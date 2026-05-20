@@ -1,0 +1,120 @@
+## F1.H
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:10:export const DEFAULT_TIPOS_EVENTO_VISIVEIS = [
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:60:  tiposEventoVisiveis: string[];
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:99:      tiposEventoVisiveis: [...DEFAULT_TIPOS_EVENTO_VISIVEIS],
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:102:          const atual = s.tiposEventoVisiveis;
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:106:            if (atual.length <= 1) return { tiposEventoVisiveis: atual };
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:107:            return { tiposEventoVisiveis: atual.filter((t) => t !== tipo) };
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:110:          return { tiposEventoVisiveis: [...atual, tipo] };
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:114:          tiposEventoVisiveis:
+src/react-app/pages/escalas/hooks/useEscalaUIStore.ts:115:            tipos && tipos.length > 0 ? tipos : [...DEFAULT_TIPOS_EVENTO_VISIVEIS],
+src/react-app/pages/escalas/hooks/useEscalaStore.ts:11:export { DEFAULT_TIPOS_EVENTO_VISIVEIS } from './useEscalaUIStore';
+src/react-app/pages/escalas/hooks/useEscalaStore.ts:29:    tiposEventoVisiveis: ui.tiposEventoVisiveis as TipoEvento[],
+
+## F1.I
+src/react-app/pages/escalas/MinhaEscalaPage.tsx:170:            <span className="material-symbols-outlined text-xl">chevron_left</span>
+src/react-app/pages/escalas/MinhaEscalaPage.tsx:198:            <span className="material-symbols-outlined text-xl">chevron_right</span>
+src/react-app/pages/escalas/MinhaEscalaPage.tsx:228:            <span className="material-symbols-outlined text-base align-middle mr-1">
+src/react-app/pages/escalas/MinhaEscalaPage.tsx:241:            <span className="material-symbols-outlined text-base align-middle mr-1">list</span>
+src/react-app/pages/escalas/MinhaEscalaPage.tsx:323:                <span className="material-symbols-outlined text-4xl mb-2">event_busy</span>
+src/react-app/pages/escalas/MinhaEscalaPage.tsx:341:                    <span className="material-symbols-outlined text-lg">{cfg.icon}</span>
+src/react-app/pages/escalas/MinhaEscalaPage.tsx:366:                            <span className="material-symbols-outlined text-[11px] align-middle">
+src/react-app/pages/escalas/MinhaEscalaPage.tsx:375:                            <span className="material-symbols-outlined text-[11px] align-middle">
+src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx:527:                      <span className="material-symbols-outlined text-base leading-none">
+src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx:538:                      <span className="material-symbols-outlined text-base leading-none">
+src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx:557:                      <span className="material-symbols-outlined text-base leading-none">
+src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx:572:                            <span className="material-symbols-outlined text-sm">table_view</span>
+src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx:579:                            <span className="material-symbols-outlined text-sm">print</span>
+src/react-app/pages/escalas/components/Paineis/VistaTripulante.tsx:131:            <span className="material-symbols-outlined text-2xl text-blue-600">person</span>
+src/react-app/pages/escalas/components/Paineis/VistaTripulante.tsx:138:            <span className="material-symbols-outlined text-xl text-gray-500">close</span>
+src/react-app/pages/escalas/components/Paineis/VistaTripulante.tsx:161:            <span className="material-symbols-outlined text-sm">flight</span>
+src/react-app/pages/escalas/components/Paineis/VistaTripulante.tsx:165:            <span className="material-symbols-outlined text-sm">weekend</span>
+src/react-app/pages/escalas/components/Paineis/VistaTripulante.tsx:170:              <span className="material-symbols-outlined text-sm">pending</span>
+src/react-app/pages/escalas/components/Paineis/VistaTripulante.tsx:175:            <span className="material-symbols-outlined text-sm">pie_chart</span>
+src/react-app/pages/escalas/components/Paineis/VistaTripulante.tsx:182:              <span className="material-symbols-outlined text-sm">favorite</span>
+src/react-app/pages/escalas/components/Paineis/BarraStatusEscala.tsx:116:          <span className="material-symbols-outlined text-sm">{item.icon}</span>
+src/react-app/pages/escalas/components/Paineis/ComparacaoVersao.tsx:63:            <span className="material-symbols-outlined text-2xl text-indigo-600">
+src/react-app/pages/escalas/components/Paineis/ComparacaoVersao.tsx:74:            <span className="material-symbols-outlined text-xl text-gray-500">close</span>
+src/react-app/pages/escalas/components/Paineis/ComparacaoVersao.tsx:81:              <span className="material-symbols-outlined text-4xl mb-2">history</span>
+src/react-app/pages/escalas/components/Paineis/ComparacaoVersao.tsx:113:                        <span className="material-symbols-outlined text-sm">add</span>
+src/react-app/pages/escalas/components/Paineis/ComparacaoVersao.tsx:123:                        <span className="material-symbols-outlined text-sm">remove</span>
+src/react-app/pages/escalas/components/Paineis/ComparacaoVersao.tsx:192:                    <span className="material-symbols-outlined text-3xl mb-2">check_circle</span>
+src/react-app/pages/escalas/components/Paineis/MiniCalendario.tsx:73:          <span className="material-symbols-outlined text-sm text-gray-500">chevron_left</span>
+src/react-app/pages/escalas/components/Paineis/MiniCalendario.tsx:79:          <span className="material-symbols-outlined text-sm text-gray-500">chevron_right</span>
+src/react-app/pages/escalas/components/Paineis/ConfirmacaoInline.tsx:79:          <span className="material-symbols-outlined text-amber-600 text-lg">auto_awesome</span>
+src/react-app/pages/escalas/components/Paineis/ConfirmacaoInline.tsx:128:                  <span className="material-symbols-outlined text-base">check_circle</span>
+src/react-app/pages/escalas/components/Paineis/ConfirmacaoInline.tsx:136:                  <span className="material-symbols-outlined text-base">cancel</span>
+src/react-app/pages/escalas/components/Paineis/WorkloadBalance.tsx:113:          <span className="material-symbols-outlined text-lg text-slate-500">bar_chart</span>
+src/react-app/pages/escalas/components/Paineis/PainelDisponibilidade.tsx:61:          <span className="material-symbols-outlined text-lg text-slate-500">event_available</span>
+src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx:619:                <span className="material-symbols-outlined text-sm text-primary">flight</span>
+src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx:626:                  <span className="material-symbols-outlined text-amber-500 text-sm mt-px">
+src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx:655:                      <span className="material-symbols-outlined text-xs">check_circle</span>
+src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx:666:                <span className="material-symbols-outlined text-sm text-primary">date_range</span>
+src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx:739:                <span className="material-symbols-outlined text-sm">check_circle</span>
+src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx:828:                      <span className="material-symbols-outlined text-xs">info</span>
+src/react-app/pages/escalas/components/Modais/ModalAdicionarTripulacao.tsx:961:                <span className="material-symbols-outlined mt-px text-sm text-blue-500">info</span>
+src/react-app/pages/escalas/components/Modais/ModalConfigModulo.tsx:54:          <span className="material-symbols-outlined text-2xl text-slate-500">tune</span>
+src/react-app/pages/escalas/components/Modais/ModalConfigModulo.tsx:132:                      <span className="material-symbols-outlined text-sm">restart_alt</span>
+src/react-app/pages/escalas/components/Modais/ModalConfigModulo.tsx:161:          <span className="material-symbols-outlined text-base text-blue-400 flex-shrink-0 mt-0.5">
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:161:                leftIcon={<span className="material-symbols-outlined text-base">delete</span>}
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:172:                leftIcon={<span className="material-symbols-outlined text-base">edit</span>}
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:296:              <span className="material-symbols-outlined text-sm">{statusConf.icon}</span>
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:301:                <span className="material-symbols-outlined text-sm">auto_fix_high</span>
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:308:              <span className="material-symbols-outlined text-sm">calendar_today</span>Período
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:321:              <span className="material-symbols-outlined text-base text-slate-400">person</span>
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:339:                <span className="material-symbols-outlined text-xs">verified</span>
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:345:                <span className="material-symbols-outlined text-base text-slate-400">
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:353:                <span className="material-symbols-outlined text-base text-slate-400">flight</span>
+src/react-app/pages/escalas/components/Modais/ModalDetalhesEvento.tsx:359:                <span className="material-symbols-outlined text-sm text-amber-500">info</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:210:            leftIcon={<span className="material-symbols-outlined text-base">auto_awesome</span>}
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:302:                            <span className="material-symbols-outlined text-sm">check</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:308:                            <span className="material-symbols-outlined text-sm">close</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:331:                            <span className="material-symbols-outlined text-sm">
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:371:                            <span className="material-symbols-outlined text-sm">check</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:377:                            <span className="material-symbols-outlined text-sm">close</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:400:                            <span className="material-symbols-outlined text-sm">
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:741:                            <span className="material-symbols-outlined text-xs text-slate-400">
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:759:                        <span className="material-symbols-outlined text-sm">check</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:765:                        <span className="material-symbols-outlined text-sm">close</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:800:                          <span className="material-symbols-outlined text-sm">restart_alt</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:808:                        <span className="material-symbols-outlined text-sm">edit</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:837:        <span className="material-symbols-outlined text-base text-blue-400 flex-shrink-0 mt-0.5">
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:888:          <span className="material-symbols-outlined text-5xl mb-2">assignment</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:899:            leftIcon={<span className="material-symbols-outlined text-base">arrow_forward</span>}
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:933:                  <span className="material-symbols-outlined text-sm">delete</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:942:        <span className="material-symbols-outlined text-base text-blue-400 flex-shrink-0 mt-0.5">
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:980:          <span className="material-symbols-outlined text-slate-500">badge</span>
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:1194:            leftIcon={<span className="material-symbols-outlined text-base">arrow_back</span>}
+src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx:1215:            <span className="material-symbols-outlined text-base">{a.icon}</span>
+src/react-app/pages/escalas/EscalasPage.tsx:399:                leftIcon={<span className="material-symbols-outlined text-base">settings</span>}
+src/react-app/pages/escalas/EscalasPage.tsx:407:                leftIcon={<span className="material-symbols-outlined text-base">auto_awesome</span>}
+src/react-app/pages/escalas/EscalasPage.tsx:429:                leftIcon={<span className="material-symbols-outlined text-base">add</span>}
+src/react-app/pages/escalas/EscalasPage.tsx:447:              <span className="material-symbols-outlined text-base">chevron_left</span>
+src/react-app/pages/escalas/EscalasPage.tsx:457:              <span className="material-symbols-outlined text-base">chevron_right</span>
+src/react-app/pages/escalas/EscalasPage.tsx:489:            <span className="material-symbols-outlined text-slate-400">expand_more</span>
+src/react-app/pages/escalas/EscalasPage.tsx:542:            <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">
+src/react-app/pages/escalas/EscalasPage.tsx:550:              leftIcon={<span className="material-symbols-outlined text-base">add</span>}
+src/react-app/pages/escalas/EscalasPage.tsx:613:                            <span className="material-symbols-outlined text-xs">person</span>
+src/react-app/pages/escalas/EscalasPage.tsx:658:                            <span className="material-symbols-outlined text-base">delete</span>
+src/react-app/pages/escalas/EscalasPage.tsx:669:                          <span className="material-symbols-outlined text-sm">arrow_forward</span>
+src/react-app/pages/escalas/EscalasPage.tsx:729:            <span className="material-symbols-outlined text-xl">arrow_back</span>
+src/react-app/pages/escalas/EscalasPage.tsx:768:                        <span className="material-symbols-outlined text-xs">warning</span>
+src/react-app/pages/escalas/EscalasPage.tsx:795:                        <span className="material-symbols-outlined text-base">add</span>
+src/react-app/pages/escalas/EscalasPage.tsx:833:                    <span className="material-symbols-outlined text-base">warning_amber</span>
+src/react-app/pages/escalas/EscalasPage.tsx:847:                        <span className="material-symbols-outlined text-base">
+src/react-app/pages/escalas/EscalasPage.tsx:860:                      <span className="material-symbols-outlined text-base">more_horiz</span>
+src/react-app/pages/escalas/EscalasPage.tsx:930:                    <span className="material-symbols-outlined text-base">settings</span>
+src/react-app/pages/escalas/EscalasPage.tsx:949:                <span className="material-symbols-outlined text-base">close</span>
+src/react-app/pages/escalas/EscalasPage.tsx:1027:                <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none">
+src/react-app/pages/escalas/EscalasPage.tsx:1042:                  <span className="material-symbols-outlined text-sm">expand_more</span>
+src/react-app/pages/escalas/EscalasPage.tsx:1075:                  <span className="material-symbols-outlined text-sm">expand_more</span>
+src/react-app/pages/escalas/EscalasPage.tsx:1191:                <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">
+src/react-app/pages/escalas/EscalasPage.tsx:1225:                      <span className="material-symbols-outlined text-sm text-gray-500">close</span>
+src/react-app/pages/escalas/EscalasPage.tsx:1263:                      <span className="material-symbols-outlined text-sm text-gray-500">close</span>
+src/react-app/pages/escalas/EscalasPage.tsx:1343:                  <span className="material-symbols-outlined text-xl text-red-600">bedtime</span>
+src/react-app/pages/escalas/EscalasPage.tsx:1352:                  <span className="material-symbols-outlined">close</span>
+src/react-app/pages/escalas/EscalasPage.tsx:1358:                    <span className="material-symbols-outlined text-4xl text-emerald-400 block mb-2">
+src/react-app/pages/escalas/EscalasPage.tsx:1377:                        <span className="material-symbols-outlined text-red-500 text-xl mt-0.5 flex-shrink-0">
+
+## F1.J
+398:    staleTime: 5 * 60 * 1000,

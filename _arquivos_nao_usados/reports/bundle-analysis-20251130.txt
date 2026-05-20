@@ -1,0 +1,114 @@
+📦 ANÁLISE DE BUNDLE - AIRTRUST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔨 Executando build de produção...
+
+> mocha-app@0.0.0 build
+> vite build && tsc --noEmit false
+
+NODE_ENV=production is not supported in the .env file. Only NODE_ENV=development is supported to create a development build of your project. If you need to set process.env.NODE_ENV, you can set it in the Vite config instead.
+vite v6.4.1 building for production...
+transforming...
+✓ 2644 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/client/index.html                            1.76 kB │ gzip:   0.80 kB
+dist/client/assets/index-D3MIf7Ot-miltms9h.css  109.66 kB │ gzip:  17.34 kB
+dist/client/assets/vendor-DbHEDQBy-miltms77.js   11.72 kB │ gzip:   4.15 kB
+dist/client/assets/router-DlOV1lCj-miltms7b.js   33.55 kB │ gzip:  12.43 kB
+dist/client/assets/xlsx-DGuHH-KN-miltms7j.js    429.49 kB │ gzip: 141.91 kB
+dist/client/assets/index-D9Y5-nIY-miltms77.js   883.19 kB │ gzip: 214.74 kB
+✓ built in 2.50s
+
+📊 ESTATÍSTICAS DO BUILD:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📁 Tamanhos de arquivos (maiores primeiro):
+864K	dist/client/assets/index-D9Y5-nIY-miltms77.js
+420K	dist/client/assets/xlsx-DGuHH-KN-miltms7j.js
+108K	dist/client/assets/index-D3MIf7Ot-miltms9h.css
+ 36K	dist/client/assets/router-DlOV1lCj-miltms7b.js
+ 12K	dist/client/assets/vendor-DbHEDQBy-miltms77.js
+4.0K	dist/client/index.html
+4.0K	dist/client/force-reload.js
+4.0K	dist/client/favicon.svg
+4.0K	dist/client/favicon.ico
+4.0K	dist/client/dev-config.js
+4.0K	dist/client/_routes.json
+4.0K	dist/client/_redirects
+4.0K	dist/client/_headers
+
+📊 Resumo por tipo:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 JavaScript:
+1.3M	total
+
+🎨 CSS:
+108K	total
+
+🖼️  Assets (imagens, fontes, etc):
+ 20K	total
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 TOTAL DO BUNDLE:
+1.4M	dist
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🗜️  TAMANHOS GZIP (simulado):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 JS comprimido:
+   364.30 KB
+
+🎨 CSS comprimido:
+   16.93 KB
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  CHUNKS MAIORES QUE 500KB:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   dist/client/assets/index-D9Y5-nIY-miltms77.js → 862K
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 TOP 10 ARQUIVOS JS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   dist/client/assets/index-D9Y5-nIY-miltms77.js → 864K
+   dist/client/assets/xlsx-DGuHH-KN-miltms7j.js → 420K
+   dist/client/assets/router-DlOV1lCj-miltms7b.js → 36K
+   dist/client/assets/vendor-DbHEDQBy-miltms77.js → 12K
+   dist/client/force-reload.js → 4.0K
+   dist/client/dev-config.js → 4.0K
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 VENDOR CHUNKS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   dist/client/assets/vendor-DbHEDQBy-miltms77.js → 11K
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 CONTAGEM DE ARQUIVOS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   JS:  6
+   CSS: 1
+   HTML: 1
+   Outros: 5
+   TOTAL: 13
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 RECOMENDAÇÕES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  Bundle total > 2MB - Considere code splitting
+⚠️  2 arquivo(s) JS > 300KB - Considere lazy loading
+ℹ️  Ratio compressão JS: 27.46%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Análise completa!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Dica: Para análise visual interativa, instale:
+   npm install -D rollup-plugin-visualizer
+

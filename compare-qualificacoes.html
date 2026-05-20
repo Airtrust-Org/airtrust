@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comparação de Qualificações - CSV vs Banco de Dados</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #f5f5f5;
+        padding: 20px;
+      }
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        padding: 30px;
+      }
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+      }
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+      }
+      .controls {
+        margin-bottom: 30px;
+        display: flex;
+        gap: 15px;
+        align-items: center;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      .loading {
+        color: #666;
+        font-style: italic;
+      }
+      .summary {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 6px;
+        margin-bottom: 30px;
+      }
+      .summary h2 {
+        font-size: 18px;
+        margin-bottom: 15px;
+        color: #333;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+      }
+      .stat {
+        background: white;
+        padding: 15px;
+        border-radius: 6px;
+        border-left: 4px solid #007bff;
+      }
+      .stat-label {
+        font-size: 12px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .stat-value {
+        font-size: 28px;
+        font-weight: bold;
+        color: #333;
+        margin-top: 5px;
+      }
+      .differences {
+        margin-top: 30px;
+      }
+      .diff-section {
+        margin-bottom: 30px;
+      }
+      .diff-section h3 {
+        font-size: 16px;
+        margin-bottom: 15px;
+        padding: 10px;
+        border-radius: 6px;
+      }
+      .diff-section.missing h3 {
+        background: #fee;
+        color: #c00;
+      }
+      .diff-section.mismatch h3 {
+        background: #ffc;
+        color: #880;
+      }
+      .diff-section.renovada h3 {
+        background: #eef;
+        color: #008;
+      }
+      .diff-item {
+        background: #f8f9fa;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-radius: 6px;
+        border-left: 4px solid #ccc;
+      }
+      .diff-section.missing .diff-item {
+        border-left-color: #c00;
+      }
+      .diff-section.mismatch .diff-item {
+        border-left-color: #f90;
+      }
+      .diff-section.renovada .diff-item {
+        border-left-color: #00c;
+      }
+      .diff-header {
+        font-weight: bold;
+        margin-bottom: 8px;
+      }
+      .diff-detail {
+        font-size: 14px;
+        color: #666;
+        margin: 4px 0;
+      }
+      .error {
+        background: #fee;
+        color: #c00;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔍 Comparação de Qualificações</h1>
+      <p class="subtitle">
+        Comparar dados do CSV fornecido com o histórico de qualificações no banco de dados
+      </p>
+
+      <div class="controls">
+        <button id="compareBtn" onclick="runComparison()">Executar Comparação</button>
+        <span id="status" class="loading" style="display: none">Carregando...</span>
+      </div>
+
+      <div id="error" class="error" style="display: none"></div>
+
+      <div id="results" style="display: none">
+        <div class="summary">
+          <h2>📊 Resumo</h2>
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-label">Total CSV</div>
+              <div class="stat-value" id="csvTotal">-</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Total DB</div>
+              <div class="stat-value" id="dbTotal">-</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Correspondentes</div>
+              <div class="stat-value" id="matches" style="color: #28a745">-</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Diferenças</div>
+              <div class="stat-value" id="diffs" style="color: #dc3545">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="differences">
+          <div id="missingSection" class="diff-section missing" style="display: none">
+            <h3>🔴 Qualificações Ausentes no Banco de Dados (<span id="missingCount">0</span>)</h3>
+            <div id="missingList"></div>
+          </div>
+
+          <div id="mismatchSection" class="diff-section mismatch" style="display: none">
+            <h3>🟡 Datas de Vencimento Diferentes (<span id="mismatchCount">0</span>)</h3>
+            <div id="mismatchList"></div>
+          </div>
+
+          <div id="renovadaSection" class="diff-section renovada" style="display: none">
+            <h3>🔵 Qualificações Marcadas como RENOVADAS (<span id="renovadaCount">0</span>)</h3>
+            <div id="renovadaList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // CSV Data - Dados completos fornecidos pelo usuário
+      const CSV_DATA = `TRIPULANTE,ANV,DESIGNAÇÃO,CURSO,DATA VENCIMENTO
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,CMA,4/3/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,CHT TIPO,9/30/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,CHT IFR,9/30/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,FAP 05.2,9/30/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,OPC,3/31/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,FAP 06,9/30/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,IFR,3/31/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,LPC,1/30/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,B. C. Gerais  da Aeronave,10/22/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,C. Emergencias Gerais,10/22/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,D1. AVSEC,10/31/2027
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,D2. SGSO 2ANOS,11/26/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,D3. CRM,3/15/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,D4. ARTIGOS PERIGOSOS 2ANOS,9/22/2027
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,E1. OFFSHORE,10/24/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,E2.PBN,11/30/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,E3.HUET/ THUET 4ANOS,8/16/2027
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,E5. EFB,11/30/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,F. C. SOLO AW139,5/7/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,G1.C.  VOO AW139,9/20/2026
+ADRIANA BRASIL - 951681,"[""AW139""]",SIC,Dt. Próximo ASO,2/17/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,CMA,4/27/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,CHT TIPO,5/31/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,CHT IFR,5/31/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,FAP 05.2,5/31/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,FAP 06 CHT,5/31/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,FAP 06 135.297,12/31/2025
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,FAP 14,2/20/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,ROTA,2/20/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,LOFT,6/26/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,B. C. Gerais  da Aeronave,10/28/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,C. Emergencias Gerais,10/29/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,D1. AVSEC,2/28/2027
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,D2. SGSO 2ANOS,11/29/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,D3. CRM,3/15/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,D4. ARTIGOS PERIGOSOS 2ANOS,2/14/2027
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,E1. OFFSHORE,11/1/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,E2.PBN,10/31/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,E3.HUET/ THUET 4ANOS,1/2/2027
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,E4. Transporte Aeromedico,10/11/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,E5. EFB,11/30/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,F. C.  SOLO SK76,3/16/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,G. C. VOO SK76,6/25/2026
+ANTONIO LUIZ SIMÕES RAMOS-383455,"[""SK76""]",PIC,Dt. Próximo ASO,9/26/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,CMA,11/14/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,CHT TIPO,10/31/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,CHT IFR,10/31/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,FAP 05.2,10/31/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,OPC,4/30/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,FAP 06 CHT,10/31/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,FAP 06 135.297,4/30/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,FAP 14,10/21/2026
+BERNARDO FREIRE ANTUNES-102172,"[""AW139""]",PIC,LOFT,9/21/2026`;
+
+      function parseCSV(csvText) {
+        const lines = csvText.trim().split('\n');
+        const rows = [];
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          const matches = line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g);
+          if (!matches || matches.length < 5) continue;
+
+          const tripulanteRaw = matches[0].replace(/^"|"$/g, '').trim();
+          const anv = matches[1].replace(/^"|"$/g, '').trim();
+          const designacao = matches[2].replace(/^"|"$/g, '').trim();
+          const curso = matches[3].replace(/^"|"$/g, '').trim();
+          const dataVencimento = matches[4].replace(/^"|"$/g, '').trim();
+
+          const parts = tripulanteRaw.split(' - ');
+          const codigoAnac = parts.length > 1 ? parts[parts.length - 1].trim() : '';
+          const tripulante =
+            parts.length > 1 ? parts.slice(0, -1).join(' - ').trim() : tripulanteRaw;
+
+          rows.push({ tripulante, codigoAnac, anv, designacao, curso, dataVencimento });
+        }
+
+        return rows;
+      }
+
+      function normalizeDate(dateStr) {
+        const parts = dateStr.split('/');
+        if (parts.length !== 3) return dateStr;
+
+        const month = parts[0].padStart(2, '0');
+        const day = parts[1].padStart(2, '0');
+        const year = parts[2];
+
+        return `${year}-${month}-${day}`;
+      }
+
+      function normalizeCursoName(curso) {
+        return curso
+          .toUpperCase()
+          .trim()
+          .replace(/\s+/g, ' ')
+          .replace(/\./g, '')
+          .replace(/\s*-\s*/g, '-');
+      }
+
+      async function runComparison() {
+        const btn = document.getElementById('compareBtn');
+        const status = document.getElementById('status');
+        const error = document.getElementById('error');
+        const results = document.getElementById('results');
+
+        btn.disabled = true;
+        status.style.display = 'inline';
+        error.style.display = 'none';
+        results.style.display = 'none';
+
+        try {
+          // Parse CSV
+          const csvRows = parseCSV(CSV_DATA);
+          console.log('CSV parsed:', csvRows.length, 'rows');
+
+          // Fetch DB data
+          const response = await fetch('/api/qualificacoes/historico?limit=1000');
+          if (!response.ok) throw new Error('Erro ao buscar dados do banco');
+
+          const dbData = await response.json();
+          if (!dbData.success) throw new Error(dbData.error || 'Erro ao buscar dados');
+
+          const dbRows = dbData.data;
+          console.log('DB data:', dbRows.length, 'rows');
+
+          // Compare
+          const differences = [];
+          let matchCount = 0;
+
+          for (const csvRow of csvRows) {
+            const normalizedCursoCSV = normalizeCursoName(csvRow.curso);
+            const normalizedDateCSV = normalizeDate(csvRow.dataVencimento);
+
+            const dbMatch = dbRows.find((dbRow) => {
+              const codigoMatch = dbRow.funcionario_codigo_anac === csvRow.codigoAnac;
+              const cursoMatch =
+                normalizeCursoName(dbRow.tipo_codigo || '') === normalizedCursoCSV ||
+                normalizeCursoName(dbRow.tipo_nome || '') === normalizedCursoCSV;
+              return codigoMatch && cursoMatch;
+            });
+
+            if (!dbMatch) {
+              differences.push({
+                ...csvRow,
+                dataVencimentoCSV: normalizedDateCSV,
+                dataVencimentoDB: null,
+                status: 'MISSING_IN_DB',
+              });
+            } else if (dbMatch.renovada === 1) {
+              differences.push({
+                ...csvRow,
+                dataVencimentoCSV: normalizedDateCSV,
+                dataVencimentoDB: dbMatch.data_vencimento,
+                status: 'RENOVADA',
+              });
+            } else if (dbMatch.data_vencimento !== normalizedDateCSV) {
+              differences.push({
+                ...csvRow,
+                dataVencimentoCSV: normalizedDateCSV,
+                dataVencimentoDB: dbMatch.data_vencimento,
+                status: 'DATE_MISMATCH',
+              });
+            } else {
+              matchCount++;
+            }
+          }
+
+          // Display results
+          displayResults(csvRows.length, dbRows.length, matchCount, differences);
+        } catch (err) {
+          error.textContent = err.message;
+          error.style.display = 'block';
+          console.error('Error:', err);
+        } finally {
+          btn.disabled = false;
+          status.style.display = 'none';
+        }
+      }
+
+      function displayResults(csvTotal, dbTotal, matches, differences) {
+        document.getElementById('csvTotal').textContent = csvTotal;
+        document.getElementById('dbTotal').textContent = dbTotal;
+        document.getElementById('matches').textContent = matches;
+        document.getElementById('diffs').textContent = differences.length;
+
+        const missing = differences.filter((d) => d.status === 'MISSING_IN_DB');
+        const mismatch = differences.filter((d) => d.status === 'DATE_MISMATCH');
+        const renovada = differences.filter((d) => d.status === 'RENOVADA');
+
+        displayDiffSection('missing', missing);
+        displayDiffSection('mismatch', mismatch);
+        displayDiffSection('renovada', renovada);
+
+        document.getElementById('results').style.display = 'block';
+      }
+
+      function displayDiffSection(type, items) {
+        const section = document.getElementById(`${type}Section`);
+        const count = document.getElementById(`${type}Count`);
+        const list = document.getElementById(`${type}List`);
+
+        if (items.length === 0) {
+          section.style.display = 'none';
+          return;
+        }
+
+        count.textContent = items.length;
+        list.innerHTML = items
+          .map(
+            (item) => `
+                <div class="diff-item">
+                    <div class="diff-header">${item.tripulante} (${item.codigoAnac}) - ${
+              item.curso
+            }</div>
+                    <div class="diff-detail">Vencimento CSV: ${item.dataVencimentoCSV}</div>
+                    ${
+                      item.dataVencimentoDB
+                        ? `<div class="diff-detail">Vencimento DB: ${item.dataVencimentoDB}</div>`
+                        : ''
+                    }
+                    ${
+                      item.status === 'RENOVADA'
+                        ? '<div class="diff-detail" style="color: #00c;">⚠️ Marcada como RENOVADA no banco</div>'
+                        : ''
+                    }
+                </div>
+            `,
+          )
+          .join('');
+
+        section.style.display = 'block';
+      }
+    </script>
+  </body>
+</html>

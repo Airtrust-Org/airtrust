@@ -1,0 +1,2 @@
+login_status=200
+auth_me_status=200

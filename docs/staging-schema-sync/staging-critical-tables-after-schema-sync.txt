@@ -1,0 +1,140 @@
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.67ms
+[
+  {
+    "results": [
+      {
+        "name": "audit_logs"
+      },
+      {
+        "name": "empresas"
+      },
+      {
+        "name": "frms_acumulo_mensal"
+      },
+      {
+        "name": "frms_acumulo_rolling"
+      },
+      {
+        "name": "frms_alerta"
+      },
+      {
+        "name": "frms_carga_trabalho"
+      },
+      {
+        "name": "frms_configuracao_limites"
+      },
+      {
+        "name": "frms_escala_quinzenal"
+      },
+      {
+        "name": "frms_explicacao_dia_cache"
+      },
+      {
+        "name": "frms_fadiga_avaliacao_gestor"
+      },
+      {
+        "name": "frms_fadiga_checkin"
+      },
+      {
+        "name": "frms_fadiga_config_empresa"
+      },
+      {
+        "name": "frms_fadiga_evento"
+      },
+      {
+        "name": "frms_fatorizacao_jornada"
+      },
+      {
+        "name": "frms_fonte_calculo_competencia"
+      },
+      {
+        "name": "frms_importacao_fira"
+      },
+      {
+        "name": "frms_jornada"
+      },
+      {
+        "name": "frms_jornada_pendente"
+      },
+      {
+        "name": "frms_justificativas"
+      },
+      {
+        "name": "frms_notificacao_config"
+      },
+      {
+        "name": "frms_notificacao_destinatario"
+      },
+      {
+        "name": "funcionarios"
+      },
+      {
+        "name": "lms_cursos"
+      },
+      {
+        "name": "lms_h5p_conteudos"
+      },
+      {
+        "name": "lms_historico_importado"
+      },
+      {
+        "name": "lms_matricula_ciclos"
+      },
+      {
+        "name": "lms_matriculas"
+      },
+      {
+        "name": "lms_progresso_scorm"
+      },
+      {
+        "name": "lms_xapi_statements"
+      },
+      {
+        "name": "qualificacoes_historico"
+      },
+      {
+        "name": "qualificacoes_tipos"
+      },
+      {
+        "name": "usuarios"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.6748
+      },
+      "duration": 0.6748,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 4190208,
+      "rows_read": 1011,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "title": "Briefing Operacional",
+  "intro": "Revise os pontos críticos antes da decolagem. Marque cada item quando estiver checado e finalize o briefing para registrar a conclusão via xAPI.",
+  "checklist": [
+    {
+      "text": "Confirmar NOTAMs ativos, meteorologia e restrições da rota."
+    },
+    {
+      "text": "Validar combustível planejado, alternados e limites de peso e balanceamento."
+    },
+    {
+      "text": "Reforçar comunicação de cabine, procedimentos anormais e critérios de retorno."
+    }
+  ],
+  "completionLabel": "Registrar briefing como concluído",
+  "completionMessage": "Briefing concluído com sucesso. O LMS já pode registrar a finalização desta matrícula.",
+  "accentColor": "#0f766e"
+}

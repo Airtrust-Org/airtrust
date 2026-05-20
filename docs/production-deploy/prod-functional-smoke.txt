@@ -1,0 +1,2 @@
+prod_functional_smoke=PENDING_HUMAN_VERIFICATION
+No PROD_ADMIN_EMAIL/PROD_ADMIN_PASSWORD in environment — manual verification required

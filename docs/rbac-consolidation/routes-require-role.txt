@@ -1,0 +1,239 @@
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:65:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:97:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:127:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:178:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:568:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:586:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:613:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:4:import { auth, requireRole } from '../middleware/auth';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:712:router.get('/fadiga-checkin/painel-gestor', requireRole('manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:775:router.get('/fadiga-checkin/analytics', requireRole('manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:881:router.patch('/fadiga-checkin/:id/resposta-gestor', requireRole('manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-fadiga-checkin.ts:942:router.get('/fadiga-checkin/export', requireRole('manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/fix-renovadas.ts:11:import { auth, requireRole } from '../middleware/auth';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/fix-renovadas.ts:16:app.use('*', auth(), requireRole('admin'));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:5:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:707:treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:784:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:858:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:993:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:1088:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:1233:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:1295:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:1411:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores.ts:75:setores.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores.ts:146:setores.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores.ts:232:setores.delete('/:id', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/solicitacoes-treinamento.ts:22:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/solicitacoes-treinamento.ts:176:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/solicitacoes-treinamento.ts:212:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/solicitacoes-treinamento.ts:248:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/solicitacoes-treinamento.ts:280:solicitacoesRoutes.post('/solicitacoes/:id/agendar', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/solicitacoes-treinamento.ts:322:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/auditoria.ts:11:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/auditoria.ts:15:app.use('*', auth(), requireRole('admin'));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-core.ts:31:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-core.ts:185:escalas.post('/:id/notificar', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-confirmacoes.ts:10:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-confirmacoes.ts:113:confirmacoes.get('/:id/confirmacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/matriz-treinamento.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/matriz-treinamento.ts:221:matrizTreinamento.post('/registros', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/matriz-treinamento.ts:326:matrizTreinamento.post('/registros/bulk', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/matriz-treinamento.ts:438:matrizTreinamento.put('/registros/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/matriz-treinamento.ts:506:matrizTreinamento.delete('/registros/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-situacoes.ts:12:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-situacoes.ts:59:situacoes.post('/:id/situacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-situacoes.ts:263:situacoes.put('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-situacoes.ts:509:situacoes.delete('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/aeronaves.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/aeronaves.ts:81:aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/aeronaves.ts:151:aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/aeronaves.ts:301:aeronaves.delete('/:id', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-edapp-legado.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-edapp-legado.ts:363:app.get('/legado/edapp/resumo', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-edapp-legado.ts:426:app.get('/legado/edapp/historico', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-edapp-legado.ts:538:app.post('/legado/edapp/importar', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-padroes.ts:9:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-padroes.ts:34:padroes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-padroes.ts:69:padroes.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:10:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:137:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:911:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-crud.ts:8:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-crud.ts:259:crud.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-crud.ts:329:crud.post('/gerar-ano', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-crud.ts:385:crud.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-crud.ts:438:crud.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-matriculas.ts:13:import { hasRole, requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-matriculas.ts:419:app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-matriculas.ts:773:app.post('/lote', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-matriculas.ts:1012:app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-matriculas.ts:1419:app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-fira.ts:9:import { auth, requireRole } from '../middleware/auth';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-fira.ts:361:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-fira.ts:679:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-relatorios.ts:8:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-relatorios.ts:15:app.get('/relatorios/conformidade', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-relatorios.ts:91:app.get('/relatorios/cursos-conformidade', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-relatorios.ts:147:app.get('/relatorios/expiracoes', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-status.ts:10:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-status.ts:48:status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/auditoria-detalhada.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/auditoria-detalhada.ts:8:app.use('*', auth(), requireRole('admin'));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:18:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:70:app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:252:app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:614:app.delete('/:id', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/importacao-xlsx.ts:17:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/importacao-xlsx.ts:102:app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/importacao-xlsx.ts:268:app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/importacao-xlsx.ts:410:app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores-gestores.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores-gestores.ts:147:setoresGestores.post('/', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores-gestores.ts:193:setoresGestores.put('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores-gestores.ts:242:setoresGestores.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/setores-gestores.ts:282:setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/hospedagem.ts:12:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/hospedagem.ts:156:app.post('/', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/hospedagem.ts:227:app.put('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/hospedagem.ts:297:app.patch('/:id/checkout', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/hospedagem.ts:328:app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/admin-migrate.ts:9:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/admin-migrate.ts:18:app.post('/0118', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tipos-evento.ts:11:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tipos-evento.ts:183:tiposEvento.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tipos-evento.ts:251:tiposEvento.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tipos-evento.ts:312:tiposEvento.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios.ts:24:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios.ts:718:app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios.ts:828:app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulacoes.ts:8:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulacoes.ts:129:tripulacoes.post('/:id/tripulacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulacoes.ts:646:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulacoes.ts:730:tripulacoes.put('/:id/tripulacoes/:tripId', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulacoes.ts:921:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/pasta-virtual.ts:18:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/pasta-virtual.ts:1006:app.delete('/:id', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/categorias.ts:15:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/categorias.ts:65:app.post('/', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/categorias.ts:137:app.put('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/categorias.ts:223:app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-restricoes.ts:9:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-restricoes.ts:38:restricoes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-restricoes.ts:79:restricoes.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/horas-voo.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/horas-voo.ts:136:app.post('/:funcionario_id/saldo', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/horas-voo.ts:269:app.delete('/:funcionario_id/saldo', requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/horas-voo.ts:409:app.post('/:funcionario_id/lancamentos', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/horas-voo.ts:487:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/horas-voo.ts:585:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/horas-voo.ts:766:app.post('/:funcionario_id/importar-xlsx', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/integracoes_sigvoos.ts:5:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/integracoes_sigvoos.ts:61:  return requireRole('admin', 'manager')(c as any, next);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-evd.ts:24:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-evd.ts:199:evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-evd.ts:300:evdRoutes.put('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-evd.ts:365:evdRoutes.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-evd.ts:383:evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-reclass.ts:14:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-reclass.ts:26:app.get('/queue', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-reclass.ts:80:app.get('/progresso', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-reclass.ts:101:app.patch('/:historicoId', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-reclass.ts:164:app.get('/sugestoes/:historicoId', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-reclass.ts:224:app.get('/queue/export', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-relatorios-config.ts:20:import { requireRole } from '../middleware/auth';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-relatorios-config.ts:156:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-relatorios-config.ts:188:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms-relatorios-config.ts:226:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms.ts:17:import { auth, requireRole } from '../middleware/auth';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms.ts:1608:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms.ts:1737:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms.ts:1751:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms.ts:1767:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/frms.ts:2729:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin-ops.ts:11:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin-ops.ts:16:opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin-ops.ts:163:opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-eventos.ts:8:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-eventos.ts:120:eventos.post('/:id/eventos', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-eventos.ts:243:eventos.put('/:id/eventos/:eventoId', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-eventos.ts:375:eventos.delete('/:id/eventos/:eventoId', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/atribuicao.ts:17:import { requireRole } from '../../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/atribuicao.ts:142:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/atribuicao.ts:235:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/atribuicao.ts:345:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/atribuicao.ts:421:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:10:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1379:app.get('/stats', requireRole('admin', 'manager'), handleLmsStats);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1380:app.get('/cursos/stats', requireRole('admin', 'manager'), handleLmsStats);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1416:app.post('/', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1548:app.put('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1713:app.post('/sync-ead', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1734:app.post('/:id/thumbnail-upload', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1770:app.post('/:id/content-upload/init', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1797:app.post('/:id/content-upload/file', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1834:app.post('/:id/content-upload/complete', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1870:app.post('/:id/scorm-upload', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:1945:app.post('/:id/upload/h5p', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:2031:app.post('/:id/upload/scorm', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:2080:app.post('/:id/upload/pdf', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:2137:app.post('/:id/upload/pptx', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-cursos.ts:2217:app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes.ts:3:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes.ts:38:app.post('/processar', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes.ts:311:app.put('/config/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/compliance-requisitos.ts:19:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/compliance-requisitos.ts:87:app.post('/requisitos', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/compliance-requisitos.ts:129:app.put('/requisitos/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/compliance-requisitos.ts:168:app.delete('/requisitos/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/tipos.ts:15:import { requireRole } from '../../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/tipos.ts:283:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/tipos.ts:493:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/tipos.ts:789:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-templates.ts:10:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-templates.ts:80:templates.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-templates.ts:134:templates.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-templates.ts:203:templates.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:25:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:141:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:199:app.get('/admin/empresas-com-templates', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:238:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:296:app.get('/admin/templates/:empresaId', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:331:app.get('/admin/inspecionar/:historicoId', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:462:app.get('/admin/verificar-cf', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:486:app.get('/admin/preview-html/:historicoId', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:584:app.get('/admin/debug-certificado-data/:historicoId', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:719:app.get('/admin/debug-template/:historicoId', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:799:app.get('/admin/debug-query/:historicoId', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcoes.ts:4:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcoes.ts:74:funcoes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcoes.ts:138:funcoes.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcoes.ts:216:funcoes.delete('/:id', auth(), requireRole('admin'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/compliance-recalculate.ts:9:import { auth, requireRole } from '../middleware/auth';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/compliance-recalculate.ts:15:app.use('*', auth(), requireRole('admin'));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/licencas.ts:11:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/licencas.ts:139:app.post('/', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/licencas.ts:224:app.put('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/licencas.ts:310:app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-alocacoes.ts:17:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-alocacoes.ts:420:alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-alocacoes.ts:1197:alocacoes.post('/:id/alocacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-alocacoes.ts:1705:alocacoes.put('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-alocacoes.ts:2105:alocacoes.delete('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'), async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/backup.ts:19:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/backup.ts:56:backup.use('*', auth(), requireRole('admin', 'manager'));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/alertas.ts:13:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/alertas.ts:316:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/alertas.ts:347:  requireRole('admin'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/integracoes_edapp.ts:6:import { requireRole } from '../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/integracoes_edapp.ts:34:  return requireRole('admin', 'manager')(c, next);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:11:import { requireRole } from '../../middleware/rbac';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:99:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:453:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:802:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:1026:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:1154:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:1294:  requireRole('admin', 'manager'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:1364:  requireRole('admin', 'manager'),

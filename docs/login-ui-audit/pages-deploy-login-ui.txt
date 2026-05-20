@@ -1,0 +1,14 @@
+
+ ⛅️ wrangler 4.45.3 (update available 4.92.0)
+─────────────────────────────────────────────
+Uploading... (76/300)
+Uploading... (150/300)
+Uploading... (225/300)
+Uploading... (300/300)
+✨ Success! Uploaded 224 files (76 already uploaded) (2.84 sec)
+
+✨ Uploading _headers
+✨ Uploading _redirects
+🌎 Deploying...
+✨ Deployment complete! Take a peek over at https://4ac45597.airtrust.pages.dev
+✨ Deployment alias URL: https://main.airtrust.pages.dev

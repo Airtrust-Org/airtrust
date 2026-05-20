@@ -1,0 +1,599 @@
+import React, { ReactNode, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  Settings,
+  Bell,
+  LogOut,
+  MoonStar,
+  SunMedium,
+  LayoutDashboard,
+  Users,
+  BadgeCheck,
+  Gauge,
+  BookOpen,
+  CalendarDays,
+  Activity,
+  ShieldCheck,
+  BarChart2,
+  FileText,
+} from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { usePermissions } from '../hooks/usePermissions';
+import { VersionBadge } from './VersionBadge';
+import { NotificacoesSistema } from './NotificacoesSistema';
+import { NotificacoesEscala } from './NotificacoesEscala';
+import { useSystemSettings } from '../hooks/useSystemSettings';
+import { toast } from 'sonner';
+import { API_BASE_URL } from '../config/api';
+import { useLanguage } from '../i18n/useLanguage';
+import { useTheme } from '../theme/ThemeProvider';
+interface AppLayoutProps {
+  children: ReactNode;
+}
+
+const NAV_ACTIVE = 'whitespace-nowrap bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200';
+const NAV_INACTIVE =
+  'whitespace-nowrap text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100';
+
+export default function AppLayout({ children }: AppLayoutProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout, empresas, empresaAtualId, selectEmpresa } = useAuth();
+  const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
+  const { logoSrc, settings } = useSystemSettings();
+  const { t } = useLanguage();
+  const { isDark, toggleTheme } = useTheme();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [empresaLogoError, setEmpresaLogoError] = useState<Record<number, boolean>>({});
+
+  // Flags de acesso a módulos
+  const showDashboard = can('dashboard.view') || isAdmin || isGestor;
+  const showFuncionarios = can('funcionarios.view');
+  const showQualificacoes = can('qualificacoes.view');
+  const showSimuladores = can('simuladores.view');
+  const showLms = !isAluno && !isInstrutor;
+  const showTreinamentosPlanejados =
+    !isAluno && (showQualificacoes || isAdmin || isGestor || isInstrutor);
+  const showEscalas = can('escalas.view') || can('self.escala');
+  const showFrms = can('frms.view');
+  const showSgso = can('sgso.view');
+
+  const isActivePath = (path: string, exact = false) => {
+    if (exact) return location.pathname === path;
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
+  const getUserInitials = () => {
+    if (!user?.nome) return 'US';
+    const names = user.nome.trim().split(' ');
+    if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
+    return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+  };
+
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+
+  const hasEmpresaLogo = (empresaId: number, logoUrl?: string | null): boolean => {
+    return Boolean(getEmpresaLogoUrl(logoUrl) && !empresaLogoError[empresaId]);
+  };
+
+  const markEmpresaLogoError = (empresaId: number) => {
+    setEmpresaLogoError((prev) => ({ ...prev, [empresaId]: true }));
+  };
+
+  const getEmpresaLogoUrl = (logoUrl?: string | null): string | null => {
+    if (!logoUrl) return null;
+    // Data URLs e absolute URLs passam direto
+    if (
+      logoUrl.startsWith('data:') ||
+      logoUrl.startsWith('http://') ||
+      logoUrl.startsWith('https://')
+    )
+      return logoUrl;
+    // Relative API URLs precisam de origin prefix
+    if (logoUrl.startsWith('/api/')) {
+      const apiOrigin = API_BASE_URL.replace(/\/api$/, '');
+      return `${apiOrigin}${logoUrl}`;
+    }
+    return logoUrl;
+  };
+
+  const getEmpresaInitials = (nome?: string): string => {
+    if (!nome) return 'EM';
+    const parts = nome.trim().split(' ').filter(Boolean);
+    if (parts.length === 0) return 'EM';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  };
+
+  const handleSelectEmpresa = async (empresaId: number) => {
+    if (!empresaId || empresaId === empresaAtualId) return;
+
+    try {
+      await selectEmpresa(empresaId);
+      toast.success(t('layout.actions.switchCompanySuccess'));
+      navigate(0);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('layout.actions.switchCompanyError'));
+    }
+  };
+
+  // Expõe altura do header como CSS var para módulos que precisam de layout full-height (ex: FRMS)
+  const headerHeightVar = settings.compactHeader
+    ? ({ '--header-height': '44px' } as React.CSSProperties)
+    : ({ '--header-height': '48px' } as React.CSSProperties);
+
+  const themeActionLabel = isDark ? 'Ativar modo claro' : 'Ativar modo escuro';
+  const themeStateLabel = isDark ? 'Escuro' : 'Claro';
+
+  return (
+    <div
+      className="airtrust-global-standard relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-slate-50 font-display text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100"
+      style={headerHeightVar}
+    >
+      {/* Header */}
+      <header className="sticky top-0 z-header w-full border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-md transition-colors dark:border-slate-800 dark:bg-slate-950/95">
+        <div
+          className={`mx-auto flex w-full items-center justify-between px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 ${
+            settings.compactHeader ? 'h-11 sm:h-12' : 'h-12 sm:h-13'
+          }`}
+        >
+          <div className="flex items-center gap-4 sm:gap-8">
+            {/* Logo */}
+            <Link
+              to="/"
+              aria-label={t('layout.aria.logoHome')}
+              title={t('layout.aria.logoHome')}
+              className="group flex items-center rounded-lg px-2 py-1 transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <img
+                src={logoSrc}
+                alt="AirTrust"
+                className="h-6 sm:h-7 md:h-8 w-[150px] object-contain object-left"
+              />
+            </Link>
+
+            {/* Navigation — hidden for restricted roles (ALUNO/INSTRUTOR) */}
+            <nav className="hidden items-center gap-1 md:flex" data-no-auto-i18n="true">
+              {!isAluno && !isInstrutor && showDashboard && (
+                <Link
+                  to="/"
+                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/', true) ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  {t('layout.nav.dashboard')}
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showFuncionarios && (
+                <Link
+                  to="/funcionarios"
+                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/funcionarios') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  {t('layout.nav.employees')}
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showQualificacoes && (
+                <Link
+                  to="/qualificacoes"
+                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/qualificacoes') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  {t('layout.nav.qualifications')}
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showSimuladores && (
+                <Link
+                  to="/simuladores"
+                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/simuladores') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  {t('layout.nav.simulators')}
+                </Link>
+              )}
+              {showLms && (
+                <Link
+                  to="/lms"
+                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/lms') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  LMS
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showEscalas && (
+                <Link
+                  to="/escalas"
+                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/escalas') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  {t('layout.nav.escalas')}
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showFrms && (
+                <Link
+                  to="/frms"
+                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/frms') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  {t('layout.nav.frms')}
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showSgso && (
+                <Link
+                  to="/sgso"
+                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/sgso') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  SGSO
+                </Link>
+              )}
+            </nav>
+          </div>
+
+          {/* Right side actions */}
+          <div className="flex items-center gap-2 sm:gap-4">
+            {empresaAtual && (
+              <div
+                className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70 md:flex"
+                title={empresaAtual.nome}
+              >
+                {hasEmpresaLogo(empresaAtual.id, empresaAtual.logo_url) ? (
+                  <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-950">
+                    <img
+                      src={getEmpresaLogoUrl(empresaAtual.logo_url) || ''}
+                      alt={empresaAtual.nome}
+                      className="h-full w-full object-contain"
+                      onError={() => markEmpresaLogoError(empresaAtual.id)}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    <span data-no-auto-i18n="true">{getEmpresaInitials(empresaAtual.nome)}</span>
+                  </div>
+                )}
+                <span className="max-w-[110px] truncate text-xs font-medium text-slate-600 dark:text-slate-300">
+                  {empresaAtual.nome}
+                </span>
+              </div>
+            )}
+
+            {isAdmin && empresas.length > 1 && (
+              <select
+                value={empresaAtualId ?? ''}
+                onChange={(e) => handleSelectEmpresa(Number(e.target.value))}
+                className="hidden h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 md:block"
+                title={t('layout.mobile.activeCompany')}
+              >
+                {empresas.map((empresa) => (
+                  <option key={empresa.id} value={empresa.id}>
+                    {empresa.nome}
+                  </option>
+                ))}
+              </select>
+            )}
+            <div className="hidden sm:flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label={themeActionLabel}
+                aria-pressed={isDark}
+                title={themeActionLabel}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-2.5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+              >
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm dark:bg-blue-500/15 dark:text-blue-200">
+                  {isDark ? <MoonStar className="h-3.5 w-3.5" /> : <SunMedium className="h-3.5 w-3.5" />}
+                </span>
+                <span className="pr-1 text-xs font-semibold">{themeStateLabel}</span>
+              </button>
+              <NotificacoesEscala />
+              <NotificacoesSistema />
+              {(isAdmin || isGestor) && (
+                <button
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  title={t('layout.actions.settings')}
+                  onClick={() => navigate('/configuracoes')}
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {/* User avatar with role badge */}
+            <div className="hidden sm:flex items-center gap-2">
+              <div className="flex flex-col items-end">
+                <span
+                  className="text-xs font-medium leading-none text-slate-700 dark:text-slate-100"
+                  data-no-auto-i18n="true"
+                >
+                  {user?.nome?.split(' ')[0] || t('layout.user.default')}
+                </span>
+                {user?.role && (
+                  <span className="mt-0.5 text-[10px] capitalize leading-none text-slate-400 dark:text-slate-500">
+                    {user.role.toLowerCase()}
+                  </span>
+                )}
+              </div>
+              <div
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                title={`${user?.nome || t('layout.user.default')} — Clique para sair`}
+                onClick={logout}
+                data-no-auto-i18n="true"
+              >
+                {getUserInitials()}
+              </div>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden"
+              aria-label={t('layout.aria.menu')}
+            >
+              <svg
+                className="h-5 w-5 text-slate-700 dark:text-slate-100"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                {mobileMenuOpen ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile Menu Drawer */}
+      {mobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-sidebar bg-black/30 md:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+
+          {/* Menu Content */}
+          <div className="fixed left-0 right-0 bottom-0 top-[48px] z-sidebar overflow-y-auto bg-white shadow-2xl dark:bg-slate-950 md:hidden sm:top-[56px]">
+            {/* User Profile Section */}
+            <div className="border-b border-slate-200 bg-gradient-to-br from-slate-50 to-blue-50 p-4 dark:border-slate-800 dark:from-slate-950 dark:to-slate-900">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200 text-base font-bold text-slate-600 shadow-md dark:bg-slate-800 dark:text-slate-100">
+                  <span data-no-auto-i18n="true">{getUserInitials()}</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {user?.nome || t('layout.user.default')}
+                  </p>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {t('layout.mobile.systemName')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation Links */}
+            <nav className="flex flex-col gap-0.5 p-3">
+              {!isAluno && !isInstrutor && showDashboard && (
+                <Link
+                  to="/"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/', true) ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                >
+                  <LayoutDashboard className="h-4 w-4 shrink-0" />
+                  {t('layout.nav.dashboard')}
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showFuncionarios && (
+                <Link
+                  to="/funcionarios"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/funcionarios') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                >
+                  <Users className="h-4 w-4 shrink-0" />
+                  {t('layout.nav.employees')}
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showQualificacoes && (
+                <>
+                  <Link
+                    to="/qualificacoes"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/qualificacoes') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                  >
+                    <BadgeCheck className="h-4 w-4 shrink-0" />
+                    {t('layout.nav.qualifications')}
+                  </Link>
+                  {isActivePath('/qualificacoes') && (
+                    <div className="ml-7 flex flex-col gap-0.5">
+                      <Link to="/qualificacoes/alertas" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <Bell className="h-3.5 w-3.5 shrink-0" /> Alertas
+                      </Link>
+                      <Link to="/qualificacoes/dashboard" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <LayoutDashboard className="h-3.5 w-3.5 shrink-0" /> Dashboard
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
+              {!isAluno && !isInstrutor && showSimuladores && (
+                <>
+                  <Link
+                    to="/simuladores"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/simuladores') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                  >
+                    <Gauge className="h-4 w-4 shrink-0" />
+                    {t('layout.nav.simulators')}
+                  </Link>
+                  {isActivePath('/simuladores') && (
+                    <div className="ml-7 flex flex-col gap-0.5">
+                      <Link to="/simuladores" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <CalendarDays className="h-3.5 w-3.5 shrink-0" /> Agenda
+                      </Link>
+                      <Link to="/simuladores/fichas" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <FileText className="h-3.5 w-3.5 shrink-0" /> Fichas
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
+              {showLms && (
+                <>
+                  <Link
+                    to="/lms/cursos"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/lms') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                  >
+                    <BookOpen className="h-4 w-4 shrink-0" />
+                    LMS
+                  </Link>
+                  {isActivePath('/lms') && (
+                    <div className="ml-7 flex flex-col gap-0.5">
+                      <Link to="/lms/dashboard" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <LayoutDashboard className="h-3.5 w-3.5 shrink-0" /> Dashboard
+                      </Link>
+                      <Link to="/lms/relatorios" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <BarChart2 className="h-3.5 w-3.5 shrink-0" /> Relatórios
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
+              {!isAluno && !isInstrutor && showEscalas && (
+                <Link
+                  to="/escalas"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/escalas') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                >
+                  <CalendarDays className="h-4 w-4 shrink-0" />
+                  {t('layout.nav.escalas')}
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showFrms && (
+                <>
+                  <Link
+                    to="/frms"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/frms') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                  >
+                    <Activity className="h-4 w-4 shrink-0" />
+                    {t('layout.nav.frms')}
+                  </Link>
+                  {isActivePath('/frms') && (
+                    <div className="ml-7 flex flex-col gap-0.5">
+                      <Link to="/frms/alertas" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <Bell className="h-3.5 w-3.5 shrink-0" /> Alertas
+                      </Link>
+                      <Link to="/frms/fadiga-painel" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                        <MoonStar className="h-3.5 w-3.5 shrink-0" /> Fadiga acumulada
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
+              {!isAluno && !isInstrutor && showSgso && (
+                <Link
+                  to="/sgso"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/sgso') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                >
+                  <ShieldCheck className="h-4 w-4 shrink-0" />
+                  SGSO
+                </Link>
+              )}
+            </nav>
+
+            {/* Mobile Actions */}
+            <div className="space-y-2 border-t border-slate-200 p-3 dark:border-slate-800">
+              {isAdmin && empresas.length > 1 && (
+                <div className="px-4 py-2">
+                  {empresaAtual && (
+                    <div className="mb-2 flex items-center gap-2">
+                      {hasEmpresaLogo(empresaAtual.id, empresaAtual.logo_url) ? (
+                        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-950">
+                          <img
+                            src={getEmpresaLogoUrl(empresaAtual.logo_url) || ''}
+                            alt={empresaAtual.nome}
+                            className="h-full w-full object-contain"
+                            onError={() => markEmpresaLogoError(empresaAtual.id)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {getEmpresaInitials(empresaAtual.nome)}
+                        </div>
+                      )}
+                      <p className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">
+                        {empresaAtual.nome}
+                      </p>
+                    </div>
+                  )}
+                  <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    {t('layout.mobile.activeCompany')}
+                  </label>
+                  <select
+                    value={empresaAtualId ?? ''}
+                    onChange={(e) => handleSelectEmpresa(Number(e.target.value))}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    {empresas.map((empresa) => (
+                      <option key={empresa.id} value={empresa.id}>
+                        {empresa.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label={themeActionLabel}
+                className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {isDark ? <MoonStar className="h-5 w-5" /> : <SunMedium className="h-5 w-5" />}
+                {isDark ? 'Modo escuro ativo' : 'Modo claro ativo'}
+              </button>
+              <button
+                onClick={() => {
+                  navigate('/configuracoes');
+                  setMobileMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Settings className="w-5 h-5" />
+                {t('layout.actions.settings')}
+              </button>
+              <button className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
+                <Bell className="w-5 h-5" />
+                {t('layout.mobile.notifications')}
+              </button>
+              <button
+                onClick={() => {
+                  logout();
+                  setMobileMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              >
+                <LogOut className="w-5 h-5" />
+                {t('layout.mobile.logout')}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Main content */}
+      <main className="mx-auto w-full flex-1 px-4 py-3 sm:px-6 sm:py-4 md:px-8 lg:px-10 lg:py-5 xl:px-12">
+        {children}
+      </main>
+
+      {/* Version Badge */}
+      <footer className="mt-auto">
+        <VersionBadge />
+      </footer>
+    </div>
+  );
+}

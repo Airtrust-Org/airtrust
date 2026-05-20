@@ -1,0 +1,94 @@
+# ===== CLOUDFLARE PAGES - HEADERS CONFIGURATION =====
+# Documentação: https://developers.cloudflare.com/pages/configuration/headers/
+#
+# Este arquivo configura headers HTTP para todas as rotas do frontend
+# Cloudflare Pages aplica automaticamente durante o deploy
+
+# ===== HEADERS GLOBAIS (TODAS AS ROTAS) =====
+/*
+  # Segurança
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  Content-Security-Policy: default-src 'self' blob:; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: https: blob:; font-src 'self' data: https: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; connect-src 'self' https: http: ws: wss: blob:; worker-src 'self' blob:; form-action 'self'; manifest-src 'self'; frame-src 'self' blob: https://api.airtrust.online https://airtrust-api-production.airtrust.workers.dev https://airtrust-api.workers.dev https://*.airtrust.com.br https://view.officeapps.live.com http://localhost:8787
+
+  # Cache default para HTML/rotas SPA: nunca cachear
+  # Regras mais específicas abaixo (ex.: /assets/*.js) vão sobrescrever
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+# ===== HTML - NUNCA CACHEAR =====
+# Garante que usuários sempre vejam a versão mais recente do app
+/*.html
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+# ===== JAVASCRIPT - CACHE LONGO (com hash) =====
+# Vite gera hash nos filenames (ex: index-abc123.js)
+# Podem ser cacheados indefinidamente pois mudam o nome quando atualizados
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+# ===== CSS - CACHE LONGO (com hash) =====
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+# ===== FONTES - CACHE LONGO =====
+/*.woff
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.ttf
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.eot
+  Cache-Control: public, max-age=31536000, immutable
+
+# ===== IMAGENS - CACHE MODERADO =====
+# Imagens podem não ter hash, cache de 1 semana
+/*.png
+  Cache-Control: public, max-age=604800
+
+/*.jpg
+  Cache-Control: public, max-age=604800
+
+/*.jpeg
+  Cache-Control: public, max-age=604800
+
+/*.gif
+  Cache-Control: public, max-age=604800
+
+/*.svg
+  Cache-Control: public, max-age=604800
+
+/*.ico
+  Cache-Control: public, max-age=604800
+
+# ===== MANIFEST E CONFIG - CACHE CURTO =====
+/manifest.json
+  Cache-Control: public, max-age=3600
+
+/robots.txt
+  Cache-Control: public, max-age=3600
+
+# ===== API PROXY (se houver) - CACHE CURTO =====
+/api/*
+  Cache-Control: public, max-age=300, s-maxage=300
+  Vary: Authorization

@@ -1,0 +1,846 @@
+/**
+ * FRMS — Dashboard Principal (Fase 4 Offshore Sleep Model)
+ *
+ * Layout 3 zonas:
+ *   1. Sidebar de filtros (fixo, esquerda)
+ *   2. Header fixo com botões sempre visíveis
+ *   3. Conteúdo scrollável: cards + heatmap + timeline + tabela
+ */
+import { useState, useMemo, useCallback, useRef, useEffect, Suspense, lazy } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Activity,
+  Bell,
+  ClipboardCheck,
+  CalendarRange,
+  History,
+  Plus,
+  Settings,
+  ShieldAlert,
+  TrendingUp,
+  Menu,
+  Upload,
+  X,
+  BookOpen,
+  Users,
+} from 'lucide-react';
+import AppLayout from '@/react-app/components/AppLayout';
+import Button from '@/react-app/components/Button';
+import { useApi } from '@/react-app/hooks/useApi';
+import {
+  useFrmsFrota,
+  useFrmsAlertas,
+  useFrmsAlertasCount,
+  useFrmsConfiguracoes,
+  useFrmsJornadasEffectiveness,
+} from '@/react-app/hooks/useFrms';
+import type {
+  FrmsFrotaRow,
+  FrmsAlertaRow,
+  FrmsEffectivenessJornadaRow,
+} from '@/react-app/hooks/useFrms';
+import FrmsFormJornada from './FrmsFormJornada';
+import { FrmsFilterProvider, useFrmsFilters } from './components/FrmsFilterContext';
+import FrmsFilters from './components/FrmsFilters';
+import FrmsFilterChips from './components/FrmsFilterChips';
+import FrmsMetricCards from './components/FrmsMetricCards';
+import FrmsHeatmap from './components/FrmsHeatmap';
+import FrmsTripulantesTable from './components/FrmsTripulantesTable';
+import FrmsJornadaEffectivenessCard from './components/FrmsJornadaEffectivenessCard';
+import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
+import {
+  getMonthRange,
+  getMonthDays,
+  getRollingRange,
+  monthLabel,
+  getFrmsNivelWeight,
+  resolveFrmsComplianceDashboardNivel,
+  resolveFrmsDashboardNivelCompleto,
+  toDateKeyLocal,
+} from './frmsUtils';
+import { applyFrmsFrotaFilters, extractModelTokens } from './frmsFilterUtils';
+
+const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
+
+// ── Helpers ────────────────────────────────────────────
+
+// ── TripulantePickerModal ──────────────────────────
+
+interface FuncRow {
+  id: number;
+  nome: string;
+  cargo?: string;
+  funcao?: string;
+}
+
+type EffectivenessCardKey = 'PLENA' | 'ATENCAO' | 'DEGRADADA' | 'SEVERA';
+type ComplianceCardKey = 'OK' | 'ATENCAO' | 'CRITICO' | 'VIOLACAO';
+
+interface DashboardHeatmapDayData {
+  pct?: number;
+  hv7d?: number;
+  hv28d?: number;
+  hvDia?: number;
+  pctDia?: number;
+  teve_jornada?: number;
+  effectiveness_pct?: number | null;
+  effectiveness_nivel?: string | null;
+}
+
+interface DashboardHeatmapTripulante {
+  tripulante_id: string;
+  dias: Record<string, DashboardHeatmapDayData>;
+}
+
+function resolveEffectivenessCardKey(
+  pct: number | null | undefined,
+  config: Record<string, number> | null,
+): EffectivenessCardKey | null {
+  if (pct == null) return null;
+  const verde = config?.EFFECTIV_VERDE_MIN ?? 90;
+  const amarelo = config?.EFFECTIV_AMARELO_MAX ?? 77;
+  const vermelho = config?.EFFECTIV_VERMELHO_MAX ?? 65;
+  if (pct >= verde) return 'PLENA';
+  if (pct <= vermelho) return 'SEVERA';
+  if (pct <= amarelo) return 'DEGRADADA';
+  return 'ATENCAO';
+}
+
+function resolveComplianceCardKey(
+  pct: number | null | undefined,
+  config: Record<string, number> | null,
+): ComplianceCardKey | null {
+  if (pct == null) return null;
+  return resolveFrmsComplianceDashboardNivel(pct, config);
+}
+
+function TripulantePickerModal({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (id: string, nome: string) => void;
+  onClose: () => void;
+}) {
+  const [busca, setBusca] = useState('');
+  const { data: funcRaw, loading } = useApi<{ data: FuncRow[] }>(
+    '/api/funcionarios?limit=200&page=1&status=ativos&orderBy=nome&order=ASC',
+  );
+  const funcionariosRaw = Array.isArray(funcRaw?.data) ? funcRaw.data : [];
+  const funcionarios: FuncRow[] = funcionariosRaw.filter((f: FuncRow) => {
+    if (!f.funcao) return true;
+    const fn = f.funcao.toUpperCase().trim();
+    return (
+      fn === 'PILOTO' ||
+      fn === 'COPILOTO' ||
+      fn === 'COMANDANTE' ||
+      fn.includes('PILOT') ||
+      fn.includes('COPIL') ||
+      fn.includes('COMAND')
+    );
+  });
+
+  const filtered = useMemo(() => {
+    if (!busca.trim()) return funcionarios;
+    const q = busca.toLowerCase();
+    return funcionarios.filter((f) => f.nome.toLowerCase().includes(q));
+  }, [funcionarios, busca]);
+
+  return (
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b px-6 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Lançar Jornada</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Selecione o tripulante</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <X className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+          </button>
+        </div>
+        <div className="px-6 pt-4 pb-2">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Buscar por nome..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="w-full rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+          />
+        </div>
+        <div className="max-h-[320px] overflow-y-auto px-2 pb-4">
+          {loading ? (
+            <div className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">Carregando...</div>
+          ) : filtered.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">Nenhum resultado</div>
+          ) : (
+            filtered.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => onSelect(String(f.id), f.nome)}
+                className="flex w-full items-center gap-3 rounded-md px-4 py-3 text-left transition-colors hover:bg-primary/5 dark:hover:bg-primary/10"
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold">
+                  {f.nome.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{f.nome}</p>
+                  {f.cargo && <p className="truncate text-xs text-slate-400 dark:text-slate-500">{f.cargo}</p>}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard Content (dentro do FrmsFilterProvider) ──
+
+function DashboardContent() {
+  const navigate = useNavigate();
+  const { filters, periodoNumDias, isMonthMode } = useFrmsFilters();
+  const [showPicker, setShowPicker] = useState(false);
+  const [jornadaTripulante, setJornadaTripulante] = useState<{ id: string; nome: string } | null>(
+    null,
+  );
+  const [selectedTripulanteId, setSelectedTripulanteId] = useState<string | undefined>();
+  const [selectedHeatmapDay, setSelectedHeatmapDay] = useState<{
+    tripulanteId: string;
+    tripulanteNome: string;
+    date: string;
+  } | null>(null);
+  const [complianceDayFilter, setComplianceDayFilter] = useState<ComplianceCardKey | null>(null);
+  const [effectivenessDayFilter, setEffectivenessDayFilter] = useState<EffectivenessCardKey | null>(
+    null,
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const timelineRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to timeline when tripulante is selected
+  useEffect(() => {
+    if (selectedTripulanteId && timelineRef.current) {
+      timelineRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [selectedTripulanteId]);
+
+  // Queries
+  const periodoAlertas = useMemo(() => {
+    return isMonthMode ? getMonthRange(filters.mesReferencia) : getRollingRange(periodoNumDias);
+  }, [filters.mesReferencia, isMonthMode, periodoNumDias]);
+
+  const {
+    data: frotaRaw,
+    loading: loadingFrota,
+    refetch: refetchFrota,
+  } = useFrmsFrota(
+    isMonthMode ? filters.mesReferencia : undefined,
+    isMonthMode ? undefined : periodoNumDias,
+    isMonthMode ? filters.quinzena : undefined,
+  );
+  const { data: alertasRaw, refetch: refetchAlertas } = useFrmsAlertas({
+    resolvido: 'false',
+    data_inicio: periodoAlertas.start,
+    data_fim: periodoAlertas.end,
+    limit: '200',
+  });
+  const { data: countData, refetch: refetchCount } = useFrmsAlertasCount();
+  const { data: configData } = useFrmsConfiguracoes();
+  const frmsConfig = (configData as { limites?: Record<string, number> } | null)?.limites ?? null;
+  const { data: heatmapRawForStats } = useApi<DashboardHeatmapTripulante[]>(
+    isMonthMode
+      ? `/api/frms/heatmap?mes=${filters.mesReferencia}`
+      : `/api/frms/heatmap?periodo=${periodoNumDias}`,
+    { requireAuth: false, bypassGetCache: true, staleTime: 2 * 60 * 1000 },
+  );
+
+  const frota: FrmsFrotaRow[] = useMemo(
+    () => (frotaRaw as FrmsFrotaRow[] | null) ?? [],
+    [frotaRaw],
+  );
+  const alertas: FrmsAlertaRow[] = useMemo(
+    () => (alertasRaw as FrmsAlertaRow[] | null) ?? [],
+    [alertasRaw],
+  );
+  const alertCount = (countData as { count: number } | null)?.count ?? 0;
+
+  const alertNivelMap = useMemo(() => {
+    const alertNivelMap = new Map<string, string>();
+    alertas.forEach((a) => {
+      const current = alertNivelMap.get(a.tripulante_id) ?? 'OK';
+      if (getFrmsNivelWeight(a.nivel) > getFrmsNivelWeight(current)) {
+        alertNivelMap.set(a.tripulante_id, a.nivel);
+      }
+    });
+    return alertNivelMap;
+  }, [alertas]);
+
+  const alertNivelByTripulante = useMemo(() => Object.fromEntries(alertNivelMap), [alertNivelMap]);
+
+  const frotaComDadosNoPeriodo = useMemo(() => {
+    if (!isMonthMode) return frota;
+    return frota.filter((item) => Number(item.hv_mes_min || 0) > 0);
+  }, [frota, isMonthMode]);
+
+  const filteredFrota = useMemo(
+    () =>
+      applyFrmsFrotaFilters(frotaComDadosNoPeriodo, filters, {
+        alertNivelByTripulante,
+        config: frmsConfig,
+        applyQuinzenaClientFilter: !isMonthMode,
+      }),
+    [alertNivelByTripulante, filters, frotaComDadosNoPeriodo, frmsConfig, isMonthMode],
+  );
+
+  const filteredTripulanteIds = useMemo(
+    () => filteredFrota.map((item) => String(item.tripulante_id)),
+    [filteredFrota],
+  );
+
+  const heatmapDates = useMemo(() => {
+    if (isMonthMode) return getMonthDays(filters.mesReferencia);
+    const result: string[] = [];
+    const today = new Date();
+    for (let i = periodoNumDias - 1; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      result.push(toDateKeyLocal(d));
+    }
+    return result;
+  }, [filters.mesReferencia, isMonthMode, periodoNumDias]);
+
+  const effectivenessByDayStats = useMemo(() => {
+    const counts = {
+      plena: 0,
+      atencao: 0,
+      degradada: 0,
+      severa: 0,
+      semDados: 0,
+    };
+
+    const rows = (heatmapRawForStats as DashboardHeatmapTripulante[] | null) ?? [];
+    if (!rows.length) return counts;
+
+    const allowed = new Set(filteredTripulanteIds);
+    rows.forEach((trip) => {
+      if (!allowed.has(String(trip.tripulante_id))) return;
+
+      heatmapDates.forEach((date) => {
+        const day = trip.dias?.[date];
+        const hasJornada = day?.teve_jornada === 1;
+        const isSemDados =
+          !day ||
+          (!hasJornada && isMonthMode) ||
+          (day.teve_jornada !== 1 &&
+            (day.hv7d ?? 0) === 0 &&
+            (day.hv28d ?? 0) === 0 &&
+            (day.hvDia ?? 0) === 0 &&
+            day.effectiveness_pct == null);
+
+        if (isSemDados) {
+          counts.semDados += 1;
+          return;
+        }
+
+        const bucket = resolveEffectivenessCardKey(day.effectiveness_pct ?? null, frmsConfig);
+        if (bucket === 'PLENA') counts.plena += 1;
+        else if (bucket === 'ATENCAO') counts.atencao += 1;
+        else if (bucket === 'DEGRADADA') counts.degradada += 1;
+        else if (bucket === 'SEVERA') counts.severa += 1;
+      });
+    });
+
+    return counts;
+  }, [filteredTripulanteIds, frmsConfig, heatmapDates, heatmapRawForStats, isMonthMode]);
+
+  const complianceByDayStats = useMemo(() => {
+    const counts = {
+      ok: 0,
+      atencao: 0,
+      critico: 0,
+      violacao: 0,
+    };
+
+    const rows = (heatmapRawForStats as DashboardHeatmapTripulante[] | null) ?? [];
+    if (!rows.length) return counts;
+
+    const allowed = new Set(filteredTripulanteIds);
+    rows.forEach((trip) => {
+      if (!allowed.has(String(trip.tripulante_id))) return;
+
+      heatmapDates.forEach((date) => {
+        const day = trip.dias?.[date];
+        const hasJornada = day?.teve_jornada === 1;
+        const isSemDados =
+          !day ||
+          (!hasJornada && isMonthMode) ||
+          (day.teve_jornada !== 1 &&
+            (day.hv7d ?? 0) === 0 &&
+            (day.hv28d ?? 0) === 0 &&
+            (day.hvDia ?? 0) === 0 &&
+            day.effectiveness_pct == null);
+
+        if (isSemDados) return;
+
+        const bucket = resolveComplianceCardKey(day.pct ?? null, frmsConfig);
+        if (bucket === 'OK') counts.ok += 1;
+        else if (bucket === 'ATENCAO') counts.atencao += 1;
+        else if (bucket === 'CRITICO') counts.critico += 1;
+        else if (bucket === 'VIOLACAO') counts.violacao += 1;
+      });
+    });
+
+    return counts;
+  }, [filteredTripulanteIds, frmsConfig, heatmapDates, heatmapRawForStats, isMonthMode]);
+
+  const modelosDisponiveis = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          frota
+            .flatMap((item) => extractModelTokens(item.aeronave_modelo))
+            .filter((modelo): modelo is string => Boolean(modelo)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [frota],
+  );
+
+  // Stats
+  const stats = useMemo(() => {
+    return {
+      total: filteredFrota.length,
+      compliance: {
+        ok: complianceByDayStats.ok,
+        atencao: complianceByDayStats.atencao,
+        critico: complianceByDayStats.critico,
+        violacao: complianceByDayStats.violacao,
+      },
+      effectiveness: {
+        plena: effectivenessByDayStats.plena,
+        atencao: effectivenessByDayStats.atencao,
+        degradada: effectivenessByDayStats.degradada,
+        severa: effectivenessByDayStats.severa,
+        semDados: effectivenessByDayStats.semDados,
+      },
+    };
+  }, [complianceByDayStats, effectivenessByDayStats, filteredFrota.length]);
+
+  const handlePickTripulante = useCallback((id: string, nome: string) => {
+    setShowPicker(false);
+    setJornadaTripulante({ id, nome });
+  }, []);
+
+  const handleJornadaSaved = useCallback(() => {
+    setJornadaTripulante(null);
+    refetchFrota();
+    refetchAlertas();
+    refetchCount();
+  }, [refetchFrota, refetchAlertas, refetchCount]);
+
+  const selectedTripulante = useMemo(
+    () => filteredFrota.find((f) => String(f.tripulante_id) === selectedTripulanteId) ?? null,
+    [filteredFrota, selectedTripulanteId],
+  );
+
+  const timelinePeriodo = useMemo(() => {
+    if (isMonthMode) {
+      const monthRange = getMonthRange(filters.mesReferencia);
+      return {
+        dias: monthRange.daysInMonth,
+        inicio: monthRange.start,
+        fim: monthRange.end,
+        label: monthLabel(filters.mesReferencia),
+      };
+    }
+    return {
+      dias: periodoNumDias,
+      inicio: undefined,
+      fim: undefined,
+      label: `Últimos ${periodoNumDias} dias`,
+    };
+  }, [filters.mesReferencia, isMonthMode, periodoNumDias]);
+
+  const selectedRange = useMemo(
+    () =>
+      timelinePeriodo.inicio && timelinePeriodo.fim
+        ? { inicio: timelinePeriodo.inicio, fim: timelinePeriodo.fim }
+        : undefined,
+    [timelinePeriodo.fim, timelinePeriodo.inicio],
+  );
+
+  const { data: selectedTripJornadasRaw, loading: loadingSelectedTripJornadas } =
+    useFrmsJornadasEffectiveness(selectedTripulanteId, timelinePeriodo.dias, selectedRange);
+
+  const selectedTripJornadas = useMemo(
+    () => (selectedTripJornadasRaw as FrmsEffectivenessJornadaRow[] | null) ?? [],
+    [selectedTripJornadasRaw],
+  );
+
+  const selectedDayJornada = useMemo(() => {
+    if (!selectedHeatmapDay || !selectedTripulanteId) return null;
+    if (selectedHeatmapDay.tripulanteId !== selectedTripulanteId) return null;
+    return (
+      selectedTripJornadas.find((j) => j.data_apresentacao === selectedHeatmapDay.date) ?? null
+    );
+  }, [selectedHeatmapDay, selectedTripJornadas, selectedTripulanteId]);
+
+  const selectedNextDayJornada = useMemo(() => {
+    if (!selectedDayJornada) return null;
+    const selectedIndex = selectedTripJornadas.findIndex((j) => j.id === selectedDayJornada.id);
+    if (selectedIndex < 0) return null;
+    return selectedTripJornadas[selectedIndex + 1] ?? null;
+  }, [selectedDayJornada, selectedTripJornadas]);
+
+  return (
+    <div
+      className="-mx-4 -mt-4 -mb-4 flex overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.08),_transparent_26%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(20,184,166,0.14),_transparent_28%),linear-gradient(180deg,#020617_0%,#0b1120_100%)] sm:-mx-6 sm:-mt-6 sm:-mb-6 md:-mx-8 lg:-mx-10 xl:-mx-12"
+      style={{ height: 'calc(100vh - var(--header-height, 48px))' }}
+    >
+      {/* ZONA 1: Sidebar — desktop fixo, mobile drawer */}
+      <aside className="hidden w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex">
+        <FrmsFilters modelosDisponiveis={modelosDisponiveis} />
+      </aside>
+
+      {/* Mobile drawer overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-sidebar lg:hidden">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
+          <aside className="relative flex h-full w-72 flex-col overflow-y-auto bg-white shadow-xl dark:bg-slate-950">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Filtros</span>
+              <button onClick={() => setSidebarOpen(false)}>
+                <X className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+              </button>
+            </div>
+            <FrmsFilters modelosDisponiveis={modelosDisponiveis} />
+          </aside>
+        </div>
+      )}
+
+      {/* ZONA 2 + 3: Main content */}
+      <main className="flex-1 flex min-w-0 flex-col overflow-hidden">
+        {/* Header fixo — botões SEMPRE visíveis */}
+        <header className="flex-shrink-0 border-b border-slate-200/80 bg-white/90 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 sm:px-6">
+          <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <button
+                className="mt-0.5 rounded-md p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"
+                onClick={() => setSidebarOpen(true)}
+              >
+                <Menu className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+              </button>
+
+              <div className="min-w-0">
+                <h1 className="truncate text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">
+                  FRMS
+                </h1>
+                <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
+                  Gerenciamento de fadiga com leitura diária de compliance e efetividade
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
+                    <CalendarRange className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                    {isMonthMode
+                      ? `Planejada · ${monthLabel(filters.mesReferencia)}`
+                      : `Últimos ${periodoNumDias} dias`}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
+                    <Users className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                    {stats.total} tripulantes monitorados
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
+                    <Bell className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                    {alertCount} alertas abertos
+                  </span>
+                  {selectedTripulante && (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300">
+                      <Activity className="h-3.5 w-3.5" />
+                      Em foco: {selectedTripulante.nome_guerra || selectedTripulante.nome}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-stretch gap-2 sm:items-end">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/frms/importacao/fira')}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-inset dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>Importar FIRAs</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-primary bg-primary px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-inset"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Incluir Jornada</span>
+                </button>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate('/frms/alertas')}
+                  className="relative"
+                  title="Alertas abertos"
+                >
+                  <Bell className="h-4 w-4" />
+                  {alertCount > 0 && (
+                    <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white">
+                      {alertCount > 99 ? '99+' : alertCount}
+                    </span>
+                  )}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate('/frms/relatorios')}
+                  className="hidden sm:flex"
+                  title="Relatórios"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate('/frms/configuracoes')}
+                  className="hidden sm:flex"
+                  title="Configurações"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate('/frms/checkin')}
+                  className="hidden sm:inline-flex gap-2.5 px-4"
+                  title="Check-in diário de fadiga"
+                >
+                  <ClipboardCheck className="h-4 w-4 shrink-0" />
+                  <span>Check-in de Fadiga</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate('/frms/fadiga-painel')}
+                  className="hidden sm:inline-flex gap-2.5 px-4"
+                  title="Painel diário de fadiga"
+                >
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  <span>Painel de Fadiga</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate('/frms/fadiga-historico')}
+                  className="hidden sm:inline-flex gap-2.5 px-4"
+                  title="Histórico de check-ins"
+                >
+                  <History className="h-4 w-4 shrink-0" />
+                  <span>Histórico Fadiga</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate('/frms/conceitos')}
+                  className="hidden sm:inline-flex gap-2.5 px-4"
+                  title="Como funciona o FRMS"
+                  aria-label="Conceitos e cálculo"
+                >
+                  <BookOpen className="h-4 w-4 shrink-0" />
+                  <span>Como funciona o FRMS</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-4 sm:p-6">
+            <FrmsFilterChips />
+
+            <FrmsMetricCards
+              complianceCards={[
+                {
+                  key: 'OK',
+                  total: stats.compliance.ok,
+                },
+                {
+                  key: 'ATENCAO',
+                  total: stats.compliance.atencao,
+                },
+                {
+                  key: 'CRITICO',
+                  total: stats.compliance.critico,
+                },
+                {
+                  key: 'VIOLACAO',
+                  total: stats.compliance.violacao,
+                },
+              ]}
+              effectivenessCards={[
+                {
+                  key: 'PLENA',
+                  total: stats.effectiveness.plena,
+                },
+                {
+                  key: 'ATENCAO',
+                  total: stats.effectiveness.atencao,
+                },
+                {
+                  key: 'DEGRADADA',
+                  total: stats.effectiveness.degradada,
+                },
+                {
+                  key: 'SEVERA',
+                  total: stats.effectiveness.severa,
+                },
+              ]}
+              effectivenessSemDados={stats.effectiveness.semDados}
+              activeComplianceKey={complianceDayFilter}
+              onComplianceToggle={(key) => {
+                setComplianceDayFilter((prev) => (prev === key ? null : key));
+                setEffectivenessDayFilter(null);
+              }}
+              activeEffectivenessKey={effectivenessDayFilter}
+              onEffectivenessToggle={(key) => {
+                setEffectivenessDayFilter((prev) => (prev === key ? null : key));
+                setComplianceDayFilter(null);
+              }}
+            />
+
+            {/* Row 1: Heatmap (largura total) */}
+            <FrmsHeatmap
+              onSelectTripulante={(id) => {
+                setSelectedTripulanteId(id);
+                setSelectedHeatmapDay((prev) => {
+                  if (prev && prev.tripulanteId !== id) return null;
+                  return prev;
+                });
+              }}
+              onSelectDay={({ tripulanteId, tripulanteNome, date }) => {
+                setSelectedTripulanteId(tripulanteId);
+                setSelectedHeatmapDay({ tripulanteId, tripulanteNome, date });
+              }}
+              alertNivelByTripulante={alertNivelByTripulante}
+              config={frmsConfig}
+              allowedTripulanteIds={filteredTripulanteIds}
+              complianceDayFilter={complianceDayFilter}
+              effectivenessDayFilter={effectivenessDayFilter}
+            />
+
+            {/* Row 2: Curva de Efetividade — visível só quando tripulante selecionado */}
+            {selectedTripulanteId && (
+              <div ref={timelineRef}>
+                <Suspense
+                  fallback={
+                    <div className="h-48 rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" />
+                  }
+                >
+                  <FrmsEffectivenessTimeline
+                    tripulanteId={selectedTripulanteId}
+                    tripulanteNome={
+                      filteredFrota.find((f) => String(f.tripulante_id) === selectedTripulanteId)
+                        ?.nome_guerra ??
+                      filteredFrota.find((f) => String(f.tripulante_id) === selectedTripulanteId)
+                        ?.nome
+                    }
+                    config={frmsConfig}
+                    mapPeriodoDias={timelinePeriodo.dias}
+                    mapPeriodoInicio={timelinePeriodo.inicio}
+                    mapPeriodoFim={timelinePeriodo.fim}
+                    mapPeriodoLabel={timelinePeriodo.label}
+                  />
+                </Suspense>
+
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">
+                      Dia selecionado no mapa
+                    </h3>
+                    {selectedHeatmapDay ? (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {selectedHeatmapDay.date.slice(8, 10)}/{selectedHeatmapDay.date.slice(5, 7)}
+                        {' · '}
+                        {selectedHeatmapDay.tripulanteNome}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {!selectedHeatmapDay ? (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Clique em um dia no mapa de fadiga para abrir o detalhe da jornada.
+                    </p>
+                  ) : loadingSelectedTripJornadas ? (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Carregando jornada do dia selecionado...
+                    </p>
+                  ) : selectedDayJornada ? (
+                    <>
+                      <FrmsJornadaEffectivenessCard
+                        jornada={selectedDayJornada}
+                        nextJornada={selectedNextDayJornada}
+                        config={frmsConfig}
+                      />
+                      <FrmsDayExplanationPanel
+                        tripulanteId={selectedHeatmapDay.tripulanteId}
+                        tripulanteNome={selectedHeatmapDay.tripulanteNome}
+                        date={selectedHeatmapDay.date}
+                        config={frmsConfig}
+                        source="dashboard"
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Sem jornada registrada para esse dia no período selecionado.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Row 2: Tabela de tripulantes (com expand → jornadas + radar) */}
+            <FrmsTripulantesTable
+              frota={filteredFrota}
+              loading={loadingFrota}
+              alertNivelByTripulante={alertNivelByTripulante}
+              config={frmsConfig}
+            />
+          </div>
+        </div>
+      </main>
+
+      {/* Modals */}
+      {showPicker && (
+        <TripulantePickerModal
+          onSelect={handlePickTripulante}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+      {jornadaTripulante && (
+        <FrmsFormJornada
+          tripulanteId={jornadaTripulante.id}
+          tripulanteNome={jornadaTripulante.nome}
+          jornada={null}
+          onClose={() => setJornadaTripulante(null)}
+          onSaved={handleJornadaSaved}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Export ────────────────────────────────
+
+export default function FrmsDashboard() {
+  return (
+    <AppLayout>
+      <FrmsFilterProvider>
+        <DashboardContent />
+      </FrmsFilterProvider>
+    </AppLayout>
+  );
+}

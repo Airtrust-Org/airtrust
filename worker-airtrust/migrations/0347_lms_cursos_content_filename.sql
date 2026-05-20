@@ -1,0 +1,1 @@
+ALTER TABLE lms_cursos ADD COLUMN conteudo_arquivo_nome TEXT;

@@ -1,0 +1,452 @@
+/**
+ * SIMULADORES — Shared utilities, helpers, and schemas
+ * Imported by simuladores-core.ts and all sub-module files.
+ */
+
+import { z } from 'zod';
+import type { Context } from 'hono';
+import type { Env } from '../types';
+import { replaceManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
+
+// ── Zod schemas ──────────────────────────────────────────────────────────────
+
+export const TipoSessaoSchema = z.object({
+  codigo: z.string().min(1, 'Código obrigatório').max(20),
+  nome: z.string().min(1, 'Nome obrigatório').max(100),
+  descricao: z.string().max(500).nullish(),
+});
+
+export const ModeloSessaoSchema = z.object({
+  codigo: z.string().min(1, 'Código obrigatório').max(20),
+  nome: z.string().min(1, 'Nome obrigatório').max(100),
+  tipo_sessao_id: z.coerce.number().int().positive().nullish(),
+  tipo: z.enum(['SIMULADOR', 'AERONAVE']).optional().default('SIMULADOR'),
+  modelo_aeronave: z.string().max(50).nullish(),
+  descricao: z.string().max(500).nullish(),
+  duracao_estimada: z.coerce.number().int().positive().optional().default(120),
+  gera_qualificacao: z.coerce.number().int().min(0).max(1).optional().default(0),
+  qualificacao_tipo_id: z.coerce.number().int().positive().nullish(),
+  checks_ids: z.array(z.coerce.number().int().positive()).optional().default([]),
+  manobras: z
+    .array(
+      z.object({
+        manobra_id: z.coerce.number().int().positive(),
+        ordem: z.coerce.number().int().optional(),
+        obrigatoria: z.coerce.number().int().min(0).max(1).optional().default(1),
+        observacoes: z.string().max(500).nullish(),
+      }),
+    )
+    .optional()
+    .default([]),
+});
+
+export const CategoriaSimuladoresSchema = z.object({
+  nome: z.string().min(1, 'Nome obrigatório').max(100),
+  descricao: z.string().max(500).nullish(),
+  cor: z.string().max(20).nullish(),
+  codigo: z.string().max(30).nullish(),
+});
+
+export const ManobraSchema = z.object({
+  codigo: z.string().min(1, 'Código obrigatório').max(20),
+  nome: z.string().min(1, 'Nome obrigatório').max(100),
+  descricao: z.string().max(500).nullish(),
+  categoria: z.string().max(50).optional(),
+  tipo_sessao: z.string().max(50).optional(),
+  tipo_aeronave: z.string().max(50).optional(),
+  ordem: z.coerce.number().int().optional(),
+  nivel_dificuldade: z.string().max(20).nullish(),
+  tempo_estimado: z.coerce.number().int().nullish(),
+  pontuacao_minima: z.coerce.number().nullish(),
+});
+
+export interface CheckTipoRecord {
+  id: number;
+  codigo: string;
+  nome?: string | null;
+  descricao?: string | null;
+}
+
+// ── Helper functions ─────────────────────────────────────────────────────────
+
+export function requireAdminForDelete(c: Context<{ Bindings: Env }>): Response | null {
+  const userRole = (c as any).get('userRole');
+  const normalizedRole =
+    typeof userRole === 'string' ? userRole.toLowerCase() : String(userRole || '').toLowerCase();
+
+  const canDelete = ['admin', 'administrador', 'gestor', 'manager'].includes(normalizedRole);
+
+  if (!canDelete) {
+    return c.json(
+      {
+        success: false,
+        error:
+          'Acesso negado. Apenas gestores e administradores podem excluir registros de simuladores.',
+      },
+      403,
+    );
+  }
+
+  return null;
+}
+
+export function timeToMinutes(h: unknown): number | null {
+  if (typeof h !== 'string') return null;
+  if (h.length < 5) return null;
+  const hh = Number(h.slice(0, 2));
+  const mm = Number(h.slice(3, 5));
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+  return hh * 60 + mm;
+}
+
+export function normalizeModeloAeronave(modeloAeronave: unknown): string {
+  return String(modeloAeronave || '')
+    .trim()
+    .toUpperCase();
+}
+
+export function isCheckCompativelComModeloAeronave(
+  codigoCheck: unknown,
+  modeloAeronave: unknown,
+): boolean {
+  const codigo = String(codigoCheck || '')
+    .trim()
+    .toUpperCase();
+  const modelo = normalizeModeloAeronave(modeloAeronave);
+
+  if (!codigo || !modelo) {
+    return true;
+  }
+
+  if (codigo.endsWith('-139')) {
+    return modelo.includes('139');
+  }
+
+  if (codigo.endsWith('-76')) {
+    return modelo.includes('76');
+  }
+
+  return true;
+}
+
+export function filtrarChecksCompativeisComModelo<T extends { codigo?: string | null }>(
+  checks: T[],
+  modeloAeronave: unknown,
+): T[] {
+  return checks.filter((check) =>
+    isCheckCompativelComModeloAeronave(check.codigo, modeloAeronave),
+  );
+}
+
+export async function listarTiposCheckPorIds(
+  db: D1Database,
+  ids: number[],
+): Promise<CheckTipoRecord[]> {
+  const idsUnicos = Array.from(
+    new Set(ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
+  );
+
+  if (idsUnicos.length === 0) {
+    return [];
+  }
+
+  const placeholders = idsUnicos.map(() => '?').join(',');
+  const result = await db
+    .prepare(
+      `SELECT id, codigo, nome, descricao
+       FROM qualificacoes_tipos
+       WHERE id IN (${placeholders})
+         AND deleted_at IS NULL
+         AND ativo = 1
+         AND UPPER(COALESCE(categoria, '')) = 'CHECK'`,
+    )
+    .bind(...idsUnicos)
+    .all<CheckTipoRecord>();
+
+  return result.results || [];
+}
+
+export async function getSimuladorModeloAeronave(
+  db: D1Database,
+  simuladorId: string | number | null | undefined,
+): Promise<string> {
+  if (simuladorId == null) {
+    return '';
+  }
+
+  const simulador = await db
+    .prepare(
+      `SELECT COALESCE(aeronave_codigo, codigo_aeronave, tipo, modelo, '') AS modelo_aeronave
+       FROM simuladores
+       WHERE id = ? AND deleted_at IS NULL
+       LIMIT 1`,
+    )
+    .bind(simuladorId)
+    .first<{ modelo_aeronave: string | null }>();
+
+  return normalizeModeloAeronave(simulador?.modelo_aeronave);
+}
+
+function addDaysToIsoDate(date: string, days: number): string {
+  const base = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(base.getTime())) return date;
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
+function buildAbsoluteInterval(date: string, inicioMin: number, fimMin: number) {
+  const baseDay = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(baseDay.getTime())) return null;
+
+  const startAbs = Math.floor(baseDay.getTime() / 60000) + inicioMin;
+  let endAbs = Math.floor(baseDay.getTime() / 60000) + fimMin;
+
+  if (fimMin <= inicioMin) {
+    endAbs += 24 * 60;
+  }
+
+  return { startAbs, endAbs };
+}
+
+export function getStatusEventoEscala(status: unknown): 'confirmado' | 'pendente' | 'cancelado' {
+  const normalized = String(status || '')
+    .trim()
+    .toUpperCase();
+
+  if (normalized.includes('CANCEL')) return 'cancelado';
+  if (normalized.includes('PEND')) return 'pendente';
+  return 'confirmado';
+}
+
+export async function getSimuladorLabel(
+  db: D1Database,
+  simuladorId: string | number | null | undefined,
+) {
+  if (simuladorId == null) return null;
+
+  const simulador = await db
+    .prepare(`SELECT nome, tipo FROM simuladores WHERE id = ? AND deleted_at IS NULL LIMIT 1`)
+    .bind(simuladorId)
+    .first<{ nome: string | null; tipo: string | null }>();
+
+  return simulador?.nome || simulador?.tipo || null;
+}
+
+export async function syncSessaoEscalaEventos(
+  db: D1Database,
+  params: {
+    empresaId?: string | number | null;
+    sessaoId: string | number;
+    simuladorId?: string | number | null;
+    data: string;
+    status?: unknown;
+    temaSessao?: string | null;
+    tipoSessao?: string | null;
+    observacoes?: string | null;
+    participantes: Array<{ funcionario_id: string | number }>;
+    createdBy: string;
+  },
+) {
+  const local = await getSimuladorLabel(db, params.simuladorId);
+  const statusEvento = getStatusEventoEscala(params.status);
+  const descricao = [params.temaSessao, params.tipoSessao].filter(Boolean).join(' · ') || null;
+
+  await Promise.all(
+    params.participantes.map((participante) =>
+      replaceManagedEscalaEvents({
+        db,
+        empresaId: params.empresaId,
+        funcionarioId: participante.funcionario_id,
+        origem: 'simuladores',
+        linkId: `sim_sessao:${params.sessaoId}`,
+        tipoEvento: 'treinamento_simulador',
+        dataInicio: params.data,
+        dataFim: params.data,
+        createdBy: params.createdBy,
+        status: statusEvento,
+        local,
+        simuladorId: params.simuladorId,
+        observacoes: descricao || params.observacoes || null,
+        motivoAutomatico:
+          'Gerado automaticamente a partir da sessão de simulador. Gerencie no módulo Simuladores.',
+        replaceAutoTipos: ['voo', 'folga'],
+      }),
+    ),
+  );
+}
+
+export async function findSessaoConflict(
+  db: D1Database,
+  p: {
+    simuladorId: number;
+    data: string;
+    inicioMin: number;
+    fimMin: number;
+    excludeId?: string | number;
+  },
+) {
+  const datasRelevantes = [addDaysToIsoDate(p.data, -1), p.data, addDaysToIsoDate(p.data, 1)];
+
+  const query = `
+    SELECT sa.id, sa.data, sa.hora_inicio, sa.hora_fim
+    FROM simulador_agendamentos sa
+    WHERE sa.deleted_at IS NULL
+      AND sa.simulador_id = ?
+      AND sa.data IN (?, ?, ?)
+      AND sa.hora_inicio IS NOT NULL
+      AND sa.hora_fim IS NOT NULL
+      ${p.excludeId !== undefined && p.excludeId !== null ? 'AND sa.id != ?' : ''}
+    ORDER BY sa.data, sa.hora_inicio
+  `;
+
+  const bindings: Array<string | number> = [p.simuladorId, ...datasRelevantes];
+  if (p.excludeId !== undefined && p.excludeId !== null) {
+    bindings.push(p.excludeId);
+  }
+
+  const candidatos = await db
+    .prepare(query)
+    .bind(...bindings)
+    .all<{ id: number; data: string; hora_inicio: string; hora_fim: string }>();
+
+  const novaJanela = buildAbsoluteInterval(p.data, p.inicioMin, p.fimMin);
+  if (!novaJanela) return null;
+
+  for (const sessao of candidatos.results || []) {
+    const inicioExistenteMin = timeToMinutes(sessao.hora_inicio);
+    const fimExistenteMin = timeToMinutes(sessao.hora_fim);
+
+    if (inicioExistenteMin === null || fimExistenteMin === null) {
+      continue;
+    }
+
+    const janelaExistente = buildAbsoluteInterval(sessao.data, inicioExistenteMin, fimExistenteMin);
+
+    if (!janelaExistente) {
+      continue;
+    }
+
+    if (
+      novaJanela.startAbs < janelaExistente.endAbs &&
+      novaJanela.endAbs > janelaExistente.startAbs
+    ) {
+      return sessao;
+    }
+  }
+
+  return null;
+}
+
+export function isFullAccessRole(role: string): boolean {
+  return ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'COMPLIANCE'].includes(role.toUpperCase());
+}
+
+export async function resolveTemplateIdSessao(
+  db: D1Database,
+  params: {
+    templateId?: unknown;
+    modeloSessaoId?: unknown;
+    temaSessao?: unknown;
+    tipoSessaoCodigo?: unknown;
+    modeloAeronave?: unknown;
+  },
+): Promise<number | null> {
+  const explicit = Number(params.templateId || params.modeloSessaoId);
+  if (Number.isInteger(explicit) && explicit > 0) {
+    return explicit;
+  }
+
+  const temaSessao = String(params.temaSessao || '').trim();
+  if (!temaSessao) {
+    return null;
+  }
+
+  const modeloAeronave = normalizeModeloAeronave(params.modeloAeronave);
+  const tipoSessaoCodigo = String(params.tipoSessaoCodigo || '').trim().toUpperCase();
+
+  const result = await db
+    .prepare(
+      `SELECT ms.id
+       FROM modelos_sessao ms
+       LEFT JOIN tipos_sessao ts ON ts.id = ms.tipo_sessao_id AND ts.deleted_at IS NULL
+       WHERE ms.deleted_at IS NULL
+         AND ms.nome = ?
+         AND (? = '' OR UPPER(COALESCE(ts.codigo, '')) = ?)
+         AND (? = '' OR UPPER(COALESCE(ms.modelo_aeronave, '')) = ?)
+       ORDER BY ms.id DESC
+       LIMIT 1`,
+    )
+    .bind(temaSessao, tipoSessaoCodigo, tipoSessaoCodigo, modeloAeronave, modeloAeronave)
+    .first<{ id: number }>();
+
+  return result?.id ? Number(result.id) : null;
+}
+
+export async function normalizeChecksSessao(
+  db: D1Database,
+  checkIds: unknown,
+  modeloAeronave: unknown,
+): Promise<number[]> {
+  const idsUnicos = Array.isArray(checkIds)
+    ? Array.from(
+        new Set(
+          checkIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0),
+        ),
+      )
+    : [];
+
+  if (idsUnicos.length === 0) {
+    return [];
+  }
+
+  const checksEncontrados = await listarTiposCheckPorIds(db, idsUnicos);
+  if (checksEncontrados.length !== idsUnicos.length) {
+    const idsValidos = new Set(checksEncontrados.map((check) => Number(check.id)));
+    const idsInvalidos = idsUnicos.filter((id) => !idsValidos.has(id));
+    throw new Error(`Tipos de check inválidos: ${idsInvalidos.join(', ')}`);
+  }
+
+  return filtrarChecksCompativeisComModelo(checksEncontrados, modeloAeronave).map((check) =>
+    Number(check.id),
+  );
+}
+
+export async function getFuncId(
+  db: D1Database,
+  userId: string | number,
+  empresaId: string | number,
+): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT f.id FROM usuarios u
+       JOIN funcionarios f ON f.id = u.funcionario_id
+       WHERE u.id = ? AND f.empresa_id = ?
+         AND (u.deleted_at IS NULL OR u.deleted_at = 0)
+         AND f.deleted_at IS NULL
+       LIMIT 1`,
+    )
+    .bind(String(userId), String(empresaId))
+    .first<{ id: string }>();
+  return row?.id ?? null;
+}
+
+export async function audit(db: D1Database, p: any) {
+  // Tabela garantida por migration — sem DDL em runtime (M-2: remove sqlite_master overhead)
+  try {
+    await db
+      .prepare(
+        'INSERT INTO auditoria_avancada_v2(tabela,acao,registro_id,dados_anteriores,dados_novos)VALUES(?,?,?,?,?)',
+      )
+      .bind(
+        p.tabela,
+        p.acao,
+        String(p.registro_id),
+        p.dados_anteriores ? JSON.stringify(p.dados_anteriores) : null,
+        p.dados_novos ? JSON.stringify(p.dados_novos) : null,
+      )
+      .run();
+  } catch (e) {
+    console.error('audit:', e);
+  }
+}

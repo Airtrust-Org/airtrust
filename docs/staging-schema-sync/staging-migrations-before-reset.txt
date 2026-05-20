@@ -1,0 +1,124 @@
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.20ms
+[
+  {
+    "results": [
+      {
+        "id": 1,
+        "name": "0000_production_schema.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 2,
+        "name": "0003_create_usuarios.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 3,
+        "name": "0016_habilitacoes_renovacao.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 4,
+        "name": "0026_create_instrutores_simulador.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 5,
+        "name": "0027_create_fichas_sessao_manobras.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 6,
+        "name": "0030_preclean_extend_qualificacoes_tipos.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 7,
+        "name": "0031_clean_qualificacoes_tipos.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 8,
+        "name": "0032_normalize_qualificacoes_historico.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 9,
+        "name": "0035_create_manobras_categorias_template.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 10,
+        "name": "0040_create_modelos_sessao.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 11,
+        "name": "0045_performance_indexes_qualificacoes_historico.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 12,
+        "name": "0046_materialized_stats_qualificacoes_historico.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 13,
+        "name": "0047_cleanup_old_stats.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 14,
+        "name": "0048_additional_indexes.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 15,
+        "name": "0049_create_integrated_view.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      },
+      {
+        "id": 16,
+        "name": "0049_qualificacoes_view_integrada.sql",
+        "applied_at": "2026-05-15 01:25:45"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2013
+      },
+      "duration": 0.2013,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 327680,
+      "rows_read": 32,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

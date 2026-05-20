@@ -1,0 +1,157 @@
+<manifest xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1" xsi:schemaLocation="http://www.imsproject.org/xsd/imscp_rootv1p1p2 imscp_rootv1p1p2.xsd http://www.imsglobal.org/xsd/imsmd_rootv1p2p1 imsmd_rootv1p2p1.xsd http://www.adlnet.org/xsd/adlcp_rootv1p2 adlcp_rootv1p2.xsd" identifier="com.edapp.69e0e569e762557815119b83">
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+  <organizations default="ed_app">
+    <organization identifier="ed_app">
+      <title>CGA - Conhecimentos Gerais de Aeronaves</title>
+      <item identifier="item_1" identifierref="resource_1" isvisible="true">
+        <title>CGA - Conhecimentos Gerais de Aeronaves</title>
+      </item>
+    </organization>
+  </organizations>
+  <resources>
+    <resource identifier="resource_1" type="webcontent" adlcp:scormtype="sco" href="index.html">
+      <file href="fit_content_assets/0001-1676870055140806134_ssebai.png"/>
+      <file href="fit_content_assets/helicopter-3977112_1280_uly11w.jpg"/>
+      <file href="fit_content_assets/25333156-8057651-image-a-23_1582921419245_neww1x.jpg"/>
+      <file href="fit_content_assets/FIPS-trial-flight-yellow-ice_1440480_tqpi36.jpg"/>
+      <file href="fit_content_assets/hq720_xch9tb.jpg"/>
+      <file href="fit_content_assets/Como-a-aplicacao-de-boro-auxilia-na-recuperacao-de-lavouras-destruidas-pela-chuvas-de-granizo_ofadr9.jpg"/>
+      <file href="fit_content_assets/american_a319_n806aw_el_paso_180603_4_sgsnk9.jpg"/>
+      <file href="fit_content_assets/istockphoto-1283894326-640x640_htwcbz.jpg"/>
+      <file href="fit_content_assets/lRSmj_rv3qfm.png"/>
+      <file href="fit_content_assets/surviving-the-slump-in-the-offshore-helicopter-market-3_zcuwmk.jpg"/>
+      <file href="fit_content_assets/7751080658_b98b90e892_b_mtcx4z.jpg"/>
+      <file href="fit_content_assets/800px-FoggDam-NT_wtpurw.jpg"/>
+      <file href="fit_content_assets/amt-11-6481-2018-f01-web_v6v5ef.png"/>
+      <file href="fit_content_assets/Doppler_Weather_Radar_-_NOAA_axiupa.jpg"/>
+      <file href="fit_content_assets/363045232_156b61d2ff_b_sney3g.jpg"/>
+      <file href="fit_content_assets/26415221458_d95eeba99e_b_rffzby.jpg"/>
+      <file href="fit_content_assets/2983317_0d901215_pbxekv.jpg"/>
+      <file href="fit_content_assets/87386298_de26fcb0cf_b_q3xooy.jpg"/>
+      <file href="fit_content_assets/237405_5c2081c7_dtxuhq.jpg"/>
+      <file href="fit_content_assets/helicopter-offshore_fybx8d.png"/>
+      <file href="fit_content_assets/Storms-Images_yqqbnn.jpg"/>
+      <file href="fit_content_assets/vento_capa_widelg_uto9do.jpg"/>
+      <file href="fit_content_assets/750x553_fa69cc1c653afd88d93f40faf773d65e_l6kcsn.jpg"/>
+      <file href="fit_content_assets/ventos-ventania_znsqfc.jpg"/>
+      <file href="fit_content_assets/frio1_vrjckw.jpg"/>
+      <file href="fit_content_assets/image2_dykjlq.jpg"/>
+      <file href="fit_content_assets/DSC_5180_uuh9mz.jpg"/>
+      <file href="fit_content_assets/nevoeiro-4055654_1_kb2wnn.jpg"/>
+      <file href="fit_content_assets/pouso-manchester-autoland-ils-3-thumb-00cdb564_qimhiy.jpg"/>
+      <file href="fit_content_assets/img_20160703_191959_thn0rs.png"/>
+      <file href="fit_content_assets/Chart-in-cockpit_oq2den.jpg"/>
+      <file href="fit_content_assets/istockphoto-1187603907-612x612_fcwd85.jpg"/>
+      <file href="fit_content_assets/AAno4_zbumal.jpg"/>
+      <file href="fit_content_assets/i340076_rlge2i.jpg"/>
+      <file href="fit_content_assets/2018-ATC-Tower-2.jpg-552x418-1_ssf2mt.jpg"/>
+      <file href="fit_content_assets/Aircraft.cockpit.instruments.resized.GettyImages-906502516-2_hch0tf.jpg"/>
+      <file href="fit_content_assets/acqUj_jyck6k.jpg"/>
+      <file href="fit_content_assets/og-airbus-helicopters_kropzu.jpg"/>
+      <file href="fit_content_assets/maxresdefault_gaheua.jpg"/>
+      <file href="fit_content_assets/15689925313_f11c76056c_b_aizysv.jpg"/>
+      <file href="fit_content_assets/51089617667_d549eb4286_b_zesxku.jpg"/>
+      <file href="fit_content_assets/RAF_Chinook_Helicopter_Over_Wales_MOD_45151080_i24vhq.jpg"/>
+      <file href="fit_content_assets/An_RAF_Chinook_helicopter_in_silhouette_2C_flying_over_Afghanistan._MOD_45158740_id6wey.jpg"/>
+      <file href="fit_content_assets/4998971560_675aae119d_b_snzhal.jpg"/>
+      <file href="fit_content_assets/6758971263_8f71831fb3_b_pnias4.jpg"/>
+      <file href="fit_content_assets/aerial_helicopter_qyilee.jpg"/>
+      <file href="fit_content_assets/14689721271_d49249b660_b_v14en2.jpg"/>
+      <file href="fit_content_assets/FUP20170115061_hju5j9.png"/>
+      <file href="fit_content_assets/ils-approach_puv1sn.jpg"/>
+      <file href="fit_content_assets/taking_off_helicopter_qsnmb7.jpg"/>
+      <file href="fit_content_assets/dZdz0_rdihi8.png"/>
+      <file href="fit_content_assets/ifr_app_web_ofzhmf.jpg"/>
+      <file href="fit_content_assets/EIQe3_snd193.png"/>
+      <file href="fit_content_assets/0001-8230740226352149826_tltdrr.png"/>
+      <file href="fit_content_assets/B407-Hover_vfg7gq.jpg"/>
+      <file href="fit_content_assets/helicopter_graphic_qjn0pf.jpg"/>
+      <file href="fit_content_assets/320px-Lloyd_Off-Shore_Helicopters__VH-SYZ__AgustaWestland_AW139_taxiing_at_Wagga_Wagga_Airport_ucil2t.jpg"/>
+      <file href="fit_content_assets/fig_1_q9b6cv.png"/>
+      <file href="fit_content_assets/Fig_2_loe9xe.png"/>
+      <file href="fit_content_assets/Fig_3_cg8k7x.png"/>
+      <file href="fit_content_assets/fig_4_krwreh.png"/>
+      <file href="fit_content_assets/fig_5_prfzjm.png"/>
+      <file href="fit_content_assets/Screenshot_2023-12-10_222434_pzeugh_mmogzl.png"/>
+      <file href="fit_content_assets/92A77_ysnvvl.jpg"/>
+      <file href="fit_content_assets/nevoeiro-4055654_hym1iv.jpg"/>
+      <file href="fit_content_assets/fog_jbrwky.jpg"/>
+      <file href="fit_content_assets/extreme-slow-motion-flying-helicopter-near-mountains-with-fog-video_hxgluz.jpg"/>
+      <file href="fit_content_assets/800px-IFR_in_IMC_over_SLI_into_LGB_on_the_VOR_and_ILS_in_a_172_photo_D_Ramey_Logan_zatwm6.jpg"/>
+      <file href="fit_content_assets/0001-5273000954318231930_ofwu13.png"/>
+      <file href="fit_content_assets/0001-8514466789523911175_zgoagk.png"/>
+      <file href="fit_content_assets/0001-5160410965957879059_f24lu4.png"/>
+      <file href="fit_content_assets/0001-2171146828206157187_skkilt.png"/>
+      <file href="fit_content_assets/Screenshot_2023-12-13_161357_scoex5.png"/>
+      <file href="fit_content_assets/Screenshot_2023-12-13_161629_ko5dpu.png"/>
+      <file href="fit_content_assets/Screenshot_2023-12-13_161357_bwh6jb.png"/>
+      <file href="fit_content_assets/Screenshot_2023-12-13_161659_ub0pp4.png"/>
+      <file href="adlcp_rootv1p2.xsd"/>
+      <file href="ims_xml.xsd"/>
+      <file href="imscp_rootv1p1p2.xsd"/>
+      <file href="imsmd_rootv1p2p1.xsd"/>
+      <file href="app.07c4586bb0edca1b.js"/>
+      <file href="app.07c4586bb0edca1b.js.map"/>
+      <file href="app.cc0d588970e1f88e.css"/>
+      <file href="app.cc0d588970e1f88e.css.map"/>
+      <file href="assets/NotoSans-Italic.f322611529c721d3.woff"/>
+      <file href="assets/NotoSans-Regular.d443fda2a79a3b67.woff"/>
+      <file href="assets/NotoSans-SemiBold.53a4b677893d7a69.woff"/>
+      <file href="assets/expand-icon.48a012d165f293b4.png"/>
+      <file href="assets/icons.44f5cb81fb0dba41.woff"/>
+      <file href="assets/loader.7afc5dbc230dd2de.gif"/>
+      <file href="assets/rotate-device.6f802beb1090241b.png"/>
+      <file href="audio/achievement.mp3"/>
+      <file href="audio/correct.mp3"/>
+      <file href="audio/game-music-slow.mp3"/>
+      <file href="audio/go.mp3"/>
+      <file href="audio/incorrect.mp3"/>
+      <file href="audio/new-star.mp3"/>
+      <file href="audio/ready.mp3"/>
+      <file href="audio/spin-fail.mp3"/>
+      <file href="audio/spin-stop.mp3"/>
+      <file href="audio/spin-success.mp3"/>
+      <file href="audio/spin-win.mp3"/>
+      <file href="audio/spinning.mp3"/>
+      <file href="audio/tally-score.mp3"/>
+      <file href="audio/welcome.mp3"/>
+      <file href="img/examples/flow-1.png"/>
+      <file href="img/examples/flow-2.png"/>
+      <file href="img/examples/parallax-1.png"/>
+      <file href="img/examples/parallax-2.png"/>
+      <file href="img/examples/parallax-3.png"/>
+      <file href="img/examples/product-1-xl.png"/>
+      <file href="img/examples/product-1.png"/>
+      <file href="img/examples/product-2.png"/>
+      <file href="img/examples/product-3.png"/>
+      <file href="img/examples/product-laptop.png"/>
+      <file href="img/examples/product-phone.png"/>
+      <file href="img/examples/product-tablet.png"/>
+      <file href="img/expand-browser.png"/>
+      <file href="img/expand-icon.png"/>
+      <file href="img/rotate-device.png"/>
+      <file href="img/templates/loader-light.gif"/>
+      <file href="img/templates/loader.gif"/>
+      <file href="img/templates/star-default.png"/>
+      <file href="img/templates/star-earned.png"/>
+      <file href="img/templates/star-light.png"/>
+      <file href="img/video/empty.png"/>
+      <file href="index.html"/>
+      <file href="modules.473fbbfd66fb5923.js"/>
+      <file href="modules.473fbbfd66fb5923.js.map"/>
+      <file href="modules.a5b0990ec50f29b5.css"/>
+      <file href="modules.a5b0990ec50f29b5.css.map"/>
+      <file href="player.html"/>
+      <file href="runtime.670f4cabae4eeec9.js"/>
+      <file href="scorm.2aa5f200ece6542d.js"/>
+      <file href="scorm.2aa5f200ece6542d.js.map"/>
+      <file href="vendors.9d8f217301be500e.js"/>
+      <file href="vendors.9d8f217301be500e.js.map"/>
+      <file href="video/example.mp4"/>
+      <file href="config.json"/>
+    </resource>
+  </resources>
+</manifest>

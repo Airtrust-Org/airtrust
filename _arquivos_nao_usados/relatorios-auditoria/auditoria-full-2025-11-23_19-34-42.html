@@ -1,0 +1,24 @@
+<html><head><meta charset='utf-8'><title>Auditoria Completa 2025-11-23_19-34-42</title><style>body{font-family:system-ui;padding:20px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px;font-size:13px}th{background:#222;color:#fff}tr.PASS{background:#e7f9ef}tr.FAIL{background:#fdeaea}tr.WARN{background:#fff6dd}tr.SKIP{background:#eef3ff}</style></head><body>
+<h1>Auditoria Completa Qualificações</h1><p>Status: <strong>OK</strong></p><table><tr><th>Teste</th><th>Resultado</th><th>Detalhe</th></tr>
+<tr class='PASS'><td>Auth /tipos</td><td>PASS</td><td>Protegido (401)</td></tr>
+<tr class='PASS'><td>Auth /historico</td><td>PASS</td><td>Protegido (401)</td></tr>
+<tr class='PASS'><td>Auth /funcionarios-ssot</td><td>PASS</td><td>Protegido (401)</td></tr>
+<tr class='PASS'><td>Listar Tipos - Protecao</td><td>PASS</td><td>401</td></tr>
+<tr class='SKIP'><td>Listar Tipos - Conteudo</td><td>SKIP</td><td>Sem token</td></tr>
+<tr class='PASS'><td>Listar Historico - Protecao</td><td>PASS</td><td>401</td></tr>
+<tr class='SKIP'><td>Listar Historico - Conteudo</td><td>SKIP</td><td>Sem token</td></tr>
+<tr class='PASS'><td>Listar Categorias - Status</td><td>PASS</td><td>HTTP 200</td></tr>
+<tr class='WARN'><td>Listar Categorias - Performance</td><td>WARN</td><td>448ms</td></tr>
+<tr class='PASS'><td>Listar Categorias - JSON</td><td>PASS</td><td>valido</td></tr>
+<tr class='PASS'><td>Listar Categorias - Conteudo</td><td>PASS</td><td>Limpo</td></tr>
+<tr class='PASS'><td>Historico Pag 1 - Protecao</td><td>PASS</td><td>401</td></tr>
+<tr class='SKIP'><td>Historico Pag 1 - Conteudo</td><td>SKIP</td><td>Sem token</td></tr>
+<tr class='PASS'><td>Historico Pag 2 - Protecao</td><td>PASS</td><td>401</td></tr>
+<tr class='SKIP'><td>Historico Pag 2 - Conteudo</td><td>SKIP</td><td>Sem token</td></tr>
+<tr class='PASS'><td>Historico Pag 3 - Protecao</td><td>PASS</td><td>401</td></tr>
+<tr class='SKIP'><td>Historico Pag 3 - Conteudo</td><td>SKIP</td><td>Sem token</td></tr>
+<tr class='SKIP'><td>POST Historico</td><td>SKIP</td><td>Sem token</td></tr>
+<tr class='SKIP'><td>PUT Historico</td><td>SKIP</td><td>Sem token</td></tr>
+<tr class='SKIP'><td>DELETE Historico</td><td>SKIP</td><td>Sem token</td></tr>
+<tr class='PASS'><td>Historico 50 itens</td><td>PASS</td><td>148ms</td></tr>
+</table><p>Total:21 Pass:12 Fail:0 Warn:1 Skip:8 Crit:0</p><p><em>Skeleton inicial. Próximas etapas ampliarão cobertura.</em></p></body></html>

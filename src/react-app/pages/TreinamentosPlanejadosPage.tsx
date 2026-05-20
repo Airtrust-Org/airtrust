@@ -1,0 +1,2101 @@
+import { useDeferredValue, useEffect, useMemo, useState, useCallback } from 'react';
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  FileClock,
+  MapPin,
+  Mail,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import PageHeader from '@/react-app/components/PageHeader';
+import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
+import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQualificacao';
+import {
+  useAtualizarPresencaTreinamento,
+  useAtualizarTreinamentoPlanejado,
+  useCriarTreinamentoPlanejado,
+  useEnviarConvocacaoTreinamento,
+  useExcluirTreinamentoPlanejado,
+  usePreviewConvocacaoTreinamento,
+  useReenviarConvocacaoTreinamento,
+  useTreinamentoPlanejadoDetalhe,
+  useTreinamentosPlanejados,
+  useTreinamentosPlanejadosAuditoria,
+  useTreinamentosPlanejadosCalendario,
+  type TreinamentoPlanejado,
+  type TreinamentoPlanejadoConvocacaoPreview,
+  type TreinamentoPlanejadoConvocacaoResultado,
+  type TreinamentoPlanejadoParticipante,
+  type TreinamentoPlanejadoStatus,
+} from '@/react-app/hooks/useTreinamentosPlanejados';
+
+type AbaAtiva = 'calendario' | 'quadro' | 'auditoria';
+
+interface FuncionarioOption {
+  id: number;
+  nome: string;
+  guerra?: string | null;
+  matricula?: string | null;
+  setor?: string | null;
+  funcao?: string | null;
+  is_instrutor?: boolean | number | null;
+}
+
+interface TipoQualificacaoOption {
+  id: number;
+  nome: string;
+  codigo?: string | null;
+}
+
+interface TreinamentoFormState {
+  qualificacao_tipo_id: string;
+  titulo: string;
+  descricao: string;
+  observacoes: string;
+  local: string;
+  data_prevista: string;
+  hora_inicio: string;
+  hora_fim: string;
+  instrutor_id: string;
+  carga_horaria_prevista: string;
+  status: TreinamentoPlanejadoStatus;
+  participante_ids: number[];
+}
+
+const STATUS_META: Record<TreinamentoPlanejadoStatus, { label: string; className: string }> = {
+  PLANEJADO: {
+    label: 'Planejado',
+    className: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  },
+  CONFIRMADO: {
+    label: 'Confirmado',
+    className: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
+  },
+  EM_ANDAMENTO: {
+    label: 'Em andamento',
+    className: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200',
+  },
+  CONCLUIDO: {
+    label: 'Concluido',
+    className: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  },
+  CANCELADO: {
+    label: 'Cancelado',
+    className: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
+  },
+};
+
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Todos os status' },
+  { value: 'PLANEJADO', label: 'Planejado' },
+  { value: 'CONFIRMADO', label: 'Confirmado' },
+  { value: 'EM_ANDAMENTO', label: 'Em andamento' },
+  { value: 'CONCLUIDO', label: 'Concluido' },
+  { value: 'CANCELADO', label: 'Cancelado' },
+];
+
+function getTodayYmd(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeText(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatDateLabel(value?: string | null): string {
+  if (!value) return 'Sem data';
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatDateTimeLabel(value?: string | null): string {
+  if (!value) return 'Sem registro';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function formatMonthLabel(month: string): string {
+  if (!/^\d{4}-\d{2}$/.test(month)) return month;
+  const date = new Date(`${month}-01T12:00:00`);
+  return new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatHourRange(inicio?: string | null, fim?: string | null): string {
+  if (inicio && fim) return `${inicio} - ${fim}`;
+  if (inicio) return `Inicio ${inicio}`;
+  if (fim) return `Fim ${fim}`;
+  return 'Horario a definir';
+}
+
+function getEventoTitulo(item: TreinamentoPlanejado): string {
+  return item.titulo?.trim() || item.qualificacao_nome || 'Treinamento planejado';
+}
+
+function getPessoaLabel(
+  nome?: string | null,
+  guerra?: string | null,
+  matricula?: string | null,
+): string {
+  const principal = guerra?.trim() || nome?.trim() || 'Nao informado';
+  return matricula ? `${principal} · ${matricula}` : principal;
+}
+
+function getConvocacaoDisabledReason(treinamento?: TreinamentoPlanejado | null): string | null {
+  if (!treinamento) return 'Carregando detalhes da turma';
+  if ((treinamento.participantes || []).length === 0) {
+    return 'A turma não possui tripulantes matriculados';
+  }
+  if (!treinamento.data_prevista) {
+    return 'A turma não possui data definida';
+  }
+  if (treinamento.status === 'CONCLUIDO' || treinamento.status === 'CANCELADO') {
+    return 'A turma já foi encerrada/concluída';
+  }
+  return null;
+}
+
+function getMonthRange(month: string): { inicio?: string; fim?: string } {
+  if (!/^\d{4}-\d{2}$/.test(month)) return {};
+  const [year, monthNumber] = month.split('-').map(Number);
+  const start = new Date(year, monthNumber - 1, 1);
+  const end = new Date(year, monthNumber, 0);
+
+  const format = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  return {
+    inicio: format(start),
+    fim: format(end),
+  };
+}
+
+function buildCalendarCells(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) return [] as Array<{ date: string; outside: boolean }>;
+  const [year, monthNumber] = month.split('-').map(Number);
+  const firstDay = new Date(year, monthNumber - 1, 1);
+  const lastDay = new Date(year, monthNumber, 0);
+  const offset = (firstDay.getDay() + 6) % 7;
+  const totalDays = lastDay.getDate();
+  const cells: Array<{ date: string; outside: boolean }> = [];
+
+  const format = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  for (let index = offset; index > 0; index -= 1) {
+    const date = new Date(year, monthNumber - 1, 1 - index);
+    cells.push({ date: format(date), outside: true });
+  }
+
+  for (let day = 1; day <= totalDays; day += 1) {
+    const date = new Date(year, monthNumber - 1, day);
+    cells.push({ date: format(date), outside: false });
+  }
+
+  while (cells.length % 7 !== 0 || cells.length < 35) {
+    const lastDate = new Date(`${cells[cells.length - 1].date}T12:00:00`);
+    lastDate.setDate(lastDate.getDate() + 1);
+    cells.push({ date: format(lastDate), outside: true });
+  }
+
+  return cells;
+}
+
+function createEmptyForm(today: string): TreinamentoFormState {
+  return {
+    qualificacao_tipo_id: '',
+    titulo: '',
+    descricao: '',
+    observacoes: '',
+    local: '',
+    data_prevista: today,
+    hora_inicio: '',
+    hora_fim: '',
+    instrutor_id: '',
+    carga_horaria_prevista: '',
+    status: 'PLANEJADO',
+    participante_ids: [],
+  };
+}
+
+function mapTreinamentoToForm(item: TreinamentoPlanejado): TreinamentoFormState {
+  return {
+    qualificacao_tipo_id: String(item.qualificacao_tipo_id),
+    titulo: item.titulo || '',
+    descricao: item.descricao || '',
+    observacoes: item.observacoes || '',
+    local: item.local || '',
+    data_prevista: item.data_prevista,
+    hora_inicio: item.hora_inicio || '',
+    hora_fim: item.hora_fim || '',
+    instrutor_id: item.instrutor_id ? String(item.instrutor_id) : '',
+    carga_horaria_prevista:
+      item.carga_horaria_prevista === null || item.carga_horaria_prevista === undefined
+        ? ''
+        : String(item.carga_horaria_prevista),
+    status: item.status,
+    participante_ids: item.participantes.map((participante) => participante.funcionario_id),
+  };
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  helper,
+}: {
+  icon: JSX.Element;
+  label: string;
+  value: string | number;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {label}
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
+          <p className="mt-1 text-sm text-slate-500">{helper}</p>
+        </div>
+        <div className="rounded-xl bg-slate-100 p-2 text-slate-600">{icon}</div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: TreinamentoPlanejadoStatus }) {
+  const meta = STATUS_META[status];
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}
+    >
+      {meta.label}
+    </span>
+  );
+}
+
+export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: boolean }) {
+  const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
+  const canManage = !isAluno && (isAdmin || isGestor || isInstrutor || can('qualificacoes.view'));
+  const today = useMemo(() => getTodayYmd(), []);
+  const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('calendario');
+  const [mesReferencia, setMesReferencia] = useState(today.slice(0, 7));
+  const [statusFiltro, setStatusFiltro] = useState('');
+  const [instrutorFiltro, setInstrutorFiltro] = useState('');
+  const [busca, setBusca] = useState('');
+  const [buscaConvocados, setBuscaConvocados] = useState('');
+  const [modalFormularioAberto, setModalFormularioAberto] = useState(false);
+  const [modalDetalheAberto, setModalDetalheAberto] = useState(false);
+  const [modalConfirmacaoConvocacaoAberto, setModalConfirmacaoConvocacaoAberto] = useState(false);
+  const [modalResultadoConvocacaoAberto, setModalResultadoConvocacaoAberto] = useState(false);
+  const [treinamentoEditando, setTreinamentoEditando] = useState<TreinamentoPlanejado | null>(null);
+  const [treinamentoSelecionadoId, setTreinamentoSelecionadoId] = useState<number | null>(null);
+  const [formState, setFormState] = useState<TreinamentoFormState>(() => createEmptyForm(today));
+  const [convocacaoPreview, setConvocacaoPreview] =
+    useState<TreinamentoPlanejadoConvocacaoPreview | null>(null);
+  const [convocacaoResultado, setConvocacaoResultado] =
+    useState<TreinamentoPlanejadoConvocacaoResultado | null>(null);
+  const [confirmarReenvio, setConfirmarReenvio] = useState(false);
+  const [ignorarSemEmail, setIgnorarSemEmail] = useState(false);
+  const [gestoresCcSelecionadosIds, setGestoresCcSelecionadosIds] = useState<number[]>([]);
+  const buscaAdiada = useDeferredValue(busca.trim());
+  const buscaConvocadosAdiada = useDeferredValue(buscaConvocados.trim().toLowerCase());
+
+  const { data: funcionarios = [], isLoading: funcionariosLoading } = useFuncionariosAtivos();
+  const { data: tiposQualificacao = [], isLoading: tiposLoading } = useTiposQualificacao();
+
+  const monthRange = useMemo(() => getMonthRange(mesReferencia), [mesReferencia]);
+  const filtrosComuns = useMemo(
+    () => ({
+      status: statusFiltro || undefined,
+      instrutor_id: instrutorFiltro ? Number(instrutorFiltro) : undefined,
+      busca: buscaAdiada || undefined,
+      inicio: monthRange.inicio,
+      fim: monthRange.fim,
+    }),
+    [buscaAdiada, instrutorFiltro, monthRange.fim, monthRange.inicio, statusFiltro],
+  );
+
+  const treinamentosQuery = useTreinamentosPlanejados(filtrosComuns);
+  const calendarioQuery = useTreinamentosPlanejadosCalendario({
+    mes: mesReferencia,
+    status: statusFiltro || undefined,
+    instrutor_id: instrutorFiltro ? Number(instrutorFiltro) : undefined,
+  });
+  const auditoriaQuery = useTreinamentosPlanejadosAuditoria(filtrosComuns);
+  const detalheQuery = useTreinamentoPlanejadoDetalhe(treinamentoSelecionadoId);
+
+  const criarTreinamento = useCriarTreinamentoPlanejado();
+  const atualizarTreinamento = useAtualizarTreinamentoPlanejado();
+  const atualizarPresenca = useAtualizarPresencaTreinamento();
+  const excluirTreinamento = useExcluirTreinamentoPlanejado();
+  const previewConvocacao = usePreviewConvocacaoTreinamento();
+  const enviarConvocacao = useEnviarConvocacaoTreinamento();
+  const reenviarConvocacao = useReenviarConvocacaoTreinamento();
+
+  const listaTreinamentos = treinamentosQuery.data?.items || [];
+  const calendarioTreinamentos = calendarioQuery.data?.items || [];
+  const auditoriaTreinamentos = auditoriaQuery.data?.items || [];
+  const detalheTreinamento = detalheQuery.data || treinamentoEditando;
+
+  const instrutores = useMemo(() => {
+    const base = funcionarios as FuncionarioOption[];
+    const marcados = base.filter((funcionario) => {
+      if (funcionario.is_instrutor === true) return true;
+      if (typeof funcionario.is_instrutor === 'number' && funcionario.is_instrutor > 0) return true;
+      const funcao = funcionario.funcao?.toLowerCase() || '';
+      return funcao.includes('instrutor');
+    });
+    return marcados.length > 0 ? marcados : base;
+  }, [funcionarios]);
+
+  const convocadosFiltrados = useMemo(() => {
+    const base = funcionarios as FuncionarioOption[];
+    if (!buscaConvocadosAdiada) return base;
+    return base.filter((funcionario) => {
+      const texto = [
+        funcionario.nome,
+        funcionario.guerra,
+        funcionario.matricula,
+        funcionario.setor,
+        funcionario.funcao,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return texto.includes(buscaConvocadosAdiada);
+    });
+  }, [buscaConvocadosAdiada, funcionarios]);
+
+  const resumoLista = useMemo(() => {
+    return listaTreinamentos.reduce(
+      (acc, item) => {
+        acc.total += 1;
+        acc.convocados += item.convocados_total;
+        acc.confirmados += item.confirmados_total;
+        acc.presentes += item.presentes_total;
+        if (item.status === 'PLANEJADO') acc.planejados += 1;
+        if (item.status === 'CONFIRMADO') acc.confirmadosEventos += 1;
+        if (item.status === 'CONCLUIDO') acc.concluidos += 1;
+        return acc;
+      },
+      {
+        total: 0,
+        convocados: 0,
+        confirmados: 0,
+        presentes: 0,
+        planejados: 0,
+        confirmadosEventos: 0,
+        concluidos: 0,
+      },
+    );
+  }, [listaTreinamentos]);
+
+  const proximoTreinamento = useMemo(() => {
+    return [...listaTreinamentos]
+      .filter((item) => item.data_prevista >= today && item.status !== 'CANCELADO')
+      .sort((left, right) => {
+        const leftKey = `${left.data_prevista} ${left.hora_inicio || '99:99'}`;
+        const rightKey = `${right.data_prevista} ${right.hora_inicio || '99:99'}`;
+        return leftKey.localeCompare(rightKey);
+      })[0];
+  }, [listaTreinamentos, today]);
+
+  const ultimoEventoAuditado = useMemo(() => {
+    return auditoriaTreinamentos
+      .flatMap((item) => item.auditoria || [])
+      .sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
+  }, [auditoriaTreinamentos]);
+
+  const eventosPorDia = useMemo(() => {
+    const map = new Map<string, TreinamentoPlanejado[]>();
+    calendarioTreinamentos.forEach((item) => {
+      const current = map.get(item.data_prevista) || [];
+      current.push(item);
+      current.sort((left, right) => {
+        const leftKey = `${left.hora_inicio || '99:99'}${getEventoTitulo(left)}`;
+        const rightKey = `${right.hora_inicio || '99:99'}${getEventoTitulo(right)}`;
+        return leftKey.localeCompare(rightKey);
+      });
+      map.set(item.data_prevista, current);
+    });
+    return map;
+  }, [calendarioTreinamentos]);
+
+  const calendarCells = useMemo(() => buildCalendarCells(mesReferencia), [mesReferencia]);
+
+  useEffect(() => {
+    if (!modalFormularioAberto) return;
+    if (treinamentoEditando) {
+      setFormState(mapTreinamentoToForm(treinamentoEditando));
+      return;
+    }
+    setFormState(createEmptyForm(today));
+  }, [modalFormularioAberto, today, treinamentoEditando]);
+
+  function abrirNovoTreinamento() {
+    setTreinamentoEditando(null);
+    setBuscaConvocados('');
+    setModalFormularioAberto(true);
+  }
+
+  function abrirDetalhes(treinamento: TreinamentoPlanejado) {
+    setTreinamentoSelecionadoId(treinamento.id);
+    setTreinamentoEditando(treinamento);
+    setModalDetalheAberto(true);
+  }
+
+  function abrirEditor(treinamento?: TreinamentoPlanejado | null) {
+    if (treinamento) {
+      setTreinamentoEditando(treinamento);
+    }
+    setBuscaConvocados('');
+    setModalDetalheAberto(false);
+    setModalFormularioAberto(true);
+  }
+
+  function alternarConvocado(funcionarioId: number) {
+    setFormState((current) => {
+      const exists = current.participante_ids.includes(funcionarioId);
+      return {
+        ...current,
+        participante_ids: exists
+          ? current.participante_ids.filter((id) => id !== funcionarioId)
+          : [...current.participante_ids, funcionarioId],
+      };
+    });
+  }
+
+  async function salvarFormulario(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!formState.qualificacao_tipo_id) {
+      toast.error('Selecione a qualificacao vinculada ao treinamento.');
+      return;
+    }
+
+    if (!formState.titulo.trim()) {
+      toast.error('Informe um titulo para o treinamento planejado.');
+      return;
+    }
+
+    if (!formState.data_prevista) {
+      toast.error('Informe a data prevista do treinamento.');
+      return;
+    }
+
+    if (formState.hora_inicio && formState.hora_fim && formState.hora_fim < formState.hora_inicio) {
+      toast.error('O horario final precisa ser maior ou igual ao horario inicial.');
+      return;
+    }
+
+    const payload = {
+      qualificacao_tipo_id: Number(formState.qualificacao_tipo_id),
+      titulo: formState.titulo.trim(),
+      descricao: normalizeText(formState.descricao),
+      observacoes: normalizeText(formState.observacoes),
+      local: normalizeText(formState.local),
+      data_prevista: formState.data_prevista,
+      hora_inicio: normalizeText(formState.hora_inicio),
+      hora_fim: normalizeText(formState.hora_fim),
+      instrutor_id: formState.instrutor_id ? Number(formState.instrutor_id) : null,
+      carga_horaria_prevista: formState.carga_horaria_prevista
+        ? Number(formState.carga_horaria_prevista)
+        : null,
+      status: formState.status,
+      participante_ids: formState.participante_ids,
+    };
+
+    try {
+      let savedId: number;
+      if (treinamentoEditando) {
+        await atualizarTreinamento.mutateAsync({ id: treinamentoEditando.id, input: payload });
+        toast.success('Treinamento planejado atualizado.');
+        savedId = treinamentoEditando.id;
+      } else {
+        const response = await criarTreinamento.mutateAsync(payload);
+        toast.success('Treinamento planejado criado.');
+        savedId = response.id;
+      }
+
+      setModalFormularioAberto(false);
+      setTreinamentoEditando(null);
+      setTreinamentoSelecionadoId(savedId);
+      setModalDetalheAberto(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Nao foi possivel salvar o treinamento.',
+      );
+    }
+  }
+
+  const fecharModalDetalhes = useCallback(() => {
+    setModalDetalheAberto(false);
+    setTreinamentoSelecionadoId(null);
+    setTreinamentoEditando(null);
+  }, []);
+
+  async function excluirTreinamentoSelecionado() {
+    const treinamento = detalheQuery.data || treinamentoEditando;
+    if (!treinamento) return;
+    const ok = window.confirm(`Excluir o treinamento "${getEventoTitulo(treinamento)}"?`);
+    if (!ok) return;
+
+    try {
+      await excluirTreinamento.mutateAsync(treinamento.id);
+      toast.success('Treinamento planejado removido.');
+      fecharModalDetalhes();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Nao foi possivel excluir o treinamento.',
+      );
+    }
+  }
+
+  async function atualizarParticipante(
+    participante: TreinamentoPlanejadoParticipante,
+    patch: {
+      confirmado?: boolean;
+      presente?: boolean | null;
+      aprovado?: boolean | null;
+    },
+  ) {
+    if (!treinamentoSelecionadoId) return;
+
+    try {
+      await atualizarPresenca.mutateAsync({
+        id: treinamentoSelecionadoId,
+        input: {
+          funcionario_id: participante.funcionario_id,
+          ...patch,
+        },
+      });
+      toast.success('Convocacao atualizada.');
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Nao foi possivel atualizar a presenca.',
+      );
+    }
+  }
+
+  async function abrirConvocacaoTurma() {
+    if (!treinamentoSelecionadoId) return;
+
+    try {
+      const preview = await previewConvocacao.mutateAsync({
+        id: treinamentoSelecionadoId,
+        gestores_cc_ids:
+          gestoresCcSelecionadosIds.length > 0 ? gestoresCcSelecionadosIds : undefined,
+      });
+      setConvocacaoPreview(preview);
+      setConfirmarReenvio(Boolean(preview.ultima_convocacao_em));
+      setIgnorarSemEmail(
+        preview.ausentes_email.length === 0 && preview.invalidos_email.length === 0,
+      );
+      if (gestoresCcSelecionadosIds.length === 0) {
+        setGestoresCcSelecionadosIds(preview.gestores_cc.map((gestor) => gestor.id));
+      }
+      setModalConfirmacaoConvocacaoAberto(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Não foi possível preparar a convocação.',
+      );
+    }
+  }
+
+  async function confirmarConvocacaoTurma() {
+    if (!treinamentoSelecionadoId || !convocacaoPreview) return;
+
+    try {
+      const resultado = await enviarConvocacao.mutateAsync({
+        id: treinamentoSelecionadoId,
+        force_resend: confirmarReenvio,
+        skip_missing_email: ignorarSemEmail,
+        gestores_cc_ids: gestoresCcSelecionadosIds,
+      });
+      setConvocacaoResultado(resultado);
+      setModalConfirmacaoConvocacaoAberto(false);
+      setModalResultadoConvocacaoAberto(true);
+      toast.success('Convocação processada.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao enviar convocação.';
+      toast.error(message);
+    }
+  }
+
+  async function reenviarIndividual(funcionarioId: number) {
+    if (!treinamentoSelecionadoId) return;
+
+    try {
+      const item = await reenviarConvocacao.mutateAsync({
+        id: treinamentoSelecionadoId,
+        funcionario_id: funcionarioId,
+        gestores_cc_ids: gestoresCcSelecionadosIds,
+      });
+      setConvocacaoResultado((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          itens: current.itens.map((entry) =>
+            entry.funcionario_id === funcionarioId
+              ? {
+                  ...entry,
+                  status: item.status,
+                  erro_mensagem: item.erro_mensagem,
+                  email: item.email,
+                }
+              : entry,
+          ),
+        };
+      });
+      toast.success('Convocação reenviada com sucesso.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Falha ao reenviar convocação.');
+    }
+  }
+
+  if (!canManage) {
+    return (
+      <div className="p-6">
+        <PageHeader
+          title="Treinamentos planejados"
+          subtitle="Calendario operacional e trilha de auditoria para treinamentos futuros."
+        />
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
+          Seu perfil nao possui acesso a esta central operacional.
+        </div>
+      </div>
+    );
+  }
+
+  const erroPrincipal =
+    (treinamentosQuery.error as Error | null)?.message ||
+    (calendarioQuery.error as Error | null)?.message ||
+    (auditoriaQuery.error as Error | null)?.message ||
+    (detalheQuery.error as Error | null)?.message ||
+    null;
+
+  const salvandoFormulario = criarTreinamento.isPending || atualizarTreinamento.isPending;
+  const atualizandoParticipante = atualizarPresenca.isPending;
+  const excluindo = excluirTreinamento.isPending;
+  const enviandoConvocacao = previewConvocacao.isPending || enviarConvocacao.isPending;
+
+  const convocacaoDisabledReason = getConvocacaoDisabledReason(detalheTreinamento);
+
+  const actionButtons = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="secondary" icon="refresh" onClick={() => treinamentosQuery.refetch()}>
+        Atualizar
+      </Button>
+      <Button icon="add" onClick={abrirNovoTreinamento}>
+        Novo treinamento
+      </Button>
+    </div>
+  );
+
+  return (
+    <div className={asTab ? '' : 'min-h-full bg-slate-50/70 px-4 py-6 sm:px-6 lg:px-8'}>
+      <div
+        className={asTab ? 'space-y-4' : 'mx-auto max-w-7xl space-y-6'}
+        data-testid="treinamentos-planejados-page"
+      >
+        {asTab ? (
+          <div className="flex justify-end pb-2">{actionButtons}</div>
+        ) : (
+          <PageHeader
+            title="Treinamentos planejados"
+            subtitle="Calendario, quadro operacional e auditoria dos treinamentos futuros e seus convocados."
+            actions={actionButtons}
+          />
+        )}
+
+        {erroPrincipal && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {erroPrincipal}
+          </div>
+        )}
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            icon={<CalendarDays className="h-5 w-5" />}
+            label="Eventos no mes"
+            value={resumoLista.total}
+            helper={
+              proximoTreinamento
+                ? `Proximo: ${formatDateLabel(proximoTreinamento.data_prevista)}`
+                : 'Sem agenda futura neste mes'
+            }
+          />
+          <StatCard
+            icon={<Users className="h-5 w-5" />}
+            label="Convocados"
+            value={resumoLista.convocados}
+            helper={`${resumoLista.confirmados} confirmados e ${resumoLista.presentes} presentes registrados`}
+          />
+          <StatCard
+            icon={<ClipboardList className="h-5 w-5" />}
+            label="Status operacionais"
+            value={resumoLista.planejados}
+            helper={`${resumoLista.confirmadosEventos} confirmados e ${resumoLista.concluidos} concluidos`}
+          />
+          <StatCard
+            icon={<ShieldCheck className="h-5 w-5" />}
+            label="Ultima trilha"
+            value={
+              ultimoEventoAuditado
+                ? formatDateTimeLabel(ultimoEventoAuditado.created_at)
+                : 'Sem trilha'
+            }
+            helper={
+              ultimoEventoAuditado
+                ? `${ultimoEventoAuditado.acao} por ${ultimoEventoAuditado.usuario_nome || 'usuario do sistema'}`
+                : 'Nenhuma alteracao auditada no periodo'
+            }
+          />
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="grid gap-3 lg:grid-cols-[1.2fr,0.9fr,0.9fr,1.1fr]">
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700">Mes de referencia</span>
+              <input
+                type="month"
+                value={mesReferencia}
+                onChange={(event) => setMesReferencia(event.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-0 transition focus:border-primary-500"
+              />
+            </label>
+
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700">Status</span>
+              <select
+                value={statusFiltro}
+                onChange={(event) => setStatusFiltro(event.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700">Instrutor</span>
+              <select
+                value={instrutorFiltro}
+                onChange={(event) => setInstrutorFiltro(event.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+              >
+                <option value="">Todos</option>
+                {instrutores.map((instrutor) => (
+                  <option key={instrutor.id} value={instrutor.id}>
+                    {getPessoaLabel(instrutor.nome, instrutor.guerra, instrutor.matricula)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700">Buscar</span>
+              <input
+                type="search"
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                placeholder="Titulo, qualificação, local ou instrutor"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+          <div className="flex flex-wrap gap-2">
+            {[
+              { id: 'calendario', label: 'Calendario', icon: CalendarDays },
+              { id: 'quadro', label: 'Quadro', icon: ClipboardList },
+              { id: 'auditoria', label: 'Auditoria', icon: FileClock },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const active = abaAtiva === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setAbaAtiva(tab.id as AbaAtiva)}
+                  className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                    active
+                      ? 'bg-primary-600 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {abaAtiva === 'calendario' && (
+            <div className="mt-4 space-y-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-lg font-semibold text-slate-900 capitalize">
+                    {formatMonthLabel(mesReferencia)}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    {calendarioQuery.data?.periodo.inicio && calendarioQuery.data?.periodo.fim
+                      ? `${formatDateLabel(calendarioQuery.data.periodo.inicio)} a ${formatDateLabel(calendarioQuery.data.periodo.fim)}`
+                      : 'Sem periodo definido'}
+                  </p>
+                </div>
+                <p className="text-sm text-slate-500">
+                  {calendarioQuery.isLoading
+                    ? 'Atualizando calendario...'
+                    : `${calendarioTreinamentos.length} evento(s) no periodo`}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'].map((label) => (
+                  <div key={label} className="rounded-xl bg-slate-100 px-2 py-2">
+                    {label}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
+                {calendarCells.map((cell) => {
+                  const eventos = eventosPorDia.get(cell.date) || [];
+                  const isToday = cell.date === today;
+                  return (
+                    <div
+                      key={cell.date}
+                      className={`min-h-[150px] rounded-2xl border p-2.5 transition ${
+                        cell.outside
+                          ? 'border-slate-100 bg-slate-50/70'
+                          : 'border-slate-200 bg-white'
+                      } ${isToday ? 'ring-2 ring-primary-200' : ''}`}
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        <span
+                          className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-sm font-semibold ${
+                            isToday ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {cell.date.slice(-2)}
+                        </span>
+                        {eventos.length > 0 && (
+                          <span className="text-[11px] font-medium text-slate-500">
+                            {eventos.length} evento(s)
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        {eventos.slice(0, 3).map((evento) => (
+                          <button
+                            key={evento.id}
+                            type="button"
+                            onClick={() => abrirDetalhes(evento)}
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-primary-200 hover:bg-primary-50"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-semibold text-slate-900">
+                                {getEventoTitulo(evento)}
+                              </p>
+                              <StatusBadge status={evento.status} />
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {formatHourRange(evento.hora_inicio, evento.hora_fim)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {evento.convocados_total} convocados
+                            </p>
+                          </button>
+                        ))}
+
+                        {eventos.length > 3 && (
+                          <p className="px-1 text-xs font-medium text-slate-500">
+                            +{eventos.length - 3} evento(s) neste dia
+                          </p>
+                        )}
+
+                        {eventos.length === 0 && !cell.outside && (
+                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-400">
+                            Sem treinamentos planejados
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {abaAtiva === 'quadro' && (
+            <div className="mt-4 space-y-4">
+              {treinamentosQuery.isLoading && listaTreinamentos.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  Carregando quadro operacional...
+                </div>
+              ) : listaTreinamentos.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  Nenhum treinamento planejado encontrado para os filtros atuais.
+                </div>
+              ) : (
+                <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                  {listaTreinamentos.map((item) => (
+                    <article
+                      key={item.id}
+                      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                      data-testid={`treinamento-planejado-${item.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            {item.qualificacao_codigo || 'TREINAMENTO'}
+                          </p>
+                          <h3 className="mt-1 text-lg font-semibold text-slate-900">
+                            {getEventoTitulo(item)}
+                          </h3>
+                        </div>
+                        <StatusBadge status={item.status} />
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4 text-slate-400" />
+                          <span>{formatDateLabel(item.data_prevista)}</span>
+                          <Clock3 className="ml-2 h-4 w-4 text-slate-400" />
+                          <span>{formatHourRange(item.hora_inicio, item.hora_fim)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-slate-400" />
+                          <span>{item.local || 'Local a definir'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-slate-400" />
+                          <span>
+                            {item.convocados_total} convocados · {item.confirmados_total}{' '}
+                            confirmados · {item.presentes_total} presentes
+                          </span>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
+                          <p className="font-medium text-slate-700">
+                            Instrutor:{' '}
+                            <FuncionarioLink
+                              funcionarioId={item.instrutor_id ?? undefined}
+                              nome={item.instrutor_nome || item.instrutor_guerra || 'Nao definido'}
+                              className="font-medium text-slate-700"
+                            />
+                          </p>
+                          <p className="mt-1 line-clamp-2 text-slate-500">
+                            {item.descricao || item.observacoes || 'Sem observacoes adicionais.'}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {item.participantes.slice(0, 4).map((participante) => (
+                            <FuncionarioLink
+                              key={`${item.id}-${participante.funcionario_id}`}
+                              funcionarioId={participante.funcionario_id}
+                              nome={
+                                participante.funcionario_guerra || participante.funcionario_nome
+                              }
+                              className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+                            />
+                          ))}
+                          {item.participantes.length > 4 && (
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                              +{item.participantes.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          icon="visibility"
+                          onClick={() => abrirDetalhes(item)}
+                          data-testid={`treinamento-detalhes-${item.id}`}
+                        >
+                          Detalhes
+                        </Button>
+                        <Button variant="ghost" icon="edit" onClick={() => abrirEditor(item)}>
+                          Editar
+                        </Button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {abaAtiva === 'auditoria' && (
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <StatCard
+                  icon={<ClipboardList className="h-5 w-5" />}
+                  label="Eventos"
+                  value={auditoriaQuery.data?.resumo.total_eventos || 0}
+                  helper="Treinamentos no recorte atual"
+                />
+                <StatCard
+                  icon={<Users className="h-5 w-5" />}
+                  label="Convocados"
+                  value={auditoriaQuery.data?.resumo.total_convocados || 0}
+                  helper="Total de pessoas convocadas"
+                />
+                <StatCard
+                  icon={<CheckCircle2 className="h-5 w-5" />}
+                  label="Confirmados"
+                  value={auditoriaQuery.data?.resumo.total_confirmados || 0}
+                  helper="Participantes que confirmaram"
+                />
+                <StatCard
+                  icon={<ShieldCheck className="h-5 w-5" />}
+                  label="Presentes"
+                  value={auditoriaQuery.data?.resumo.total_presentes || 0}
+                  helper="Presencas registradas"
+                />
+                <StatCard
+                  icon={<FileClock className="h-5 w-5" />}
+                  label="Prontos para auditoria"
+                  value={auditoriaQuery.data?.resumo.prontos_para_auditoria || 0}
+                  helper="Eventos com registros relevantes"
+                />
+              </div>
+
+              {auditoriaQuery.isLoading && auditoriaTreinamentos.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  Carregando trilha de auditoria...
+                </div>
+              ) : auditoriaTreinamentos.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  Nenhum treinamento com trilha de auditoria encontrado neste periodo.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {auditoriaTreinamentos.map((item) => (
+                    <article
+                      key={item.id}
+                      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-semibold text-slate-900">
+                              {getEventoTitulo(item)}
+                            </h3>
+                            <StatusBadge status={item.status} />
+                          </div>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {formatDateLabel(item.data_prevista)} ·{' '}
+                            {item.local || 'Local a definir'} · {item.convocados_total} convocados
+                          </p>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          icon="visibility"
+                          onClick={() => abrirDetalhes(item)}
+                        >
+                          Abrir evento
+                        </Button>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {(item.auditoria || []).length === 0 ? (
+                          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+                            Sem eventos auditados ainda.
+                          </div>
+                        ) : (
+                          (item.auditoria || []).map((registro) => (
+                            <div
+                              key={registro.id}
+                              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                            >
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {registro.acao}
+                                </p>
+                                <span className="text-xs text-slate-500">
+                                  {formatDateTimeLabel(registro.created_at)}
+                                </span>
+                              </div>
+                              {registro.usuario_nome && (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Por {registro.usuario_nome}
+                                </p>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+        <Modal
+          isOpen={modalFormularioAberto}
+          onClose={() => setModalFormularioAberto(false)}
+          title={
+            treinamentoEditando ? 'Editar treinamento planejado' : 'Novo treinamento planejado'
+          }
+          size="5xl"
+        >
+          <form id="treinamento-planejado-form" className="space-y-5" onSubmit={salvarFormulario}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Tipo de qualificacao</span>
+                <select
+                  value={formState.qualificacao_tipo_id}
+                  onChange={(event) => {
+                    const selectedId = event.target.value;
+                    const tipo = (tiposQualificacao as TipoQualificacaoOption[]).find(
+                      (item) => String(item.id) === selectedId,
+                    );
+                    setFormState((current) => ({
+                      ...current,
+                      qualificacao_tipo_id: selectedId,
+                      titulo: current.titulo || tipo?.nome || '',
+                    }));
+                  }}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                >
+                  <option value="">Selecione</option>
+                  {(tiposQualificacao as TipoQualificacaoOption[]).map((tipo) => (
+                    <option key={tipo.id} value={tipo.id}>
+                      {tipo.codigo ? `${tipo.codigo} · ${tipo.nome}` : tipo.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Status operacional</span>
+                <select
+                  value={formState.status}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      status: event.target.value as TreinamentoPlanejadoStatus,
+                    }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                >
+                  {STATUS_OPTIONS.filter((option) => option.value).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700">Titulo</span>
+              <input
+                type="text"
+                value={formState.titulo}
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, titulo: event.target.value }))
+                }
+                placeholder="Ex.: Reciclagem anual de CRM"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+              />
+            </label>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <label className="space-y-1.5 xl:col-span-1">
+                <span className="text-sm font-medium text-slate-700">Data prevista</span>
+                <input
+                  type="date"
+                  value={formState.data_prevista}
+                  min={today}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, data_prevista: event.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+
+              <label className="space-y-1.5 xl:col-span-1">
+                <span className="text-sm font-medium text-slate-700">Hora inicio</span>
+                <input
+                  type="time"
+                  value={formState.hora_inicio}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, hora_inicio: event.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+
+              <label className="space-y-1.5 xl:col-span-1">
+                <span className="text-sm font-medium text-slate-700">Hora fim</span>
+                <input
+                  type="time"
+                  value={formState.hora_fim}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, hora_fim: event.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+
+              <label className="space-y-1.5 xl:col-span-1">
+                <span className="text-sm font-medium text-slate-700">Carga horaria prevista</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  value={formState.carga_horaria_prevista}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      carga_horaria_prevista: event.target.value,
+                    }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Instrutor responsavel</span>
+                <select
+                  value={formState.instrutor_id}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, instrutor_id: event.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                >
+                  <option value="">Nao definido</option>
+                  {instrutores.map((instrutor) => (
+                    <option key={instrutor.id} value={instrutor.id}>
+                      {getPessoaLabel(instrutor.nome, instrutor.guerra, instrutor.matricula)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Local</span>
+                <input
+                  type="text"
+                  value={formState.local}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, local: event.target.value }))
+                  }
+                  placeholder="Sala, simulador, base ou plataforma"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Descricao operacional</span>
+                <textarea
+                  rows={4}
+                  value={formState.descricao}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, descricao: event.target.value }))
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  placeholder="Objetivo, publico alvo, observacoes do instrutor..."
+                />
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Observacoes internas</span>
+                <textarea
+                  rows={4}
+                  value={formState.observacoes}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, observacoes: event.target.value }))
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  placeholder="Requisitos previos, sala reservada, dependencia de frota..."
+                />
+              </label>
+            </div>
+
+            <section className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Convocados</h3>
+                  <p className="text-sm text-slate-500">
+                    {formState.participante_ids.length} selecionado(s) para este treinamento.
+                  </p>
+                </div>
+                <input
+                  type="search"
+                  value={buscaConvocados}
+                  onChange={(event) => setBuscaConvocados(event.target.value)}
+                  placeholder="Buscar por nome, guerra, matricula"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 sm:max-w-xs"
+                />
+              </div>
+
+              <div className="mt-4 max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                {funcionariosLoading ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                    Carregando funcionarios...
+                  </div>
+                ) : convocadosFiltrados.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                    Nenhum funcionario encontrado para o filtro atual.
+                  </div>
+                ) : (
+                  convocadosFiltrados.map((funcionario) => {
+                    const checked = formState.participante_ids.includes(funcionario.id);
+                    return (
+                      <label
+                        key={funcionario.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
+                          checked
+                            ? 'border-primary-200 bg-primary-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => alternarConvocado(funcionario.id)}
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-primary-600"
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {funcionario.guerra || funcionario.nome}
+                          </p>
+                          <p className="text-sm text-slate-500">
+                            {[
+                              funcionario.nome,
+                              funcionario.matricula,
+                              funcionario.setor,
+                              funcionario.funcao,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          </form>
+        </Modal>
+
+        <Modal
+          isOpen={modalDetalheAberto}
+          onClose={fecharModalDetalhes}
+          title={
+            detalheTreinamento ? getEventoTitulo(detalheTreinamento) : 'Detalhes do treinamento'
+          }
+          size="5xl"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={fecharModalDetalhes}
+              >
+                Fechar
+              </Button>
+              <Button
+                variant="danger"
+                onClick={excluirTreinamentoSelecionado}
+                disabled={excluindo || !detalheTreinamento}
+              >
+                {excluindo ? 'Excluindo...' : 'Excluir'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={abrirConvocacaoTurma}
+                disabled={Boolean(convocacaoDisabledReason) || enviandoConvocacao}
+                title={
+                  convocacaoDisabledReason ||
+                  'Enviar convocação por e-mail para todos os matriculados'
+                }
+              >
+                <Mail className="h-4 w-4" />
+                {enviandoConvocacao ? 'Preparando...' : 'Convocar Turma'}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => abrirEditor(detalheQuery.data || treinamentoEditando)}
+                disabled={!detalheTreinamento}
+              >
+                Editar
+              </Button>
+            </>
+          }
+        >
+          {!detalheTreinamento || detalheQuery.isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+              Carregando detalhes do treinamento...
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <section className="grid gap-4 lg:grid-cols-[1.3fr,0.9fr]">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={detalheTreinamento.status} />
+                    {detalheTreinamento.qualificacao_codigo && (
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                        {detalheTreinamento.qualificacao_codigo}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-4 text-sm text-slate-500">
+                    {detalheTreinamento.qualificacao_nome}
+                  </p>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+                        Agenda
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">
+                        {formatDateLabel(detalheTreinamento.data_prevista)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {formatHourRange(
+                          detalheTreinamento.hora_inicio,
+                          detalheTreinamento.hora_fim,
+                        )}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+                        Instrutor e local
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">
+                        <FuncionarioLink
+                          funcionarioId={detalheTreinamento.instrutor_id ?? undefined}
+                          nome={
+                            detalheTreinamento.instrutor_nome ||
+                            detalheTreinamento.instrutor_guerra ||
+                            'Nao definido'
+                          }
+                          className="text-sm font-semibold text-slate-900"
+                        />
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {detalheTreinamento.local || 'Local a definir'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+                        Convocados
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-slate-900">
+                        {detalheTreinamento.convocados_total}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+                        Confirmados
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-slate-900">
+                        {detalheTreinamento.confirmados_total}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+                        Presentes
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-slate-900">
+                        {detalheTreinamento.presentes_total}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl bg-white p-4 text-sm text-slate-600">
+                    <p className="font-semibold text-slate-900">Descricao operacional</p>
+                    <p className="mt-2 whitespace-pre-wrap">
+                      {detalheTreinamento.descricao || 'Sem descricao registrada.'}
+                    </p>
+                    <p className="mt-4 font-semibold text-slate-900">Observacoes internas</p>
+                    <p className="mt-2 whitespace-pre-wrap">
+                      {detalheTreinamento.observacoes || 'Sem observacoes registradas.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                  <h3 className="text-base font-semibold text-slate-900">Trilha recente</h3>
+                  <div className="mt-4 space-y-3">
+                    {(detalheQuery.data?.auditoria || []).length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-500">
+                        Nenhuma alteracao auditada ainda.
+                      </div>
+                    ) : (
+                      (detalheQuery.data?.auditoria || []).map((registro) => (
+                        <div
+                          key={registro.id}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                        >
+                          <div className="flex flex-col gap-1">
+                            <p className="text-sm font-semibold text-slate-900">{registro.acao}</p>
+                            <p className="text-xs text-slate-500">
+                              {formatDateTimeLabel(registro.created_at)}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {registro.usuario_nome || 'Usuario do sistema'}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Convocados e presenca
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      Controle operacional de confirmacao, presenca e aprovacao por participante.
+                    </p>
+                  </div>
+                  {atualizandoParticipante && (
+                    <p className="text-sm text-slate-500">Salvando atualizacao...</p>
+                  )}
+                </div>
+
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead>
+                      <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        <th className="px-3 py-3">Participante</th>
+                        <th className="px-3 py-3">Setor</th>
+                        <th className="px-3 py-3">Confirmacao</th>
+                        <th className="px-3 py-3">Presenca</th>
+                        <th className="px-3 py-3">Aprovacao</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {detalheTreinamento.participantes.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500">
+                            Nenhum convocado vinculado a este treinamento.
+                          </td>
+                        </tr>
+                      ) : (
+                        detalheTreinamento.participantes.map((participante) => (
+                          <tr key={participante.id} className="align-top">
+                            <td className="px-3 py-4">
+                              <p className="font-semibold text-slate-900">
+                                {participante.funcionario_guerra ||
+                                  participante.funcionario_nome ||
+                                  'Sem nome'}
+                              </p>
+                              <p className="text-slate-500">
+                                {[participante.funcionario_nome, participante.funcionario_matricula]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </p>
+                            </td>
+                            <td className="px-3 py-4 text-slate-600">
+                              {[participante.funcionario_setor, participante.funcionario_funcao]
+                                .filter(Boolean)
+                                .join(' · ') || 'Nao informado'}
+                            </td>
+                            <td className="px-3 py-4">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  atualizarParticipante(participante, {
+                                    confirmado: !participante.confirmado,
+                                  })
+                                }
+                                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                  participante.confirmado
+                                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                              >
+                                {participante.confirmado ? 'Confirmado' : 'Pendente'}
+                              </button>
+                            </td>
+                            <td className="px-3 py-4">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    atualizarParticipante(participante, { presente: true })
+                                  }
+                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                    participante.presente === true
+                                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  Presente
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    atualizarParticipante(participante, { presente: false })
+                                  }
+                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                    participante.presente === false
+                                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  Faltou
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    atualizarParticipante(participante, { presente: null })
+                                  }
+                                  className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
+                                >
+                                  Limpar
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-3 py-4">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    atualizarParticipante(participante, { aprovado: true })
+                                  }
+                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                    participante.aprovado === true
+                                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  Aprovado
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    atualizarParticipante(participante, { aprovado: false })
+                                  }
+                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                    participante.aprovado === false
+                                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  Reprovado
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    atualizarParticipante(participante, { aprovado: null })
+                                  }
+                                  className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
+                                >
+                                  Limpar
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Histórico de convocações
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      Registro operacional dos envios de e-mail e das falhas por tripulante.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {(detalheTreinamento.convocacoes_email || []).length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+                      Nenhuma convocação por e-mail registrada para esta turma.
+                    </div>
+                  ) : (
+                    (detalheTreinamento.convocacoes_email || []).map((convocacao) => (
+                      <div
+                        key={convocacao.id}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                      >
+                        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="font-semibold text-slate-900">{convocacao.assunto}</p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {formatDateTimeLabel(convocacao.created_at)} ·{' '}
+                              {convocacao.disparado_por_nome || 'Usuário do sistema'}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {convocacao.enviados_sucesso} sucesso(s) · {convocacao.enviados_falha}{' '}
+                              falha(s)
+                            </p>
+                            {convocacao.cc.length > 0 && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                CC: {convocacao.cc.join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          {convocacao.avisos.length > 0 && (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                              {convocacao.avisos.join(' ')}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
+        </Modal>
+
+        <Modal
+          isOpen={modalConfirmacaoConvocacaoAberto}
+          onClose={() => setModalConfirmacaoConvocacaoAberto(false)}
+          title="Confirmar convocação da turma"
+          size="3xl"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setModalConfirmacaoConvocacaoAberto(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={confirmarConvocacaoTurma}
+                disabled={
+                  enviarConvocacao.isPending ||
+                  (Boolean(convocacaoPreview?.ultima_convocacao_em) && !confirmarReenvio) ||
+                  ((convocacaoPreview?.ausentes_email.length || 0) +
+                    (convocacaoPreview?.invalidos_email.length || 0) >
+                    0 &&
+                    !ignorarSemEmail)
+                }
+              >
+                {enviarConvocacao.isPending ? 'Enviando...' : 'Confirmar envio'}
+              </Button>
+            </>
+          }
+        >
+          {!convocacaoPreview ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              Carregando prévia...
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Destinatários
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {convocacaoPreview.destinatarios_total}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {convocacaoPreview.destinatarios_validos} válidos para envio
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Treinamento
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {convocacaoPreview.treinamento_nome}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">{convocacaoPreview.modalidade}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Agenda
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {convocacaoPreview.data_inicio}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">{convocacaoPreview.horario}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Local / acesso
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {convocacaoPreview.local}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {convocacaoPreview.link_acesso || 'Sem link associado'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-semibold text-slate-900">Gestores em cópia</p>
+                {convocacaoPreview.gestores_cc.length > 0 ? (
+                  <>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                        onClick={() =>
+                          setGestoresCcSelecionadosIds(
+                            convocacaoPreview.gestores_cc.map((gestor) => gestor.id),
+                          )
+                        }
+                      >
+                        Marcar todos
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                        onClick={() => setGestoresCcSelecionadosIds([])}
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                    <div className="mt-3 max-h-40 space-y-2 overflow-y-auto pr-1">
+                      {convocacaoPreview.gestores_cc.map((gestor) => (
+                        <label
+                          key={gestor.id}
+                          className="flex items-start gap-2 text-sm text-slate-600"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={gestoresCcSelecionadosIds.includes(gestor.id)}
+                            onChange={(event) => {
+                              setGestoresCcSelecionadosIds((current) => {
+                                if (event.target.checked) {
+                                  return current.includes(gestor.id)
+                                    ? current
+                                    : [...current, gestor.id];
+                                }
+                                return current.filter((id) => id !== gestor.id);
+                              });
+                            }}
+                          />
+                          <span>
+                            {gestor.nome}{' '}
+                            <span className="text-slate-500">&lt;{gestor.email}&gt;</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-600">
+                    Nenhum gestor ativo configurado para cópia.
+                  </p>
+                )}
+              </div>
+
+              {(convocacaoPreview.ausentes_email.length > 0 ||
+                convocacaoPreview.invalidos_email.length > 0) && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-amber-700" />
+                    <div>
+                      <p className="font-semibold text-amber-900">
+                        Alguns tripulantes não entrarão na fila
+                      </p>
+                      <ul className="mt-2 space-y-1 text-sm text-amber-800">
+                        {convocacaoPreview.ausentes_email.map((item) => (
+                          <li key={`missing-${item.funcionario_id}`}>
+                            {item.nome}: sem e-mail cadastrado
+                          </li>
+                        ))}
+                        {convocacaoPreview.invalidos_email.map((item) => (
+                          <li key={`invalid-${item.funcionario_id}`}>
+                            {item.nome}: e-mail inválido ({item.email})
+                          </li>
+                        ))}
+                      </ul>
+                      <label className="mt-3 flex items-center gap-2 text-sm font-medium text-amber-900">
+                        <input
+                          type="checkbox"
+                          checked={ignorarSemEmail}
+                          onChange={(event) => setIgnorarSemEmail(event.target.checked)}
+                        />
+                        Confirmo o envio ignorando tripulantes sem e-mail ou com e-mail inválido.
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {convocacaoPreview.ultima_convocacao_em && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="text-sm font-semibold text-rose-900">
+                    Esta turma já recebeu convocação em{' '}
+                    {formatDateTimeLabel(convocacaoPreview.ultima_convocacao_em)}.
+                  </p>
+                  <label className="mt-3 flex items-center gap-2 text-sm font-medium text-rose-800">
+                    <input
+                      type="checkbox"
+                      checked={confirmarReenvio}
+                      onChange={(event) => setConfirmarReenvio(event.target.checked)}
+                    />
+                    Confirmo que desejo reenviar a convocação desta turma.
+                  </label>
+                </div>
+              )}
+
+              {convocacaoPreview.avisos.length > 0 && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  {convocacaoPreview.avisos.map((aviso) => (
+                    <p key={aviso}>{aviso}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
+
+        <Modal
+          isOpen={modalResultadoConvocacaoAberto}
+          onClose={() => setModalResultadoConvocacaoAberto(false)}
+          title="Resultado da convocação"
+          size="4xl"
+          footer={
+            <Button variant="secondary" onClick={() => setModalResultadoConvocacaoAberto(false)}>
+              Fechar
+            </Button>
+          }
+        >
+          {!convocacaoResultado ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              Sem resultado disponível.
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                    Sucesso
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold text-emerald-900">
+                    {convocacaoResultado.enviados_sucesso}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-rose-700">
+                    Falhas
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold text-rose-900">
+                    {convocacaoResultado.enviados_falha}
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="px-3 py-3">Tripulante</th>
+                      <th className="px-3 py-3">E-mail</th>
+                      <th className="px-3 py-3">Status</th>
+                      <th className="px-3 py-3">Motivo</th>
+                      <th className="px-3 py-3 text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {convocacaoResultado.itens.map((item) => (
+                      <tr key={`${item.funcionario_id}-${item.email || 'sem-email'}`}>
+                        <td className="px-3 py-3 font-medium text-slate-900">{item.nome}</td>
+                        <td className="px-3 py-3 text-slate-600">{item.email || 'Sem e-mail'}</td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.status === 'sucesso' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : item.status === 'falha' ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'}`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-slate-600">{item.erro_mensagem || '—'}</td>
+                        <td className="px-3 py-3 text-right">
+                          {item.status === 'falha' && item.email ? (
+                            <Button
+                              variant="secondary"
+                              onClick={() => reenviarIndividual(item.funcionario_id)}
+                              disabled={reenviarConvocacao.isPending}
+                            >
+                              Reenviar
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Modal>
+
+        {(tiposLoading || funcionariosLoading) && (
+          <div className="pointer-events-none fixed bottom-6 right-6 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg">
+            Atualizando bases de apoio...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,95 @@
+## 0049 (2 arquivos)
+./migrations/0049_create_integrated_view.sql
+./migrations/0049_qualificacoes_view_integrada.sql
+## 0062 (2 arquivos)
+./migrations/0062_consolidate_ssot_preserve_data.sql
+./migrations/0062_ssot_extended_tables_triggers_indexes.sql
+## 0063 (2 arquivos)
+./migrations/0063_align_qualificacoes_tipos_schema.sql
+./migrations/0063_normalize_qualificacoes_historico_schema.sql
+## 0068 (2 arquivos)
+./migrations/0068_enrich_and_fk.sql
+./migrations/0068_reintroduce_fk_qualificacoes_historico.sql
+## 0069 (2 arquivos)
+./migrations/0069_create_view_qualificacoes_historico_v.sql
+./migrations/0069_repoint_view_qualificacoes.sql
+## 0092 (9 arquivos)
+./migrations/0092_restore_data_chunk1.sql
+./migrations/0092_restore_data_chunk2.sql
+./migrations/0092_restore_data_chunk3.sql
+./migrations/0092_restore_data_chunk4.sql
+./migrations/0092_restore_data_chunk5.sql
+./migrations/0092_restore_data_chunk6.sql
+./migrations/0092_restore_real_data.sql
+./migrations/0092_restore_real_data_notx.sql
+./migrations/0092_restore_real_data_tipos.sql
+## 0093 (2 arquivos)
+./migrations/0093_create_importacoes_log.sql
+./migrations/0093_perf_indexes_qualificacoes.sql
+## 0098 (2 arquivos)
+./migrations/0098_add_certificado_arquivo_fk.sql
+./migrations/0098_add_examinador_checks.sql
+## 0107 (2 arquivos)
+./migrations/0107_fix_historico_fks.sql
+./migrations/0107_refactor_qualificacoes_historico.sql
+## 0112 (2 arquivos)
+./migrations/0112_add_missing_columns_qualificacoes_historico.sql
+./migrations/0112_seed_qualificacoes_tipos_exemplo.sql
+## 0117 (2 arquivos)
+./migrations/0117_create_modelos_aeronave.sql
+./migrations/0117_fix_qualificacoes_tipos_trigger.sql
+## 0137 (2 arquivos)
+./migrations/0137_add_integrity_checks.sql
+./migrations/0137_fix_certificados_completo.sql
+## 0140 (2 arquivos)
+./migrations/0140_add_simuladores_indexes.sql
+./migrations/0140_fix_fk_modelos_sessao_manobras.sql
+## 0144 (2 arquivos)
+./migrations/0144_deprecate_sessoes_template.sql
+./migrations/0144_integracao_edapp.sql
+## 0145 (2 arquivos)
+./migrations/0145_cleanup_obsolete_simuladores_tables.sql
+./migrations/0145_integracao_edapp_dados_teste.sql
+## 0150 (3 arquivos)
+./migrations/0150_marcar_qualificacoes_renovadas.sql
+./migrations/0150_multi_tenant_empresas.sql
+./migrations/0150_refactor_aeronaves_remove_codigo.sql
+## 0151 (2 arquivos)
+./migrations/0151_add_empresa_id_incremental.sql
+./migrations/0151_migrate_aeronave_references.sql
+## 0159 (2 arquivos)
+./migrations/0159_add_gera_qualificacao_modelos_sessao.sql
+./migrations/0159_remover_tipo_aeronave_modelos_sessao.sql
+## 0172 (2 arquivos)
+./migrations/0172_create_treinamentos_planejados.sql
+./migrations/0172_rollback_treinamentos.sql
+## 0200 (2 arquivos)
+./migrations/0200_performance_composite_indexes.sql
+./migrations/0200_remove_unused_columns_historico.sql
+## 0215 (2 arquivos)
+./migrations/0215_frms_notas_resolucao.sql
+./migrations/0215_frms_visual_thresholds.sql
+## 0246 (2 arquivos)
+./migrations/0246_enforce_tripulacao_unique_aeronave.sql
+./migrations/0246_fix_vw_tripulante_operacional_guerra.sql
+## 0263 (2 arquivos)
+./migrations/0263_backfill_manobras_descricao.sql
+./migrations/0263_frms_effectiveness_thresholds.sql
+## 0284 (2 arquivos)
+./migrations/0284_fix_sk76_loft_check_0303.sql
+./migrations/0284_frat_multilevel_bowtie_risk.sql
+## 0320 (2 arquivos)
+./migrations/0320_alertas_whatsapp_delivery_tracking.sql
+./migrations/0320_treinamentos_convocacao_email.sql
+## 0332 (2 arquivos)
+./migrations/0332_create_audit_logs_compatible.sql
+./migrations/0332_normalize_edapp_historical_renewals.sql
+## 0340 (2 arquivos)
+./migrations/0340_lms_cursos_ead_metadata.sql
+./migrations/0340_perfis_permissoes.sql
+## 0347 (2 arquivos)
+./migrations/0347_lms_cursos_content_filename.sql
+./migrations/0347_lms_edapp_tenant_indexes.sql
+## 0367 (2 arquivos)
+./migrations/0367_classificar_dificuldade_sk76_restantes.sql
+./migrations/0367_sk76_reaquisicao_experiencia_recente.sql

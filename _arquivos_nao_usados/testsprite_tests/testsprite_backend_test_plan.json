@@ -1,0 +1,52 @@
+[
+  {
+    "id": "TC001",
+    "title": "verify_jwt_authentication_and_refresh_token_functionality",
+    "description": "Test the login endpoint to ensure JWT authentication is correctly implemented, including issuance of access and refresh tokens, and verify that the refresh token mechanism maintains session continuity."
+  },
+  {
+    "id": "TC002",
+    "title": "validate_funcionarios_crud_operations_with_advanced_filters_and_import",
+    "description": "Test the /api/funcionarios endpoints for full CRUD operations, including advanced filtering capabilities and CSV import functionality, ensuring data integrity and correct handling of regulatory data fields (ANAC, ASO, CMA)."
+  },
+  {
+    "id": "TC003",
+    "title": "test_certificacoes_system_with_automatic_expiry_alerts_and_file_upload_download",
+    "description": "Verify the /api/qualificacoes and /api/certificados endpoints for managing certifications, including automatic expiry alerts, uploading and downloading of certificate files, and correct synchronization with storage."
+  },
+  {
+    "id": "TC004",
+    "title": "check_treinamentos_catalogue_access_and_periodicity_handling",
+    "description": "Test the /api/v2/treinamentos endpoints to ensure the training catalog is accessible, categorized correctly, and periodicity rules are enforced for operator training management."
+  },
+  {
+    "id": "TC005",
+    "title": "validate_simuladores_scheduling_sessions_evaluation_and_pdf_generation",
+    "description": "Test the /api/v2/simuladores and related endpoints for scheduling simulator sessions, managing evaluation forms, and generating detailed PDF reports without errors."
+  },
+  {
+    "id": "TC006",
+    "title": "test_pasta_virtual_document_upload_download_and_r2_synchronization",
+    "description": "Verify the /api/v2/pasta-virtual endpoints for secure document upload, download, and synchronization with Cloudflare R2 storage, ensuring data consistency and access control."
+  },
+  {
+    "id": "TC007",
+    "title": "verify_compliance_status_automatic_updates_and_expiry_matrix_access",
+    "description": "Test the /api/v2/compliance endpoints to ensure compliance status updates automatically based on certification data and that the expiry matrix is accessible and accurate."
+  },
+  {
+    "id": "TC008",
+    "title": "validate_dashboard_metrics_and_kpi_real_time_updates",
+    "description": "Test the /api/v2/dashboard endpoint to confirm that operational metrics and KPIs are displayed accurately and updated in real time according to backend data."
+  },
+  {
+    "id": "TC009",
+    "title": "test_auditoria_logs_access_and_rbac_protection",
+    "description": "Verify the /api/v2/auditoria endpoints to ensure detailed audit logs are recorded for all operations and that access is restricted to authorized users via RBAC."
+  },
+  {
+    "id": "TC010",
+    "title": "check_health_and_version_endpoints_response_and_data_accuracy",
+    "description": "Test the /api/health and /api/version endpoints to ensure they respond correctly with up-to-date system health and version information."
+  }
+]

@@ -1,0 +1,715 @@
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BookOpen,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Gauge,
+  Loader2,
+  Maximize2,
+} from 'lucide-react';
+import {
+  API_BASE_URL,
+  AUTH_TOKEN_CHANGED_EVENT,
+  ensureValidAccessToken,
+  fetchWithAuth,
+  getAccessToken,
+} from '@/react-app/config/api';
+import { toast } from 'sonner';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import { useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
+import { formatMinutes } from './lmsUi';
+
+function inferProgressFromLocation(location: string | null | undefined): number | null {
+  if (!location) return null;
+  const slash = location.match(/(\d+)\s*\/\s*(\d+)/);
+  if (slash) {
+    const current = Number(slash[1]);
+    const total = Number(slash[2]);
+    if (Number.isFinite(current) && Number.isFinite(total) && total > 0) {
+      return Math.min(100, Math.max(0, Math.round((current / total) * 100)));
+    }
+  }
+  const ofMatch = location.match(/(\d+)\s*of\s*(\d+)/i);
+  if (ofMatch) {
+    const current = Number(ofMatch[1]);
+    const total = Number(ofMatch[2]);
+    if (Number.isFinite(current) && Number.isFinite(total) && total > 0) {
+      return Math.min(100, Math.max(0, Math.round((current / total) * 100)));
+    }
+  }
+  return null;
+}
+
+function readLocationFromCmiJson(cmiJson: string | null | undefined): string | null {
+  if (!cmiJson) return null;
+  try {
+    const parsed = JSON.parse(cmiJson) as Record<string, unknown>;
+    const location =
+      (parsed['cmi.location'] as string | undefined) ??
+      (parsed['cmi.core.lesson_location'] as string | undefined);
+    return typeof location === 'string' && location.trim() ? location.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseSlideLocation(
+  location: string | null | undefined,
+): { current: number; total: number } | null {
+  if (!location) return null;
+  const slash = location.match(/(\d+)\s*\/\s*(\d+)/);
+  if (slash) {
+    const current = Number(slash[1]);
+    const total = Number(slash[2]);
+    if (Number.isFinite(current) && Number.isFinite(total) && total > 0) {
+      return { current, total };
+    }
+  }
+
+  const ofMatch = location.match(/(\d+)\s*of\s*(\d+)/i);
+  if (ofMatch) {
+    const current = Number(ofMatch[1]);
+    const total = Number(ofMatch[2]);
+    if (Number.isFinite(current) && Number.isFinite(total) && total > 0) {
+      return { current, total };
+    }
+  }
+
+  return null;
+}
+
+function normalizeScormStatus(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
+}
+
+export default function LmsPlayer() {
+  const { matriculaId } = useParams<{ matriculaId: string }>();
+  const navigate = useNavigate();
+  const { token } = useAuth();
+
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [completed, setCompleted] = useState(false);
+  const [qualificacaoGerada, setQualificacaoGerada] = useState(false);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [liveProgress, setLiveProgress] = useState<number | null>(null);
+  const [liveLocation, setLiveLocation] = useState<string | null>(null);
+  const [liveSlideCurrent, setLiveSlideCurrent] = useState<number | null>(null);
+  const [liveSlideTotal, setLiveSlideTotal] = useState<number | null>(null);
+  const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
+
+  const id = Number(matriculaId);
+  const {
+    data: matricula,
+    isLoading: matriculaLoading,
+    refetch: refetchMatricula,
+  } = useMatriculaDetalhe(id);
+  const { data: curso } = useLmsCurso(matricula?.curso_id ?? 0);
+  const persistedLocation = readLocationFromCmiJson(
+    (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
+  );
+  const currentLocation = liveLocation ?? persistedLocation;
+  const parsedCurrentLocation = parseSlideLocation(currentLocation);
+  const currentSlideIndex = parsedCurrentLocation?.current ?? null;
+  const inferredLocationProgress = inferProgressFromLocation(liveLocation);
+  const inferredPersistedLocationProgress = inferProgressFromLocation(persistedLocation);
+  const mergedProgress = Math.max(
+    matricula?.progresso_pct ?? 0,
+    liveProgress ?? 0,
+    inferredLocationProgress ?? 0,
+    inferredPersistedLocationProgress ?? 0,
+  );
+  const scormProgress = matricula?.scorm_progresso ?? null;
+  const scormLessonStatus = normalizeScormStatus(scormProgress?.lesson_status);
+  const scormCompletionStatus = normalizeScormStatus(scormProgress?.completion_status);
+  const scormSuccessStatus = normalizeScormStatus(scormProgress?.success_status);
+  const scormExplicitlyCompleted =
+    scormLessonStatus === 'completed' ||
+    scormLessonStatus === 'passed' ||
+    scormCompletionStatus === 'completed' ||
+    scormSuccessStatus === 'passed';
+  const hasCompletionDate = Boolean(matricula?.data_conclusao);
+  const isCompletedState =
+    completed || matricula?.status === 'CONCLUIDO' || scormExplicitlyCompleted || hasCompletionDate;
+  const displayProgress = completed || matricula?.status === 'CONCLUIDO' ? 100 : mergedProgress;
+  const reachedLastSlideFromWorker =
+    liveSlideCurrent != null && liveSlideTotal != null && liveSlideTotal > 0
+      ? liveSlideCurrent >= liveSlideTotal
+      : false;
+  const reachedLastSlideFromLocation =
+    parsedCurrentLocation != null && parsedCurrentLocation.total > 0
+      ? parsedCurrentLocation.current >= parsedCurrentLocation.total
+      : false;
+  const reachedLastSlide =
+    reachedLastSlideFromWorker ||
+    reachedLastSlideFromLocation ||
+    (inferredLocationProgress ?? 0) >= 99 ||
+    (inferredPersistedLocationProgress ?? 0) >= 99;
+  const canFinalize =
+    !isCompletedState &&
+    matricula?.status !== 'CONCLUIDO' &&
+    (displayProgress >= 99 || reachedLastSlide || scormExplicitlyCompleted) &&
+    !isFinalizing;
+  const remainingProgress = Math.max(0, 100 - displayProgress);
+  const canGoPrev = (currentSlideIndex ?? 1) > 1;
+  const canGoNextViewedOnly =
+    currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
+  const launchUrl =
+    playerToken && matricula && matricula.tipo_conteudo !== 'h5p'
+      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(playerToken)}`
+      : null;
+  const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncToken() {
+      try {
+        const nextToken = await ensureValidAccessToken();
+        if (!cancelled) {
+          setPlayerToken(nextToken ?? null);
+        }
+      } catch {
+        if (!cancelled) {
+          setPlayerToken(null);
+        }
+      }
+    }
+
+    void syncToken();
+
+    const onTokenChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ token?: string | null }>).detail;
+      setPlayerToken(detail?.token ?? getAccessToken());
+    };
+
+    const intervalId = window.setInterval(() => {
+      void syncToken();
+    }, 45_000);
+
+    window.addEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged as EventListener);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged as EventListener);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    setIframeLoaded(false);
+  }, [launchUrl]);
+
+  useEffect(() => {
+    const persisted = parseSlideLocation(persistedLocation);
+    if (persisted?.current) {
+      setMaxVisitedSlide((prev) => Math.max(prev, persisted.current));
+    }
+  }, [persistedLocation]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncFrameToken() {
+      const frameWindow = iframeRef.current?.contentWindow;
+      if (!frameWindow) return;
+
+      try {
+        const nextToken = await ensureValidAccessToken();
+        if (cancelled) return;
+
+        const resolvedToken = nextToken ?? getAccessToken() ?? null;
+        setPlayerToken(resolvedToken);
+        frameWindow.postMessage(
+          {
+            type: 'lms:auth-token',
+            matriculaId: id,
+            previewMode: false,
+            token: resolvedToken,
+          },
+          launchOrigin,
+        );
+      } catch {
+        if (!cancelled) {
+          frameWindow.postMessage(
+            {
+              type: 'lms:auth-token',
+              matriculaId: id,
+              previewMode: false,
+              token: null,
+            },
+            launchOrigin,
+          );
+        }
+      }
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== launchOrigin) return;
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:completed' &&
+        event.data.matriculaId === id
+      ) {
+        setCompleted(true);
+        if (event.data.qualificacao_gerada) setQualificacaoGerada(true);
+        void refetchMatricula();
+        return;
+      }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:progress' &&
+        event.data.matriculaId === id
+      ) {
+        if (typeof event.data.progresso_pct === 'number') {
+          setLiveProgress(event.data.progresso_pct);
+        }
+        if (typeof event.data.location === 'string' && event.data.location.trim()) {
+          setLiveLocation(event.data.location.trim());
+          const parsed = parseSlideLocation(event.data.location);
+          if (parsed?.current) {
+            setMaxVisitedSlide((prev) => Math.max(prev, parsed.current));
+          }
+        }
+        if (
+          typeof event.data.slide_current === 'number' &&
+          Number.isFinite(event.data.slide_current)
+        ) {
+          setLiveSlideCurrent(event.data.slide_current);
+          setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
+        }
+        if (typeof event.data.slide_total === 'number' && Number.isFinite(event.data.slide_total)) {
+          setLiveSlideTotal(event.data.slide_total);
+        }
+        if (event.data.novo_status === 'CONCLUIDO') {
+          setCompleted(true);
+        }
+        void refetchMatricula();
+        return;
+      }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:auth-token-request' &&
+        event.data.matriculaId === id
+      ) {
+        void syncFrameToken();
+        return;
+      }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:navigate:ack' &&
+        event.data.matriculaId === id &&
+        event.data.moved === false
+      ) {
+        toast.warning('Não foi possível navegar para este slide.');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    const intervalId = window.setInterval(() => {
+      if (iframeLoaded) void syncFrameToken();
+    }, 45_000);
+
+    if (iframeLoaded) {
+      void syncFrameToken();
+    }
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [id, iframeLoaded, launchOrigin, refetchMatricula]);
+
+  async function handleFullscreen() {
+    const el = iframeRef.current;
+    if (!el) return;
+
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => Promise<void> | void;
+      msFullscreenElement?: Element | null;
+      msExitFullscreen?: () => Promise<void> | void;
+    };
+
+    const root = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+      msRequestFullscreen?: () => Promise<void> | void;
+    };
+
+    const inFullscreen = Boolean(
+      doc.fullscreenElement || doc.webkitFullscreenElement || doc.msFullscreenElement,
+    );
+
+    try {
+      if (inFullscreen) {
+        if (doc.exitFullscreen) {
+          await doc.exitFullscreen();
+          return;
+        }
+        if (doc.webkitExitFullscreen) {
+          await doc.webkitExitFullscreen();
+          return;
+        }
+        if (doc.msExitFullscreen) {
+          await doc.msExitFullscreen();
+          return;
+        }
+      } else {
+        if (root.requestFullscreen) {
+          await root.requestFullscreen();
+          return;
+        }
+        if (root.webkitRequestFullscreen) {
+          await root.webkitRequestFullscreen();
+          return;
+        }
+        if (root.msRequestFullscreen) {
+          await root.msRequestFullscreen();
+          return;
+        }
+      }
+    } catch {
+      // Fallback below handles browsers with partial fullscreen support.
+    }
+
+    // Fallback para WebViews/mobile onde fullscreen da página principal falha.
+    if (launchOrigin && el.contentWindow) {
+      el.contentWindow.postMessage({ type: 'lms:fullscreen' }, launchOrigin);
+    }
+  }
+
+  function navigateSlide(direction: 'prev' | 'next') {
+    if (direction === 'prev' && !canGoPrev) {
+      return;
+    }
+
+    if (direction === 'next' && !canGoNextViewedOnly) {
+      toast.warning('Avanço bloqueado: você só pode avançar para slides já vistos.');
+      return;
+    }
+
+    const frameWindow = iframeRef.current?.contentWindow;
+    if (!frameWindow || !launchOrigin) return;
+    frameWindow.postMessage(
+      {
+        type: 'lms:navigate',
+        direction,
+      },
+      launchOrigin,
+    );
+  }
+
+  function handleLeave() {
+    const shouldConfirm = !completed && matricula?.status !== 'CONCLUIDO';
+    if (shouldConfirm) {
+      const confirmed = window.confirm(
+        'O curso ainda não foi concluído. Deseja sair agora mesmo assim?',
+      );
+      if (!confirmed) return;
+    }
+    navigate('/lms/cursos');
+  }
+
+  async function handleFinalizeAndGenerateQualification() {
+    if (!matricula) return;
+    setIsFinalizing(true);
+    try {
+      const res = await fetchWithAuth(`/api/lms/matriculas/${id}/finalizar`, {
+        method: 'POST',
+      });
+      const json = (await res.json()) as {
+        success: boolean;
+        data?: { qualificacao_gerada?: unknown };
+        error?: string;
+      };
+      if (!res.ok || !json.success) {
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+
+      setCompleted(true);
+      setLiveProgress(100);
+      setQualificacaoGerada(Boolean(json.data?.qualificacao_gerada));
+      void refetchMatricula();
+      toast.success('Treinamento finalizado com sucesso.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao finalizar treinamento');
+    } finally {
+      setIsFinalizing(false);
+    }
+  }
+
+  if (!token && !playerToken) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950 text-white">
+        <div className="text-center space-y-3">
+          <AlertTriangle className="h-10 w-10 text-amber-400 mx-auto" />
+          <p>Sessão expirada. Faça login novamente.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (matriculaLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950">
+        <Loader2 className="h-8 w-8 animate-spin text-white/50" />
+      </div>
+    );
+  }
+
+  if (!matricula) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-slate-950 text-white gap-4">
+        <AlertTriangle className="h-10 w-10 text-amber-400" />
+        <p className="text-sm">Matrícula não encontrada.</p>
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm hover:bg-white/20"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
+        </button>
+      </div>
+    );
+  }
+
+  // Redirect non-SCORM types to their own players
+  if (matricula.tipo_conteudo === 'h5p') {
+    navigate(`/lms/player/h5p/${id}`, { replace: true });
+    return null;
+  }
+  if (matricula.tipo_conteudo === 'pdf') {
+    navigate(`/lms/player/pdf/${id}`, { replace: true });
+    return null;
+  }
+  if (matricula.tipo_conteudo === 'pptx') {
+    navigate(`/lms/player/pptx/${id}`, { replace: true });
+    return null;
+  }
+
+  return (
+    <div className="flex h-[100dvh] flex-col bg-slate-950 text-white">
+      <header className="border-b border-white/10 bg-slate-900/85 px-3 py-2 backdrop-blur sm:px-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleLeave}
+            className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
+            title="Voltar"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{matricula.titulo ?? 'Curso SCORM'}</p>
+            <p className="truncate text-[11px] text-white/60">
+              {liveLocation || persistedLocation
+                ? `Onde você está: ${liveLocation ?? persistedLocation}`
+                : 'Onde você está: início do curso'}
+            </p>
+          </div>
+
+          <button
+            onClick={() => navigateSlide('prev')}
+            disabled={!canGoPrev}
+            className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-medium text-white/85 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Voltar slide"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Voltar slide</span>
+          </button>
+
+          <button
+            onClick={() => navigateSlide('next')}
+            disabled={!canGoNextViewedOnly}
+            className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-medium text-white/85 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Próximo slide"
+          >
+            <ChevronRight className="h-4 w-4" />
+            <span className="hidden sm:inline">Próximo</span>
+          </button>
+
+          <button
+            onClick={handleFullscreen}
+            className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/85 hover:bg-white/10"
+            title="Tela cheia"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
+        </div>
+      </header>
+
+      <main className="relative flex-1">
+        <div className="flex h-full min-h-0">
+          <div className="relative min-w-0 flex-1">
+            {!iframeLoaded && launchUrl ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-950">
+                <div className="text-center">
+                  <Loader2 className="mx-auto h-10 w-10 animate-spin text-white/30" />
+                  <p className="mt-3 text-sm text-white/60">Montando o ambiente do curso...</p>
+                </div>
+              </div>
+            ) : null}
+
+            {launchUrl ? (
+              <iframe
+                ref={iframeRef}
+                src={launchUrl}
+                className="absolute inset-0 h-full w-full border-none bg-white"
+                allow="autoplay; fullscreen; clipboard-write"
+                allowFullScreen
+                onLoad={() => {
+                  setIframeLoaded(true);
+                }}
+                title={matricula.titulo ?? 'Curso SCORM'}
+              />
+            ) : null}
+          </div>
+
+          <aside className="hidden w-[340px] shrink-0 border-l border-white/10 bg-slate-900/70 p-4 md:flex md:flex-col md:gap-4">
+            <section className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <h3 className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-white/90">
+                <BookOpen className="h-4 w-4 text-sky-300" />
+                Conteúdo programático
+              </h3>
+              <div className="max-h-48 overflow-auto whitespace-pre-wrap text-xs leading-5 text-white/75">
+                {curso?.conteudo_programatico?.trim() ||
+                  curso?.descricao?.trim() ||
+                  'Conteúdo sem descrição detalhada cadastrada para este curso.'}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <h3 className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-white/90">
+                <Gauge className="h-4 w-4 text-emerald-300" />
+                Progresso e sessão
+              </h3>
+              <div className="space-y-1.5 text-xs text-white/75">
+                <p>Progresso: {displayProgress}%</p>
+                <p>Restante: {remainingProgress}%</p>
+                <p>Posição: {liveLocation || persistedLocation || 'sem marcador'}</p>
+                <p>
+                  Carga horária:{' '}
+                  {formatMinutes(curso?.carga_horaria_minutos ?? matricula.carga_horaria_minutos)}
+                </p>
+                {matricula.score_final != null ? <p>Nota: {matricula.score_final}%</p> : null}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <h3 className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-white/90">
+                <Clock3 className="h-4 w-4 text-amber-300" />
+                Ações rápidas
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => navigateSlide('prev')}
+                  disabled={!canGoPrev}
+                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Anterior
+                </button>
+                <button
+                  onClick={() => navigateSlide('next')}
+                  disabled={!canGoNextViewedOnly}
+                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                  Próximo
+                </button>
+                <button
+                  onClick={handleFullscreen}
+                  className="col-span-2 inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs hover:bg-white/10"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                  Tela cheia
+                </button>
+              </div>
+            </section>
+
+            {canFinalize ? (
+              <button
+                onClick={handleFinalizeAndGenerateQualification}
+                disabled={isFinalizing}
+                className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isFinalizing
+                  ? 'Finalizando...'
+                  : matricula?.gerar_qualificacao_ao_concluir === 1
+                    ? 'Finalizar e gerar qualificação'
+                    : 'Finalizar curso'}
+              </button>
+            ) : null}
+          </aside>
+        </div>
+      </main>
+      {canFinalize && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4">
+          <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-emerald-300/30 bg-slate-900/90 p-3 shadow-2xl backdrop-blur">
+            <div className="mb-2 text-xs text-emerald-200/90">
+              Todos os slides concluídos. Você já pode finalizar o treinamento.
+            </div>
+            <button
+              onClick={handleFinalizeAndGenerateQualification}
+              disabled={isFinalizing}
+              className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isFinalizing
+                ? 'Finalizando...'
+                : matricula?.gerar_qualificacao_ao_concluir === 1
+                  ? 'Finalizar curso e gerar qualificação'
+                  : 'Finalizar curso'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Overlay de conclusão */}
+      {completed && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="text-center space-y-5 text-white max-w-sm px-6">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500">
+              <CheckCircle2 className="h-8 w-8 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold">Curso concluído</h2>
+            <p className="text-white/70 text-sm">
+              Seu progresso foi salvo com sucesso.
+              {qualificacaoGerada ? ' A qualificação foi gerada automaticamente.' : ''}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => navigate(`/lms/cursos/${matricula.curso_id}`)}
+                className="w-full rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 hover:bg-slate-100"
+              >
+                Ver detalhes do curso
+              </button>
+              <button
+                onClick={() => navigate('/lms/cursos')}
+                className="w-full rounded-xl bg-white/10 px-4 py-2.5 text-sm text-white hover:bg-white/20"
+              >
+                Voltar ao catálogo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

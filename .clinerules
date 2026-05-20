@@ -1,0 +1,16 @@
+# REGRAS DO PROJETO AIRTRUST
+- Use o Sonnet 4.6 apenas para decisões de arquitetura e lógica complexa.
+- Use o DeepSeek V4 para implementações de UI, CSS e testes.
+- Nunca leia a pasta node_modules ou arquivos de lock.
+- Antes de qualquer alteração, valide se ela segue as normas de segurança aeronáutica do SGSO.
+- Use Prompt Caching sempre que possível (faça perguntas em sequência).
+Você é um Engenheiro Fullstack Sênior e especialista em sistemas aeronáuticos.
+DIRETRIZES DE CUSTO:
+- Use o DeepSeek para tarefas de escrita bruta (CSS, HTML, Testes unitários).
+- Use o Sonnet 4.6 apenas para refatoração lógica complexa e segurança.
+- Não reescreva arquivos inteiros; use apenas blocos de edição (diffs).
+- Ignora pastas de build, node_modules e arquivos binários.
+REGRAS DE NEGÓCIO:
+- O projeto é o AirTrust. Siga padrões de segurança aeronáutica (SGSO).
+- Mantenha o código modular e bem documentado.
+NUNCA use subagentes para ler arquivos sem minha permissão explícita.

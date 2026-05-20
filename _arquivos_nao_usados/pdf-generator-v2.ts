@@ -1,0 +1,84 @@
+export interface DadosPDF {
+  funcionario: string;
+  matricula: string;
+  qualificacao: string;
+  codigo: string;
+  data_inicio: string;
+  data_conclusao: string;
+  data_vencimento: string;
+  numero_certificado: string;
+  conteudo_programatico?: string;
+}
+
+export async function gerarPDF(dados: DadosPDF): Promise<Buffer> {
+  // Gerar PDF binário válido com os dados
+  const pdfContent = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>
+endobj
+5 0 obj
+<< /Length 1200 >>
+stream
+BT
+/F1 28 Tf
+150 750 Td
+(CERTIFICADO) Tj
+0 -60 Td
+/F1 12 Tf
+(Certificamos que) Tj
+0 -30 Td
+/F1 14 Tf
+(${dados.funcionario}) Tj
+0 -30 Td
+/F1 12 Tf
+(concluiu com aproveitamento o treinamento em) Tj
+0 -30 Td
+/F1 14 Tf
+(${dados.qualificacao}) Tj
+0 -40 Td
+/F1 11 Tf
+(Matricula: ${dados.matricula}) Tj
+0 -20 Td
+(Codigo: ${dados.codigo}) Tj
+0 -20 Td
+(Certificado No: ${dados.numero_certificado}) Tj
+0 -20 Td
+(Inicio: ${new Date(dados.data_inicio).toLocaleDateString('pt-BR')}) Tj
+0 -20 Td
+(Conclusao: ${new Date(dados.data_conclusao).toLocaleDateString('pt-BR')}) Tj
+0 -20 Td
+(Validade: ${new Date(dados.data_vencimento).toLocaleDateString('pt-BR')}) Tj
+0 -40 Td
+(_________________________________) Tj
+0 -20 Td
+(Assinado Digitalmente) Tj
+0 -20 Td
+(${new Date().toLocaleDateString('pt-BR')}) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000214 00000 n 
+0000000313 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1563
+%%EOF`;
+
+  return Buffer.from(pdfContent, 'latin1');
+}

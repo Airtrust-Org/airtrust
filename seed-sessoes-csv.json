@@ -1,0 +1,453 @@
+{
+  "sessions": [
+    {
+      "id": 1,
+      "tema": "FAMILIARIZAÇÃO AW139 - VFR BÁSICO",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        { "codigo": "FLY-BAS-X3", "descricao": "Hover & taxi", "ordem": 2 },
+        {
+          "codigo": "FLY-BAS-X5",
+          "descricao": "Circuits (inclui T/O, pattern, landing)",
+          "ordem": 3
+        },
+        { "codigo": "FLY-BAS-X6", "descricao": "Steep approaches", "ordem": 4 },
+        { "codigo": "FLY-BAS-X7", "descricao": "Engine-off landing", "ordem": 5 },
+        { "codigo": "FLY-BAS-X8", "descricao": "Autorotations", "ordem": 6 },
+        { "codigo": "FLY-BAS-X10", "descricao": "Fuel management", "ordem": 7 },
+        { "codigo": "FLY-BAS-X11", "descricao": "Electrical system", "ordem": 8 },
+        { "codigo": "FLY-BAS-X12", "descricao": "Hydraulic system", "ordem": 9 },
+        { "codigo": "FLY-BAS-X13", "descricao": "SAS (Stability Augmentation)", "ordem": 10 },
+        { "codigo": "FLY-BAS-X14", "descricao": "AFCS mode awareness", "ordem": 11 },
+        { "codigo": "FLY-BAS-X15", "descricao": "Flight Director awareness", "ordem": 12 },
+        { "codigo": "NAV-BAS-X1", "descricao": "ADF + VOR", "ordem": 13 },
+        { "codigo": "NAV-BAS-X2", "descricao": "GPS/FMS (G5000H)", "ordem": 14 },
+        { "codigo": "COM-BAS-X1", "descricao": "Radio phraseology + procedures", "ordem": 15 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 16
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 17
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 18 },
+        {
+          "codigo": "OPS-STD-X4",
+          "descricao": "SOPS review (Sim-specific Standard Operating Procedures)",
+          "ordem": 19
+        },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 20 },
+        { "codigo": "OPS-STD-X6", "descricao": "Taxi operations & ramp awareness", "ordem": 21 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 22 }
+      ]
+    },
+    {
+      "id": 2,
+      "tema": "EMERGÊNCIAS POWERPLANT & AUTOROTAÇÕES",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        { "codigo": "FLY-BAS-X3", "descricao": "Hover & taxi", "ordem": 2 },
+        {
+          "codigo": "FLY-BAS-X5",
+          "descricao": "Circuits (inclui T/O, pattern, landing)",
+          "ordem": 3
+        },
+        { "codigo": "FLY-BAS-X8", "descricao": "Autorotations", "ordem": 4 },
+        { "codigo": "EMG-ENG-X1", "descricao": "Engine failure in hover", "ordem": 5 },
+        { "codigo": "EMG-ENG-X2", "descricao": "Engine failure during takeoff", "ordem": 6 },
+        { "codigo": "EMG-ENG-X3", "descricao": "Engine failure en route", "ordem": 7 },
+        { "codigo": "EMG-ENG-X4", "descricao": "Engine failure approach/landing", "ordem": 8 },
+        { "codigo": "EMG-ENG-X5", "descricao": "Dual engine failure", "ordem": 9 },
+        { "codigo": "EMG-ENG-X6", "descricao": "Engine fire in flight", "ordem": 10 },
+        { "codigo": "EMG-ENG-X7", "descricao": "Engine oil pressure/temperature", "ordem": 11 },
+        { "codigo": "EMG-ENG-X8", "descricao": "Fuel leak/fuel starvation", "ordem": 12 },
+        { "codigo": "EMG-GEN-X1", "descricao": "Emergency descent", "ordem": 13 },
+        { "codigo": "EMG-GEN-X2", "descricao": "Forced landing procedures", "ordem": 14 },
+        { "codigo": "EMG-GEN-X3", "descricao": "Ditching procedure", "ordem": 15 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 16
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 17
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 18 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 19 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 20 },
+        { "codigo": "EMG-GEN-X4", "descricao": "Mayday call procedure", "ordem": 21 },
+        { "codigo": "EMG-GEN-X5", "descricao": "Post-crash/ditching action", "ordem": 22 }
+      ]
+    },
+    {
+      "id": 3,
+      "tema": "SISTEMA ELÉTRICO & NOTURNO",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        { "codigo": "FLY-BAS-X3", "descricao": "Hover & taxi", "ordem": 2 },
+        {
+          "codigo": "FLY-BAS-X5",
+          "descricao": "Circuits (inclui T/O, pattern, landing)",
+          "ordem": 3
+        },
+        { "codigo": "FLY-BAS-X11", "descricao": "Electrical system", "ordem": 4 },
+        { "codigo": "EMG-ELEC-X1", "descricao": "Total electrical failure", "ordem": 5 },
+        { "codigo": "EMG-ELEC-X2", "descricao": "Single generator failure", "ordem": 6 },
+        { "codigo": "EMG-ELEC-X3", "descricao": "Dual generator failure", "ordem": 7 },
+        { "codigo": "EMG-ELEC-X4", "descricao": "Battery-only operation", "ordem": 8 },
+        { "codigo": "EMG-ELEC-X5", "descricao": "Inverter failure", "ordem": 9 },
+        { "codigo": "EMG-ELEC-X6", "descricao": "Essential bus failure", "ordem": 10 },
+        { "codigo": "FLY-ADV-X1", "descricao": "Night VFR (reduced visibility ops)", "ordem": 11 },
+        {
+          "codigo": "FLY-ADV-X2",
+          "descricao": "NVG (Night Vision Goggles) awareness",
+          "ordem": 12
+        },
+        { "codigo": "NAV-ADV-X2", "descricao": "Night recovery procedures", "ordem": 13 },
+        { "codigo": "EMG-FIRE-X1", "descricao": "Electrical fire (in-flight)", "ordem": 14 },
+        { "codigo": "EMG-FIRE-X2", "descricao": "Cabin fire", "ordem": 15 },
+        { "codigo": "EMG-AVION-X5", "descricao": "Loss of navigation aids", "ordem": 16 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 17
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 18
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 19 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 20 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 21 },
+        { "codigo": "FLY-ADV-X3", "descricao": "Reduced lighting operations", "ordem": 22 },
+        { "codigo": "EMG-GEN-X1", "descricao": "Emergency descent", "ordem": 23 }
+      ]
+    },
+    {
+      "id": 4,
+      "tema": "INTRODUÇÃO IFR & NAVEGAÇÃO BÁSICA",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        {
+          "codigo": "FLY-IFR-X1",
+          "descricao": "Instrument scan (atitude, heading, altitude)",
+          "ordem": 2
+        },
+        { "codigo": "FLY-IFR-X2", "descricao": "Attitude flying (unusual attitudes)", "ordem": 3 },
+        { "codigo": "FLY-IFR-X3", "descricao": "Holding patterns", "ordem": 4 },
+        { "codigo": "FLY-IFR-X4", "descricao": "Timed turns & rate turns", "ordem": 5 },
+        { "codigo": "NAV-IFR-X1", "descricao": "ILS approach", "ordem": 6 },
+        { "codigo": "NAV-IFR-X2", "descricao": "RNAV/RNP approach", "ordem": 7 },
+        { "codigo": "NAV-IFR-X3", "descricao": "VOR/DME approach", "ordem": 8 },
+        { "codigo": "NAV-IFR-X4", "descricao": "NDB approach", "ordem": 9 },
+        { "codigo": "NAV-BAS-X1", "descricao": "ADF + VOR", "ordem": 10 },
+        { "codigo": "NAV-BAS-X2", "descricao": "GPS/FMS (G5000H)", "ordem": 11 },
+        { "codigo": "NAV-ADV-X1", "descricao": "Missed approach procedure", "ordem": 12 },
+        { "codigo": "OPS-APP-X3", "descricao": "Missed approach", "ordem": 13 },
+        { "codigo": "OPS-APP-X4", "descricao": "IFR departure & arrival", "ordem": 14 },
+        { "codigo": "COM-BAS-X1", "descricao": "Radio phraseology + procedures", "ordem": 15 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 16
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 17
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 18 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 19 },
+        { "codigo": "FLY-BAS-X14", "descricao": "AFCS mode awareness", "ordem": 20 },
+        { "codigo": "FLY-BAS-X15", "descricao": "Flight Director awareness", "ordem": 21 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 22 }
+      ]
+    },
+    {
+      "id": 5,
+      "tema": "AFCS INTRODUÇÃO & AUTOPILOT",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        { "codigo": "FLY-BAS-X14", "descricao": "AFCS mode awareness", "ordem": 2 },
+        { "codigo": "FLY-BAS-X15", "descricao": "Flight Director awareness", "ordem": 3 },
+        { "codigo": "AFCS-BAS-X1", "descricao": "AFCS engagement (all modes)", "ordem": 4 },
+        { "codigo": "AFCS-BAS-X2", "descricao": "SAS1/SAS2 normal ops", "ordem": 5 },
+        { "codigo": "AFCS-BAS-X3", "descricao": "Autopilot coupled flight", "ordem": 6 },
+        { "codigo": "AFCS-BAS-X4", "descricao": "Altitude hold & VS", "ordem": 7 },
+        { "codigo": "AFCS-BAS-X5", "descricao": "Heading & Nav mode", "ordem": 8 },
+        { "codigo": "AFCS-BAS-X6", "descricao": "IAS hold mode", "ordem": 9 },
+        { "codigo": "AFCS-BAS-X7", "descricao": "Coupled ILS approach", "ordem": 10 },
+        { "codigo": "AFCS-BAS-X8", "descricao": "Coupled RNAV/GPS approach", "ordem": 11 },
+        { "codigo": "AFCS-BAS-X9", "descricao": "Hover trim & hover autopilot", "ordem": 12 },
+        { "codigo": "AFCS-BAS-X10", "descricao": "Manual disconnect & reversion", "ordem": 13 },
+        { "codigo": "NAV-IFR-X1", "descricao": "ILS approach", "ordem": 14 },
+        { "codigo": "NAV-IFR-X2", "descricao": "RNAV/RNP approach", "ordem": 15 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 16
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 17
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 18 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 19 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 20 },
+        {
+          "codigo": "FLY-IFR-X1",
+          "descricao": "Instrument scan (atitude, heading, altitude)",
+          "ordem": 21
+        },
+        { "codigo": "FLY-BAS-X8", "descricao": "Autorotations", "ordem": 22 },
+        { "codigo": "EMG-AFCS-X1", "descricao": "AFCS malfunction / disconnect", "ordem": 23 }
+      ]
+    },
+    {
+      "id": 6,
+      "tema": "AFCS DEGRADAÇÕES & MANUAL REVERSION",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        { "codigo": "FLY-BAS-X14", "descricao": "AFCS mode awareness", "ordem": 2 },
+        { "codigo": "AFCS-BAS-X1", "descricao": "AFCS engagement (all modes)", "ordem": 3 },
+        { "codigo": "EMG-AFCS-X1", "descricao": "AFCS malfunction / disconnect", "ordem": 4 },
+        { "codigo": "EMG-AFCS-X2", "descricao": "SAS degradation (single/dual)", "ordem": 5 },
+        { "codigo": "EMG-AFCS-X3", "descricao": "Trim malfunction", "ordem": 6 },
+        { "codigo": "EMG-AFCS-X4", "descricao": "Autopilot runaway trim", "ordem": 7 },
+        { "codigo": "EMG-AFCS-X5", "descricao": "Flight Director failure", "ordem": 8 },
+        { "codigo": "FLY-IFR-X2", "descricao": "Attitude flying (unusual attitudes)", "ordem": 9 },
+        { "codigo": "FLY-IFR-X3", "descricao": "Holding patterns", "ordem": 10 },
+        { "codigo": "NAV-IFR-X1", "descricao": "ILS approach", "ordem": 11 },
+        { "codigo": "NAV-IFR-X2", "descricao": "RNAV/RNP approach", "ordem": 12 },
+        { "codigo": "NAV-ADV-X1", "descricao": "Missed approach procedure", "ordem": 13 },
+        { "codigo": "OPS-APP-X3", "descricao": "Missed approach", "ordem": 14 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 15
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 16
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 17 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 18 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 19 },
+        { "codigo": "FLY-BAS-X8", "descricao": "Autorotations", "ordem": 20 },
+        { "codigo": "EMG-ENG-X1", "descricao": "Engine failure in hover", "ordem": 21 },
+        { "codigo": "EMG-GEN-X1", "descricao": "Emergency descent", "ordem": 22 }
+      ]
+    },
+    {
+      "id": 7,
+      "tema": "AVIÔNICOS FAILURES & PARTIAL PANEL",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        {
+          "codigo": "FLY-IFR-X1",
+          "descricao": "Instrument scan (atitude, heading, altitude)",
+          "ordem": 2
+        },
+        { "codigo": "FLY-IFR-X2", "descricao": "Attitude flying (unusual attitudes)", "ordem": 3 },
+        {
+          "codigo": "EMG-AVION-X1",
+          "descricao": "PFD failure (Primary Flight Display)",
+          "ordem": 4
+        },
+        {
+          "codigo": "EMG-AVION-X2",
+          "descricao": "MFD failure (Multi-Function Display)",
+          "ordem": 5
+        },
+        { "codigo": "EMG-AVION-X3", "descricao": "AHRS failure", "ordem": 6 },
+        { "codigo": "EMG-AVION-X4", "descricao": "ADC failure (Air Data Computer)", "ordem": 7 },
+        { "codigo": "EMG-AVION-X5", "descricao": "Loss of navigation aids", "ordem": 8 },
+        { "codigo": "EMG-AVION-X6", "descricao": "Radio altimeter failure", "ordem": 9 },
+        { "codigo": "EMG-AVION-X7", "descricao": "Standby instrument operations", "ordem": 10 },
+        { "codigo": "FLY-IFR-X4", "descricao": "Timed turns & rate turns", "ordem": 11 },
+        { "codigo": "NAV-IFR-X1", "descricao": "ILS approach", "ordem": 12 },
+        { "codigo": "NAV-IFR-X2", "descricao": "RNAV/RNP approach", "ordem": 13 },
+        { "codigo": "NAV-IFR-X3", "descricao": "VOR/DME approach", "ordem": 14 },
+        { "codigo": "OPS-APP-X3", "descricao": "Missed approach", "ordem": 15 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 16
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 17
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 18 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 19 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 20 },
+        { "codigo": "EMG-AFCS-X1", "descricao": "AFCS malfunction / disconnect", "ordem": 21 },
+        { "codigo": "FLY-BAS-X8", "descricao": "Autorotations", "ordem": 22 },
+        { "codigo": "EMG-GEN-X1", "descricao": "Emergency descent", "ordem": 23 }
+      ]
+    },
+    {
+      "id": 8,
+      "tema": "ROTOR, TRANSMISSÃO & HIDRÁULICO",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        { "codigo": "FLY-BAS-X3", "descricao": "Hover & taxi", "ordem": 2 },
+        {
+          "codigo": "FLY-BAS-X5",
+          "descricao": "Circuits (inclui T/O, pattern, landing)",
+          "ordem": 3
+        },
+        { "codigo": "FLY-BAS-X12", "descricao": "Hydraulic system", "ordem": 4 },
+        { "codigo": "EMG-HYDR-X1", "descricao": "Single hydraulic failure", "ordem": 5 },
+        { "codigo": "EMG-HYDR-X2", "descricao": "Dual hydraulic failure", "ordem": 6 },
+        { "codigo": "EMG-HYDR-X3", "descricao": "Servo transparency mode", "ordem": 7 },
+        { "codigo": "EMG-ROTOR-X1", "descricao": "Main rotor vibration", "ordem": 8 },
+        { "codigo": "EMG-ROTOR-X2", "descricao": "Tail rotor failure", "ordem": 9 },
+        {
+          "codigo": "EMG-ROTOR-X3",
+          "descricao": "Tail rotor control jam/restriction",
+          "ordem": 10
+        },
+        { "codigo": "EMG-ROTOR-X4", "descricao": "Main gearbox malfunction", "ordem": 11 },
+        { "codigo": "EMG-ROTOR-X5", "descricao": "MGB chip light / oil pressure", "ordem": 12 },
+        { "codigo": "EMG-ROTOR-X6", "descricao": "T/R gearbox chip light", "ordem": 13 },
+        { "codigo": "FLY-BAS-X8", "descricao": "Autorotations", "ordem": 14 },
+        { "codigo": "EMG-GEN-X1", "descricao": "Emergency descent", "ordem": 15 },
+        { "codigo": "EMG-GEN-X2", "descricao": "Forced landing procedures", "ordem": 16 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 17
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 18
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 19 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 20 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 21 },
+        { "codigo": "EMG-ENG-X1", "descricao": "Engine failure in hover", "ordem": 22 },
+        { "codigo": "EMG-ENG-X2", "descricao": "Engine failure during takeoff", "ordem": 23 }
+      ]
+    },
+    {
+      "id": 9,
+      "tema": "FOGO, FUMAÇA & HIGHSTRESS",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        { "codigo": "FLY-BAS-X3", "descricao": "Hover & taxi", "ordem": 2 },
+        {
+          "codigo": "FLY-BAS-X5",
+          "descricao": "Circuits (inclui T/O, pattern, landing)",
+          "ordem": 3
+        },
+        { "codigo": "EMG-FIRE-X1", "descricao": "Electrical fire (in-flight)", "ordem": 4 },
+        { "codigo": "EMG-FIRE-X2", "descricao": "Cabin fire", "ordem": 5 },
+        { "codigo": "EMG-FIRE-X3", "descricao": "Engine fire (ground/takeoff)", "ordem": 6 },
+        { "codigo": "EMG-ENG-X6", "descricao": "Engine fire in flight", "ordem": 7 },
+        { "codigo": "EMG-FIRE-X4", "descricao": "Smoke in cockpit / cabin", "ordem": 8 },
+        { "codigo": "FLY-BAS-X8", "descricao": "Autorotations", "ordem": 9 },
+        { "codigo": "EMG-ENG-X1", "descricao": "Engine failure in hover", "ordem": 10 },
+        { "codigo": "EMG-ENG-X2", "descricao": "Engine failure during takeoff", "ordem": 11 },
+        { "codigo": "EMG-ENG-X5", "descricao": "Dual engine failure", "ordem": 12 },
+        { "codigo": "EMG-GEN-X1", "descricao": "Emergency descent", "ordem": 13 },
+        { "codigo": "EMG-GEN-X2", "descricao": "Forced landing procedures", "ordem": 14 },
+        { "codigo": "EMG-GEN-X3", "descricao": "Ditching procedure", "ordem": 15 },
+        { "codigo": "EMG-GEN-X4", "descricao": "Mayday call procedure", "ordem": 16 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 17
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 18
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 19 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 20 },
+        { "codigo": "OPS-APP-X5", "descricao": "Abnormal configuration awareness", "ordem": 21 },
+        { "codigo": "EMG-HYDR-X2", "descricao": "Dual hydraulic failure", "ordem": 22 },
+        { "codigo": "EMG-ROTOR-X2", "descricao": "Tail rotor failure", "ordem": 23 }
+      ]
+    },
+    {
+      "id": 10,
+      "tema": "OFFSHORE & PERFORMANCE OPERATIONS",
+      "tipo_sessao": "TREINAMENTO",
+      "tipo_aeronave": "AW139",
+      "manobras": [
+        { "codigo": "FLY-BAS-X1", "descricao": "Controle geral VFR", "ordem": 1 },
+        { "codigo": "FLY-BAS-X3", "descricao": "Hover & taxi", "ordem": 2 },
+        {
+          "codigo": "FLY-BAS-X5",
+          "descricao": "Circuits (inclui T/O, pattern, landing)",
+          "ordem": 3
+        },
+        { "codigo": "OPS-OFF-X1", "descricao": "Deck landing (helideck procedures)", "ordem": 4 },
+        { "codigo": "OPS-OFF-X2", "descricao": "Hover over water", "ordem": 5 },
+        { "codigo": "OPS-OFF-X3", "descricao": "Overwater navigation", "ordem": 6 },
+        { "codigo": "OPS-OFF-X4", "descricao": "Fuel planning (overwater)", "ordem": 7 },
+        { "codigo": "OPS-OFF-X5", "descricao": "SAR briefing & procedures", "ordem": 8 },
+        {
+          "codigo": "OPS-PERF-X1",
+          "descricao": "High-altitude ops (density altitude)",
+          "ordem": 9
+        },
+        { "codigo": "OPS-PERF-X2", "descricao": "High gross weight ops", "ordem": 10 },
+        {
+          "codigo": "OPS-PERF-X3",
+          "descricao": "Performance calculations (HIGE, HOGE)",
+          "ordem": 11
+        },
+        { "codigo": "OPS-PERF-X4", "descricao": "Cat A takeoff & landing", "ordem": 12 },
+        { "codigo": "OPS-APP-X1", "descricao": "Precision approach (ILS, LPV)", "ordem": 13 },
+        { "codigo": "OPS-APP-X2", "descricao": "Non-precision approach", "ordem": 14 },
+        { "codigo": "OPS-APP-X3", "descricao": "Missed approach", "ordem": 15 },
+        {
+          "codigo": "OPS-STD-X1",
+          "descricao": "Briefing completo (TEM, meteorologia, route)",
+          "ordem": 16
+        },
+        {
+          "codigo": "OPS-STD-X2",
+          "descricao": "Checklists verbalized (full cockpit flow)",
+          "ordem": 17
+        },
+        { "codigo": "OPS-STD-X3", "descricao": "SOP/CRM (callouts, cross-checks)", "ordem": 18 },
+        { "codigo": "OPS-STD-X5", "descricao": "Altitude/speed awareness & calls", "ordem": 19 },
+        { "codigo": "EMG-GEN-X3", "descricao": "Ditching procedure", "ordem": 20 },
+        { "codigo": "FLY-BAS-X8", "descricao": "Autorotations", "ordem": 21 },
+        { "codigo": "EMG-ENG-X1", "descricao": "Engine failure in hover", "ordem": 22 }
+      ]
+    }
+  ]
+}

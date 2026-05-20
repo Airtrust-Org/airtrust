@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover"
+    />
+    <title>Carregando aula...</title>
+    <script defer="defer" src="runtime.670f4cabae4eeec9.js"></script>
+    <script defer="defer" src="modules.473fbbfd66fb5923.js"></script>
+    <script defer="defer" src="scorm.2aa5f200ece6542d.js"></script>
+    <script defer="defer" src="vendors.9d8f217301be500e.js"></script>
+    <script defer="defer" src="app.07c4586bb0edca1b.js"></script>
+    <link href="modules.a5b0990ec50f29b5.css" rel="stylesheet" />
+    <link href="app.cc0d588970e1f88e.css" rel="stylesheet" />
+  </head>
+  <body>
+    <script>
+      (function () {
+        function syncParentScormApi() {
+          try {
+            if (window.parent && window.parent !== window) {
+              if (!window.API && window.parent.API) {
+                window.API = window.parent.API;
+              }
+              if (!window.API_1484_11 && window.parent.API_1484_11) {
+                window.API_1484_11 = window.parent.API_1484_11;
+              }
+            }
+          } catch (_error) {
+            return false;
+          }
+          return Boolean(window.API || window.API_1484_11);
+        }
+        function startWhenReady(retriesLeft) {
+          if (window.__airtrustScormBootstrapped) return;
+          if (
+            typeof window.Application === 'undefined' ||
+            !window.Application ||
+            typeof window.Application.initialize !== 'function'
+          ) {
+            window.setTimeout(function () {
+              startWhenReady(retriesLeft);
+            }, 50);
+            return;
+          }
+          if (syncParentScormApi() || retriesLeft <= 0) {
+            window.__airtrustScormBootstrapped = true;
+            window.Application.initialize('scorm');
+            return;
+          }
+          window.setTimeout(function () {
+            startWhenReady(retriesLeft - 1);
+          }, 50);
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+          startWhenReady(80);
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,96 @@
+AIRTRUST PERFORMANCE TEST REPORT
+Date: 2025-11-06T19:43:29.147267
+======================================================================
+
+DETAILED METRICS:
+
+Agendamentos:
+  Average Response Time: 2356.6 ms
+  Min Response Time: 2260.2 ms
+  Max Response Time: 2433.4 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Equipamentos:
+  Average Response Time: 2358.5 ms
+  Min Response Time: 2297.7 ms
+  Max Response Time: 2398.8 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Fichas:
+  Average Response Time: 2421.1 ms
+  Min Response Time: 2356.1 ms
+  Max Response Time: 2456.8 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Funcionarios List:
+  Average Response Time: 2526.2 ms
+  Min Response Time: 2460.9 ms
+  Max Response Time: 2560.2 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Habilitacoes List:
+  Average Response Time: 3307.3 ms
+  Min Response Time: 2559.6 ms
+  Max Response Time: 4709.6 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Health Check:
+  Average Response Time: 3159.4 ms
+  Min Response Time: 2299.6 ms
+  Max Response Time: 4823.2 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Instrutores:
+  Average Response Time: 2344.3 ms
+  Min Response Time: 2327.9 ms
+  Max Response Time: 2377.0 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Manobras:
+  Average Response Time: 2248.0 ms
+  Min Response Time: 2137.1 ms
+  Max Response Time: 2310.6 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Manobras Disponiveis:
+  Average Response Time: 2532.7 ms
+  Min Response Time: 2492.1 ms
+  Max Response Time: 2558.7 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Qualificacoes List:
+  Average Response Time: 2598.0 ms
+  Min Response Time: 2467.4 ms
+  Max Response Time: 2766.8 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Simuladores:
+  Average Response Time: 2398.4 ms
+  Min Response Time: 2356.4 ms
+  Max Response Time: 2437.4 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+Templates:
+  Average Response Time: 2350.7 ms
+  Min Response Time: 2142.2 ms
+  Max Response Time: 2462.7 ms
+  Cache Hit Rate: 0%
+  HTTP Status: 200
+
+
+SUMMARY:
+Total Endpoints: 12
+Total Requests: 36
+Cache Hits: 0
+Cache Hit Rate: 0.0%

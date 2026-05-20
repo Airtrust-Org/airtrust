@@ -1,0 +1,23 @@
+-- Migration: Adicionar colunas instrutor/examinador
+-- Data: 23/10/2025
+-- Descrição: Permite marcar funcionários como instrutores ou examinadores
+
+-- Tentar adicionar colunas (ignorar se já existem)
+-- SQLite não tem IF NOT EXISTS para ALTER TABLE, então usamos PRAGMA para verificar
+-- Se a coluna já existe, essa migration será idempotente via try-catch no Wrangler
+
+-- Adicionar coluna is_instrutor se não existir
+ALTER TABLE funcionarios ADD COLUMN is_instrutor INTEGER DEFAULT 0;
+
+-- Adicionar coluna is_checador se não existir  
+ALTER TABLE funcionarios ADD COLUMN is_checador INTEGER DEFAULT 0;
+
+-- Criar índices para performance
+CREATE INDEX IF NOT EXISTS idx_funcionarios_instrutor 
+  ON funcionarios(is_instrutor) WHERE deleted_at IS NULL;
+  
+CREATE INDEX IF NOT EXISTS idx_funcionarios_checador 
+  ON funcionarios(is_checador) WHERE deleted_at IS NULL;
+
+-- Atualizar timestamp
+UPDATE funcionarios SET updated_at = datetime('now') WHERE id > 0;

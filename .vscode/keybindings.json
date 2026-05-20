@@ -1,0 +1,11 @@
+[
+  {
+    "key": "tab",
+    "command": "editor.action.inlineSuggest.commit",
+    "when": "inlineSuggestionVisible && !editorTabMovesFocus"
+  },
+  {
+    "key": "ctrl+alt+slash",
+    "command": "github.copilot.toggleCopilot"
+  }
+]

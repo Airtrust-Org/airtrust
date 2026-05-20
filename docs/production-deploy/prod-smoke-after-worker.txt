@@ -1,0 +1,5 @@
+prod_health_after_worker=200
+prod_version_after_worker=200
+prod_no_token_after_worker=401
+prod_frms_no_secret_after_worker=403
+prod_frms_bad_secret_after_worker=403

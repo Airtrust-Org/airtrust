@@ -1,0 +1,183 @@
+📦 ANÁLISE DE BUNDLE - AIRTRUST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔨 Executando build de produção...
+
+> mocha-app@0.0.0 build
+> vite build && tsc --noEmit false
+
+NODE_ENV=production is not supported in the .env file. Only NODE_ENV=development is supported to create a development build of your project. If you need to set process.env.NODE_ENV, you can set it in the Vite config instead.
+vite v6.4.1 building for production...
+transforming...
+✓ 2645 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/client/index.html                                                  1.76 kB │ gzip:   0.79 kB
+dist/client/assets/index-D3MIf7Ot-milwkuff.css                        109.66 kB │ gzip:  17.34 kB
+dist/client/assets/chevron-down-BcKs1kJT-milwkudj.js                    0.32 kB │ gzip:   0.26 kB
+dist/client/assets/loader-circle-t9H31yU7-milwkudl.js                   0.33 kB │ gzip:   0.27 kB
+dist/client/assets/plus-BKnZxHox-milwkudj.js                            0.35 kB │ gzip:   0.27 kB
+dist/client/assets/x-BntvOdRS-milwkudj.js                               0.35 kB │ gzip:   0.27 kB
+dist/client/assets/arrow-left-a5rA0k1p-milwkudl.js                      0.36 kB │ gzip:   0.28 kB
+dist/client/assets/circle-check-D2-frBZe-milwkudq.js                    0.37 kB │ gzip:   0.28 kB
+dist/client/assets/clock-DBCS8QvJ-milwkudl.js                           0.37 kB │ gzip:   0.28 kB
+dist/client/assets/circle-check-big-DoUdItAg-milwkudj.js                0.38 kB │ gzip:   0.30 kB
+dist/client/assets/user-u-U3XQOv-milwkudl.js                            0.38 kB │ gzip:   0.30 kB
+dist/client/assets/trending-up-CWO5ycIJ-milwkudq.js                     0.40 kB │ gzip:   0.30 kB
+dist/client/assets/briefcase-BwGrSUIa-milwkudl.js                       0.41 kB │ gzip:   0.31 kB
+dist/client/assets/pen-CUikyWPq-milwkudj.js                             0.43 kB │ gzip:   0.32 kB
+dist/client/assets/circle-alert-C5a5RsET-milwkudl.js                    0.44 kB │ gzip:   0.30 kB
+dist/client/assets/eye-B-eHbETI-milwkudj.js                             0.44 kB │ gzip:   0.31 kB
+dist/client/assets/calendar-BEBupHpF-milwkudj.js                        0.45 kB │ gzip:   0.32 kB
+dist/client/assets/download-CMKfb0On-milwkudj.js                        0.46 kB │ gzip:   0.33 kB
+dist/client/assets/file-check-CIBF94Bz-milwkudj.js                      0.46 kB │ gzip:   0.32 kB
+dist/client/assets/shield-DrS3Epru-milwkudl.js                          0.46 kB │ gzip:   0.34 kB
+dist/client/assets/award-zNRhgYY8-milwkudl.js                           0.46 kB │ gzip:   0.34 kB
+dist/client/assets/differenceInDays-odEqenve-milwkudj.js                0.48 kB │ gzip:   0.29 kB
+dist/client/assets/folder-open-CrR88C0E-milwkudj.js                     0.49 kB │ gzip:   0.33 kB
+dist/client/assets/refresh-cw-B77OE4Pn-milwkudl.js                      0.51 kB │ gzip:   0.34 kB
+dist/client/assets/file-text-CTYhV9Z6-milwkudj.js                       0.53 kB │ gzip:   0.33 kB
+dist/client/assets/trash-2-CGzAJucu-milwkudj.js                         0.55 kB │ gzip:   0.36 kB
+dist/client/assets/toast-D1udZU3i-milwkudq.js                           0.64 kB │ gzip:   0.29 kB
+dist/client/assets/CadastrosPage-C91VQ8kE-milwkud3.js                   0.76 kB │ gzip:   0.43 kB
+dist/client/assets/upload-N25pzwKF-milwkudj.js                          0.84 kB │ gzip:   0.44 kB
+dist/client/assets/apiClient-CxsVzSoT-milwkudq.js                       1.53 kB │ gzip:   0.86 kB
+dist/client/assets/createLucideIcon-Dec2Zobp-milwkudj.js                1.87 kB │ gzip:   0.81 kB
+dist/client/assets/SimuladoresLayout-y1YpVb4m-milwkue0.js               3.23 kB │ gzip:   0.95 kB
+dist/client/assets/ImportacaoPageV2-Cq01l74w-milwkud3.js                4.59 kB │ gzip:   1.50 kB
+dist/client/assets/ConfiguracoesCadastros-BmO9Lmvy-milwkud3.js          5.35 kB │ gzip:   1.76 kB
+dist/client/assets/CrudTiposSessao-DluPkLbG-milwkud3.js                 5.51 kB │ gzip:   1.83 kB
+dist/client/assets/CrudCategorias-Df7pzRd2-milwkud3.js                  5.74 kB │ gzip:   1.89 kB
+dist/client/assets/ModalLicenca-dWpXliTG-milwkudj.js                    5.80 kB │ gzip:   1.80 kB
+dist/client/assets/CrudInstrutores-CQx-Hpa_-milwkud3.js                 5.93 kB │ gzip:   1.89 kB
+dist/client/assets/DashboardQualificacoes-sO3hPwMw-milwkud3.js          6.35 kB │ gzip:   1.84 kB
+dist/client/assets/CrudTemplates-DlwwC0Kw-milwkud3.js                   6.40 kB │ gzip:   2.04 kB
+dist/client/assets/NovaSessao-Drt8ibA3-milwkud3.js                      7.14 kB │ gzip:   1.88 kB
+dist/client/assets/ComplianceSettings-DGNl0psA-milwkud3.js              8.46 kB │ gzip:   2.57 kB
+dist/client/assets/LicencasPage-EQDCuSQ9-milwkud3.js                    8.63 kB │ gzip:   2.59 kB
+dist/client/assets/CrudSimuladores-CVdHpYMm-milwkud3.js                 8.70 kB │ gzip:   2.37 kB
+dist/client/assets/CrudManobras-Ck1TgtIC-milwkud3.js                   10.40 kB │ gzip:   2.74 kB
+dist/client/assets/ReclassificacaoQualificacoes-frrBo_KS-milwkud3.js   10.46 kB │ gzip:   3.51 kB
+dist/client/assets/SimuladoresDashboard-c639nA7_-milwkud3.js           10.98 kB │ gzip:   2.39 kB
+dist/client/assets/FichaDetalhe-DiiUt5bl-milwkud3.js                   11.04 kB │ gzip:   2.47 kB
+dist/client/assets/vendor-DbHEDQBy-milwkuct.js                         11.72 kB │ gzip:   4.15 kB
+dist/client/assets/FichasSessao-CMzeCoVT-milwkud3.js                   12.29 kB │ gzip:   3.39 kB
+dist/client/assets/AgendaCalendario-9doKVkY5-milwkud3.js               16.53 kB │ gzip:   4.05 kB
+dist/client/assets/CrudModelos-Cm4mdlQT-milwkud3.js                    17.11 kB │ gzip:   3.63 kB
+dist/client/assets/QualificacoesAlertas-DvZI5ir1-milwkud3.js           18.41 kB │ gzip:   5.40 kB
+dist/client/assets/FichaFuncionarioPage-CAOh0P0G-milwkud3.js           20.02 kB │ gzip:   5.23 kB
+dist/client/assets/parseISO-BEeIpAku-milwkudj.js                       22.58 kB │ gzip:   6.69 kB
+dist/client/assets/Configuracoes-D78CGQJv-milwkud3.js                  24.33 kB │ gzip:   6.39 kB
+dist/client/assets/Cadastros-idF_IsZP-milwkue4.js                      24.37 kB │ gzip:   4.45 kB
+dist/client/assets/Card-Br1wWeg_-milwkudj.js                           28.07 kB │ gzip:   9.08 kB
+dist/client/assets/router-DmaR9y8W-milwkucw.js                         33.55 kB │ gzip:  12.42 kB
+dist/client/assets/ModalImportacao-Bd1cxpgc-milwkudj.js                41.98 kB │ gzip:  13.52 kB
+dist/client/assets/PastaVirtual-vjLM56dY-milwkud3.js                   43.05 kB │ gzip:  11.42 kB
+dist/client/assets/Funcionarios-CJexy8a0-milwkud3.js                   66.79 kB │ gzip:  14.98 kB
+dist/client/assets/Qualificacoes-C_mVOiQ5-milwkud3.js                 133.61 kB │ gzip:  31.17 kB
+dist/client/assets/index-DqIRzKmC-milwkuct.js                         290.54 kB │ gzip:  89.30 kB
+dist/client/assets/xlsx-DGuHH-KN-milwkudw.js                          429.49 kB │ gzip: 141.91 kB
+✓ built in 2.44s
+
+📊 ESTATÍSTICAS DO BUILD:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📁 Tamanhos de arquivos (maiores primeiro):
+420K	dist/client/assets/xlsx-DGuHH-KN-milwkudw.js
+284K	dist/client/assets/index-DqIRzKmC-milwkuct.js
+132K	dist/client/assets/Qualificacoes-C_mVOiQ5-milwkud3.js
+108K	dist/client/assets/index-D3MIf7Ot-milwkuff.css
+ 68K	dist/client/assets/Funcionarios-CJexy8a0-milwkud3.js
+ 44K	dist/client/assets/PastaVirtual-vjLM56dY-milwkud3.js
+ 44K	dist/client/assets/ModalImportacao-Bd1cxpgc-milwkudj.js
+ 36K	dist/client/assets/router-DmaR9y8W-milwkucw.js
+ 28K	dist/client/assets/Card-Br1wWeg_-milwkudj.js
+ 24K	dist/client/assets/parseISO-BEeIpAku-milwkudj.js
+ 24K	dist/client/assets/Configuracoes-D78CGQJv-milwkud3.js
+ 24K	dist/client/assets/Cadastros-idF_IsZP-milwkue4.js
+ 20K	dist/client/assets/QualificacoesAlertas-DvZI5ir1-milwkud3.js
+ 20K	dist/client/assets/FichaFuncionarioPage-CAOh0P0G-milwkud3.js
+ 20K	dist/client/assets/CrudModelos-Cm4mdlQT-milwkud3.js
+ 20K	dist/client/assets/AgendaCalendario-9doKVkY5-milwkud3.js
+ 16K	dist/client/assets/FichasSessao-CMzeCoVT-milwkud3.js
+ 12K	dist/client/assets/vendor-DbHEDQBy-milwkuct.js
+ 12K	dist/client/assets/SimuladoresDashboard-c639nA7_-milwkud3.js
+ 12K	dist/client/assets/ReclassificacaoQualificacoes-frrBo_KS-milwkud3.js
+
+📊 Resumo por tipo:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 JavaScript:
+1.5M	total
+
+🎨 CSS:
+108K	total
+
+🖼️  Assets (imagens, fontes, etc):
+ 20K	total
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 TOTAL DO BUNDLE:
+1.6M	dist
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🗜️  TAMANHOS GZIP (simulado):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 JS comprimido:
+   379.52 KB
+
+🎨 CSS comprimido:
+   16.93 KB
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  CHUNKS MAIORES QUE 500KB:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Nenhum chunk maior que 500KB encontrado!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 TOP 10 ARQUIVOS JS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   dist/client/assets/xlsx-DGuHH-KN-milwkudw.js → 420K
+   dist/client/assets/index-DqIRzKmC-milwkuct.js → 284K
+   dist/client/assets/Qualificacoes-C_mVOiQ5-milwkud3.js → 132K
+   dist/client/assets/Funcionarios-CJexy8a0-milwkud3.js → 68K
+   dist/client/assets/PastaVirtual-vjLM56dY-milwkud3.js → 44K
+   dist/client/assets/ModalImportacao-Bd1cxpgc-milwkudj.js → 44K
+   dist/client/assets/router-DmaR9y8W-milwkucw.js → 36K
+   dist/client/assets/Card-Br1wWeg_-milwkudj.js → 28K
+   dist/client/assets/parseISO-BEeIpAku-milwkudj.js → 24K
+   dist/client/assets/Configuracoes-D78CGQJv-milwkud3.js → 24K
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 VENDOR CHUNKS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   dist/client/assets/vendor-DbHEDQBy-milwkuct.js → 11K
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 CONTAGEM DE ARQUIVOS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   JS:  65
+   CSS: 1
+   HTML: 1
+   Outros: 5
+   TOTAL: 72
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 RECOMENDAÇÕES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  Bundle total > 2MB - Considere code splitting
+⚠️  1 arquivo(s) JS > 300KB - Considere lazy loading
+ℹ️  Ratio compressão JS: 28.25%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Análise completa!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Dica: Para análise visual interativa, instale:
+   npm install -D rollup-plugin-visualizer
+

@@ -1,0 +1,32 @@
+name = "airtrust-api"
+main = "src/index.ts"
+compatibility_date = "2025-11-22"
+compatibility_flags = ["nodejs_compat"]
+
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  AMBIENTE LOCAL ISOLADO — NÃO TOCA PRODUÇÃO                     ║
+# ║  Use: wrangler dev --config wrangler.dev.toml --local           ║
+# ║  Setup inicial: npm run setup:local                              ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
+[vars]
+ENVIRONMENT = "development"
+USE_QUALIFICACOES_VIEW = "true"
+# Configurar apenas em worker-airtrust/.dev.vars (ignorado pelo Git):
+# ENABLE_DEV_AUTH_BYPASS=true
+# JWT_SECRET=...
+# CF_ACCOUNT_ID=...
+# CF_BROWSER_API_TOKEN=...
+# EDAPP_API_TOKEN=...
+# EDAPP_WEBHOOK_SECRET=...
+
+[[d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-local"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "./migrations"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-local"
+preview_bucket_name = "airtrust-storage-local"

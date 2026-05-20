@@ -1,0 +1,238 @@
+/**
+ * SIMULADORES — Catálogo (categorias e manobras)
+ * Routes: GET/POST /categorias, PUT/DELETE /categorias/:id,
+ *         GET/POST /manobras, PUT/DELETE /manobras/:id
+ */
+
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { auth, optionalAuth } from '../middleware/auth';
+import {
+  CategoriaSimuladoresSchema,
+  ManobraSchema,
+  requireAdminForDelete,
+  audit,
+} from './simuladores-shared';
+
+const app = new Hono<{ Bindings: Env }>();
+app.use('*', async (c, next) => {
+  if (c.req.method === 'GET') {
+    return optionalAuth()(c, next);
+  }
+  return auth()(c, next);
+});
+
+// ==========================================================================
+// CRUD: CATEGORIAS DE MANOBRAS
+// ==========================================================================
+
+// GET /api/simuladores/categorias - Listar categorias
+app.get('/categorias', async (c) => {
+  try {
+    const result = await c.env.DB.prepare(
+      'SELECT * FROM manobras_categorias WHERE deleted_at IS NULL ORDER BY ordem, nome',
+    ).all();
+    return c.json({ success: true, data: result.results });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// POST /api/simuladores/categorias - Criar categoria
+app.post('/categorias', async (c) => {
+  try {
+    const parsed = CategoriaSimuladoresSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: parsed.error.errors[0]?.message ?? 'Dados inválidos' },
+        400,
+      );
+    }
+    const { nome, descricao, cor } = parsed.data;
+    // Gerar código a partir do nome se não fornecido
+    const codigo = parsed.data.codigo || nome.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+
+    const result = await c.env.DB.prepare(
+      `INSERT INTO manobras_categorias (codigo, nome, descricao, cor, created_at, updated_at) 
+       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    )
+      .bind(codigo, nome, descricao, cor)
+      .run();
+
+    return c.json({ success: true, data: { ...parsed.data, id: result.meta.last_row_id } });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// PUT /api/simuladores/categorias/:id - Atualizar categoria
+app.put('/categorias/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const body = await c.req.json();
+    const { nome, descricao, cor } = body;
+
+    await c.env.DB.prepare(
+      `UPDATE manobras_categorias 
+       SET nome = ?, descricao = ?, cor = ?, updated_at = datetime('now') 
+       WHERE id = ?`,
+    )
+      .bind(nome, descricao, cor, id)
+      .run();
+
+    // Busca a categoria atualizada
+    const { results: categoriaAtualizada } = await c.env.DB.prepare(
+      'SELECT * FROM manobras_categorias WHERE id = ? AND deleted_at IS NULL',
+    )
+      .bind(id)
+      .all();
+
+    return c.json({
+      success: true,
+      data: categoriaAtualizada && categoriaAtualizada.length > 0 ? categoriaAtualizada[0] : null,
+    });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// DELETE /api/simuladores/categorias/:id - Excluir categoria
+app.delete('/categorias/:id', async (c) => {
+  try {
+    const denied = requireAdminForDelete(c);
+    if (denied) return denied;
+
+    const id = c.req.param('id');
+    await c.env.DB.prepare(
+      "UPDATE manobras_categorias SET deleted_at = datetime('now') WHERE id = ?",
+    )
+      .bind(id)
+      .run();
+    return c.json({ success: true, message: 'Categoria excluída' });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+// ==========================================================================
+// CRUD: MANOBRAS
+// ==========================================================================
+
+app.get('/manobras', async (c) => {
+  try {
+    const ts = c.req.query('tipo_sessao') || '';
+    const ta = c.req.query('tipo_aeronave') || c.req.query('modelo_aeronave') || '';
+    const cat = c.req.query('categoria') || '';
+    let q = 'SELECT * FROM manobras WHERE deleted_at IS NULL';
+    const ps: any[] = [];
+    if (ts) {
+      q += ' AND tipo_sessao=?';
+      ps.push(ts);
+    }
+    if (ta) {
+      q += ' AND tipo_aeronave=?';
+      ps.push(ta);
+    }
+    if (cat) {
+      q += ' AND categoria=?';
+      ps.push(cat);
+    }
+    q += ' ORDER BY ordem,codigo';
+    const r = await c.env.DB.prepare(q)
+      .bind(...ps)
+      .all();
+    return c.json({ success: true, data: r.results });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+app.post('/manobras', async (c) => {
+  try {
+    const parsed = ManobraSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: parsed.error.errors[0]?.message ?? 'Dados inválidos' },
+        400,
+      );
+    }
+    const b = parsed.data;
+    const r = await c.env.DB.prepare(
+      'INSERT INTO manobras(codigo,nome,descricao,categoria,tipo_sessao,tipo_aeronave,ordem)VALUES(?,?,?,?,?,?,?)',
+    )
+      .bind(
+        b.codigo,
+        b.nome,
+        b.descricao || null,
+        b.categoria || 'NORMAL',
+        b.tipo_sessao || 'TREINAMENTO',
+        b.tipo_aeronave || 'AW139',
+        b.ordem || 1,
+      )
+      .run();
+    const m = await c.env.DB.prepare('SELECT * FROM manobras WHERE id=? AND deleted_at IS NULL')
+      .bind(r.meta.last_row_id)
+      .first();
+    return c.json({ success: true, data: m }, 201);
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+app.put('/manobras/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const b = await c.req.json();
+    const ant = await c.env.DB.prepare('SELECT * FROM manobras WHERE id=? AND deleted_at IS NULL')
+      .bind(id)
+      .first();
+    if (!ant) return c.json({ success: false, error: 'Não encontrada' }, 404);
+    await c.env.DB.prepare(
+      'UPDATE manobras SET codigo=?,nome=?,descricao=?,categoria=?,tipo_sessao=?,tipo_aeronave=?,ordem=?,nivel_dificuldade=?,tempo_estimado=?,pontuacao_minima=?,updated_at=datetime("now") WHERE id=?',
+    )
+      .bind(
+        b.codigo !== undefined ? b.codigo : ant.codigo,
+        b.nome !== undefined ? b.nome : ant.nome,
+        b.descricao !== undefined ? b.descricao : ant.descricao,
+        b.categoria !== undefined ? b.categoria : ant.categoria,
+        b.tipo_sessao !== undefined ? b.tipo_sessao : ant.tipo_sessao,
+        b.tipo_aeronave !== undefined ? b.tipo_aeronave : ant.tipo_aeronave,
+        b.ordem !== undefined ? b.ordem : ant.ordem,
+        b.nivel_dificuldade !== undefined ? b.nivel_dificuldade : ant.nivel_dificuldade,
+        b.tempo_estimado !== undefined ? b.tempo_estimado : ant.tempo_estimado,
+        b.pontuacao_minima !== undefined ? b.pontuacao_minima : ant.pontuacao_minima,
+        id,
+      )
+      .run();
+    const atu = await c.env.DB.prepare('SELECT * FROM manobras WHERE id=? AND deleted_at IS NULL')
+      .bind(id)
+      .first();
+    await audit(c.env.DB, {
+      tabela: 'manobras',
+      acao: 'UPDATE',
+      registro_id: id,
+      dados_anteriores: ant,
+      dados_novos: atu,
+    });
+    return c.json({ success: true, data: atu });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+app.delete('/manobras/:id', async (c) => {
+  try {
+    const denied = requireAdminForDelete(c);
+    if (denied) return denied;
+
+    const id = c.req.param('id');
+    await c.env.DB.prepare('UPDATE manobras SET deleted_at=datetime("now") WHERE id=?')
+      .bind(id)
+      .run();
+    return c.json({ success: true, message: 'Manobra excluída' });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
+  }
+});
+
+export default app;

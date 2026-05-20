@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Import Tipos</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        #result { background: #f0f0f0; padding: 10px; margin-top: 10px; white-space: pre-wrap; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>Test Tipos Import</h1>
+    
+    <h2>1. Test File Input</h2>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+    <button onclick="validarArquivo()">Validar</button>
+    <button onclick="importarArquivo()">Importar</button>
+    
+    <h2>2. Test JSON Data</h2>
+    <button onclick="testJSONValidacao()">Test JSON Validação</button>
+    
+    <div id="result"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8787';
+        
+        async function validarArquivo() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Select a file first');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                console.log('Validando arquivo:', file.name);
+                
+                const response = await fetch(`${API_BASE}/api/importacao-v2/validar/qualificacoes_tipos`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const text = await response.text();
+                document.getElementById('result').textContent = `Status: ${response.status}\n${text}`;
+            } catch (error) {
+                document.getElementById('result').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function importarArquivo() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Select a file first');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('mode', 'UPSERT');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/importacao-v2/executar/qualificacoes_tipos`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const text = await response.text();
+                document.getElementById('result').textContent = `Status: ${response.status}\n${text}`;
+            } catch (error) {
+                document.getElementById('result').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function testJSONValidacao() {
+            try {
+                const response = await fetch(`${API_BASE}/api/importacao-v2/validar-json/qualificacoes_tipos`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        rows: [
+                            { Codigo: 'CRM-001', Nome: 'Crew Resource Management', Validade: 24, Carga_Horaria: 40 },
+                            { codigo: 'trn-002', nome: 'Basic Training', validade: 12, carga_horaria: 20 }
+                        ],
+                        mode: 'UPSERT'
+                    })
+                });
+
+                const text = await response.text();
+                document.getElementById('result').textContent = `Status: ${response.status}\n${text}`;
+            } catch (error) {
+                document.getElementById('result').textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

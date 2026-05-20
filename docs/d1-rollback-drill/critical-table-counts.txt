@@ -1,0 +1,10 @@
+usuarios|61
+empresas|7
+funcionarios|64
+qualificacoes_historico|984
+qualificacoes_tipos|95
+simuladores|17
+audit_logs|207
+fichas_sessao|117
+simulador_agendamentos|60
+lms_cursos|14

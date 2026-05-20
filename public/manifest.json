@@ -1,0 +1,33 @@
+{
+  "name": "AirTrust",
+  "short_name": "AirTrust",
+  "description": "Plataforma de gestão aeronáutica — escalas, qualificações e FRMS",
+  "start_url": "/escalas/minha-escala",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563EB",
+  "orientation": "portrait-primary",
+  "lang": "pt-BR",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/airtrust-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "shortcuts": [
+    {
+      "name": "Minha Escala",
+      "url": "/escalas/minha-escala",
+      "description": "Ver escala do mês atual"
+    }
+  ]
+}

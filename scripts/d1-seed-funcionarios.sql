@@ -1,0 +1,27 @@
+-- Seed Funcionarios (produção) - Compatível com schema local INTEGER AUTOINCREMENT
+-- Formato: (matricula, nome, cpf, email, telefone, data_nascimento, data_admissao, cargo, setor, status, codigo_anac, created_at, updated_at, deleted_at)
+INSERT INTO funcionarios (matricula, nome, cpf, email, cargo, setor, status, created_at, updated_at) VALUES
+('00300', 'Adriana Brasil', '13465142837', 'adriana.brasil@voecostadosol.co.br', 'Piloto', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:43:58', '2025-11-06 12:40:56'),
+('00074', 'Antonio Luiz Simões Ramos', '419.906.257-20', 'antonio.ramos@voecostadosol.com.br', 'Co-piloto', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:43:58', '2025-11-06 12:40:56'),
+('00003', 'Bernardo Freire Antunes', '05241484736', 'bernardo.antunes@voecostadosol.com.br', 'Comissário', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:43:58', '2025-11-06 12:40:56'),
+('00170', 'Caio Cesar Simões de Alcantara', '38718100880', 'caio.alcantara@voecostadosol.com.br', 'Piloto', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:43:59', '2025-11-06 12:40:56'),
+('00218', 'Carlos José Salgueiro de Castro', '899.850.527-49', 'carlos.castro@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:43:59', '2025-11-06 12:40:56'),
+('00252', 'Dieter Johny Kühr', '017.058.448-80', 'dieter.kuhr@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:43:59', '2025-11-06 12:40:56'),
+('00282', 'Fernando La Rocque', '722.443.567-87', 'fernando.filho@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:43:59', '2025-11-06 12:40:56'),
+('00149', 'Flavio Alves Belmont', '112.015.317-48', 'flavio.belmont@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:00', '2025-11-06 12:40:56'),
+('00251', 'José Alfredo Gomes Marinho', '401.238.047-87', 'jose.marinho@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:00', '2025-11-06 12:40:56'),
+('00246', 'Katia de Aguiar Santa Anna', '734.990.727-34', 'katia.santana@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:00', '2025-11-06 12:40:56'),
+('00004', 'Max Monteiro Magioli', '311.120.807-91', 'max.magioli@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:01', '2025-11-06 12:40:56'),
+('00232', 'Nivaldo Antonio Naressi', '058.412.708-18', 'nivaldo.naressi@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:01', '2025-11-06 12:40:56'),
+('00333', 'Paloma Gonçalves Moreira', '102.896.837-66', 'paloma.magioli@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:01', '2025-11-06 12:40:56'),
+('00262', 'Rafael Siegmann Paradeda', '563.716.080-53', 'rafael.paradeda@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:02', '2025-11-06 12:40:56'),
+('00264', 'Ramon Godinho Bastos', '093.127.887-28', 'ramon.bastos@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:02', '2025-11-06 12:40:56'),
+('00221', 'Vitor de Almeida Costa', '155.257.297-84', 'vitor.costa@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:03', '2025-11-06 12:40:56'),
+('00001', 'Wilson Maciel Martins Nery', '71392092787', 'wilson.nery@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:03', '2025-11-06 12:40:56'),
+('00318', 'Eduardo Luiz Brandão Ribeiro', '772.105.497-49', 'eduardo.ribeiro@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:04', '2025-11-06 12:40:56'),
+('00334', 'Karl Martin Kühr', '012.598.600-94', 'karl.kuhr@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:04', '2025-11-06 12:40:56'),
+('00353', 'Filipe Passaroni Daumas', '083.286.227-42', 'filipe.daumas@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:04', '2025-11-06 12:40:56'),
+('00363', 'Jair Cesar da Silva', '108.943.047-71', 'jair.silva@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 15:44:04', '2025-11-06 12:40:56'),
+('TEST-001', 'Teste Funcionário', '12345678909', 'teste@example.com', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-22 19:58:21', '2025-11-06 12:40:56'),
+('00313', 'Rubens Negreiros Silva.', '66379458620', 'rubens.silva@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-23 13:27:04', '2025-11-06 12:40:56'),
+('00362', 'Gabriel Ferreira Barreto', '14588074792', 'gabriel.barreto@voecostadosol.com.br', 'Tripulante', 'OPERACIONAL', 'ATIVO', '2025-10-23 13:43:39', '2025-11-06 12:40:56');

@@ -1,0 +1,719 @@
+
+ ⛅️ wrangler 4.75.0 (update available 4.92.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.61ms
+[
+  {
+    "results": [
+      {
+        "name": "_backup_qh_tmp"
+      },
+      {
+        "name": "_cf_KV"
+      },
+      {
+        "name": "_data_recovery_log"
+      },
+      {
+        "name": "_qualificacoes_enriquecimento"
+      },
+      {
+        "name": "_qualificacoes_mapping"
+      },
+      {
+        "name": "admin_actions"
+      },
+      {
+        "name": "aeronaves"
+      },
+      {
+        "name": "alertas_enviados"
+      },
+      {
+        "name": "alertas_reforco"
+      },
+      {
+        "name": "alertas_whatsapp_delivery"
+      },
+      {
+        "name": "alertas_whatsapp_templates"
+      },
+      {
+        "name": "arquivos"
+      },
+      {
+        "name": "audit_cascade"
+      },
+      {
+        "name": "audit_logs"
+      },
+      {
+        "name": "auditoria"
+      },
+      {
+        "name": "auditoria_avancada_v2"
+      },
+      {
+        "name": "backups"
+      },
+      {
+        "name": "backups_controle"
+      },
+      {
+        "name": "backups_logs"
+      },
+      {
+        "name": "bkp_qual_historico_20260325"
+      },
+      {
+        "name": "bkp_qual_tipos_20260325"
+      },
+      {
+        "name": "catalogo_treinamentos"
+      },
+      {
+        "name": "certificado_anexos"
+      },
+      {
+        "name": "certificados"
+      },
+      {
+        "name": "certificados_templates"
+      },
+      {
+        "name": "compliance_status"
+      },
+      {
+        "name": "consentimentos_lgpd"
+      },
+      {
+        "name": "convites_usuarios"
+      },
+      {
+        "name": "credenciais"
+      },
+      {
+        "name": "d1_migrations"
+      },
+      {
+        "name": "documentos"
+      },
+      {
+        "name": "domain_events"
+      },
+      {
+        "name": "empresa_certificado_config"
+      },
+      {
+        "name": "empresa_config"
+      },
+      {
+        "name": "empresas"
+      },
+      {
+        "name": "empresas_config"
+      },
+      {
+        "name": "escala_alertas"
+      },
+      {
+        "name": "escala_alocacoes"
+      },
+      {
+        "name": "escala_auditoria"
+      },
+      {
+        "name": "escala_cobertura_diaria"
+      },
+      {
+        "name": "escala_confirmacoes"
+      },
+      {
+        "name": "escala_eventos"
+      },
+      {
+        "name": "escala_publicacao_snapshots"
+      },
+      {
+        "name": "escala_situacao_tipos"
+      },
+      {
+        "name": "escala_template_alocacoes"
+      },
+      {
+        "name": "escala_tripulacoes"
+      },
+      {
+        "name": "escala_voo_diaria"
+      },
+      {
+        "name": "escalas_mensais"
+      },
+      {
+        "name": "escalas_quinzenas"
+      },
+      {
+        "name": "escalas_templates_tripulacao"
+      },
+      {
+        "name": "escalas_tipos_evento_config"
+      },
+      {
+        "name": "ficha_manobras_avaliacao"
+      },
+      {
+        "name": "fichas_manobras_historico"
+      },
+      {
+        "name": "fichas_sessao"
+      },
+      {
+        "name": "fichas_sessao_edicoes"
+      },
+      {
+        "name": "fichas_sessao_manobras"
+      },
+      {
+        "name": "frms_acumulo_mensal"
+      },
+      {
+        "name": "frms_acumulo_rolling"
+      },
+      {
+        "name": "frms_alerta"
+      },
+      {
+        "name": "frms_carga_trabalho"
+      },
+      {
+        "name": "frms_configuracao_limites"
+      },
+      {
+        "name": "frms_escala_quinzenal"
+      },
+      {
+        "name": "frms_explicacao_dia_cache"
+      },
+      {
+        "name": "frms_fadiga_avaliacao_gestor"
+      },
+      {
+        "name": "frms_fadiga_checkin"
+      },
+      {
+        "name": "frms_fadiga_config_empresa"
+      },
+      {
+        "name": "frms_fadiga_evento"
+      },
+      {
+        "name": "frms_fatorizacao_jornada"
+      },
+      {
+        "name": "frms_fonte_calculo_competencia"
+      },
+      {
+        "name": "frms_importacao_fira"
+      },
+      {
+        "name": "frms_jornada"
+      },
+      {
+        "name": "frms_jornada_pendente"
+      },
+      {
+        "name": "frms_justificativas"
+      },
+      {
+        "name": "frms_notificacao_config"
+      },
+      {
+        "name": "frms_notificacao_destinatario"
+      },
+      {
+        "name": "funcionario_documentos"
+      },
+      {
+        "name": "funcionario_ferias"
+      },
+      {
+        "name": "funcionarios"
+      },
+      {
+        "name": "funcionarios_aeronaves"
+      },
+      {
+        "name": "funcionarios_tmp"
+      },
+      {
+        "name": "funcoes"
+      },
+      {
+        "name": "habilitacoes"
+      },
+      {
+        "name": "historico_compliance"
+      },
+      {
+        "name": "historico_notas_manobras"
+      },
+      {
+        "name": "horas_voo_lancamentos"
+      },
+      {
+        "name": "horas_voo_saldo_inicial"
+      },
+      {
+        "name": "hospedagem"
+      },
+      {
+        "name": "hospedagem_sugestoes"
+      },
+      {
+        "name": "hospedagens"
+      },
+      {
+        "name": "importacoes_log"
+      },
+      {
+        "name": "instrutores_simulador"
+      },
+      {
+        "name": "integracoes_edapp_config"
+      },
+      {
+        "name": "integracoes_edapp_cursos"
+      },
+      {
+        "name": "integracoes_edapp_eventos"
+      },
+      {
+        "name": "integracoes_edapp_usuarios"
+      },
+      {
+        "name": "integracoes_sigvoos_config"
+      },
+      {
+        "name": "integracoes_sigvoos_eventos"
+      },
+      {
+        "name": "integracoes_sigvoos_mapeamentos"
+      },
+      {
+        "name": "job_execution_log"
+      },
+      {
+        "name": "job_queue"
+      },
+      {
+        "name": "legacy_funcionarios"
+      },
+      {
+        "name": "legacy_import_log"
+      },
+      {
+        "name": "legacy_qualificacoes_historico"
+      },
+      {
+        "name": "legacy_qualificacoes_tipos"
+      },
+      {
+        "name": "licencas"
+      },
+      {
+        "name": "lms_cursos"
+      },
+      {
+        "name": "lms_h5p_conteudos"
+      },
+      {
+        "name": "lms_historico_importado"
+      },
+      {
+        "name": "lms_matricula_ciclos"
+      },
+      {
+        "name": "lms_matriculas"
+      },
+      {
+        "name": "lms_progresso_scorm"
+      },
+      {
+        "name": "lms_xapi_statements"
+      },
+      {
+        "name": "logs_acesso_dados"
+      },
+      {
+        "name": "manobras"
+      },
+      {
+        "name": "manobras_avaliacoes"
+      },
+      {
+        "name": "manobras_categorias"
+      },
+      {
+        "name": "matriz_treinamento_funcao"
+      },
+      {
+        "name": "migracao_log"
+      },
+      {
+        "name": "migracao_mapeamento_ids"
+      },
+      {
+        "name": "modelos_aeronave"
+      },
+      {
+        "name": "modelos_sessao"
+      },
+      {
+        "name": "modelos_sessao_checks"
+      },
+      {
+        "name": "modelos_sessao_manobras"
+      },
+      {
+        "name": "notificacoes"
+      },
+      {
+        "name": "notificacoes_config"
+      },
+      {
+        "name": "notificacoes_convocacao_cc_gestores"
+      },
+      {
+        "name": "notificacoes_convocacao_email_config"
+      },
+      {
+        "name": "notificacoes_inapp"
+      },
+      {
+        "name": "notificacoes_log"
+      },
+      {
+        "name": "notificacoes_sistema"
+      },
+      {
+        "name": "padroes_escala"
+      },
+      {
+        "name": "papeis"
+      },
+      {
+        "name": "password_reset_tokens"
+      },
+      {
+        "name": "pasta_virtual"
+      },
+      {
+        "name": "pasta_virtual_jobs"
+      },
+      {
+        "name": "perfis_permissoes"
+      },
+      {
+        "name": "pessoas_auditoria_acessos"
+      },
+      {
+        "name": "pessoas_papeis"
+      },
+      {
+        "name": "qualificacoes_categorias"
+      },
+      {
+        "name": "qualificacoes_historico"
+      },
+      {
+        "name": "qualificacoes_historico_reclass_queue"
+      },
+      {
+        "name": "qualificacoes_historico_stats_daily"
+      },
+      {
+        "name": "qualificacoes_pendencias"
+      },
+      {
+        "name": "qualificacoes_tipos"
+      },
+      {
+        "name": "qualificacoes_tipos_backup_0063"
+      },
+      {
+        "name": "qualificacoes_tipos_backup_20251128"
+      },
+      {
+        "name": "qualificacoes_tipos_id_map"
+      },
+      {
+        "name": "qualificacoes_tipos_old"
+      },
+      {
+        "name": "rate_limit_store"
+      },
+      {
+        "name": "refresh_tokens"
+      },
+      {
+        "name": "registros_frms"
+      },
+      {
+        "name": "requisitos_compliance"
+      },
+      {
+        "name": "restricoes_tripulacao"
+      },
+      {
+        "name": "schema_versions"
+      },
+      {
+        "name": "sessoes"
+      },
+      {
+        "name": "sessoes_checks"
+      },
+      {
+        "name": "sessoes_checks_resultados"
+      },
+      {
+        "name": "sessoes_fichas"
+      },
+      {
+        "name": "sessoes_participantes"
+      },
+      {
+        "name": "sessoes_template"
+      },
+      {
+        "name": "sessoes_treinamento"
+      },
+      {
+        "name": "setores"
+      },
+      {
+        "name": "setores_gestores"
+      },
+      {
+        "name": "sgso_acoes_mitigacao"
+      },
+      {
+        "name": "sgso_audit_trail"
+      },
+      {
+        "name": "sgso_auditoria_itens"
+      },
+      {
+        "name": "sgso_auditorias"
+      },
+      {
+        "name": "sgso_avaliacao_risco"
+      },
+      {
+        "name": "sgso_avaliacao_risco_contexto"
+      },
+      {
+        "name": "sgso_bowtie_barreira_historico"
+      },
+      {
+        "name": "sgso_bowtie_barreira_vinculos"
+      },
+      {
+        "name": "sgso_bowtie_barreiras"
+      },
+      {
+        "name": "sgso_bowtie_cenarios"
+      },
+      {
+        "name": "sgso_bowtie_nos"
+      },
+      {
+        "name": "sgso_categorias_adrep"
+      },
+      {
+        "name": "sgso_frat_aprovacoes"
+      },
+      {
+        "name": "sgso_frat_avaliacoes"
+      },
+      {
+        "name": "sgso_frat_fatores"
+      },
+      {
+        "name": "sgso_frat_modelos"
+      },
+      {
+        "name": "sgso_frat_respostas"
+      },
+      {
+        "name": "sgso_licoes_aprendidas"
+      },
+      {
+        "name": "sgso_matriz_risco_celulas"
+      },
+      {
+        "name": "sgso_matriz_risco_perfis"
+      },
+      {
+        "name": "sgso_moc_aprovacoes"
+      },
+      {
+        "name": "sgso_moc_registros"
+      },
+      {
+        "name": "sgso_nao_conformidades"
+      },
+      {
+        "name": "sgso_perigos"
+      },
+      {
+        "name": "sgso_protocolo_sequencia"
+      },
+      {
+        "name": "sgso_relato_capturas"
+      },
+      {
+        "name": "sgso_relato_ia_triagem"
+      },
+      {
+        "name": "sgso_relato_notificacoes"
+      },
+      {
+        "name": "sgso_relato_perigos"
+      },
+      {
+        "name": "sgso_relato_privacidade"
+      },
+      {
+        "name": "sgso_relato_workflow_eventos"
+      },
+      {
+        "name": "sgso_relatos"
+      },
+      {
+        "name": "sgso_relatos_arquivos"
+      },
+      {
+        "name": "sgso_relatos_comentarios"
+      },
+      {
+        "name": "sgso_relatos_fatores_humanos"
+      },
+      {
+        "name": "sgso_relatos_historico_status"
+      },
+      {
+        "name": "sgso_relatos_midias_metadados"
+      },
+      {
+        "name": "sgso_sla_config"
+      },
+      {
+        "name": "sgso_spi_config"
+      },
+      {
+        "name": "sigvoos_mapeamento_manual"
+      },
+      {
+        "name": "simulador_agendamentos"
+      },
+      {
+        "name": "simuladores"
+      },
+      {
+        "name": "solicitacoes_lgpd"
+      },
+      {
+        "name": "solicitacoes_treinamento"
+      },
+      {
+        "name": "sqlite_sequence"
+      },
+      {
+        "name": "sqlite_stat1"
+      },
+      {
+        "name": "system_config"
+      },
+      {
+        "name": "system_logs"
+      },
+      {
+        "name": "tipos_check"
+      },
+      {
+        "name": "tipos_sessao"
+      },
+      {
+        "name": "token_blocklist"
+      },
+      {
+        "name": "treinamentos"
+      },
+      {
+        "name": "treinamentos_convocacoes_email"
+      },
+      {
+        "name": "treinamentos_convocacoes_email_itens"
+      },
+      {
+        "name": "treinamentos_participantes"
+      },
+      {
+        "name": "treinamentos_planejados"
+      },
+      {
+        "name": "user_permissions"
+      },
+      {
+        "name": "user_profiles"
+      },
+      {
+        "name": "usuario_permissoes"
+      },
+      {
+        "name": "usuario_preferencias"
+      },
+      {
+        "name": "usuarios"
+      },
+      {
+        "name": "usuarios_empresas"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.613
+      },
+      "duration": 0.613,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 4190208,
+      "rows_read": 1204,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

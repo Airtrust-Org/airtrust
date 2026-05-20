@@ -1,0 +1,816 @@
+openapi: 3.0.0
+info:
+  title: AirTrust Simuladores API
+  description: |
+    API completa para gestão de simuladores de voo, incluindo agendamentos, 
+    sessões, fichas de avaliação, manobras e relatórios.
+    
+    ## Funcionalidades Principais
+    - 🚁 Gestão de simuladores (CRUD)
+    - 📅 Agendamentos e disponibilidade
+    - 🎓 Sessões de treinamento
+    - 🎯 Catálogo de manobras
+    - 📝 Fichas de avaliação
+    - 📋 Templates de sessão
+    - 📊 Relatórios e compliance
+    - 🔔 Notificações automáticas
+    
+  version: 2.0.0
+  contact:
+    name: AirTrust Support
+    email: suporte@airtrust.com.br
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.airtrust.com.br/api/v2
+    description: Produção
+  - url: http://localhost:8787/api/v2
+    description: Desenvolvimento
+
+tags:
+  - name: Simuladores
+    description: CRUD de simuladores
+  - name: Manobras
+    description: Catálogo de manobras
+  - name: Templates
+    description: Templates de sessão
+  - name: Agendamentos
+    description: Agendamentos de sessões
+  - name: Sessões
+    description: Sessões de treinamento
+  - name: Fichas
+    description: Fichas de avaliação
+  - name: Relatórios
+    description: Relatórios e estatísticas
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtido via /auth/login
+
+  schemas:
+    # ========== SIMULADOR ==========
+    Simulador:
+      type: object
+      required:
+        - nome
+        - tipo_simulador
+        - aeronave_base
+      properties:
+        id:
+          type: integer
+          example: 1
+        nome:
+          type: string
+          example: "Simulador A320-001"
+        codigo_identificacao:
+          type: string
+          example: "SIM-A320-001"
+        tipo_simulador:
+          type: string
+          enum: [FFS, FNPT-I, FNPT-II]
+          example: "FFS"
+        aeronave_base:
+          type: string
+          example: "A320"
+        empresa_local:
+          type: string
+          example: "CAE Training Center"
+        localizacao:
+          type: string
+          example: "Hangar 1"
+        status:
+          type: string
+          enum: [ATIVO, MANUTENCAO, INATIVO]
+          default: ATIVO
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ========== MANOBRA ==========
+    Manobra:
+      type: object
+      required:
+        - codigo
+        - nome
+        - referencia_qrh
+      properties:
+        id:
+          type: integer
+          example: 1
+        codigo:
+          type: string
+          example: "MAN-001"
+          description: "Código único da manobra (uppercase)"
+        nome:
+          type: string
+          example: "Decolagem Normal"
+        referencia_qrh:
+          type: string
+          example: "QRH 2.1.1"
+        pontuacao_minima:
+          type: integer
+          default: 5
+          minimum: 1
+          maximum: 7
+        categoria:
+          type: string
+          enum: [DECOLAGEM, SUBIDA, APROXIMACAO, POUSO, EMERGENCIA, GERAL]
+          default: GERAL
+        criterios_avaliacao:
+          type: string
+          example: "Execução conforme procedimentos padrão - QRH 2.1.1"
+        ativo:
+          type: boolean
+          default: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ========== TEMPLATE ==========
+    Template:
+      type: object
+      required:
+        - nome
+        - duracao_horas
+        - tipo
+      properties:
+        id:
+          type: integer
+          example: 1
+        nome:
+          type: string
+          example: "PC - Proficiency Check"
+        duracao_horas:
+          type: number
+          format: float
+          example: 4
+          minimum: 1
+          maximum: 8
+        tipo:
+          type: string
+          enum: [PC, PF, REQUALIFICACAO, INICIAL, RECORRENTE]
+          example: "PC"
+        descricao:
+          type: string
+          example: "Check de proficiência completo"
+        ativo:
+          type: boolean
+          default: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        manobras:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateManobra'
+
+    TemplateManobra:
+      type: object
+      properties:
+        manobra_id:
+          type: integer
+          example: 1
+        manobra_codigo:
+          type: string
+          example: "MAN-001"
+        manobra_nome:
+          type: string
+          example: "Decolagem Normal"
+        obrigatoria:
+          type: boolean
+          example: true
+
+    # ========== RESPONSES ==========
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operação realizada com sucesso"
+        data:
+          type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Erro ao processar requisição"
+        details:
+          type: string
+          example: "Detalhes adicionais do erro"
+
+    PaginatedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+          example: 50
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ========== SIMULADORES ==========
+  /simuladores:
+    get:
+      tags:
+        - Simuladores
+      summary: Listar simuladores
+      description: Retorna lista de simuladores ativos com filtros opcionais
+      parameters:
+        - name: tipo
+          in: query
+          schema:
+            type: string
+            enum: [FFS, FNPT-I, FNPT-II]
+          description: Filtrar por tipo de simulador
+        - name: aeronave
+          in: query
+          schema:
+            type: string
+          description: Filtrar por aeronave (A320, B737, etc)
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ATIVO, MANUTENCAO, INATIVO]
+          description: Filtrar por status
+        - name: localizacao
+          in: query
+          schema:
+            type: string
+          description: Filtrar por localização
+      responses:
+        '200':
+          description: Lista de simuladores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Simulador'
+                  total:
+                    type: integer
+                    example: 4
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Simuladores
+      summary: Criar simulador
+      description: Cria um novo simulador no sistema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - nome
+                - tipo_simulador
+                - aeronave_base
+              properties:
+                nome:
+                  type: string
+                  example: "Simulador A320-002"
+                codigo_identificacao:
+                  type: string
+                  example: "SIM-A320-002"
+                tipo_simulador:
+                  type: string
+                  enum: [FFS, FNPT-I, FNPT-II]
+                  example: "FFS"
+                aeronave_base:
+                  type: string
+                  example: "A320"
+                empresa_local:
+                  type: string
+                  example: "CAE Training Center"
+                localizacao:
+                  type: string
+                  example: "Hangar 2"
+                status:
+                  type: string
+                  enum: [ATIVO, MANUTENCAO, INATIVO]
+                  default: ATIVO
+      responses:
+        '201':
+          description: Simulador criado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  id:
+                    type: integer
+                    example: 5
+                  message:
+                    type: string
+                    example: "Simulador criado com sucesso"
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /simuladores/{id}:
+    put:
+      tags:
+        - Simuladores
+      summary: Atualizar simulador
+      description: Atualiza dados de um simulador existente
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID do simulador
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nome:
+                  type: string
+                status:
+                  type: string
+                  enum: [ATIVO, MANUTENCAO, INATIVO]
+                localizacao:
+                  type: string
+                observacoes:
+                  type: string
+      responses:
+        '200':
+          description: Simulador atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Simulador não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Simuladores
+      summary: Remover simulador
+      description: Soft delete de um simulador
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID do simulador
+      responses:
+        '200':
+          description: Simulador removido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Simulador não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /simuladores/listar:
+    get:
+      tags:
+        - Simuladores
+      summary: Listar simuladores (legacy)
+      description: Endpoint legacy para compatibilidade. Use GET /simuladores
+      responses:
+        '200':
+          description: Lista de simuladores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Simulador'
+
+  # ========== MANOBRAS ==========
+  /simuladores/manobras:
+    get:
+      tags:
+        - Manobras
+      summary: Listar manobras
+      description: Retorna catálogo completo de manobras
+      parameters:
+        - name: categoria
+          in: query
+          schema:
+            type: string
+            enum: [DECOLAGEM, SUBIDA, APROXIMACAO, POUSO, EMERGENCIA, GERAL]
+          description: Filtrar por categoria
+        - name: ativo
+          in: query
+          schema:
+            type: boolean
+          description: Filtrar por status ativo
+      responses:
+        '200':
+          description: Lista de manobras
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Manobra'
+                  from_mock:
+                    type: boolean
+                    description: Indica se os dados são mock ou do banco
+
+    post:
+      tags:
+        - Manobras
+      summary: Criar manobra
+      description: Adiciona nova manobra ao catálogo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - codigo
+                - nome
+                - referencia_qrh
+              properties:
+                codigo:
+                  type: string
+                  example: "MAN-006"
+                  description: "Código único (será convertido para uppercase)"
+                nome:
+                  type: string
+                  example: "Aproximação ILS"
+                referencia_qrh:
+                  type: string
+                  example: "QRH 3.2.1"
+                categoria:
+                  type: string
+                  enum: [DECOLAGEM, SUBIDA, APROXIMACAO, POUSO, EMERGENCIA, GERAL]
+                  default: GERAL
+      responses:
+        '201':
+          description: Manobra criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Manobra MAN-006 criada com sucesso"
+                  data:
+                    $ref: '#/components/schemas/Manobra'
+        '400':
+          description: Código duplicado ou dados inválidos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Código MAN-006 já existe. Use um código diferente."
+
+  /simuladores/manobras/{id}:
+    get:
+      tags:
+        - Manobras
+      summary: Buscar manobra por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Manobra encontrada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Manobra'
+        '404':
+          description: Manobra não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Manobras
+      summary: Editar manobra
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - codigo
+                - nome
+                - referencia_qrh
+              properties:
+                codigo:
+                  type: string
+                nome:
+                  type: string
+                referencia_qrh:
+                  type: string
+      responses:
+        '200':
+          description: Manobra atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Código duplicado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Manobras
+      summary: Remover manobra
+      description: Soft delete de manobra
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Manobra removida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Manobra MAN-001 removida com sucesso"
+                  id:
+                    type: integer
+                  codigo:
+                    type: string
+        '404':
+          description: Manobra não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ========== TEMPLATES ==========
+  /simuladores/templates-sessao:
+    get:
+      tags:
+        - Templates
+      summary: Listar templates
+      description: Retorna todos os templates ativos com suas manobras
+      responses:
+        '200':
+          description: Lista de templates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Template'
+
+    post:
+      tags:
+        - Templates
+      summary: Criar template
+      description: Cria novo template de sessão com manobras
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - nome
+                - duracao_horas
+                - tipo
+              properties:
+                nome:
+                  type: string
+                  example: "PF - Pilot Flying"
+                duracao_horas:
+                  type: number
+                  example: 2
+                tipo:
+                  type: string
+                  enum: [PC, PF, REQUALIFICACAO, INICIAL, RECORRENTE]
+                  example: "PF"
+                descricao:
+                  type: string
+                  example: "Sessão de pilotagem"
+                ativo:
+                  type: boolean
+                  default: true
+                manobras:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      manobra_id:
+                        type: integer
+                      obrigatoria:
+                        type: boolean
+      responses:
+        '201':
+          description: Template criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      nome:
+                        type: string
+                  message:
+                    type: string
+                    example: "Template \"PF - Pilot Flying\" criado com 2 manobras"
+
+  /simuladores/templates-sessao/{id}:
+    put:
+      tags:
+        - Templates
+      summary: Editar template
+      description: Atualiza template e suas manobras
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nome:
+                  type: string
+                duracao_horas:
+                  type: number
+                tipo:
+                  type: string
+                descricao:
+                  type: string
+                ativo:
+                  type: boolean
+                manobras:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      manobra_id:
+                        type: integer
+                      obrigatoria:
+                        type: boolean
+      responses:
+        '200':
+          description: Template atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+    delete:
+      tags:
+        - Templates
+      summary: Desativar template
+      description: Soft delete (desativa) template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Template removido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'

@@ -1,0 +1,251 @@
+{
+  "info": {
+    "name": "AirTrust API v2.0",
+    "description": "Collection completa da API AirTrust",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8787",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set(\"token\", json.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@airtrust.com\",\n  \"password\": \"admin123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Qualificações",
+      "item": [
+        {
+          "name": "Dashboard Compliance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/qualificacoes/compliance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "qualificacoes", "compliance"]
+            }
+          }
+        },
+        {
+          "name": "Listar Qualificações",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/qualificacoes?page=1&per_page=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "qualificacoes"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "20"
+                },
+                {
+                  "key": "tipo",
+                  "value": "TREINAMENTO",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar Qualificação",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"funcionario_id\": 1,\n  \"tipo\": \"TREINAMENTO\",\n  \"categoria\": \"CRM\",\n  \"descricao\": \"Crew Resource Management\",\n  \"data_validade\": \"2027-10-05\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/qualificacoes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "qualificacoes"]
+            }
+          }
+        },
+        {
+          "name": "Upload Certificado",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/qualificacoes/1/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "qualificacoes", "1", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Download Certificado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/qualificacoes/1/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "qualificacoes", "1", "download"]
+            }
+          }
+        },
+        {
+          "name": "Qualificações por Funcionário",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/qualificacoes/funcionario/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "qualificacoes", "funcionario", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Treinamentos",
+      "item": [
+        {
+          "name": "Listar Catálogo",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/treinamentos",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "treinamentos"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Funcionários",
+      "item": [
+        {
+          "name": "Listar Funcionários",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/funcionarios?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "funcionarios"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar Funcionário",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"João Silva\",\n  \"matricula\": \"12345\",\n  \"cpf\": \"12345678901\",\n  \"email\": \"joao@airtrust.com\",\n  \"cargo\": \"Piloto\",\n  \"status\": \"ATIVO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/funcionarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "funcionarios"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

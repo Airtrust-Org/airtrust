@@ -1,0 +1,4164 @@
+{
+	"config": {
+		"background": "fit_content_assets/0001-1676870055140806134_ssebai.png",
+		"colors": {
+			"background": "#00122D",
+			"experimental": false,
+			"text": "#0066A4"
+		},
+		"enableCustomCSS": true,
+		"customCSS": "/* EDIT THE “MAIN COLORS” BELOW TO APPLY YOUR ORGANISATION’S COLORS */\n/* Add your primary, secondary and tertiary colours by typing colour names such as \"white\" etc. or by replacing the hex color codes below. */\n:root {\n  --primary-palette-colour: #E66C18;\n  --secondary-palette-colour: #00122D;\n  --primary-font-colour: #FFFFFF;\n  --secondary-font-colour: #0066A4;\n}\n\n/* No need to touch the code below*/\n#slides-view, #slides-view-inner, #lesson-menu {\n  color: var(--secondary-font-colour) !important;\n  background-color: var(--secondary-palette-colour) !important;\n}\n/*/ Buttons /*/\n.btn.btn-muted,\n.btn.btn-solid,\n.btn.btn-primary {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n}\n.btn.btn-muted.__active,\n.btn.btn-muted:hover,\n.btn.btn-solid.__active,\n.btn.btn-solid:hover,\n.btn.btn-primary__active,\n.btn.btn-primary:hover {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n  filter: brightness(90%);\n}\n/* exclude game memory */\n.slide-game-memory .game-tiles .btn.btn-solid {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n}\n/*/ Header & Slides /*/\n/*/ Corner Box /*/\n#lesson-header-nav {\n  background: #00000040;\n  color: #fff;\n}\n/*/ Menu Button /*/\n#lesson-header-nav-menu-btn {\n  border-left: 1px solid var(--secondary-palette-colour);\n}\n/*/ Line at the Top/*/\n#lesson-header-title-content {\n  border-bottom: 1px solid var(--secondary-font-colour);\n  color: var(--secondary-font-colour);\n}\n/*/ Progress Bar /*/\n#indicator {\n  background-color: #00000040;\n  color: var(--primary-palette-colour);\n}\n/*/ Line at the bottom/*/\n#slides {\n  border-bottom: 1px solid var(--secondary-font-colour);\n}\n/*/ Image Background Color When You Zoom in/*/\n.pswp__item {\n  background: var(--primary-palette-colour);\n}\n\n/*/----- Multiple Choice Slides ------/*/\n/*/Multiple Choice Slides Selected Button/*/\n.selectable.active .btn {\n  background-color: var(--secondary-palette-colour);\n  color: var(--secondary-font-colour);\n}\n/*/Multiple Choice Incorrect/*/\n.slide-multiple-choice-game.state-complete .selectable.incorrect .btn {\n  background: var(--secondary-palette-colour);\n  color: var(--secondary-font-colour);\n}\n/*/Multiple Choice Correct/*/\n.slide-multiple-choice-game.state-complete .selectable.correct .btn {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n}\n/*/-----------------------------------/*/\n\n/*/Chat Bubble on selected/*/\n.slide-chat.show-msg-true .message--answer.active {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n}\n/*/Chat Bubble, the Pointy Part/*/\n.slide-chat.show-msg-true .message--answer.active:after {\n  border-color: var(--primary-palette-colour) transparent transparent;\n}\n/*/Expandable List/*/\n.slide-expandable-list .item.active .item-button,\n.slide-expandable-list .item.active .item-button:after {\n  background: var(--secondary-palette-colour);\n  color: var(--secondary-font-colour);\n}",
+		"direction": "ltr",
+		"disableInteractionSummary": true,
+		"disableLessonScore": false,
+		"hasAnswerFeedback": true,
+		"hasScormExitButton": false,
+		"preventLogoutOnExit": false,
+		"indicator": true,
+		"logo": "",
+		"minimumScore": 70,
+		"pageNumbers": true,
+		"pagination": false,
+		"soundDisabled": false,
+		"language": "pt"
+	},
+	"slides": [
+		{
+			"id": "f023b09a-a9a5-4bb1-892d-495c43eb6631",
+			"type": "title",
+			"subtype": "default",
+			"name": 1,
+			"displayIndex": 1,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f023b09a-a9a5-4bb1-892d-495c43eb6631"
+			},
+			"data": {
+				"buttonText": "<p>Próximo</p>",
+				"exitButton": false,
+				"title": "<p><strong>Informações Regulatórias do Curso</strong></p>",
+				"titleType": "html",
+				"subtitle": "<p><strong>Versão:</strong> 1.0 &nbsp;|&nbsp; <strong>Emissão:</strong> Abril/2026<br><strong>Referência Normativa:</strong> RBAC 91, RBAC 135, ICAO Doc 9613, IS 91-001E<br><strong>Carga Horária:</strong> ~6 horas &nbsp;|&nbsp; <strong>Periodicidade:</strong> Conforme PTO PRG-OPS-001<br><strong>Órgão Aprovador:</strong> Costa do Sol — Departamento de Operações</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "0ad98b56-a030-9eac-aeec-68a8da51ff36",
+			"type": "title",
+			"subtype": "default",
+			"name": 2,
+			"displayIndex": 2,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "0ad98b56-a030-9eac-aeec-68a8da51ff36"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar Curso</p>",
+				"exitButton": true,
+				"title": "<p>Bem vindo ao treinamento:</p><p> <strong>Operação PBN</strong></p>",
+				"titleType": "html",
+				"subtitle": "<p>O conteúdo deste curso segue a última revisão aprovada do Programa de Treinamento Operacional (PTO) da Costa do Sol, código PRG-OPS-001.</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "4f138970-30b2-5c7e-e8c2-5201bc55a2fd",
+			"type": "list",
+			"subtype": "list",
+			"name": 3,
+			"displayIndex": 3,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "4f138970-30b2-5c7e-e8c2-5201bc55a2fd"
+			},
+			"data": {
+				"list": [
+					"<p>Introdução</p>",
+					"<p>Sistemas RNAV e RNP instalados</p>",
+					"<p>Operação GNSS (GPS)</p>",
+					"<p>Procedimentos de operação dos equipamentos PBN</p>",
+					"<p>Instruções complementares para a condução de operações RNP APCH</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p><strong>Módulos:</strong></p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "badfb2c9-a9e8-6be0-7f39-34fbc53a7784",
+			"type": "video",
+			"subtype": "default",
+			"name": 4,
+			"displayIndex": 4,
+			"templateName": "Single video",
+			"templateDescription": "Play a video",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "badfb2c9-a9e8-6be0-7f39-34fbc53a7784"
+			},
+			"data": {
+				"prompt": "Assista ao vídeo para continuar",
+				"url": "fit_content_assets/PBN_-_DECEA_ehy0f3.mp4",
+				"streamUrl": null,
+				"showSkipButton": true,
+				"stream": true,
+				"autoplay": false,
+				"autoprogress": false,
+				"duration": 398.6,
+				"doneText": "Continuar",
+				"title": "Introdução ao PBN — DECEA",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "448a65da-18d7-40fe-80dd-d2e54992e21e",
+			"type": "title",
+			"subtype": "default",
+			"name": 5,
+			"displayIndex": 5,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "448a65da-18d7-40fe-80dd-d2e54992e21e"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": true,
+				"title": "<p>Sistemas RNAV e RNP instalados</p>",
+				"titleType": "html",
+				"subtitle": "<p>Módulo 1</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "c15dadd3-5c7a-4eaa-85f6-3a04d3127faf",
+			"type": "list",
+			"subtype": "list",
+			"name": 6,
+			"displayIndex": 6,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "c15dadd3-5c7a-4eaa-85f6-3a04d3127faf"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Identificar</strong> os sistemas RNAV e RNP instalados na aeronave e suas especificações de desempenho (RBAC 91, RBAC 135, ICAO Doc 9613).</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Diferenciar</strong> as especificações PBN (RNAV 5, RNAV 2, RNP 1, RNP APCH) e seus respectivos requisitos de precisão lateral.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Descrever</strong> os requisitos de aprovação operacional, documentação obrigatória a bordo e regulamentos aplicáveis às operações PBN.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Aplicar</strong> a fraseologia padrão para comunicação ATC em operações PBN e procedimentos de contingência por perda de capacidade.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Preencher</strong> corretamente o plano de voo com os designadores PBN (campos 10 e 18 do formulário ICAO).</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p><strong>Objetivos de Aprendizagem — Módulo 1</strong></p>",
+				"titleType": "html",
+				"subtitle": "<p style=\"font-size:0.85rem;color:#aaa\">Ao final deste módulo, você será capaz de:</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "2d4a1185-13c4-28e8-ed0e-96e16ab64c0b",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 7,
+			"displayIndex": 7,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "2d4a1185-13c4-28e8-ed0e-96e16ab64c0b"
+			},
+			"data": {
+				"content": "<p><strong style=\"color:#0066A4\">Siglas Fundamentais</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>PBN</strong> — Performance Based Navigation (Navegação Baseada em Performance)</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>GNSS</strong> — Global Navigation Satellite System (Sistema Global de Navegação por Satélite)</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>RNAV</strong> — Area Navigation (Navegação de Área)</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>RNP</strong> — Required Navigation Performance (Desempenho de Navegação Requerido)</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>RAIM</strong> — Receiver Autonomous Integrity Monitoring (Monitoramento Autônomo de Integridade do Receptor)</p></li></ul><p><strong style=\"color:#0066A4\">O que é RNAV?</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Permite que a aeronave navegue ao longo de qualquer rota no espaço aéreo, <strong>sem depender de auxílios de rádio convencionais</strong> (VOR, NDB) como pontos obrigatórios de rota.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Prover maior <strong>liberdade lateral</strong>, tornando o espaço aéreo mais eficiente e reduzindo o congestionamento em rotas convencionais.</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>ICAO Doc 9613 — Manual PBN</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>Conceitos e Siglas do PBN</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "a6eb8116-009a-d93f-5642-4f69039e7e1f",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 8,
+			"displayIndex": 8,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "a6eb8116-009a-d93f-5642-4f69039e7e1f"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "<ul><li><p><strong>RNAV 5 (ROTA):</strong> Capacidade de manter erro máximo de 5 NM da rota por 95% do tempo de voo.</p></li><li><p><strong>RNAV 2:</strong> Precisão de 2 NM — utilizada em rotas continentais e terminais.</p></li><li><p><strong>RNAV 1 / RNP 1 (BASIC) ou RNP TERMINAL:</strong> Precisão de 1 NM — rotas de saída e chegada (SID/STAR).</p></li><li><p><strong>RNP APCH (V-NAV):</strong> Precisão lateral de 0,3 NM — aproximação por instrumentos de alta precisão.</p></li></ul>",
+						"contentType": "text"
+					},
+					{
+						"content": "fit_content_assets/Screenshot_2024-11-07_185331_kuc1nx.png",
+						"contentType": "image"
+					}
+				],
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"preventFocus": true,
+				"title": "<p>Capacidades e Limitações</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "ad21365f-4930-dbd9-9e49-c1980a5db856",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 9,
+			"displayIndex": 9,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ad21365f-4930-dbd9-9e49-c1980a5db856"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">Clique em cada item para ler mais</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"content": "<p>Instalação em conformidade com as instruções da autoridade aeronáutica; </p><p>Provisões no RFM ou suplemento;</p><p>Autorização na E.O. para utilização</p>",
+						"title": "<p>Equipamentos aprovados:\r\n</p>"
+					},
+					{
+						"content": "<p>Deve possuir meio alternativo de navegação aprovado</p>",
+						"title": "<p>Rotas oceânicas:</p>"
+					},
+					{
+						"content": "<p>Deve possuir os equipamentos de navegação convencionais;</p>",
+						"title": "<p>Rotas domésticas:</p>"
+					},
+					{
+						"content": "<p>Devem possuir equipamentos de navegação convencionais;</p><p> Conduzidos da mesma maneira que os procedimentos RNAV existentes; </p><p>Estações de solo necessárias devem estar operacionais.</p>",
+						"title": "<p>Áreas terminais</p>"
+					},
+					{
+						"content": "<p>Equipamentos convencionais não necessitam de monitoramento </p><p>Devem possuir RAIM </p><p>Estações de solo necessárias devem estar operacionais na ausência de RAIM</p>",
+						"title": "<p>Procedimento IFR:\r\n</p>"
+					}
+				],
+				"title": "<p>Aprovação por Espaço Aéreo e Tipo de Operação</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "1476c8e8-c8c0-e03c-ac66-8879f0978c83",
+			"type": "image-slider",
+			"subtype": "multiple",
+			"name": 10,
+			"displayIndex": 10,
+			"templateName": "Vertical series",
+			"templateDescription": "Swipe through a group of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "1476c8e8-c8c0-e03c-ac66-8879f0978c83"
+			},
+			"data": {
+				"prompt": "Deslize para cima para ver mais",
+				"items": [
+					{
+						"content": "fit_content_assets/pbn_0_ertrqo.jpg",
+						"contentType": "image",
+						"position": "Middle",
+						"color": null,
+						"caption": "<p class=\"text-lg\">Limitações dos auxílios à navegação com respeito ao sistema de navegação que será utilizado nas operações PBN</p>",
+						"imagePosition": "Cover",
+						"captionStyle": "Dark"
+					},
+					{
+						"content": "fit_content_assets/frspt-02-662883-g001_rimyjj.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "A precisão depende dos sinais de satélite ou da disponibilidade da infraestrutura terrestre",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/fnbeh-15-633872-g003_t4gsgm.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "RAIM garante a integridade do sinal GNSS e alerta os pilotos sobre falhas",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					}
+				],
+				"arrows": true,
+				"doneText": "Continuar",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "7056aae1-e2d1-f776-3904-6cc66a15a0f4",
+			"type": "image-gallery",
+			"subtype": "image-gallery",
+			"name": 11,
+			"displayIndex": 11,
+			"templateName": "Horizontal series",
+			"templateDescription": "Swipe through a gallery of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "7056aae1-e2d1-f776-3904-6cc66a15a0f4"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"background": null,
+				"lightbox": false,
+				"images": [
+					{
+						"image": "fit_content_assets/images_10_p2lfqh.jpg",
+						"caption": "<p class=\"text-lg\">Procedimentos de contingência e reversão para métodos alternativos de navegação no caso de perda da capacidade de navegação PBN</p>"
+					},
+					{
+						"image": "fit_content_assets/1520125698506_ixlnfy.jpg",
+						"caption": "Os pilotos devem mudar para métodos convencionais em caso de perda de navegação PBN"
+					}
+				],
+				"doneText": "Continuar",
+				"title": null,
+				"titleType": null,
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "2c9243b3-e8dc-d802-53a9-95e03b9c4263",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 12,
+			"displayIndex": 12,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "2c9243b3-e8dc-d802-53a9-95e03b9c4263"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">CLIQUE EM CADA ITEM PARA MAIS INFORMAÇÕES</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"content": "<p>Exemplo: \"Solicitando RNAV 1\" ou \"Solicitando RNP APCH\". </p><p>Objetivo: Informar ao ATC que a aeronave possui capacidade de navegação específica e está pronta para operar em áreas ou rotas que exigem essa capacidade.</p>",
+						"title": "<p>Solicitação de Capacidade PBN</p>"
+					},
+					{
+						"content": "<p>ATC: \"Autorizado RNAV SID [Nome]\". </p><p>Piloto: \"Autorizado RNAV SID [Nome], [Identificação da Aeronave]\". </p><p>Objetivo: Confirma a autorização para decolar usando uma saída RNAV, garantindo que o piloto siga o procedimento correto.</p>",
+						"title": "<p>Atribuição e Confirmação de Procedimentos RNAV/RNP</p>"
+					},
+					{
+						"content": "<p>ATC: \"Siga direto para o waypoint [Nome] e mantenha RNP [Valor]\". </p><p>Piloto: \"Direto para o waypoint [Nome], mantendo RNP [Valor], [Identificação]\". </p><p>Objetivo: Direciona a aeronave para uma aproximação RNP específica, com nível de precisão requerido.</p>",
+						"title": "<p>Instruções de Aproximação RNP</p>"
+					},
+					{
+						"content": "<p>Piloto: \"Perda de capacidade RNP, solicitando vetoração radar\". </p><p>Objetivo: Notificar o ATC sobre a perda de capacidade de navegação PBN, permitindo que o controlador providencie uma alternativa segura.</p>",
+						"title": "<p>Perda de Capacidade PBN</p>"
+					},
+					{
+						"content": "<p>Piloto: \"Solicitando alteração para RNP STAR [Nome]\".</p><p> Objetivo: Solicitar uma mudança para uma chegada RNP, que deve ser aprovada pelo ATC.</p>",
+						"title": "<p>Mudança de Plano de Voo para Rotas PBN</p>"
+					},
+					{
+						"content": "<p>Piloto: \"Iniciando procedimento alternativo RNAV devido à perda de RNP\".</p><p> Objetivo: Informar ao ATC que a aeronave está mudando para um método alternativo de navegação por conta de limitações PBN.</p>",
+						"title": "<p>Procedimentos de Contingência e Navegação Alternativa</p>"
+					}
+				],
+				"title": "<p>Fraseologia para Operações PBN</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "4cf79bbd-132d-aa12-540e-961c60a4adb1",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 13,
+			"displayIndex": 13,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "4cf79bbd-132d-aa12-540e-961c60a4adb1"
+			},
+			"data": {
+				"content": "<p class=\"text-md\" style=\"margin-bottom:0.5rem\">Use a fraseologia a seguir ao notificar o ATC sobre perda ou limitação da capacidade PBN:</p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>\"Incapaz RNAV\"</strong> — ao informar perda de capacidade RNAV por falha de equipamento.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>\"RNAV negativo\"</strong> — quando a aeronave não possui autorização para a operação requerida.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>\"Centro XX, PR-XXX, GNSS básico indisponível devido a [razão]\"</strong> — ao notificar alerta RAIM ou perda de sinal GNSS.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>\"Controle XX, PR-XXX, sem condições de executar RNP/RNAV [tipo] devido a [razão]\"</strong> — ao reportar incapacidade de executar um procedimento PBN específico.</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>RBAC 91/135 — AIP Brasil (DECEA)</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>Fraseologia de Contingência PBN</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "266e40c4-2208-f4ef-d641-0702345f5cf1",
+			"type": "image-gallery",
+			"subtype": "content",
+			"name": 14,
+			"displayIndex": 14,
+			"templateName": "Horizontal series",
+			"templateDescription": "Swipe through a gallery of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "266e40c4-2208-f4ef-d641-0702345f5cf1"
+			},
+			"data": {
+				"prompt": "Deslize pela galeria de imagens",
+				"background": "",
+				"lightbox": false,
+				"images": [
+					{
+						"image": "",
+						"caption": "<p class=\"text-lg\">Procedimentos para elaboração do plano de voo para as operações PBN requeridas</p>"
+					},
+					{
+						"image": "fit_content_assets/Screenshot_2024-11-07_183711_tzkxij.png",
+						"caption": "<p>No formulário Plano de Voo colocar os designadores G, R e S no item 10 (equipamento) e exigência no item 18 (outros dados): PBN/B2/O2/S1</p>"
+					},
+					{
+						"image": "fit_content_assets/Screenshot_2024-11-07_183756_hucce2.png",
+						"caption": ""
+					},
+					{
+						"image": "fit_content_assets/Screenshot_2024-11-07_184021_bcufoq.png",
+						"caption": "<p> </p>"
+					},
+					{
+						"image": "",
+						"caption": "<ul><li><p class=\"text-md\">CAMPO 10 (EQUIPAMENTO): SDFGR/C</p></li><li><p class=\"text-md\">CAMPO 18 (OUTROS DADOS):</p></li><li><p class=\"text-md\">OPR/GTE</p></li><li><p class=\"text-md\">RMK/XXX</p></li><li><p class=\"text-md\">STS/ STATE ou HEAD ou MEDVAC (RMK/TROV ou TREN) ou HUM ( RMK/ SEGP ou DEFC) ou SAR</p></li><li><p class=\"text-md\">PBN/ B2B4D2O2S1</p></li><li><p class=\"text-md\">REG/FAB8738 FAB8740</p></li><li><p class=\"text-md\">EET/SBCW0155</p></li></ul>"
+					}
+				],
+				"doneText": null,
+				"title": null,
+				"titleType": null,
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "60336032-33ec-8bf2-92d2-c22f04324936",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 15,
+			"displayIndex": 15,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "60336032-33ec-8bf2-92d2-c22f04324936"
+			},
+			"data": {
+				"content": "<p><strong style=\"color:#0066A4\">Procedimentos de Navegação em Rota</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Monitoramento contínuo:</strong> Verifique regularmente o desempenho do sistema (XTE e EPE no FMS) para garantir que a aeronave está dentro dos limites da especificação em uso.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Correção de desvios:</strong> Corrija imediatamente qualquer desvio lateral e registre a ocorrência conforme os procedimentos da companhia.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Planejamento de alternativa:</strong> Inclua aeródromo alternativo no plano de voo sempre que houver risco de degradação do sistema PBN.</p></li></ul><p><strong style=\"color:#0066A4\">Leitura de Cartas e Critérios PBN</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">As cartas PBN apresentam <strong>waypoints, altitudes restritas, velocidades máximas e trajetórias</strong> com simbologia padronizada pelo ICAO.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Símbolos de <strong>fly-by</strong> (curva antes do waypoint) e <strong>fly-over</strong> (passa diretamente no ponto) indicam como executar a trajetória.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">A tripulação deve usar os <strong>recursos de automação (FMS/autoflight)</strong> para minimizar desvios e manter conformidade com os requisitos de precisão RNP e RNAV.</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>ICAO Doc 9613 — Manual PBN, RBAC 91</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>Navegação em Rota e Leitura de Cartas PBN</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "28f15166-8568-b769-64eb-38362286a576",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 16,
+			"displayIndex": 16,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "28f15166-8568-b769-64eb-38362286a576"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">Clique em cada regulamento para saber mais</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"content": "<p>Este regulamento estabelece regras gerais para operações de voo civil no Brasil, abrangendo requisitos básicos para navegação, incluindo operações PBN (Performance Based Navigation). Fornece orientações para conformidade com práticas e padrões da ANAC e ICAO.</p>",
+						"title": "<p>RBAC 91</p>"
+					},
+					{
+						"content": "<p>Este regulamento aplica-se a transporte aéreo público com aeronaves de pequeno porte, incluindo operações PBN para helicópteros. Descreve requisitos sobre navegação, equipamentos e treinamentos necessários, abordando autorizações e limitações para operações baseadas em PBN.</p>",
+						"title": "<p>RBAC 135</p>"
+					},
+					{
+						"content": "<p>Publicado pela ICAO, este manual fornece diretrizes para a implementação de operações PBN globalmente. É uma referência para operadores e autoridades regulatórias em planejamento, execução e monitoramento dessas operações.</p>",
+						"title": "<p>ICAO Doc 9613 (Manual PBN) </p>"
+					},
+					{
+						"content": "<p>Parte III refere-se à operação de aeronaves, incluindo requisitos para navegação baseada em performance (PBN). Este anexo aborda padrões de segurança e eficiência, detalhando requisitos de certificação, autorização operacional e equipamentos para voos PBN.</p>",
+						"title": "<p>ICAO Annexo 6</p>"
+					},
+					{
+						"content": "<p>Documentos de orientação e regulamentação da EASA e da FAA orientam operadores sobre requisitos técnicos e operacionais para a implementação de PBN, incluindo certificação de equipamentos e procedimentos de navegação.</p>",
+						"title": "<p>EASA e FAA Advisory Circulars</p>"
+					}
+				],
+				"title": "<p>Regulamentos Aplicáveis às Operações PBN</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "901585f8-7cda-f49a-2174-09456045af4c",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 17,
+			"displayIndex": 17,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "901585f8-7cda-f49a-2174-09456045af4c"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">clique em cada item para mais detalhes</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"content": "<p>É essencial que a aeronave e a operação tenham autorização específica para PBN, concedida pela ANAC ou autoridade de aviação relevante. Esse documento valida a conformidade da aeronave e da tripulação com os requisitos de navegação PBN.</p>",
+						"title": "<p>Autorização PBN</p>"
+					},
+					{
+						"content": "<p>O manual de operações da companhia aérea deve incluir os procedimentos para operações PBN, detalhando as capacidades e limitações dos sistemas RNAV e RNP, além dos procedimentos de emergência em caso de falhas.</p>",
+						"title": "<p>Manual de Operações</p>"
+					},
+					{
+						"content": "<p>O plano de voo deve incluir sufixos que indiquem a capacidade PBN da aeronave. Esses sufixos são essenciais para o ATC entender as capacidades de navegação da aeronave.</p>",
+						"title": "<p>Plano de Voo com Indicadores PBN</p>"
+					},
+					{
+						"content": "<p>As cartas de navegação baseadas em performance (RNP/RNAV) devem estar disponíveis e atualizadas durante o voo. Elas fornecem orientações visuais e espaciais para aproximação e decolagem em operações PBN.</p>",
+						"title": "<p>Cartas Aeronáuticas RNP/RNAV</p>"
+					},
+					{
+						"content": "<p>A bordo, devem estar disponíveis checklists detalhados para procedimentos PBN, incluindo contingências e sistemas alternativos de navegação. Esses checklists garantem que a tripulação siga etapas adequadas, especialmente em falhas de sistema.</p>",
+						"title": "<p>Checklists de Procedimentos PBN</p>"
+					}
+				],
+				"title": "<p>Documentos Obrigatórios a Bordo</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "bc35841b-c4da-2437-5c53-a017c9d88f7a",
+			"type": "image-gallery",
+			"subtype": "text-gallery",
+			"name": 18,
+			"displayIndex": 18,
+			"templateName": "Horizontal series",
+			"templateDescription": "Swipe through a gallery of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "bc35841b-c4da-2437-5c53-a017c9d88f7a"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"background": "",
+				"lightbox": false,
+				"images": [
+					{
+						"image": null,
+						"caption": "<p class=\"text-lg\">Informações específicas dos sistemas instalados</p>"
+					},
+					{
+						"image": null,
+						"caption": "<p><strong>(i) Níveis de Automação, Anúncios, Alertas, Interações e Degradação </strong></p><p>Os sistemas RNP/RNAV oferecem automação variada para controle da trajetória, com anúncios como \"NAV\" e \"APPR\" para indicar o status e alertas visuais/sonoros para desvio ou falhas. Em caso de degradação, como perda de sinal GNSS, o sistema pode reverter para sensores inerciais (IRS), limitando a precisão</p>"
+					},
+					{
+						"image": null,
+						"caption": "<p><strong>(ii) Integração com Sistemas da Aeronave </strong></p><p>O PBN integra-se com o FMS, autopiloto e TCAS, ajustando automaticamente o voo. </p><p>Por exemplo, o GNSS fornece dados de posição ao FMS, que ajusta a navegação e o piloto automático.</p>"
+					},
+					{
+						"image": "",
+						"caption": "<p><strong>(iii) Monitoramento em Cada Fase do Voo </strong></p><p>O monitoramento é contínuo e ajustado conforme a fase do voo. </p><p>Durante a aproximação, o sistema controla o desvio lateral e vertical, alertando o piloto sobre qualquer desvio, o que melhora a precisão</p>"
+					},
+					{
+						"image": "",
+						"caption": "<p><strong>(iv) Sensores de Navegação e Funcionalidades </strong></p><p>Os sistemas PBN usam sensores como GNSS, INS/IRS e DME. </p><p>O GNSS é o primário para RNP, e o IRS pode assumir em caso de falha, embora exija atualizações para precisão</p>"
+					},
+					{
+						"image": "",
+						"caption": "<p><strong>(v) Efeitos de Velocidade e Altitude na Antecipação de Curva </strong></p><p>A velocidade e altitude afetam a antecipação de curva. </p><p>A velocidades mais altas, o sistema inicia curvas antes dos waypoints para manter a precisão, ajustando automaticamente conforme a velocidade da aeronave.</p>"
+					},
+					{
+						"image": "",
+						"caption": "<p><strong>(vi) Interpretação de Displays e Símbolos </strong></p><p>Os displays apresentam a posição da aeronave, waypoints e alertas. </p><p>Símbolos como fly-by e fly-over orientam a execução das curvas, enquanto o CDI indica desvios laterais e verticais, mantendo a trajetória planejad</p>"
+					}
+				],
+				"doneText": "Continuar",
+				"title": "<p>Informações Específicas dos Sistemas Instalados</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "cfc704e7-e9ab-43d5-b1f2-3fc7bdb8304c",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 19,
+			"displayIndex": 19,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "O que garante a integridade do sinal GNSS e alerta os pilotos sobre falhas?",
+							"questionId": "80a7d156-037f-4d4c-a7d3-704a23f77dc6",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "RAIM",
+								"correct": true,
+								"answerId": "a971b3b7-ba4d-404e-bd3d-59855ef52ac6",
+								"type": "text"
+							},
+							{
+								"content": "<p>DME</p>",
+								"correct": false,
+								"answerId": "97653b3c-a091-48cc-b48c-674d72dbdb22",
+								"type": "text"
+							},
+							{
+								"content": "PBN",
+								"correct": false,
+								"answerId": "37cbc83d-642d-4b9f-a94b-de8ab6f12fdf",
+								"type": "text"
+							},
+							{
+								"content": "INS",
+								"correct": false,
+								"answerId": "ae83c9fe-7337-46e0-bdf1-dc36ce7c0488",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "cfc704e7-e9ab-43d5-b1f2-3fc7bdb8304c"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "d483bef8-fb4c-c9b0-eb9b-33c496ef82ba",
+						"content": "RAIM",
+						"correct": true
+					},
+					{
+						"id": "a8528fdc-85c6-55a7-b22d-8aa03a0574aa",
+						"content": "<p>DME</p>",
+						"correct": false
+					},
+					{
+						"id": "c80d6ce3-1b1b-3907-f502-2a73e261dec0",
+						"content": "PBN",
+						"correct": false
+					},
+					{
+						"id": "5fb7e638-b04b-5bf0-fa40-cd40382087ff",
+						"content": "INS",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. O RAIM (Receiver Autonomous Integrity Monitoring) é o sistema a bordo responsável por verificar a integridade do sinal GNSS e alertar sobre falhas.</p>",
+					"correct": "<p class=\"text-lg\">Correto! O RAIM monitora continuamente a integridade do sinal GNSS e emite alerta quando a geometria de satélites é insuficiente ou há falha detectada.</p>",
+					"text": "RAIM",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "O que garante a integridade do sinal GNSS e alerta os pilotos sobre falhas?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "dc2cd3ca-4520-6032-a5ef-d2f1aeb67d45",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 20,
+			"displayIndex": 20,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Quando os pilotos devem mudar para métodos convencionais em caso de perda de navegação PBN?",
+							"questionId": "67dc5d32-a4fd-4306-8762-9ed65f4ca7b4",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Rotas oceânicas",
+								"correct": false,
+								"answerId": "90911191-bfce-41fd-a32e-3d4b8610e553",
+								"type": "text"
+							},
+							{
+								"content": "Fraseologia padrão",
+								"correct": false,
+								"answerId": "1fad441f-4901-4393-9298-a3763c37dd37",
+								"type": "text"
+							},
+							{
+								"content": "Navegação em rota",
+								"correct": false,
+								"answerId": "cc55f7bb-dfff-4090-9c82-2c321ac98039",
+								"type": "text"
+							},
+							{
+								"content": "Procedimentos de contingência",
+								"correct": true,
+								"answerId": "891f62e4-39e2-4dbd-bc2a-abd4b311ccab",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "dc2cd3ca-4520-6032-a5ef-d2f1aeb67d45"
+			},
+			"data": {
+				"answers": {
+					"correct": "Procedimentos de contingência",
+					"incorrect": [
+						"Rotas oceânicas",
+						"Fraseologia padrão",
+						"Navegação em rota"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. A transição para métodos convencionais faz parte dos procedimentos de contingência PBN, conforme ICAO Doc 9613 e RBAC 91/135.</p>",
+					"correct": "<p class=\"text-lg\">Correto! Em caso de perda PBN, o piloto aciona os procedimentos de contingência e notifica o ATC com fraseologia padrão (ex.: \"Incapaz RNAV, solicitando vetoração radar\").</p>",
+					"text": "Procedimentos de contingência",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Quando os pilotos devem mudar para métodos convencionais em caso de perda de navegação PBN?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "bcf85cf3-f21e-52c2-9698-085baaaccde7",
+			"type": "chat",
+			"subtype": "default",
+			"name": 21,
+			"displayIndex": 21,
+			"templateName": "Chat",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Quais operações diferentes têm valores associados que definem a precisão lateral necessária?",
+							"questionId": "0300e6e0-941b-43fe-afc6-4f04a62082c3",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "GNSS",
+								"correct": false,
+								"answerId": "00d03916-7261-4422-887b-273548e0144f",
+								"type": "text"
+							},
+							{
+								"content": "RNAV",
+								"correct": false,
+								"answerId": "24ea79a8-5d8e-498f-9914-f9d487de918f",
+								"type": "text"
+							},
+							{
+								"content": "RNP",
+								"correct": true,
+								"answerId": "37100c52-8e51-4b5c-835b-fdd6bf99789b",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "bcf85cf3-f21e-52c2-9698-085baaaccde7"
+			},
+			"data": {
+				"message": {
+					"responder": "Qual é a sua resposta?",
+					"sender": "Teste sua compreensão",
+					"content": "Quais operações diferentes têm valores associados que definem a precisão lateral necessária?"
+				},
+				"answers": {
+					"correct": "RNP",
+					"incorrect": [
+						"GNSS",
+						"RNAV"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. RNP (Required Navigation Performance) é a especificação que define valores numéricos de precisão lateral exigidos para cada tipo de operação.</p>",
+					"correct": "<p class=\"text-lg\">Correto! As especificações RNP definem valores de precisão lateral obrigatórios para cada operação (ex.: RNP APCH = 0,3 NM, RNP 1 = 1 NM), ao contrário do RNAV e GNSS.</p>",
+					"text": "RNP",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": null,
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "bbb6c4a4-372a-3929-d744-cd133eef495c",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 22,
+			"displayIndex": 22,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "O que os pilotos devem declarar no plano de voo para eficiência operacional?",
+							"questionId": "77178ce9-a305-4b21-ac3a-00c36dab007b",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Capacidades RNAV e RNP",
+								"correct": true,
+								"answerId": "9a3aa9bb-e5c5-430b-a73f-0ee0f5499504",
+								"type": "text"
+							},
+							{
+								"content": "Autorizações de aproximação",
+								"correct": false,
+								"answerId": "c8a8f22e-8c7e-4183-9055-84b776837b49",
+								"type": "text"
+							},
+							{
+								"content": "Desempenho do sistema de navegação",
+								"correct": false,
+								"answerId": "d5f64c2c-4857-4699-965e-058124849ad4",
+								"type": "text"
+							},
+							{
+								"content": "Critérios PBN",
+								"correct": false,
+								"answerId": "5f924be8-5acf-4457-a485-44c3e4541cdc",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "bbb6c4a4-372a-3929-d744-cd133eef495c"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "c92a00a3-8067-8e09-f3a8-0908a5d4dc60",
+						"content": "Capacidades RNAV e RNP",
+						"correct": true
+					},
+					{
+						"id": "cadc0306-478f-3fe5-ecda-76f465fe7978",
+						"content": "Autorizações de aproximação",
+						"correct": false
+					},
+					{
+						"id": "2dbbc111-75be-7b0a-c80c-f967a01b68c4",
+						"content": "Desempenho do sistema de navegação",
+						"correct": false
+					},
+					{
+						"id": "f0bd68ae-9dbb-742b-0389-651de2c70e8c",
+						"content": "Critérios PBN",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. O piloto deve declarar as capacidades RNAV e RNP nos campos 10 e 18 do plano de voo para informar o ATC e otimizar a operação.</p>",
+					"correct": "<p class=\"text-lg\">Correto! As capacidades RNAV e RNP são declaradas nos campos 10 e 18 do plano de voo ICAO, permitindo que o ATC atribua procedimentos e rotas adequados.</p>",
+					"text": "Capacidades RNAV e RNP",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "O que os pilotos devem declarar no plano de voo para eficiência operacional?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "81649139-9181-513b-baa5-8fd41cc342ef",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 23,
+			"displayIndex": 23,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Nas operações PBN, o que garante uma comunicação clara entre pilotos e controladores?",
+							"questionId": "ce072b45-f65d-4032-a885-ada91dea9738",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Notificações de perda de capacidade GNSS",
+								"correct": false,
+								"answerId": "b8ba2365-3dca-478c-b9e5-31f96d14173f",
+								"type": "text"
+							},
+							{
+								"content": "Rotas continentais",
+								"correct": false,
+								"answerId": "5f6e6a06-254b-49ba-9c46-246fb3cdd931",
+								"type": "text"
+							},
+							{
+								"content": "Abordagens terminais",
+								"correct": false,
+								"answerId": "3c9988a7-d502-4706-b904-eb25f384640f",
+								"type": "text"
+							},
+							{
+								"content": "Fraseologia padrão",
+								"correct": true,
+								"answerId": "b66efc0a-b701-4124-90a9-48038b3b8768",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "81649139-9181-513b-baa5-8fd41cc342ef"
+			},
+			"data": {
+				"answers": {
+					"correct": "Fraseologia padrão",
+					"incorrect": [
+						"Notificações de perda de capacidade GNSS",
+						"Rotas continentais",
+						"Abordagens terminais"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. A fraseologia padrão é o elemento que assegura comunicação precisa entre pilotos e controladores em todas as fases das operações PBN.</p>",
+					"correct": "<p class=\"text-lg\">Correto! A fraseologia padrão ICAO garante comunicação inequívoca em autorizações, contingências e mudanças de procedimento PBN entre piloto e ATC.</p>",
+					"text": "Fraseologia padrão",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Nas operações PBN, o que garante uma comunicação clara entre pilotos e controladores?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "05a45df2-711a-7e74-5e7b-26bbdf20a4e9",
+			"type": "title",
+			"subtype": "default",
+			"name": 24,
+			"displayIndex": 24,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "05a45df2-711a-7e74-5e7b-26bbdf20a4e9"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": true,
+				"title": "<p>Operação GNSS (GPS)</p>",
+				"titleType": "html",
+				"subtitle": "<p>Módulo 2</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "8220df9a-f610-4241-a483-ffe6f57a7c13",
+			"type": "list",
+			"subtype": "list",
+			"name": 25,
+			"displayIndex": 25,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "8220df9a-f610-4241-a483-ffe6f57a7c13"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Descrever</strong> a arquitetura do GNSS: segmentos espacial, de controle e usuário, e o papel de cada um na navegação.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Identificar</strong> as constelações que compõem o GNSS (GPS, GLONASS, GALILEO, BEIDOU) e suas aplicações na aviação.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Explicar</strong> o funcionamento do RAIM e suas implicações para a integridade do sinal de navegação em diferentes fases do voo.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Analisar</strong> as capacidades e limitações do GNSS, incluindo vulnerabilidade a interferências e condições atmosféricas adversas.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Aplicar</strong> os procedimentos corretos diante de falhas de GNSS, incluindo a transição para sistemas alternativos de navegação.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p><strong>Objetivos de Aprendizagem — Módulo 2</strong></p>",
+				"titleType": "html",
+				"subtitle": "<p style=\"font-size:0.85rem;color:#aaa\">Ao final deste módulo, você será capaz de:</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "db0ea501-ce24-7658-3cf8-ba7a18663c15",
+			"type": "image-slider",
+			"subtype": "multiple",
+			"name": 26,
+			"displayIndex": 26,
+			"templateName": "Vertical series",
+			"templateDescription": "Swipe through a group of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "db0ea501-ce24-7658-3cf8-ba7a18663c15"
+			},
+			"data": {
+				"prompt": "Deslize para cima para ver mais",
+				"items": [
+					{
+						"content": "fit_content_assets/GPS_Satellite_NASA_art-iif_kqicz2.jpg",
+						"contentType": "image",
+						"position": "Middle",
+						"color": null,
+						"caption": "<p class=\"text-xxl\">Explorando os fundamentos dos sistemas globais de navegação por satélite</p>",
+						"imagePosition": "Cover",
+						"captionStyle": "Default"
+					}
+				],
+				"arrows": true,
+				"doneText": "Continuar",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "b472b76f-868d-8ba1-2397-c6bb866eb631",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 27,
+			"displayIndex": 27,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "b472b76f-868d-8ba1-2397-c6bb866eb631"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/gps_satellite_constellation_pncreu.jpg",
+						"contentType": "image"
+					},
+					{
+						"content": "O GNSS usa uma rede de satélites para determinar a posição da aeronave globalmente",
+						"contentType": "text"
+					},
+					{
+						"content": "Inclui constelações como GPS, GLONASS, GALILEO e BEIDOU para sinais de navegação precisos",
+						"contentType": "text"
+					},
+					{
+						"content": "<p>Composto por segmentos de Espaço, Controle e Usuário para transmissão, monitoramento e recepção de sinais</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"preventFocus": true,
+				"title": "Visão geral do GNSS",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "e882ac86-ed72-7412-ea12-17baec1dfbfd",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 28,
+			"displayIndex": 28,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "e882ac86-ed72-7412-ea12-17baec1dfbfd"
+			},
+			"data": {
+				"content": "<p class=\"text-md\" style=\"margin-bottom:0.5rem\">Termo genérico adotado pela <strong>ICAO</strong> para designar qualquer sistema de posicionamento global baseado em satélites. Inclui as seguintes constelações:</p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>GPS</strong> (EUA) — constelação primária para a aviação mundial. 24 satélites em 6 órbitas.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>GLONASS</strong> (Rússia) — disponível globalmente. Complementa e aumenta a disponibilidade do GNSS.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>GALILEO</strong> (União Europeia) — operacional desde 2016. Alta precisão para uso civil.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>BEIDOU</strong> (China) — operacional globalmente desde 2018. Cobertura global crescente.</p></li></ul><p class=\"text-md\" style=\"margin-bottom:0.5rem\">A combinação de múltiplas constelações aumenta a <strong>disponibilidade e integridade</strong> do sinal, essencial para operações PBN em todas as regiões do globo.</p><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>ICAO Doc 9613 — Manual PBN, ICAO Anexo 10</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>O Sistema GNSS</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "5aab422b-89d6-8246-2789-6fe771719213",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 29,
+			"displayIndex": 29,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "5aab422b-89d6-8246-2789-6fe771719213"
+			},
+			"data": {
+				"content": "<p><strong style=\"color:#0066A4\">Segmentos do GPS</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Segmento Espacial:</strong> 24 satélites distribuídos em 6 órbitas (4 por órbita). Cada satélite emite sinais de rádio com dados de posição e tempo precisos.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Segmento de Controle:</strong> Estações terrestres que monitoram e gerenciam todos os satélites, corrigem órbitas, sincronizam relógios e realizam o <em>Predictive RAIM</em> do sistema.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Segmento Usuário:</strong> Receptor GNSS a bordo que processa os sinais e calcula a posição com precisão.</p></li></ul><p><strong style=\"color:#0066A4\">Conceitos Operacionais</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">O receptor mede a distância até <strong>pelo menos 4 satélites</strong>: 3 para determinar latitude, longitude e altitude, e 1 adicional para corrigir erros de relógio.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">A precisão depende da geometria dos satélites visíveis — fator chamado de <strong>DOP (Dilution of Precision)</strong>. Quanto menor o DOP, maior a precisão.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">É essencial para as operações <strong>RNAV e RNP</strong>, garantindo posicionamento contínuo em cruzeiro, chegada e aproximação.</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>ICAO Doc 9613 — Manual PBN, ICAO Anexo 10</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>Estrutura do GPS: Segmentos e Conceitos</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "2d72c557-8ac9-5533-dfce-64a8ec7d03e1",
+			"type": "image-slider",
+			"subtype": "multiple",
+			"name": 30,
+			"displayIndex": 30,
+			"templateName": "Vertical series",
+			"templateDescription": "Swipe through a group of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "2d72c557-8ac9-5533-dfce-64a8ec7d03e1"
+			},
+			"data": {
+				"prompt": "Deslize para cima para ver mais",
+				"items": [
+					{
+						"content": "fit_content_assets/Work_Breakdown_Structure_of_Aircraft_System_xfw8wf.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "Integração de sistemas e desempenho aviônico",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/220px-Airbus_A380_cockpit_vyvo08.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "GNSS integrado à aviônica da aeronave, incluindo FMS e piloto automático",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/CNS-aircraft-sattelite-comunicaciones-OACI-2023-400x240_qxdbhh.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "Permite orientação automática ao longo de rotas planejadas, reduzindo a carga de trabalho do piloto",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/images_10_kj5ebh.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "Aumenta a precisão na execução da rota para uma navegação eficiente",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					}
+				],
+				"arrows": true,
+				"doneText": "Continuar",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "e4254e2d-dd4b-f7c0-7ccb-4acb00c5bce8",
+			"type": "image-gallery",
+			"subtype": "image-gallery",
+			"name": 31,
+			"displayIndex": 31,
+			"templateName": "Horizontal series",
+			"templateDescription": "Swipe through a gallery of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "e4254e2d-dd4b-f7c0-7ccb-4acb00c5bce8"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"background": null,
+				"lightbox": false,
+				"images": [
+					{
+						"image": "fit_content_assets/GNSS-1024x683_ff7rck.jpg",
+						"caption": "<p class=\"text-lg\">Capacidades</p>"
+					},
+					{
+						"image": "fit_content_assets/image_y0kn0k.png",
+						"caption": "<p><strong>Cobertura Global: </strong></p><p>O GNSS oferece cobertura global, permitindo que aeronaves naveguem com precisão em quase qualquer lugar, incluindo áreas remotas e oceanos, onde não há auxílios terrestres. </p><p>Isso é essencial para operações de longo alcance e para aumentar a flexibilidade das rotas aéreas.</p>"
+					},
+					{
+						"image": "fit_content_assets/segments-in-a-satellite-system_zua3jw.png",
+						"caption": "<p><strong>Alta Precisão de Posição: </strong></p><p>O GNSS oferece alta precisão posicional, especialmente com técnicas como RAIM e SBAS. </p><p>Esse nível de precisão permite operações de aproximação e navegação em áreas terminais com segurança, diminuindo a dependência de auxílios à navegação convencionais.</p>"
+					},
+					{
+						"image": "fit_content_assets/240124-gnss-aviation-2-scaled_hqlzsf.jpg",
+						"caption": "<p><strong>Independência de Infraestrutura Terrestre: </strong></p><p>O GNSS, como sistema baseado em satélites, permite que aeronaves naveguem sem infraestrutura de rádio em solo, como VOR ou NDB, facilitando operações em áreas com instalação limitada.</p>"
+					},
+					{
+						"image": "fit_content_assets/unnamed_tgohnm.gif",
+						"caption": "<p><strong>Flexibilidade e Eficiência de Rota: </strong></p><p>O GNSS permite que as aeronaves sigam rotas diretas e eficientes, ao invés de depender de auxílios terrestres que exigem rotações em pontos fixos. </p><p>Isso diminui o tempo de voo, o consumo de combustível e as emissões, gerando benefícios econômicos e ambientais.</p>"
+					},
+					{
+						"image": "fit_content_assets/images_1_bhvgfi.png",
+						"caption": "<p><strong>Compatibilidade com PBN e Operações Avançadas: </strong></p><p>O GNSS é essencial para implementar operações de Navegação Baseada em Performance (PBN), como RNAV e RNP. Essas operações aumentam a densidade de tráfego e a flexibilidade de voo, especialmente em áreas de grande movimento aéreo.</p>"
+					}
+				],
+				"doneText": "Continuar",
+				"title": null,
+				"titleType": null,
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "0e9716a8-b2bc-b6b5-9af8-79248474c359",
+			"type": "image-gallery",
+			"subtype": "image-gallery",
+			"name": 32,
+			"displayIndex": 32,
+			"templateName": "Horizontal series",
+			"templateDescription": "Swipe through a gallery of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "0e9716a8-b2bc-b6b5-9af8-79248474c359"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"background": null,
+				"lightbox": false,
+				"images": [
+					{
+						"image": "fit_content_assets/si_gps_fa_flat_11-1-12b_lzjzkc.jpg",
+						"caption": "<p class=\"text-lg\">Limitações</p>"
+					},
+					{
+						"image": "fit_content_assets/urban-canyon_mu3ocf.jpg",
+						"caption": "<p><strong>Vulnerabilidade a Interferências e Bloqueios de Sinal: </strong></p><p>O sinal GNSS é fraco ao chegar à Terra e, portanto, é suscetível a interferências eletromagnéticas, intencionais ou acidentais (como jammers). </p><p>Obstruções físicas, como montanhas e edifícios altos, também podem bloquear o sinal em baixas altitudes, reduzindo a precisão.</p>"
+					},
+					{
+						"image": "fit_content_assets/p1bdiqllehmk31fr87387s91pqs6.jpg.optimal_wievf9.jpg",
+						"caption": "<p><strong>Dependência da Integridade do Sinal (RAIM): </strong></p><p>Para operações críticas, o receptor GPS deve monitorar a integridade do sinal, usando RAIM para identificar sinais falhos. </p><p>Se a integridade não puder ser verificada (por falta de satélites ou condições de sinal), o GNSS pode não ser adequado para certas aproximações ou navegação de precisão.</p>"
+					},
+					{
+						"image": "fit_content_assets/Lpb8V_cr2vfp.jpg",
+						"caption": "<p><strong>Influência de Condições Atmosféricas:</strong> </p><p>Fenômenos atmosféricos, como a ionosfera e a troposfera, afetam a propagação do sinal GNSS, introduzindo erros de posicionamento. </p><p>Em latitudes elevadas ou durante tempestades solares, a precisão pode ser reduzida.</p>"
+					},
+					{
+						"image": "fit_content_assets/gnss_segments_oh5w2l.jpg",
+						"caption": "<p><strong>Necessidade de Calibração e Monitoramento: </strong></p><p>A precisão do GNSS pode variar com o tempo, especialmente devido a mudanças na constelação de satélites ou problemas técnicos. </p><p>Assim, as autoridades de aviação exigem que as aeronaves utilizem sistemas complementares ou alternativos para operações críticas, caso o GNSS fique temporariamente indisponível.</p>"
+					},
+					{
+						"image": "fit_content_assets/LOIdowngrade_ayzkyc.png",
+						"caption": "<p><strong>Limitações de Precisão sem Sistemas de Aumento (Augmentation Systems): </strong></p><p>Em operações que exigem alta precisão, como aproximações de pouso, o GNSS sozinho pode não oferecer a exatidão necessária sem o suporte de sistemas de aumento, como SBAS (WAAS, EGNOS) ou GBAS (Ground-Based Augmentation System), que aumentam a precisão e integridade do sinal.</p>"
+					},
+					{
+						"image": "fit_content_assets/DTW_Triple_Arrivals_qv32x6.jpg",
+						"caption": "<p><strong>Impacto em Áreas de Alta Densidade de Tráfego Aéreo: </strong></p><p>Em áreas com alta densidade de tráfego, os controladores de tráfego aéreo precisam monitorar com precisão as aeronaves usando dados GNSS. </p><p>A confiabilidade do GNSS é essencial para evitar conflitos de rota, exigindo que os pilotos e controladores estejam atentos a limitações e possíveis erros.</p>"
+					}
+				],
+				"doneText": "Continuar",
+				"title": null,
+				"titleType": null,
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "bf0c1f4d-2c9c-e628-cbfc-86eefed577f0",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 33,
+			"displayIndex": 33,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "bf0c1f4d-2c9c-e628-cbfc-86eefed577f0"
+			},
+			"data": {
+				"content": "<p class=\"text-md\" style=\"margin-bottom:0.5rem\">O <strong>RAIM</strong> é um sistema interno de monitoramento que verifica a integridade do sinal de posicionamento GNSS, utilizando redundância entre os sinais recebidos de múltiplos satélites.</p><p><strong style=\"color:#0066A4\">Quando o RAIM emite alerta?</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Geometria insuficiente:</strong> Quando não há satélites suficientes em posições adequadas para detectar e isolar um sinal com falha.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Falha detectada:</strong> Quando um satélite com sinal degradado é identificado — o receptor pode <em>excluir</em> esse satélite (RAIM com FDE: Fault Detection and Exclusion).</p></li></ul><p><strong style=\"color:#0066A4\">Tipos de RAIM</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>RAIM em tempo real:</strong> Monitoramento contínuo durante o voo. Um alerta FLAG indica perda de integridade — a operação PBN deve ser interrompida.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Predictive RAIM:</strong> Verificação antecipada (pré-voo) da disponibilidade do RAIM para um aeródromo e horário específicos, feita pelo segmento de controle ou pelo FMS.</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>ICAO Doc 9613 — Manual PBN, IS 91-001E ANAC</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>RAIM (Receiver Autonomous Integrity Monitoring)</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "6e7835e2-a7c2-a589-a8a5-50555fa7a215",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 34,
+			"displayIndex": 34,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "6e7835e2-a7c2-a589-a8a5-50555fa7a215"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"label": "Fase",
+				"canGoBack": false,
+				"doneText": "Continuar",
+				"content": [
+					"<span class=\"text-md leading-relaxed\"><strong>Decolagem e subida:</strong> O GNSS fornece guia lateral precisa para os procedimentos de saída RNAV (SID). O RAIM deve estar disponível e verificado antes da partida.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Cruzeiro:</strong> Garante o seguimento da rota planejada com precisão contínua. O FMS monitora a posição do GNSS e avisa o piloto sobre qualquer degradação do sinal.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Chegada e aproximação:</strong> Fase mais crítica para a precisão PBN. O RNP APCH exige RAIM disponível, banco de dados vigente e monitoramento ativo do XTE (limite: 0,3 NM).</span>"
+				],
+				"title": "Operações GNSS em diferentes fases do voo",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "bc96b63f-815c-0229-caea-9775a5848bbb",
+			"type": "list",
+			"subtype": "list",
+			"name": 35,
+			"displayIndex": 35,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "bc96b63f-815c-0229-caea-9775a5848bbb"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Interface e ergonomia:</strong> Sistemas com interface clara reduzem erros de entrada no FMS e facilitam a leitura rápida de alertas em situações críticas.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Domínio do equipamento:</strong> Compreender o funcionamento do GNSS e do FMS é fundamental para identificar alertas, responder a falhas e evitar erros de navegação.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Procedimentos operacionais:</strong> O cumprimento rigoroso dos procedimentos definidos no <strong>Manual de Operações</strong> minimiza os riscos associados ao fator humano no uso de sistemas PBN.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "Fatores humanos e GNSS",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "f72c5b67-80ed-3fa9-cd0a-53e18753b18a",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 36,
+			"displayIndex": 36,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f72c5b67-80ed-3fa9-cd0a-53e18753b18a"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/amt-13-4963-2020-avatar-web_wj6pk8.png",
+						"contentType": "image"
+					},
+					{
+						"content": "Erros potenciais incluem erros de relógio de satélite, erros atmosféricos e falhas de receptor",
+						"contentType": "text"
+					},
+					{
+						"content": "A mudança para sistemas de navegação alternativos pode ajudar em caso de falhas do GNSS",
+						"contentType": "text"
+					},
+					{
+						"content": "<p>Se houver previsão de manipulação de sinal a partir do NOTAM GPS ou indicação de falha em voo, a atualização de posição via GNSS deve ser desabilitada, utilizando-se os critérios estabelecidos para operação com VOR e DMW.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"preventFocus": true,
+				"title": "Erros e modos de falha",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "c9aec45f-234e-84ad-e941-504843534b1b",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 37,
+			"displayIndex": 37,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "c9aec45f-234e-84ad-e941-504843534b1b"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"label": "Alerta",
+				"canGoBack": false,
+				"doneText": "Continuar",
+				"content": [
+					"<span class=\"text-md leading-relaxed\"><strong>Perda de RAIM (FLAG):</strong> O receptor não consegue verificar a integridade do sinal. Ação imediata: interrompa a operação PBN e notifique o ATC com fraseologia padrão.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Sinal degradado (POOR/LOW):</strong> Precision degradada, mas ainda acima do mínimo. Continue monitorando e avalie a necessidade de transição para sistema alternativo.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Falha de satélite (EXCLUÍDO):</strong> Um satélite foi detectado com falha e excluído (FDE ativo). Verifique se ainda há RAIM disponível com os satélites restantes antes de continuar.</span>"
+				],
+				"title": "Alertas e mensagens GNSS",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "8bf763f0-249f-e1e7-7efe-e963781811b9",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 38,
+			"displayIndex": 38,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Como o GNSS determina a posição da aeronave globalmente?",
+							"questionId": "5b807dda-a82f-4af4-9cfb-73a6eb2ceb5d",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Usando uma rede de satélites",
+								"correct": true,
+								"answerId": "6ea83f00-c28f-4843-aca7-7d3e860ac330",
+								"type": "text"
+							},
+							{
+								"content": "Por meio de sistemas de radar terrestres",
+								"correct": false,
+								"answerId": "58002a72-80f2-437f-93ed-c272a275a6ba",
+								"type": "text"
+							},
+							{
+								"content": "Analisando padrões de nuvens",
+								"correct": false,
+								"answerId": "396c18f5-38e9-412d-8cfe-59bf8a661158",
+								"type": "text"
+							},
+							{
+								"content": "Por triangulação de radiofrequência",
+								"correct": false,
+								"answerId": "682debd4-f8c7-407e-94b1-8727288d80c4",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "8bf763f0-249f-e1e7-7efe-e963781811b9"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "4a488919-ecc2-e149-f13f-03beeaa8ec54",
+						"content": "Usando uma rede de satélites",
+						"correct": true
+					},
+					{
+						"id": "7412d7ef-7359-abf2-a0f8-802a08ea1e7e",
+						"content": "Por meio de sistemas de radar terrestres",
+						"correct": false
+					},
+					{
+						"id": "afff123c-9bdb-d244-77b3-7da07087eaec",
+						"content": "Analisando padrões de nuvens",
+						"correct": false
+					},
+					{
+						"id": "ddac2dc0-b907-14e4-e186-c7dc348becc5",
+						"content": "Por triangulação de radiofrequência",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. O GNSS determina a posição globalmente por meio de uma rede de satélites que transmitem sinais de tempo, triangulados pelo receptor a bordo.</p>",
+					"correct": "<p class=\"text-lg\">Correto! O GNSS usa uma constelação de satélites (GPS, GLONASS, GALILEO, BEIDOU) que transmitem sinais de rádio processados pelo receptor para determinar a posição.</p>",
+					"text": "Usando uma rede de satélites",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Como o GNSS determina a posição da aeronave globalmente?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "19ec9ca3-d1f9-d069-2f63-569cb7e2f6c3",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 39,
+			"displayIndex": 39,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "O que é crucial para o posicionamento 3D preciso usando GNSS?",
+							"questionId": "e24cf90a-163d-4700-9dc2-1ee692654403",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Dois satélites visíveis",
+								"correct": false,
+								"answerId": "fd38f4c8-1511-449e-9910-925d06a2a22b",
+								"type": "text"
+							},
+							{
+								"content": "Pontos de referência terrestres",
+								"correct": false,
+								"answerId": "82d9d9c1-76f7-48f6-9077-5002dcd1e3a0",
+								"type": "text"
+							},
+							{
+								"content": "Três satélites visíveis",
+								"correct": false,
+								"answerId": "90b0b458-c75f-4487-b164-899bb7674943",
+								"type": "text"
+							},
+							{
+								"content": "Pelo menos quatro satélites visíveis",
+								"correct": true,
+								"answerId": "60aa45a2-7e9d-45b5-96fd-c1c1ac49b3a5",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "19ec9ca3-d1f9-d069-2f63-569cb7e2f6c3"
+			},
+			"data": {
+				"answers": {
+					"correct": "Pelo menos quatro satélites visíveis",
+					"incorrect": [
+						"Dois satélites visíveis",
+						"Pontos de referência terrestres",
+						"Três satélites visíveis"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. O GNSS exige no mínimo 4 satélites em geometria adequada (DOP favorável) para fornecer posicionamento tridimensional preciso e confiável.</p>",
+					"correct": "<p class=\"text-lg\">Correto! São necessários pelo menos 4 satélites: 3 para determinar latitude, longitude e altitude, e 1 adicional para corrigir o erro de relógio do receptor.</p>",
+					"text": "Pelo menos quatro satélites visíveis",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "O que é crucial para o posicionamento 3D preciso usando GNSS?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "4a63fe40-b3fc-f7dd-9fb6-7e5a361dad13",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 40,
+			"displayIndex": 40,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Por que entender a operação do equipamento é crucial para pilotos que usam GNSS?",
+							"questionId": "8a174f66-e7d0-4677-97bc-1efb7488fb4a",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Para aumentar a velocidade do voo",
+								"correct": false,
+								"answerId": "17ad4451-5bfd-4000-a0c7-4d5782ca238a",
+								"type": "text"
+							},
+							{
+								"content": "Para melhorar a eficiência do combustível",
+								"correct": false,
+								"answerId": "67423a8e-17b0-40ac-8ce0-c80c95581ab6",
+								"type": "text"
+							},
+							{
+								"content": "Para melhorar o conforto da cabine",
+								"correct": false,
+								"answerId": "13aa9b23-0300-4e3a-80c0-1b4d902fe1bc",
+								"type": "text"
+							},
+							{
+								"content": "Para evitar erros de navegação",
+								"correct": true,
+								"answerId": "4fc45835-9cfd-4ce2-9818-a8aab60a95d9",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "4a63fe40-b3fc-f7dd-9fb6-7e5a361dad13"
+			},
+			"data": {
+				"answers": {
+					"correct": "Para evitar erros de navegação",
+					"incorrect": [
+						"Para aumentar a velocidade do voo",
+						"Para melhorar a eficiência do combustível",
+						"Para melhorar o conforto da cabine"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. O conhecimento da operação do equipamento é essencial para identificar alertas, interpretar displays e evitar erros de navegação durante o voo.</p>",
+					"correct": "<p class=\"text-lg\">Correto! O domínio do equipamento permite ao piloto interpretar alertas, responder a falhas e evitar erros de entrada no FMS que comprometam a trajetória.</p>",
+					"text": "Para evitar erros de navegação",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Por que entender a operação do equipamento é crucial para pilotos que usam GNSS?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "b2123e23-7684-43ea-3e04-f73d33daec74",
+			"type": "title",
+			"subtype": "default",
+			"name": 41,
+			"displayIndex": 41,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "b2123e23-7684-43ea-3e04-f73d33daec74"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": true,
+				"title": "<p>Procedimentos de operação dos equipamentos PBN</p>",
+				"titleType": "html",
+				"subtitle": "<p>Módulo 3</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "cdf501fb-bc53-40e3-acfd-6a8abbf79402",
+			"type": "list",
+			"subtype": "list",
+			"name": 42,
+			"displayIndex": 42,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "cdf501fb-bc53-40e3-acfd-6a8abbf79402"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Executar</strong> a verificação da validade do banco de dados de navegação (ciclo AIRAC de 28 dias) antes de cada voo.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Verificar</strong> a correta conclusão dos autotestes dos sistemas PBN e interpretar os resultados e mensagens de falha.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Aplicar</strong> os procedimentos de voo direto a waypoint, interceptação de trajetória e regresso a procedimento após vetoração.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Identificar</strong> e corrigir desvios perpendiculares à rota (cross-track error) por meio dos recursos do FMS.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Selecionar</strong> a fonte de sensor de navegação mais adequada conforme a infraestrutura disponível e a fase do voo.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p><strong>Objetivos de Aprendizagem — Módulo 3</strong></p>",
+				"titleType": "html",
+				"subtitle": "<p style=\"font-size:0.85rem;color:#aaa\">Ao final deste módulo, você será capaz de:</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "ce5c7d18-ec74-899f-ea5e-5ef6891215a8",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 43,
+			"displayIndex": 43,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ce5c7d18-ec74-899f-ea5e-5ef6891215a8"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/airac2105.jpg.a470e2e2edebb7251fef0f4ec9d67635_e0carc.jpg",
+						"contentType": "image"
+					},
+					{
+						"content": "<p>Para garantir uma navegação segura e precisa, é essencial verificar a validade dos dados de navegação antes de cada voo. </p><p>Os dados de navegação são atualizados regularmente (geralmente a cada 28 dias) para refletir alterações nas rotas, procedimentos de aproximação e waypoints. </p><p>O sistema PBN utiliza esses dados para determinar a posição e a trajetória da aeronave.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"preventFocus": true,
+				"title": "<p>Verificação da validade dos dados de navegação</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "4a02148a-08a7-74a5-d3ae-aec970ffd640",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 44,
+			"displayIndex": 44,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "4a02148a-08a7-74a5-d3ae-aec970ffd640"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">CLIQUE EM CADA ITEM PARA LER MAIS</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"content": "<p>O banco de dados pode estar armazenado no sistema de gerenciamento de voo (FMS). Acesse o menu de navegação e localize a seção onde é exibida a data do ciclo atual.</p>",
+						"title": "<p>1 - Acessar o banco de dados de navegação:</p>"
+					},
+					{
+						"content": "<p>Confirme que a data exibida corresponde ao ciclo de navegação em vigor. Dados desatualizados podem resultar em trajetórias incorretas, pois as informações de pontos de referência e rotas podem ter sido alteradas desde o último ciclo.</p>",
+						"title": "<p>2 - Verificar a data de validade:</p>"
+					},
+					{
+						"content": "<p>Se os dados estiverem desatualizados, interrompa a preparação do voo até que uma versão atualizada seja carregada. Em muitos sistemas, a atualização pode ser feita automaticamente através de um link com a base de dados ou manualmente, utilizando um dispositivo portátil.</p>",
+						"title": "<p>3 - Procedimento caso o banco de dados esteja vencido:</p>"
+					}
+				],
+				"title": "<p>Passo a Passo para Verificação da Validade</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "a906fe29-f644-7c76-2a8f-ec0cc8f408d8",
+			"type": "list",
+			"subtype": "list",
+			"name": 45,
+			"displayIndex": 45,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "a906fe29-f644-7c76-2a8f-ec0cc8f408d8"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\">As rotinas de autoteste verificam se todos os componentes do sistema de navegação estão operacionais antes do voo.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Como iniciar:</strong> Após energizar os sistemas, o autoteste é ativado automaticamente. Aguarde a conclusão e verifique a mensagem de status do FMS.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Verificar resultados:</strong> Confirme que todos os subsistemas (GPS, FMS, baro-altímetro) apresentam status OK. Qualquer erro exige análise imediata antes do voo.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Falha no autoteste:</strong> Consulte o Manual de Operações da aeronave. Se o defeito não puder ser resolvido pela tripulação, acione a manutenção antes de prosseguir.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p>Autotestes dos Sistemas de Navegação</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "841e703f-2cd2-4706-3c83-8710a0129234",
+			"type": "image-slider",
+			"subtype": "multiple",
+			"name": 46,
+			"displayIndex": 46,
+			"templateName": "Vertical series",
+			"templateDescription": "Swipe through a group of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "841e703f-2cd2-4706-3c83-8710a0129234"
+			},
+			"data": {
+				"prompt": "Deslize para cima para ver mais",
+				"items": [
+					{
+						"content": "fit_content_assets/ifd540440_fmlg71.jpg",
+						"contentType": "image",
+						"position": "Middle",
+						"color": null,
+						"caption": "<p class=\"text-lg\">Ativação de Posições do Sistema</p>",
+						"imagePosition": "Cover",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/mcdu_pos_sensors_qo0q8w.png",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "A ativação da posição inicial permite que o sistema PBN obtenha um ponto de partida preciso para navegação.",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/3Xqzo_accmls.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "A ativação precisa é essencial para evitar desvios e garantir uma navegação precisa.",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					}
+				],
+				"arrows": true,
+				"doneText": "Continuar",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "44d4ea13-417a-f46f-0ea6-3ad61aa3191b",
+			"type": "image-gallery",
+			"subtype": "image-gallery",
+			"name": 47,
+			"displayIndex": 47,
+			"templateName": "Horizontal series",
+			"templateDescription": "Swipe through a gallery of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "44d4ea13-417a-f46f-0ea6-3ad61aa3191b"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"background": null,
+				"lightbox": false,
+				"images": [
+					{
+						"image": "fit_content_assets/abeam_route_executed_figure_3_tfmydp.gif",
+						"caption": "<p class=\"text-lg\">Voo direto a um ponto de referência (waypoint)</p>"
+					},
+					{
+						"image": "fit_content_assets/2016.04.17-03.23-flyhpa-571301c89c7ff-600x468_tldwds.jpg",
+						"caption": "<p>Durante a operação PBN, a capacidade de voar diretamente a um ponto de referência ou waypoint é essencial para rotas eficientes. </p><p>Um waypoint é um ponto geográfico com coordenadas definidas no espaço aéreo.</p>"
+					}
+				],
+				"doneText": "Continuar",
+				"title": null,
+				"titleType": null,
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "52db3b90-405c-8b46-cbab-299cc7f6e4c2",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 48,
+			"displayIndex": 48,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "52db3b90-405c-8b46-cbab-299cc7f6e4c2"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": "Continuar",
+				"content": [
+					"<p>Interceptar uma trajetória é necessário quando a aeronave precisa se alinhar com uma rota específica, especialmente ao ingressar em rotas aéreas pré-determinadas.</p>",
+					"<p><strong>Seleção do curso desejado: </strong></p><p>No FMS, insira o curso que deseja interceptar e defina o ângulo de interceptação. Normalmente, o sistema exibirá a trajetória de interceptação na tela de navegação.</p>",
+					"<p><strong>Engajamento do modo de interceptação:</strong> </p><p>Após selecionar o curso, ative o modo de interceptação no FMS. A aeronave começará a manobra para se alinhar com o curso.</p>"
+				],
+				"title": "<p>Interceptação de uma trajetória/curso</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "f55fa9b7-daaf-0ae9-1200-7aadfaa910a7",
+			"type": "list",
+			"subtype": "list",
+			"name": 49,
+			"displayIndex": 49,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f55fa9b7-daaf-0ae9-1200-7aadfaa910a7"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>O que é vetoração:</strong> Instrução do ATC que guia a aeronave para uma posição específica por meio de rumos e altitudes definidos — geralmente usada antes de retomar um procedimento publicado.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Recebendo vetores:</strong> Desative o modo de rota automática do FMS (HDG selected). Siga as instruções de rumo do ATC mantendo o sistema de navegação ativo para monitoramento.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Regresso ao procedimento:</strong> Ao reabilitar o FMS, selecione o ponto de reentrada adequado (ex.: interceptar a final de um RNP APCH). Confirme com o ATC antes de retomar o procedimento publicado.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p>Vetoração e regresso a um procedimento</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "ecf67626-0235-61d6-6f0c-d757fa202402",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 50,
+			"displayIndex": 50,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ecf67626-0235-61d6-6f0c-d757fa202402"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/Provisional-Level-1-Alert-On-Modified-FMS-Route_hsazfd.png",
+						"contentType": "image"
+					},
+					{
+						"content": "<p class=\"text-md\"><strong>O que é XTE:</strong> O Cross-Track Error (erro perpendicular à rota) mede o desvio lateral da aeronave em relação à trajetória planejada. É exibido no FMS em milhas náuticas (NM).</p>",
+						"contentType": "text"
+					},
+					{
+						"content": "<p class=\"text-md\"><strong>Limite para RNP APCH:</strong> 0,3 NM. Se o XTE ultrapassar esse valor durante a aproximação, o piloto deve executar arremetida imediatamente e informar o ATC.</p>",
+						"contentType": "text"
+					},
+					{
+						"content": "<p class=\"text-md\"><strong>Correção:</strong> Ajuste o curso via FMS ou use o diretor de voo para centralizar a aeronave na trajetória. A correção rápida minimiza o risco de violação do espaço aéreo e compromete a separação do terreno.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"preventFocus": true,
+				"title": "<p>Desvios Laterais (Cross-Track Error)</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "f33fd8e9-47fc-b01c-ce5f-b5b7f0b7dcf8",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 51,
+			"displayIndex": 51,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f33fd8e9-47fc-b01c-ce5f-b5b7f0b7dcf8"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"label": "Passo",
+				"canGoBack": false,
+				"doneText": "Continuar",
+				"content": [
+					"<span class=\"text-md leading-relaxed\"><strong>GPS/GNSS (primário):</strong> Use como fonte principal. Verifique RAIM disponível e sinal válido. Se FLAG, desabilite a atualização GPS e comute para fonte alternativa.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>DME/DME ou VOR/DME (alternativo):</strong> Disponível onde há infraestrutura terrestre. Menos preciso que o GPS — adequado para RNAV 5 e RNAV 1, mas <em>não</em> para RNP APCH.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>IRS/INS (backup):</strong> Sistema inercial puro. Acumula deriva com o tempo — adequado apenas para períodos curtos sem outra fonte disponível. Requer atualizações periódicas de posição.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Verificação:</strong> Após selecionar a fonte, confirme no FMS que a posição indicada é consistente com a referência visual/radar disponível antes de prosseguir com o procedimento.</span>"
+				],
+				"title": "<p>Seleção da Fonte de Sensor de Navegação</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "6137c02b-c9f2-463b-67a2-357a1c9ed28a",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 52,
+			"displayIndex": 52,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "6137c02b-c9f2-463b-67a2-357a1c9ed28a"
+			},
+			"data": {
+				"content": "<p class=\"text-md\" style=\"margin-bottom:0.5rem\">Em algumas situações, pode ser necessário remover auxílios à navegação do FMS para evitar interferência ou dados conflitantes. Procedimento:</p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Identificar:</strong> No sistema, localize os auxílios a remover (ex.: VORs notificados como não operacionais via NOTAM, ou beacons redundantes que estejam interferindo).</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Desativar:</strong> Selecione a opção de deselect ou disable no menu de sensores do FMS para cada auxílio a remover.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Verificar:</strong> Confirme que o sistema de navegação continua operando normalmente após a remoção e que a precisão não foi impactada.</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>RBAC 91/135 — Manual de Operações da companhia</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>Remoção de Auxílios à Navegação</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "26337b04-0e7e-73c4-b51d-20343eb07c51",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 53,
+			"displayIndex": 53,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Por que a atualização regular dos dados de navegação é crucial antes de cada voo?",
+							"questionId": "5948ebdb-868a-41c0-baa2-9a26774af184",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "<p>Garantir uma navegação segura e precisa</p>",
+								"correct": true,
+								"answerId": "295da1dd-eed5-439b-9d3d-0567d004c73a",
+								"type": "text"
+							},
+							{
+								"content": "<p>Melhorar o desempenho e a velocidade da aeronave</p>",
+								"correct": false,
+								"answerId": "52fe3932-6dd5-410e-bad5-f0710a4f1c94",
+								"type": "text"
+							},
+							{
+								"content": "Minimizar o consumo de combustível e as emissões",
+								"correct": false,
+								"answerId": "882ecafb-8046-4650-a9f2-570d2f6ea42b",
+								"type": "text"
+							},
+							{
+								"content": "Melhorar o conforto dos passageiros e os serviços de bordo",
+								"correct": false,
+								"answerId": "abc2f3bf-882e-4150-b4f5-b47a4ccd259d",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "26337b04-0e7e-73c4-b51d-20343eb07c51"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "52187978-ea64-e0f8-e667-eaf14906f3cb",
+						"content": "<p>Garantir uma navegação segura e precisa</p>",
+						"correct": true
+					},
+					{
+						"id": "4bba5694-1e3f-5d16-8b7f-6cc4995a8914",
+						"content": "<p>Melhorar o desempenho e a velocidade da aeronave</p>",
+						"correct": false
+					},
+					{
+						"id": "f06f18bf-3c81-0cad-6ef6-8fbc9e904a2c",
+						"content": "Minimizar o consumo de combustível e as emissões",
+						"correct": false
+					},
+					{
+						"id": "f1a42392-2010-a899-7da8-f0b5af7e49bf",
+						"content": "Melhorar o conforto dos passageiros e os serviços de bordo",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. A atualização dos dados de navegação (ciclo AIRAC, 28 dias) garante waypoints, procedimentos e rotas corretos durante o voo.</p>",
+					"correct": "<p class=\"text-lg\">Correto! O banco de dados AIRAC é atualizado a cada 28 dias. Dados desatualizados podem gerar trajetórias incorretas e comprometer a segurança operacional.</p>",
+					"text": "<p>Garantir uma navegação segura e precisa</p>",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Por que a atualização regular dos dados de navegação é crucial antes de cada voo?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "b0dc3dd4-c6b1-eb4a-78d6-916142ac389c",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 54,
+			"displayIndex": 54,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "O que a ativação da posição inicial permite que o sistema PBN faça?",
+							"questionId": "a2d5cd5d-a5df-4f0e-b053-185b3719f4e3",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Aumentar a velocidade e a eficiência da aeronave",
+								"correct": false,
+								"answerId": "09fde259-39f3-4e12-9425-69b306b4677e",
+								"type": "text"
+							},
+							{
+								"content": "Melhore os sistemas de entretenimento a bordo",
+								"correct": false,
+								"answerId": "8d9916e9-2c70-4159-b26d-b9b40f477cf2",
+								"type": "text"
+							},
+							{
+								"content": "Melhore a pressurização da cabine e a qualidade do ar",
+								"correct": false,
+								"answerId": "a14c3865-2b76-49e4-a504-58ec79b1dacb",
+								"type": "text"
+							},
+							{
+								"content": "Obtenha um ponto de partida preciso para navegação",
+								"correct": true,
+								"answerId": "23bc62e3-67dc-4db4-ba7b-33b1c75b63c8",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "b0dc3dd4-c6b1-eb4a-78d6-916142ac389c"
+			},
+			"data": {
+				"answers": {
+					"correct": "Obtenha um ponto de partida preciso para navegação",
+					"incorrect": [
+						"Aumentar a velocidade e a eficiência da aeronave",
+						"Melhore os sistemas de entretenimento a bordo",
+						"Melhore a pressurização da cabine e a qualidade do ar"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. A ativação da posição inicial establece o ponto de partida geográfico (alinhamento IRS/GPS) necessário para o início da navegação com precisão.</p>",
+					"correct": "<p class=\"text-lg\">Correto! A posição inicial (IRS alignment) fornece ao sistema PBN o ponto de referência geográfico a partir do qual toda a navegação será calculada.</p>",
+					"text": "Obtenha um ponto de partida preciso para navegação",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "O que a ativação da posição inicial permite que o sistema PBN faça?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "3fb5b2ce-bfd2-8421-71a7-22814f396c4a",
+			"type": "chat",
+			"subtype": "default",
+			"name": 55,
+			"displayIndex": 55,
+			"templateName": "Chat",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Por que interceptar um curso é necessário para a navegação de aeronaves?",
+							"questionId": "814223c5-974b-4ef6-a4c9-f569edbc3a60",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Redução do ruído do motor e das emissões",
+								"correct": false,
+								"answerId": "d65174c2-a125-45f9-8c07-68fc56b7a295",
+								"type": "text"
+							},
+							{
+								"content": "Melhorando o conforto dos passageiros e o espaço para as pernas",
+								"correct": false,
+								"answerId": "c18f0ec0-1195-4957-8ce0-17ba9b77102e",
+								"type": "text"
+							},
+							{
+								"content": "Alinhamento com rotas e vias aéreas específicas",
+								"correct": true,
+								"answerId": "c6cacd71-1701-4d53-bc30-188eda183a5c",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "3fb5b2ce-bfd2-8421-71a7-22814f396c4a"
+			},
+			"data": {
+				"message": {
+					"responder": "Qual é a sua resposta?",
+					"sender": "Teste sua compreensão",
+					"content": "Por que interceptar um curso é necessário para a navegação de aeronaves?"
+				},
+				"answers": {
+					"correct": "Alinhamento com rotas e vias aéreas específicas",
+					"incorrect": [
+						"Redução do ruído do motor e das emissões",
+						"Melhorando o conforto dos passageiros e o espaço para as pernas"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. Interceptar um curso é necessário para que a aeronave se alinhe com rotas ou vias aéreas específicas, retomando o procedimento de navegação planejado.</p>",
+					"correct": "<p class=\"text-lg\">Correto! A interceptação de trajetória é utilizada para alinhar a aeronave com rotas RNAV pré-definidas (SID/STAR) após vetorações ou desvios do plano.</p>",
+					"text": "Alinhamento com rotas e vias aéreas específicas",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": null,
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "88dbf8a6-9768-6545-8450-2317b80ea710",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 56,
+			"displayIndex": 56,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Qual é o propósito da vetorização na navegação de aeronaves?",
+							"questionId": "11d238f2-68dd-492b-ad15-93b145b4d952",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Guiar aeronaves para posições específicas",
+								"correct": true,
+								"answerId": "beb42b3a-1172-4607-a8df-5f799456baa0",
+								"type": "text"
+							},
+							{
+								"content": "Ajuste da temperatura e iluminação da cabine",
+								"correct": false,
+								"answerId": "74bc5dd7-4af9-44ef-a83e-a62e8c44fbb3",
+								"type": "text"
+							},
+							{
+								"content": "Melhorando a conectividade Wi-Fi durante o voo",
+								"correct": false,
+								"answerId": "955932ea-4b77-4531-b103-a244328d15dd",
+								"type": "text"
+							},
+							{
+								"content": "Melhorando a eficiência de combustível e o alcance das aeronaves",
+								"correct": false,
+								"answerId": "022b8217-0cc0-4b1e-adc0-852403aecf2b",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "88dbf8a6-9768-6545-8450-2317b80ea710"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "b6218fd9-dc65-0706-af73-d6902a68f964",
+						"content": "Guiar aeronaves para posições específicas",
+						"correct": true
+					},
+					{
+						"id": "9f817d98-e800-98d2-7d1a-10d3938ac079",
+						"content": "Ajuste da temperatura e iluminação da cabine",
+						"correct": false
+					},
+					{
+						"id": "1e0a3294-1c08-bf72-9581-dbaf44bf43c2",
+						"content": "Melhorando a conectividade Wi-Fi durante o voo",
+						"correct": false
+					},
+					{
+						"id": "a1254042-fdaa-a96c-04b4-fe8c94f4eebf",
+						"content": "Melhorando a eficiência de combustível e o alcance das aeronaves",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. A vetoração (radar vectoring) é o recurso pelo qual o ATC guia a aeronave para uma posição específica por meio de instruções de curso e altitude.</p>",
+					"correct": "<p class=\"text-lg\">Correto! A vetoração é a instrução do ATC que guia a aeronave para uma posição específica, frequentemente utilizada antes de retornar a um procedimento publicado.</p>",
+					"text": "Guiar aeronaves para posições específicas",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Qual é o propósito da vetorização na navegação de aeronaves?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "e2c06cb8-6b5f-4974-33d9-9b99ca10147f",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 57,
+			"displayIndex": 57,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Por que selecionar a fonte de sensor apropriada é vital para uma navegação precisa?",
+							"questionId": "0a22f739-49f2-4077-be68-c62058967c89",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Melhorando o design e a estética exterior da aeronave",
+								"correct": false,
+								"answerId": "226d9079-7148-4e3b-bc7b-a2032d77b48b",
+								"type": "text"
+							},
+							{
+								"content": "Minimizando a turbulência e o estresse da fuselagem",
+								"correct": false,
+								"answerId": "36b1ad0c-2323-48f0-9377-65cb028e6809",
+								"type": "text"
+							},
+							{
+								"content": "Melhorando o conforto dos assentos dos passageiros e o espaço para as pernas",
+								"correct": false,
+								"answerId": "306e20a1-abe1-439d-aa8a-86dc8059321c",
+								"type": "text"
+							},
+							{
+								"content": "Garantir uma navegação contínua e precisa",
+								"correct": true,
+								"answerId": "b9bdee35-b215-443e-84d6-a76c4f782763",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "e2c06cb8-6b5f-4974-33d9-9b99ca10147f"
+			},
+			"data": {
+				"answers": {
+					"correct": "Garantir uma navegação contínua e precisa",
+					"incorrect": [
+						"Melhorando o design e a estética exterior da aeronave",
+						"Minimizando a turbulência e o estresse da fuselagem",
+						"Melhorando o conforto dos assentos dos passageiros e o espaço para as pernas"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. Selecionar a fonte de sensor correta é fundamental para manter dados de posição confiáveis e navegação contínua em todas as fases do voo.</p>",
+					"correct": "<p class=\"text-lg\">Correto! A fonte de sensor adequada (GPS, VOR/DME, IRS) garante dados de posição confiáveis e continuidade da navegação, especialmente em áreas com infraestrutura terrestre limitada.</p>",
+					"text": "Garantir uma navegação contínua e precisa",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Por que selecionar a fonte de sensor apropriada é vital para uma navegação precisa?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "887a2ea6-5fbf-9bcb-a16f-fcbc5879bc5e",
+			"type": "title",
+			"subtype": "default",
+			"name": 58,
+			"displayIndex": 58,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "887a2ea6-5fbf-9bcb-a16f-fcbc5879bc5e"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": true,
+				"title": "<p>RNP APCH: Instruções Complementares de Operação</p>",
+				"titleType": "html",
+				"subtitle": "<p>Módulo 4</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "69cae49b-f5ff-4506-8bee-0b859f051ac4",
+			"type": "list",
+			"subtype": "list",
+			"name": 59,
+			"displayIndex": 59,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "69cae49b-f5ff-4506-8bee-0b859f051ac4"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Interpretar</strong> as informações da IS 91-001E da ANAC e os requisitos operacionais aplicáveis às operações RNP APCH.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Identificar</strong> os sufixos de equipamentos de navegação e aplicá-los corretamente nos campos 10 e 18 do plano de voo.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Diferenciar</strong> waypoints Fly-By e Fly-Over e descrever as trajetórias de voo correspondentes a cada tipo.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Executar</strong> os procedimentos de operação dos sistemas durante uma aproximação RNP APCH, incluindo monitoramento de XTE e RAIM.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Aplicar</strong> os procedimentos de contingência em caso de falha do sistema RNP durante a aproximação final.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p><strong>Objetivos de Aprendizagem — Módulo 4</strong></p>",
+				"titleType": "html",
+				"subtitle": "<p style=\"font-size:0.85rem;color:#aaa\">Ao final deste módulo, você será capaz de:</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "ab7b9792-851e-8af4-542c-49dce8ec6160",
+			"type": "list",
+			"subtype": "list",
+			"name": 60,
+			"displayIndex": 60,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ab7b9792-851e-8af4-542c-49dce8ec6160"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Objetivo:</strong> A IS 91-001E da ANAC detalha os requisitos operacionais e técnicos para operações IFR no Brasil, especificando os critérios de aprovação de sistemas RNAV e RNP.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Aprovação do operador:</strong> O operador deve obter aprovação específica da ANAC antes de usar procedimentos RNP APCH, demonstrando conformidade de equipamento, treinamento e manual de operações.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Monitoramento em tempo real:</strong> Exige que os pilotos monitorem a precisão de navegação (XTE e EPE) durante a execução do procedimento, dentro dos limites estabelecidos pela especificação RNP em uso.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p>Norma IS 91-001E (ANAC)</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "1c95e794-f18c-5268-db45-e7a868fbc947",
+			"type": "image-slider",
+			"subtype": "multiple",
+			"name": 61,
+			"displayIndex": 61,
+			"templateName": "Vertical series",
+			"templateDescription": "Swipe through a group of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "1c95e794-f18c-5268-db45-e7a868fbc947"
+			},
+			"data": {
+				"prompt": "Deslize para cima para ver mais",
+				"items": [
+					{
+						"content": "fit_content_assets/eXZBL_y1hqoj.jpg",
+						"contentType": "image",
+						"position": "Middle",
+						"color": null,
+						"caption": "<p class=\"text-lg\">Interpretação e a correta utilização dos sufixos dos equipamentos de navegação,</p>",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/EVWKS_uctqp9.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "Os sufixos indicam a capacidade da aeronave de operar sob diferentes especificações RNP e RNAV.",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/Screenshot_2024-11-07_183756_iilmw1.png",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "<p>Esses sufixos devem ser inseridos corretamente no plano de voo para assegurar que o controle de tráfego aéreo (ATC) compreenda a capacidade de navegação e a confiabilidade dos sistemas a bordo da aeronave.</p>",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					}
+				],
+				"arrows": true,
+				"doneText": "Continuar",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "2ebf6a57-497f-b3e8-88fd-2fc8179df731",
+			"type": "image-gallery",
+			"subtype": "image-gallery",
+			"name": 62,
+			"displayIndex": 62,
+			"templateName": "Horizontal series",
+			"templateDescription": "Swipe through a gallery of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "2ebf6a57-497f-b3e8-88fd-2fc8179df731"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"background": null,
+				"lightbox": false,
+				"images": [
+					{
+						"image": "fit_content_assets/hmnmhbnm_wx1daz.png",
+						"caption": "<p class=\"text-lg\">Características do procedimento conforme determinado a partir das informações cartográficas e textuais</p>"
+					},
+					{
+						"image": "fit_content_assets/i340076_ldyvz3.jpg",
+						"caption": "Os pilotos devem interpretar as informações da carta de navegação com precisão para os procedimentos RNP APCH."
+					},
+					{
+						"image": "fit_content_assets/aasas_ksr1lv.png",
+						"caption": "As cartas contêm trajetórias de voo precisas e detalhes essenciais para cada segmento do procedimento de aproximação."
+					}
+				],
+				"doneText": "Continuar",
+				"title": null,
+				"titleType": null,
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "c5c555a1-c7af-44da-f8cb-c44901563e96",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 63,
+			"displayIndex": 63,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "c5c555a1-c7af-44da-f8cb-c44901563e96"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"label": "Tipo",
+				"canGoBack": false,
+				"doneText": "Continuar",
+				"content": [
+					"<span class=\"text-md leading-relaxed\"><strong>Fly-By (❯):</strong> A aeronave inicia a curva <em>antes</em> de alcançar o waypoint, descrevendo uma trajetória suave (antecipação). Usado na maioria dos waypoints de rota para transições eficientes entre segmentos.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Fly-Over (⊙):</strong> A aeronave <em>sobrevoa diretamente</em> o ponto antes de iniciar a curva para o próximo segmento. Usado quando a precisão no ponto é crítica, como em pontos de espera ou início de final de aproximação.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Identificação correta:</strong> Use as cartas aeronáuticas publicadas pelo DECEA/AISWEB para identificar o símbolo de cada waypoint. O FMS geralmente herda esse atributo do banco de dados AIRAC.</span>"
+				],
+				"title": "<p>Waypoints: Fly-By e Fly-Over</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "86d8764c-dc81-ae27-17c4-1b5459d3f94d",
+			"type": "list",
+			"subtype": "list",
+			"name": 64,
+			"displayIndex": 64,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "86d8764c-dc81-ae27-17c4-1b5459d3f94d"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Receptor GNSS aprovado (TSO-C129a ou C145/C146):</strong> Deve suportar RAIM preditivo. É o sensor primário de posição para todos os procedimentos RNP APCH.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>FMS com banco de dados AIRAC vigente:</strong> Deve conter os procedimentos do aeródromo de destino. Gerencia a sequência de waypoints e a trajetória lateral completa da aproximação.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Piloto automático / diretor de voo:</strong> Recomendado para manter o XTE abaixo de 0,3 NM durante a final. O uso da automação reduz a variabilidade da trajetória.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Baro-altímetro aprovado (BARO-VNAV):</strong> Usado como sensor de guia vertical em operações RNP APCH com APV (Approach with Vertical guidance), baseado em altitude-pressão calibrada.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p>Equipamentos Requeridos para RNP APCH</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "9a8bbc87-193b-3db5-cfe8-88309be1ea9f",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 65,
+			"displayIndex": 65,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "9a8bbc87-193b-3db5-cfe8-88309be1ea9f"
+			},
+			"data": {
+				"content": "<p><strong style=\"color:#0066A4\">Pré-voo</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Verifique a <strong>validade do ciclo AIRAC</strong> e carregue o procedimento no FMS.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Confirme os waypoints, altitude de mínima (DA/MDA) e a disponibilidade de aeródromo alternativo.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Realize o <strong>RAIM check preditivo</strong> para o horário estimado de chegada.</p></li></ul><p><strong style=\"color:#0066A4\">Durante a Aproximação</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Selecione o modo de automação apropriado (CMD/LNAV ou LNAV/VNAV) e confirme a captura da trajetória no display.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Monitore continuamente: <strong>XTE ≤ 0,3 NM</strong> e status do RAIM no FMS.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Se XTE exceder o limite ou RAIM indicar FLAG → <strong>execute arremetida imediatamente</strong> e informe o ATC.</p></li></ul><p><strong style=\"color:#0066A4\">Aderir às Restrições</strong></p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Respeite altitudes e velocidades restritas em cada waypoint — violações comprometem a separação do terreno (<em>COCA</em>).</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\">Em caso de ambiguidade entre a carta e o FMS, priorize a <strong>carta publicada</strong> e informe a discrepância ao ATC.</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>IS 91-001E ANAC, ICAO Doc 9613, Manual de Operações da companhia</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>Execução dos Procedimentos RNP APCH</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "a3433c4a-0c1d-1ebb-2ba2-c1dc099cff8f",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 66,
+			"displayIndex": 66,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "a3433c4a-0c1d-1ebb-2ba2-c1dc099cff8f"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"label": "Modo",
+				"canGoBack": false,
+				"doneText": "Continuar",
+				"content": [
+					"<span class=\"text-md leading-relaxed\"><strong>CMD / LNAV+VNAV (Cruzeiro e STAR):</strong> Automação máxima. O FMS controla lateral e verticalmente, mantendo o XTE mínimo e reduzindo a carga de trabalho da tripulação.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>HDG + FMS ativo (Vetoração):</strong> Automação parcial. O heading é manual (instrução ATC), mas o FMS permanece monitorado para facilitar o retorno ao procedimento publicado.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>LNAV ou LNAV/VNAV (Aproximação final):</strong> Automação máxima recomendada. Monitore XTE ativo — limite máximo <strong>0,3 NM</strong>. Acima disso, execute arremetida.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Manual com FD (Fallback):</strong> Apenas se o autopiloto falhar. Use o Flight Director como guia e aplique correções suaves. A variabilidade da trajetória é maior — monitore ainda mais atentamente o XTE.</span>"
+				],
+				"title": "<p>Automação e Cross-Track Error</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "c09ebde8-1aa2-2923-d35b-f03219e42559",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 67,
+			"displayIndex": 67,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "c09ebde8-1aa2-2923-d35b-f03219e42559"
+			},
+			"data": {
+				"content": "<p class=\"text-md\" style=\"margin-bottom:0.5rem\">A comunicação com o ATC durante procedimentos RNP deve ser precisa e padronizada. Use sempre a fraseologia ICAO conforme exemplos:</p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Ao solicitar a aproximação:</strong> \"PR-XXX, solicitando RNP APCH via [nome do procedimento].\"</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Ao iniciar a fase final:</strong> \"PR-XXX, estabelecido RNP APCH [nome], segmento final.\"</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Ao mudar de segmento ou reportar posição:</strong> \"PR-XXX, [waypoint], [altitude], mantendo RNP [valor].\"</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Em caso de desvio ou falha:</strong> \"PR-XXX, GNSS FLAG, XTE excedido, executando arremetida, solicitando vetoração radar.\"</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>RBAC 91/135 — AIP Brasil (DECEA), IS 91-001E ANAC</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>Fraseologia R/T para Procedimentos RNP</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "f4bc1c47-fdc5-0001-20b1-fab9d01c0b62",
+			"type": "scrollable",
+			"subtype": "scrolling-content",
+			"name": 68,
+			"displayIndex": 68,
+			"templateName": "Scrolling text",
+			"templateDescription": "Display a long amount of content",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f4bc1c47-fdc5-0001-20b1-fab9d01c0b62"
+			},
+			"data": {
+				"content": "<p class=\"text-md\" style=\"margin-bottom:0.5rem\"><strong>Quando acionar o procedimento de contingência:</strong> alerta RAIM FLAG, XTE acima do limite, mensagem de falha do FMS ou perda de sinal GNSS.</p><ul><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Passo 1:</strong> Interrompa a aproximação — execute arremetida (<em>missed approach</em>) pelo procedimento publicado na carta.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Passo 2:</strong> Notifique o ATC: <em>\"PR-XXX, GNSS FLAG, executando arremetida, solicitando vetoração.\"</em></p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Passo 3:</strong> Avalie a disponibilidade de sistema alternativo (IRS, DME/VOR) conforme o Despacho de Operações (EO) e o Manual de Operações.</p></li><li><p class=\"text-md\" style=\"margin:0;padding-bottom:0.4rem\"><strong>Passo 4:</strong> Se o sistema não for restaurado, proceda ao aeródromo alternativo ou solicite procedimento convencional (ILS, VOR, NDB).</p></li></ul><p style=\"font-size:0.75rem;color:#888;margin-top:1rem;border-top:1px solid #eee;padding-top:0.5rem\">📋 Referência: <em>IS 91-001E ANAC, Manual de Operações, RBAC 91/135</em></p>",
+				"prompt": "Role para ver mais",
+				"doneText": "Continuar",
+				"title": "<p>Procedimentos de Contingência RNP</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "93ee02bf-1a5d-db8a-3065-516c5543ec16",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 69,
+			"displayIndex": 69,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Qual é o propósito da Navegação Baseada em Desempenho (PBN)?",
+							"questionId": "bc5cb565-2d9b-4380-bbb8-ef3b8ccfacf4",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Garantir a segurança e a eficiência nas operações",
+								"correct": true,
+								"answerId": "25cf4919-83d5-496a-a82a-690c8ca0189c",
+								"type": "text"
+							},
+							{
+								"content": "Melhore a comunicação e o monitoramento do clima",
+								"correct": false,
+								"answerId": "f37f826b-5575-4ed8-a1ea-586e9e440385",
+								"type": "text"
+							},
+							{
+								"content": "Reduza o consumo de combustível durante os voos",
+								"correct": false,
+								"answerId": "3ba84de7-b777-4bb1-a6a7-59a986e5401d",
+								"type": "text"
+							},
+							{
+								"content": "Melhore o conforto dos passageiros e os serviços de bordo",
+								"correct": false,
+								"answerId": "a113b394-bf46-4f49-a8c4-007b593be082",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "93ee02bf-1a5d-db8a-3065-516c5543ec16"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "0bb5b325-17d7-752e-08b3-7b494c3e1f7b",
+						"content": "Garantir a segurança e a eficiência nas operações",
+						"correct": true
+					},
+					{
+						"id": "7af58fbe-dc7d-63d8-51e4-da58d9a7aa21",
+						"content": "Melhore a comunicação e o monitoramento do clima",
+						"correct": false
+					},
+					{
+						"id": "44d47438-1199-bf15-8306-de3a3479e0e2",
+						"content": "Reduza o consumo de combustível durante os voos",
+						"correct": false
+					},
+					{
+						"id": "1975977a-d018-a5d0-5d6a-746c41b799f9",
+						"content": "Melhore o conforto dos passageiros e os serviços de bordo",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. O propósito central do PBN é garantir segurança e eficiência operacional por meio de requisitos padronizados e mensuráveis de desempenho de navegação.</p>",
+					"correct": "<p class=\"text-lg\">Correto! O PBN garante segurança e eficiência ao definir requisitos mensuráveis de precisão e integridade para operações de navegação, independente da tecnologia usada.</p>",
+					"text": "Garantir a segurança e a eficiência nas operações",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Qual é o propósito da Navegação Baseada em Desempenho (PBN)?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "afc05e41-b336-62e0-ac90-d657a0d7e71e",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 70,
+			"displayIndex": 70,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "O que a norma IS 91001E da ANAC especifica para operações de voo por instrumentos?",
+							"questionId": "3ff35841-78d9-41c8-8c35-03aff61c8536",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Condições meteorológicas para operações de voo",
+								"correct": false,
+								"answerId": "cf2e81fa-2c58-4189-b0d1-bd771bfd7794",
+								"type": "text"
+							},
+							{
+								"content": "Procedimentos e cronogramas de manutenção de aeronaves",
+								"correct": false,
+								"answerId": "6f2c2382-7fa6-4450-99e3-00c07e5e70b2",
+								"type": "text"
+							},
+							{
+								"content": "Protocolos de embarque e desembarque de passageiros",
+								"correct": false,
+								"answerId": "1e97891c-e0f1-4f10-bd80-f53a6d6a8414",
+								"type": "text"
+							},
+							{
+								"content": "Requisitos operacionais e técnicos",
+								"correct": true,
+								"answerId": "6e3525e6-cd50-4577-baf8-c64887e801ce",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "afc05e41-b336-62e0-ac90-d657a0d7e71e"
+			},
+			"data": {
+				"answers": {
+					"correct": "Requisitos operacionais e técnicos",
+					"incorrect": [
+						"Condições meteorológicas para operações de voo",
+						"Procedimentos e cronogramas de manutenção de aeronaves",
+						"Protocolos de embarque e desembarque de passageiros"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. A IS 91-001E especifica os requisitos operacionais e técnicos para operações de voo por instrumentos, incluindo aprovação e uso de sistemas RNAV e RNP.</p>",
+					"correct": "<p class=\"text-lg\">Correto! A IS 91-001E da ANAC detalha os requisitos operacionais e técnicos para operações IFR no Brasil, incluindo critérios de aprovação de sistemas PBN.</p>",
+					"text": "Requisitos operacionais e técnicos",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "O que a norma IS 91001E da ANAC especifica para operações de voo por instrumentos?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "addf20c9-4bd9-489a-56db-e100ee55bb0d",
+			"type": "chat",
+			"subtype": "default",
+			"name": 71,
+			"displayIndex": 71,
+			"templateName": "Chat",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Por que os sufixos dos equipamentos de navegação são importantes para o planejamento de voo?",
+							"questionId": "7f1b4009-adeb-4efd-86a2-ed89b2ecfe0e",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Determinar a disposição dos assentos dos passageiros",
+								"correct": false,
+								"answerId": "74dd9633-fd6a-4f77-a134-efca30057756",
+								"type": "text"
+							},
+							{
+								"content": "Programe os períodos de descanso da tripulação de voo",
+								"correct": false,
+								"answerId": "2c27b56c-a586-4940-9385-35462972e2f8",
+								"type": "text"
+							},
+							{
+								"content": "Indicar capacidade da aeronave de acordo com as especificações RNP",
+								"correct": true,
+								"answerId": "fd6b253e-07d5-4e64-bc6b-1ac699919d54",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "addf20c9-4bd9-489a-56db-e100ee55bb0d"
+			},
+			"data": {
+				"message": {
+					"responder": "Qual é a sua resposta?",
+					"sender": "Teste sua compreensão",
+					"content": "Por que os sufixos dos equipamentos de navegação são importantes para o planejamento de voo?"
+				},
+				"answers": {
+					"correct": "Indicar capacidade da aeronave de acordo com as especificações RNP",
+					"incorrect": [
+						"Determinar a disposição dos assentos dos passageiros",
+						"Programe os períodos de descanso da tripulação de voo"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. Os sufixos de navegação são inseridos no plano de voo para informar ao ATC as especificações RNP/RNAV da aeronave e habilitar o uso de procedimentos PBN.</p>",
+					"correct": "<p class=\"text-lg\">Correto! Os sufixos nos campos 10 e 18 do plano de voo comunicam ao ATC as capacidades RNAV/RNP da aeronave, viabilizando autorizações de procedimentos específicos.</p>",
+					"text": "Indicar capacidade da aeronave de acordo com as especificações RNP",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": null,
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "40eb3fee-4370-9f72-2759-b4904accf79c",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 72,
+			"displayIndex": 72,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Como os waypoints FlyBy diferem dos waypoints FlyOver?",
+							"questionId": "ad4b4f53-b8ab-44e6-9750-662619c76b86",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "FlyBy requer curva antes de alcançar, FlyOver passa diretamente",
+								"correct": true,
+								"answerId": "55405002-d3ab-4aa4-abbd-8f737bf64e43",
+								"type": "text"
+							},
+							{
+								"content": "FlyBy passa diretamente, FlyOver requer curva antes de chegar",
+								"correct": false,
+								"answerId": "c38fc5a9-9943-464e-9c87-7d8a68492320",
+								"type": "text"
+							},
+							{
+								"content": "FlyBy requer curva após a passagem, FlyOver curva antes da passagem",
+								"correct": false,
+								"answerId": "e91f2dfe-6a6c-40af-abc9-36ba6c67db5f",
+								"type": "text"
+							},
+							{
+								"content": "FlyBy vira diretamente, FlyOver requer passagem antes de virar",
+								"correct": false,
+								"answerId": "330bda8e-a83a-4bc4-bd07-e5fb39586618",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "40eb3fee-4370-9f72-2759-b4904accf79c"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "91512531-2d3a-74fa-a092-990726ac96a0",
+						"content": "FlyBy requer curva antes de alcançar, FlyOver passa diretamente",
+						"correct": true
+					},
+					{
+						"id": "7748d5f3-6b24-8a39-ffe0-b58d3739db60",
+						"content": "FlyBy passa diretamente, FlyOver requer curva antes de chegar",
+						"correct": false
+					},
+					{
+						"id": "5b2c4fc3-eebb-1271-08fe-1dcec03b3f1c",
+						"content": "FlyBy requer curva após a passagem, FlyOver curva antes da passagem",
+						"correct": false
+					},
+					{
+						"id": "caf94148-4a22-8842-0ade-026f632aebb5",
+						"content": "FlyBy vira diretamente, FlyOver requer passagem antes de virar",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. Fly-By inicia a curva antes do waypoint (antecipação), enquanto Fly-Over exige que a aeronave passe diretamente sobre o ponto antes de virar.</p>",
+					"correct": "<p class=\"text-lg\">Correto! Fly-By: a curva começa antes do waypoint para uma transição suave ao próximo segmento. Fly-Over: a aeronave sobrevoa o ponto exato antes de iniciar a curva.</p>",
+					"text": "FlyBy requer curva antes de alcançar, FlyOver passa diretamente",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Como os waypoints FlyBy diferem dos waypoints FlyOver?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "d459c3b4-156b-f408-a7d9-5198c5730b7b",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 73,
+			"displayIndex": 73,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "O que é essencial para a execução adequada dos procedimentos RNP APCH?",
+							"questionId": "af44718e-5402-4da9-9a11-daca1b8c81d1",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Implementação de sistemas avançados de automação de aeronaves",
+								"correct": false,
+								"answerId": "39e635a1-1c1d-479f-bb4f-a3a70185774d",
+								"type": "text"
+							},
+							{
+								"content": "Realização de briefings regulares sobre segurança dos passageiros",
+								"correct": false,
+								"answerId": "84390553-492d-43f4-88c0-0e9249d0f0fb",
+								"type": "text"
+							},
+							{
+								"content": "Monitoramento de serviços de alimentação a bordo",
+								"correct": false,
+								"answerId": "83a0da55-8234-4402-824c-bc62753a6c02",
+								"type": "text"
+							},
+							{
+								"content": "<p>Seguir procedimentos operacionais específicos</p>",
+								"correct": true,
+								"answerId": "c4406cbb-1f8f-48ba-bda8-5eb0197d46e3",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "d459c3b4-156b-f408-a7d9-5198c5730b7b"
+			},
+			"data": {
+				"answers": {
+					"correct": "<p>Seguir procedimentos operacionais específicos</p>",
+					"incorrect": [
+						"Implementação de sistemas avançados de automação de aeronaves",
+						"Realização de briefings regulares sobre segurança dos passageiros",
+						"Monitoramento de serviços de alimentação a bordo"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "<p class=\"text-lg\">Não exatamente. A execução do RNP APCH requer procedimentos operacionais específicos: verificar banco de dados AIRAC, monitorar RAIM e seguir as restrições de cada segmento.</p>",
+					"correct": "<p class=\"text-lg\">Correto! O RNP APCH exige seguimento rigoroso de etapas: banco de dados válido, RAIM disponível, aderência às restrições de altitude/velocidade em cada waypoint.</p>",
+					"text": "<p>Seguir procedimentos operacionais específicos</p>",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "O que é essencial para a execução adequada dos procedimentos RNP APCH?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "8a121457-1049-4002-b004-108859841aa7",
+			"type": "list",
+			"subtype": "list",
+			"name": 74,
+			"displayIndex": 74,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "8a121457-1049-4002-b004-108859841aa7"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>PBN</strong>: Navegação Baseada em Performance — requisitos mensuráveis de precisão e integridade para operações RNAV e RNP (ICAO Doc 9613).</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>GNSS/GPS</strong>: Exige no mínimo 4 satélites visíveis e monitoramento RAIM para garantir integridade do sinal e posicionamento 3D preciso.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>RNP APCH</strong>: Precisão lateral de 0,3 NM. Requer aprovação ANAC (IS 91-001E), banco de dados AIRAC válido e checklist de contingência ativo.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Documentação obrigatória</strong>: Autorização PBN, Manual de Operações com procedimentos PBN, cartas RNP/RNAV atualizadas e checklists de contingência.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Fraseologia</strong>: \"Incapaz RNAV\" / \"GNSS básico indisponível\" — notifique sempre o ATC ao perder capacidade PBN e transfira para método alternativo.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Plano de voo</strong>: Declare capacidades nos campos 10 (G, R, S) e 18 (PBN/B2O2S1) — exigência do ATC para autorização de rotas PBN.</p>",
+					"<p class=\"text-md\" style=\"margin:0;padding-bottom:0.5rem\"><strong>Base regulatória</strong>: RBAC 91, RBAC 135, ICAO Doc 9613, IS 91-001E, ICAO Anexo 6. Mantenha documentos atualizados e disponíveis a bordo.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p><strong>Síntese do Curso — Operação PBN</strong></p>",
+				"titleType": "html",
+				"subtitle": "<p style=\"font-size:0.85rem;color:#aaa\">Os 7 pontos essenciais que você aprendeu neste treinamento:</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "31bb9d2c-3806-433b-b5a3-7933e44ec72a",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 75,
+			"displayIndex": 75,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "31bb9d2c-3806-433b-b5a3-7933e44ec72a"
+			},
+			"data": {
+				"prompt": "Deslize para continuar",
+				"label": "Passo",
+				"canGoBack": false,
+				"doneText": "Continuar",
+				"content": [
+					"<span class='text-md leading-relaxed'><strong>Consulte o Manual de Operações:</strong> Verifique o capítulo de procedimentos PBN da sua companhia para confirmar as especificações aprovadas para cada tipo de operação.</span>",
+					"<span class='text-md leading-relaxed'><strong>Verifique o banco de dados AIRAC:</strong> Antes de cada voo PBN, confirme que o ciclo está vigente. Em caso de vencimento, interrompa e atualize antes de prosseguir.</span>",
+					"<span class='text-md leading-relaxed'><strong>Confirme a autorização PBN da aeronave:</strong> Consulte a Especificação Operacional (EO) para verificar quais especificações RNAV e RNP estão aprovadas para a frota.</span>",
+					"<span class='text-md leading-relaxed'><strong>Em caso de dúvidas operacionais:</strong> Acione o setor de Operações ou o CRM da sua companhia. Não execute uma operação PBN sem a devida autorização e familiarização com o equipamento.</span>",
+					"<span class='text-md leading-relaxed'><strong>Referências para consulta:</strong> RBAC 91, RBAC 135, ICAO Doc 9613, IS 91-001E, AIP Brasil (DECEA) — disponíveis no site da ANAC e do DECEA.</span>"
+				],
+				"title": "<p><strong>Próximos Passos — Como Aplicar o que Aprendeu</strong></p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "7b582daa-753c-4d45-ac6a-b7161fb70f42",
+			"type": "exit",
+			"subtype": "default",
+			"name": 76,
+			"displayIndex": 76,
+			"templateName": "Exit Lesson",
+			"templateDescription": "",
+			"permanent": true,
+			"metadata": {
+				"questions": [],
+				"slideId": "7b582daa-753c-4d45-ac6a-b7161fb70f42"
+			},
+			"data": {
+				"content": "Você concluiu este módulo com sucesso. Seu desempenho foi registrado. Consulte seu gestor ou o LMS para verificar a pontuação e o certificado, se aplicável.",
+				"buttonText": "Encerrar Módulo",
+				"title": "Parabéns!",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": null
+			}
+		}
+	],
+	"title": "PBN",
+	"index": 0,
+	"scorm": true,
+	"id": "69e3caac9a6ccb851df94d6e"
+}

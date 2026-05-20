@@ -1,0 +1,37 @@
+[seed] Target DB : airtrust-db-staging (env=staging)
+[seed] Verifying this is NOT production...
+[seed] Safety check passed. Proceeding with staging seed...
+
+[seed] Insert empresa demo (idempotent)
+      "rows_written": 8,
+      "total_attempts": 1
+    }
+  }
+]
+[seed] Insert funcionário demo (idempotent)
+      "rows_written": 11,
+      "total_attempts": 1
+    }
+  }
+]
+[seed] Insert qualificacao_tipo demo (idempotent)
+      "rows_written": 1,
+      "total_attempts": 1
+    }
+  }
+]
+[seed] Insert lms_curso demo (idempotent)
+      "rows_written": 1,
+      "total_attempts": 1
+    }
+  }
+]
+[seed] Insert simulador demo (idempotent)
+      "rows_written": 1,
+      "total_attempts": 1
+    }
+  }
+]
+
+[seed] Done. Seed complete (all inserts were idempotent via INSERT OR IGNORE).
+[seed] DB: airtrust-db-staging | Env: staging

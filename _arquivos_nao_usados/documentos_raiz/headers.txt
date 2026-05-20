@@ -1,0 +1,14 @@
+HTTP/1.1 200 OK
+Content-Length: 745
+Content-Type: application/pdf
+Cache-Control: public, max-age=3600
+Content-Disposition: attachment; filename="CERT-QUAL-DEMO-2025-11-01.pdf"
+Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';
+Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+Referrer-Policy: strict-origin-when-cross-origin
+X-Certificado-Id: 1
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+X-Minimal-Mode: false
+X-Query-Time-Ms: 44
+

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover"
+    />
+    <title>Loading your lesson...</title>
+    <script defer="defer" src="runtime.670f4cabae4eeec9.js"></script>
+    <script defer="defer" src="modules.473fbbfd66fb5923.js"></script>
+    <script defer="defer" src="scorm.2aa5f200ece6542d.js"></script>
+    <script defer="defer" src="vendors.9d8f217301be500e.js"></script>
+    <script defer="defer" src="app.07c4586bb0edca1b.js"></script>
+    <link href="modules.a5b0990ec50f29b5.css" rel="stylesheet" />
+    <link href="app.cc0d588970e1f88e.css" rel="stylesheet" />
+  </head>
+  <body>
+    <script defer="defer">
+      document.addEventListener('DOMContentLoaded', function () {
+        var IOS_TARGET_SELECTOR =
+          '.exit-btn, .btn-done, #slide-answer-continue, #lesson-header-nav-prev-btn, #lesson-header-nav-next-btn, #lesson-menu-go-back, #lesson-menu-exit, #lesson-menu-restart, #lesson-menu-cancel';
+        var fallbackDispatching = false;
+        var lastNativeIostapAt = 0;
+
+        function forceIostapConfig() {
+          if (!window.iostap || typeof window.iostap.set !== 'function') return;
+          var smallestSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
+          var maxDistance = Math.max(40, Math.round(smallestSide * 0.08));
+          try {
+            window.iostap.set({ maxDistance: maxDistance });
+          } catch (e) {
+            // Ignore unsupported iostap implementations.
+          }
+        }
+
+        function dispatchIostapFallback(event) {
+          if (Date.now() - lastNativeIostapAt < 60) return;
+          if (event.type === 'pointerup' && event.pointerType && event.pointerType !== 'touch')
+            return;
+
+          var target =
+            event.target && event.target.closest ? event.target.closest(IOS_TARGET_SELECTOR) : null;
+          if (!target) return;
+
+          fallbackDispatching = true;
+          try {
+            target.dispatchEvent(new CustomEvent('iostap', { bubbles: true, cancelable: true }));
+          } catch (e) {
+            var ev = document.createEvent('Event');
+            ev.initEvent('iostap', true, true);
+            target.dispatchEvent(ev);
+          }
+
+          window.setTimeout(function () {
+            fallbackDispatching = false;
+          }, 0);
+        }
+
+        document.addEventListener(
+          'iostap',
+          function () {
+            if (!fallbackDispatching) {
+              lastNativeIostapAt = Date.now();
+            }
+          },
+          true,
+        );
+
+        window.addEventListener('load', forceIostapConfig, { once: true });
+        window.addEventListener('resize', forceIostapConfig);
+        window.addEventListener('orientationchange', forceIostapConfig);
+        document.addEventListener('touchend', dispatchIostapFallback, {
+          capture: true,
+          passive: true,
+        });
+        document.addEventListener('pointerup', dispatchIostapFallback, true);
+
+        forceIostapConfig();
+        window.Application.initialize('scorm');
+      });
+    </script>
+  </body>
+</html>

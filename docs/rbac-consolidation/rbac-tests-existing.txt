@@ -1,0 +1,148 @@
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:4: * These tests document CURRENT behavior of the normalizeRole function
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:5: * and the requireRole middleware, including the known issue where
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:6: * 'instrutor'/'instructor' maps to 'manager' (giving broad access).
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:9: *   - Safety net: these tests will FAIL if normalizeRole behavior changes
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:13: * When the real RBAC fix is applied (dedicated 'instructor' role), update
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:22:// ===== LOCAL REPLICA OF normalizeRole =====
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:24:// Keep in sync with worker-airtrust/src/middleware/rbac.ts → normalizeRole().
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:26:type UserRole = 'admin' | 'manager' | 'user';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:28:function normalizeRole(raw: string | undefined): UserRole | undefined {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:32:  if (r === 'gestor' || r === 'manager') return 'manager';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:33:  // KNOWN ISSUE: instrutor/instructor is mapped to manager.
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:34:  // This gives instructors full manager-level access to 143 routes.
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:36:  if (r === 'instrutor' || r === 'instructor') return 'manager';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:41:// ===== CHARACTERIZATION: normalizeRole =====
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:43:describe('normalizeRole — characterization of current behavior', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:46:    expect(normalizeRole('admin')).toBe('admin');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:50:    expect(normalizeRole('ADMIN')).toBe('admin');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:54:    expect(normalizeRole('administrador')).toBe('admin');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:58:    expect(normalizeRole('ADMINISTRADOR')).toBe('admin');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:61:  // --- manager/gestor variants ---
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:62:  it('normalizes "gestor" → manager', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:63:    expect(normalizeRole('gestor')).toBe('manager');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:66:  it('normalizes "GESTOR" → manager (case-insensitive)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:67:    expect(normalizeRole('GESTOR')).toBe('manager');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:70:  it('normalizes "manager" → manager', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:71:    expect(normalizeRole('manager')).toBe('manager');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:74:  // --- instructor variants: CURRENT BEHAVIOR (maps to manager) ---
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:75:  it('[CURRENT BEHAVIOR] normalizes "instrutor" → manager (not instructor)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:77:    // When fixed, this should return 'instructor' instead.
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:78:    expect(normalizeRole('instrutor')).toBe('manager');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:81:  it('[CURRENT BEHAVIOR] normalizes "INSTRUTOR" → manager (case-insensitive)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:82:    expect(normalizeRole('INSTRUTOR')).toBe('manager');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:85:  it('[CURRENT BEHAVIOR] normalizes "instructor" → manager (not instructor)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:86:    expect(normalizeRole('instructor')).toBe('manager');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:89:  it('[CURRENT BEHAVIOR] normalizes "INSTRUCTOR" → manager (case-insensitive)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:90:    expect(normalizeRole('INSTRUCTOR')).toBe('manager');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:95:    expect(normalizeRole('usuario')).toBe('user');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:99:    expect(normalizeRole('user')).toBe('user');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:103:    expect(normalizeRole('aluno')).toBe('user');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:107:    expect(normalizeRole('student')).toBe('user');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:111:    expect(normalizeRole('USUARIO')).toBe('user');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:116:    expect(normalizeRole(undefined)).toBeUndefined();
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:120:    expect(normalizeRole('')).toBeUndefined();
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:124:    expect(normalizeRole('superuser')).toBe('superuser');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:128:    expect(normalizeRole('  instrutor  ')).toBe('manager');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:129:    expect(normalizeRole('  admin  ')).toBe('admin');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:135:describe('Access matrix — instructor currently has manager-level access', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:137:   * The following tests document which route categories an instructor
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:138:   * can effectively access TODAY (because instrutor → manager).
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:146:    const normalized = normalizeRole(userRole);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:151:  // --- CATEGORY A: Training-related routes (instructor should access post-fix) ---
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:152:  describe('Category A — Training routes (instructor should retain access)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:153:    it('[CURRENT] instrutor can access treinamentos-planejados (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:155:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:158:    it('[CURRENT] instrutor can access solicitacoes-treinamento (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:160:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:163:    it('[CURRENT] instrutor can access qualificacoes/historico-write (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:165:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:168:    it('[CURRENT] instrutor can access lms-matriculas (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:170:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:173:    it('[CURRENT] instrutor can access lms-relatorios (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:175:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:181:    it('[CURRENT] instrutor can access escalas-crud (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:183:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:186:    it('[CURRENT] instrutor can access escalas-alocacoes (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:188:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:191:    it('[CURRENT] instrutor can access horas-voo write routes (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:193:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:196:    it('[CURRENT] instrutor can access lms-cursos write routes (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:198:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:201:    it('[CURRENT] instrutor can access notificacoes-convocacao (admin|manager)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:203:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:207:  // --- CATEGORY C: Admin routes (instructor should NOT access post-fix) ---
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:208:  describe('Category C — Admin/management routes (instructor should be blocked post-fix)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:209:    it('[CURRENT] instrutor can access backup routes (admin|manager) — SHOULD BE BLOCKED', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:210:      // backup.use('*', auth(), requireRole('admin', 'manager'))
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:211:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:214:    it('[CURRENT] instrutor can access funcionarios-mutations (admin|manager) — SHOULD BE BLOCKED', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:216:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:219:    it('[CURRENT] instrutor can access setores-gestores (admin|manager) — SHOULD BE BLOCKED', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:221:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:224:    it('[CURRENT] instrutor can access importacao-xlsx (admin|manager) — SHOULD BE BLOCKED', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:226:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:229:    it('[CURRENT] instrutor can access integracoes_edapp (admin|manager) — SHOULD BE BLOCKED', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:231:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:234:    it('[CURRENT] instrutor can access integracoes_sigvoos (admin|manager) — SHOULD BE BLOCKED', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:236:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:239:    it('[CURRENT] instrutor can access frms fadiga-checkin manager panel (manager) — SHOULD BE BLOCKED', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:241:      expect(canAccess('instrutor', ['manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:244:    it('[CURRENT] instrutor can access compliance-requisitos write routes (admin|manager) — SHOULD BE BLOCKED', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:246:      expect(canAccess('instrutor', ['admin', 'manager'])).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:250:  // --- Admin-only routes: instructor correctly blocked today ---
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:251:  describe('Admin-only routes — instructor correctly blocked (no change needed)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:252:    it('instrutor CANNOT access auditoria (admin-only)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:253:      expect(canAccess('instrutor', ['admin'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:256:    it('instrutor CANNOT access auditoria-detalhada (admin-only)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:257:      expect(canAccess('instrutor', ['admin'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:260:    it('instrutor CANNOT access compliance-recalculate (admin-only)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:261:      expect(canAccess('instrutor', ['admin'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:264:    it('instrutor CANNOT access qualificacoes-certificados-admin (admin-only)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:265:      expect(canAccess('instrutor', ['admin'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:268:    it('instrutor CANNOT access funcionarios DELETE (admin-only)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:269:      expect(canAccess('instrutor', ['admin'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:272:    it('instrutor CANNOT access admin-migrate routes (admin-only)', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:273:      expect(canAccess('instrutor', ['admin'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:277:  // --- Regular user: correctly blocked from manager routes ---
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:278:  describe('User role — correctly blocked from manager routes', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:279:    it('user cannot access admin|manager routes', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:280:      expect(canAccess('usuario', ['admin', 'manager'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:283:    it('user cannot access manager-only routes', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:284:      expect(canAccess('user', ['manager'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:287:    it('aluno cannot access admin|manager routes', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/rbac-characterization.test.ts:288:      expect(canAccess('aluno', ['admin', 'manager'])).toBe(false);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:119:  it('resolve os dados do instrutor pelo nome na empresa e faz fallback para nome livre', async () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:174:  it('resolve o funcionario do instrutor por nome e evita cair no aluno do historico', async () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:230:  it('adapta o template do instrutor com texto correto, label e css A4', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:235:          <div>Certificamos que o profissional abaixo ministrou, como instrutor, o seguinte treinamento:o treinamento descrito neste documento.</div>
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:243:      'Certificamos que o profissional abaixo ministrou, como instrutor, o treinamento descrito neste documento.',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:248:      'Certificamos que o profissional abaixo ministrou, como instrutor, o treinamento descrito neste documento. o treinamento descrito neste documento.',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:251:    expect(html).toContain('airtrust-instrutor-a4-fix');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:293:    expect(html).toContain('airtrust-instrutor-a4-fix');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:315:    expect(html).toContain('airtrust-instrutor-a4-fix');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/lms-progresso.test.ts:21:vi.mock('../../middleware/rbac', () => ({
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/solicitacoes-treinamento.test.ts:18:vi.mock('../../middleware/rbac', () => ({
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/solicitacoes-treinamento.test.ts:19:  requireRole: () => async (_c: unknown, next: () => Promise<void>) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:16:vi.mock('../../middleware/rbac', () => ({
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:17:  requireRole: () => async (_c: unknown, next: () => Promise<void>) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:131:          instrutor_id: 4,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:202:                instrutor_id: 4,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:203:                instrutor_nome: 'Instrutor Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:204:                instrutor_guerra: 'Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:34:  instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:35:  instrutor_nome: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:36:  instrutor_guerra: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:253:            _instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:313:            _instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:486:      instrutor_id: 5,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:487:      instrutor_nome: 'Instrutor Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:488:      instrutor_guerra: 'Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:29:vi.mock('../../middleware/rbac', () => ({
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:30:  requireRole: () => async (_c: unknown, next: () => Promise<void>) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:134:  it('reaplica o instrutor quando o readback inicial volta nulo', async () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:159:        'SELECT id, data_conclusao, data_vencimento, observacoes, instrutor,',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:168:              instrutor: readbackCount === 1 ? null : 'Cap. Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:176:        'SET instrutor = ?,',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:200:          instrutor: '  Cap. Silva  ',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:216:        instrutor: 'Cap. Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:236:      (call) => call.method === 'run' && call.query.includes('SET instrutor = ?,'),

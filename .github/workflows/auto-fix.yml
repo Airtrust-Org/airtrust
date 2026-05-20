@@ -1,0 +1,45 @@
+name: Auto-fix ESLint & Prettier on PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint fix
+        run: |
+          npx eslint "./src/**/*.{js,jsx,ts,tsx}" --fix || true
+
+      - name: Run Prettier write
+        run: |
+          npx prettier --write . || true
+
+      - name: Commit and push fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: apply eslint --fix and prettier formatting [skip ci]" || true
+            git push origin HEAD:${{ github.head_ref }}
+          fi

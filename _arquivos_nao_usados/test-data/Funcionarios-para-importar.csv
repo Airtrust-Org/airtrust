@@ -1,0 +1,9 @@
+matricula,nome,cpf,email,funcao,setor
+00001,João Silva Santos,12345678901,joao.silva@empresa.com,PIC,Operações
+00002,Maria Costa Lima,98765432100,maria.costa@empresa.com,SIC,Operações
+00003,Pedro Oliveira,11122233344,pedro.oliveira@empresa.com,ADM,Administrativo
+00004,Ana Paula Souza,55566677788,ana.souza@empresa.com,CMS,Tripulação
+00005,Carlos Eduardo,99988877766,carlos.eduardo@empresa.com,MMA,Manutenção
+INVALIDO1,Jo,123,email-invalido,PIC,Operações
+00007,Funcionário Teste,44455566677,,COORD,Gestão
+INVALIDO2,,12345678901,teste@empresa.com,ADM,Administrativo

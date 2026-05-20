@@ -1,0 +1,305 @@
+🔍 ANÁLISE DE DUPLICAÇÕES - AIRTRUST
+Data: 29/11/2025 22:37:21
+
+📂 1. COMPONENTES FRONTEND
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 Funcionários:
+src/__tests__/funcionarios-ssot-reativo.test.ts
+src/hooks/useFuncionarios.ts
+src/hooks/useFuncionariosConfig.ts
+src/pages/Funcionarios/components/FuncionarioFilters.tsx
+src/pages/Funcionarios/components/FuncionarioModal.tsx
+src/pages/Funcionarios/components/FuncionariosList.tsx
+src/react-app/__tests__/hooks/useFuncionarios.test.ts
+src/react-app/__tests__/services/funcionarios.service.test.ts
+src/react-app/components/FuncionarioCard.tsx
+src/react-app/components/ImportarFuncionariosCSVModal.tsx
+src/react-app/components/QualificacoesFuncionario.tsx
+src/react-app/components/SeletorFuncionario.tsx
+src/react-app/components/forms/FuncionarioForm.tsx
+src/react-app/components/funcionarios/FuncionarioForm.tsx
+src/react-app/components/funcionarios/FuncionarioKPIs.tsx
+src/react-app/components/funcionarios/FuncionarioList.tsx
+src/react-app/components/funcionarios/FuncionarioListDetailed.tsx
+src/react-app/components/funcionarios/TabelaFuncionarios.tsx
+src/react-app/components/modals/FuncionarioModal.tsx
+src/react-app/components/modals/ModalFuncionario.tsx
+src/react-app/components/simuladores/FuncionarioCombobox.tsx
+src/react-app/hooks/mutations/useFuncionariosMutations.ts
+src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts
+src/react-app/hooks/queries/useFuncionariosRQ.ts
+src/react-app/hooks/useFuncionarios.ts
+src/react-app/hooks/useFuncionariosSimples.ts
+src/react-app/pages/FichaFuncionarioPage.tsx
+src/react-app/pages/Funcionarios.tsx
+src/react-app/pages/FuncionariosNew.tsx
+src/react-app/pages/FuncionariosSimples.tsx
+src/react-app/pages/TestFuncionarios.tsx
+src/react-app/pages/funcionarios/FuncionariosDashboard.tsx
+src/react-app/pages/funcionarios/FuncionariosMain.tsx
+src/react-app/pages/funcionarios/FuncionariosWrapper.tsx
+src/react-app/pages/funcionarios/ListaFuncionarios.tsx
+src/react-app/pages/funcionarios/ModalFuncionario.tsx
+src/react-app/pages/funcionarios/PerfilFuncionario.tsx
+src/react-app/pages/funcionarios/TabListaFuncionarios.tsx
+src/react-app/pages/simuladores/HistoricoFuncionario.tsx
+src/react-app/schemas/funcionario.schema.ts
+src/react-app/services/funcionarios.service.ts
+src/services/funcionarios.service.ts
+src/test/funcionarios.test.ts
+
+🎓 Qualificações:
+src/__tests__/schemas/qualificacoes.test.ts
+src/client/hooks/useQualificacoes.ts
+src/components/FormTipoQualificacao.tsx
+src/components/qualificacoes/NovaQualificacaoModal.tsx
+src/components/qualificacoes/QualificacaoCard.tsx
+src/pages/PaginaQualificacao.tsx
+src/pages/QualificacoesAlertas.tsx
+src/react-app/__tests__/components/QualificacoesHeader.test.tsx
+src/react-app/__tests__/qualificacoesService.test.ts
+src/react-app/components/QualificacoesFuncionario.tsx
+src/react-app/components/funcionarios/QualificacoesCard.tsx
+src/react-app/components/modals/ModalAtribuirQualificacao.tsx
+src/react-app/components/modals/ModalRenovarQualificacao.tsx
+src/react-app/components/qualificacoes/ModalEditarQualificacao.tsx
+src/react-app/components/qualificacoes/ModalEditarQualificacaoSimples.tsx
+src/react-app/hooks/mutations/useQualificacoesMutations.ts
+src/react-app/hooks/qualificacoes/useHistoricoQualificacoes.ts
+src/react-app/hooks/qualificacoes/useTiposQualificacao.ts
+src/react-app/hooks/queries/useQualificacoesRQ.ts
+src/react-app/hooks/useDashboardQualificacoes.ts
+src/react-app/hooks/useQualificacoes.ts
+src/react-app/hooks/useQualificacoesExt.ts
+src/react-app/hooks/useQualificacoesHistorico.ts
+src/react-app/hooks/useQualificacoesStats.ts
+src/react-app/pages/DashboardQualificacoes.tsx
+src/react-app/pages/QualificacaoEditar.tsx
+src/react-app/pages/Qualificacoes.tsx
+src/react-app/pages/ReclassificacaoQualificacoes.tsx
+src/react-app/pages/qualificacoes/ConfigurarColunasQualificacoes.tsx
+src/react-app/pages/qualificacoes/FormularioQualificacao.tsx
+src/react-app/pages/qualificacoes/ImportarQualificacoes.tsx
+src/react-app/pages/qualificacoes/QualificacoesTab.tsx
+src/react-app/pages/qualificacoes/components/QualificacoesFilters.tsx
+src/react-app/pages/qualificacoes/components/QualificacoesHeader.tsx
+src/react-app/pages/qualificacoes/components/QualificacoesTable.tsx
+src/react-app/schemas/qualificacao.schema.ts
+src/react-app/schemas/qualificacoes.ts
+src/react-app/services/qualificacoes.service.ts
+src/react-app/services/qualificacoesService.ts
+src/react-app/utils/qualificacoesUtils.ts
+src/schemas/qualificacoes.schema.ts
+src/services/qualificacoes.service.ts
+src/types/qualificacoes.ts
+
+🛩️ Simuladores/Sessões:
+src/react-app/components/SimuladoresLayout.tsx
+src/react-app/components/modals/SessaoModal.tsx
+src/react-app/components/simuladores/ImportarSimuladoresCSV.tsx
+src/react-app/components/simuladores/ListagemFichasSimulador.tsx
+src/react-app/components/simuladores/SessionModal.tsx
+src/react-app/components/simuladores/VisualizarFichaSimulador.tsx
+src/react-app/hooks/mutations/useSimuladorMutations.ts
+src/react-app/hooks/queries/useSimuladoresRQ.ts
+src/react-app/hooks/useSimuladores.ts
+src/react-app/pages/AgendarSimulador.tsx
+src/react-app/pages/AvaliarFichaSimulador.tsx
+src/react-app/pages/EditarFichaSimulador.tsx
+src/react-app/pages/FichaSimulador.tsx
+src/react-app/pages/Simuladores.tsx
+src/react-app/pages/SimuladoresDashboard.tsx
+src/react-app/pages/SimuladoresModulo.tsx
+src/react-app/pages/SimuladoresNew.tsx
+src/react-app/pages/SimuladoresSessoes.tsx
+src/react-app/pages/SimuladoresSimple.tsx
+src/react-app/pages/SimuladoresTemplates.tsx
+src/react-app/pages/VisualizarFichaSimulador.tsx
+src/react-app/pages/simuladores/AprovarSessao.tsx
+src/react-app/pages/simuladores/CrudSimuladores.tsx
+src/react-app/pages/simuladores/CrudTiposSessao.tsx
+src/react-app/pages/simuladores/DetalhesSessao.tsx
+src/react-app/pages/simuladores/EditarModeloSessao.tsx
+src/react-app/pages/simuladores/ExecutarSessao.tsx
+src/react-app/pages/simuladores/FichasSessao.tsx
+src/react-app/pages/simuladores/FormSessao.tsx
+src/react-app/pages/simuladores/FormSimulador.tsx
+src/react-app/pages/simuladores/NovaSessao.tsx
+src/react-app/pages/simuladores/SimuladoresMain.tsx
+src/react-app/pages/simuladores/SimuladoresWrapper.tsx
+src/react-app/services/relatoriosSimuladoresApi.ts
+src/react-app/services/simuladores-consolidado.service.ts
+src/react-app/services/simuladores.service.ts
+src/react-app/services/simuladoresApi.ts
+src/react-app/services/simuladoresQuick.ts
+src/react-app/types/simuladores.ts
+src/services/simuladores.service.ts
+
+📄 Certificados:
+src/components/GerenciadorCertificados.tsx
+src/frontend/pages/CertificadosPage.tsx
+src/react-app/components/CertificadoLista.tsx
+src/react-app/components/CertificadoUpload.tsx
+src/react-app/components/certificados/UploadCertificado.tsx
+src/react-app/components/funcionarios/AbaCertificados.tsx
+src/react-app/components/modals/ModalCertificado.tsx
+src/react-app/components/qualificacoes/ModalCertificados.tsx
+src/react-app/hooks/mutations/useCertificadosMutations.ts
+src/react-app/hooks/queries/useCertificadosRQ.ts
+src/react-app/hooks/useCertificados.ts
+src/react-app/pages/ConfiguracaoCertificado.tsx
+src/react-app/utils/certificadoNaming.ts
+
+✅ Compliance:
+src/react-app/components/compliance/ComplianceMatrix.tsx
+src/react-app/hooks/useCompliance.ts
+src/react-app/pages/ComplianceSettings.tsx
+
+📁 Pasta Virtual/Documentos:
+src/components/PastaVirtualIntegrada.tsx
+src/react-app/components/UploadDocumentosPastaVirtual.tsx
+src/react-app/components/funcionarios/PastaVirtualCompleta.tsx
+src/react-app/components/funcionarios/UploadDocumentoModal.tsx
+src/react-app/config/pastaVirtual.ts
+src/react-app/hooks/usePastaVirtual.ts
+src/react-app/pages/PastaVirtual.tsx
+src/react-app/pages/PastaVirtualGeral.tsx
+src/react-app/pages/PastaVirtualLanding.tsx
+src/react-app/pages/funcionarios/AbaDocumentos.tsx
+src/react-app/pages/funcionarios/ListaDocumentos.tsx
+src/react-app/pages/funcionarios/UploadDocumentos.tsx
+
+🏨 Hospedagem:
+
+⚠️ FRMS:
+
+🔍 Auditoria:
+src/react-app/hooks/useAuditoria.ts
+src/react-app/pages/AuditoriaDatas.tsx
+
+📂 2. ROTAS BACKEND
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+worker-airtrust/src/routes/admin-apply-migration.ts (637B)
+worker-airtrust/src/routes/admin-migrate.ts (1.9K)
+worker-airtrust/src/routes/admin-migration.ts (3.8K)
+worker-airtrust/src/routes/admin.ts (13K)
+worker-airtrust/src/routes/aeronaves.ts (6.9K)
+worker-airtrust/src/routes/alertas.ts (3.2K)
+worker-airtrust/src/routes/auditoria-detalhada.ts (3.9K)
+worker-airtrust/src/routes/auditoria.ts (6.9K)
+worker-airtrust/src/routes/auth.ts (13K)
+worker-airtrust/src/routes/categorias.ts (5.8K)
+worker-airtrust/src/routes/compliance-recalculate.test.ts (6.2K)
+worker-airtrust/src/routes/compliance-recalculate.ts (13K)
+worker-airtrust/src/routes/compliance.ts (7.7K)
+worker-airtrust/src/routes/dashboard.ts (5.0K)
+worker-airtrust/src/routes/debug.ts (1.3K)
+worker-airtrust/src/routes/deduplicate.ts (6.0K)
+worker-airtrust/src/routes/ficha360.ts (6.8K)
+worker-airtrust/src/routes/fix-renovadas.ts (5.1K)
+worker-airtrust/src/routes/funcionarios.ts (20K)
+worker-airtrust/src/routes/funcionarios_ssot.ts (3.4K)
+worker-airtrust/src/routes/funcoes.ts (5.8K)
+worker-airtrust/src/routes/habilitacoes.ts (3.5K)
+worker-airtrust/src/routes/importacao-refactored.ts (13K)
+worker-airtrust/src/routes/importacao.ts (40K)
+worker-airtrust/src/routes/licencas.ts (9.9K)
+worker-airtrust/src/routes/lookup.ts (6.6K)
+worker-airtrust/src/routes/migrations.ts (8.7K)
+worker-airtrust/src/routes/modelos-aeronave.ts (3.8K)
+worker-airtrust/src/routes/notificacoes.ts (5.8K)
+worker-airtrust/src/routes/pasta-virtual.ts (25K)
+worker-airtrust/src/routes/qualificacoes-alertas.ts (6.1K)
+worker-airtrust/src/routes/qualificacoes-certificados.ts (23K)
+worker-airtrust/src/routes/qualificacoes-reclass.ts (9.5K)
+worker-airtrust/src/routes/qualificacoes.ts (77K)
+worker-airtrust/src/routes/setores.ts (6.1K)
+worker-airtrust/src/routes/simuladores.ts (82K)
+
+📂 3. HOOKS CUSTOMIZADOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+src/hooks/index.ts (847B)
+src/hooks/useFuncionarios.ts (2.1K)
+src/hooks/useFuncionariosConfig.ts (3.4K)
+
+📊 4. ESTATÍSTICAS GERAIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total componentes: 31
+Total páginas: 11
+Total modais: 0
+Total hooks: 3
+Total rotas backend: 36
+
+🔍 5. BUSCAR PADRÕES DE DUPLICAÇÃO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Analisando Modais com possíveis duplicações:
+
+Analisando Hooks com possíveis duplicações:
+  ⚠️ Funcionario: 2 hooks encontrados
+     - src/hooks/useFuncionarios.ts
+     - src/hooks/useFuncionariosConfig.ts
+
+Analisando Rotas Backend com sufixos suspeitos:
+  Rotas com versionamento/extensões:
+
+  Entidades com múltiplos arquivos de rota:
+     ⚠️ funcionarios: 2 arquivos
+        - worker-airtrust/src/routes/funcionarios.ts
+        - worker-airtrust/src/routes/funcionarios_ssot.ts
+     ⚠️ qualificacoes: 4 arquivos
+        - worker-airtrust/src/routes/qualificacoes-alertas.ts
+        - worker-airtrust/src/routes/qualificacoes-certificados.ts
+        - worker-airtrust/src/routes/qualificacoes-reclass.ts
+        - worker-airtrust/src/routes/qualificacoes.ts
+     ⚠️ auditoria: 2 arquivos
+        - worker-airtrust/src/routes/auditoria-detalhada.ts
+        - worker-airtrust/src/routes/auditoria.ts
+
+📈 6. ANÁLISE DE USO (TOP 10 IMPORTS MAIS USADOS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Modais mais importados:
+  12 usos: ../modals/BaseModal
+   5 usos: ../../components/modals/BaseModal
+   3 usos: @/react-app/components/modals/BaseModal
+   3 usos: @/react-app/components/importacao/ModalImportacao
+   3 usos: @/components/ui/Modal
+   3 usos: ./DetalhesModal
+   3 usos: ../components/ImportarCSVModal
+   2 usos: @/react-app/components/modals/ModalCertificado
+   2 usos: @/react-app/components/modals/ModalAtribuirQualificacao
+   2 usos: ./components/ColumnConfigModal
+
+Hooks mais importados:
+   8 usos: @/react-app/hooks/useApi
+   7 usos: @/react-app/hooks/useDebounce
+   5 usos: ./useApi
+   4 usos: @/react-app/hooks/usePastaVirtual
+   4 usos: @/hooks/useFuncionariosConfig
+   3 usos: @/react-app/hooks/usePrefetch
+   2 usos: @/react-app/hooks/useToast
+   2 usos: @/react-app/hooks/useQualificacoesExt
+   2 usos: @/react-app/hooks/useFormValidation
+   2 usos: @/react-app/hooks/useAuth
+
+🎯 7. RESUMO DE AÇÕES SUGERIDAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Componentes potencialmente duplicados:
+  - Modais: 0 arquivos
+  - Add* components: 1 arquivos
+  - Edit* components: 7 arquivos
+
+Rotas potencialmente duplicadas:
+  - Rotas versionadas/extensões: 0 arquivos
+
+✅ ANÁLISE COMPLETA!
+
+📝 Próximos Passos:
+  1. Revisar componentes Add*/Edit* e consolidar em Modais
+  2. Consolidar hooks duplicados por entidade
+  3. Remover rotas -v2, -ext, -old
+  4. Padronizar nomenclatura
+  5. Executar testes após cada consolidação

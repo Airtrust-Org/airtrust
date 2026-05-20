@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schemas.cloudflare.com/json_schemas/pages_build_configuration_schema.json",
+  "build": {
+    "command": "npm run build",
+    "cwd": "/",
+    "destination": "/dist/client",
+    "root_dir": "/"
+  },
+  "env": {
+    "production": {
+      "vars": {
+        "API_BASE_URL": "https://api.airtrust.online/api"
+      }
+    }
+  },
+  "compatibility_date": "2025-06-17",
+  "compatibility_flags": ["nodejs_compat"]
+}

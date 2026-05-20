@@ -1,0 +1,11 @@
+Nome,CPF,Matricula,Nascimento,Admissao,Email
+,012.345.678-90,001,25/11/1990,15/01/2020,joao@email.com
+João Silva,111.111.111-11,002,25/11/1990,15/01/2020,joao@email.com
+Maria Santos,123.456.789-00,003,99/99/9999,15/01/2020,maria@email.com
+Pedro Oliveira,012.345.678-90,,32/13/2025,40/40/2020,pedro@invalido
+Ana Costa,abc.def.ghi-jk,005,25/11/1990,15/01/2020,ana@email.com
+Carlos Souza,012.345.678-90,006,25/11/1990,ontem,invalidemail
+Teste Muito Longo Nome Para Validar Limites Do Sistema De Importação,012.345.678-91,007,25/11/1990,15/01/2020,
+Roberto Alves,000.000.000-00,008,25/11/1990,15/01/2020,roberto@email.com
+Fernanda Costa,222.222.222-22,009,25/11/1990,15/01/2020,fernanda@email.com
+Lucas,123,010,25/11/1990,15/01/2020,lucas@email.com

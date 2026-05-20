@@ -1,0 +1,174 @@
+-- ==========================================
+-- MIGRATION 0020: MÓDULO SIMULADORES COMPLETO
+-- Data: 2025-11-19
+-- ==========================================
+
+-- 1) SIMULADORES (equipamentos)
+CREATE TABLE IF NOT EXISTS simuladores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  codigo TEXT NOT NULL UNIQUE,
+  tipo_aeronave TEXT NOT NULL,
+  nivel TEXT,
+  base TEXT,
+  fabricante TEXT,
+  status TEXT DEFAULT 'DISPONIVEL' CHECK(status IN ('DISPONIVEL','MANUTENCAO','INOPERANTE')),
+  observacoes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+-- 2) SESSÕES DE SIMULADOR
+CREATE TABLE IF NOT EXISTS sessoes_simulador (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  simulador_id INTEGER NOT NULL,
+  tipo_sessao TEXT NOT NULL CHECK(tipo_sessao IN ('LPC','OPC','LOFT','TREINAMENTO','UPGRADE','TRANSICAO')),
+  data_inicio TEXT NOT NULL,
+  data_fim TEXT NOT NULL,
+  duracao_minutos INTEGER,
+  status TEXT DEFAULT 'PLANEJADA' CHECK(status IN ('PLANEJADA','CONFIRMADA','CONCLUIDA','CANCELADA')),
+  objetivo TEXT,
+  observacoes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+-- 3) PARTICIPANTES DA SESSÃO
+CREATE TABLE IF NOT EXISTS sessoes_participantes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sessao_id INTEGER NOT NULL,
+  funcionario_id INTEGER NOT NULL,
+  papel TEXT NOT NULL CHECK(papel IN ('ALUNO','INSTRUTOR','EXAMINADOR','OBSERVADOR')),
+  presenca TEXT DEFAULT 'PENDENTE' CHECK(presenca IN ('PENDENTE','PRESENTE','AUSENTE','JUSTIFICADO')),
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+-- 4) FICHAS DE AVALIAÇÃO
+CREATE TABLE IF NOT EXISTS fichas_simulador (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sessao_id INTEGER NOT NULL,
+  funcionario_id INTEGER NOT NULL,
+  instrutor_id INTEGER,
+  examinador_id INTEGER,
+  data_sessao TEXT NOT NULL,
+  tipo_sessao TEXT NOT NULL,
+  tipo_aeronave TEXT NOT NULL,
+  status TEXT DEFAULT 'EM_PREENCHIMENTO' CHECK(status IN ('EM_PREENCHIMENTO','ASSINADA_ALUNO','ASSINADA_INSTRUTOR','ASSINADA_EXAMINADOR','ASSINADA_TOTAL')),
+  nota_geral TEXT CHECK(nota_geral IN ('APROVADO','REPROVADO')),
+  comentarios_gerais TEXT,
+  
+  assinatura_aluno TEXT,
+  data_assinatura_aluno TEXT,
+  ip_assinatura_aluno TEXT,
+  
+  assinatura_instrutor TEXT,
+  data_assinatura_instrutor TEXT,
+  ip_assinatura_instrutor TEXT,
+  
+  assinatura_examinador TEXT,
+  data_assinatura_examinador TEXT,
+  ip_assinatura_examinador TEXT,
+  
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+-- 5) MANOBRAS DAS FICHAS
+CREATE TABLE IF NOT EXISTS fichas_simulador_manobras (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ficha_id INTEGER NOT NULL,
+  codigo TEXT NOT NULL,
+  descricao TEXT NOT NULL,
+  categoria TEXT,
+  ordem INTEGER,
+  resultado TEXT CHECK(resultado IN ('SATISFATORIO','NAO_SATISFATORIO','NA','OBSERVADO')),
+  observacoes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+-- 6) CADASTRO DE MANOBRAS (templates)
+CREATE TABLE IF NOT EXISTS cadastro_manobras (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo_sessao TEXT NOT NULL,
+  tipo_aeronave TEXT NOT NULL,
+  codigo TEXT NOT NULL,
+  descricao TEXT NOT NULL,
+  categoria TEXT,
+  ordem INTEGER,
+  obrigatoria INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+-- ==========================================
+-- INDEXES
+-- ==========================================
+
+CREATE INDEX idx_simuladores_codigo ON simuladores(codigo);
+CREATE INDEX idx_simuladores_tipo ON simuladores(tipo_aeronave);
+CREATE INDEX idx_simuladores_base ON simuladores(base);
+
+CREATE INDEX idx_sessoes_simulador_id ON sessoes_simulador(simulador_id);
+CREATE INDEX idx_sessoes_data ON sessoes_simulador(data_inicio, data_fim);
+CREATE INDEX idx_sessoes_status ON sessoes_simulador(status);
+
+CREATE INDEX idx_participantes_sessao ON sessoes_participantes(sessao_id);
+CREATE INDEX idx_participantes_funcionario ON sessoes_participantes(funcionario_id);
+
+CREATE INDEX idx_fichas_sessao ON fichas_simulador(sessao_id);
+CREATE INDEX idx_fichas_funcionario ON fichas_simulador(funcionario_id);
+CREATE INDEX idx_fichas_instrutor ON fichas_simulador(instrutor_id);
+CREATE INDEX idx_fichas_status ON fichas_simulador(status);
+CREATE INDEX idx_fichas_data ON fichas_simulador(data_sessao);
+
+CREATE INDEX idx_manobras_ficha ON fichas_simulador_manobras(ficha_id);
+
+CREATE INDEX idx_cadastro_tipo_sessao ON cadastro_manobras(tipo_sessao, tipo_aeronave);
+
+-- ==========================================
+-- SEED DATA: SIMULADORES
+-- ==========================================
+
+INSERT INTO simuladores (codigo, tipo_aeronave, nivel, base, fabricante, status) VALUES
+('SIM-A320-01', 'A320', 'D', 'SBGR', 'CAE', 'DISPONIVEL'),
+('SIM-B737-01', 'B737', 'D', 'SBGL', 'CAE', 'DISPONIVEL'),
+('SIM-E195-01', 'E195', 'D', 'SBSP', 'CAE', 'DISPONIVEL');
+
+-- ==========================================
+-- SEED DATA: CADASTRO DE MANOBRAS A320 LPC
+-- ==========================================
+
+INSERT INTO cadastro_manobras (tipo_sessao, tipo_aeronave, codigo, descricao, categoria, ordem, obrigatoria) VALUES
+-- LPC A320 - PROCEDIMENTOS NORMAIS
+('LPC', 'A320', 'LPC-1', 'Briefing de voo e procedimentos de segurança', 'PROCEDIMENTOS_NORMAIS', 1, 1),
+('LPC', 'A320', 'LPC-2', 'Inspeção externa da aeronave', 'PROCEDIMENTOS_NORMAIS', 2, 1),
+('LPC', 'A320', 'LPC-3', 'Acionamento de motores e sistemas', 'PROCEDIMENTOS_NORMAIS', 3, 1),
+('LPC', 'A320', 'LPC-4', 'Táxi e procedimentos de solo', 'PROCEDIMENTOS_NORMAIS', 4, 1),
+('LPC', 'A320', 'LPC-5', 'Decolagem normal e subida', 'PROCEDIMENTOS_NORMAIS', 5, 1),
+('LPC', 'A320', 'LPC-6', 'Voo em cruzeiro e navegação', 'PROCEDIMENTOS_NORMAIS', 6, 1),
+('LPC', 'A320', 'LPC-7', 'Descida e aproximação', 'PROCEDIMENTOS_NORMAIS', 7, 1),
+('LPC', 'A320', 'LPC-8', 'Pouso normal', 'PROCEDIMENTOS_NORMAIS', 8, 1),
+
+-- LPC A320 - PROCEDIMENTOS ANORMAIS
+('LPC', 'A320', 'LPC-9', 'Falha de motor na decolagem', 'PROCEDIMENTOS_ANORMAIS', 9, 1),
+('LPC', 'A320', 'LPC-10', 'Falha de motor em voo', 'PROCEDIMENTOS_ANORMAIS', 10, 1),
+('LPC', 'A320', 'LPC-11', 'Despressurização rápida', 'PROCEDIMENTOS_ANORMAIS', 11, 1),
+('LPC', 'A320', 'LPC-12', 'Falha de sistemas hidráulicos', 'PROCEDIMENTOS_ANORMAIS', 12, 1),
+('LPC', 'A320', 'LPC-13', 'Falha elétrica (baterias)', 'PROCEDIMENTOS_ANORMAIS', 13, 1),
+('LPC', 'A320', 'LPC-14', 'Fogo em motor', 'PROCEDIMENTOS_ANORMAIS', 14, 1),
+
+-- OPC A320 - PROFICIÊNCIA OPERACIONAL
+('OPC', 'A320', 'OPC-1', 'Planejamento de voo e briefing', 'OPERACIONAL', 1, 1),
+('OPC', 'A320', 'OPC-2', 'Gerenciamento de recursos de cabine (CRM)', 'OPERACIONAL', 2, 1),
+('OPC', 'A320', 'OPC-3', 'Voo em condições meteorológicas adversas', 'OPERACIONAL', 3, 1),
+('OPC', 'A320', 'OPC-4', 'Aproximação de precisão (ILS)', 'OPERACIONAL', 4, 1),
+('OPC', 'A320', 'OPC-5', 'Aproximação de não precisão (VOR/NDB)', 'OPERACIONAL', 5, 1),
+('OPC', 'A320', 'OPC-6', 'Circuito de tráfego', 'OPERACIONAL', 6, 1),
+('OPC', 'A320', 'OPC-7', 'Arremetida (Go-around)', 'OPERACIONAL', 7, 1);

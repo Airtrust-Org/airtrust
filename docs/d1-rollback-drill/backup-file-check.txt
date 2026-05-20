@@ -1,0 +1,1 @@
+-rw-r--r--  1 filipedaumas  staff    76M May 15 18:55 /Users/filipedaumas/AirTrust_Backups/production-d1/airtrust-db-production-20260515-1855.sql

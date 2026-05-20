@@ -1,0 +1,4706 @@
+{
+	"config": {
+		"background": "fit_content_assets/0001-1676870055140806134_ssebai.png",
+		"colors": {
+			"background": "#00122D",
+			"experimental": false,
+			"text": "#0066A4"
+		},
+		"enableCustomCSS": true,
+		"customCSS": "/* EDIT THE “MAIN COLORS” BELOW TO APPLY YOUR ORGANISATION’S COLORS */\n/* Add your primary, secondary and tertiary colours by typing colour names such as \"white\" etc. or by replacing the hex color codes below. */\n:root {\n  --primary-palette-colour: #E66C18;\n  --secondary-palette-colour: #00122D;\n  --primary-font-colour: #FFFFFF;\n  --secondary-font-colour: #0066A4;\n}\n\n/* No need to touch the code below*/\n#slides-view, #slides-view-inner, #lesson-menu {\n  color: var(--secondary-font-colour) !important;\n  background-color: var(--secondary-palette-colour) !important;\n}\n/*/ Buttons /*/\n.btn.btn-muted,\n.btn.btn-solid,\n.btn.btn-primary {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n}\n.btn.btn-muted.__active,\n.btn.btn-muted:hover,\n.btn.btn-solid.__active,\n.btn.btn-solid:hover,\n.btn.btn-primary__active,\n.btn.btn-primary:hover {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n  filter: brightness(90%);\n}\n/* exclude game memory */\n.slide-game-memory .game-tiles .btn.btn-solid {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n}\n/*/ Header & Slides /*/\n/*/ Corner Box /*/\n#lesson-header-nav {\n  background: #00000040;\n  color: #fff;\n}\n/*/ Menu Button /*/\n#lesson-header-nav-menu-btn {\n  border-left: 1px solid var(--secondary-palette-colour);\n}\n/*/ Line at the Top/*/\n#lesson-header-title-content {\n  border-bottom: 1px solid var(--secondary-font-colour);\n  color: var(--secondary-font-colour);\n}\n/*/ Progress Bar /*/\n#indicator {\n  background-color: #00000040;\n  color: var(--primary-palette-colour);\n}\n/*/ Line at the bottom/*/\n#slides {\n  border-bottom: 1px solid var(--secondary-font-colour);\n}\n/*/ Image Background Color When You Zoom in/*/\n.pswp__item {\n  background: var(--primary-palette-colour);\n}\n\n/*/----- Multiple Choice Slides ------/*/\n/*/Multiple Choice Slides Selected Button/*/\n.selectable.active .btn {\n  background-color: var(--secondary-palette-colour);\n  color: var(--secondary-font-colour);\n}\n/*/Multiple Choice Incorrect/*/\n.slide-multiple-choice-game.state-complete .selectable.incorrect .btn {\n  background: var(--secondary-palette-colour);\n  color: var(--secondary-font-colour);\n}\n/*/Multiple Choice Correct/*/\n.slide-multiple-choice-game.state-complete .selectable.correct .btn {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n}\n/*/-----------------------------------/*/\n\n/*/Chat Bubble on selected/*/\n.slide-chat.show-msg-true .message--answer.active {\n  background: var(--primary-palette-colour);\n  color: var(--primary-font-colour);\n}\n/*/Chat Bubble, the Pointy Part/*/\n.slide-chat.show-msg-true .message--answer.active:after {\n  border-color: var(--primary-palette-colour) transparent transparent;\n}\n/*/Expandable List/*/\n.slide-expandable-list .item.active .item-button,\n.slide-expandable-list .item.active .item-button:after {\n  background: var(--secondary-palette-colour);\n  color: var(--secondary-font-colour);\n}\n\n\n/* Padronizacao de tipografia dos slides — unifica tamanho e espaçamento (ajustada) */\n#slides-view-inner, #slides-view-inner .slide, #slides-view-inner .slide * {\n  font-family: system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif !important;\n  font-size: 18px !important;\n  line-height: 1.6 !important;\n  color: inherit !important;\n  -webkit-font-smoothing: antialiased !important;\n  -moz-osx-font-smoothing: grayscale !important;\n}\n#slides-view-inner p, #slides-view-inner span, #slides-view-inner li {\n  margin: 0 0 0.75rem 0 !important;\n}\n#slides-view-inner .text-xl { font-size: 22px !important; font-weight: 700 !important; }\n#slides-view-inner .text-lg { font-size: 20px !important; font-weight: 600 !important; }\n#slides-view-inner .text-md { font-size: 18px !important; }\n#slides-view-inner .text-sm { font-size: 16px !important; }\n#lesson-header-title-content, .slide.title .title, .slide.title h1, .slide.title p { font-size: 28px !important; line-height:1.2 !important; }\n@media (max-width: 768px) {\n  #slides-view-inner, #slides-view-inner .slide, #slides-view-inner .slide * { font-size: 16px !important; }\n  #slides-view-inner .text-xl { font-size: 20px !important; }\n  #slides-view-inner .text-lg { font-size: 18px !important; }\n  #slides-view-inner .text-md { font-size: 16px !important; }\n  .slide.title .title, .slide.title h1, #lesson-header-title-content { font-size: 24px !important; }\n}\n#slides-view-inner li p { margin: 0 !important; padding-bottom: .5rem !important; }\n#slides-view-inner .text-sequence span { display:block; margin-bottom: .6rem; }\n#slides-view-inner .slide { word-break: break-word; hyphens: auto; overflow-wrap: break-word; }\n",
+		"direction": "ltr",
+		"disableInteractionSummary": true,
+		"disableLessonScore": false,
+		"hasAnswerFeedback": true,
+		"hasScormExitButton": false,
+		"preventLogoutOnExit": false,
+		"indicator": true,
+		"logo": "",
+		"minimumScore": 0,
+		"pageNumbers": true,
+		"pagination": false,
+		"soundDisabled": false,
+		"language": "pt"
+	},
+	"slides": [
+		{
+			"id": "c599a294-ee6c-4b2e-a70d-bc195ebcc29c",
+			"type": "title",
+			"subtype": "default",
+			"name": 1,
+			"displayIndex": 1,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "c599a294-ee6c-4b2e-a70d-bc195ebcc29c"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>CGA – Conhecimentos Gerais de Aeronaves</p>",
+				"titleType": "html",
+				"subtitle": "<p>Treinamento obrigatório conforme RBAC 135.345</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "4904ba30-b545-7d90-35ab-6e50eabca5a2",
+			"type": "title",
+			"subtype": "default",
+			"name": 2,
+			"displayIndex": 2,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "4904ba30-b545-7d90-35ab-6e50eabca5a2"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Liberação e Localização de Voos</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(a) – Item 1 – Autorização e rastreamento de voos em operações 135</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "f26417c6-abd8-9ba4-aea1-88578f3bd209",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 3,
+			"displayIndex": 3,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f26417c6-abd8-9ba4-aea1-88578f3bd209"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "<p class=\"text-lg\"><strong>O que é a liberação de voo?</strong></p><p class=\"text-md\">O detentor do certificado deve garantir que todo voo seja <strong>formalmente autorizado</strong> antes de cada decolagem, conforme o RBAC 135.345(a)(1).</p><p class=\"text-lg\"><strong>Três pilares do processo:</strong></p><ul><li><p class=\"text-md\"><strong>Liberação de voo:</strong> autorização formal confirmando que aeronave, piloto e condições atendem aos requisitos legais e operacionais.</p></li><li><p class=\"text-md\"><strong>Localização contínua:</strong> o sistema operacional deve conhecer a posição da aeronave a todo momento — com pontos de reporte e contato de rádio periódico.</p></li><li><p class=\"text-md\"><strong>Documentação de bordo:</strong> plano de voo aprovado, certificados válidos e informações meteorológicas atualizadas.</p></li></ul>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": false,
+				"title": "<p>Plano de Voo Obrigatório</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "189307e3-52e0-3b7d-6ddc-48850b373c3d",
+			"type": "list",
+			"subtype": "list",
+			"name": 4,
+			"displayIndex": 4,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "189307e3-52e0-3b7d-6ddc-48850b373c3d"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Comunicação obrigatória:</strong> manter contato regular com o órgão ATC competente nos pontos de reporte definidos no plano de voo. Referência: <em>ICA 100-4, seção 6.1.4</em>.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Vigilância radar:</strong> o transponder deve estar ativo (modo C ou S) durante todo o voo, permitindo ao ATC rastrear a aeronave continuamente.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Falha de comunicação:</strong> manter transponder ativo, seguir o plano de voo original e pousar no aeródromo alternativo mais próximo. Consulte a <em>ICA 100-4</em> para procedimentos completos.</p>"
+				],
+				"doneText": null,
+				"title": "Comunicação e Vigilância",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "7657e78a-4075-8fc6-95db-6194308cf7c2",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 5,
+			"displayIndex": 5,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "7657e78a-4075-8fc6-95db-6194308cf7c2"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\">Voos noturnos offshore exigem <strong>certificação IFR</strong> para o piloto e a aeronave, além de luzes, instrumentos e equipamentos de comunicação adequados para operação noturna.</span>",
+					"<span class=\"text-md leading-relaxed\">O piloto deve ter <strong>proficiência atual em voo por instrumentos</strong>. À noite, a dependência dos instrumentos é total — referências visuais externas são drasticamente reduzidas.</span>",
+					"<span class=\"text-md leading-relaxed\">O planejamento deve incluir <strong>maiores margens de combustível</strong> e alternativas viáveis, dados os riscos adicionais de operar sobre o mar no escuro.</span>"
+				],
+				"title": "<p>Operações Noturnas em Ambiente Offshore</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "188b76f8-beb7-5157-b8f0-620a6e2baa22",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 6,
+			"displayIndex": 6,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Qual o objetivo de apresentar um plano de voo completo para voos offshore?",
+							"questionId": "bb3def6d-8d4a-4396-a42f-c662c9a9ef83",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Garantir a coordenação e comunicação adequadas entre a aeronave e o controle de tráfego aéreo.",
+								"correct": true,
+								"answerId": "bba0e8c5-5254-4ad8-a23c-baa4013e2385",
+								"type": "text"
+							},
+							{
+								"content": "Para determinar os requisitos de combustível para o voo.",
+								"correct": false,
+								"answerId": "32d63f96-116c-438d-873e-c0e03effebb8",
+								"type": "text"
+							},
+							{
+								"content": "Para calcular o peso e balanceamento da aeronave.",
+								"correct": false,
+								"answerId": "ca8daac5-b409-4793-842a-adde1be9e632",
+								"type": "text"
+							},
+							{
+								"content": "Para agendar a manutenção do helicóptero.",
+								"correct": false,
+								"answerId": "b5fb7fd0-a741-4559-a758-e92b90caf9f0",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "188b76f8-beb7-5157-b8f0-620a6e2baa22"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "4cc1cdaa-028e-1e66-449f-04bd9089f4df",
+						"content": "Garantir a coordenação e comunicação adequadas entre a aeronave e o controle de tráfego aéreo.",
+						"correct": true
+					},
+					{
+						"id": "51c84d11-ccd9-c080-133b-35ae69fc16aa",
+						"content": "Para determinar os requisitos de combustível para o voo.",
+						"correct": false
+					},
+					{
+						"id": "6877effa-712f-5619-a3c5-1469b69218b6",
+						"content": "Para calcular o peso e balanceamento da aeronave.",
+						"correct": false
+					},
+					{
+						"id": "887acd24-5f64-f13f-0794-e9299b55a8ca",
+						"content": "Para agendar a manutenção do helicóptero.",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente. O plano de voo é principalmente sobre coordenação e localização — não apenas combustível ou peso.",
+					"correct": "Exato! O plano de voo garante coordenação, comunicação e localização contínua da aeronave durante todo o trajeto.",
+					"text": "Garantir a coordenação e comunicação adequadas entre a aeronave e o controle de tráfego aéreo.",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Qual o objetivo de apresentar um plano de voo completo para voos offshore?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "7d8317ab-5f4a-8378-b9c4-ff8130198340",
+			"type": "title",
+			"subtype": "default",
+			"name": 7,
+			"displayIndex": 7,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "7d8317ab-5f4a-8378-b9c4-ff8130198340"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Peso, Balanceamento e Limitações de Pista para Decolagem e Pouso</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(a) – Item 2 – Princípios, métodos de cálculo e limitações operacionais de pista</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "87643b08-cbda-5165-ed2b-d35da7f711af",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 8,
+			"displayIndex": 8,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "87643b08-cbda-5165-ed2b-d35da7f711af"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/0001-2171146828206157187_skkilt.png",
+						"contentType": "image"
+					},
+					{
+						"content": "<p class=\"text-lg \"><strong>Peso</strong> refere-se à massa total da aeronave, incluindo passageiros, carga, combustível e equipamentos.</p>",
+						"contentType": "text"
+					},
+					{
+						"content": "<p class=\"text-lg \">O <strong>balanceamento</strong> de um helicóptero envolve a distribuição adequada do peso dentro da aeronave, principalmente em relação ao seu centro de gravidade (CG).</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": true,
+				"title": "<p>Peso e Balanceamento</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "4a3717c6-6883-1e1f-cf92-8433ca3dae10",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 9,
+			"displayIndex": 9,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "4a3717c6-6883-1e1f-cf92-8433ca3dae10"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">Selecione cada item para ler mais</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Peso Total (MTOW)</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Soma de todas as massas: estrutura, passageiros, bagagens, carga, combustível e equipamentos. O <strong>Peso Máximo de Decolagem (MTOW)</strong> é estabelecido pelo fabricante no RFM e <strong>nunca deve ser ultrapassado</strong>.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Centro de Gravidade (CG)</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Ponto teórico onde toda a massa é considerada concentrada. O CG <strong>dentro dos limites do envelope</strong> (definidos no RFM) é fundamental para a estabilidade e controlabilidade. Fora do envelope, o helicóptero pode se tornar incontrolável.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Sustentação × Peso</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Para voo nivelado, a <strong>sustentação gerada pelo rotor principal deve ser igual ao peso total</strong>. Excesso de peso reduz a margem de sustentação disponível — crítico em pousos em plataformas offshore com área limitada.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Cálculo Antes do Voo</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">O piloto deve calcular peso total e posição do CG usando a <strong>planilha de balanceamento do RFM</strong>, contabilizando cada passageiro, bagagem e litro de combustível. Este cálculo é obrigatório antes de cada voo.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Redistribuição de Carga</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Se o CG estiver fora dos limites, <strong>redistribua a carga antes de decolar</strong>. Em helicópteros com múltiplos compartimentos, a posição de cada item influencia diretamente o CG. <strong>Jamais decole fora do envelope.</strong></p>"
+					}
+				],
+				"title": "<p>Princípios Básicos de Peso e Balanceamento</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "4c0fe622-f38b-677b-dbc7-458badd2eb5a",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 10,
+			"displayIndex": 10,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "A que se refere o peso na aviação?",
+							"questionId": "296b5e4c-3f85-467d-b483-cb5e8dd85093",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "A massa total da aeronave, incluindo passageiros, carga, combustível e equipamentos.",
+								"correct": true,
+								"answerId": "72e021c5-07e2-40e2-9ce9-ac65945a5be2",
+								"type": "text"
+							},
+							{
+								"content": "A força exercida pela gravidade na aeronave.",
+								"correct": false,
+								"answerId": "e95042c4-d38c-4d35-aab5-7dcf5b314290",
+								"type": "text"
+							},
+							{
+								"content": "A quantidade de combustível necessária para um voo.",
+								"correct": false,
+								"answerId": "f44d2ae2-efaa-40cb-9037-26be404c31b9",
+								"type": "text"
+							},
+							{
+								"content": "O número de passageiros a bordo da aeronave.",
+								"correct": false,
+								"answerId": "2a55c392-a0a2-42b9-9755-fbba9b25fe53",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "4c0fe622-f38b-677b-dbc7-458badd2eb5a"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "babbc636-c2cf-ae08-2c44-1ee9e05c8c90",
+						"content": "A massa total da aeronave, incluindo passageiros, carga, combustível e equipamentos.",
+						"correct": true
+					},
+					{
+						"id": "8c524e2f-dc53-687c-2f96-9dac98e28a66",
+						"content": "A força exercida pela gravidade na aeronave.",
+						"correct": false
+					},
+					{
+						"id": "83339b33-d4b3-a5e1-846d-4ddb15362acc",
+						"content": "A quantidade de combustível necessária para um voo.",
+						"correct": false
+					},
+					{
+						"id": "57add917-7e35-cebe-c4d0-c069265bdb4b",
+						"content": "O número de passageiros a bordo da aeronave.",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente. O \"peso\" na aviação é a massa TOTAL — não apenas um componente como combustível ou passageiros.",
+					"correct": "Correto! O peso na aviação representa a massa total da aeronave — incluindo passageiros, carga, combustível e equipamentos.",
+					"text": "A massa total da aeronave, incluindo passageiros, carga, combustível e equipamentos.",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "A que se refere o peso na aviação?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "420e74e3-d0e9-944a-2c18-ae3b161951b0",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 11,
+			"displayIndex": 11,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "420e74e3-d0e9-944a-2c18-ae3b161951b0"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\">O <strong>comprimento disponível</strong> da pista ou área de pouso deve ser suficiente para completar a decolagem e o pouso com a margem de segurança exigida, mesmo em caso de falha de motor.</span>",
+					"<span class=\"text-md leading-relaxed\">A <strong>condição da superfície</strong> impacta diretamente o desempenho: pista molhada, em desnível ou com ondas de mar (para Helipontos flutuantes) aumentam as distâncias necessárias.</span>",
+					"<span class=\"text-md leading-relaxed\">Pilotos devem avaliar se a área disponível atende aos requisitos de <strong>Categoria de Performance</strong> (Cat 1, 2 ou 3) aplicável à operação, conforme o RFM e os requisitos do operador.</span>"
+				],
+				"title": "<p>Limitações da Pista / Área de Pouso</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "455e6032-6d5a-4e74-35ce-5348b1a1391d",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 12,
+			"displayIndex": 12,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "455e6032-6d5a-4e74-35ce-5348b1a1391d"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\">As distâncias de decolagem e pouso dependem de: <strong>peso total da aeronave</strong> (maior peso = maior distância), <strong>densidade do ar</strong> (altitude e temperatura elevadas reduzem o desempenho) e <strong>características do heliponto</strong> (tamanho, obstáculos, elevação).</span>",
+					"<span class=\"text-md leading-relaxed\">Use sempre as <strong>tabelas de desempenho do RFM</strong> da aeronave para o modelo específico. As tabelas fornecem distâncias em condições padrão, com fatores de correção para variações de temperatura, altitude e peso.</span>",
+					"<span class=\"text-md leading-relaxed\">Em plataformas offshore, inclua margem adicional para <strong>condições de mar agitado</strong>, vento cruzado e limitações de área. O planejamento conservador é sempre preferível.</span>"
+				],
+				"title": "<p>Calculando Distâncias de Decolagem e Pouso</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "28f72ef0-0391-c6b7-f237-95b4b5175c14",
+			"type": "title",
+			"subtype": "default",
+			"name": 13,
+			"displayIndex": 13,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "28f72ef0-0391-c6b7-f237-95b4b5175c14"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Meteorologia Operacional: Sistemas Frontais, Gelo, Nevoeiro, Trovoadas, Tesouras de Vento e Meteorologia de Grande Altitude</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(a) – Item 3 – Conhecimento prático dos fenômenos atmosféricos relevantes para operações 135</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "9f064834-0098-7ecf-5f89-5a220ee7c0e4",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 14,
+			"displayIndex": 14,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "9f064834-0098-7ecf-5f89-5a220ee7c0e4"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "<p class=\"text-lg\"><strong>O que são sistemas frontais?</strong></p><p class=\"text-md\">Frentes são zonas de encontro entre massas de ar com diferentes temperatura, umidade e pressão. Na aviação, são uns dos principais riscos meteorológicos.</p><table style=\"width:100%;border-collapse:collapse\"><tr><th style=\"text-align:left;padding:6px;border-bottom:2px solid #ccc\">Tipo</th><th style=\"text-align:left;padding:6px;border-bottom:2px solid #ccc\">Características</th><th style=\"text-align:left;padding:6px;border-bottom:2px solid #ccc\">Riscos</th></tr><tr><td style=\"padding:6px;border-bottom:1px solid #eee\"><strong>Frente Fria</strong></td><td style=\"padding:6px;border-bottom:1px solid #eee\">Ar frio avança sobre ar quente. Passagem rápida.</td><td style=\"padding:6px;border-bottom:1px solid #eee\">Tempestades, rajadas, ventos cortantes</td></tr><tr><td style=\"padding:6px;border-bottom:1px solid #eee\"><strong>Frente Quente</strong></td><td style=\"padding:6px;border-bottom:1px solid #eee\">Ar quente avança sobre ar frio. Passagem gradual.</td><td style=\"padding:6px;border-bottom:1px solid #eee\">Nevoeiros, chuvas persistentes, baixa visibilidade</td></tr><tr><td style=\"padding:6px\"><strong>Frente Oclusa</strong></td><td style=\"padding:6px\">Frente fria alcança frente quente.</td><td style=\"padding:6px\">Combina ambas — condições complexas</td></tr></table><p class=\"text-md\" style=\"margin-top:12px\">⚠️ Antes de cada voo, verifique SIGMETs, SIGAs, METARs e TAFs para identificar sistemas frontais na rota.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": true,
+				"title": "<p>Sistemas Frontais e Fenômenos Atmosféricos</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "9cfb97d5-c0fd-d293-5b90-c7084960da51",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 15,
+			"displayIndex": 15,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Quais são as características das frentes quentes e das frentes frias em relação às condições climáticas?",
+							"questionId": "58d626c7-54d9-4e46-a7e7-bbbd220ebb81",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "As frentes quentes trazem condições estáveis, enquanto as frentes frias indicam mudanças climáticas",
+								"correct": true,
+								"answerId": "3af6b9bb-bb3a-487d-afe2-a3cdcb73be41",
+								"type": "text"
+							},
+							{
+								"content": "Frentes quentes trazem condições instáveis, enquanto frentes frias indicam mudanças climáticas",
+								"correct": false,
+								"answerId": "23ce8559-8aa5-41f0-ad77-ffbe234cf4cb",
+								"type": "text"
+							},
+							{
+								"content": "Frentes quentes indicam mudanças climáticas, enquanto frentes frias trazem condições estáveis",
+								"correct": false,
+								"answerId": "5477f835-049e-4df2-ab14-742d7fd26daa",
+								"type": "text"
+							},
+							{
+								"content": "Frentes quentes e frias trazem condições climáticas estáveis",
+								"correct": false,
+								"answerId": "2f74eb46-1b3c-4043-b27c-217b7664d88e",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "9cfb97d5-c0fd-d293-5b90-c7084960da51"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "f65adb85-794a-0970-175b-744ba4b6597f",
+						"content": "Traz tempestades intensas e rápidas, com rajadas de vento e queda brusca de temperatura.",
+						"correct": true
+					},
+					{
+						"id": "6b50047e-1c25-59d9-0c50-98d031d6252e",
+						"content": "Traz chuvas persistentes e nevoeiros por período prolongado.",
+						"correct": false
+					},
+					{
+						"id": "4b02399f-d777-6b8a-a943-2c42dae1a640",
+						"content": "Traz chuvas persistentes e nevoeiros por período prolongado.",
+						"correct": false
+					},
+					{
+						"id": "ea20d430-029d-7923-34c2-d801001d6490",
+						"content": "Traz chuvas persistentes e nevoeiros por período prolongado.",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não foi isso. A frente fria provoca tempestades intensas e passagem rápida, com queda brusca de temperatura e rajadas fortes.",
+					"correct": "Correto! A frente fria é caracterizada por tempestades intensas e rápidas — ao contrário da frente quente, que traz chuvas prolongadas e nevoeiros.",
+					"text": "Traz tempestades intensas e rápidas, com rajadas de vento e queda brusca de temperatura.",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Qual das afirmações abaixo descreve corretamente uma frente FRIA?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "83a6a844-80c2-26a6-75ec-7dbb2423209f",
+			"type": "list",
+			"subtype": "list",
+			"name": 16,
+			"displayIndex": 16,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "83a6a844-80c2-26a6-75ec-7dbb2423209f"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Como ocorre:</strong> o gelo forma-se quando a aeronave voa por nuvens com gotículas de água super-resfriadas (temperatura ≤ 0°C). Deposita-se nas pás do rotor, fuselagem, antenas e entradas de ar.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Impactos críticos:</strong> o gelo altera o perfil aerodinâmico das pás (reduz a sustentação), aumenta o peso, causa vibração anormal e pode bloquear filtros de ar do motor.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Condições de maior risco:</strong> nuvens com topos entre −10°C e +2°C são as mais perigosas. Verifique SIGMETs de gelo no briefing pré-voo.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Procedimento:</strong> acione sistemas antisselo (se disponível), saia da área de gelo alterando altitude, reportando ao ATC. Consulte os procedimentos de emergência de gelo no RFM.</p>"
+				],
+				"doneText": null,
+				"title": "<p><strong>Formação de Gelo — Riscos e Procedimentos</strong></p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "b7c94ec5-90e5-cf4c-998a-e8a8ac764f1a",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 17,
+			"displayIndex": 17,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "b7c94ec5-90e5-cf4c-998a-e8a8ac764f1a"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\"><strong>O que é:</strong> mudança súbita de velocidade e/ou direção do vento em curta distância ou altura. É especialmente perigosa durante decolagem e pouso (baixa altitude, baixa velocidade).</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Como afeta o helicóptero:</strong> queda súbita do vento de proa (headwind) causa perda imediata de sustentação. Mudança para vento de cauda (tailwind) tem o mesmo efeito. Ambas podem resultar em impacto com o solo.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Fontes típicas:</strong> bordas de células convectivas (trovoadas), frentes frias, brisas marítimas e obstáculos físicos próximos (plataformas, edificações no campo de voo).</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Ação imediata:</strong> ao detectar windshear, aplique <strong>potência máxima imediatamente</strong>, aceite a altitude disponível e comunique o ATC. O alarme EGPWS/GPWS deve ser respondido com o procedimento de escape padrão do RFM.</span>"
+				],
+				"title": "<p>Tesouras de Vento (Windshear)</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "3aafb492-b0af-3e25-fb3e-394de0e1d51f",
+			"type": "title",
+			"subtype": "default",
+			"name": 18,
+			"displayIndex": 18,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "3aafb492-b0af-3e25-fb3e-394de0e1d51f"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Sistemas de Controle de Tráfego Aéreo, Procedimentos e Fraseologia</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(a) – Item 4 – Espaço aéreo, mínimos VFR/IFR e fraseologia ICAO/DECEA</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "7b8f7372-b007-a798-bf17-e310e8636ce5",
+			"type": "list",
+			"subtype": "list",
+			"name": 19,
+			"displayIndex": 19,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "7b8f7372-b007-a798-bf17-e310e8636ce5"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Visibilidade de Voo (VFR):</strong> mínimo de <strong>5 km</strong> em espaço aéreo controlado. (Abaixo de 300m AGL, aplica-se a visibilidade do terreno).</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Distância de Nuvens:</strong> manter ao menos <strong>300 m horizontais e verticais</strong> de qualquer nuvem (exceto classe G, que possui regras específicas).</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Horário VFR:</strong> realizado exclusivamente de dia (entre nascer e pôr do sol). VFR Noturno exige homologação e certificação específicas.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Operação Abaixo de 300 m AGL:</strong> autorizações especiais do ATC são possíveis em visibilidade reduzida, desde que se mantenha contato visual contínuo com a superfície.</p>"
+				],
+				"doneText": null,
+				"title": "<p><strong>Critérios VFR em Espaço Aéreo Controlado</strong></p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "d678482b-c17e-0337-0865-4b08595970c3",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 20,
+			"displayIndex": 20,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Qual é a visibilidade mínima de voo exigida para voos VFR dentro do espaço aéreo controlado?",
+							"questionId": "2ea23b70-04f8-4323-9d1f-3e036f350820",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "3.000 metros",
+								"correct": true,
+								"answerId": "6f9ac86a-7ad0-441b-9ed0-09feab12a7c2",
+								"type": "text"
+							},
+							{
+								"content": "2.000 metros",
+								"correct": false,
+								"answerId": "23bb7872-d202-469d-ac10-49d5fea118e3",
+								"type": "text"
+							},
+							{
+								"content": "4.000 metros",
+								"correct": false,
+								"answerId": "537400b5-0d54-466c-9ebd-8bc04b74f728",
+								"type": "text"
+							},
+							{
+								"content": "5.000 metros",
+								"correct": false,
+								"answerId": "70950846-8a59-4ecf-a6e5-421d1886365d",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "d678482b-c17e-0337-0865-4b08595970c3"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "71b452a0-bd5d-8480-35a4-80eea9f6a85f",
+						"content": "3.000 metros",
+						"correct": true
+					},
+					{
+						"id": "45c049cb-a8c5-e798-b384-509fff747f68",
+						"content": "2.000 metros",
+						"correct": false
+					},
+					{
+						"id": "91d86ce0-e6e3-45f0-d31a-76ceb97cb91b",
+						"content": "4.000 metros",
+						"correct": false
+					},
+					{
+						"id": "72e7bca3-a22f-f7d6-2803-b1e94096eba8",
+						"content": "5.000 metros",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente. A visibilidade mínima padrão para VFR em espaço aéreo controlado é de 5 km. Valores menores se aplicam a casos especiais.",
+					"correct": "Correto! A visibilidade mínima para VFR em espaço controlado é de 5 km, exceto em classes específicas com regras diferenciadas.",
+					"text": "3.000 metros",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Qual é a visibilidade mínima de voo exigida para voos VFR dentro do espaço aéreo controlado?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "ff6d0bff-9212-e076-0baa-bde3450dfde2",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 21,
+			"displayIndex": 21,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ff6d0bff-9212-e076-0baa-bde3450dfde2"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\">Os mínimos VFR combinam <strong>teto de nuvens e visibilidade</strong>: para voos VFR padrão em espaço controlado, o teto deve ser no mínimo 1.000 pés (300 m) acima do terreno e a visibilidade mínima de 5 km.</span>",
+					"<span class=\"text-md leading-relaxed\">Em operações offshore, o piloto deve considerar também a altura de onde pode ter <strong>visual contínuo da superfície oceânica</strong> — referência fundamental quando não há horizonte natural definido.</span>",
+					"<span class=\"text-md leading-relaxed\">Sempre confirme os mínimos específicos para cada trecho e classe de espaço aéreo no <strong>AIP Brasil</strong> e nas cartas de rota. Os valores podem variar por região e tipo de operação.</span>"
+				],
+				"title": "<p>Mínimos Meteorológicos para Voo VFR</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "ac1e3742-6bdb-8150-3f7f-d010299aed6f",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 22,
+			"displayIndex": 22,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Quais são os mínimos meteorológicos vigentes para voos VFR em aeródromos ou helipontos?",
+							"questionId": "9bc9109c-ec93-4285-bf20-5529002d3674",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Teto de 600 pés e visibilidade de 1.500 metros",
+								"correct": true,
+								"answerId": "5717c8a0-cbdf-4a87-b6c6-c1933a42ecce",
+								"type": "text"
+							},
+							{
+								"content": "Teto de 500 pés e visibilidade de 1000 metros",
+								"correct": false,
+								"answerId": "e59140ab-691f-480c-8e0e-f2cece46ceba",
+								"type": "text"
+							},
+							{
+								"content": "Teto de 700 pés e visibilidade de 2.000 metros",
+								"correct": false,
+								"answerId": "b5224a9b-88a2-4cde-9f9f-70389fc7f2f3",
+								"type": "text"
+							},
+							{
+								"content": "Teto de 800 pés e visibilidade de 2.500 metros",
+								"correct": false,
+								"answerId": "1ff9882a-a949-43d7-9a25-fde9d7752419",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "ac1e3742-6bdb-8150-3f7f-d010299aed6f"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "d72926e3-d9b1-8565-9130-d9527d04d7ae",
+						"content": "Teto de 600 pés e visibilidade de 1.500 metros",
+						"correct": true
+					},
+					{
+						"id": "46128b30-9461-56ec-a5f2-56a164aae95e",
+						"content": "Teto de 500 pés e visibilidade de 1000 metros",
+						"correct": false
+					},
+					{
+						"id": "4975117e-6b51-7a55-a891-34dc9ecd70e3",
+						"content": "Teto de 700 pés e visibilidade de 2.000 metros",
+						"correct": false
+					},
+					{
+						"id": "3016eab2-e30d-a809-5be1-7df7cce44715",
+						"content": "Teto de 800 pés e visibilidade de 2.500 metros",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Incorreto. Os mínimos VFR para pouso em aeródromos no Brasil exigem <strong>teto mínimo de 600 pés AGL e visibilidade de 1.500 metros</strong>, conforme ICA 100-12. Abaixo desses valores, a operação requer IFR ou não é autorizada — operar VFR abaixo dos mínimos é infração grave e risco de CFIT (Controlled Flight Into Terrain).",
+					"correct": "Correto! Teto de 600 pés e visibilidade de 1.500 metros são os mínimos VFR para pouso definidos no ICA 100-12. Essa margem garante que o piloto mantenha referências visuais com o solo durante toda a aproximação final.",
+					"text": "Teto de 600 pés e visibilidade de 1.500 metros",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Quais são os mínimos meteorológicos vigentes para voos VFR em aeródromos ou helipontos?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "f8e146b3-2c79-ce05-cb94-3d5fdc4906fd",
+			"type": "list",
+			"subtype": "list",
+			"name": 23,
+			"displayIndex": 23,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f8e146b3-2c79-ce05-cb94-3d5fdc4906fd"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">Durante o dia, os aeródromos ou helipontos de partida, destino e alternativa deverão estar cadastrados ou certificados para operações VFR.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">As condições meteorológicas nos aeródromos ou helipontos deverão atender aos mínimos estabelecidos para operações VFR de helicópteros.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">À noite, os pilotos e helicópteros devem ser certificados IFR e equipados com um transceptor VHF funcional, além das condições diurnas.</p>"
+				],
+				"doneText": null,
+				"title": "Condições para realização de voo VFR",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "c2b4e774-65fa-8dfa-a0c0-c011dafd9f3d",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 24,
+			"displayIndex": 24,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "c2b4e774-65fa-8dfa-a0c0-c011dafd9f3d"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/FUP20170115061_hju5j9.png",
+						"contentType": "image"
+					},
+					{
+						"content": "<p class=\"text-lg\">Os helicópteros estão proibidos de sobrevoar instituições penais a uma altura inferior a 300 metros (1000 pés) acima da estrutura mais alta da parte construída.</p>",
+						"contentType": "text"
+					},
+					{
+						"content": "<p class=\"text-lg\">As autorizações para voar abaixo das alturas mínimas especificadas destinam-se exclusivamente à coordenação do tráfego aéreo e à garantia da segurança do voo.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": true,
+				"title": "Regulamentos Especiais para Voo VFR",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "57a904f7-d6b6-aa84-b6bb-109e0e798ad0",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 25,
+			"displayIndex": 25,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "57a904f7-d6b6-aa84-b6bb-109e0e798ad0"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/0001-8230740226352149826_tltdrr.png",
+						"contentType": "image"
+					},
+					{
+						"content": "<p>Caso a decolagem ou pouso ocorra fora da área de manobra, fora da linha de visão da torre de controle de tráfego aéreo (ATC), ou se esta instalação não tiver visibilidade adequada da área, deverá ser utilizada fraseologia apropriada.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": true,
+				"title": "Condições Específicas de Decolagem ou Pouso",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "e0009c04-2448-e968-86af-2330b5336af7",
+			"type": "list",
+			"subtype": "list",
+			"name": 26,
+			"displayIndex": 26,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "e0009c04-2448-e968-86af-2330b5336af7"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">Helicópteros equipados com rodas ou aeronaves VTOL podem taxiar no solo.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">O taxiamento terrestre consome menos combustível e minimiza a turbulência, mas o taxiamento aéreo pode ser necessário em certas condições como terrenos acidentados, frágeis ou irregulares</p>"
+				],
+				"doneText": null,
+				"title": "<p><strong>Operação de Táxi</strong></p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "bce60321-dcf2-de61-3e0d-b2e7f4cd9aa9",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 27,
+			"displayIndex": 27,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Quando os helicópteros podem taxiar no solo?",
+							"questionId": "61f8ea6f-89f4-4237-b260-1f3568e891c4",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "<p>Helicópteros equipados com flutuadores</p>",
+								"correct": false,
+								"answerId": "31069bcc-050d-4c45-9712-697d6b09d46d",
+								"type": "text"
+							},
+							{
+								"content": "Helicópteros equipados com trem de pouso retrátil",
+								"correct": false,
+								"answerId": "fca3d7ed-b311-4c48-95c7-bb2853cc4a9e",
+								"type": "text"
+							},
+							{
+								"content": "<p>Helicópteros equipados com rotores fixos</p>",
+								"correct": false,
+								"answerId": "e126579c-7fcb-41fa-b374-aec11e0dc9e5",
+								"type": "text"
+							},
+							{
+								"content": "Helicópteros equipados com rodas ou aeronaves VTOL",
+								"correct": true,
+								"answerId": "af04dcf7-b88c-4519-8bd8-8a7d2e150cb4",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "bce60321-dcf2-de61-3e0d-b2e7f4cd9aa9"
+			},
+			"data": {
+				"answers": {
+					"correct": "Helicópteros equipados com rodas ou aeronaves VTOL",
+					"incorrect": [
+						"<p>Helicópteros equipados com flutuadores</p>",
+						"Helicópteros equipados com trem de pouso retrátil",
+						"<p>Helicópteros equipados com rotores fixos</p>"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente...",
+					"correct": "Correto! Helicópteros equipados com rodas ou aeronaves VTOL",
+					"text": "Helicópteros equipados com rodas ou aeronaves VTOL",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Quando os helicópteros podem taxiar no solo?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "89ea89d4-dee8-ab24-3072-9fb8ed1757cf",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 28,
+			"displayIndex": 28,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "89ea89d4-dee8-ab24-3072-9fb8ed1757cf"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\">Helipontos offshore apresentam desafios únicos: área limitada, impossibilidade de abortar para retomada, movimento da plataforma e ausência de alternativa de pouso imediata. O piloto deve estar preparado para todos esses fatores simultaneamente.</span>",
+					"<span class=\"text-md leading-relaxed\">A seleção da <strong>direção de aproximação</strong> deve considerar o vento predominante (aproximar contra o vento sempre que possível), a posição de obstáculos e a área de segurança da plataforma.</span>",
+					"<span class=\"text-md leading-relaxed\">Em caso de não estabilização na final, ou condições abaixo dos mínimos no heliponto, o piloto deve executar a <strong>arremetida imediata</strong> sem hesitação e comunicar o ATC/operador.</span>"
+				],
+				"title": "<p>Operações de Pouso e Decolagem em Helipontos</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "6198378c-902a-e7ca-11a8-9cefec073c9f",
+			"type": "list",
+			"subtype": "list",
+			"name": 29,
+			"displayIndex": 29,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "6198378c-902a-e7ca-11a8-9cefec073c9f"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Ponto designado de pouso/decolagem:</strong> helicópteros podem decolar e pousar em pontos ou áreas designadas que não sejam pistas convencionais, desde que a operação seja segura e previamente autorizada (RBAC 91 e 135). Exemplos: terraços de hospitais, plataformas marítimas e helipads urbanos.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Autorização e coordenação:</strong> mesmo sendo permitido tecnicamente, o pouso em áreas não convencionais requer coordenação com o ATC, proprietário da área e operador. Uma verificação visual do local deve ser realizada antes do pouso sempre que possível.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Avaliação do local (LZ):</strong> ao avaliar uma zona de pouso não convencional, o piloto deve verificar: tamanho (mínimo 1,5x o diâmetro do rotor em todas as direções), inclinação (máxima conforme RFM), obstáculos laterais e condições do solo.</p>"
+				],
+				"doneText": null,
+				"title": "Separação na decolagem e/ou pouso",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "4b1bab1d-c0ac-dd37-5731-3ec725d67194",
+			"type": "image-collection",
+			"subtype": "image-collection",
+			"name": 30,
+			"displayIndex": 30,
+			"templateName": "Image collection",
+			"templateDescription": "Select an image to see more detail",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "4b1bab1d-c0ac-dd37-5731-3ec725d67194"
+			},
+			"data": {
+				"prompt": "<p class=\"text-transform-uppercase\">Clique em cada imagem para mais detalhes</p>",
+				"background": "",
+				"lightbox": false,
+				"images": [
+					{
+						"content": "<p>Figura 1 - Decolagens consecutivas de helicópteros</p>",
+						"image": "fit_content_assets/fig_1_q9b6cv.png",
+						"narration": null,
+						"description": "Imagem de referência para o conteúdo apresentado.",
+						"label": "Decolagem normal: o helicóptero sobe verticalmente para o efeito solo, depois acelera para frente. A linha tracejada mostra a trajetória de subida."
+					},
+					{
+						"content": "<p>Figura 2 – Decolagem, após o pouso e o táxi de outro helicóptero</p>",
+						"image": "fit_content_assets/Fig_2_loe9xe.png",
+						"narration": null,
+						"description": "Imagem de referência para o conteúdo apresentado.",
+						"label": "Decolagem com ponto de decisão: caso haja falha de motor antes do ponto P, o pouso é no heliponto; após P, a decolagem continua com o motor restante."
+					}
+				],
+				"doneText": "Continuar",
+				"title": "<p>Decolagem</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "74b8951f-1202-a73a-6d2e-1c4f9bd58b18",
+			"type": "image-collection",
+			"subtype": "image-collection",
+			"name": 31,
+			"displayIndex": 31,
+			"templateName": "Image collection",
+			"templateDescription": "Select an image to see more detail",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "74b8951f-1202-a73a-6d2e-1c4f9bd58b18"
+			},
+			"data": {
+				"prompt": "<p class=\"text-transform-uppercase\">Clique em cada imagem para mais detalhes</p>",
+				"background": "",
+				"lightbox": false,
+				"images": [
+					{
+						"content": "<p>Figura 3 – Pouso após o pouso e o táxi de outro helicóptero</p>",
+						"image": "fit_content_assets/Fig_3_cg8k7x.png",
+						"narration": null,
+						"description": "Imagem de referência para o conteúdo apresentado.",
+						"label": "Aproximação normal ao heliponte: descida estabilizada com ângulo de 6–8°, vento de frente, velocidade reduzida até ponto de hover."
+					},
+					{
+						"content": "<p>Figura 4 – Decolagem seguida do pouso de outro helicóptero</p>",
+						"image": "fit_content_assets/fig_4_krwreh.png",
+						"narration": null,
+						"description": "Imagem de referência para o conteúdo apresentado.",
+						"label": "Pouso segmentado: aproximação ao ponto de hover (identificação de obstáculos), seguida de descida vertical controlada até o deck."
+					}
+				],
+				"doneText": "Continuar",
+				"title": "<p>Pouso</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "3c0a9ba4-094e-d208-1250-fcd14a7c186c",
+			"type": "list",
+			"subtype": "list",
+			"name": 32,
+			"displayIndex": 32,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "3c0a9ba4-094e-d208-1250-fcd14a7c186c"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">As trajetórias de voo não forem conflitantes;</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">Os pontos de pouso ou decolagem usados pelos dois helicópteros estiverem afastados lateralmente de, pelo menos, 60 metros;</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">Os helicópteros forem instruídos a manter-se afastados, pelo menos, 60 metros entre si.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Separação entre Pouso e Decolagem simultânea</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "dce3d246-3845-b4e5-76c6-c143041de6de",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 33,
+			"displayIndex": 33,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "dce3d246-3845-b4e5-76c6-c143041de6de"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/Screenshot_2023-12-10_222434_pzeugh_mmogzl.png",
+						"contentType": "image"
+					},
+					{
+						"content": "<p class=\"text-lg\">Uma Rota Especial de Helicópteros pode ser estabelecida para organizar a movimentação de helicópteros dentro de um CTR/TMA dependendo do volume e da complexidade do tráfego aéreo.</p>",
+						"contentType": "text"
+					},
+					{
+						"content": "<p class=\"text-lg\">O REH implementado será incluído nas publicações de informação aeronáutica correspondentes.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": false,
+				"title": "Estabelecimento da REH",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "d2131222-6bf2-79b8-17da-92469bd823a3",
+			"type": "list",
+			"subtype": "list",
+			"name": 34,
+			"displayIndex": 34,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "d2131222-6bf2-79b8-17da-92469bd823a3"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">Os voos de helicóptero deverão, a princípio, ser realizados dentro da REH estabelecido quando implementado no CTR/TMA.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">Os níveis ou altitudes de voo são estabelecidos de acordo com a direção do voo.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">Um helicóptero voando dentro da REH deverá ter sempre os pontos de referência desta rota no seu lado direito, salvo indicação em contrário.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Operações dentro da REH</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "a70b0a19-6146-69a0-b36c-cf093eb7f3c1",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 35,
+			"displayIndex": 35,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "a70b0a19-6146-69a0-b36c-cf093eb7f3c1"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">Clique em cada item para ver os detalhes</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"content": "<p class=\"text-md\" style=\"margin:0;\">A expressão “táxi” será utilizada para o movimento do helicóptero na superfície do\r\naeródromo, via pistas de táxi ou outras trajetórias previstas. Tal expressão é usada, primariamente,\r\npara helicópteros equipados com rodas ou em resposta a uma solicitação do piloto.</p>",
+						"title": "<p class=\"text-md\" style=\"margin:0;\">TÁXI</p>"
+					},
+					{
+						"content": "<p class=\"text-md\" style=\"margin:0;\">A expressão “taxiamento aéreo” será usada para o movimento de helicóptero em baixa\r\nvelocidade sobre a superfície do aeródromo, normalmente a menos de 37 km/h (20 kt) e com o\r\nefeito do solo.</p>",
+						"title": "<p class=\"text-md\" style=\"margin:0;\">TAXIAMENTO AÉREO</p>"
+					},
+					{
+						"content": "<p class=\"text-md\" style=\"margin:0;\">A expressão “deslocamento aéreo” será usada para o movimento de helicóptero sobre a\r\nsuperfície do aeródromo e em rota de deslocamento aéreo, quando as operações de solo e as\r\ncondições assim o permitirem. Nessa situação, os helicópteros permanecem abaixo de 100 pés e\r\ncom velocidade relativa ao solo superior a 37 km/h (20 kt).</p>",
+						"title": "<p class=\"text-md\" style=\"margin:0;\">DESLOCAMENTO AÉREO</p>"
+					}
+				],
+				"title": "<p>Fraseologia Específica</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "ae9d15c4-8b41-b51a-4644-399c645f2ecb",
+			"type": "title",
+			"subtype": "default",
+			"name": 36,
+			"displayIndex": 36,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ae9d15c4-8b41-b51a-4644-399c645f2ecb"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Navegação e Uso de Facilidades de Auxílio à Navegação, Incluindo Procedimentos de Aproximação por Instrumentos</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(a) – Item 5 – VOR, NDB, GPS/GNSS, ILS e procedimentos IAC</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "5c8d9b3d-c8c8-273c-5c19-fa62a7921e47",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 37,
+			"displayIndex": 37,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "5c8d9b3d-c8c8-273c-5c19-fa62a7921e47"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/ils-approach_puv1sn.jpg",
+						"contentType": "image",
+						"caption": "<p class=\"text-md\">Aproximação IFR com auxílio de ILS — procedimento padrão em aeródromos equipados.</p>"
+					},
+					{
+						"content": "<p class=\"text-lg\"><strong>IFR em Helicópteros</strong></p><p class=\"text-md\">Voos IFR (Instrument Flight Rules) permitem que o piloto opere em condições de baixa visibilidade ou dentro de nuvens, com base exclusivamente nos instrumentos de bordo.</p><p class=\"text-md\"><strong>Requisitos básicos para IFR:</strong></p><ul><li><p class=\"text-md\">Piloto com habilitação IFR válida e recência.</p></li><li><p class=\"text-md\">Aeronave certificada e equipada para IFR (giroscópios, altímetro barométrico, VOR/ILS, transponder modo C ou S).</p></li><li><p class=\"text-md\">Plano de voo IFR preenchido e aceito pelo ATC.</p></li><li><p class=\"text-md\">Separação garantida pelo ATC durante toda a operação.</p></li></ul>",
+						"contentType": "text"
+					},
+					{
+						"content": "<p class=\"text-md\">Procedimentos de aproximação IFR seguem as cartas de procedimento publicadas no AIP. Em aeródromos sem cartas específicas para helicópteros, aplicam-se os procedimentos da categoria de aviões (mais conservadores).</p><p class=\"text-md\">⚠️ Helipontos offshore normalmente <strong>não possuem procedimentos IFR publicados</strong>. A aproximação VFR a partir de condições IFR exige coordenação prévia e autorização específica.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": true,
+				"title": "<p>Voo por Instrumentos (IFR) em Helicópteros</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "e375393a-bd5b-b60b-1053-a755039e895d",
+			"type": "list",
+			"subtype": "list",
+			"name": 38,
+			"displayIndex": 38,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "e375393a-bd5b-b60b-1053-a755039e895d"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Mínimos meteorológicos:</strong> cada procedimento de aproximação publica mínimos específicos (DA/DH ou MDA/MDH) que determinam a altitude mínima de descida e a visibilidade necessária para pousar.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Velocidade na final:</strong> a velocidade mínima no segmento de aproximação final para helicópteros é de <strong>70 kt</strong>, podendo ser reduzida em procedimentos exclusivos para helicópteros.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Alternativas:</strong> a aeronave deve ter combustível suficiente para voar ao aeródromo de alternativa e pousar, caso o destino principal esteja abaixo dos mínimos. Alternativas IFR exigem mínimos meteorológicos próprios.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Reporte de posição:</strong> durante a aproximação IFR, o piloto deve confirmar ao ATC quando passa por pontos de reporte da carta de procedimento (FAF, IF, etc.).</p>"
+				],
+				"doneText": null,
+				"title": "<p>Mínimos para Helicópteros em IFR</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "6a687e68-7e57-35b2-d247-2c1d68cad38f",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 39,
+			"displayIndex": 39,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Qual a velocidade mínima exigida no segmento de aproximação final para helicópteros durante procedimentos IFR?",
+							"questionId": "8c3dfe96-3c5c-4868-aa3a-c50b0faad112",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "50kt",
+								"correct": false,
+								"answerId": "09940876-f9aa-4e68-8c54-b2703eb99649",
+								"type": "text"
+							},
+							{
+								"content": "80kt",
+								"correct": false,
+								"answerId": "bb6ef466-6c8d-48e7-b0e2-c972ff9aad90",
+								"type": "text"
+							},
+							{
+								"content": "90kt",
+								"correct": false,
+								"answerId": "aa4cdaa0-2524-4cd9-b2f0-c397807978d0",
+								"type": "text"
+							},
+							{
+								"content": "70kt",
+								"correct": true,
+								"answerId": "4c2d6c01-fc94-46cf-9239-70eddc246ee5",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "6a687e68-7e57-35b2-d247-2c1d68cad38f"
+			},
+			"data": {
+				"answers": {
+					"correct": "70kt",
+					"incorrect": [
+						"50kt",
+						"80kt",
+						"90kt"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente...",
+					"correct": "Correto! 70kt",
+					"text": "70kt",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Qual a velocidade mínima exigida no segmento de aproximação final para helicópteros durante procedimentos IFR?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "bf1756b1-a25f-77b0-bf31-4ff86be9c7fc",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 40,
+			"displayIndex": 40,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "bf1756b1-a25f-77b0-bf31-4ff86be9c7fc"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\">O aeródromo ou heliponto de destino deve estar <strong>registrado para operações IFR noturnas</strong>, com iluminação de pista/heliponto adequada e serviços ATC disponíveis.</span>",
+					"<span class=\"text-md leading-relaxed\">As condições meteorológicas no destino e no alternativo devem <strong>satisfazer os mínimos IFR noturnos</strong> publicados no AIP ou nas autorizações específicas do operador.</span>",
+					"<span class=\"text-md leading-relaxed\">O piloto deve ter <strong>recência noturna e IFR válidas</strong>. A combinação de operação noturna + IFR offshore representa o cenário de maior exigência de preparo — a margem de erro é mínima.</span>"
+				],
+				"title": "<p>Condições para Voo IFR Noturno em Helicópteros</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "2c423e57-80a4-2d3b-1c80-9881f6cf3ba6",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 41,
+			"displayIndex": 41,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "O que é necessário para operações noturnas IFR em helicópteros?",
+							"questionId": "a80cf5c8-10cf-48e1-ad0a-2f85894edbdf",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Aprovação ou registro do aeródromo ou heliponto de partida para operações noturnas IFR",
+								"correct": true,
+								"answerId": "a2bc8118-e8c5-404c-85fe-4682ff01ac1b",
+								"type": "text"
+							},
+							{
+								"content": "Sem requisitos específicos",
+								"correct": false,
+								"answerId": "d8a3ce08-021e-43ee-91f8-08d0e36743af",
+								"type": "text"
+							},
+							{
+								"content": "Aprovação ou registro do aeródromo ou heliponto de destino para operações noturnas IFR",
+								"correct": false,
+								"answerId": "f3f5dd4d-3dca-41b0-8b52-c2fbceaf6b1a",
+								"type": "text"
+							},
+							{
+								"content": "Aprovação ou registro de aeródromo ou heliponto alternativo para operações noturnas IFR",
+								"correct": false,
+								"answerId": "a8dbc20b-c71d-4c03-882d-014d420321f6",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "2c423e57-80a4-2d3b-1c80-9881f6cf3ba6"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "00afa756-c473-dfa3-052a-1b36a994128d",
+						"content": "Aprovação ou registro do aeródromo ou heliponto de partida para operações noturnas IFR",
+						"correct": true
+					},
+					{
+						"id": "5c6ff02e-32f4-e25d-f685-8f9e081a9935",
+						"content": "Sem requisitos específicos",
+						"correct": false
+					},
+					{
+						"id": "83e530d6-b4f6-6d8b-6be5-2a2d4a364827",
+						"content": "Aprovação ou registro do aeródromo ou heliponto de destino para operações noturnas IFR",
+						"correct": false
+					},
+					{
+						"id": "b754420e-8da2-1d15-0636-3ad1cbce1790",
+						"content": "Aprovação ou registro de aeródromo ou heliponto alternativo para operações noturnas IFR",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Incorreto. Operações IFR noturnas em helicóptero exigem <strong>homologação específica do heliponto</strong> de partida e destino para operações noturnas (iluminação, balizamento, FATO/TLOF dimensionados para período noturno), além de piloto com habilitação IFR e noturna em dia, conforme os requisitos do RBAC 135 e ICA 63-19.",
+					"correct": "Correto! A aprovação/homologação noturna do heliponto é requisito essencial. Sem iluminação e balizamento adequados, mesmo um piloto habilitado para IFR noturno não pode operar legalmente naquele local.",
+					"text": "Aprovação ou registro do aeródromo ou heliponto de partida para operações noturnas IFR",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "O que é necessário para operações noturnas IFR em helicópteros?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "2106d122-946a-fe2e-32be-01461219422b",
+			"type": "list",
+			"subtype": "list",
+			"name": 42,
+			"displayIndex": 42,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "2106d122-946a-fe2e-32be-01461219422b"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Frequências ATC:</strong> em IFR, o piloto recebe atribuições de frequência do ATC conforme passa por diferentes setores. Monitore as frequências atribuídas e reporte imediatamente qualquer perda de contato.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Auxílios de navegação:</strong> VOR, ILS, GPS/GNSS e DME são os principais auxílios em voo IFR. Verifique a validade e operacionalidade de cada um no NOTAM antes do voo.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Gestão de workload:</strong> em IFR, a carga de trabalho do piloto é alta — divida tarefas entre piloto e copiloto (CRM), use checklists e mantenha disciplina de procedimentos para minimizar erros.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Comunicação e Navegação em Voo IFR</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "daf22dfc-ffd3-4921-501b-973ca687345c",
+			"type": "title",
+			"subtype": "default",
+			"name": 43,
+			"displayIndex": 43,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "daf22dfc-ffd3-4921-501b-973ca687345c"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Procedimentos de Comunicações Normais e de Emergência</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(a) – Item 6 – Fraseologia, comunicações em emergência e falha de rádio</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "c9fe2bf3-c4d0-e2bd-d8d9-519af67fb40f",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 44,
+			"displayIndex": 44,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "c9fe2bf3-c4d0-e2bd-d8d9-519af67fb40f"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/acqUj_jyck6k.jpg",
+						"contentType": "image"
+					},
+					{
+						"content": "<p class=\"text-lg\"><strong>Fraseologia padronizada — por que é obrigatória?</strong></p><p class=\"text-md\">A comunicação aeronáutica usa fraseologia padronizada (definida pela ICAO e traduzida pelo DECEA) para garantir que as mensagens sejam <strong>precisas, inequívocas e compreendidas</strong> por todos os envolvidos, independente do idioma nativo.</p><p class=\"text-lg\"><strong>Estrutura de uma mensagem padrão:</strong></p><ul><li><p class=\"text-md\"><strong>Destinatário:</strong> quem recebe (ex: \"Approach Rio\")</p></li><li><p class=\"text-md\"><strong>Identificação:</strong> quem chama (ex: \"Helicóptero PR-XYZ\")</p></li><li><p class=\"text-md\"><strong>Mensagem:</strong> o que se comunica (posição, pedido, informação)</p></li></ul><p class=\"text-md\">As comunicações devem ser <strong>curtas, claras e objetivas</strong>. Sempre confirme instruções lidas de volta (readback) para garantir que foram compreendidas corretamente.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": true,
+				"title": "<p>Procedimentos Normais de Comunicação Aeronáutica</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "55498863-5fbc-c184-18bc-94044039f87e",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 45,
+			"displayIndex": 45,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Qual é o propósito da fraseologia padronizada na comunicação de helicópteros offshore?",
+							"questionId": "0da0b1ae-8ad9-4f43-a11d-c521109e831d",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Para garantir clareza e compreensão universal",
+								"correct": true,
+								"answerId": "33338749-09ec-43c0-82c4-4e340e220eb8",
+								"type": "text"
+							},
+							{
+								"content": "Para aumentar a eficiência e a velocidade da comunicação",
+								"correct": false,
+								"answerId": "4f19a1ce-89f2-49f1-9214-3ccbe0799f82",
+								"type": "text"
+							},
+							{
+								"content": "Para reduzir o risco de falhas de comunicação e erros",
+								"correct": false,
+								"answerId": "82e3390c-0298-416b-96b5-e8582dea16ca",
+								"type": "text"
+							},
+							{
+								"content": "Estabelecer uma linguagem comum para todas as operações offshore",
+								"correct": false,
+								"answerId": "f9d80e29-9cef-4df1-b330-7c6c97afc9b2",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "55498863-5fbc-c184-18bc-94044039f87e"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "769cc27d-4596-57d4-0369-d018dc608a5d",
+						"content": "Para garantir clareza e compreensão universal",
+						"correct": true
+					},
+					{
+						"id": "a26326ed-ee92-6bd1-0105-7f6135559108",
+						"content": "Para aumentar a eficiência e a velocidade da comunicação",
+						"correct": false
+					},
+					{
+						"id": "53e58ac8-e61a-18a6-beda-1819879aeb16",
+						"content": "Para reduzir o risco de falhas de comunicação e erros",
+						"correct": false
+					},
+					{
+						"id": "1812c8aa-c681-aa7a-ee1e-62ac7f914a31",
+						"content": "Estabelecer uma linguagem comum para todas as operações offshore",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Incorreto. A fraseologia padronizada ICAO/DECEA garante <strong>clareza e compreensão universal</strong>. Em ambiente offshore, com pilotos e controladores de diferentes origens e cargas de trabalho elevadas, fraseologia não-padrão introduz ambiguidades que podem resultar em colisões, desvios de rota e atrasos críticos em emergências.",
+					"correct": "Correto! Fraseologia padronizada elimina ambiguidades. Em emergências offshore, onde cada segundo conta, a comunicação clara e estruturada (MAYDAY/PAN-PAN + identificação + natureza + posição + intenção) é o que permite ao ATC coordenar auxílio de forma eficaz.",
+					"text": "Para garantir clareza e compreensão universal",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Qual é o propósito da fraseologia padronizada na comunicação de helicópteros offshore?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "b013f4b9-e1f4-d9e3-6df8-683375064331",
+			"type": "list",
+			"subtype": "list",
+			"name": 46,
+			"displayIndex": 46,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "b013f4b9-e1f4-d9e3-6df8-683375064331"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Contato inicial:</strong> antes de entrar na zona de plataforma (normalmente 10 NM), o piloto deve estabelecer contato com o radiooperador ou supervisor de deck via frequência designada pela operadora (geralmente VHF).</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Informações necessárias:</strong> condições do deck (livre / ocupado), vento e temperatura no deck, estado do heliponto (sinalizações completas, net instalada), presença de obstáculos ou atividade de guindaste.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Procedimento de pouso:</strong> somente poouse após receber autorização explícita do agente de deck. A comunicação contínua durante a aproximação é fundamental, especialmente em condições de vento variável.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Emergências na plataforma:</strong> se ocorrer emergência médica ou mecânica após o pouso, comunique imediatamente o supervisor de deck e o ATC relevante para coordenar suporte.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Comunicação entre Pilotos e Operadores de Plataformas</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "a3952454-1fbd-a8ac-3842-e92a928b4128",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 47,
+			"displayIndex": 47,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "a3952454-1fbd-a8ac-3842-e92a928b4128"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">Selecione CADA ITEM PARA LER MAIS</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">1. Controle a Aeronave (Aviate)</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">A prioridade número 1 é sempre manter o controle da aeronave. Aplique os procedimentos de emergência do RFM (Checklist de Memória). <strong>Nunca abandone os controles para buscar documentos.</strong></p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">2. Navegue com Segurança (Navigate)</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Após estabilizar a aeronave, identifique a posição atual, o terreno e obstáculos próximos. Estabeleça rota para o ponto de pouso seguro mais próximo — base, plataforma ou área de pouso de emergência.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">3. Comunique (Communicate)</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Declare <strong>MAYDAY MAYDAY MAYDAY</strong> na frequência em uso ou na frequência de emergência (121.5 MHz). Informe: identificação, natureza da emergência, posição (lat/long ou referência), almas a bordo e intenções.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">4. Siga os Procedimentos</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Execute o checklist de emergência correspondente do RFM. Em situações de ditching (pouso forçado no mar), ative o ELT e acione os equipamentos de sobrevivência conforme o briefing de segurança.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">5. Registre e Reporte</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Após a emergência, documente todos os eventos (hora, altitude, ações tomadas). O relatório de ocorrência à ANAC e ao CENIPA é obrigatório para incidentes graves e acidentes.</p>"
+					}
+				],
+				"title": "<p>Sequência de Ações em Situações de Emergência</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "c5885718-bb89-39a4-bc2b-2cc40d19f633",
+			"type": "list",
+			"subtype": "list",
+			"name": 48,
+			"displayIndex": 48,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "c5885718-bb89-39a4-bc2b-2cc40d19f633"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Cenário:</strong> durante voo offshore a 1.500 ft, o piloto detecta falha de motor (alarme de chip de transmissão, queda de RPM). Procedimento:</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>1. Aviate:</strong> aplicar autorrotação imediatamente (abaixar coletivo, manter RPM do rotor), estabilizar a aeronave no melhor planeio (Vy de autorrotação, conforme RFM).</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>2. Navigate:</strong> identificar área de pouso mais próxima (plataforma offshore, navio, faixa de praia), iniciar gerenciamento de energia do rotor para atingir a área selecionada.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>3. Communicate:</strong> transmitir MAYDAY na frequência em uso, com posição (lat/long ou referência), número de almas a bordo e intenções de pouso. Acionar ELT se necessário.</p>"
+				],
+				"doneText": "Continuar",
+				"title": "<p>Exemplo Prático\r\n</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "855a7d50-a781-cbab-20ed-2eab004af335",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 49,
+			"displayIndex": 49,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Qual é a primeira ação que os pilotos devem tomar em uma situação de emergência?",
+							"questionId": "9585b0aa-9b17-4031-8cf4-b684bea56a0c",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Garanta a segurança do voo mantendo o controle da aeronave",
+								"correct": true,
+								"answerId": "fed68921-e616-4bd7-b01e-e3c8b0d699f5",
+								"type": "text"
+							},
+							{
+								"content": "Declare a emergência no rádio",
+								"correct": false,
+								"answerId": "a2cefe51-372c-43a5-a44a-7de74c2aafc1",
+								"type": "text"
+							},
+							{
+								"content": "Solicite assistência do controle de tráfego aéreo",
+								"correct": false,
+								"answerId": "3575ff1e-7a97-4bce-b39d-9ba6de25650b",
+								"type": "text"
+							},
+							{
+								"content": "Ative o transmissor localizador de emergência (ELT)",
+								"correct": false,
+								"answerId": "54fed84b-7a4f-4c9f-8533-6eb6e0240ab6",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "855a7d50-a781-cbab-20ed-2eab004af335"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "2791fb6d-456a-aacd-0695-66bdddf197ab",
+						"content": "Garanta a segurança do voo mantendo o controle da aeronave",
+						"correct": true
+					},
+					{
+						"id": "2b85f257-2be0-1ffa-1c31-8b155bf9e403",
+						"content": "Declare a emergência no rádio",
+						"correct": false
+					},
+					{
+						"id": "35e35ef6-5e10-41ee-e0a5-29c8b8c8b61a",
+						"content": "Solicite assistência do controle de tráfego aéreo",
+						"correct": false
+					},
+					{
+						"id": "d4189418-729c-1aa8-a4a5-4d1676608d4d",
+						"content": "Ative o transmissor localizador de emergência (ELT)",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Incorreto. A prioridade universal em emergências é <strong>Aviate → Navigate → Communicate</strong>. Pilotos que comunicam antes de controlar a aeronave perdem o controle situacional. O protocolo existe porque manter o voo controlado é a única ação que preserva a aeronave e as vidas a bordo — ATC não pode voar por você.",
+					"correct": "Correto! Aviate vem SEMPRE em primeiro lugar. Em seguida Navigate (oriente-se para local seguro), e só então Communicate (declare emergência no 121.5 MHz se necessário). Inverter essa ordem é responsável por vários acidentes aéreos documentados pelo ICAO.",
+					"text": "Garanta a segurança do voo mantendo o controle da aeronave",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Qual é a primeira ação que os pilotos devem tomar em uma situação de emergência?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "0a4ba636-f315-5a4d-135e-29093aa6f132",
+			"type": "list",
+			"subtype": "list",
+			"name": 50,
+			"displayIndex": 50,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "0a4ba636-f315-5a4d-135e-29093aa6f132"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Ao receber MAYDAY:</strong> o ATC prioriza imediatamente a aeronave em emergência, oferecendo vetores diretos, clearance para qualquer altitude e coordenação com serviços de resgate (SAR).</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Serviços disponíveis:</strong> direção de QDM (azimute magnético para a estação), rastreamento por radar, alerta de SAR, e coordenação com Helipontos e aeroportos alternativos.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Comunicação simplificada:</strong> em emergência, o ATC aceita comunicações fora do padrão. O objetivo é manter o contato e fornecer assistência, não corrigir fraseologia.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Transponder:</strong> em emergência, ajuste o transponder para o código 7700. Isso ativa alertas automáticos em todos os setores ATC que rastreiam a aeronave.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Os controladores de tráfego aéreo possuem um protocolo específico para lidar com emergências.</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "34d50757-79e8-d41d-cc6c-1a6a7a92a1fc",
+			"type": "title",
+			"subtype": "default",
+			"name": 51,
+			"displayIndex": 51,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "34d50757-79e8-d41d-cc6c-1a6a7a92a1fc"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Familiarização com Referências Visuais antes e durante a Descida abaixo da Altitude de Decisão ou da Altitude Mínima de Descida em Aproximação por Instrumento</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(a) – Item 7 – DA/MDA, referências visuais obrigatórias e procedimentos de aproximação frustrada</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "3b2a7b78-0767-32b3-c197-cadd76613531",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 52,
+			"displayIndex": 52,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "3b2a7b78-0767-32b3-c197-cadd76613531"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\",text-transform-uppercase\">Clique em cada item para ler mais</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Por que é crítica em helicópteros?</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Procedimentos de aproximação por instrumentos terminam com uma fase visual: ao atingir a DA/DH ou MDA, o piloto precisa <strong>identificar rapidamente o ponto de toque</strong> ou executar a arremetida. Sem pré-familiarização, segundos valiosos são perdidos.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Referências antes da descida</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Antes de iniciar a descida, o piloto deve identificar: posição do heliponto em relação a estruturas da plataforma, indicações de vento (wind sock, fumaça, espuma do mar), obstáculos e estado da iluminação do deck.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Referências durante a descida</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Em descida, mantenha visual das referências laterais e verticais: horizonte (se disponível), luzes do deck, PAPI/APAPI (se instalado) e sinalizador de vento. A perda de referências visuais durante a final requer arremetida imediata.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Condições especiais no offshore</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">No mar, a <strong>ausência de horizonte natural</strong> é um fator de desorientação. À noite ou em névoa, o piloto pode perder a distinção entre céu e mar (\"black hole effect\"). Nessas condições, confie nos instrumentos até ter referência visual clara e confiável.</p>"
+					}
+				],
+				"title": "<p>Familiarização com Referências Visuais</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "2be75042-feac-6351-b769-1d75f172bbec",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 53,
+			"displayIndex": 53,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Ao emergir de condições IFR na final (atingindo a DA ou MDA), por que a familiarização visual prévia é crítica?",
+							"questionId": "1da776ab-1da1-4886-a81a-c3d1e5ddd99b",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Permite identificar rapidamente o ponto de pouso para decidir pela continuação ou arremetida.",
+								"correct": true,
+								"answerId": "54ca35ad-8c51-49a2-a319-be692dc44ce0",
+								"type": "text"
+							},
+							{
+								"content": "Para saber onde estão as antenas de comunicação do heliponto.",
+								"correct": false,
+								"answerId": "4161047f-3c71-4346-8d41-47f9a6426ce7",
+								"type": "text"
+							},
+							{
+								"content": "Para garantir que o helicóptero consuma menos combustível nos metros finais da aproximação.",
+								"correct": false,
+								"answerId": "36d797ca-ae2f-4bfd-9ce3-7a529072dc78",
+								"type": "text"
+							},
+							{
+								"content": "Para coordenar a chegada com os passageiros através do sistema de comunicação da cabine.",
+								"correct": false,
+								"answerId": "edc0c4e3-3e19-4ae5-8bc4-0f10b22aeefe",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "2be75042-feac-6351-b769-1d75f172bbec"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "96afc883-5f82-810e-077a-a00946c8186a",
+						"content": "Permite identificar rapidamente o ponto de pouso para decidir pela continuação ou arremetida.",
+						"correct": true
+					},
+					{
+						"id": "2b8d1372-b66f-20a7-d201-601f6d0e1aa8",
+						"content": "Para saber onde estão as antenas de comunicação do heliponto.",
+						"correct": false
+					},
+					{
+						"id": "06a21a28-f463-fd67-a312-33af690eaa27",
+						"content": "Para garantir que o helicóptero consuma menos combustível nos metros finais da aproximação.",
+						"correct": false
+					},
+					{
+						"id": "1aae9a46-9379-0663-7c5f-9c0591f826a4",
+						"content": "Para coordenar a chegada com os passageiros através do sistema de comunicação da cabine.",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente. O propósito principal é garantir que o piloto possa identificar rapidamente suas referências visuais ao sair das nuvens na final.",
+					"correct": "Correto! A familiarização serve para reconhecer o local de imediato assim que se sai das nuvens.",
+					"text": "Permite identificar rapidamente o ponto de pouso para decidir pela continuação ou arremetida.",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Ao emergir de condições IFR na final (atingindo a DA ou MDA), por que a familiarização visual prévia é crítica?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "bf2c5e04-e195-95dc-a909-3a4da644369c",
+			"type": "image-slider",
+			"subtype": "multiple",
+			"name": 54,
+			"displayIndex": 54,
+			"templateName": "Vertical series",
+			"templateDescription": "Swipe through a group of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "bf2c5e04-e195-95dc-a909-3a4da644369c"
+			},
+			"data": {
+				"prompt": "<p class=\"text-transform-uppercase\">DESLIZE PARA VER MAIS</p>",
+				"items": [
+					{
+						"content": "fit_content_assets/Chart-in-cockpit_oq2den.jpg",
+						"contentType": "text",
+						"position": "Bottom",
+						"color": "",
+						"caption": "<p class=\"text-md\">Antes da descida: o piloto deve reconhecer todas as referências visuais do trecho de aproximação — posição do heliponte, obstáculos, luzes e estado do deck.</p>",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/Chart-in-cockpit_oq2den.jpg",
+						"contentType": "image",
+						"position": "Top",
+						"color": "#91A6BA",
+						"caption": "<p class=\"text-lg\">Estudo Pré-Voo: </p><p>O processo de familiarização começa muito antes do voo. </p><p>Pilotos devem estudar detalhadamente as cartas de aproximação e outras publicações pertinentes, como a ICA 100-4, para entender as características visuais esperadas do destino.</p>",
+						"imagePosition": "Cover",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/istockphoto-1187603907-612x612_fcwd85.jpg",
+						"contentType": "image",
+						"position": "Top",
+						"color": "#9fb9bf",
+						"caption": "<p class=\"text-lg\">Briefing de Aproximação:</p><p>Durante o briefing de aproximação, devem ser discutidas as referências visuais específicas que se espera encontrar, como luzes de plataforma, marcadores costeiros ou outras estruturas significativas.</p>",
+						"imagePosition": "Cover",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/AAno4_zbumal.jpg",
+						"contentType": "image",
+						"position": "Top",
+						"color": "rgba(29, 46, 67, 0.84)",
+						"caption": "<p class=\"text-lg\">Condições Meteorológicas:</p><p>Avaliação das condições meteorológicas esperadas e como elas podem afetar a visibilidade das referências visuais.</p>",
+						"imagePosition": "Cover",
+						"captionStyle": "Default"
+					}
+				],
+				"arrows": true,
+				"doneText": "Continuar",
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "f224bcb3-fbd7-3f2a-796a-04135c748172",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 55,
+			"displayIndex": 55,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Qual é uma das principais atividades antes da descida durante as aproximações por instrumentos?",
+							"questionId": "a8e1d57a-d8a4-4020-ba3b-839aa66229de",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Conduzindo uma inspeção completa da aeronave",
+								"correct": false,
+								"answerId": "fa8cc1ad-f447-43fc-b37a-92584a5c839b",
+								"type": "text"
+							},
+							{
+								"content": "Coordenação com a equipe de terra para reabastecimento",
+								"correct": false,
+								"answerId": "dea2f8e6-67d7-406e-a10b-e829b6126f2b",
+								"type": "text"
+							},
+							{
+								"content": "Ajustando a configuração do altímetro para leituras precisas de altitude",
+								"correct": false,
+								"answerId": "e67fde7d-d74d-4ea8-904b-f2bdb909f58c",
+								"type": "text"
+							},
+							{
+								"content": "Estudo pré-voo de cartas de aproximação e publicações relevantes",
+								"correct": true,
+								"answerId": "a828ceb2-c5cc-4f85-9fa5-c6aa2f474321",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "f224bcb3-fbd7-3f2a-796a-04135c748172"
+			},
+			"data": {
+				"answers": {
+					"correct": "Estudo pré-voo de cartas de aproximação e publicações relevantes",
+					"incorrect": [
+						"Conduzindo uma inspeção completa da aeronave",
+						"Coordenação com a equipe de terra para reabastecimento",
+						"Ajustando a configuração do altímetro para leituras precisas de altitude"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente...",
+					"correct": "Correto! Estudo pré-voo de cartas de aproximação e publicações relevantes",
+					"text": "Estudo pré-voo de cartas de aproximação e publicações relevantes",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Qual é uma das principais atividades antes da descida durante as aproximações por instrumentos?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "cga-mod8-title",
+			"type": "title",
+			"subtype": "default",
+			"name": 56,
+			"displayIndex": 56,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "cga-mod8-title"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Outras Informações para Garantir a Segurança Operacional e a Competência do Piloto</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(a) – Item 8 – Fatores humanos, CRM, SOPs, apt. médica e cultura de segurança</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "cga-mod8-lista",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 57,
+			"displayIndex": 57,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "cga-mod8-lista"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">Selecione cada item para ler mais</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Gerenciamento de Recursos da Tripulação (CRM)</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">O CRM maximiza o uso de todos os recursos disponíveis — tripulação, ATC, cartas, automação — para garantir segurança de voo. Piloto eficaz delega, comunica e lidera sem hierarquia rígida durante emergências. Deficiências em CRM estão presentes em mais de 70% dos acidentes investigados pelo CENIPA.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Fatores Humanos e Modelo DECIDE</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">O modelo <strong>DECIDE</strong> orienta decisões em voo: <em>Detect</em> (perceba o problema), <em>Estimate</em> (avalie as consequências), <em>Choose</em> (escolha a ação), <em>Identify</em> (identifique os meios), <em>Do</em> (execute), <em>Evaluate</em> (avalie o resultado). Involutário em fadiga — piloto deve reconhecer sinais de degradação cognitiva.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">SOPs – Procedimentos Operacionais Padrão</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">SOPs são checklists e procedimentos definidos pelo operador aprovados pela ANAC. <strong>Desvios não autorizados de SOP</strong> figuram entre as principais causas de acidentes evitáveis. Em condições de alta carga de trabalho, seguir o SOP previne erros de omissão críticos.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Notificação de Ocorrências – SIPAER (NSCA 3-2)</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">O piloto é <strong>legalmente obrigado</strong> a notificar incidentes e acidentes ao SIPAER conforme a NSCA 3-2. O sistema é <strong>não-punitivo e sigiloso</strong> para encorajar o relato. Ocorrências não relatadas privam o sistema de aviação de informações vitais para prevenção.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Aptidão Médica e Limitações Pessoais (RBAC 67)</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">O Certificado Médico Aeronáutico (CMA) deve estar válido e o piloto <strong>apto no dia do voo</strong>. Não voar com: febre, medicamentos que afetam o SNC, álcool nas últimas 8 horas, fadiga que comprometa julgamento. A regra pessoal de 'IM SAFE' (Illness, Medication, Stress, Alcohol, Fatigue, Emotion) é a checagem de aptidão pré-voo do piloto.</p>"
+					}
+				],
+				"title": "<p>Competências Operacionais Complementares (RBAC 135.345(a) – Item 8)</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "cga-mod8-quiz",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 58,
+			"displayIndex": 58,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Um piloto percebe sinais de fadiga severa antes do voo. Qual é a conduta correta conforme o RBAC 135 e os princípios de fatores humanos?",
+							"questionId": "mod8-q1",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Comunicar ao operador e não realizar o voo, aplicando a regra IM SAFE.",
+								"correct": true,
+								"answerId": "mod8-q1-a1",
+								"type": "text"
+							},
+							{
+								"content": "Tomar café forte e realizar o voo normalmente.",
+								"correct": false,
+								"answerId": "mod8-q1-a2",
+								"type": "text"
+							},
+							{
+								"content": "Reduzir o tempo de voo pela metade e pousar antes do destino.",
+								"correct": false,
+								"answerId": "mod8-q1-a3",
+								"type": "text"
+							},
+							{
+								"content": "Notificar o ATC ao decolar sobre possível sonolência.",
+								"correct": false,
+								"answerId": "mod8-q1-a4",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "cga-mod8-quiz"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "mod8-b1",
+						"content": "Comunicar ao operador e não realizar o voo, aplicando a regra IM SAFE.",
+						"correct": true
+					},
+					{
+						"id": "mod8-b2",
+						"content": "Tomar café forte e realizar o voo normalmente.",
+						"correct": false
+					},
+					{
+						"id": "mod8-b3",
+						"content": "Reduzir o tempo de voo pela metade e pousar antes do destino.",
+						"correct": false
+					},
+					{
+						"id": "mod8-b4",
+						"content": "Notificar o ATC ao decolar sobre possível sonolência.",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Incorreto. A regra <strong>IM SAFE</strong> (I=doença, M=medicamentos, S=estresse, A=álcool, F=fadiga, E=emoção) indica claramente: fadiga severa é fator de inaptidão para o voo. Voar fadigado degrada o tempo de reação e a tomada de decisão, e é considerado imprudência aeronáutica. A conduta correta é <strong>comunicar o operador e recusar o voo</strong>.",
+					"correct": "Correto! A regra IM SAFE é a checagem de aptidão individual do piloto. Fadiga severa compromete tempo de reação e julgamento situacional — condições incompatíveis com a operação segura de aeronaves. Comunicar ao operador é obrigatório.",
+					"text": "Comunicar ao operador e não realizar o voo, aplicando a regra IM SAFE.",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Um piloto percebe sinais de fadiga severa antes do voo. Qual é a conduta correta conforme o RBAC 135 e os princípios de fatores humanos?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "ed1d887e-bc4f-ea2b-fbce-4ea985b6d105",
+			"type": "title",
+			"subtype": "default",
+			"name": 59,
+			"displayIndex": 59,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ed1d887e-bc4f-ea2b-fbce-4ea985b6d105"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Reconhecer e Evitar Condições Atmosféricas Severas; Recuperação de Encontro Inadvertido e Tesouras de Vento em Baixa Altitude</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(b)(6) e (b)(7) – Reconhecimento, evasão e recuperação de condições meteorológicas severas</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "cga-windshear-recovery",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 60,
+			"displayIndex": 60,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "cga-windshear-recovery"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Procedimento",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\"><strong>Encontro Inadvertido com Condições Severas (RBAC 135.345(b)(7)):</strong> Se em voo VFR você penetrar inadvertidamente em IMC ou encontrar meteorologia severa — <strong>não tente continuar</strong>. Execute a inversão de curso padrão: vire 180° imediatamente, mantenha atitude de voo controlada e comunique ao ATC/Operador.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Tesoura de Vento em Baixa Altitude (Windshear):</strong> Detectada por variação súbita de velocidade aerodinâmica ±15 kt, variação de altitude não comandada ou alarme GPWS/TAWS. Ação imediata: <em>máxima potência disponível → pitch para ângulo de subida de segurança → NÃO reduzir potência prematuramente</em>. Prioridade absoluta: afastar-se do solo.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Protocolo Aviate → Navigate → Communicate:</strong> Em qualquer emergência meteorológica — (1) <em>Aviate</em>: mantenha controle da aeronave; (2) <em>Navigate</em>: afaste-se do perigo e oriente-se para local seguro; (3) <em>Communicate</em>: declara emergência no 121.5 MHz se necessário (MAYDAY MAYDAY MAYDAY). A ordem não pode ser invertida.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Reconhecimento de Gelo Estrutural:</strong> Acúmulo de gelo em asas, rotor e sondas altera o perfil aerodinâmico, aumenta o arrasto e reduz a sustentação. Indicadores: vibração incomum, queda de velocidade, aumento de torque, redução de sustentação. Ação: saia da camada de gelo imediatamente — suba acima ou desça abaixo. Ative equipamentos de degelo se disponíveis no modelo.</span>"
+				],
+				"title": "<p>Recuperação de Encontro Inadvertido com Condições Severas e Windshear</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "f5eea951-2e8b-ed17-8db0-c292ef7d04fa",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 61,
+			"displayIndex": 61,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f5eea951-2e8b-ed17-8db0-c292ef7d04fa"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "<p class=\"text-lg\"><strong>Por que reconhecer condições severas é uma habilidade crítica?</strong></p><p class=\"text-md\">Em operações offshore, o piloto está frequentemente distante de apoio imediato. A <strong>identificação precoce</strong> de condições meteorológicas adversas é a diferença entre um desvio tranquilo e uma emergência real.</p><p class=\"text-lg\"><strong>Cinco condições principais a monitorar:</strong></p><ul><li><p class=\"text-md\"><strong>Tempestades (CB):</strong> identificadas por torres de nuvens em forma de bigorna, relâmpagos, chuva intensa e turbulência severa.</p></li><li><p class=\"text-md\"><strong>Visibilidade reduzida:</strong> nevoeiro, névoa seca, precipitação intensa ou bruma marítima que limita a visão a menos de 5 km.</p></li><li><p class=\"text-md\"><strong>Vento forte e rajadas:</strong> variações rápidas de velocidade e direção indicam cisalhamento. Observe agitação do mar e espuma branca visível.</p></li><li><p class=\"text-md\"><strong>Formação de gelo:</strong> nuvens estratiformes acima de 3.000 pés com temperatura abaixo de 0°C são de risco máximo.</p></li><li><p class=\"text-md\"><strong>Turbulência de céu claro (CAT):</strong> mais difícil de detectar visualmente — atenção aos SIGMETs de turbulência para a altitude de cruzeiro.</p></li></ul>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": true,
+				"title": "<p>Reconhecendo e Evitando Condições Atmosféricas Severas</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "69577ada-1890-7603-b5cc-36c9c47786ce",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 62,
+			"displayIndex": 62,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Como os pilotos podem identificar os primeiros sinais de desenvolvimento de tempestades?",
+							"questionId": "1261239a-379d-4283-ba8d-3857563140ee",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Aumento da visibilidade e céu limpo.",
+								"correct": false,
+								"answerId": "3f290a7b-adeb-42f7-bb80-fc57f7096166",
+								"type": "text"
+							},
+							{
+								"content": "Diminuição da pressão atmosférica.",
+								"correct": false,
+								"answerId": "c897e768-122e-4fc8-b859-1d0a2bfb5b4a",
+								"type": "text"
+							},
+							{
+								"content": "Diminuição da atividade elétrica, como relâmpagos e trovões.",
+								"correct": false,
+								"answerId": "40e61c62-62d3-43dc-bcbe-c216a3e9e680",
+								"type": "text"
+							},
+							{
+								"content": "Aparecimento de nuvens escuras e ameaçadoras, geralmente com bordas nítidas.",
+								"correct": true,
+								"answerId": "b39fce71-d198-44d3-a0a2-06847058e754",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "69577ada-1890-7603-b5cc-36c9c47786ce"
+			},
+			"data": {
+				"answers": {
+					"correct": "Aparecimento de nuvens escuras e ameaçadoras, geralmente com bordas nítidas.",
+					"incorrect": [
+						"Aumento da visibilidade e céu limpo.",
+						"Diminuição da pressão atmosférica.",
+						"Diminuição da atividade elétrica, como relâmpagos e trovões."
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente...",
+					"correct": "Correto! Aparecimento de nuvens escuras e ameaçadoras, geralmente com bordas nítidas.",
+					"text": "Aparecimento de nuvens escuras e ameaçadoras, geralmente com bordas nítidas.",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Como os pilotos podem identificar os primeiros sinais de desenvolvimento de tempestades?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "feb83bd2-b77e-dbde-2bfd-4c1e8420eae6",
+			"type": "image-gallery",
+			"subtype": "image-gallery",
+			"name": 63,
+			"displayIndex": 63,
+			"templateName": "Horizontal series",
+			"templateDescription": "Swipe through a gallery of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "feb83bd2-b77e-dbde-2bfd-4c1e8420eae6"
+			},
+			"data": {
+				"prompt": null,
+				"background": null,
+				"lightbox": false,
+				"images": [
+					{
+						"image": "fit_content_assets/DSC_5180_uuh9mz.jpg",
+						"caption": "<p class=\"text-lg\"><strong>Redução gradual da visibilidade: </strong></p><p>À medida que a visibilidade diminui gradualmente, os pilotos podem perceber que objetos distantes se tornam menos visíveis e que a paisagem ao redor começa a ficar menos nítida</p>",
+						"description": "Chuva intensa sobre o mar: visibilidade pode cair para menos de 500 m em minutos. Sinal crítico de deterioração meteorológica."
+					},
+					{
+						"image": "fit_content_assets/nevoeiro-4055654_1_kb2wnn.jpg",
+						"caption": "<p class=\"text-lg\"><strong>Perda de contraste: </strong></p><p>A perda de contraste entre objetos e o ambiente circundante pode indicar visibilidade reduzida. Os contornos de objetos podem se tornar menos distintos.</p>",
+						"description": "Nevoeiro marítimo: formação rápida e densa sobre o mar à noite e ao amanhecer. Pode reduzir visibilidade a zero em minutos."
+					},
+					{
+						"image": "fit_content_assets/pouso-manchester-autoland-ils-3-thumb-00cdb564_qimhiy.jpg",
+						"caption": "<p class=\"text-lg\"><strong>Dificuldade em identificar pontos de referência: </strong></p><p>Se os pilotos têm dificuldade em identificar pontos de referência específicos, como aeroportos, pistas de pouso, torres ou marcos geográficos, isso pode ser um sinal de que a visibilidade está se deteriorando.</p>",
+						"description": "Procedimento de aproximação por instrumento (ILS): recurso indispensável quando a visibilidade é insuficiente para o visual direto."
+					},
+					{
+						"image": "fit_content_assets/img_20160703_191959_thn0rs.png",
+						"caption": "<p class=\"text-lg\"><strong>Condições de baixa altitude de nuvens: </strong></p><p>Se as nuvens estiverem baixas e próximas ao nível do solo, isso pode indicar que a visibilidade está reduzida, pois as nuvens podem ocultar objetos terrestres.</p>",
+						"description": "Sinalização do heliponte em condições de baixa visibilidade: luzes de balizamento são obrigatórias para operações noturnas e IFR."
+					}
+				],
+				"doneText": null,
+				"title": null,
+				"titleType": null,
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "0a84ae8f-f641-8a3b-5bf5-5630ab073b15",
+			"type": "expandable-list",
+			"subtype": "three",
+			"name": 64,
+			"displayIndex": 64,
+			"templateName": "Expandable list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "0a84ae8f-f641-8a3b-5bf5-5630ab073b15"
+			},
+			"data": {
+				"content": null,
+				"prompt": "<p class=\"text-transform-uppercase\">Selecione cada item para ler mais</p>",
+				"focus": true,
+				"doneText": "Continuar",
+				"list": [
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Briefing meteorológico completo</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Antes de cada voo, obtenha METAR, TAF, SIGMET/AIRMET, imagens de satélite e radar para a rota completa. Use o App Redemet (DECEA) ou contate o CGNA para informações em tempo real.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Planejamento de alternativas</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Estabeleça pontos de desvio e alternativas antes do voo. Defina mentalmente os critérios que exigirão um desvio (visibilidade mínima, altura de teto, velocidade de vento máxima no deck).</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Vigilância contínua em rota</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Use o radar meteorológico de bordo (se disponível) e os displays de temperatura para identificar condições adversas à frente. Solicite PIREPs de outras aeronaves e atualizações de ATIS/AWOS.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Decisão de retorno ou desvio</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">A <strong>\"Go/No-Go decision\"</strong> deve ser tomada antes do voo E reavaliada continuamente. Se as condições deteriorarem além dos mínimos, o retorno ou desvio é obrigatório — nunca continue por pressão de tempo ou carga.</p>"
+					},
+					{
+						"title": "<p class=\"text-md\" style=\"margin:0;\">Comunicação com controle</p>",
+						"content": "<p class=\"text-md\" style=\"margin:0;\">Mantenha o ATC informado sobre condições adversas encontradas em rota. Seu reporte contribui para a segurança de outras aeronaves e pode resultar em desvios de rota fornecidos pelo controle.</p>"
+					}
+				],
+				"title": "<p>Estratégias de Prevenção</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "b2887c7d-47f7-fc3a-7c3b-96fcf0b58a7c",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 65,
+			"displayIndex": 65,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Quais são alguns dos principais indicadores e sinais de mau tempo que os pilotos devem ser capazes de identificar?",
+							"questionId": "a356b570-33ea-4651-8f84-b15773991299",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Nuvens escuras e ameaçadoras, baixa visibilidade, ventos fortes e mar agitado",
+								"correct": true,
+								"answerId": "668134da-a1de-4198-abf7-50b84f7ae8f5",
+								"type": "text"
+							},
+							{
+								"content": "Céu limpo, alta visibilidade, ventos fracos e mar calmo",
+								"correct": false,
+								"answerId": "e94b4e25-6e86-437c-88f6-1dc9b00ce6ec",
+								"type": "text"
+							},
+							{
+								"content": "Nuvens claras e fofas, visibilidade moderada, brisa suave e mar calmo",
+								"correct": false,
+								"answerId": "071c26cb-3cbf-44c9-a37c-40a3064821dd",
+								"type": "text"
+							},
+							{
+								"content": "Céu nublado, visibilidade moderada, ventos moderados e mar calmo",
+								"correct": false,
+								"answerId": "c4d14e24-e6b8-433e-a006-2c3361a0e602",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "b2887c7d-47f7-fc3a-7c3b-96fcf0b58a7c"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "6163aa8c-9856-41e5-2ca5-ae9c449b2b86",
+						"content": "Nuvens escuras e ameaçadoras, baixa visibilidade, ventos fortes e mar agitado",
+						"correct": true
+					},
+					{
+						"id": "49f28399-934c-7264-8977-83e54870635e",
+						"content": "Céu limpo, alta visibilidade, ventos fracos e mar calmo",
+						"correct": false
+					},
+					{
+						"id": "c2703ce8-98c8-48e4-2d97-e70732450a6d",
+						"content": "Nuvens claras e fofas, visibilidade moderada, brisa suave e mar calmo",
+						"correct": false
+					},
+					{
+						"id": "a173b99d-db3b-1ced-3caf-e11f2c72b5cd",
+						"content": "Céu nublado, visibilidade moderada, ventos moderados e mar calmo",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente. Os indicadores incluem nuvens CB, relâmpagos visíveis, agitação extrema do mar, quedas bruscas de temperatura e visibilidade.",
+					"correct": "Correto! Nuvens cumulonimbus, relâmpagos, espuma intensa no mar e quedas bruscas de visibilidade são os principais indicadores visíveis de condições severas.",
+					"text": "Nuvens escuras e ameaçadoras, baixa visibilidade, ventos fortes e mar agitado",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "Quais são alguns dos principais indicadores e sinais de mau tempo que os pilotos devem ser capazes de identificar?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "cga-new-escape-procedures-2026",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 66,
+			"displayIndex": 66,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "cga-new-escape-procedures-2026"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "<p class=\"text-lg\"><strong>Ao se deparar inadvertidamente com condições severas:</strong></p><table style=\"width:100%;border-collapse:collapse;margin:8px 0\"><tr><th style=\"width:40px;text-align:center;background:#d32f2f;color:white;padding:8px;border-radius:4px 0 0 0\">1</th><td style=\"padding:8px;border-bottom:1px solid #eee\"><strong>Mantenha a calma</strong> — confie nos instrumentos. Desorientação espacial é o maior risco nesta fase.</td></tr><tr><th style=\"width:40px;text-align:center;background:#e64a19;color:white;padding:8px\">2</th><td style=\"padding:8px;border-bottom:1px solid #eee\"><strong>Reduza para Vt (velocidade de turbulência)</strong> conforme o RFM — protege a estrutura e o rotor.</td></tr><tr><th style=\"width:40px;text-align:center;background:#f57c00;color:white;padding:8px\">3</th><td style=\"padding:8px;border-bottom:1px solid #eee\"><strong>Mantenha a atitude</strong> — evite manobras bruscas que agravem vibrações ou comprometam estrutura.</td></tr><tr><th style=\"width:40px;text-align:center;background:#fbc02d;color:white;padding:8px\">4</th><td style=\"padding:8px;border-bottom:1px solid #eee\"><strong>Saia pela rota mais curta</strong> — gire 180° se necessário para retornar à rota segura.</td></tr><tr><th style=\"width:40px;text-align:center;background:#388e3c;color:white;padding:8px;border-radius:0 0 0 4px\">5</th><td style=\"padding:8px\"><strong>Comunique o ATC imediatamente</strong> — declare MAYDAY se necessário e solicite vetores de escape.</td></tr></table><p class=\"text-md\" style=\"margin-top:12px\">⚠️ Em nenhuma circunstância tente penetrar voluntariamente em uma tempestade ativa (CB). A decisão de <strong>evitar é sempre a correta</strong>.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": false,
+				"title": "<p>Procedimentos ao Encontrar Condições Severas Inadvertidamente</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "7ff5c38a-d780-8a0c-3b68-374b3de1f869",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 67,
+			"displayIndex": 67,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "7ff5c38a-d780-8a0c-3b68-374b3de1f869"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\">Tempestades convectivas (CB) produzem correntes verticais intensas (up/downdrafts), turbulência severa, granizo, relâmpagos e windshear. <strong>Nunca tente penetrar uma célula CB ativa.</strong></span>",
+					"<span class=\"text-md leading-relaxed\">O desvio mínimo recomendado de um CB ativo é de <strong>20 NM pelo lado de barlavento</strong>. Pelos flancos ou pela esteira do temporal, a turbulência pode se estender ainda mais longe.</span>",
+					"<span class=\"text-md leading-relaxed\">Use o <strong>radar meteorológico de bordo</strong> para identificar as células mais intensas (ecos vermelhos = evitar) e planejar o desvio com antecedência. Solicite ao ATC desvios de trajetória quando necessário.</span>"
+				],
+				"title": "<p>Evitando Áreas de Atividade Convectiva</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "97d82f96-a56a-dde5-8e92-a1c982de46e0",
+			"type": "list",
+			"subtype": "list",
+			"name": 68,
+			"displayIndex": 68,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "97d82f96-a56a-dde5-8e92-a1c982de46e0"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">O radar meteorológico de bordo permite identificar células de tempestade e o piloto pode traçar rotas de desvio em tempo real.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">Sistemas de detecção de gelo alertam precocemente para a formação de gelo nas lâminas do rotor e fuselagem, permitindo ação preventiva.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">O EGPWS (sistema de alerta de proximidade com o solo) auxilia na prevenção de colisões com terreno em condições de baixa visibilidade.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\">O transponder e o ADS-B garantem que o ATC acompanhe a trajetória da aeronave em tempo real, facilitando suporte em situações adversas.</p>"
+				],
+				"doneText": null,
+				"title": "Uso de Tecnologia em Bordo",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "cga-quiz-escape-2026",
+			"type": "multiple-choice-game",
+			"subtype": "multiple-choice-game",
+			"name": 69,
+			"displayIndex": 69,
+			"templateName": "Multiple Choice Game",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"slideId": "cga-quiz-escape-2026",
+				"questions": [
+					{
+						"id": "q-escape-1",
+						"question": {
+							"content": "Ao encontrar acidentalmente condições de turbulência severa (ex: windshear repentino), qual é a atitude imediata em relação à velocidade?"
+						},
+						"answers": [
+							{
+								"id": "a1",
+								"content": "Reduzir imediatamente para a velocidade de penetração em turbulência (Vt) indicada no RFM.",
+								"correct": true
+							},
+							{
+								"id": "a2",
+								"content": "Acelerar para a velocidade nunca exceder (Vne) para sair mais rápido da área.",
+								"correct": false
+							},
+							{
+								"id": "a3",
+								"content": "Manter a velocidade de cruzeiro atual para não perder sustentação.",
+								"correct": false
+							},
+							{
+								"id": "a4",
+								"content": "Reduzir a potência para marcha lenta (idle) e descer até avistar o solo.",
+								"correct": false
+							}
+						]
+					}
+				]
+			},
+			"data": {
+				"answers": [
+					{
+						"id": "ans-correct",
+						"content": "Reduzir imediatamente para a velocidade de penetração em turbulência (Vt) indicada no RFM.",
+						"correct": true
+					},
+					{
+						"id": "ans-wrong1",
+						"content": "Acelerar para a velocidade nunca exceder (Vne) para sair mais rápido da área.",
+						"correct": false
+					},
+					{
+						"id": "ans-wrong2",
+						"content": "Manter a velocidade de cruzeiro atual para não perder sustentação.",
+						"correct": false
+					},
+					{
+						"id": "ans-wrong3",
+						"content": "Reduzir a potência para marcha lenta (idle) e descer até avistar o solo.",
+						"correct": false
+					}
+				],
+				"doneText": "Continuar",
+				"answer": {
+					"text": "Reduzir imediatamente para a velocidade de penetração em turbulência (Vt) indicada no RFM.",
+					"correct": "Exato! Reduzir para Vt protege o mastro do rotor principal e a estrutura do helicóptero de danos durante turbulência.",
+					"incorrect": "Incorreto. A ação imediata é reduzir para Vt (velocidade de turbulência) para proteger a estrutura."
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Ao encontrar acidentalmente condições de turbulência severa (ex: windshear repentino), qual é a atitude imediata em relação à velocidade?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null,
+				"layout": "split-horizontal"
+			}
+		},
+		{
+			"id": "4cb245fd-8aa8-0ccd-f80a-daafd4f9c131",
+			"type": "title",
+			"subtype": "default",
+			"name": 70,
+			"displayIndex": 70,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "4cb245fd-8aa8-0ccd-f80a-daafd4f9c131"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Operação em Tempestades, Turbulência (inclusive TCU), Gelo, Granizo e Condições Meteorológicas Adversas</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(b)(8) – Melhores altitudes de penetração, técnicas e procedimentos em condições adversas</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "0114ae61-8970-1c45-3c0a-5930b3a297ef",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 71,
+			"displayIndex": 71,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "0114ae61-8970-1c45-3c0a-5930b3a297ef"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "<p class=\"text-lg \">Antes de realizar um voo, é fundamental avaliar minuciosamente as condições ambientais. Evite atravessar tempestades sempre que possível — esta deve ser a primeira e principal estratégia.</p><p class=\"text-lg \">Caso seja inevitável operar próximo a uma tempestade, siga estritamente os procedimentos estabelecidos no Manual de Voo da Aeronave (RFM/AFM), que especificam altitudes e velocidades adequadas para cada situação.</p><p class=\"text-lg \">Evite sempre as nuvens cumulonimbus (Cb): elas são indicativas de tempestades severas com turbulência extrema, granizo, raios e cisalhamento do vento, podendo causar perda de controle da aeronave.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": false,
+				"title": "<p>Operando próximo ou dentro de áreas de tempestades</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "8b0e2d2d-6486-dec7-dc9d-1e908154484a",
+			"type": "list",
+			"subtype": "list",
+			"name": 72,
+			"displayIndex": 72,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "8b0e2d2d-6486-dec7-dc9d-1e908154484a"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Turbulência convectiva:</strong> associada a tempestades (CB) e cumulos de grande desenvolvimento. Inclui updrafts e downdrafts intensos que podem exceder a capacidade de controle do helicóptero. <strong>Evite a 20 NM</strong> de qualquer CB ativo.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Turbulência mecânica:</strong> causada por vento passando sobre obstáculos (edificações, plataformas, morros). Em plataformas offshore, a turbulência de esteira de estrutura pode surpreender o piloto na aproximação final. Identifique a direção do vento e evite rotas pela sotavento das estruturas.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Turbulência de Céu Claro (CAT):</strong> ocorre em altitude de cruzeiro (FL180+) sem nuvens visíveis, geralmente associada à corrente de jato. Consulte os SIGMETs de turbulência antes de voos em altitude. Reduza para Vt ao encontrar turbulência moderada ou severa.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Procedimento em turbulência:</strong> reduza para a velocidade de penetração em turbulência (Vt, conforme RFM), mantenha a atitude e evite manobras abruptas. Se severa: informe ATC, peça altitude alternativa e registre o PIREP.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Ar Turbulento — Incluindo Turbulência de Céu Claro</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "257c45aa-8681-7a82-4c98-edc3f721e3bb",
+			"type": "circle-the-answer",
+			"subtype": "default",
+			"name": 73,
+			"displayIndex": 73,
+			"templateName": "Circle the answer",
+			"templateDescription": "",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "Como os pilotos devem lidar com o ar turbulento?",
+							"questionId": "6c04a570-9524-4c3c-843d-3c8d229b1e6c",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Aumente a altitude para um ar mais suave",
+								"correct": false,
+								"answerId": "1ca3ad0f-1853-4546-96cd-6f7463293ab4",
+								"type": "text"
+							},
+							{
+								"content": "Mantenha a velocidade de cruzeiro para estabilidade",
+								"correct": false,
+								"answerId": "57c1d35a-b7e3-450a-87a9-4f2674c0b982",
+								"type": "text"
+							},
+							{
+								"content": "Desça para uma altitude mais baixa para melhor visibilidade",
+								"correct": false,
+								"answerId": "d145818a-5f0a-4df9-920d-dafd823343dc",
+								"type": "text"
+							},
+							{
+								"content": "Reduzir a velocidade para velocidade de turbulência",
+								"correct": true,
+								"answerId": "e742359d-637f-4170-9cb6-e6cb96920e5e",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "257c45aa-8681-7a82-4c98-edc3f721e3bb"
+			},
+			"data": {
+				"answers": {
+					"correct": "Reduzir a velocidade para velocidade de turbulência",
+					"incorrect": [
+						"Aumente a altitude para um ar mais suave",
+						"Mantenha a velocidade de cruzeiro para estabilidade",
+						"Desça para uma altitude mais baixa para melhor visibilidade"
+					]
+				},
+				"doneText": "Continuar",
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Não exatamente...",
+					"correct": "Correto! Reduzir a velocidade para velocidade de turbulência",
+					"text": "Reduzir a velocidade para velocidade de turbulência",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Circule a resposta correta",
+				"title": "Como os pilotos devem lidar com o ar turbulento?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "b6d89551-6307-ac80-0535-784c3327385c",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 74,
+			"displayIndex": 74,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "b6d89551-6307-ac80-0535-784c3327385c"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\"><strong>Relâmpagos:</strong> mantenha distância mínima de 20 NM de tempestades com atividade elétrica. Relâmpagos podem causar cegamento temporário do piloto, danificar aviônicos e antenas, e magnetizar instrumentos. Um único raio em estrutura metálica é uma emergência.</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Visibilidade reduzida:</strong> em nevoeiro denso, precipitação intensa ou bruma marítima abaixo dos mínimos VFR, <strong>nunca continue o voo no visual</strong>. Retorne à base ou declare emergência. A tentação de \"ver o outro lado\" é uma das causas mais comuns de acidentes CFIT (voo controlado contra o terreno).</span>",
+					"<span class=\"text-md leading-relaxed\"><strong>Mudanças bruscas de vento:</strong> em plataformas marítimas, a turbulência de esteira de estrutura pode causar variações de 20–40 kt de efeito solo. Monitore o windsock continuamente durante a aproximação e esteja preparado para a arremetida.</span>"
+				],
+				"title": "<p>Outras Condições Meteorológicas Perigosas</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "a88e3063-2282-789a-bcfe-db9dc7519ba3",
+			"type": "list",
+			"subtype": "list",
+			"name": 75,
+			"displayIndex": 75,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "a88e3063-2282-789a-bcfe-db9dc7519ba3"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Briefing meteorológico completo</strong> antes de cada voo. Consulte previsões, imagens de radar e NOTAMs relevantes para a rota.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Treinamento periódico</strong> em simuladores e situações adversas. A preparação antecipada reduz o tempo de resposta em emergências reais.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Comunicação constante</strong> com os órgãos de controle de tráfego aéreo durante o voo. Reporte condições inesperadas imediatamente.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Atenção às atualizações</strong> meteorológicas em rota. Condições podem mudar rapidamente, especialmente em operações offshore.</p>"
+				],
+				"doneText": null,
+				"title": "Práticas Gerais",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "f27bb4bd-f178-81ed-ab69-b7b20e3f269a",
+			"type": "title",
+			"subtype": "default",
+			"name": 76,
+			"displayIndex": 76,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "f27bb4bd-f178-81ed-ab69-b7b20e3f269a"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Limitações Operacionais</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(b) – Parâmetros do RFM, espaços aéreos restritos e requisitos de certificação</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "d09fe73e-676e-533a-ef91-f50a799d3540",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 77,
+			"displayIndex": 77,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "d09fe73e-676e-533a-ef91-f50a799d3540"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "<p class=\"text-lg\"><strong>Limitações Ambientais e Climáticas</strong></p><p class=\"text-md\">Helicópteros offshore operam em um dos ambientes mais desafiadores da aviação. As limitações ambientais são restrições impostas pelas condições naturais que <strong>devem ser respeitadas para garantir a segurança da operação</strong>.</p><p class=\"text-lg\"><strong>Principais limitações ambientais:</strong></p><ul><li><p class=\"text-md\"><strong>Vento máximo:</strong> cada helicóptero tem um limite de vento de componente lateral e de popa definido no RFM. Exceder esse limite compromete o controle durante aproximações e decolagens em Helipontos.</p></li><li><p class=\"text-md\"><strong>Visibilidade e teto:</strong> operações VFR requerem mínimos de visibilidade (≥ 5 km) e teto (≥ 300 m). Abaixo dos mínimos, cancele ou converta para IFR (se habilitado).</p></li><li><p class=\"text-md\"><strong>Temperatura:</strong> temperaturas extremas afetam a densidade do ar e o desempenho do motor. Em dias quentes, a altitude-densidade pode ser significativamente maior que a altitude real.</p></li><li><p class=\"text-md\"><strong>Estado do mar:</strong> para operações de resgate aquático ou ditching, o estado do mar (altura de ondas) é um fator limitante definido no manual de operações do operador.</p></li></ul>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": false,
+				"title": "Limitações ambientais e climáticas",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "cb383de6-02f8-6ad7-b596-536fe73daf3b",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 78,
+			"displayIndex": 78,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "cb383de6-02f8-6ad7-b596-536fe73daf3b"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "<p class=\"text-lg\"><strong>Limitações Técnicas e de Desempenho</strong></p><p class=\"text-md\">Além das limitações do ambiente, cada aeronave tem limitações intrínsecas que devem ser rigorosamente respeitadas:</p><ul><li><p class=\"text-md\"><strong>MTOW (Peso Máximo de Decolagem):</strong> ultrapassar o MTOW compromete o desempenho do rotor, aumenta o risco de falha mecânica e é ilegal. Calcule o peso antes de cada voo.</p></li><li><p class=\"text-md\"><strong>Alcance e endurance:</strong> em missões offshore longas, calcule o combustível necessário + reservas legais + combustível de alternativa. O não cumprimento pode resultar em pouso forçado no mar.</p></li><li><p class=\"text-md\"><strong>Velocidade (Vne / Vt):</strong> a velocidade nunca exceder (Vne) é um limite absoluto. Em turbulência, reduza para Vt (velocidade de penetração em turbulência) para proteger a estrutura.</p></li><li><p class=\"text-md\"><strong>Hora de vida dos componentes:</strong> rotores, caixas de engrenagem e outros itens têm horas de vida definidas pelo fabricante. Operação além dessas horas é ilegal e perigosa.</p></li></ul><p class=\"text-md\">📖 Todas as limitações técnicas estão publicadas na <strong>Seção 1 do RFM</strong> da aeronave.</p>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": false,
+				"title": "<p>Limitações técnicas e de desempenho</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "3d4c6766-1c54-67ed-bbc4-e00aab5b69c4",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 79,
+			"displayIndex": 79,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "No contexto das Limitações Operacionais, qual aspecto do espaço aéreo é OBRIGATÓRIO considerar ao planejar voos de helicóptero?",
+							"questionId": "d9f89536-f1c6-4603-850e-0029873310fd",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Áreas Proibidas, Perigosas e Restritas.",
+								"correct": true,
+								"answerId": "96d76054-39aa-40dc-ae4b-7f7527828ca9",
+								"type": "text"
+							},
+							{
+								"content": "Consumo de combustível e autonomia.",
+								"correct": false,
+								"answerId": "9789d049-ec8f-40db-982f-820b0d3f648d",
+								"type": "text"
+							},
+							{
+								"content": "Conforto e entretenimento dos passageiros.",
+								"correct": false,
+								"answerId": "c2570373-6fd8-4ba1-9d2a-40451c976000",
+								"type": "text"
+							},
+							{
+								"content": "A disponibilidade de rotas cênicas.",
+								"correct": false,
+								"answerId": "fab42211-25e3-4de7-a526-01679ed2a698",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "3d4c6766-1c54-67ed-bbc4-e00aab5b69c4"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "e8a7d4c6-8bd3-3cc2-5516-bdd30c3d4aa0",
+						"content": "Áreas Proibidas, Perigosas e Restritas.",
+						"correct": true
+					},
+					{
+						"id": "f8c6b26e-1ed7-702f-9d42-c4bdc10cbb4e",
+						"content": "Consumo de combustível e autonomia.",
+						"correct": false
+					},
+					{
+						"id": "886f6802-4199-efd5-f7c2-6cd58bb8e338",
+						"content": "Conforto e entretenimento dos passageiros.",
+						"correct": false
+					},
+					{
+						"id": "c7850fef-aeef-e354-44c4-b271c006b5e7",
+						"content": "A disponibilidade de rotas cênicas.",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Incorreto. As <strong>Áreas Proibidas (P), Restritas (R) e Perigosas (D)</strong> são limitações do espaço aéreo de conhecimento obrigatório para o piloto PIC. Voar em Área Proibida sem autorização constitui infração administrativa grave com possibilidade de cancelamento da licença e intercepção por aeronaves militares.",
+					"correct": "Correto! Áreas P (proibidas), R (restritas) e D (perigosas) são publicadas nas cartas AIP AISWEB e devem ser checadas no planejamento de voo. A violação de área proibida pode resultar em intercepção pela FAB e cancelamento do CMA e da licença de voo.",
+					"text": "Áreas Proibidas, Perigosas e Restritas.",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "No contexto das Limitações Operacionais, qual aspecto do espaço aéreo é OBRIGATÓRIO considerar ao planejar voos de helicóptero?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "6f11106c-6e20-51f6-969b-b9ea4bcf1b2e",
+			"type": "title",
+			"subtype": "default",
+			"name": 80,
+			"displayIndex": 80,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "6f11106c-6e20-51f6-969b-b9ea4bcf1b2e"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Controle de Cruzeiro e de Consumo de Combustível</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(b) – Gestão de combustível, reservas mínimas e planejamento de alternativas</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "a375451d-f727-bf62-1477-a62885335a35",
+			"type": "scrolling-media",
+			"subtype": "scrolling-media",
+			"name": 81,
+			"displayIndex": 81,
+			"templateName": "Scrolling mix",
+			"templateDescription": "Display long form content of any type",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "a375451d-f727-bf62-1477-a62885335a35"
+			},
+			"data": {
+				"content": [
+					{
+						"content": "fit_content_assets/surviving-the-slump-in-the-offshore-helicopter-market-3_zcuwmk.jpg",
+						"contentType": "image",
+						"caption": "<p class=\"text-md\">A verificação visual e quantitativa do combustível é um item obrigatório no checklist pré-voo.</p>"
+					},
+					{
+						"content": "<p class=\"text-lg\"><strong>Por que a verificação de combustível é crítica?</strong></p><p class=\"text-md\">Em operações offshore, não há postos intermediários — o <strong>cálculo de combustível deve garantir o voo de ida, mais reservas de contingência, mais combustível para alternativa</strong>.</p><p class=\"text-md\">O procedimento de verificação deve incluir:</p><ul><li><p class=\"text-md\"><strong>Verificação visual</strong> dos tanques e linhas de combustível (integridade, ausência de vazamentos).</p></li><li><p class=\"text-md\"><strong>Confirmação da quantidade</strong> abastecida com o registro de operações.</p></li><li><p class=\"text-md\"><strong>Cálculo de autonomia</strong> comparado à distância total do voo + margem legal (conforme RBAC 135).</p></li><li><p class=\"text-md\"><strong>Verificação de contaminação</strong> (água no combustível) via dreno antes do primeiro voo do dia.</p></li></ul>",
+						"contentType": "text"
+					}
+				],
+				"prompt": null,
+				"doneText": null,
+				"preventFocus": true,
+				"title": "Verificação de combustível antes do voo",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "557cf1d2-af76-8f2b-13e8-93a13c4bb950",
+			"type": "list",
+			"subtype": "list",
+			"name": 82,
+			"displayIndex": 82,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "557cf1d2-af76-8f2b-13e8-93a13c4bb950"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Frequência de verificação:</strong> monitore o nível de combustível a cada <strong>30 minutos</strong> de voo, ou conforme estabelecido no manual de operações do operador. Em voos curtos, verifique no ponto de decolagem e ao iniciar a descida.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>O que verificar:</strong> comparar o consumo REAL com o consumo PLANEJADO. Uma discrepância positiva (mais consumo que o previsto) deve ser reportada ao operador e pode exigir pouso em alternativa mais próxima.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Ponto de não retorno:</strong> calcule antes do voo o \"ponto de não retorno\" — posição a partir da qual o combustível disponível não é mais suficiente para retornar à base. Após esse ponto, o destino é obrigatório.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Indicadores de falha:</strong> se os indicadores de combustível (Fuel Quantity Indicators) mostrarem leitura inconsistente ou a luz de baixo combustível acender antes do previsto, declare emergência preventiva e planeje pouso imediato.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Monitoramento Regular de Combustível em Voo</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "ce802fec-f0ce-87cc-564e-968469c73e67",
+			"type": "multiple-choice-game",
+			"subtype": "default",
+			"name": 83,
+			"displayIndex": 83,
+			"templateName": "Multiple Choice",
+			"templateDescription": "Select the correct answer(s)",
+			"permanent": false,
+			"metadata": {
+				"questions": [
+					{
+						"question": {
+							"content": "O que os pilotos devem fazer antes de cada voo para garantir o combustível adequado?",
+							"questionId": "958fda21-4106-4775-88ca-478ab12cdd2f",
+							"type": "text"
+						},
+						"answers": [
+							{
+								"content": "Realize uma verificação de combustível antes do voo",
+								"correct": true,
+								"answerId": "26bbc62a-364a-49b9-be8a-58cef5c3b35d",
+								"type": "text"
+							},
+							{
+								"content": "Verifique as condições meteorológicas",
+								"correct": false,
+								"answerId": "6f982130-6244-4637-8ade-8a9b151665de",
+								"type": "text"
+							},
+							{
+								"content": "Ajuste o peso do helicóptero",
+								"correct": false,
+								"answerId": "10cb34ca-a581-4306-8f4a-f1c89eb1660f",
+								"type": "text"
+							},
+							{
+								"content": "Monitore o nível de combustível durante o voo",
+								"correct": false,
+								"answerId": "07e37044-aba5-40e1-b8b6-26432f9917f4",
+								"type": "text"
+							}
+						]
+					}
+				],
+				"slideId": "ce802fec-f0ce-87cc-564e-968469c73e67"
+			},
+			"data": {
+				"additionalContent": "",
+				"additionalContentType": "text",
+				"selectable": 1,
+				"randomize": true,
+				"doneText": "Continuar",
+				"answers": [
+					{
+						"id": "b431fa4d-86a1-2272-525b-1152a00f1950",
+						"content": "Realize uma verificação de combustível antes do voo",
+						"correct": true
+					},
+					{
+						"id": "29a083bd-5b18-596b-e927-902bb8b56ed5",
+						"content": "Verifique as condições meteorológicas",
+						"correct": false
+					},
+					{
+						"id": "4144990f-6548-aa78-1213-a7264ac30911",
+						"content": "Ajuste o peso do helicóptero",
+						"correct": false
+					},
+					{
+						"id": "1f86c12a-27b5-0a3d-e338-eb2988fd91fd",
+						"content": "Monitore o nível de combustível durante o voo",
+						"correct": false
+					}
+				],
+				"answer": {
+					"takeaway": "",
+					"incorrect": "Incorreto. O RBAC 135.343 exige que o piloto calcule o combustível mínimo necessário para: (1) atingir o destino, (2) atingir o alternativo (se exigido), (3) mais a reserva final mínima de 20 minutos (VFR) ou 45 minutos (IFR). Decolar sem essa reserva constitui imprudência aeronáutica.",
+					"correct": "Correto! Verificar combustível antes do voo inclui calcular: combustível de táxi + rota + alternativo + reserva final mínima. É um dos itens do briefing de pré-voo obrigatório e sua omissão figura entre as principais causas de acidentes por exaustão de combustível.",
+					"text": "Realize uma verificação de combustível antes do voo",
+					"value": null
+				},
+				"game": {
+					"timer": {
+						"limit": -1,
+						"isDisabled": false,
+						"out-of-time-prompt": null
+					},
+					"stars": null
+				},
+				"prompt": "Selecione a resposta correta",
+				"title": "O que os pilotos devem fazer antes de cada voo para garantir o combustível adequado?",
+				"titleType": "text",
+				"subtitle": null,
+				"subtitleType": "text",
+				"challenge_configuration": {
+					"nb_stars": null,
+					"weighting": 1
+				},
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": null
+			}
+		},
+		{
+			"id": "ad7b7b1c-fb82-d763-21a4-f30a9e27e3c9",
+			"type": "text-sequence",
+			"subtype": "text-sequence",
+			"name": 84,
+			"displayIndex": 84,
+			"templateName": "Sequence",
+			"templateDescription": "Display a sequence of text",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ad7b7b1c-fb82-d763-21a4-f30a9e27e3c9"
+			},
+			"data": {
+				"prompt": null,
+				"label": "Etapa",
+				"canGoBack": false,
+				"doneText": null,
+				"content": [
+					"<span class=\"text-md leading-relaxed\">A <strong>altitude ótima de cruzeiro</strong> é aquela onde a relação entre potência consumida e velocidade de avanço é mais eficiente. Consulte os gráficos de desempenho do RFM para cada modelo de helicóptero.</span>",
+					"<span class=\"text-md leading-relaxed\">Voar acima ou abaixo da altitude ótima aumenta o arrasto parasita e induzido, respectivamente, elevando o consumo de combustível sem benefício correspondente em velocidade ou alcance.</span>",
+					"<span class=\"text-md leading-relaxed\">A <strong>velocidade de máximo alcance (Vmax range)</strong> é diferente da velocidade de cruzeiro normal. Para missões longas, voe na Vmax range e na altitude ótima — pode economizar até 15–20% de combustível.</span>"
+				],
+				"title": "<p>Altitude e Velocidade Ótimas para Economia de Combustível</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "4e92a94b-a9bf-405f-1a79-6087e553f129",
+			"type": "list",
+			"subtype": "list",
+			"name": 85,
+			"displayIndex": 85,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "4e92a94b-a9bf-405f-1a79-6087e553f129"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Registro pós-voo:</strong> anote o consumo real de cada voo (combustível inicial menos combustível final) e compare com os valores previstos. Desvios recorrentes indicam problemas de eficiência ou falha de instrumento.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Análise por fase de voo:</strong> taxiamento, decolagem, cruzeiro e aproximação têm consumos distintos. Um motor com consumo excessivo em cruzeiro pode indicar necessidade de regulagem ou inspeção de injeção.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Relatório ao operador:</strong> dados de consumo são compartilhados com a equipe de operações para análise de tendências, planejamento de manutenção e otimização das táticas de voo. Toda anomalia deve ser documentada no diário de bordo.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Análise de Dados de Consumo de Combustível</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "a5649fbc-e41f-cb75-b456-357c96a8d460",
+			"type": "title",
+			"subtype": "default",
+			"name": 86,
+			"displayIndex": 86,
+			"templateName": "Title",
+			"templateDescription": "Introduce your lesson",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "a5649fbc-e41f-cb75-b456-357c96a8d460"
+			},
+			"data": {
+				"buttonText": "<p>Iniciar</p>",
+				"exitButton": false,
+				"title": "<p>Planejamento de Voo</p>",
+				"titleType": "html",
+				"subtitle": "<p>RBAC 135.345(b) – Elaboração do plano de voo, NOTAMs, meteorologia e rotas alternativas</p>",
+				"subtitleType": "html",
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "19e9fbac-8bae-9ea7-4b68-f87e244179b6",
+			"type": "list",
+			"subtype": "list",
+			"name": 87,
+			"displayIndex": 87,
+			"templateName": "Bulleted list",
+			"templateDescription": "Display a list of bullet points",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "19e9fbac-8bae-9ea7-4b68-f87e244179b6"
+			},
+			"data": {
+				"list": [
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Análise meteorológica da rota:</strong> verifique METARs, TAFs e SIGMETs de todas as estações na rota. Identifique e planeje desvios de áreas de mau tempo, especialmente tempestades convectivas e sistemas frontais.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Seleção de altitude de cruzeiro:</strong> escolha altitude que permita desempenho adequado (densidade do ar, limitações de motor), evite condições de gelo (temperatura) e seja compatível com os requisitos de voo IFR ou VFR da rota.</p>",
+					"<p class=\"text-md\" style=\"margin:0; padding-bottom: 0.5rem;\"><strong>Pontos de reporte e alternativas:</strong> defina os pontos de reporte obrigatórios com o ATC e identifique aeródromos ou plataformas alternativas ao longo da rota, com dados de combustível suficiente para chegar lá.</p>"
+				],
+				"doneText": null,
+				"title": "<p>Planejamento de Rota Adequado</p>",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "ad51130a-9f10-de54-c749-74113e835f80",
+			"type": "image-slider",
+			"subtype": "multiple",
+			"name": 88,
+			"displayIndex": 88,
+			"templateName": "Vertical series",
+			"templateDescription": "Swipe through a group of images",
+			"permanent": false,
+			"metadata": {
+				"questions": [],
+				"slideId": "ad51130a-9f10-de54-c749-74113e835f80"
+			},
+			"data": {
+				"prompt": null,
+				"items": [
+					{
+						"content": "fit_content_assets/amt-11-6481-2018-f01-web_v6v5ef.png",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "<p class=\"text-xl\">Uso de Informações Meteorológicas Atualizadas</p>",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/Doppler_Weather_Radar_-_NOAA_axiupa.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "Os pilotos devem sempre buscar informações meteorológicas atualizadas antes e durante o voo.",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/363045232_156b61d2ff_b_sney3g.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "Isso inclui a obtenção de previsões meteorológicas precisas, dados de radar e imagens de satélite em tempo real.",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					},
+					{
+						"content": "fit_content_assets/26415221458_d95eeba99e_b_rffzby.jpg",
+						"contentType": "image",
+						"position": "Bottom",
+						"color": null,
+						"caption": "<p>\r\nEssas fontes de informação auxiliam os pilotos na identificação de áreas de tempestade e condições adversas, capacitando-os a tomar decisões de evasão com base em dados fundamentados</p>",
+						"imagePosition": "Middle",
+						"captionStyle": "Default"
+					}
+				],
+				"arrows": true,
+				"doneText": null,
+				"challenge_configuration": null,
+				"socialLearning": {
+					"enabled": false,
+					"maxResponseLength": 0
+				},
+				"narration": {
+					"progress_on_completion": false,
+					"can_not_be_skipped": false,
+					"audio_file": null
+				}
+			}
+		},
+		{
+			"id": "72c8c1ce-4b8e-4c66-8630-19959164564a",
+			"type": "exit",
+			"subtype": "default",
+			"name": 89,
+			"displayIndex": 89,
+			"templateName": "Exit Lesson",
+			"templateDescription": "",
+			"permanent": true,
+			"metadata": {
+				"questions": [],
+				"slideId": "72c8c1ce-4b8e-4c66-8630-19959164564a"
+			},
+			"data": {
+				"content": "Parabéns! Você concluiu com sucesso o módulo CGA – Conhecimentos Gerais de Aeronaves.",
+				"buttonText": "Concluir",
+				"title": "Módulo Concluído!",
+				"titleType": "html",
+				"subtitle": null,
+				"subtitleType": null,
+				"challenge_configuration": null,
+				"socialLearning": null,
+				"narration": null
+			}
+		}
+	],
+	"title": "CGA - Conhecimentos Gerais de Aeronaves",
+	"index": 0,
+	"scorm": true,
+	"id": "69e0e569e762557815119b83"
+}

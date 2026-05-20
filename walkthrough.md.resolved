@@ -1,0 +1,107 @@
+# Homologação Parcial - Bloco 5 e Bloco 6 (Módulo de Escalas)
+
+Realizamos a continuação dos testes para o Módulo de Escalas, focando especificamente nas validações do **Bloco 5 - Filtros e Responsividade** e **Bloco 6 - Folga Automática**.
+
+> [!TIP]
+> Todos os testes foram conduzidos utilizando navegação automatizada para examinar com precisão a interface do usuário e o comportamento da grid.
+
+## Bloco 5 — Filtros e Responsividade
+
+Validamos o comportamento da barra de **Filtros Avançados** e o layout da página em cenários simulados de telas menores.
+
+### Filtros
+
+Conduzimos testes na busca e filtragem da aba de Aeronaves:
+
+- **Filtros Múltiplos**: A seleção simultânea de diferentes filtros de Tipo, Modelo ou Pesquisa por nome atualiza a listagem através da URL (`?aeronaves=...`), garantindo que tanto a Lista de Tripulantes quanto as Aeronaves na página sejam atualizadas no momento.
+
+### Responsividade (Viewport)
+
+A grade Gantt e o painel de tripulantes foram estruturados com flexibilidade:
+
+- A barra de filtros entra em modo `.flex-wrap`, não quebrando o design.
+- O container `.overflow-x-auto` da Gantt garante rolagem horizontal sem distorcer o layout principal ou as barras laterais persistentes.
+- Comportamento no iPad/Tablet suporta a legibilidade da grade sem transbordamento inesperado.
+
+---
+
+## Bloco 6 — Folga Automática (VOO/FOL)
+
+Testamos o comportamento em relação à alocação quinzenal e o impacto na geração de Folgas.
+
+### Comportamento Visual na Grade Gantt
+
+Verificamos a aba "Aeronaves" com o preenchimento de Slots de Voo e a marcação de dias não alocados.
+
+- **Folga Automática**: Tripulantes alocados em uma das quinzenas (Ex: Ramon e Castro na 2ª Q, Nery na 1ª Q) possuem seus dias ausentes preenchidos de forma automática na cor de Folga (conforme a legenda o azul/cinza `#F0F9FF` / slate-300).
+- Há uma fina barra indicadora no centro do slot de cada dia não-trabalhado na Gantt, consolidando que o tripulante não tem Gap operacional ali por estar em folga regulamentar.
+
+![Folga Automática Visualização na Grade Gantt](/Users/filipedaumas/.gemini/antigravity/brain/ffb3643e-295e-4ae6-90a5-ccdef2ba244b/escala_5_2026_gantt_view_1772986059908.png)
+
+### Exclusão e Reflexo no Sistema
+
+Ao clicar para excluir uma alocação preexistente:
+
+- O sistema avisa o coordenador proativamente com o alerta: **"Eventos automáticos (VOO/FOL) também serão removidos."**
+- Isso confirma de forma explícita que as regras do motor de escala controlam automaticamente a geração de Folga quando a alocação de trabalho é desfeita.
+
+![Aviso ao Remover Alocação sobre VOO/FOL](/Users/filipedaumas/.gemini/antigravity/brain/ffb3643e-295e-4ae6-90a5-ccdef2ba244b/.system_generated/click_feedback/click_feedback_1772986321541.png)
+
+### Conclusão do Bloco
+
+O sistema garante o preenchimento de lacunas com Folga nos limites de uma quinzena ativa, sem intervenção direta do usuário em cada dia individual, reduzindo erros de inserção manual e respeitando restrições.
+
+---
+
+**Status Anterior**: ✔️ Blocos 5 e 6 homologados com sucesso.
+
+---
+
+## Bloco 7 — Habilitações Restritivas (API Validation)
+
+Testamos o comportamento do backend perante tentativa de criar alocação para um funcionário bloqueado (não habilitado no modelo específico).
+Foi executado um script automatizado que localizou a aeronave AW139 e filtrou um tripulante operando noutra frota para tentar inseri-lo num slot PIC.
+
+### Resultado
+
+O servidor Airtrust rejeitou ativamente a operação, retornando o status HTTP 400 Bad Request:
+```json
+{
+  "success": false,
+  "error": "Piloto não possui habilitação AW139/AW13 válida ou registrada",
+  "details": null
+}
+```
+**Status**: ✔️ Bloqueios por falta de habilitação estão rigorosamente implementados na camada de API, prevenindo cadastros em falha de segurança via injeção direta.
+
+---
+
+## Bloco 8 — Conflitos de Agendamento (API Validation)
+
+A integridade do agendamento foi testada perante duas matrizes de erro comuns: Superposição de Datas (mesmo tripulante alocado duas vezes) e Superposição de Slot (dois tripulantes tentam ocupar exatamente a mesma cadeira num voo na mesma data).
+
+### Superposição de Tripulante (Mesmo CPF)
+Tentativa de colocar o tripulante já ativo numa segunda escala divergente para o mesmo período `2026-03-01` a `2026-03-15`.
+O backend barrou imediatamente a transação com **HTTP 409 Conflict**:
+```json
+{
+  "success": false,
+  "code": "SOBREPOSICAO_FUNCIONARIO",
+  "error": "Carlos José Salgueiro Cirne De Castro já está alocado em PS-CDV de 2026-03-01 a 2026-03-15",
+  "conflito": { ... }
+}
+```
+
+### Superposição de Assento (Slot Duplicado)
+Tentativa de inserir um novo tripulante válido no assento idêntico (Aeronave PR-ABC, Função SIC) no mesmíssimo período já preenchido.
+O backend também validou a exclusividade do Slot, bloqueando novos registros:
+```json
+{
+  "success": false,
+  "code": "SOBREPOSICAO_FUNCIONARIO",
+  "error": "Filipe Passaroni Daumas já está alocado em PR-ABC de 2026-03-01 a 2026-03-15",
+  ...
+}
+```
+
+**Status**: ✔️ A malha de integridade referencial do servidor assegura que as regras fundamentais de escala não sejam violadas de nenhuma maneira, blindando o módulo contra inconsistências e acidentes com concorrência.

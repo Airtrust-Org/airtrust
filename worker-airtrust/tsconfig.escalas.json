@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/routes/escalas.ts",
+    "src/routes/escalas-*.ts",
+    "src/utils/escala-engine.ts",
+    "src/middleware/**/*.ts",
+    "src/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".wrangler"
+  ]
+}

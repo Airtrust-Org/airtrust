@@ -1,0 +1,288 @@
+openapi: 3.0.3
+info:
+  title: AirTrust API (Runtime Prefix Catalog)
+  description: |
+    Catálogo dos prefixes montados atualmente no Worker.
+    Esta spec substitui o contrato antigo v2 para evitar drift silencioso.
+    O contrato legado permanece em openapi.v2.legacy.yaml.
+  version: 3.0.0-runtime
+servers:
+  - url: https://airtrust-api-production.airtrust.workers.dev
+    description: Worker produção
+  - url: http://localhost:8787
+    description: Worker local
+paths:
+  /api/health:
+    get:
+      summary: Health check da API
+      tags: [Health]
+      responses:
+        '200':
+          description: Serviço saudável
+  /api:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/admin:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/admin/perfis:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/admin/usuarios:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/aeronaves:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/assets:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/assistente:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/auth:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/auth/login:
+    post:
+      summary: Login com email e senha
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, senha]
+              properties:
+                email:
+                  type: string
+                  format: email
+                senha:
+                  type: string
+      responses:
+        '200':
+          description: Login realizado com sucesso
+        '401':
+          description: Credenciais inválidas
+  /api/auth/refresh:
+    post:
+      summary: Renovar access token com refresh token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token renovado
+        '401':
+          description: Refresh token inválido
+  /api/auth/forgot-password:
+    post:
+      summary: Solicitar recuperação de senha
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Resposta neutra para evitar enumeração de usuários
+        '429':
+          description: Limite de tentativas excedido
+  /api/auth/reset-password:
+    post:
+      summary: Redefinir senha com token temporário
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, senha]
+              properties:
+                token:
+                  type: string
+                senha:
+                  type: string
+      responses:
+        '200':
+          description: Senha redefinida
+        '401':
+          description: Token inválido ou expirado
+        '429':
+          description: Limite de tentativas excedido
+  /api/backup:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/categorias:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/certificados:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/certificados/validar:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/compliance:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/dashboard:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/debug:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/empresas:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/escalas:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/evd:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/exportacao:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/frms:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/funcionarios:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/funcoes:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/habilitacoes:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/horas-voo:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/hospedagem:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/importacao:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/importacao-xlsx:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/integracoes/sigvoos:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/integracoes/sigvoos/historico:
+    get:
+      summary: Histórico recente de sincronizações SIGVOOS
+      tags: [Integracoes, SIGVOOS]
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: Histórico retornado
+  /api/integracoes/sigvoos/sincronizar-frms:
+    post:
+      summary: Executar sincronização SIGVOOS para FRMS
+      tags: [Integracoes, SIGVOOS]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from:
+                  type: string
+                  pattern: '^\\d{4}-\\d{2}-\\d{2}$'
+                to:
+                  type: string
+                  pattern: '^\\d{4}-\\d{2}-\\d{2}$'
+                clearExisting:
+                  type: boolean
+      responses:
+        '200':
+          description: Sincronização concluída
+        '400':
+          description: Período inválido
+  /api/licencas:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/lms:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/lms/cursos:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/lms/matriculas:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/migrations:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/modelos-aeronave:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/notificacoes:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/pasta-virtual:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/preferencias:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/qualificacoes:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/qualificacoes-historico/auditoria:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/qualificacoes-historico/deduplicate:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/qualificacoes-historico/fix-renovadas:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/qualificacoes/alertas:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/qualificacoes/reclass:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/setores:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/sgso:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/sgso/next:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/simuladores:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true
+  /api/treinamentos:
+    description: Prefix montado no runtime via app.route em worker-airtrust/src/index.ts
+    x-mounted-prefix: true

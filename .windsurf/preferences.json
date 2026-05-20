@@ -1,0 +1,44 @@
+{
+  "autoAccept": {
+    "fileCreation": true,
+    "fileModification": true,
+    "dependencyInstallation": true,
+    "commandExecution": true,
+    "serverRestart": true
+  },
+  "workflow": {
+    "mode": "autonomous",
+    "stopOnError": false,
+    "requireConfirmation": false,
+    "generateReportOnComplete": true
+  },
+  "project": {
+    "name": "AirTrust",
+    "type": "fullstack",
+    "stack": ["React", "TypeScript", "Cloudflare Workers", "D1", "R2"],
+    "mainDirectories": {
+      "frontend": "src/react-app",
+      "backend": "src/worker",
+      "shared": "src/shared"
+    }
+  },
+  "codeStyle": {
+    "database": "snake_case",
+    "javascript": "camelCase",
+    "components": "PascalCase",
+    "constants": "UPPER_SNAKE_CASE"
+  },
+  "logging": {
+    "enableConsoleLogs": true,
+    "verboseMode": true,
+    "logErrors": true
+  },
+  "permissions": {
+    "readFiles": true,
+    "writeFiles": true,
+    "executeCommands": true,
+    "installDependencies": true,
+    "modifyConfigurations": true,
+    "accessEnvironmentVariables": true
+  }
+}

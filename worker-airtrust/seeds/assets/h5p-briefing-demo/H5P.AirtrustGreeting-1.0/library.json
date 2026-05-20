@@ -1,0 +1,26 @@
+{
+  "title": "Airtrust Greeting",
+  "description": "Conteúdo H5P mínimo para demonstrar renderização e conclusão xAPI no LMS.",
+  "majorVersion": 1,
+  "minorVersion": 0,
+  "patchVersion": 0,
+  "machineName": "H5P.AirtrustGreeting",
+  "runnable": "1",
+  "author": "AirTrust",
+  "license": "MIT",
+  "embedTypes": ["div"],
+  "preloadedJs": [
+    {
+      "path": "airtrust-greeting.js"
+    }
+  ],
+  "preloadedCss": [
+    {
+      "path": "airtrust-greeting.css"
+    }
+  ],
+  "coreApi": {
+    "majorVersion": 1,
+    "minorVersion": 24
+  }
+}

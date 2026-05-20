@@ -1,0 +1,21 @@
+{
+  "github.copilot.enable": {
+    "*": true
+  },
+  "editor.inlineSuggest.enabled": true,
+  "editor.acceptSuggestionOnCommitCharacter": true,
+  "editor.acceptSuggestionOnEnter": "on",
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 500,
+  "explorer.confirmDelete": false,
+  "explorer.confirmDragAndDrop": false,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "workbench.browser.enableChatTools": true,
+  "[typescript]": {
+    "editor.formatOnSave": true
+  },
+  "[typescriptreact]": {
+    "editor.formatOnSave": true
+  }
+}

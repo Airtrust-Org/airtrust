@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.app.json",
+  "include": [
+    "src/react-app/pages/escalas/**/*",
+    "src/react-app/hooks/useAuth.ts",
+    "src/react-app/context/**/*",
+    "src/react-app/config/**/*",
+    "src/react-app/services/**/*",
+    "src/react-app/utils/**/*",
+    "src/components/ui/**/*"
+  ],
+  "exclude": [
+    "src/react-app/__tests__",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
+}

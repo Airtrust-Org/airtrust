@@ -1,0 +1,4 @@
+nome,email,matricula,cpf,telefone,cargo,setor,data_admissao,ativo
+,teste@test.com,2001,666.666.666-66,11944444444,Piloto,Operações,2024-04-01,1
+José,email-invalido,2002,777.777.777-77,11933333333,Copiloto,Operações,2024-04-02,1
+Carlos,,2003,888.888.888-88,11922222222,Mecânico,Manutenção,2024-04-03,1

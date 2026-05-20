@@ -1,0 +1,299 @@
+openapi: 3.0.0
+info:
+  title: AirTrust API
+  description: Sistema de gestão de qualificações aeronáuticas
+  version: 2.0.0
+  contact:
+    email: suporte@airtrust.com.br
+  license:
+    name: MIT
+servers:
+  - url: https://api.airtrust.com.br
+    description: Produção
+  - url: http://localhost:8787
+    description: Desenvolvimento
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  
+  schemas:
+    Qualificacao:
+      type: object
+      required:
+        - funcionario_id
+        - tipo
+        - categoria
+        - data_validade
+      properties:
+        id:
+          type: integer
+          example: 151
+        funcionario_id:
+          type: integer
+          example: 10
+        tipo:
+          type: string
+          enum: [TREINAMENTO, CHECK, EXAME]
+          example: TREINAMENTO
+        categoria:
+          type: string
+          example: CRM
+        descricao:
+          type: string
+          example: Crew Resource Management
+        instituicao:
+          type: string
+          example: ANAC
+        instrutor:
+          type: string
+          example: Pedro Almeida
+        carga_horaria:
+          type: integer
+          example: 40
+        numero:
+          type: string
+          example: CRM-2025-001
+        data_emissao:
+          type: string
+          format: date
+          example: "2025-10-01"
+        data_conclusao:
+          type: string
+          format: date
+          example: "2025-10-05"
+        data_validade:
+          type: string
+          format: date
+          example: "2027-10-05"
+        observacoes:
+          type: string
+        arquivo_url:
+          type: string
+        status:
+          type: string
+          enum: [VÁLIDO, VENCENDO, VENCIDO]
+          example: VÁLIDO
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        field:
+          type: string
+        code:
+          type: string
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v2/auth/login:
+    post:
+      tags:
+        - Autenticação
+      summary: Login do usuário
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login bem-sucedido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  token:
+                    type: string
+                  user:
+                    type: object
+        '401':
+          description: Credenciais inválidas
+  
+  /api/v2/qualificacoes/compliance:
+    get:
+      tags:
+        - Qualificações
+      summary: Dashboard de compliance
+      responses:
+        '200':
+          description: Estatísticas de vencimento
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stats:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      validas:
+                        type: integer
+                      vencendo:
+                        type: integer
+                      vencidas:
+                        type: integer
+                  compliance:
+                    type: string
+  
+  /api/v2/qualificacoes:
+    get:
+      tags:
+        - Qualificações
+      summary: Listar qualificações
+      parameters:
+        - name: tipo
+          in: query
+          schema:
+            type: string
+            enum: [TREINAMENTO, CHECK, EXAME]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [VÁLIDO, VENCENDO, VENCIDO]
+        - name: funcionario_id
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Lista de qualificações
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Qualificacao'
+                  pagination:
+                    type: object
+    
+    post:
+      tags:
+        - Qualificações
+      summary: Criar qualificação
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Qualificacao'
+      responses:
+        '201':
+          description: Qualificação criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Qualificacao'
+        '400':
+          description: Validação falhou
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /api/v2/qualificacoes/{id}/upload:
+    post:
+      tags:
+        - Qualificações
+      summary: Upload de certificado
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Upload bem-sucedido
+        '413':
+          description: Arquivo muito grande (>10MB)
+  
+  /api/v2/qualificacoes/{id}/download:
+    get:
+      tags:
+        - Qualificações
+      summary: Download de certificado
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Arquivo PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Arquivo não encontrado
+  
+  /api/v2/treinamentos:
+    get:
+      tags:
+        - Treinamentos
+      summary: Listar catálogo de treinamentos
+      security: []
+      responses:
+        '200':
+          description: Lista de treinamentos

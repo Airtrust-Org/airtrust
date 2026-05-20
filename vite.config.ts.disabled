@@ -1,0 +1,102 @@
+import path from 'path';
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// Load environment variables
+const API_URL =
+  process.env.VITE_API_URL || 'https://airtrust-api-production.airtrust.workers.dev/api';
+const DEV_PROXY_TARGET =
+  process.env.VITE_DEV_PROXY_TARGET || 'https://airtrust-api-production.airtrust.workers.dev';
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  server: {
+    host: 'localhost',
+    port: 3000,
+    strictPort: true, // ✅ Falha se 3000 estiver ocupada (forçar porta fixa)
+    allowedHosts: true,
+    open: false, // ✅ Não abre o browser automaticamente a cada restart
+    // ✅ CRÍTICO: Headers anti-cache para desenvolvimento
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+      'Surrogate-Control': 'no-store',
+    },
+    hmr: {
+      overlay: false,
+    },
+    proxy: {
+      '/api': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: DEV_PROXY_TARGET.startsWith('https://'),
+      },
+    },
+    watch: {
+      ignored: [
+        '**/node_modules/**',
+        '**/.bun/**',
+        '**/jsdom/**',
+        '**/cache/**',
+        '**/dist/**',
+        '**/.git/**',
+        '**/vite.config.ts.timestamp-*',
+      ],
+    },
+  },
+  // Keep console logs in production to aid remote debugging on Pages.
+  // We still drop 'debugger' statements.
+  esbuild: {
+    drop: process.env.NODE_ENV === 'production' ? ['debugger'] : [],
+  },
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+    __DEV_MODE__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+    'import.meta.env.VITE_API_URL': JSON.stringify(API_URL),
+    // Apenas em desenvolvimento - remover em produção
+    ...(process.env.NODE_ENV === 'development'
+      ? {
+          'process.env.DISABLE_TRACKING': JSON.stringify(true),
+          'process.env.SKIP_SECRET_VALIDATION': JSON.stringify(true),
+        }
+      : {}),
+  },
+  build: {
+    watch: null,
+    chunkSizeWarningLimit: 1000,
+    sourcemap: true,
+    target: 'es2020',
+    minify: false,
+    outDir: 'dist/client',
+    emptyOutDir: true,
+    manifest: 'manifest.json',
+    rollupOptions: {
+      output: {
+        // ✅ CACHE BUSTING: Hash determinístico (não adicionar timestamp aleatório)
+        // Vite usa [hash] baseado no conteúdo do arquivo, garantindo que:
+        // - Mesmos conteúdos = mesmo hash = reusam cache
+        // - Conteúdos diferentes = hashes diferentes = cliente busca novo
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          router: ['react-router-dom'],
+        },
+      },
+    },
+  },
+  optimizeDeps: {
+    // Desabilita pre-bundling via esbuild para evitar deadlock no dev server
+    // (esbuild orphan deadlock com Node 24 + Vite 6 + muitos .html no repo)
+    noDiscovery: true,
+    include: [],
+    exclude: [],
+  },
+});

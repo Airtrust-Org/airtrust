@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "autoCreateReports": false,
+    "autoCreateDocumentation": false,
+    "verboseLogging": false,
+    "reportPatterns": [
+      "Fixing-*.md",
+      "Clean-Up-*.md",
+      "*-Report.md",
+      "Sync-*.md",
+      "Analysis-*.md",
+      "Debug-*.md",
+      "Log-*.md",
+      "RELATORIO-*.md",
+      "TROUBLESHOOTING-*.md",
+      "SOLUCAO-*.md"
+    ]
+  },
+  "preferences": {
+    "showResultsInChat": true,
+    "askBeforeCreatingFiles": true,
+    "minimizeMarkdownFiles": true
+  }
+}

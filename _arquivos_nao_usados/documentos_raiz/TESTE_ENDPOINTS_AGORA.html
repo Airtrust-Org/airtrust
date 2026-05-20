@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🔥 TESTE ENDPOINTS SIMULADORES - 01/12/2025</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 40px 20px;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+      h1 {
+        color: #667eea;
+        margin-bottom: 10px;
+        font-size: 32px;
+      }
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 16px;
+      }
+      .endpoint {
+        background: #f8f9fa;
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        transition: all 0.3s;
+      }
+      .endpoint:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+      }
+      .endpoint-name {
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 8px;
+        font-size: 18px;
+      }
+      .endpoint-url {
+        font-family: 'Courier New', monospace;
+        color: #667eea;
+        font-size: 14px;
+        margin-bottom: 12px;
+        word-break: break-all;
+      }
+      .status {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-right: 10px;
+      }
+      .status.loading {
+        background: #ffc107;
+        color: #000;
+      }
+      .status.success {
+        background: #28a745;
+        color: white;
+      }
+      .status.error {
+        background: #dc3545;
+        color: white;
+      }
+      .result {
+        margin-top: 12px;
+        padding: 12px;
+        background: white;
+        border-radius: 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+      }
+      .summary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+        text-align: center;
+      }
+      .summary h2 {
+        margin-bottom: 10px;
+      }
+      .summary .stats {
+        display: flex;
+        justify-content: center;
+        gap: 30px;
+        margin-top: 15px;
+      }
+      .summary .stat {
+        font-size: 24px;
+        font-weight: bold;
+      }
+      .summary .stat-label {
+        font-size: 12px;
+        opacity: 0.9;
+      }
+      button {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-bottom: 20px;
+      }
+      button:hover {
+        background: #764ba2;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔥 TESTE DE ENDPOINTS - MÓDULO SIMULADORES</h1>
+      <p class="subtitle">Verificação em tempo real dos endpoints da API de produção</p>
+
+      <div class="summary">
+        <h2>Status Geral</h2>
+        <div class="stats">
+          <div>
+            <div class="stat" id="total-success">0</div>
+            <div class="stat-label">✅ Sucesso</div>
+          </div>
+          <div>
+            <div class="stat" id="total-error">0</div>
+            <div class="stat-label">❌ Erros</div>
+          </div>
+          <div>
+            <div class="stat" id="total-time">0ms</div>
+            <div class="stat-label">⏱️ Tempo Total</div>
+          </div>
+        </div>
+      </div>
+
+      <button onclick="testarTodos()">🚀 TESTAR TODOS OS ENDPOINTS AGORA</button>
+
+      <div id="endpoints-container"></div>
+    </div>
+
+    <script>
+      const API_BASE = 'https://airtrust-api-production.airtrust.workers.dev';
+
+      const endpoints = [
+        {
+          name: '1. Health Check',
+          url: `${API_BASE}/api/simuladores/health`,
+          description: 'Verifica se o módulo está online',
+        },
+        {
+          name: '2. Listar Sessões',
+          url: `${API_BASE}/api/simuladores/sessoes`,
+          description: 'Retorna todas as sessões agendadas',
+        },
+        {
+          name: '3. Listar Fichas',
+          url: `${API_BASE}/api/simuladores/fichas`,
+          description: 'Retorna todas as fichas de avaliação',
+        },
+        {
+          name: '4. Listar Manobras',
+          url: `${API_BASE}/api/simuladores/manobras`,
+          description: 'Retorna templates de manobras',
+        },
+        {
+          name: '5. Listar Equipamentos',
+          url: `${API_BASE}/api/simuladores`,
+          description: 'Retorna simuladores cadastrados',
+        },
+        {
+          name: '6. Relatório de Uso',
+          url: `${API_BASE}/api/simuladores/relatorios/uso?data_inicio=2025-01-01&data_fim=2025-12-31`,
+          description: 'Estatísticas de utilização',
+        },
+        {
+          name: '7. Relatório de Tripulantes',
+          url: `${API_BASE}/api/simuladores/relatorios/tripulantes?limit=10`,
+          description: 'Performance dos tripulantes',
+        },
+        {
+          name: '8. Relatório de Desempenho',
+          url: `${API_BASE}/api/simuladores/relatorios/desempenho`,
+          description: 'Taxa de aprovação por tipo',
+        },
+      ];
+
+      let successCount = 0;
+      let errorCount = 0;
+      let totalTime = 0;
+
+      function createEndpointCard(endpoint, index) {
+        const card = document.createElement('div');
+        card.className = 'endpoint';
+        card.id = `endpoint-${index}`;
+        card.innerHTML = `
+                <div class="endpoint-name">${endpoint.name}</div>
+                <div style="color: #666; font-size: 14px; margin-bottom: 8px;">${endpoint.description}</div>
+                <div class="endpoint-url">${endpoint.url}</div>
+                <div>
+                    <span class="status loading" id="status-${index}">⏳ Aguardando...</span>
+                    <span id="time-${index}" style="color: #666; font-size: 12px;"></span>
+                </div>
+                <div class="result" id="result-${index}" style="display: none;"></div>
+            `;
+        return card;
+      }
+
+      async function testarEndpoint(endpoint, index) {
+        const statusEl = document.getElementById(`status-${index}`);
+        const timeEl = document.getElementById(`time-${index}`);
+        const resultEl = document.getElementById(`result-${index}`);
+
+        statusEl.className = 'status loading';
+        statusEl.textContent = '⏳ Testando...';
+
+        const startTime = performance.now();
+
+        try {
+          const response = await fetch(endpoint.url);
+          const endTime = performance.now();
+          const duration = Math.round(endTime - startTime);
+          totalTime += duration;
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            statusEl.className = 'status success';
+            statusEl.textContent = `✅ Sucesso (${response.status})`;
+            timeEl.textContent = `⏱️ ${duration}ms`;
+
+            let resultText = JSON.stringify(data, null, 2);
+            if (resultText.length > 500) {
+              resultText = resultText.substring(0, 500) + '... (truncado)';
+            }
+
+            resultEl.textContent = resultText;
+            resultEl.style.display = 'block';
+            resultEl.style.borderColor = '#28a745';
+
+            successCount++;
+          } else {
+            throw new Error(data.error || 'Resposta sem success:true');
+          }
+        } catch (error) {
+          const endTime = performance.now();
+          const duration = Math.round(endTime - startTime);
+          totalTime += duration;
+
+          statusEl.className = 'status error';
+          statusEl.textContent = '❌ Erro';
+          timeEl.textContent = `⏱️ ${duration}ms`;
+
+          resultEl.textContent = `Erro: ${error.message}`;
+          resultEl.style.display = 'block';
+          resultEl.style.borderColor = '#dc3545';
+          resultEl.style.color = '#dc3545';
+
+          errorCount++;
+        }
+
+        updateSummary();
+      }
+
+      function updateSummary() {
+        document.getElementById('total-success').textContent = successCount;
+        document.getElementById('total-error').textContent = errorCount;
+        document.getElementById('total-time').textContent = `${totalTime}ms`;
+      }
+
+      async function testarTodos() {
+        successCount = 0;
+        errorCount = 0;
+        totalTime = 0;
+        updateSummary();
+
+        for (let i = 0; i < endpoints.length; i++) {
+          await testarEndpoint(endpoints[i], i);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        console.log(
+          `\n✅ Teste concluído: ${successCount}/${endpoints.length} endpoints funcionando`,
+        );
+      }
+
+      // Renderizar cards
+      const container = document.getElementById('endpoints-container');
+      endpoints.forEach((endpoint, index) => {
+        container.appendChild(createEndpointCard(endpoint, index));
+      });
+
+      // Auto-start
+      console.log('🔥 Página carregada. Clique no botão para testar os endpoints!');
+    </script>
+  </body>
+</html>

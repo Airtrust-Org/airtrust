@@ -1,0 +1,10 @@
+auth_me=200
+funcionarios=200
+empresas=200
+qualificacoes_tipos=200
+lms_cursos=200
+frms_alertas=200
+simuladores=200
+qualificacoes_historico=200
+lms_matriculas=404
+sgso_ocorrencias=404

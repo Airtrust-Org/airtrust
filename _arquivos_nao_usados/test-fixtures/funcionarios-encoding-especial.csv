@@ -1,0 +1,5 @@
+nome,email,matricula,cpf,telefone,cargo,setor,data_admissao,ativo
+José Oliveira,jose.oliveira@test.com,F001,123.456.789-01,11900000001,Piloto,Ops,2024-01-01,1
+François Dubois,francois@test.com,F002,123.456.789-02,11900000002,Piloto,Ops,2024-01-02,1
+María García,maria.garcia@test.com,F003,123.456.789-03,11900000003,Piloto,Ops,2024-01-03,1
+中文姓名,chinese@test.com,F004,123.456.789-04,11900000004,Piloto,Ops,2024-01-04,1

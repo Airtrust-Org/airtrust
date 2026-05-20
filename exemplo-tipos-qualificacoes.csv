@@ -1,0 +1,6 @@
+nome,codigo,categoria,descricao,validade_meses,obrigatoria
+CMA Classe 1,CMA1,CMA,Certificado Médico Aeronáutico Classe 1,12,1
+CMA Classe 2,CMA2,CMA,Certificado Médico Aeronáutico Classe 2,12,1
+ICAO Nível 3,ICAO3,ICAO,Proficiência em Idioma Nível 3,36,1
+ASO 2024,ASO2024,ASO,Avaliação de Saúde Ocupacional 2024,12,1
+CHECK-IN A320,CHECK-A,CHECK,Check da Aeronave A320,,0
