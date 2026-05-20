@@ -1,0 +1,47 @@
+
+ ⛅️ wrangler 4.75.0 (update available 4.92.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "production".
+      Before using `--env=production` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.production]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db (7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 4.19ms
+[
+  {
+    "results": [
+      {
+        "audit_mentions": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 4.1913
+      },
+      "duration": 4.1913,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 61779968,
+      "rows_read": 207,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

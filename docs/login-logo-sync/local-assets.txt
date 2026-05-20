@@ -1,0 +1,6 @@
+public/airtrust-icon.svg
+public/airtrust-logo.svg
+public/favicon.svg
+public/h5p-standalone/images/h5p.svg
+src/react-app/components/empresas/UploadLogo.tsx
+src/react-app/pages/lms/LmsCatalogo.tsx

@@ -1,0 +1,27 @@
+[3J[H[2J[0;35m
+╔══════════════════════════════════════════════════════════════════╗
+║           AUDITORIA PROFUNDA - MÓDULO QUALIFICAÇÕES             ║
+╚══════════════════════════════════════════════════════════════════╝
+[0m
+🔍 Iniciando auditoria completa...
+📅 Data: 23/11/2025 18:15:28
+🌐 API: https://airtrust-api-staging.airtrust.workers.dev/api
+🔑 Token: eyJhbGciOiJIUzI1NiIs...
+
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m1. ANÁLISE DE ESTRUTURA DE ARQUIVOS[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;34m▶ 1.1 Backend - Estrutura do Worker[0m
+[0;34m──────────────────────────────────────────────────────[0m
+[0;32m✅ PASS[0m - Backend: index.ts
+[0;32m✅ PASS[0m - Backend: qualificacoes.ts
+[0;32m✅ PASS[0m - Backend: pasta-virtual.ts
+[0;32m✅ PASS[0m - Backend: auth.ts
+[0;32m✅ PASS[0m - Backend: wrangler.toml
+[0;32m✅ PASS[0m - Backend: package.json
+
+[0;34m▶ 1.2 Frontend - Estrutura React[0m
+[0;34m──────────────────────────────────────────────────────[0m
+[0;31m❌ FAIL[0m - Frontend: Qualificacoes.tsx

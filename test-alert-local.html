@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Teste de Alerta CMA/EAD</title>
+    <style>
+      body {
+        font-family: system-ui;
+        padding: 40px;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      button {
+        padding: 12px 24px;
+        font-size: 16px;
+        cursor: pointer;
+        margin: 8px;
+      }
+      .success {
+        color: green;
+      }
+      .error {
+        color: red;
+      }
+      pre {
+        background: #f5f5f5;
+        padding: 16px;
+        overflow: auto;
+      }
+      input {
+        padding: 8px;
+        font-size: 14px;
+        width: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🧪 Teste de Envio de Alerta CMA/EAD</h1>
+
+    <div>
+      <label>ID da Qualificação: <input type="number" id="qualId" value="3265" /></label>
+      <button onclick="testarAlerta()">🚀 Enviar Alerta</button>
+    </div>
+
+    <div id="resultado" style="margin-top: 24px"></div>
+
+    <script>
+      const API_BASE = 'https://airtrust-api-production.airtrust.workers.dev/api';
+
+      async function testarAlerta() {
+        const id = document.getElementById('qualId').value;
+        const resultado = document.getElementById('resultado');
+
+        resultado.innerHTML = '<p>⏳ Enviando alerta...</p>';
+
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) {
+            resultado.innerHTML =
+              '<p class="error">❌ Token não encontrado. Faça login primeiro em https://airtrust.online</p>';
+            return;
+          }
+
+          const response = await fetch(`${API_BASE}/alertas/ead-vencido/${id}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              mensagem: 'Teste de alerta via HTML',
+              enviarEmail: true,
+              enviarWhatsApp: true,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            resultado.innerHTML = `
+            <p class="success">✅ SUCESSO! Alerta enviado</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+          } else {
+            resultado.innerHTML = `
+            <p class="error">❌ ERRO ao enviar alerta</p>
+            <p><strong>Erro:</strong> ${data.error}</p>
+            ${data.detalhes ? `<p><strong>Detalhes:</strong></p><ul>${data.detalhes.map((d) => `<li>${d}</li>`).join('')}</ul>` : ''}
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+          }
+        } catch (err) {
+          resultado.innerHTML = `
+          <p class="error">❌ ERRO na requisição</p>
+          <pre>${err.message}</pre>
+        `;
+        }
+      }
+    </script>
+  </body>
+</html>

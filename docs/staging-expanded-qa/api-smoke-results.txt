@@ -1,0 +1,12 @@
+Staging API Smoke Test - Fri May 15 18:25:15 -03 2026
+Login: 200 (OK)
+GET /api/funcionarios: 200
+GET /api/empresas: 200
+GET /api/qualificacoes/tipos: 200
+GET /api/simuladores: 200
+GET /api/lms/cursos: 200
+GET /api/escalas: 200
+GET /api/frms/configuracao: 404
+GET /api/sgso/relatos: 200
+GET /api/treinamentos: 404
+GET /api/notificacoes: 404

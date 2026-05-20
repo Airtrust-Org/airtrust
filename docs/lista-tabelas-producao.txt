@@ -1,0 +1,256 @@
+
+ ⛅️ wrangler 4.45.3 (update available 4.46.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+🌀 Executing on preview database airtrust-db (7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.4483ms
+[
+  {
+    "results": [
+      {
+        "name": "_cf_KV"
+      },
+      {
+        "name": "aeronaves"
+      },
+      {
+        "name": "agendamentos_simulador"
+      },
+      {
+        "name": "alertas_enviados"
+      },
+      {
+        "name": "arquivos"
+      },
+      {
+        "name": "audit_cascade"
+      },
+      {
+        "name": "auditoria"
+      },
+      {
+        "name": "auditoriaavancadav2"
+      },
+      {
+        "name": "avaliacoes_manobras"
+      },
+      {
+        "name": "catalogo_treinamentos"
+      },
+      {
+        "name": "categorias_qualificacoes"
+      },
+      {
+        "name": "categoriasmanobras"
+      },
+      {
+        "name": "certificado_anexos"
+      },
+      {
+        "name": "certificados"
+      },
+      {
+        "name": "certificados_auditoria"
+      },
+      {
+        "name": "certificados_qualificacoes"
+      },
+      {
+        "name": "certificados_storage"
+      },
+      {
+        "name": "certificados_templates"
+      },
+      {
+        "name": "checks"
+      },
+      {
+        "name": "compliance_status"
+      },
+      {
+        "name": "consentimentos_lgpd"
+      },
+      {
+        "name": "credenciais"
+      },
+      {
+        "name": "d1_migrations"
+      },
+      {
+        "name": "empresa_certificado_config"
+      },
+      {
+        "name": "empresa_config"
+      },
+      {
+        "name": "empresas"
+      },
+      {
+        "name": "exames"
+      },
+      {
+        "name": "ficha_manobras_avaliacao"
+      },
+      {
+        "name": "fichas"
+      },
+      {
+        "name": "fichas_assinaturas"
+      },
+      {
+        "name": "fichas_manobras_historico"
+      },
+      {
+        "name": "fichas_sessao"
+      },
+      {
+        "name": "funcionario_documentos"
+      },
+      {
+        "name": "funcionarios"
+      },
+      {
+        "name": "funcionarios_aeronaves"
+      },
+      {
+        "name": "funcionarios_temp"
+      },
+      {
+        "name": "funcionarios_v2"
+      },
+      {
+        "name": "funcoes"
+      },
+      {
+        "name": "habilitacoes"
+      },
+      {
+        "name": "habilitacoes_v2"
+      },
+      {
+        "name": "importacoes_log"
+      },
+      {
+        "name": "job_execution_log"
+      },
+      {
+        "name": "job_queue"
+      },
+      {
+        "name": "logs_acesso_dados"
+      },
+      {
+        "name": "manobras"
+      },
+      {
+        "name": "manobras_old"
+      },
+      {
+        "name": "migracao_mapeamento_ids"
+      },
+      {
+        "name": "modelo_sessao_manobras"
+      },
+      {
+        "name": "modelos_sessao"
+      },
+      {
+        "name": "notificacoes"
+      },
+      {
+        "name": "papeis"
+      },
+      {
+        "name": "pasta_virtual_sync"
+      },
+      {
+        "name": "pessoas"
+      },
+      {
+        "name": "pessoas_auditoria_acessos"
+      },
+      {
+        "name": "pessoas_papeis"
+      },
+      {
+        "name": "qualificacoes"
+      },
+      {
+        "name": "qualificacoes_registros"
+      },
+      {
+        "name": "qualificacoes_v2"
+      },
+      {
+        "name": "schema_versions"
+      },
+      {
+        "name": "sessoes_manobras"
+      },
+      {
+        "name": "sessoes_participantes"
+      },
+      {
+        "name": "sessoes_simulador"
+      },
+      {
+        "name": "sessoes_template"
+      },
+      {
+        "name": "sessoes_treinamento"
+      },
+      {
+        "name": "setores"
+      },
+      {
+        "name": "simuladores"
+      },
+      {
+        "name": "solicitacoes_lgpd"
+      },
+      {
+        "name": "system_config"
+      },
+      {
+        "name": "system_logs"
+      },
+      {
+        "name": "template_manobras"
+      },
+      {
+        "name": "tipos_sessao"
+      },
+      {
+        "name": "treinamentos"
+      },
+      {
+        "name": "user_permissions"
+      },
+      {
+        "name": "user_profiles"
+      },
+      {
+        "name": "usuarios"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.4483
+      },
+      "duration": 0.4483,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 4313088,
+      "rows_read": 520,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

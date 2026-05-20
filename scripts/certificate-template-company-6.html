@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: 'Inter', Arial, sans-serif;
+        background: #fff;
+      }
+      .cert-page {
+        width: 210mm;
+        min-height: 297mm;
+        padding: 16mm 18mm 14mm;
+        display: grid;
+        grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+        gap: 24px;
+      }
+      .header {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding-bottom: 14px;
+        border-bottom: 2px solid #0071e3;
+      }
+      .header img {
+        max-height: 108px;
+        max-width: 315px;
+        object-fit: contain;
+      }
+      .main-title {
+        text-align: center;
+        font-size: 28pt;
+        font-weight: 700;
+        letter-spacing: -0.6px;
+        color: #1d1d1f;
+        margin: 0;
+      }
+      .main-title + .main-sub {
+        margin-top: 12px;
+      }
+      .main-sub {
+        text-align: center;
+        font-size: 10.5pt;
+        color: #6e6e73;
+        margin: 0;
+        line-height: 1.45;
+      }
+      .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 18px;
+      }
+      .info-item {
+        background: #f5f5f7;
+        border-radius: 12px;
+        padding: 14px 16px;
+        min-height: 64px;
+      }
+      .info-item .label {
+        font-size: 7.5pt;
+        color: #6e6e73;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .info-item .value {
+        font-size: 10.5pt;
+        font-weight: 600;
+        color: #1d1d1f;
+        margin-top: 4px;
+        line-height: 1.35;
+      }
+      .training-box {
+        background: linear-gradient(135deg, #0071e3 0%, #0077ed 100%);
+        border-radius: 16px;
+        padding: 18px 20px;
+        color: #fff;
+        box-shadow: 0 10px 28px rgba(0, 113, 227, 0.16);
+      }
+      .training-box .qual-name {
+        font-size: 15.5pt;
+        font-weight: 700;
+      }
+      .training-box .qual-meta {
+        font-size: 9.3pt;
+        opacity: 0.9;
+        margin-top: 6px;
+        line-height: 1.4;
+      }
+      .program-section {
+        border: 1px solid #e5e5ea;
+        border-radius: 16px;
+        background: linear-gradient(180deg, #ffffff 0%, #fafafc 100%);
+        padding: 12px 14px 10px;
+        display: flex;
+        flex-direction: column;
+        min-height: 118mm;
+      }
+      .program-label {
+        font-size: 7.4pt;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: #1d1d1f;
+        margin-bottom: 8px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #e5e5ea;
+      }
+      .program-content {
+        column-count: 2;
+        column-gap: 18px;
+        font-size: 6.6pt;
+        color: #424245;
+        line-height: 1.18;
+        flex: 1;
+      }
+      .program-item {
+        display: block;
+        margin-bottom: 2px;
+        break-inside: avoid;
+      }
+      .footer {
+        border-top: 1px solid #e5e5ea;
+        padding-top: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 14px;
+      }
+      .qr-block {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .qr-code {
+        width: 74px;
+        height: 74px;
+      }
+      .qr-info {
+        font-size: 7pt;
+        color: #6e6e73;
+        line-height: 1.55;
+      }
+      .sig-box {
+        text-align: right;
+        border: 1px solid #0071e3;
+        padding: 11px 15px;
+        border-radius: 12px;
+        background: #fbfbfd;
+        min-width: 80mm;
+      }
+      .sig-box strong {
+        font-size: 8.5pt;
+        color: #1d1d1f;
+        display: block;
+      }
+      .sig-box span {
+        font-size: 7.5pt;
+        color: #6e6e73;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cert-page">
+      <div class="header">
+        <img src="{{logo_url}}" alt="Logo" />
+      </div>
+
+      <div>
+        <div class="main-title">Certificado</div>
+        <div class="main-sub">
+          Certificamos que o(a) profissional abaixo concluiu com aproveitamento o treinamento:
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="label">Funcionário</div>
+          <div class="value">{{nome_funcionario}}</div>
+        </div>
+        <div class="info-item">
+          <div class="label">CANAC / Matrícula</div>
+          <div class="value">{{codigo_anac}} &nbsp;·&nbsp; {{matricula}}</div>
+        </div>
+        <div class="info-item">
+          <div class="label">Data de Realização</div>
+          <div class="value">{{data_conclusao}}</div>
+        </div>
+        <div class="info-item">
+          <div class="label">Validade</div>
+          <div class="value">{{data_vencimento}}</div>
+        </div>
+      </div>
+
+      <div class="training-box">
+        <div class="qual-name">{{nome_qualificacao}}</div>
+        <div class="qual-meta">
+          Carga Horária: {{carga_horaria}}h &nbsp;·&nbsp; Categoria: {{categoria}} &nbsp;·&nbsp;
+          Código: {{codigo_qualificacao}}
+        </div>
+      </div>
+
+      <div class="program-section">
+        <div class="program-label">Conteúdo Programático</div>
+        <div class="program-content">{{conteudo}}</div>
+      </div>
+
+      <div class="footer">
+        <div class="qr-block">
+          <img src="{{qr_code_data_url}}" class="qr-code" alt="QR Code" />
+          <div class="qr-info">
+            <strong>Nº {{numero_certificado}}</strong><br />
+            ID: {{hash_id}}<br />
+            Validação Digital AirTrust
+          </div>
+        </div>
+        <div class="sig-box">
+          <strong>Assinatura Eletrônica Autenticada</strong>
+          <span>{{nome_empresa}} — Departamento de Treinamento</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

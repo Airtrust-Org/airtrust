@@ -1,0 +1,41 @@
+# AirTrust Cursor Rules
+
+## Scope and Safety
+
+- Never edit snapshot, temporary, backup, deploy artifact, or auxiliary worktree directories unless explicitly asked. Examples include `.tmp-deploy-*`, backup folders, generated deployment folders, and unrelated worktrees.
+- For backend changes, prioritize `worker-airtrust/src/**` and follow the existing Cloudflare Worker route and handler structure.
+- For frontend changes, prioritize `src/react-app/**` and follow the existing React/Vite application structure.
+- Do not change AirTrust branding, logos, primary colors, global navigation, or global headers unless explicitly requested.
+- Keep edits scoped to the requested behavior. Avoid broad refactors, formatting churn, or unrelated cleanup.
+
+## Workflow
+
+- For any non-trivial request touching more than one file, first read the relevant files, propose a short step-by-step plan, and wait for confirmation before applying code changes.
+- Prefer small, focused patches with a clear explanation of intent and risk.
+- Avoid massive edits across many unrelated files in one step.
+- Before editing, identify whether the working tree already has user changes and preserve them.
+- After changing code, run the narrowest meaningful validation first, then broader build/test commands when appropriate.
+
+## AirTrust Conventions
+
+- Respect multi-tenant patterns. Always preserve and use `empresa_id` where required by backend queries, mutations, UI state, and authorization checks.
+- Follow established route and handler patterns in `worker-airtrust/src/routes/**`.
+- Follow established page and component patterns in `src/react-app/pages/**` and `src/react-app/components/**`.
+- Preserve mature UI/UX patterns from Qualificações, Escalas, FRMS, and other stable modules when updating LMS, Funcionários, or Configurações.
+- Prefer existing helpers, API clients, toast patterns, modal patterns, and local TypeScript types over introducing new abstractions.
+- Keep backend request/response contracts explicit and consistent between the Worker and React app.
+
+## Bug Fixing Behavior
+
+- For bugfixes, first explain the probable cause and reference the exact files and relevant lines.
+- Then propose the patch and wait for confirmation if the fix touches more than one file.
+- After patching, describe how to reproduce the bug before the fix and how to verify the behavior after the fix.
+- Trace data end-to-end when fixing persistence bugs: database schema, backend read path, backend write path, frontend state initialization, and frontend save payload.
+- Normalize persisted boolean-like values consistently across backend and frontend boundaries.
+
+## Production and Data Safety
+
+- Do not apply production database changes directly unless explicitly asked.
+- For one-off production data corrections, create a clear SQL script under the project’s existing SQL/migration conventions and provide the exact command to run it.
+- Do not change secrets, API keys, password hashes, or authentication material unless explicitly requested and necessary.
+- Email delivery failures must surface visible errors to users; do not silently swallow failures in invite or account-creation flows.

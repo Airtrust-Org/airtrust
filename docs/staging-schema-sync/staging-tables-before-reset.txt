@@ -1,0 +1,110 @@
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.13ms
+[
+  {
+    "results": [
+      {
+        "name": "_cf_KV"
+      },
+      {
+        "name": "d1_migrations"
+      },
+      {
+        "name": "documentos"
+      },
+      {
+        "name": "fichas_sessao"
+      },
+      {
+        "name": "fichas_sessao_manobras"
+      },
+      {
+        "name": "funcionarios"
+      },
+      {
+        "name": "habilitacoes_funcionarios"
+      },
+      {
+        "name": "instrutores_simulador"
+      },
+      {
+        "name": "manobras"
+      },
+      {
+        "name": "manobras_categorias"
+      },
+      {
+        "name": "modelos_sessao"
+      },
+      {
+        "name": "qualificacoes"
+      },
+      {
+        "name": "qualificacoes_historico"
+      },
+      {
+        "name": "qualificacoes_historico_stats_daily"
+      },
+      {
+        "name": "qualificacoes_tipos"
+      },
+      {
+        "name": "refresh_tokens"
+      },
+      {
+        "name": "sessoes_participantes"
+      },
+      {
+        "name": "sessoes_simulador"
+      },
+      {
+        "name": "simuladores"
+      },
+      {
+        "name": "sqlite_sequence"
+      },
+      {
+        "name": "template_manobras"
+      },
+      {
+        "name": "usuarios"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1264
+      },
+      "duration": 0.1264,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 327680,
+      "rows_read": 96,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

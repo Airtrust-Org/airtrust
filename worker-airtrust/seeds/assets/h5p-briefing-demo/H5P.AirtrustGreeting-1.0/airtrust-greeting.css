@@ -1,0 +1,161 @@
+.airtrust-h5p {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef6f4 100%);
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+  margin: 0 auto;
+  max-width: 880px;
+  overflow: hidden;
+}
+
+.airtrust-h5p__hero {
+  color: #ffffff;
+  padding: 32px 32px 24px;
+}
+
+.airtrust-h5p__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 6px 10px;
+  text-transform: uppercase;
+}
+
+.airtrust-h5p__hero h2 {
+  font-size: 32px;
+  line-height: 1.1;
+  margin: 16px 0 12px;
+}
+
+.airtrust-h5p__hero p {
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 680px;
+  opacity: 0.92;
+}
+
+.airtrust-h5p__body {
+  padding: 28px 32px 32px;
+}
+
+.airtrust-h5p__progress {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.airtrust-h5p__progress-track {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 999px;
+  flex: 1;
+  height: 10px;
+  overflow: hidden;
+}
+
+.airtrust-h5p__progress-fill {
+  border-radius: 999px;
+  height: 100%;
+  transition: width 180ms ease;
+  width: 0;
+}
+
+.airtrust-h5p__progress-label {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 82px;
+  text-align: right;
+}
+
+.airtrust-h5p__list {
+  display: grid;
+  gap: 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.airtrust-h5p__item {
+  align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+}
+
+.airtrust-h5p__item input {
+  accent-color: var(--airtrust-accent, #0f766e);
+  height: 18px;
+  margin-top: 2px;
+  width: 18px;
+}
+
+.airtrust-h5p__item span {
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.airtrust-h5p__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.airtrust-h5p__button {
+  appearance: none;
+  border: none;
+  border-radius: 14px;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px 18px;
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.airtrust-h5p__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.airtrust-h5p__button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.airtrust-h5p__message {
+  color: #0f5132;
+  display: none;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.airtrust-h5p__message.is-visible {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .airtrust-h5p__hero,
+  .airtrust-h5p__body {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .airtrust-h5p__hero h2 {
+    font-size: 26px;
+  }
+}

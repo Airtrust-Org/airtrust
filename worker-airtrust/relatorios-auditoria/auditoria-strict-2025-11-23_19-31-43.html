@@ -1,0 +1,35 @@
+<html><head><meta charset='utf-8'><title>Auditoria Estrita 2025-11-23_19-31-43</title><style>body{font-family:system-ui;padding:20px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px;font-size:13px}th{background:#222;color:#fff}tr.PASS{background:#e7f9ef}tr.FAIL{background:#fdeaea}tr.WARN{background:#fff6dd}</style></head><body>
+<h1>Auditoria Estrita Qualificações</h1><p>Status: <strong>OK</strong></p><table><tr><th>Teste</th><th>Resultado</th><th>Detalhe</th></tr>
+<tr class='PASS'><td>Auth /tipos</td><td>PASS</td><td>Protegido (401)</td></tr>
+<tr class='PASS'><td>Auth /historico</td><td>PASS</td><td>Protegido (401)</td></tr>
+<tr class='PASS'><td>Listar Tipos - Status</td><td>PASS</td><td>HTTP 200</td></tr>
+<tr class='WARN'><td>Listar Tipos - Performance</td><td>WARN</td><td>499ms</td></tr>
+<tr class='PASS'><td>Listar Tipos - JSON</td><td>PASS</td><td>válido</td></tr>
+<tr class='PASS'><td>Listar Tipos - Conteúdo</td><td>PASS</td><td>Limpo</td></tr>
+<tr class='PASS'><td>Listar Historico - Status</td><td>PASS</td><td>HTTP 200</td></tr>
+<tr class='PASS'><td>Listar Historico - Performance</td><td>PASS</td><td>315ms <= 500ms</td></tr>
+<tr class='PASS'><td>Listar Historico - JSON</td><td>PASS</td><td>válido</td></tr>
+<tr class='PASS'><td>Listar Historico - Conteúdo</td><td>PASS</td><td>Limpo</td></tr>
+<tr class='PASS'><td>Categorias - Status</td><td>PASS</td><td>HTTP 200</td></tr>
+<tr class='PASS'><td>Categorias - Performance</td><td>PASS</td><td>225ms <= 300ms</td></tr>
+<tr class='PASS'><td>Categorias - JSON</td><td>PASS</td><td>válido</td></tr>
+<tr class='PASS'><td>Categorias - Conteúdo</td><td>PASS</td><td>Limpo</td></tr>
+<tr class='PASS'><td>Historico Pag 1 - Status</td><td>PASS</td><td>HTTP 200</td></tr>
+<tr class='PASS'><td>Historico Pag 1 - Performance</td><td>PASS</td><td>230ms <= 600ms</td></tr>
+<tr class='PASS'><td>Historico Pag 1 - JSON</td><td>PASS</td><td>válido</td></tr>
+<tr class='PASS'><td>Historico Pag 1 - Conteúdo</td><td>PASS</td><td>Limpo</td></tr>
+<tr class='PASS'><td>Historico Pag 2 - Status</td><td>PASS</td><td>HTTP 200</td></tr>
+<tr class='WARN'><td>Historico Pag 2 - Performance</td><td>WARN</td><td>614ms</td></tr>
+<tr class='PASS'><td>Historico Pag 2 - JSON</td><td>PASS</td><td>válido</td></tr>
+<tr class='PASS'><td>Historico Pag 2 - Conteúdo</td><td>PASS</td><td>Limpo</td></tr>
+<tr class='PASS'><td>Historico Pag 3 - Status</td><td>PASS</td><td>HTTP 200</td></tr>
+<tr class='WARN'><td>Historico Pag 3 - Performance</td><td>WARN</td><td>694ms</td></tr>
+<tr class='PASS'><td>Historico Pag 3 - JSON</td><td>PASS</td><td>válido</td></tr>
+<tr class='PASS'><td>Historico Pag 3 - Conteúdo</td><td>PASS</td><td>Limpo</td></tr>
+<tr class='PASS'><td>POST Criar</td><td>PASS</td><td>400</td></tr>
+<tr class='PASS'><td>PUT Editar</td><td>PASS</td><td>400</td></tr>
+<tr class='PASS'><td>DELETE Soft</td><td>PASS</td><td>Soft delete (404)</td></tr>
+<tr class='WARN'><td>Tamanho arquivo</td><td>WARN</td><td>1795 linhas</td></tr>
+<tr class='WARN'><td>Handlers</td><td>WARN</td><td>21</td></tr>
+<tr class='PASS'><td>Histórico 50</td><td>PASS</td><td>234ms</td></tr>
+</table><p>Total:32 Pass:27 Fail:0 Warn:5 Crit:0</p></body></html>

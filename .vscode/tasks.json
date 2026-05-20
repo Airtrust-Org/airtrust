@@ -1,0 +1,554 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "npm run build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build, Commit & Deploy",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "set -euo pipefail\nif [[ -n \"$(git status --porcelain)\" ]]; then\n  git add -A\n  git commit -m \"chore: deploy $(date -u +%Y-%m-%dT%H:%M:%SZ)\"\nfi\nnpm run deploy"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Dev (web + dados reais)",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "npx concurrently --names worker,vite --prefix-colors cyan,green \"npm run dev:worker -- --remote\" \"npm run dev\""
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Check versions (post deploy)",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "set -euo pipefail\necho \"--- Pages build-version\"\ncurl -fsSL https://airtrust.online | head -200 | grep -i \"build-version\" -n || true\necho \"--- Worker /api/health version\"\ncurl -fsSL https://airtrust-api-production.airtrust.workers.dev/api/health | head -80"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build, Commit & Deploy",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -e && echo '🔨 Building...' && npm run build && echo '✅ Build complete' && echo '📝 Committing changes...' && git add -A && git commit -m 'perf: otimizações finais - indexes D1 + code splitting + lazy loading [10/11/2025]' && echo '✅ Commit complete' && echo '🚀 Deploying...' && chmod +x deploy-full-automated.sh && ./deploy-full-automated.sh && echo '🎉 Deploy complete'"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build, Commit e Deploy",
+      "type": "shell",
+      "command": "bash",
+      "args": ["./EXECUTA_AGORA.sh"],
+      "isBackground": false,
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "problemMatcher": ["$tsc"],
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "problemMatcher": ["$tsc"],
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "problemMatcher": ["$tsc"],
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build, Commit & Deploy",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -e && echo '🔨 Building...' && npm run build && echo '✅ Build complete' && echo '📝 Committing changes...' && git add -A && git commit -m 'perf: otimizações finais - indexes D1 + code splitting + lazy loading [10/11/2025]' && echo '✅ Commit complete' && echo '🚀 Deploying...' && chmod +x deploy-full-automated.sh && ./deploy-full-automated.sh && echo '🎉 Deploy complete'"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build, Commit & Deploy",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -e && echo '🔨 Building...' && npm run build && echo '✅ Build complete' && echo '📝 Committing changes...' && git add -A && git commit -m 'perf: atualização final: refs fichas->fichas_sessao (auditoria semanal + avaliação), build ok, deploy auto [2025-11-13]' && echo '✅ Commit complete' && echo '🚀 Deploying...' && chmod +x deploy-full-automated.sh && ./deploy-full-automated.sh && echo '🎉 Deploy complete'"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Commit, Deploy & Backup (layout e dados corrigidos)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\n\n# Build already done; stage and commit with requested message\nif ! git diff --quiet || ! git diff --cached --quiet; then\n  echo \"📝 Committing changes...\"\n  git add -A\n  git commit -m \"layout e dados corrigidos\"\nelse\n  echo \"ℹ️  No changes to commit.\"\nfi\n\n# Deploy\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"🗄️  Running database backup with label...\"\nchmod +x scripts/backup-database.sh\n./scripts/backup-database.sh --db \"airtrust-db\" --label \"layout e dados corrigidos\"\n\necho \"🎉 All done: commit, deploy, and backup complete.\""
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Dev (web + dados reais)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["start"],
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Seed exemplo (sessoes + fichas)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "chmod +x scripts/seed-sessoes-fichas-exemplo.sh && scripts/seed-sessoes-fichas-exemplo.sh"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Dev (web + dados reais)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["start"],
+      "isBackground": true,
+      "group": "build"
+    },
+    {
+      "label": "Build (npm run build)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Dev (web + dados reais)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["start"],
+      "isBackground": true,
+      "group": "build"
+    },
+    {
+      "label": "Commit + Deploy (fix funcionarios 500)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncd \"/Users/filipedaumas/Documents/airtrust v1\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"fix(api): evita 500 em /funcionarios (alias SQL)\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Check Pages build-version",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncurl -fsSL https://airtrust.online | head -200 | grep -i \"build-version\" -n || true\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Check API health",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncurl -fsSL https://api.airtrust.online/api/health | head -80\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Check Worker health (workers.dev)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncurl -fsSL https://airtrust-api-production.airtrust.workers.dev/api/health | head -80\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Commit + Deploy (remove cards dashboard qualificacoes)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncd \"/Users/filipedaumas/Documents/airtrust v1\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"chore(ui): remove total/validas do dashboard qualificacoes\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Check Pages build-version (post deploy)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncurl -fsSL https://airtrust.online | head -200 | grep -i \"build-version\" -n || true\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Check Worker health version (post deploy)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncurl -fsSL https://airtrust-api-production.airtrust.workers.dev/api/health | head -80\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Commit + Deploy (filtro categoria historico qualificacoes)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncd \"/Users/filipedaumas/Documents/airtrust v1\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"feat(qualificacoes): filtro categoria no historico\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Check versions (post deploy)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\n\necho \"--- Pages build-version\" \ncurl -fsSL https://airtrust.online | head -200 | grep -i \"build-version\" -n || true\n\necho \"--- Worker /api/health version\"\ncurl -fsSL https://airtrust-api-production.airtrust.workers.dev/api/health | head -80\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Check Pages build-version only",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncurl -fsSL https://airtrust.online | head -200 | grep -i \"build-version\" -n || true\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Commit + Deploy (page size tables + fix historico status)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncd \"/Users/filipedaumas/Documents/airtrust v1\"\n\necho \"📝 Staging changes...\"\ngit add -A\n\nif git diff --cached --quiet; then\n  echo \"ℹ️  No changes to commit.\"\nelse\n  echo \"📝 Committing...\"\n  git commit -m \"fix(ui/api): page size 20/50/100 + historico status schema\"\nfi\n\necho \"🚀 Deploying...\"\nchmod +x deploy-full-automated.sh\n./deploy-full-automated.sh\n\necho \"✅ Done.\"\n"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Check versions after deploy (35bf788a)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncurl -fsSL https://airtrust.online | head -200 | grep -i \"build-version\" -n || true\ncurl -fsSL https://airtrust-api-production.airtrust.workers.dev/api/health | head -80\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Check Pages build-version (35bf788a)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\ncurl -fsSL https://airtrust.online | head -200 | grep -i \"build-version\" -n || true\n"
+      ],
+      "isBackground": false
+    },
+    {
+      "label": "Smoke assets public",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "smoke:assets-public"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Smoke core prod",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "smoke:core:prod"],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Sync certificate template production",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "cd /Users/filipedaumas/Documents/Airtrust && node tmp-sync-cert-template.js && npx wrangler d1 execute airtrust-db --remote --file=/tmp/sync_cert_templates.sql && rm -f tmp-sync-cert-template.js /tmp/sync_cert_templates.sql"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Sync certificate template production cjs",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "cd /Users/filipedaumas/Documents/Airtrust && node tmp-sync-cert-template.cjs && npx wrangler d1 execute airtrust-db --remote --file=/tmp/sync_cert_templates.sql && rm -f tmp-sync-cert-template.cjs /tmp/sync_cert_templates.sql tmp-sync-cert-template.js"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Sync certificate template production noninteractive",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "cd /Users/filipedaumas/Documents/Airtrust && node tmp-sync-cert-template.cjs && printf 'y\\n' | npx wrangler d1 execute airtrust-db --remote --file=/tmp/sync_cert_templates.sql && rm -f tmp-sync-cert-template.cjs /tmp/sync_cert_templates.sql tmp-sync-cert-template.js"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Sync certificate template via commands",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "cd /Users/filipedaumas/Documents/Airtrust && node tmp-sync-cert-template-exec.cjs && rm -f tmp-sync-cert-template-exec.cjs tmp-sync-cert-template.cjs tmp-sync-cert-template.js /tmp/sync_cert_templates.sql"
+      ],
+      "isBackground": false,
+      "group": "build"
+    },
+    {
+      "label": "Sync template company 6 from company 1",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "-lc",
+        "cd /Users/filipedaumas/Documents/Airtrust && npx wrangler d1 execute airtrust-db --remote --command \"UPDATE empresas_config SET certificado_template_html = (SELECT certificado_template_html FROM empresas_config WHERE empresa_id = 1), updated_at = datetime('now') WHERE empresa_id = 6\" && npx wrangler d1 execute airtrust-db --remote --command \"INSERT INTO empresas_config (empresa_id, certificado_template_html, timezone, idioma, updated_at) SELECT 6, certificado_template_html, 'America/Sao_Paulo', 'pt-BR', datetime('now') FROM empresas_config WHERE empresa_id = 1 AND NOT EXISTS (SELECT 1 FROM empresas_config WHERE empresa_id = 6)\" && npx wrangler d1 execute airtrust-db --remote --command \"UPDATE certificados_templates SET ativo = 0, updated_at = datetime('now') WHERE empresa_id = 6 AND deleted_at IS NULL\" && npx wrangler d1 execute airtrust-db --remote --command \"UPDATE certificados_templates SET template_json = (SELECT certificado_template_html FROM empresas_config WHERE empresa_id = 6), nome = 'Template Certificado Ativo', ativo = 1, padrao = 1, updated_at = datetime('now') WHERE id = (SELECT id FROM certificados_templates WHERE empresa_id = 6 AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1)\" && npx wrangler d1 execute airtrust-db --remote --command \"INSERT INTO certificados_templates (empresa_id, nome, template_json, ativo, padrao, created_at, updated_at) SELECT 6, 'Template Certificado Ativo', certificado_template_html, 1, 1, datetime('now'), datetime('now') FROM empresas_config WHERE empresa_id = 6 AND NOT EXISTS (SELECT 1 FROM certificados_templates WHERE empresa_id = 6 AND deleted_at IS NULL)\""
+      ],
+      "isBackground": false,
+      "group": "build"
+    }
+  ]
+}

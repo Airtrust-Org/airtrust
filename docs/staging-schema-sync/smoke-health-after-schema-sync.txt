@@ -1,0 +1,1 @@
+{"success":true,"status":"healthy","checks":{"database":{"status":"ok","latency":136},"storage":{"status":"ok","latency":156}},"stats":{"timestamp":"2026-05-15T03:48:13.932Z","environment":"staging","version":"dev-local","region":"BR"},"latency":292}

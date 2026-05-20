@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Teste Direto Backend</title>
+  </head>
+  <body>
+    <h1>Teste Direto Backend (sem Vite)</h1>
+    <button onclick="testarLogin()">Testar Login</button>
+    <pre id="resultado"></pre>
+
+    <script>
+      async function testarLogin() {
+        const resultado = document.getElementById('resultado');
+        resultado.textContent = 'Enviando requisição...';
+
+        try {
+          console.log('Enviando para: http://localhost:8787/api/auth/login');
+
+          const response = await fetch('http://localhost:8787/api/auth/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: 'admin@airtrust.com',
+              senha: 'admin123',
+            }),
+          });
+
+          console.log('Status:', response.status);
+          const data = await response.json();
+          console.log('Resposta:', data);
+
+          resultado.textContent = JSON.stringify(
+            {
+              status: response.status,
+              data: data,
+            },
+            null,
+            2,
+          );
+        } catch (error) {
+          console.error('Erro:', error);
+          resultado.textContent = 'ERRO: ' + error.message;
+        }
+      }
+    </script>
+  </body>
+</html>

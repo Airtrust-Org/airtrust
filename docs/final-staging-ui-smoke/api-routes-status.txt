@@ -1,0 +1,11 @@
+/api/auth/me=200
+/api/funcionarios=200
+/api/empresas=200
+/api/qualificacoes/tipos=200
+/api/qualificacoes/historico=200
+/api/lms/cursos=200
+/api/lms/matriculas/minhas=200
+/api/frms/alertas=200
+/api/simuladores=200
+/api/sgso/relatos=200
+/api/sgso/kpi/spi=200

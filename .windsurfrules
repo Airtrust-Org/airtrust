@@ -1,0 +1,43 @@
+# Regras do Windsurf/Cascade para o Projeto AirTrust
+
+## Documentação e Relatórios
+
+- NUNCA crie arquivos .md de relatório automaticamente
+- NUNCA crie arquivos começando com: Fixing-, Clean-Up-, Report-, Sync-, Analysis-
+- Apenas execute tarefas e mostre resultados no chat
+- Se precisar documentar, pergunte ao usuário ANTES de criar arquivos
+- Mostre todas as saídas de comandos diretamente no chat, não em arquivos
+
+## Exceções (pode criar sem perguntar)
+
+- Arquivos de código (.ts, .tsx, .js, .jsx, .py, etc)
+- Arquivos de configuração (.json, .yaml, .toml, .env, etc)
+- Arquivos explicitamente solicitados pelo usuário
+
+## Formato de Resposta Preferido
+
+- Mostre comandos executados
+- Mostre saídas dos comandos
+- Resuma resultados
+- Tudo no chat, não em arquivos markdown
+
+## Arquivos que PODEM ser editados/criados
+
+- README.md (se solicitado)
+- package.json
+- tsconfig.json
+- wrangler.json
+- Qualquer arquivo de código do projeto
+
+## Arquivos que NÃO devem ser criados automaticamente
+
+- Fixing-*.md
+- Clean-Up-*.md
+- *-Report.md
+- Sync-*.md
+- Analysis-*.md
+- Debug-*.md
+- Log-*.md
+- RELATORIO-*.md
+- TROUBLESHOOTING-*.md
+- SOLUCAO-*.md

@@ -1,0 +1,113 @@
+.btn {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 100ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  position: relative;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* SIZES */
+.btnSm {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.btnMd {
+  padding: 12px 24px;
+  font-size: 16px;
+}
+
+.btnLg {
+  padding: 16px 32px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* VARIANTS */
+.btnPrimary {
+  background-color: #0066cc;
+  color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background-color: #0052a3;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+.btnPrimary:active:not(:disabled) {
+  background-color: #003d7a;
+}
+
+.btnSecondary {
+  background-color: #f3f4f6;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+}
+
+.btnSecondary:hover:not(:disabled) {
+  background-color: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.btnDanger {
+  background-color: #ef4444;
+  color: white;
+}
+
+.btnDanger:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+.btnSuccess {
+  background-color: #22c55e;
+  color: white;
+}
+
+.btnSuccess:hover:not(:disabled) {
+  background-color: #16a34a;
+}

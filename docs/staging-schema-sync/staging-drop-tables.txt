@@ -1,0 +1,104 @@
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.25ms
+[
+  {
+    "results": [
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'd1_migrations';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'documentos';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'simuladores';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'funcionarios';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'habilitacoes_funcionarios';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'sessoes_simulador';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'sessoes_participantes';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'fichas_sessao';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'manobras';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'qualificacoes';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'usuarios';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'refresh_tokens';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'instrutores_simulador';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'fichas_sessao_manobras';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'qualificacoes_tipos';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'qualificacoes_historico';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'manobras_categorias';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'template_manobras';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'modelos_sessao';"
+      },
+      {
+        "'DROP TABLE IF EXISTS ' || quote(name) || ';'": "DROP TABLE IF EXISTS 'qualificacoes_historico_stats_daily';"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2459
+      },
+      "duration": 0.2459,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 327680,
+      "rows_read": 74,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

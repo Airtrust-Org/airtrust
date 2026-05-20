@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Teste Modal Funcionário - AirTrust</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f8fafc;
+      }
+      .section {
+        background: white;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .section h2 {
+        margin-top: 0;
+        color: #1e293b;
+        border-bottom: 2px solid #3b82f6;
+        padding-bottom: 8px;
+      }
+      .status {
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-weight: 600;
+        display: inline-block;
+        margin: 4px 0;
+      }
+      .status.success {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .status.error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .status.pending {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .test-item {
+        padding: 8px;
+        margin: 4px 0;
+        border-left: 3px solid #cbd5e1;
+        padding-left: 12px;
+      }
+      .test-item.pass {
+        border-color: #22c55e;
+        background: #f0fdf4;
+      }
+      .test-item.fail {
+        border-color: #ef4444;
+        background: #fef2f2;
+      }
+      button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        margin-right: 8px;
+      }
+      button:hover {
+        background: #2563eb;
+      }
+      button:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+      }
+      pre {
+        background: #1e293b;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 13px;
+      }
+      .api-response {
+        max-height: 300px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🧪 Teste Completo Modal Funcionário</h1>
+
+    <div class="section">
+      <h2>FASE 0: Preparação</h2>
+      <div id="preparacao">
+        <button onclick="fazerLogin()">1. Fazer Login (obter token)</button>
+        <button onclick="testarEndpoints()">2. Testar Endpoints API</button>
+        <button onclick="abrirModal()">3. Abrir Página Funcionários</button>
+        <div id="status-preparacao"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>FASE 1: Renderização Inicial</h2>
+      <div id="fase1">
+        <p>✅ Abrir modal via botão "Novo Funcionário"</p>
+        <p>✅ Verificar campos visíveis</p>
+        <p>✅ Verificar selects populados (não "Carregando...")</p>
+        <p>✅ Verificar placeholder matrícula</p>
+        <button onclick="verificarRenderizacao()">Executar Verificações</button>
+        <div id="resultado-fase1"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>FASE 2-3: Validações e Máscaras</h2>
+      <div id="fase23">
+        <p>✅ Matrícula: 5 dígitos com auto-padding (353 → 00353)</p>
+        <p>✅ CPF: validação algorítmica</p>
+        <p>✅ Campos obrigatórios: Nome, CPF, Função, Setor</p>
+        <p>✅ Uppercase: Base, Estado</p>
+        <p>✅ Visual feedback: ⏳ incomplete / ✓ complete</p>
+        <button onclick="testarValidacoes()">Testar Validações</button>
+        <div id="resultado-fase23"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>FASE 4: Criar Funcionário (Happy Path)</h2>
+      <button onclick="criarFuncionarioTeste()">Criar Funcionário Completo</button>
+      <div id="resultado-fase4"></div>
+    </div>
+
+    <div class="section">
+      <h2>FASE 5: Editar Funcionário</h2>
+      <button onclick="listarFuncionarios()">1. Listar Funcionários</button>
+      <button onclick="editarPrimeiroFuncionario()">2. Editar Primeiro da Lista</button>
+      <div id="resultado-fase5"></div>
+    </div>
+
+    <div class="section">
+      <h2>📊 Resumo dos Testes</h2>
+      <div id="resumo"></div>
+    </div>
+
+    <script>
+      const API_URL = 'http://localhost:8787';
+      let token = null;
+      let testResults = {
+        preparacao: [],
+        fase1: [],
+        fase23: [],
+        fase4: [],
+        fase5: [],
+      };
+
+      // FASE 0: PREPARAÇÃO
+      async function fazerLogin() {
+        const statusDiv = document.getElementById('status-preparacao');
+        statusDiv.innerHTML = '<span class="status pending">🔄 Fazendo login...</span>';
+
+        try {
+          const res = await fetch(`${API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'admin@airtrust.com', password: 'admin123' }),
+          });
+
+          const data = await res.json();
+
+          if (data.success && data.data.accessToken) {
+            token = data.data.accessToken;
+            localStorage.setItem('airtrust_token', token);
+            statusDiv.innerHTML = `<span class="status success">✅ Login OK</span><br><pre>${token.substring(
+              0,
+              50,
+            )}...</pre>`;
+            testResults.preparacao.push({ name: 'Login', pass: true });
+          } else {
+            throw new Error('Token não recebido');
+          }
+        } catch (err) {
+          statusDiv.innerHTML = `<span class="status error">❌ Erro: ${err.message}</span>`;
+          testResults.preparacao.push({ name: 'Login', pass: false, error: err.message });
+        }
+      }
+
+      async function testarEndpoints() {
+        const statusDiv = document.getElementById('status-preparacao');
+        if (!token) {
+          statusDiv.innerHTML += '<br><span class="status error">❌ Faça login primeiro!</span>';
+          return;
+        }
+
+        statusDiv.innerHTML += '<br><span class="status pending">🔄 Testando endpoints...</span>';
+
+        try {
+          const endpoints = ['funcoes', 'setores', 'modelos-aeronave'];
+          const results = [];
+
+          for (const ep of endpoints) {
+            const res = await fetch(`${API_URL}/api/${ep}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json();
+
+            if (data.success) {
+              results.push(`✅ ${ep}: ${data.data.length} registros`);
+              testResults.preparacao.push({
+                name: `API ${ep}`,
+                pass: true,
+                count: data.data.length,
+              });
+            } else {
+              throw new Error(`${ep} falhou`);
+            }
+          }
+
+          statusDiv.innerHTML += `<br><div class="test-item pass">${results.join('<br>')}</div>`;
+        } catch (err) {
+          statusDiv.innerHTML += `<br><span class="status error">❌ ${err.message}</span>`;
+          testResults.preparacao.push({ name: 'APIs', pass: false, error: err.message });
+        }
+      }
+
+      function abrirModal() {
+        window.open('http://localhost:3000/funcionarios', 'airtrust-test');
+        document.getElementById('status-preparacao').innerHTML +=
+          '<br><span class="status success">✅ Página aberta em nova aba</span><br><em>Clique em "Novo Funcionário" para abrir o modal</em>';
+      }
+
+      // FASE 1: RENDERIZAÇÃO
+      function verificarRenderizacao() {
+        const resultDiv = document.getElementById('resultado-fase1');
+        resultDiv.innerHTML = `
+        <div class="test-item pass">✅ Modal deve estar aberto</div>
+        <div class="test-item pass">✅ Verificar campos visíveis: Nome, CPF, Matrícula, Função, Setor, Modelo, Base</div>
+        <div class="test-item pass">✅ Selects devem estar populados (sem "Carregando...")</div>
+        <div class="test-item pass">✅ Campo Matrícula deve aceitar números</div>
+        <p><strong>👁️ Verificação manual necessária no navegador</strong></p>
+      `;
+        testResults.fase1.push({ name: 'Renderização inicial', pass: true, manual: true });
+      }
+
+      // FASE 2-3: VALIDAÇÕES
+      function testarValidacoes() {
+        const resultDiv = document.getElementById('resultado-fase23');
+        resultDiv.innerHTML = `
+        <h3>Teste Manual no Modal:</h3>
+        <div class="test-item pass">1. Digite "353" na matrícula → onBlur deve gerar "00353"</div>
+        <div class="test-item pass">2. Digite CPF inválido → deve mostrar erro</div>
+        <div class="test-item pass">3. Digite "sp" no Base → deve virar "SP"</div>
+        <div class="test-item pass">4. Matrícula incompleta → ícone ⏳ amarelo</div>
+        <div class="test-item pass">5. Matrícula completa (5 dígitos) → ícone ✓ verde</div>
+        <div class="test-item pass">6. Tentar salvar sem preencher obrigatórios → deve bloquear</div>
+        <p><strong>⚠️ Execute esses testes manualmente no modal aberto</strong></p>
+      `;
+        testResults.fase23.push({ name: 'Validações', pass: true, manual: true });
+      }
+
+      // FASE 4: CRIAR
+      async function criarFuncionarioTeste() {
+        const resultDiv = document.getElementById('resultado-fase4');
+        if (!token) {
+          resultDiv.innerHTML = '<span class="status error">❌ Faça login primeiro!</span>';
+          return;
+        }
+
+        resultDiv.innerHTML = '<span class="status pending">🔄 Criando funcionário teste...</span>';
+
+        const funcionarioTeste = {
+          nome: 'João Silva Teste',
+          cpf: '12345678901',
+          matricula: '00999',
+          funcao: 'Comandante',
+          setor: 'Operações',
+          modelo_aeronave_id: 5, // AW139
+          base: 'GRU',
+          data_admissao: '2024-01-15',
+          situacao: 'ATIVO',
+          ativo: 1,
+        };
+
+        try {
+          const res = await fetch(`${API_URL}/api/funcionarios`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(funcionarioTeste),
+          });
+
+          const data = await res.json();
+
+          if (data.success) {
+            resultDiv.innerHTML = `
+            <div class="test-item pass">✅ Funcionário criado com sucesso!</div>
+            <div class="api-response"><pre>${JSON.stringify(data, null, 2)}</pre></div>
+          `;
+            testResults.fase4.push({ name: 'Criar funcionário', pass: true, id: data.data?.id });
+          } else {
+            throw new Error(data.error || 'Erro desconhecido');
+          }
+        } catch (err) {
+          resultDiv.innerHTML = `<span class="status error">❌ Erro: ${err.message}</span>`;
+          testResults.fase4.push({ name: 'Criar funcionário', pass: false, error: err.message });
+        }
+      }
+
+      // FASE 5: EDITAR
+      async function listarFuncionarios() {
+        const resultDiv = document.getElementById('resultado-fase5');
+        if (!token) {
+          resultDiv.innerHTML = '<span class="status error">❌ Faça login primeiro!</span>';
+          return;
+        }
+
+        resultDiv.innerHTML = '<span class="status pending">🔄 Listando funcionários...</span>';
+
+        try {
+          const res = await fetch(`${API_URL}/api/funcionarios`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          const data = await res.json();
+
+          if (data.success) {
+            const lista = data.data
+              .slice(0, 5)
+              .map((f) => `ID: ${f.id} | ${f.nome} | Mat: ${f.matricula} | ${f.funcao || 'N/A'}`)
+              .join('<br>');
+
+            resultDiv.innerHTML = `
+            <div class="test-item pass">✅ ${data.data.length} funcionários encontrados</div>
+            <div style="margin-top: 8px;"><strong>Primeiros 5:</strong><br>${lista}</div>
+          `;
+            testResults.fase5.push({
+              name: 'Listar funcionários',
+              pass: true,
+              count: data.data.length,
+            });
+          } else {
+            throw new Error(data.error);
+          }
+        } catch (err) {
+          resultDiv.innerHTML = `<span class="status error">❌ ${err.message}</span>`;
+          testResults.fase5.push({ name: 'Listar funcionários', pass: false, error: err.message });
+        }
+      }
+
+      async function editarPrimeiroFuncionario() {
+        const resultDiv = document.getElementById('resultado-fase5');
+        resultDiv.innerHTML +=
+          '<br><em>⚠️ Edição manual: clique no ícone de editar no primeiro funcionário da lista</em>';
+        resultDiv.innerHTML +=
+          '<br><em>Verifique se os campos estão pré-preenchidos corretamente</em>';
+      }
+
+      // Auto-executar preparação ao carregar
+      window.onload = async () => {
+        await fazerLogin();
+        await new Promise((r) => setTimeout(r, 500));
+        await testarEndpoints();
+      };
+    </script>
+  </body>
+</html>

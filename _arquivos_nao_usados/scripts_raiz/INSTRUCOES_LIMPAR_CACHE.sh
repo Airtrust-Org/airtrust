@@ -1,0 +1,67 @@
+#!/bin/bash
+# Script para limpar cache e forçar atualização completa do frontend
+
+echo "🧹 LIMPANDO CACHE COMPLETO DO AIRTRUST"
+echo "======================================"
+echo ""
+
+echo "✅ 1. Frontend deployado: versão 52da79f6-3a92-4078-9815-85c5049d22dc"
+echo "✅ 2. Backend deployado: versão c4f09488-27f3-414b-b788-84c354534e19"
+echo "✅ 3. Banco de dados: 638 registros com datas corretas"
+echo ""
+
+echo "🔧 INSTRUÇÕES PARA LIMPAR CACHE NO NAVEGADOR:"
+echo "=============================================="
+echo ""
+echo "📱 Chrome/Edge/Brave:"
+echo "   1. Abra DevTools (F12 ou Cmd+Option+I)"
+echo "   2. Clique com botão direito no ícone de RELOAD"
+echo "   3. Selecione 'Empty Cache and Hard Reload'"
+echo "   4. OU: Cmd+Shift+Delete → Selecione 'Cached images and files' → Clear data"
+echo ""
+
+echo "🦊 Firefox:"
+echo "   1. Cmd+Shift+Delete (Mac) ou Ctrl+Shift+Delete (Windows)"
+echo "   2. Selecione 'Cache'"
+echo "   3. Clique em 'Clear Now'"
+echo "   4. OU: Cmd+Shift+R para hard reload"
+echo ""
+
+echo "🧭 Safari:"
+echo "   1. Cmd+Option+E (limpar cache)"
+echo "   2. Depois: Cmd+R (reload)"
+echo "   3. OU: Safari → Preferences → Advanced → Show Develop menu"
+echo "   4. Develop → Empty Caches"
+echo ""
+
+echo "⚡ TESTE RÁPIDO:"
+echo "==============="
+echo "1. Abra: https://airtrust-frontend.airtrust.workers.dev"
+echo "2. Faça hard refresh (Cmd+Shift+R no Mac, Ctrl+F5 no Windows)"
+echo "3. Verifique se os totais no dashboard mostram:"
+echo "   - Total: 638 (não 50!)"
+echo "   - Válidas: 518 (não 24!)"
+echo "   - Vencendo: 65"
+echo "   - Vencidas: 55"
+echo ""
+
+echo "📊 Verificar datas específicas:"
+echo "- Ramon Godinho Bastos (D1): deve mostrar 31/10/2025 (não 30/10/2026!)"
+echo "- Adriana Brasil (D1): deve mostrar 31/10/2025"
+echo ""
+
+echo "🔍 Se ainda não funcionar:"
+echo "========================="
+echo "1. Abra modo anônimo/privado"
+echo "2. Acesse: https://airtrust-frontend.airtrust.workers.dev"
+echo "3. Se funcionar no modo anônimo = problema de cache local"
+echo "4. Solução: Limpar TODOS os dados do site (não só cache)"
+echo ""
+
+echo "💡 ALTERNATIVA: Adicionar cache-bust na URL"
+echo "============================================"
+echo "Acesse: https://airtrust-frontend.airtrust.workers.dev?v=$(date +%s)"
+echo ""
+
+echo "✅ Deploy concluído com sucesso!"
+echo "⏰ Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"

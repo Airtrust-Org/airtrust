@@ -1,0 +1,40 @@
+POST_C03_C04:
+850:    const transicoesValidas: Record<string, string[]> = {
+854:      publicada: ['arquivada'],
+859:    if (!transicoesValidas[statusAtual]?.includes(parsed.data.status)) {
+1117:      return c.json({ success: false, error: 'SIC não pode ser o mesmo piloto que o PIC' }, 400);
+1346:      return c.json({ success: false, error: 'SIC não pode ser o mesmo piloto que o PIC' }, 400);
+
+POST_C07:
+-rw-r--r--  1 filipedaumas  staff  970 Mar  5 16:59 worker-airtrust/migrations/0234_indices_escalas.sql
+
+POST_C10_C11:
+8:import { useQueryClient } from '@tanstack/react-query';
+207:    staleTime: 0,
+214:    staleTime: 0,
+225:    staleTime: 2 * 60 * 1000,
+253:  const queryClient = useQueryClient();
+259:      await queryClient.invalidateQueries({ queryKey: ['escalas', body.ano] });
+272:        await queryClient.invalidateQueries({ queryKey: ['escalas', ano] });
+274:      await queryClient.invalidateQueries({ queryKey: ['escala', id] });
+275:      await queryClient.invalidateQueries({ queryKey: ['notificacoes'] });
+299:      await queryClient.invalidateQueries({ queryKey: ['escala', escalaId, 'calendario'] });
+324:      await queryClient.invalidateQueries({ queryKey: ['escala', escalaId, 'calendario'] });
+335:      await queryClient.invalidateQueries({ queryKey: ['escala', escalaId, 'calendario'] });
+359:      await queryClient.invalidateQueries({ queryKey: ['escala', escalaId, 'calendario'] });
+370:      await queryClient.invalidateQueries({ queryKey: ['escala', escalaId, 'calendario'] });
+394:      await queryClient.invalidateQueries({ queryKey: ['escala', escalaId, 'calendario'] });
+436:    staleTime: 5 * 60 * 1000,
+494:    staleTime: 5 * 60 * 1000,
+499:  const queryClient = useQueryClient();
+527:      await queryClient.invalidateQueries({ queryKey: ['escalas-templates'] });
+603:    staleTime: 0,
+604:    refetchInterval: 5 * 60 * 1000,
+
+POST_C12:
+304:      const res = await fetch(`${API_BASE_URL}/escalas/${escalaAtual.id}/export?format=html`, {
+312:      const url = URL.createObjectURL(blob);
+313:      const win = window.open(url, '_blank');
+
+POST_C14:
+356:                  navigate(`/qualificacoes?funcionario=${evento.funcionario_id}`);

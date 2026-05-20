@@ -1,0 +1,25 @@
+HTTP/2 103 
+link: <https://fonts.googleapis.com>; rel=preconnect
+
+HTTP/2 200 
+date: Fri, 15 May 2026 16:52:16 GMT
+content-type: text/html; charset=utf-8
+access-control-allow-origin: *
+cache-control: no-cache, no-store, must-revalidate
+etag: "b9b3f5ae5676f0fd1fcf827535a7446b"
+expires: 0
+link: <https://fonts.googleapis.com>; rel="preconnect"
+strict-transport-security: max-age=31536000; includeSubDomains; preload
+pragma: no-cache
+content-security-policy: default-src 'self' blob:; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: https: blob:; font-src 'self' data: https: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; connect-src 'self' https: http: ws: wss: blob:; worker-src 'self' blob:; form-action 'self'; manifest-src 'self'; frame-src 'self' blob: https://api.airtrust.online https://airtrust-api-production.airtrust.workers.dev https://airtrust-api.workers.dev https://*.airtrust.com.br https://view.officeapps.live.com http://localhost:8787
+permissions-policy: camera=(), microphone=(), geolocation=()
+referrer-policy: strict-origin-when-cross-origin
+x-content-type-options: nosniff
+x-frame-options: DENY
+x-robots-tag: noindex
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=%2FjH%2B3gtHUyVjDBBJ2RgJSr7eO%2BP%2FjmrbZwT4LDxrGNvRaZMnPjpYn5ciH2sBLTdI4jVmSe34t8ur%2FzjACX9pBhB2jgh1RePA8D64YrtMHFF6%2FnfJEyXoBIYYmnQyJiUaIq4sJ9pu%2Bd3U%2FsSkTo7%2FrnbkUd7NFQ%3D%3D"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: 9fc3a6f00f7009d2-GIG
+alt-svc: h3=":443"; ma=86400
+

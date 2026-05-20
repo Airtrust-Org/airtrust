@@ -1,0 +1,13 @@
+## F1.K
+496:        `SELECT id, ${nomeSelect}, ${matriculaSelect}, ${cargoSelect}, ${funcaoSelect},
+
+## F1.L
+       0
+
+## F1.M
+57
+
+1534:// GET /api/escalas/:id/calendario - view para o frontend (formato calendário)
+1535-escalas.get('/:id/calendario', auth(), async (c) => {
+1536-  const { id } = c.req.param();
+1537-  const { incluir_mes_anterior, incluir_mes_seguinte } = c.req.query();

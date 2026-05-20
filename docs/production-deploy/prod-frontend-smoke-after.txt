@@ -1,0 +1,7 @@
+prod_frontend_status=200
+/assets/index-C0BR3_8m.js
+bundle_name=/assets/index-C0BR3_8m.js
+staging_refs_in_prod_bundle=2
+NOTE: staging refs are CONDITIONAL routing logic (main.airtrust.pages.dev -> staging, airtrust.online -> production).
+ANALYSIS: airtrust.online correctly routes to https://api.airtrust.online/api (production). NOT a blocker.
+prod_bundle_routing=CORRECT

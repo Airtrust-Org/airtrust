@@ -1,0 +1,10 @@
+usuarios: present
+empresas: present
+funcionarios: present
+qualificacoes_historico: present
+qualificacoes_tipos: present
+simuladores: present
+audit_logs: present
+fichas_sessao: present
+simulador_agendamentos: present
+lms_cursos: present

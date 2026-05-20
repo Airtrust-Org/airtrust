@@ -1,0 +1,63 @@
+╔═══════════════════════════════════════════════════════════════╗
+║                                                               ║
+║   🎯 AÇÃO NECESSÁRIA - 2 MINUTOS PARA CONCLUIR               ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+✅ O QUE JÁ ESTÁ PRONTO:
+   • Backend API deployed (compliance-recalculate.ts)
+   • Frontend dashboard deployed (/configuracoes/compliance)
+   • Testes completos (5 casos Vitest)
+   • Documentação completa (4 arquivos .md)
+   • Push para GitHub concluído
+
+⚠️  O QUE FALTA (APENAS 1 AÇÃO):
+   Criar tabela historico_compliance no D1
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 PASSO A PASSO (2 minutos):
+
+1. Abra este link no navegador:
+   https://dash.cloudflare.com/4dca4e5fddc6a351651dd224f456586f/workers-and-pages/d1
+
+2. Clique em "airtrust-db"
+
+3. Vá para aba "Console"
+
+4. Abra o arquivo: 
+   migrations/130_compliance_MANUAL_APPLY.sql
+
+5. Copie TODO o conteúdo (Cmd+A, Cmd+C)
+
+6. Cole no console D1 (Cmd+V)
+
+7. Clique no botão "Execute"
+
+8. Aguarde mensagem: 
+   "Tabela historico_compliance criada com sucesso"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ APÓS EXECUTAR O SQL:
+
+Sistema estará 100% funcional:
+   • GET /api/compliance/stats → retorna estatísticas
+   • POST /api/compliance/recalculate → calcula compliance
+   • /configuracoes/compliance → dashboard visual
+   • Cálculo automático em futuras inserções
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📁 Arquivos de referência:
+   • migrations/130_compliance_MANUAL_APPLY.sql (SQL para copiar)
+   • FALTANDO_APLICAR_MIGRATION.md (instruções detalhadas)
+   • COMPLIANCE_STATUS_FINAL.md (status completo)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 ALTERNATIVA (se Dashboard não funcionar):
+   Ajustar token API em https://dash.cloudflare.com/profile/api-tokens
+   Adicionar permissão: D1 -> Database -> Edit
+   Executar: wrangler d1 execute airtrust-db --remote --file=migrations/130_compliance_MANUAL_APPLY.sql
+

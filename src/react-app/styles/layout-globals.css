@@ -1,0 +1,93 @@
+/**
+ * Layout Global - Design System AirTrust
+ * Margens laterais responsivas por faixa de resolução
+ */
+
+/* Container principal do layout - padding responsivo */
+.layout-content-container {
+  padding-left: 100px !important;
+  padding-right: 100px !important;
+}
+
+/* Resolução HD (1366x768) e laptops menores */
+@media (max-width: 1440px) {
+  .layout-content-container {
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+  }
+}
+
+@media (max-width: 1280px) {
+  .layout-content-container {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .layout-content-container {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}
+
+/* Remover padding extra de containers aninhados */
+.layout-content-container > * {
+  max-width: 100%;
+}
+
+/* PageLayout não deve adicionar padding extra */
+.page-layout-container {
+  width: 100%;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Cards e sections seguem o design system */
+.page-section,
+.page-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid rgb(226 232 240);
+  overflow: hidden;
+}
+
+/* Dark mode */
+.dark .page-section,
+.dark .page-card {
+  background: rgb(15 23 42);
+  border-color: rgb(51 65 85);
+}
+
+/* Garantir que tabelas não quebrem o layout */
+.page-section table,
+.page-card table {
+  width: 100%;
+}
+
+/* Headers de página consistentes */
+.page-header {
+  margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: rgb(15 23 42);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.dark .page-header h1 {
+  color: white;
+}
+
+.page-header p {
+  font-size: 1rem;
+  color: rgb(100 116 139);
+  margin-top: 0.25rem;
+}
+
+.dark .page-header p {
+  color: rgb(148 163 184);
+}

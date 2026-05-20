@@ -1,0 +1,359 @@
+openapi: 3.0.0
+info:
+  title: AirTrust API
+  description: Sistema de Gestão de Treinamentos e Qualificações Aeronáuticas
+  version: 2.0.0
+  contact:
+    name: AirTrust Support
+    email: suporte@airtrust.com.br
+
+servers:
+  - url: http://localhost:8787
+    description: Desenvolvimento
+  - url: https://api.airtrust.com.br
+    description: Produção
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  
+  schemas:
+    Funcionario:
+      type: object
+      required:
+        - nome
+        - matricula
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        nome:
+          type: string
+          minLength: 3
+        matricula:
+          type: string
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+        email:
+          type: string
+          format: email
+        telefone:
+          type: string
+        funcao:
+          type: string
+        base:
+          type: string
+        status:
+          type: string
+          enum: [ATIVO, INATIVO, AFASTADO]
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    
+    Qualificacao:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        funcionario_id:
+          type: integer
+        tipo:
+          type: string
+        codigo:
+          type: string
+        data_emissao:
+          type: string
+          format: date
+        data_validade:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [VALIDA, VENCIDA, VENCENDO]
+    
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+        message:
+          type: string
+    
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total_pages:
+          type: integer
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v2/health:
+    get:
+      summary: Health Check Básico
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: Sistema saudável
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+  
+  /api/v2/health/detailed:
+    get:
+      summary: Health Check Detalhado
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: Status detalhado de todos os componentes
+        '503':
+          description: Sistema degradado
+  
+  /api/v2/funcionarios:
+    get:
+      summary: Listar Funcionários
+      tags: [Funcionários]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: ativo
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de funcionários
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  funcionarios:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Funcionario'
+                  total:
+                    type: integer
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    post:
+      summary: Criar Funcionário
+      tags: [Funcionários]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Funcionario'
+      responses:
+        '201':
+          description: Funcionário criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Funcionario'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /api/v2/funcionarios/{id}:
+    get:
+      summary: Buscar Funcionário por ID
+      tags: [Funcionários]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Funcionário encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Funcionario'
+        '404':
+          description: Funcionário não encontrado
+    
+    put:
+      summary: Atualizar Funcionário
+      tags: [Funcionários]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Funcionario'
+      responses:
+        '200':
+          description: Funcionário atualizado
+        '404':
+          description: Funcionário não encontrado
+    
+    delete:
+      summary: Deletar Funcionário (Soft Delete)
+      tags: [Funcionários]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Funcionário deletado
+        '404':
+          description: Funcionário não encontrado
+  
+  /api/v2/qualificacoes:
+    get:
+      summary: Listar Qualificações
+      tags: [Qualificações]
+      parameters:
+        - name: funcionario_id
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [VALIDA, VENCIDA, VENCENDO]
+      responses:
+        '200':
+          description: Lista de qualificações
+  
+  /api/v2/compliance/dashboard:
+    get:
+      summary: Dashboard de Compliance
+      tags: [Compliance]
+      security: []
+      responses:
+        '200':
+          description: Estatísticas de compliance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  stats:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      validas:
+                        type: integer
+                      vencendo:
+                        type: integer
+                      vencidas:
+                        type: integer
+                  compliance:
+                    type: string
+                    example: "85.5%"
+  
+  /api/v2/lgpd/exportar-dados/{id}:
+    post:
+      summary: Exportar Dados do Funcionário (LGPD Art. 18, II)
+      tags: [LGPD]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Dados exportados
+        '404':
+          description: Funcionário não encontrado
+  
+  /api/v2/lgpd/excluir-permanente/{id}:
+    delete:
+      summary: Excluir Permanentemente (Right to be Forgotten - LGPD Art. 18, VI)
+      tags: [LGPD]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Dados excluídos permanentemente
+        '400':
+          description: Funcionário deve ser soft deleted primeiro
+        '404':
+          description: Funcionário não encontrado
+
+tags:
+  - name: Health
+    description: Health checks e status do sistema
+  - name: Funcionários
+    description: Gestão de funcionários
+  - name: Qualificações
+    description: Gestão de qualificações e certificações
+  - name: Compliance
+    description: Relatórios de compliance
+  - name: LGPD
+    description: Endpoints de conformidade LGPD

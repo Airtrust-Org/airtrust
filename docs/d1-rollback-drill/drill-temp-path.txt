@@ -1,0 +1,2 @@
+/tmp/airtrust-d1-rollback-drill
+Repo path: /Users/filipedaumas/Documents/Airtrust

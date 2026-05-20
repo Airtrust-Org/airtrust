@@ -1,0 +1,134 @@
+
+ ⛅️ wrangler 4.75.0 (update available 4.92.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "production".
+      Before using `--env=production` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.production]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db (7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.44ms
+[
+  {
+    "results": [
+      {
+        "name": "_data_recovery_log"
+      },
+      {
+        "name": "audit_cascade"
+      },
+      {
+        "name": "audit_logs"
+      },
+      {
+        "name": "auditoria"
+      },
+      {
+        "name": "auditoria_avancada_v2"
+      },
+      {
+        "name": "backups_logs"
+      },
+      {
+        "name": "catalogo_treinamentos"
+      },
+      {
+        "name": "convites_usuarios"
+      },
+      {
+        "name": "empresa_certificado_config"
+      },
+      {
+        "name": "empresa_config"
+      },
+      {
+        "name": "empresas"
+      },
+      {
+        "name": "empresas_config"
+      },
+      {
+        "name": "escala_auditoria"
+      },
+      {
+        "name": "frms_fadiga_config_empresa"
+      },
+      {
+        "name": "importacoes_log"
+      },
+      {
+        "name": "integracoes_edapp_usuarios"
+      },
+      {
+        "name": "job_execution_log"
+      },
+      {
+        "name": "legacy_import_log"
+      },
+      {
+        "name": "logs_acesso_dados"
+      },
+      {
+        "name": "migracao_log"
+      },
+      {
+        "name": "notificacoes_log"
+      },
+      {
+        "name": "pessoas_auditoria_acessos"
+      },
+      {
+        "name": "sgso_audit_trail"
+      },
+      {
+        "name": "sgso_auditoria_itens"
+      },
+      {
+        "name": "sgso_auditorias"
+      },
+      {
+        "name": "system_logs"
+      },
+      {
+        "name": "usuario_permissoes"
+      },
+      {
+        "name": "usuario_preferencias"
+      },
+      {
+        "name": "usuarios"
+      },
+      {
+        "name": "usuarios_empresas"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.4374
+      },
+      "duration": 0.4374,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 61779968,
+      "rows_read": 1009,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

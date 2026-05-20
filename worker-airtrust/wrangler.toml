@@ -1,0 +1,112 @@
+name = "airtrust-api"
+main = "src/index.ts"
+compatibility_date = "2025-11-22"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Configuração local isolada continua em worker-airtrust/wrangler.dev.toml.
+# Este arquivo contém apenas os ambientes remotos oficiais:
+#   - development
+#   - staging
+#   - production
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-dev"
+preview_bucket_name = "airtrust-storage-dev"
+
+[ai]
+binding = "AI"
+
+# ===== DEVELOPMENT =====
+[env.development]
+name = "airtrust-api-development"
+
+[env.development.vars]
+ENVIRONMENT = "development"
+# DEV auth bypass local deve ficar apenas em worker-airtrust/.dev.vars, nunca em arquivo rastreado.
+
+[[env.development.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-dev"
+preview_bucket_name = "airtrust-storage-dev"
+
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-dev"
+database_id = "a72fb05b-0912-4ad9-9686-e7948c8b09eb"
+migrations_dir = "./migrations"
+
+[env.development.ai]
+binding = "AI"
+
+# ===== STAGING ENVIRONMENT (ZERO CACHE) =====
+[env.staging]
+name = "airtrust-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+# JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env staging
+# CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env staging
+# CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env staging
+# EdApp Integration: configurar via wrangler secret put EDAPP_* --env staging
+
+[[env.staging.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage-staging"
+preview_bucket_name = "airtrust-storage-staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-staging"
+database_id = "b7f50907-c110-45f5-ad17-e97ea47f2826"
+migrations_dir = "./migrations"
+
+[env.staging.ai]
+binding = "AI"
+
+# ===== PRODUÇÃO =====
+[env.production]
+name = "airtrust-api-production"
+routes = [
+  { pattern = "api.airtrust.online/*", zone_name = "airtrust.online" }
+]
+
+[env.production.vars]
+ENVIRONMENT = "production"
+# Placeholder tracked in git. The real APP_VERSION is injected by scripts/deploy-worker-only.sh
+APP_VERSION = "managed-by-script"
+# Placeholder tracked in git. The real APP_BUILD_TIME is injected by scripts/deploy-worker-only.sh
+APP_BUILD_TIME = "managed-by-script"
+# JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env production
+# CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env production
+# CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env production
+
+# EdApp Integration: configurar via wrangler secret put EDAPP_* --env production
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "airtrust-storage"
+preview_bucket_name = "airtrust-storage"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "airtrust-db"
+database_id = "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+migrations_dir = "./migrations"
+
+[env.production.ai]
+binding = "AI"
+
+# ===== CRON TRIGGERS (PRODUÇÃO) =====
+# EdApp reconciliation: a cada 10 minutos
+# Notificações + FRMS: diariamente às 8h UTC (5h BRT)
+# Backups: diário 3h, semanal domingo 4h, mensal dia 1 às 5h
+[env.production.triggers]
+crons = [
+  "*/10 * * * *",  # EdApp reconciliation fallback
+  "0 8 * * *",      # Notificações diárias + stats + FRMS
+  "0 3 * * *",      # Backup diário 3h UTC
+  "0 4 * * SUN",    # Backup semanal domingo 4h UTC
+  "0 5 1 * *"       # Backup mensal dia 1 às 5h UTC
+]

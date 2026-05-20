@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: URL guard
+        run: npm run lint:api-base
+        env:
+          CI: true
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Build
+        run: npm run build
+
+  lms-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: cd worker-airtrust && npm ci
+
+      - name: Write local dev vars
+        run: |
+          JWT_SECRET="$(openssl rand -hex 32)"
+          cat > worker-airtrust/.dev.vars <<EOF
+          JWT_SECRET=$JWT_SECRET
+          EOF
+
+      - name: Setup local database
+        run: npm run setup:local:reset
+
+      - name: Start local worker
+        run: |
+          npm run dev:worker:local > /tmp/airtrust-worker.log 2>&1 &
+          echo $! > /tmp/airtrust-worker.pid
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8787/api/health >/dev/null; then
+              echo "Local worker ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/airtrust-worker.log
+          exit 1
+
+      - name: Run LMS smoke
+        run: npm run smoke:lms:local
+
+      - name: Worker log on failure
+        if: failure()
+        run: cat /tmp/airtrust-worker.log || true
+
+      - name: Stop local worker
+        if: always()
+        run: |
+          if [ -f /tmp/airtrust-worker.pid ]; then
+            kill "$(cat /tmp/airtrust-worker.pid)" || true
+          fi
+          rm -f worker-airtrust/.dev.vars

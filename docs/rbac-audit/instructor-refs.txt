@@ -1,0 +1,1038 @@
+/Users/filipedaumas/Documents/Airtrust/src/react-app/App.tsx:91:  () => import('./pages/simuladores/cadastros/instrutores'),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/App.tsx:559:                      path="/simuladores/cadastros/instrutores"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/types/fichas.ts:13:  instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/types/fichas.ts:23:  assinatura_instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/types/fichas.ts:24:  data_assinatura_instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/types/dashboard.types.ts:89:    instrutorNome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/types/index.ts:17:  is_instrutor?: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/types/index.ts:67:  instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/utils/validationRules.ts:110:  if (func.eh_instrutor && !['SIM', 'NAO', 'S', 'N', '1', '0'].includes(String(func.eh_instrutor).toUpperCase())) {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/utils/validationRules.ts:114:      campo: 'eh_instrutor', 
+/Users/filipedaumas/Documents/Airtrust/src/react-app/utils/validationRules.ts:116:      valorOriginal: func.eh_instrutor,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/schemas/qualificacoes.ts:18:  instrutor_id: z.number().positive('Instrutor inválido').nullable().optional(), // SECURITY: Use ID for FK validation
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/AssinaturaModal.tsx:267:                Como instrutor, você deve indicar se a sessão foi APROVADA ou NÃO APROVADA.
+/Users/filipedaumas/Documents/Airtrust/src/react-app/utils/qualificacoesUtils.ts:89:  instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/PDFSystem.tsx:243:            <div class="info-value">${fichaData.instrutor?.nome || 'Nome do Instrutor'}</div>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/FuncionarioCard.tsx:84:            {funcionario.is_instrutor === 1 && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/HomePerfilAssistant.tsx:60:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/HomePerfilAssistant.tsx:69:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/HomePerfilAssistant.tsx:620:                        Instrutor: {ficha.instrutor_nome}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/HomePerfilAssistant.tsx:708:                  <p className="mt-1 text-sm text-slate-600">Instrutor: {ficha.instrutor_nome}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/forms/FuncionarioForm.tsx:10:  { value: 'instrutor', label: 'Instrutor' },
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/UI/Calendar.tsx:23:  instrutor: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:30:  const [instrutores, setInstrutores] = useState<any[]>([]);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:38:    instrutor_id: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:71:          const resInstrutores = await fetch(`${API_BASE_URL}/funcionarios/instrutores`);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:76:            setInstrutores(todos.filter((f: any) => f.is_instrutor || f.funcao === 'INSTRUTOR'));
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:79:          setInstrutores(todos.filter((f: any) => f.is_instrutor || f.funcao === 'INSTRUTOR'));
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:116:    if (!dadosGerais.instrutor_id) {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:117:      toast.warning('Selecione um instrutor');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:151:          instrutor_id: parseInt(dadosGerais.instrutor_id),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:257:                value={dadosGerais.instrutor_id}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:258:                onChange={(e) => setDadosGerais({ ...dadosGerais, instrutor_id: e.target.value })}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:262:                <option value="">Selecione um instrutor</option>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FormularioAgendamento.tsx:263:                {instrutores.map((i) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FuncionarioCombobox.tsx:13:  is_instrutor?: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FuncionarioCombobox.tsx:26:  tipo?: 'instrutor' | 'checador' | '';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FuncionarioCombobox.tsx:98:    if (func.is_instrutor) return 'bg-primary/20 text-blue-700 border-blue-300';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/FuncionarioCombobox.tsx:104:    if (func.is_instrutor) return 'Instrutor';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalCertificado.tsx:32:    instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalCertificado.tsx:74:  const instrutorNome = String(qualificacao.instrutor || '').trim();
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalCertificado.tsx:274:      { para_instrutor: true, nome_instrutor: instrutorNome },
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalCertificado.tsx:275:      '✅ Certificado do instrutor gerado com sucesso!',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalCertificado.tsx:576:              className={`grid grid-cols-1 gap-3 ${instrutorNome ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalCertificado.tsx:625:              {/* Gerar Certificado do Instrutor - apenas quando há instrutor cadastrado */}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalCertificado.tsx:626:              {instrutorNome && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/ImportarFuncionariosCSVModal.tsx:218:              is_instrutor:
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/ImportarFuncionariosCSVModal.tsx:219:                (r.is_instrutor as number | string | boolean) ||
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/SessaoCard.tsx:43:  instrutor_id: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/SessaoCard.tsx:44:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/SessaoCard.tsx:45:  instrutor_email?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/SessaoCard.tsx:46:  instrutor_telefone?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/simuladores/SessaoCard.tsx:185:            <span>{sessao.instrutor_nome}</span>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioForm.tsx:18:  is_instrutor?: boolean;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioForm.tsx:34:  is_instrutor?: boolean | number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioForm.tsx:56:    is_instrutor: funcionario?.is_instrutor === 1 || funcionario?.is_instrutor === true || false,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioForm.tsx:260:                id="is_instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioForm.tsx:261:                name="is_instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioForm.tsx:262:                checked={formData.is_instrutor || false}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioForm.tsx:266:              <label htmlFor="is_instrutor" className="ml-3 text-sm">
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioForm.tsx:269:                  Marcando esta opção, o funcionário aparecerá na lista de instrutores ao agendar
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:31:  instrutor: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:47:    instrutor: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:117:        instrutor: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:153:      instrutor: formData.instrutor?.trim() || null,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:187:      instrutor: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:279:          <label htmlFor="instrutor-input" className="block text-sm font-medium text-gray-700 mb-2">
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:284:            id="instrutor-input"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:286:            name="instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:287:            value={formData.instrutor}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:289:            placeholder="Nome do instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/AddCertificacaoModal.tsx:290:            data-testid="instrutor-input"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/forms/AgendamentoForm.tsx:15:  { value: 'instrutor_1', label: 'Instrutor João Silva' },
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/forms/AgendamentoForm.tsx:16:  { value: 'instrutor_2', label: 'Instrutor Maria Santos' },
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/forms/AgendamentoForm.tsx:17:  { value: 'instrutor_3', label: 'Instrutor Pedro Costa' },
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/forms/AgendamentoForm.tsx:44:      instrutor: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/forms/AgendamentoForm.tsx:94:          {...form.getFieldProps('instrutor')}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:14: * - ✅ Destinatários automáticos (participantes + instrutor)
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:101:  instrutor_id: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:102:  instrutor_nome?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:151:  const [instrutores, setInstrutores] = useState<Funcionario[]>([]);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:181:  const [instrutorId, setInstrutorId] = useState<number | null>(null);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:445:      setInstrutorId(sessao.instrutor_id);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:527:        (f: Funcionario & { is_instrutor?: number; cargo?: string }) =>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:528:          f.is_instrutor === 1 || f.cargo?.toLowerCase().includes('instrutor'),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:532:      console.error('Erro ao buscar instrutores:', error);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:943:    if (!instrutorId) return 'Selecione o instrutor';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:1024:        instrutor_id: instrutorId,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:1045:        gerar_ficha_instrutor: gerarFichaInstrutorEfetivo,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:1494:              value={instrutorId || ''}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:1499:              <option value="">Selecione o instrutor</option>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:1500:              {instrutores.map((inst) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:1506:            {instrutores.length === 0 && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:1508:                ⚠️ Nenhum instrutor encontrado. Configure instrutores em Configurações.
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalNovaSessao.tsx:1601:                Marcando abaixo, uma ficha extra será criada tendo o <strong>instrutor</strong> da
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAvaliarFicha.tsx:3: * Permite ao instrutor avaliar as manobras e adicionar observações gerais
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAvaliarFicha.tsx:29:  instrutor_id?: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAvaliarFicha.tsx:36:  instrutor_nome?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAvaliarFicha.tsx:158:              instrutor_id: result.data.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAvaliarFicha.tsx:165:              instrutor_nome: result.data.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAvaliarFicha.tsx:187:                  instrutor_nome: retryResult.data.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAvaliarFicha.tsx:483:                {fichaContexto.instrutor_nome || '—'}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/funcionarios/FuncionarioListDetailed.tsx:26:  is_instrutor: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:51:  const [instrutores, setInstrutores] = useState<Instrutor[]>([]);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:60:    instrutor_id: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:81:        fetch(`${API_BASE_URL}/simuladores/instrutores`),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:122:            instrutor_id: sessao.instrutor_id?.toString() || '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:139:      instrutor_id: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:176:      !formData.instrutor_id
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:198:        instrutor_id: parseInt(formData.instrutor_id),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:336:              value={formData.instrutor_id}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:337:              onChange={(e) => setFormData({ ...formData, instrutor_id: e.target.value })}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:341:              {instrutores.map((instrutor) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:342:                <option key={instrutor.id} value={instrutor.id}>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/SessaoModal.tsx:343:                  {instrutor.nome}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:33:    instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:46:  is_instrutor?: number | boolean;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:103:    instrutor_id: '', // SECURITY: Use ID instead of name to prevent dangling FK
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:125:  const instrutoresCadastrados = useMemo(
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:128:        .filter((funcionario) => Boolean(funcionario.is_instrutor))
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:143:      const instrutorIdMatch = instrutoresCadastrados.find((instrutor) => {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:144:        const target = String(habilitacao.instrutor || '')
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:148:        const nome = String(instrutor.nome || '')
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:151:        const matricula = String(instrutor.matricula || '')
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:164:        instrutor_id: instrutorIdMatch ? String(instrutorIdMatch.id) : '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:177:      instrutor_id: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:183:    instrutoresCadastrados,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:189:    habilitacao?.instrutor,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:343:      instrutor_id: form.instrutor_id ? Number(form.instrutor_id) : undefined,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:654:                  value={form.instrutor_id}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:655:                  onChange={(e) => setForm({ ...form, instrutor_id: e.target.value })}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:658:                  <option value="">-- Selecione um instrutor --</option>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:659:                  {instrutoresCadastrados.map((instrutor) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:660:                    <option key={instrutor.id} value={instrutor.id}>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:661:                      {instrutor.nome} {instrutor.matricula ? `(${instrutor.matricula})` : ''}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.tsx:666:                  Escolha um instrutor cadastrado na empresa. Se não estiver na lista, cadastre-o
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalHabilitacao.tsx:33:    instrutor: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalHabilitacao.tsx:65:          instrutor: habilitacao.instrutor || '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalHabilitacao.tsx:97:          instrutor: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalHabilitacao.tsx:236:        instrutor: form.instrutor || null,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalHabilitacao.tsx:386:              value={form.instrutor}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalHabilitacao.tsx:387:              onChange={(e) => setForm({ ...form, instrutor: e.target.value })}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalHabilitacao.tsx:392:                .filter((f) => f.is_instrutor === 1 || f.is_instrutor === true)
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalHabilitacao.tsx:400:              Selecione apenas entre os instrutores cadastrados
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.test.tsx:17:    is_instrutor: 0,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.test.tsx:24:    is_instrutor: 1,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.test.tsx:86:  it('preserva o instrutor selecionado apos rerender do parent e envia no update', async () => {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.test.tsx:102:        instrutor: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.test.tsx:110:    const instrutorSelect = screen.getAllByRole('combobox').at(-1)!;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.test.tsx:111:    fireEvent.change(instrutorSelect, { target: { value: '2' } });
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/modals/ModalAtribuirQualificacao.test.tsx:138:          instrutor_id: 2,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useTreinamentosPlanejados.ts:87:  instrutor: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useTreinamentosPlanejados.ts:132:  instrutor_id?: number | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useTreinamentosPlanejados.ts:133:  instrutor_nome?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useTreinamentosPlanejados.ts:134:  instrutor_guerra?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useTreinamentosPlanejados.ts:179:  instrutor_id?: number | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useTreinamentosPlanejados.ts:193:  instrutor_id?: number | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/shared/ImportarCertificacoes.tsx:61:    'instrutor',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/shared/ImportarCertificacoes.tsx:65:  example: `funcionario_matricula,treinamento_codigo,data_conclusao,data_vencimento,instrutor,nota,observacoes
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/shared/ImportarCertificacoes.tsx:512:                  <strong>instrutor:</strong> Nome do instrutor (opcional)
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useAgendamentos.ts:12:  instrutor_id: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useAgendamentos.ts:13:  instrutor_nome?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useSimuladores.ts:23:  instrutor_id: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useSimuladores.ts:24:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useSimuladores.ts:43:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/lib/validations/schemas.ts:26:  instrutor: z.string().min(1, 'Instrutor é obrigatório'),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:140:  | 'sim.calendar.instructor.all'
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:151:  | 'sim.calendar.card.instructor'
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:168:  | 'settings.users.role.instructor'
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:192:  | 'settings.users.roleOption.instructor'
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:519:    'sim.calendar.searchPlaceholder': 'Buscar por simulador, instrutor ou funcionário...',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:525:    'sim.calendar.instructor.all': 'Todos os Instrutores',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:536:    'sim.calendar.card.instructor': 'Instrutor',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:553:    'settings.users.role.instructor': 'Instrutor',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:577:    'settings.users.roleOption.instructor': 'Instrutor (Fichas e Simuladores)',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:914:    'sim.calendar.searchPlaceholder': 'Search by simulator, instructor or employee...',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:920:    'sim.calendar.instructor.all': 'All Instructors',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:931:    'sim.calendar.card.instructor': 'Instructor',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:948:    'settings.users.role.instructor': 'Instructor',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/i18n/translations.ts:972:    'settings.users.roleOption.instructor': 'Instructor (Records and Simulators)',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:119:    .instructor-section {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:124:    .instructor-name-block, .instructor-meta-block {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:127:    .instructor-label, .instructor-meta-label {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:131:    .instructor-name, .instructor-meta-value {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:195:  {{instrutor_section}}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:237:  '{{instrutor_nome}}': 'Negreiros Silva Exemplo',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:238:  '{{instrutor_codigo_anac}}': 'ANAC-009876',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:239:  '{{instrutor_matricula}}': '00123',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:240:  '{{instrutor_section}}':
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:241:    '<div class="instructor-section"><div class="instructor-name-block"><span class="instructor-label">Instrutor</span><span class="instructor-name">Negreiros Silva Exemplo</span></div><div class="instructor-meta-block"><span class="instructor-meta-label">CANAC / Matrícula</span><span class="instructor-meta-value">ANAC-009876 &nbsp;·&nbsp; 00123</span></div></div>',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:266:  const hasInstrutorPlaceholder = template.includes('{{instrutor_section}}');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:269:    .instructor-section {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:274:    .instructor-name-block, .instructor-meta-block {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:277:    .instructor-label, .instructor-meta-label {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:281:    .instructor-name, .instructor-meta-value {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:287:  if (!result.includes('instructor-section')) {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:300:      '</div>\n\n  {{instrutor_section}}\n\n  <!-- QUALIFICAÇÃO -->',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:307:      '{{instrutor_section}}\n\n  $1',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:312:    ? result.replace(/<\/body>/i, '{{instrutor_section}}</body>')
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:313:    : `${result}\n{{instrutor_section}}`;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:957:                      <code className="bg-blue-100 px-1 rounded">{'{{instrutor_section}}'}</code>{' '}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:958:                      Bloco do instrutor, preenchido apenas para treinamentos de voo/solo
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:961:                      <code className="bg-blue-100 px-1 rounded">{'{{instrutor_nome}}'}</code> Nome
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:962:                      do instrutor quando aplicável
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:966:                        {'{{instrutor_codigo_anac}}'}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:968:                      Código ANAC do instrutor
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:971:                      <code className="bg-blue-100 px-1 rounded">{'{{instrutor_matricula}}'}</code>{' '}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/components/empresas/EmpresaForm.tsx:972:                      Matrícula do instrutor
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:50:  is_instrutor?: boolean | number | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:68:  instrutor_id: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:246:    instrutor_id: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:263:    instrutor_id: item.instrutor_id ? String(item.instrutor_id) : '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:318:  const [instrutorFiltro, setInstrutorFiltro] = useState('');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:345:      instrutor_id: instrutorFiltro ? Number(instrutorFiltro) : undefined,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:350:    [buscaAdiada, instrutorFiltro, monthRange.fim, monthRange.inicio, statusFiltro],
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:357:    instrutor_id: instrutorFiltro ? Number(instrutorFiltro) : undefined,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:375:  const instrutores = useMemo(() => {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:378:      if (funcionario.is_instrutor === true) return true;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:379:      if (typeof funcionario.is_instrutor === 'number' && funcionario.is_instrutor > 0) return true;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:381:      return funcao.includes('instrutor');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:535:      instrutor_id: formState.instrutor_id ? Number(formState.instrutor_id) : null,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:821:                value={instrutorFiltro}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:826:                {instrutores.map((instrutor) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:827:                  <option key={instrutor.id} value={instrutor.id}>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:828:                    {getPessoaLabel(instrutor.nome, instrutor.guerra, instrutor.matricula)}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:840:                placeholder="Titulo, qualificação, local ou instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1024:                              funcionarioId={item.instrutor_id ?? undefined}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1025:                              nome={item.instrutor_nome || item.instrutor_guerra || 'Nao definido'}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1309:                  value={formState.instrutor_id}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1311:                    setFormState((current) => ({ ...current, instrutor_id: event.target.value }))
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1316:                  {instrutores.map((instrutor) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1317:                    <option key={instrutor.id} value={instrutor.id}>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1318:                      {getPessoaLabel(instrutor.nome, instrutor.guerra, instrutor.matricula)}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1348:                  placeholder="Objetivo, publico alvo, observacoes do instrutor..."
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1518:                          funcionarioId={detalheTreinamento.instrutor_id ?? undefined}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1520:                            detalheTreinamento.instrutor_nome ||
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/TreinamentosPlanejadosPage.tsx:1521:                            detalheTreinamento.instrutor_guerra ||
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/AvaliarFicha.tsx:34:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:48:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:49:  instrutor_codigo_anac: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:60:  assinatura_instrutor_timestamp: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:62:  assinatura_instrutor_imagem?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:191:      toast.warning('A ficha precisa ser avaliada pelo instrutor antes da assinatura');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:210:    if (ficha?.assinatura_instrutor_timestamp) {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:211:      toast.info('O instrutor já assinou esta ficha');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:224:      // Se for assinatura de instrutor, deve incluir aprovado
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:352:        instrutor_nome: ficha.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:353:        instrutor_codigo_anac: ficha.instrutor_codigo_anac,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:364:        assinatura_instrutor_timestamp: ficha.assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:366:        assinatura_instrutor_dataUrl: ficha.assinatura_instrutor_imagem,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:534:              <p className="text-sm font-bold text-slate-900">{ficha.instrutor_nome}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:536:                Código ANAC: {ficha.instrutor_codigo_anac}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:714:                ficha.assinatura_instrutor_timestamp
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:723:              <p className="text-sm text-slate-700 mb-2">{ficha.instrutor_nome}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:725:              {ficha.assinatura_instrutor_timestamp ? (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:727:                  {ficha.assinatura_instrutor_imagem ? (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:730:                        src={ficha.assinatura_instrutor_imagem}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:731:                        alt="Assinatura do instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaVoo.tsx:741:                    {formatTimestamp(ficha.assinatura_instrutor_timestamp)}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/DashboardPrincipal.tsx:129:  instrutor_nome?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/DashboardPrincipal.tsx:1458:                <span className="truncate">{sessao.instrutor_nome || 'Instrutor a definir'}</span>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:657:            instrutor: turmaPlanejadaInstrutor || undefined,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:794:    instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:1120:    instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:1779:          instrutor: (planejadaConvocacaoSelecionada as HistoricoItem).instrutor || undefined,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:3581:                    instrutor: e.instrutor,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:4039:                placeholder="Nome do instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:4286:                  {planejadaSelecionada.instrutor || '-'}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:4348:                    instrutor: r.instrutor,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Qualificacoes.tsx:4826:              instrutor: historicoSelecionado.instrutor,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Certificacoes.tsx:23:  instrutor_id?: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Certificacoes.tsx:31:  instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Certificacoes.tsx:318:                        funcionarioId={cert.instrutor_id}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Certificacoes.tsx:319:                        nome={cert.instrutor || '-'}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useQualificacoesExt.ts:31:  funcionario_is_instrutor?: number | boolean;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useQualificacoesExt.ts:59:  instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/ValidarCertificado.tsx:19:    instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/ValidarCertificado.tsx:20:    instrutor_codigo_anac: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/ValidarCertificado.tsx:247:            <p className="text-lg font-semibold text-slate-900 mb-1">{cert.instrutor_nome}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/ValidarCertificado.tsx:248:            <p className="text-sm text-slate-600">Código ANAC: {cert.instrutor_codigo_anac}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useSessoes.ts:16:  instrutor_id: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useSessoes.ts:17:  instrutor_nome?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/LoginSimple.tsx:28:  import.meta.env.VITE_QUICK_LOGIN_INSTRUTOR_EMAIL || 'test.instrutor@airtrust.com';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/qualificacoes/ImportarQualificacoes.tsx:248:        'instrutor',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/VisualizarFicha.tsx:22:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/VisualizarFicha.tsx:28:  observacoes_instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/VisualizarFicha.tsx:204:            <p className="text-gray-900">{ficha.instrutor_nome}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/VisualizarFicha.tsx:300:      {(ficha.observacoes_instrutor || ficha.observacoes_aluno) && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/VisualizarFicha.tsx:304:          {ficha.observacoes_instrutor && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/VisualizarFicha.tsx:307:              <p className="text-gray-900 bg-gray-50 p-3 rounded">{ficha.observacoes_instrutor}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useFuncionarios.ts:18:  is_instrutor?: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useFuncionarios.ts:58:  is_instrutor?: boolean;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/hooks/useFuncionarios.ts:72:      if (filtros?.is_instrutor) params.set('is_instrutor', 'true');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/HomePerfil.tsx:59:  // Minhas sessões de simulador (ALUNO vê onde é participante, INSTRUTOR onde é instrutor)
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/HomePerfil.tsx:66:          ? 'Visualize as sessões de simulador onde você é o instrutor.'
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:276:    is_instrutor: false,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:429:          is_instrutor: false,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:589:          is_instrutor: parseBooleanFlag(f.is_instrutor),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:715:      is_instrutor: formData.is_instrutor ? 1 : 0,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:1441:                        id="is_instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:1442:                        name="is_instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:1443:                        checked={formData.is_instrutor || false}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:1447:                      <label htmlFor="is_instrutor" className="ml-3 text-sm">
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/funcionarios/ModalFuncionario.tsx:1452:                          Marcando esta opção, o funcionário aparecerá na lista de instrutores ao
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/EditarFicha.tsx:23:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/EditarFicha.tsx:29:  observacoes_instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/EditarFicha.tsx:79:      setObservacoesInstrutor(fichaData.observacoes_instrutor || '');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/EditarFicha.tsx:151:        observacoes_instrutor: observacoesInstrutor || undefined,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/EditarFicha.tsx:279:            <p className="text-gray-900">{ficha.instrutor_nome}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/PastaVirtual.tsx:51:  is_instrutor?: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/PastaVirtual.tsx:322:    Number(funcionario.is_instrutor || 0) === 1 ||
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/PastaVirtual.tsx:323:    /comandante|copiloto|co-piloto|piloto|instrutor/.test(perfilOperacional);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/tabs/TabSessoesWrapper.tsx:88:        instrutor_id: sessao.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/tabs/TabSessoesWrapper.tsx:89:        instrutor_nome: sessao.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/tabs/TabSessoesWrapper.tsx:178:          s.instrutor_nome?.toLowerCase().includes(searchLower) ||
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/tabs/TabSessoesWrapper.tsx:300:              placeholder="Buscar por simulador, instrutor ou participante..."
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/historico/funcionario.tsx:102:                      {sessao.instrutor}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/dashboard/DashboardDesempenho.tsx:50:    instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/dashboard/DashboardDesempenho.tsx:115:          observacoes_resolucao: 'Resolvido manualmente pelo instrutor',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/dashboard/DashboardDesempenho.tsx:285:                        {alerta.instrutor_nome && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/dashboard/DashboardDesempenho.tsx:287:                            <strong>Instrutor:</strong> {alerta.instrutor_nome}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/components/PDFGenerator.tsx:314:                        <span class="info-value">${dados.tripulante.instrutor}</span>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/components/PDFGenerator.tsx:376:            ${dados.assinaturas.instrutor.assinado ? `
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/components/PDFGenerator.tsx:379:                    ${new Date(dados.assinaturas.instrutor.timestamp).toLocaleString('pt-BR')}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/components/PDFGenerator.tsx:383:                ${dados.tripulante.instrutor}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/fichaModeloPdf.ts:49:    instrutor_nome: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/fichaModeloPdf.ts:50:    instrutor_codigo_anac: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/fichaModeloPdf.ts:61:    assinatura_instrutor_timestamp: null,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/MinhasAssinaturas.tsx:207:              <p>• Após sua assinatura, a ficha segue para validação do instrutor</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/configuracoes/index.tsx:12: * NOTA: Instrutores são funcionários com flag is_instrutor=true
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx:15:  const [instrutores, setInstrutores] = useState([]);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx:25:    instrutor_id: '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx:51:      setInstrutores(funcData.data?.filter((f: any) => f.is_instrutor) || []);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx:161:                value={formData.instrutor_id}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx:162:                onChange={(e) => setFormData({ ...formData, instrutor_id: e.target.value })}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx:166:                {instrutores.map((inst: any) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaFuncionarioPage.tsx:67:  instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaFuncionarioPage.tsx:161:    instrutor_nome?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/FichaFuncionarioPage.tsx:1120:                      <td className="px-4 py-3 text-gray-700">{evento.instrutor_nome ?? '-'}</td>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/GradeGantt.tsx:828:        isInstrutor: !!alocacao.funcionario_is_instrutor,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/dashboard/index.tsx:158:                            funcionarioId={sessao.instrutor_id}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/dashboard/index.tsx:159:                            nome={sessao.instrutor_nome || 'Sem instrutor'}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/__tests__/GradeTripulantes.utils.test.ts:52:    funcionario_is_instrutor: partial.funcionario_is_instrutor ?? false,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:28:  const [instrutores, setInstrutores] = useState<Instrutor[]>([]);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:32:  const [instrutorEditando, setInstrutorEditando] = useState<Instrutor | null>(null);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:71:      const response = await fetch(`${API_BASE_URL}/simuladores/instrutores`, {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:85:  const abrirModal = (instrutor?: Instrutor) => {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:86:    if (instrutor) {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:87:      setInstrutorEditando(instrutor);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:89:        funcionario_id: instrutor.funcionario_id.toString(),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:90:        habilitacoes: instrutor.habilitacoes || '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:91:        observacoes: instrutor.observacoes || '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:108:      const url = instrutorEditando
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:109:        ? `${API_BASE_URL}/simuladores/instrutores/${instrutorEditando.id}`
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:110:        : `${API_BASE_URL}/simuladores/instrutores`;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:113:        method: instrutorEditando ? 'PUT' : 'POST',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:122:        toast.warning(`Instrutor ${instrutorEditando ? 'atualizado' : 'cadastrado'} com sucesso!`);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:127:        toast.warning(`Erro ao salvar instrutor: ${errorData.message || 'Erro desconhecido'}`);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:131:      toast.warning('Não foi possível salvar o instrutor. Verifique a conexão.');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:138:    if (!(await confirmDialog('Tem certeza que deseja remover este instrutor?'))) return;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:141:      const response = await fetch(`${API_BASE_URL}/simuladores/instrutores/${id}`, {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:153:        toast.warning(`Erro ao remover instrutor: ${errorData.message || 'Erro desconhecido'}`);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:157:      toast.warning('Não foi possível remover o instrutor. Verifique a conexão.');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:192:              {instrutores.map((inst) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:222:          {instrutores.length === 0 && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:225:              title="Nenhum instrutor cadastrado"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:226:              description="Comece adicionando um novo instrutor de simulador."
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/cadastros/instrutores/index.tsx:237:              {instrutorEditando ? 'Editar Instrutor' : 'Novo Instrutor'}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:70:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:79:  assinatura_instrutor_timestamp?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:128:type SortColumn = 'participante_nome' | 'sessao_titulo' | 'instrutor_nome' | 'data_hora' | 'status';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:158:  const [instrutores, setInstrutores] = useState<Instrutor[]>([]);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:245:      const response = await fetch(`${API_BASE_URL}/simuladores/instrutores`, {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:255:      console.error('Erro ao carregar instrutores:', error);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:518:      // Filtro de instrutor
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:521:        !f.instrutor_nome?.toLowerCase().includes(filtroInstrutor.toLowerCase())
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:539:          f.instrutor_nome?.toLowerCase().includes(termo) ||
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:563:          case 'instrutor_nome':
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:564:            valA = a.instrutor_nome || '';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:565:            valB = b.instrutor_nome || '';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:642:        ficha.assinatura_aluno_timestamp || ficha.assinatura_instrutor_timestamp;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:644:        toast.warning('A ficha precisa ser avaliada pelo instrutor primeiro');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:657:    if (papel === 'INSTRUTOR' && ficha?.assinatura_instrutor_timestamp) {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:849:        {ficha.assinatura_aluno_timestamp && ficha.assinatura_instrutor_timestamp && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:971:                {instrutores.map((inst) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:1111:                          Instrutor: {ficha.instrutor_nome || '-'}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:1138:                      <SortableHeader column="instrutor_nome" label="Instrutor" />
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/index.tsx:1204:                          <p className="text-sm text-gray-700">{ficha.instrutor_nome || '-'}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/sessoes/[id]/index.tsx:132:                  {sessao.instrutor.nome}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/sessoes/[id]/index.tsx:133:                  <span className="text-sm text-gray-500 ml-2">({sessao.instrutor.matricula})</span>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/Modais/__tests__/tripulacao-utils.test.ts:210:    expect(funcaoExigeComandante('instrutor')).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/__tests__/fichaModeloPdf.test.ts:35:    expect(dados.instrutor_nome).toBe('');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/hooks/queries/escalas-types.ts:256:  funcionario_is_instrutor?: boolean;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:11:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:26:    instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:129:  if (filters?.instrutor) {
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:130:    chips.push(`<span class="chip">Instrutor: ${escapeHtml(filters.instrutor)}</span>`);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:257:                  <div class="crew-row"><span class="crew-label crew-instr">Instr</span>${escapeHtml(session.instrutor_nome || 'Não informado')}</div>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:493:      /* instructor / examiner */
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:680:                <span class="cal-instr">${escapeHtml(s.instrutor_nome || '')}</span>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:899:  filters?: { instrutor?: string; status?: string; busca?: string };
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:967:        <div class="sc-instr">Instr: ${escapeHtml(s.instrutor_nome || '—')}</div>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/monthlyAgendaPrint.ts:1142:          <div><span class="ag-badge ag-instr">Instr</span> ${escapeHtml(s.instrutor_nome || '—')}</div>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/__tests__/GradeGantt.utils.test.ts:52:    funcionario_is_instrutor: partial.funcionario_is_instrutor ?? false,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:7: * - Cabeçalho (participante, instrutor, simulador, sessão/modelo, data/hora, carga horária)
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:78:  instrutor_id?: number | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:79:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:93:  instrutor_codigo_anac?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:99:  assinatura_instrutor_timestamp?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:101:  assinatura_instrutor_ip?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:103:  assinatura_instrutor_imagem?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:774:      // Checks (somente instrutor em sessão de check)
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:865:      // Se é assinatura do instrutor e é uma sessão de check, validar e salvar resultados
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:955:    !!ficha?.instrutor_id &&
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:957:    String(ficha.instrutor_id) === String(user.funcionario_id);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1030:                Esta ficha já foi finalizada. Alterações diretas ficam bloqueadas; o instrutor deve
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1068:                  <p className="text-sm font-semibold text-slate-900">{ficha.instrutor_nome}</p>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1287:                      Somente observações podem ser alteradas, sempre com solicitação do instrutor
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1522:                      {ficha.assinatura_aluno_timestamp && !ficha.assinatura_instrutor_timestamp ? (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1530:                      ) : ficha.assinatura_instrutor_timestamp ? (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1548:                    {ficha.assinatura_instrutor_timestamp ? (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1551:                          {ficha.assinatura_instrutor_imagem ? (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1553:                              src={ficha.assinatura_instrutor_imagem}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1554:                              alt="Assinatura do instrutor"
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1563:                          {new Date(ficha.assinatura_instrutor_timestamp).toLocaleString('pt-BR')}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1565:                        {ficha.assinatura_instrutor_ip && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1567:                            IP: {ficha.assinatura_instrutor_ip}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1689:                  {/* Aprovação (somente para instrutor) */}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1875:                      !ficha.assinatura_instrutor_timestamp
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1952:                        instrutor_nome: ficha.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1953:                        instrutor_codigo_anac: ficha.instrutor_codigo_anac || '',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1973:                        assinatura_instrutor_timestamp: ficha.assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:1975:                        assinatura_instrutor_dataUrl: ficha.assinatura_instrutor_imagem,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:2011:                {/* Botão Gerar Qualificação — fichas do fluxo de check aprovadas pelo instrutor */}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:2014:                  ficha.assinatura_instrutor_timestamp && (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/fichas/[id]/index.tsx:2197:          {/* Avaliação de Checks (somente para instrutor em sessões de check) */}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:51:  instrutor_id: number;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:52:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:215:  const [instrutores, setInstrutores] = useState<Instrutor[]>([]);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:275:        const instRes = await fetch(`${API_BASE_URL}/simuladores/instrutores`, { headers: _authH });
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:507:      if (filtroInstrutor && ag.instrutor_id !== Number(filtroInstrutor)) return false;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:514:        const instrutorMatch = ag.instrutor_nome.toLowerCase().includes(buscaLower);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:519:        if (!simuladorMatch && !instrutorMatch && !participantesMatch) return false;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:603:    const instrutorSelecionado = instrutores.find(
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:604:      (instrutor) => instrutor.id === Number(filtroInstrutor),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:610:        instrutor: instrutorSelecionado?.nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:634:      instrutor_nome: agendamento.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:650:    const instrutorSelecionado = instrutores.find((i) => i.id === Number(filtroInstrutor));
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:655:        instrutor: instrutorSelecionado?.nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:666:    const instrutorSelecionado = instrutores.find((i) => i.id === Number(filtroInstrutor));
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:672:        instrutor: instrutorSelecionado?.nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:681:    const instrutorSelecionado = instrutores.find((i) => i.id === Number(filtroInstrutor));
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:686:          instrutor: instrutorSelecionado?.nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:721:          instrutor_id: agendamento.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:722:          instrutor_nome: agendamento.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:764:          }\n${t('sim.calendar.card.instructor')}: ${
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:765:            agendamento.instrutor_nome
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:816:          {t('sim.calendar.card.instructor')}: {agendamento.instrutor_nome}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:1066:          {/* Filtro instrutor — oculto para readOnly (só veem as próprias sessões) */}
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:1073:              <option value="">{t('sim.calendar.instructor.all')}</option>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx:1074:              {instrutores.map((i) => (
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/qualificacoes/index.ts:24:  is_instrutor?: number | boolean;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/qualificacoes/index.ts:64:  funcionario_is_instrutor?: number | boolean;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/qualificacoes/index.ts:97:  instrutor_id?: number; // SECURITY: Foreign key to funcionarios table
+/Users/filipedaumas/Documents/Airtrust/src/test/funcionarios.test.ts:149:        is_instrutor: true,
+/Users/filipedaumas/Documents/Airtrust/src/test/funcionarios.test.ts:154:        is_instrutor: funcionario.is_instrutor ? 1 : 0,
+/Users/filipedaumas/Documents/Airtrust/src/test/funcionarios.test.ts:158:      expect(dbFormat.is_instrutor).toBe(1);
+/Users/filipedaumas/Documents/Airtrust/src/test/funcionarios.test.ts:162:        is_instrutor: Boolean(dbFormat.is_instrutor),
+/Users/filipedaumas/Documents/Airtrust/src/test/funcionarios.test.ts:166:      expect(boolFormat.is_instrutor).toBe(true);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/BlocoAeronave.tsx:241:    const instrutorEmVoo = Boolean(linha.isInstrutor && linha.funcao !== 'INSTRUTOR');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/BlocoAeronave.tsx:246:      ? `${nomeExibido} | ${prefixoLinha || prefixo} | ${resumoPeriodo} | ${linha.observacoes}${instrutorEmVoo ? ' | Instrutor em voo' : ''}`
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/BlocoAeronave.tsx:247:      : `${nomeExibido} | ${prefixoLinha || prefixo} | ${resumoPeriodo}${instrutorEmVoo ? ' | Instrutor em voo' : ''}`;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/BlocoAeronave.tsx:253:            instrutorEmVoo ? 'bg-amber-50/80 border-r-amber-200' : 'bg-white',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/BlocoAeronave.tsx:262:              instrutorEmVoo && 'bg-amber-50',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/BlocoAeronave.tsx:270:                    instrutorEmVoo ? 'text-amber-950' : 'text-slate-800',
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/escalas/components/EscalaCalendario/BlocoAeronave.tsx:276:                {instrutorEmVoo && (
+/Users/filipedaumas/Documents/Airtrust/src/shared/types.ts:98:  instrutor_id?: number;
+/Users/filipedaumas/Documents/Airtrust/src/shared/types.ts:160:  is_instrutor: z.number().int().min(0).max(1).default(0),
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/NovaQualificacaoModal.tsx:43:    instrutor: '',
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/NovaQualificacaoModal.tsx:157:        instrutor: formData.instrutor?.trim() || null,
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/NovaQualificacaoModal.tsx:338:              value={formData.instrutor}
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/NovaQualificacaoModal.tsx:339:              onChange={(e) => setFormData((prev) => ({ ...prev, instrutor: e.target.value }))}
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/NovaQualificacaoModal.tsx:341:              placeholder="Nome do instrutor"
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/middleware/tenant.ts:27:  role: 'admin' | 'manager' | 'editor' | 'viewer' | 'instructor' | 'student';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/middleware/tenant.ts:36:  instructor: 60,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/middleware/tenant.ts:57:    case 'instructor':
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/middleware/tenant.ts:58:      return 'instructor';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/middleware/tenant.ts:426:    case 'instructor':
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/index.ts:126:  is_instrutor: boolean;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/index.ts:162:  instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/index.ts:219:  instrutor_id: number;
+/Users/filipedaumas/Documents/Airtrust/src/test/test-brazilian-dates.mjs:10:  const csvBrasileiroValido = `funcionario_matricula,treinamento_codigo,data_conclusao,data_vencimento,instrutor,nota_final,observacoes
+/Users/filipedaumas/Documents/Airtrust/src/test/test-brazilian-dates.mjs:45:  const csvFormatoAntigo = `funcionario_matricula,treinamento_codigo,data_conclusao,data_vencimento,instrutor,nota_final,observacoes
+/Users/filipedaumas/Documents/Airtrust/src/test/test-brazilian-dates.mjs:123:  const csvDatasInvalidas = `funcionario_matricula,treinamento_codigo,data_conclusao,data_vencimento,instrutor,nota_final,observacoes
+/Users/filipedaumas/Documents/Airtrust/src/shared/schemas/index.ts:30:  is_instrutor: z.boolean().default(false),
+/Users/filipedaumas/Documents/Airtrust/src/shared/schemas/index.ts:44:  instrutor: z.string().optional(),
+/Users/filipedaumas/Documents/Airtrust/src/shared/schemas/index.ts:66:  instrutor_obrigatorio: z.boolean().default(false),
+/Users/filipedaumas/Documents/Airtrust/src/shared/schemas/index.ts:95:  instrutor: z.string().optional(),
+/Users/filipedaumas/Documents/Airtrust/src/shared/schemas/index.ts:116:      instrutor: z.string().optional(),
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/QualificacaoCard.tsx:18:    instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/QualificacaoCard.tsx:94:        {qualificacao.instrutor && (
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/QualificacaoCard.tsx:97:            <span>Instrutor: {qualificacao.instrutor}</span>
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/middleware/rbac.ts:27:  if (r === 'instrutor' || r === 'instructor') return 'manager'; // instrutor has manager-level access for routes
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:148:  instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:159:  assinatura_instrutor: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:162:  data_assinatura_instrutor: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:165:  ip_assinatura_instrutor: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:188:  | 'assinatura_instrutor'
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:191:  | 'data_assinatura_instrutor'
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:194:  | 'ip_assinatura_instrutor'
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:202:  instrutor_nome?: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:308:  instrutor_id?: number;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/types/simulador.ts:317:  instrutor_id?: number;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/shared/handlers/horasVooFromSimulador.handler.ts:11:              fs.instrutor_id, fs.duracao_min
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/shared/handlers/horasVooFromSimulador.handler.ts:24:      instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/shared/handlers/horasVooFromSimulador.handler.ts:65:  const funcao = ficha.instrutor_id === ficha.funcionario_id ? 'PIC' : 'ALUNO';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/schemas/index.ts:26:  is_instrutor: z.boolean().default(false),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/schemas/index.ts:63:  instrutor: z.string().optional().nullable(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/schemas/index.ts:98:  instrutor_id: z.number().int().positive().optional(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/schemas/index.ts:123:  instrutor_id: z.number().int().positive().optional(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/schemas/index.ts:124:  instrutor_codigo_anac: z.string().optional(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:34:  instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:35:  instrutor_nome: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:36:  instrutor_guerra: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:253:            _instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:313:            _instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:486:      instrutor_id: 5,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:487:      instrutor_nome: 'Instrutor Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/services/treinamentos-planejados-integration.test.ts:488:      instrutor_guerra: 'Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:131:          instrutor_id: 4,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:202:                instrutor_id: 4,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:203:                instrutor_nome: 'Instrutor Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/treinamentos-planejados.test.ts:204:                instrutor_guerra: 'Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:134:  it('reaplica o instrutor quando o readback inicial volta nulo', async () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:159:        'SELECT id, data_conclusao, data_vencimento, observacoes, instrutor,',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:168:              instrutor: readbackCount === 1 ? null : 'Cap. Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:176:        'SET instrutor = ?,',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:200:          instrutor: '  Cap. Silva  ',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:216:        instrutor: 'Cap. Silva',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-historico-write.test.ts:236:      (call) => call.method === 'run' && call.query.includes('SET instrutor = ?,'),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Configuracoes/Usuarios.tsx:53:  if (role === 'instructor' || role === 'instrutor') return 'instructor';
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Configuracoes/Usuarios.tsx:91:    if (normalizedRole === 'instructor') return t('settings.users.role.instructor');
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Configuracoes/Usuarios.tsx:505:                          : normalizedRole === 'instructor'
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Configuracoes/Usuarios.tsx:633:                    <option value="instructor">{t('settings.users.roleOption.instructor')}</option>
+/Users/filipedaumas/Documents/Airtrust/src/react-app/pages/Configuracoes/Usuarios.tsx:738:                  <option value="instructor">{t('settings.users.roleOption.instructor')}</option>
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:194:        instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/notificacoes-convocacao.ts:490:          instrutor: String(body.instrutor || '').trim() || 'Não informado',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/scripts/etlImport.ts:105:  instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/scripts/etlImport.ts:116:    db.prepare(`INSERT INTO qualificacoes_historico (funcionario_id, qualificacao_id, data_conclusao, data_vencimento, validade_meses, codigo, categoria, numero_certificado, observacoes, arquivo_url, nota, instrutor, carga_horaria, status, created_at, updated_at)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/scripts/etlImport.ts:131:      enriched.instrutor ?? null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/ficha360.ts:383:                 t.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/ficha360.ts:384:                 i.nome AS instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/ficha360.ts:400:                      ON i.id = t.instrutor_id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:39:      instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:84:        nota, observacoes, data_sessao, tipo_sessao, tipo_aeronave, instrutor_id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:98:        instrutor_id || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:142:              instrutor_id_notificado, status
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:155:              instrutor_id || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:197:        i.nome as instrutor_nome
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:200:       LEFT JOIN funcionarios i ON hnm.instrutor_id = i.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:230:        i.nome as instrutor_nome
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:232:       LEFT JOIN funcionarios i ON hnm.instrutor_id = i.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:282:        i.nome as instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:283:        i.email as instrutor_email,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:286:       LEFT JOIN funcionarios i ON ar.instrutor_id_notificado = i.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-extras.ts:370:      `SELECT sa.id, sa.funcionario_id, sa.instrutor_id, sa.data, sa.is_check
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:174:    //   1. Flag explícita no body: gerar_ficha_instrutor / gerar_ficha_examinador
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:178:      const instrutorEspecial =
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:179:        b.instrutor_id !== undefined ? b.instrutor_id : (a as any).instrutor_id;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:180:      if (instrutorEspecial) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:223:              b.gerar_ficha_instrutor === true || codsAtuais.some((c) => c.startsWith('FAP07')),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:237:                    assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:239:                    assinatura_instrutor_imagem,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:245:            .bind(id, instrutorEspecial, esp.modelo)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:253:                fichaExistente.assinatura_instrutor_timestamp ||
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:255:                fichaExistente.assinatura_instrutor_imagem ||
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:285:                 (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:292:                instrutorEspecial,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:293:                examinadorEsp || instrutorEspecial,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:378:      ? "UPDATE simulador_agendamentos SET simulador_id=?,aeronave_id=?,tipo_dispositivo=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=?"
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:379:      : "UPDATE simulador_agendamentos SET simulador_id=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=?";
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:390:          b.instrutor_id !== undefined ? b.instrutor_id : a.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:404:          b.instrutor_id !== undefined ? b.instrutor_id : a.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:419:    // SINCRONIZAR instrutor_id nas fichas quando o instrutor da sessão muda.
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:420:    // Apenas fichas ainda não assinadas pelo instrutor (não concluídas).
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:422:    // nesses casos o instrutor da ficha é o examinador, não o instrutor da sessão.
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:425:      b.instrutor_id !== undefined &&
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:426:      String(b.instrutor_id) !== String((a as any).instrutor_id)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:432:           SET instrutor_id = ?,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:436:             AND assinatura_instrutor_timestamp IS NULL`,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:438:          .bind(b.instrutor_id, id)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:454:             assinatura_instrutor_ip = NULL,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:455:             assinatura_instrutor_timestamp = NULL,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:456:             assinatura_instrutor_imagem = NULL,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:458:             assinatura_instrutor = 0,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:460:             assinatura_instrutor_completa = 0,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:548:          const instrutorIdFinal =
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:549:            b.instrutor_id !== undefined
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:550:              ? b.instrutor_id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:551:              : (sessaoAtual as any)?.instrutor_id || null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:575:            `INSERT INTO fichas_sessao (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:582:              instrutorIdFinal,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:659:               assinatura_instrutor_ip = NULL,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:660:               assinatura_instrutor_timestamp = NULL,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:661:               assinatura_instrutor_imagem = NULL,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:663:               assinatura_instrutor = 0,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes-update.ts:665:               assinatura_instrutor_completa = 0,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-assets.ts:56:  return ['admin', 'administrador', 'manager', 'gestor', 'instrutor', 'instructor'].includes(role);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:18:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:19:  instrutor_codigo_anac?: string;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:30:  assinatura_instrutor_timestamp?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:32:  assinatura_instrutor_dataUrl?: string | null;
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:435:      Boolean(dados.assinatura_aluno_timestamp && dados.assinatura_instrutor_timestamp));
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:517:  drawInfoField('Instrutor:', getDisplayValue(dados.instrutor_nome), margin + 3, 16, lineY);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:520:    getDisplayValue(dados.instrutor_codigo_anac, '____________'),
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:722:    dados.assinatura_aluno_dataUrl || dados.assinatura_instrutor_dataUrl
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:745:  const sigImgH_i = calcImgH(dados.assinatura_instrutor_dataUrl);
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:822:    dados.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:823:    dados.assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/src/react-app/services/pdf-ficha-client.ts:824:    dados.assinatura_instrutor_dataUrl,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:26:  instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:30:  instrutor_nome: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:79:  instrutor_nome?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:139:         fs.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:143:         instrutor.nome AS instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:148:       LEFT JOIN funcionarios instrutor ON instrutor.id = fs.instrutor_id AND instrutor.deleted_at IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:282:    if (String(ficha.instrutor_id) !== String(funcionarioId)) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:284:        { success: false, error: 'Apenas o instrutor vinculado à ficha pode solicitar edição' },
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:366:        instrutor_id: ficha.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:416:      mensagem: `${ficha.instrutor_nome || 'Instrutor'} solicitou alteração de observações na ficha #${fichaId}.`,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:453:      (funcionarioId && String(ficha.instrutor_id) === String(funcionarioId));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:501:           instrutor.nome AS instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-edicoes.ts:509:         LEFT JOIN funcionarios instrutor ON instrutor.id = fs.instrutor_id AND instrutor.deleted_at IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:48:  instrutor_id: z.number().int().positive().optional().nullable(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:81:  instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:82:  instrutor_nome: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:83:  instrutor_guerra: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:231:        instrutor_id INTEGER,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:421:    instrutor_id: row.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:422:    instrutor_nome: row.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:423:    instrutor_guerra: row.instrutor_guerra,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:449:    instrutorId?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:464:                    t.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:465:                    instr.nome AS instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:466:                    instr.guerra AS instrutor_guerra,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:480:               LEFT JOIN funcionarios instr ON instr.id = t.instrutor_id AND instr.deleted_at IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:503:  if (filters.instrutorId) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:504:    sql += ' AND t.instrutor_id = ?';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:505:    params.push(Number(filters.instrutorId));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:578:    instrutorId: c.req.query('instrutor_id'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:605:    instrutorId: c.req.query('instrutor_id'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:631:    instrutorId: c.req.query('instrutor_id'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:728:        instrutor_id, local, carga_horaria_prevista, titulo, descricao, observacoes,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:739:      input.instrutor_id ?? null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:1160:    if (input.instrutor_id !== undefined) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:1161:      updates.push('instrutor_id = ?');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/treinamentos-planejados.ts:1162:      params.push(input.instrutor_id ?? null);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:3: * Routes: GET /agendamentos, GET /instrutores,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:117:        f.id as instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:118:        f.nome as instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:119:        f.codigo_anac as instrutor_codigo_anac,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:134:      LEFT JOIN funcionarios f ON sa.instrutor_id = f.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:165:        // Instrutor pode ser também aluno — vê sessões onde é instrutor OU participante
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:167:          ' AND (sa.instrutor_id = ? OR EXISTS (SELECT 1 FROM sessoes_participantes sp2 WHERE sp2.sessao_id = sa.id AND sp2.funcionario_id = ? AND sp2.deleted_at IS NULL))';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:200:// GET /api/simuladores/instrutores - Listar instrutores
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:201:app.get('/instrutores', async (c) => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:212:        AND is_instrutor = 1
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:257:        sa.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:258:        fi.nome as instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:296:      INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:333:          ' AND (sa.instrutor_id = ? OR EXISTS (SELECT 1 FROM sessoes_participantes sp3 WHERE sp3.sessao_id = sa.id AND sp3.funcionario_id = ? AND sp3.deleted_at IS NULL))';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:401:      instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:440:    if (!data || !instrutor_id || !tipo_sessao) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:543:        instrutor_id, examinador_id, is_check, tipo_sessao, tipo_dispositivo, template_id, status, observacoes, nome, empresa_id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:554:        instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:567:        instrutor_id, examinador_id, is_check, tipo_sessao, template_id, status, observacoes, nome, empresa_id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:577:        instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:606:      // FAP07 → ficha especial "TREINAMENTO DE INSTRUTOR DE VOO" (avaliado = instrutor da sessão)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:607:      // FAP13 → ficha especial "CREDENCIAMENTO DE EXAMINADOR"    (avaliado = instrutor da sessão)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:608:      if (instrutor_id) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:642:               (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:649:              instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:650:              examinador_id || instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:703:          instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:714:          instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:878:    // 3. Buscar instrutor
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:879:    const instrutor = await c.env.DB.prepare(
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:882:      .bind(s.instrutor_id)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:895:      instrutor: instrutor || { nome: 'N/A', matricula: 'N/A' },
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:923:          WHEN f.assinatura_instrutor_timestamp IS NOT NULL THEN
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:955:        COALESCE(instrutor.nome, 'N/A') as instrutor_nome
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:963:      LEFT JOIN funcionarios instrutor ON f.instrutor_id = instrutor.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1011:         fi.id AS instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1012:         fi.nome AS instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1013:         fi.email AS instrutor_email,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1014:         fi.telefone AS instrutor_telefone,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1021:       LEFT JOIN funcionarios fi ON fi.id = sa.instrutor_id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1038:        instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1039:        instrutor_nome: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1040:        instrutor_email: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1041:        instrutor_telefone: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1085:    if (sessao.instrutor_id) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1086:      destinatarios.set(sessao.instrutor_id, {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1087:        funcionario_id: sessao.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1088:        nome: sessao.instrutor_nome || 'Instrutor',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1089:        email: sessao.instrutor_email || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1090:        telefone: sessao.instrutor_telefone || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-sessoes.ts:1091:        papel: 'instrutor',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/sgso-next-gen.ts:12://      `qualificacoes_historico` com `origem_tipo = 'PRESENCIAL'` (via instructor)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/empresas-usuarios.ts:124:  if (role === 'instructor' || role === 'instrutor') return 'instructor';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/empresas-usuarios.ts:139:    case 'instructor':
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/empresas-usuarios.ts:154:    case 'instructor':
+/Users/filipedaumas/Documents/Airtrust/src/types/qualificacoes.ts:29:  instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:47:function buildInstrutorSection(instrutor: {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:52:  const safeName = escapeHtml(instrutor.nome);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:53:  const meta = [instrutor.codigoAnac, instrutor.matricula]
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:59:    ? `<span class="instructor-meta-label" style="color:#64748b;font-size:7.1pt;font-weight:700;text-transform:uppercase;letter-spacing:.45px;white-space:nowrap;">CANAC / Matrícula</span><span class="instructor-meta-value" style="color:#1d1d1f;font-size:9pt;font-weight:650;line-height:1.15;">${meta}</span>`
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:62:  return `<div class="instructor-section" style="border:1px solid #dbeafe;background:#eff6ff;border-radius:9px;padding:7px 10px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center;min-height:0;"><div class="instructor-name-block" style="display:flex;align-items:center;gap:8px;min-width:0;"><span class="instructor-label" style="color:#64748b;font-size:7.1pt;font-weight:700;text-transform:uppercase;letter-spacing:.45px;white-space:nowrap;">Instrutor</span><span class="instructor-name" style="color:#1d1d1f;font-size:9pt;font-weight:700;line-height:1.15;overflow:hidden;text-overflow:ellipsis;">${safeName}</span></div>${metaHtml ? `<div class="instructor-meta-block" style="display:flex;align-items:center;gap:7px;min-width:0;">${metaHtml}</div>` : ''}</div>`;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:66:  const hasInstrutorPlaceholder = templateHtml.includes('{{instrutor_section}}');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:68:  const style = `<style id="airtrust-instrutor-section-style">
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:73:  .instructor-section {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:84:  .instructor-name-block,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:85:  .instructor-meta-block {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:91:  .instructor-label,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:92:  .instructor-meta-label {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:100:  .instructor-name,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:101:  .instructor-meta-value {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:110:  if (!result.includes('airtrust-instrutor-section-style')) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:121:    return result.replace('</div>\n\n  <!-- QUALIFICAÇÃO -->', '</div>\n\n  {{instrutor_section}}\n\n  <!-- QUALIFICAÇÃO -->');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:127:      '{{instrutor_section}}\n\n  $1',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:131:  return result.replace(/<\/body>/i, '{{instrutor_section}}</body>');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:148:    // Ler body opcional para flags como para_instrutor
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:150:    const paraInstrutor = Boolean(body?.para_instrutor);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:151:    const nomeInstrutorInformado = String(body?.nome_instrutor || '').trim();
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:152:    const cpfInstrutorInformado = String(body?.cpf_instrutor || '').trim();
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:153:    const matriculaInstrutorInformada = String(body?.matricula_instrutor || '').trim();
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:238:            nomeInstrutor: nomeInstrutorInformado || qualificacao.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:251:          'Nome do instrutor não informado para geração do certificado do instrutor.',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:315:      const instrutorQualificacao = String(qualificacao.instrutor || '').trim();
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:316:      const deveMostrarInstrutor = Boolean(instrutorQualificacao);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:317:      const instrutorCertificado = deveMostrarInstrutor
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:320:            nomeInstrutor: instrutorQualificacao,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:324:      const instrutorNomeCertificado =
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:325:        instrutorCertificado?.nome || (deveMostrarInstrutor ? instrutorQualificacao : '');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:344:        instrutor:
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:345:          (participanteCertificado?.nome || qualificacao.instrutor || undefined) ?? undefined,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:539:      // Ajustar template para certificado de instrutor
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:599:          const instrutorSection = deveMostrarInstrutor
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:601:                nome: instrutorNomeCertificado,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:602:                codigoAnac: instrutorCertificado?.codigoAnac,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:603:                matricula: instrutorCertificado?.matricula,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:626:            instrutor_nome: instrutorNomeCertificado,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:627:            instrutor_codigo_anac: deveMostrarInstrutor ? instrutorCertificado?.codigoAnac || '' : '',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:628:            instrutor_matricula: deveMostrarInstrutor ? instrutorCertificado?.matricula || '' : '',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:629:            instrutor_section: instrutorSection,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:754:      // Para certificados de instrutor, tentar localizar o `funcionario.id` do instrutor
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:755:      // (busca por nome / cpf / matricula). Se encontrado, arquivar na pasta do instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:760:          const instrutorFuncionario = await resolveFuncionarioInstrutorNaEmpresa(db, {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:765:              qualificacao.instrutor ||
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:771:          if (instrutorFuncionario?.id) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:772:            targetFuncionarioId = instrutorFuncionario.id;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-write.ts:775:          console.warn('[GERAR PDF] Falha ao tentar resolver funcionario do instrutor:', e);
+/Users/filipedaumas/Documents/Airtrust/src/types/index.ts:49:  instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/src/types/index.ts:99:  instrutor_id: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-matriculas.ts:295:// ── Treinamentos EAD enriquecidos (dashboard do aluno/instrutor) ─────────────
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/lms-matriculas.ts:1297:// ── Finalizar curso manualmente (aluno/instrutor) ───────────────────────────
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:180:          WHEN f.assinatura_instrutor_timestamp IS NOT NULL THEN
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:212:        COALESCE(instrutor.nome, 'N/A') as instrutor_nome
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:220:      LEFT JOIN funcionarios instrutor ON f.instrutor_id = instrutor.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:237:          AND f.assinatura_instrutor_timestamp IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:242:        q += ' AND (f.instrutor_id = ? OR f.colaborador_id_aluno = ?)';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:281:      'INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,tipo_sessao,tipo_aeronave,status,data_sessao,aprovado)VALUES(?,?,?,?,?,?,?,?,?)',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:287:        b.instrutor_id || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:341:        fs.assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:343:        fs.assinatura_instrutor_ip,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:345:        fs.assinatura_instrutor_imagem,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:361:        fi.id as instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:362:        fi.nome as instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:363:        fi.matricula as instrutor_matricula,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:364:        fi.codigo_anac as instrutor_codigo_anac,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:383:      INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id AND fi.deleted_at IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:408:            ? // Instrutor pode ser o instrutor OU o aluno da ficha
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:409:              String(f.instrutor_id) === String(funcId) ||
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:663:      instrutor_id: f.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:664:      instrutor_nome: f.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:665:      instrutor_matricula: f.instrutor_matricula,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:666:      instrutor_codigo_anac: f.instrutor_codigo_anac || 'N/A',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:684:      assinatura_instrutor_timestamp: f.assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:686:      assinatura_instrutor_ip: f.assinatura_instrutor_ip,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:688:      assinatura_instrutor_imagem: f.assinatura_instrutor_imagem || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:723:        fs.assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:734:        fi.nome as instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:735:        fi.codigo_anac as instrutor_codigo_anac,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:741:      INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id AND fi.deleted_at IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:845:      instrutor_nome: f.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:846:      instrutor_codigo_anac: f.instrutor_codigo_anac || 'N/A',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:855:      assinatura_instrutor_timestamp: f.assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:999:      const instrutorAssinou = Boolean((a as any)?.assinatura_instrutor_timestamp);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:1001:      if (instrutorAssinou) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:1050:        const instrutorInfo = await getFuncionarioUserInfo(
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:1052:          String((a as any).instrutor_id),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:1054:        const instrutorNome = instrutorInfo?.nome || 'O instrutor';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas.ts:1059:          mensagem: `${instrutorNome} concluiu a avaliação da sua ficha. Falta sua assinatura para encaminhar a ficha à etapa final do instrutor.`,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/importacao-xlsx.ts:185:                is_instrutor = ?, is_examinador = ?, ativo = ?, updated_at = datetime('now')
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/importacao-xlsx.ts:214:                is_instrutor, is_examinador, ativo, created_at, updated_at
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/importacao-xlsx.ts:356:              data_conclusao, data_vencimento, instrutor, observacoes,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/importacao-xlsx.ts:363:              instrutor = excluded.instrutor,
+/Users/filipedaumas/Documents/Airtrust/src/schemas/qualificacoes.schema.ts:117:  instrutor: z.string().optional().nullable(), // Ainda existe na tabela
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:45:          fi.nome  AS instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:54:         INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:251:      // Para assinar como INSTRUTOR: deve ser o instrutor da ficha
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:252:      // (mesmo que também seja aluno em outra ficha, aqui o papel é de instrutor)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:253:      if (b.tipo === 'INSTRUTOR' && String(f.instrutor_id) !== String(funcId)) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:254:        return c.json({ success: false, error: 'Você não é o instrutor desta ficha' }, 403);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:281:      // Notificar instrutor
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:282:      const instrutorInfo = await getFuncionarioUserInfo(c.env.DB, String(f.instrutor_id));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:283:      if (instrutorInfo?.userId) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:286:          userId: instrutorInfo.userId,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:292:          acaoPrimaria: 'Assinar como instrutor',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:330:        "UPDATE fichas_sessao SET assinatura_instrutor_ip=?,assinatura_instrutor_timestamp=?,assinatura_instrutor_imagem=?,assinatura_instrutor=1,status=?,resultado_final=?,aprovado=?,updated_at=datetime('now') WHERE id=?",
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:337:      const instrutorInfo = await getFuncionarioUserInfo(c.env.DB, String(f.instrutor_id));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:338:      if (instrutorInfo?.userId) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:340:          userId: instrutorInfo.userId,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:354:          mensagem: `Sua assinatura e a assinatura do instrutor já foram registradas. Resultado final: ${resultadoTexto}. Não há mais ações pendentes; você pode abrir a ficha e visualizar o PDF.`,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:386:    // Quando a ficha fica concluída (instrutor assinou → APROVADO / NAO_APROVADO),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:438:        fi.nome as instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:439:        fi.cpf as instrutor_cpf,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:440:        fi.codigo_anac as instrutor_codigo_anac,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:449:       INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:501:      instrutor: ficha.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-fichas-acoes.ts:506:      assinatura_instrutor: ficha.assinatura_instrutor_timestamp,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:122:      observacoes, foto_url, status, ativo, is_instrutor, is_checador, empresa_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:193:      flagToInt(body.is_instrutor),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:362:  if (body.is_instrutor !== undefined) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:363:    updates.push('is_instrutor = ?');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios-mutations.ts:364:    bindings.push(flagToInt(body.is_instrutor));
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:21:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:30:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:108:        instrutor_nome: item.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:114:        instrutor_nome: item.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:205:         COALESCE(instrutor.nome, 'Instrutor') as instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:209:             AND f.assinatura_instrutor_timestamp IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:211:           WHEN f.instrutor_id = ?
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:213:             AND f.assinatura_instrutor_timestamp IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:220:       LEFT JOIN funcionarios instrutor ON instrutor.id = f.instrutor_id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:226:             AND f.assinatura_instrutor_timestamp IS NULL)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:228:           (f.instrutor_id = ?
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:230:             AND f.assinatura_instrutor_timestamp IS NULL)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:241:      instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:252:         COALESCE(instrutor.nome, 'Instrutor') as instrutor_nome
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:256:       LEFT JOIN funcionarios instrutor ON instrutor.id = f.instrutor_id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:259:         AND (f.colaborador_id_aluno = ? OR f.instrutor_id = ?)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:260:         AND f.assinatura_instrutor_timestamp IS NOT NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:270:      instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:281:      instrutor_nome: item.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:290:    instrutor_nome: item.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/assistente.ts:615:        const prefixo = item.papel === 'INSTRUTOR' ? 'Como instrutor' : 'Como aluno';
+/Users/filipedaumas/Documents/Airtrust/src/components/qualificacoes/QualificacoesCalendario.tsx:13:  instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/admin-manual-migrations.ts:459:      'DROP TABLE IF EXISTS instrutores_simulador_backup',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/admin-manual-migrations.ts:460:      'CREATE TABLE instrutores_simulador_backup AS SELECT * FROM instrutores_simulador',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/admin-manual-migrations.ts:461:      'DROP TABLE instrutores_simulador',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/admin-manual-migrations.ts:462:      `CREATE TABLE instrutores_simulador (
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/admin-manual-migrations.ts:472:      'INSERT INTO instrutores_simulador SELECT * FROM instrutores_simulador_backup',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/admin-manual-migrations.ts:473:      'DROP TABLE instrutores_simulador_backup',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-alocacoes-schemas.ts:37:  funcionario_is_instrutor: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-alocacoes-helpers-internal.ts:709:         COALESCE(f.is_instrutor, 0) AS funcionario_is_instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-alocacoes-helpers-internal.ts:792:    funcionario_is_instrutor: row.funcionario_is_instrutor === 1,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios.ts:332:      f.is_instrutor, f.is_checador,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/funcionarios.ts:948:      is_instrutor, is_checador,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:22:  tripulante: { is_instrutor?: number | null; is_checador?: number | null },
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:29:  // INSTRUTOR slots: only instructors
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:31:    return Boolean(tripulante.is_instrutor);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:134:    is_instrutor?: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:143:        `SELECT CAST(id AS TEXT) AS id, quinzena, is_instrutor, is_checador
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:154:        is_instrutor: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/escalas-tripulantes-operacionais.ts:163:        is_instrutor: flags?.is_instrutor ?? 0,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-admin.ts:662:      instrutor: qualificacao.instrutor || undefined,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/certificados/validacao.ts:95:        qh.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/certificados/validacao.ts:183:            instrutor_nome: cert.instrutor || 'N/A',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/certificados/validacao.ts:184:            instrutor_codigo_anac: 'N/A',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/atribuicao.ts:29:  instrutor: z.string().max(200).optional(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/atribuicao.ts:200:         (funcionario_id, qualificacao_id, data_conclusao, data_vencimento, instrutor, observacoes, status, renovada, created_at, updated_at, deleted_at)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/atribuicao.ts:208:        data.instrutor || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:31:  is_instrutor: z.number().min(0).max(1).default(0).optional(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:85:        hasInstrutor: cols.has('instrutor_id'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:108:      whereParts.push('instrutor_id = ?');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:116:    const query = `SELECT id, simulador_id, aluno_id, instrutor_id, checador_id, data_sessao, status, tipo_sessao, duracao_minutos, created_at, updated_at
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:132:    is_instrutor?: boolean;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:136:    const { status, setor, cargo, base, is_instrutor, page = 1, limit = 50 } = params || {};
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:157:    if (is_instrutor !== undefined) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:158:      where += ' AND is_instrutor = ?';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:159:      bindings.push(is_instrutor ? 1 : 0);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:297:      if (cols.has('instrutor_id')) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:298:        whereParts.push('instrutor_id = ?');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:344:    // Sessoes simulador (aluno/instrutor/checador)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:355:      if (cols.has('instrutor_id')) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/funcionarios.service.ts:356:        whereParts.push('instrutor_id = ?');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/qualificacoes-g1-sem.ts:25:  instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/qualificacoes-g1-sem.ts:201:    instrutor?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/qualificacoes-g1-sem.ts:274:            instrutor = COALESCE(?, instrutor),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/qualificacoes-g1-sem.ts:290:        params.instrutor ?? null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/qualificacoes-g1-sem.ts:318:         instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/qualificacoes-g1-sem.ts:334:      params.instrutor ?? null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/qualificacoes-g1-sem.ts:399:      instrutor: params.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-equipamentos.ts:54:// GET /api/simuladores/alertas - Listar todos alertas ativos (para instrutores/gestores)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-equipamentos.ts:65:        i.nome as instrutor_nome
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-equipamentos.ts:68:       LEFT JOIN funcionarios i ON ar.instrutor_id_notificado = i.id
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/html-to-pdf.ts:283:    '{{instrutor_nome}}': String(data.instrutor_nome || ''),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/html-to-pdf.ts:284:    '{{instrutor_codigo_anac}}': String(data.instrutor_codigo_anac || ''),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/html-to-pdf.ts:285:    '{{instrutor_matricula}}': String(data.instrutor_matricula || ''),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/html-to-pdf.ts:286:    '{{instrutor_section}}': String(data.instrutor_section || ''),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/html-to-pdf.ts:333:    '{{instrutor_nome}}': String(data.instrutor_nome || ''),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/html-to-pdf.ts:334:    '{{instrutor_codigo_anac}}': String(data.instrutor_codigo_anac || ''),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/html-to-pdf.ts:335:    '{{instrutor_matricula}}': String(data.instrutor_matricula || ''),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/html-to-pdf.ts:336:    '{{instrutor_section}}': String(data.instrutor_section || ''),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:22:  instrutor_id: number | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:23:  instrutor_nome: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:24:  instrutor_guerra: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:137:        instrutor_id INTEGER,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:241:                t.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:242:                instr.nome AS instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:243:                instr.guerra AS instrutor_guerra,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:251:           LEFT JOIN funcionarios instr ON instr.id = t.instrutor_id AND instr.deleted_at IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:379:  const instrutor = evento.instrutor_guerra || evento.instrutor_nome || null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:410:                instrutor = ?,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:424:        instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:441:         data_conclusao, data_vencimento, validade_meses, instrutor, observacoes,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-planejados-integration.ts:453:      instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico.ts:246:      qh.instrutor AS instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/pdf-generator.ts:21:  instrutor?: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:37:  payload: { instrutor?: unknown; instrutor_id?: unknown },
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:38:): Promise<{ instrutorNome: string | null; instrutorId: number | null; error?: string }> {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:39:  const instrutorIdNum = Number(payload.instrutor_id || 0);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:40:  const hasInstrutorId = Number.isInteger(instrutorIdNum) && instrutorIdNum > 0;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:43:    const instrutorRow = await db
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:50:      .bind(instrutorIdNum, empresaId)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:53:    if (!instrutorRow) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:55:        instrutorNome: null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:56:        instrutorId: instrutorIdNum,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:62:      instrutorNome: String(instrutorRow.guerra || instrutorRow.nome || '').trim() || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:63:      instrutorId: instrutorRow.id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:67:  const instrutorTexto =
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:68:    typeof payload.instrutor === 'string' && payload.instrutor.trim().length > 0
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:69:      ? payload.instrutor.trim()
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:73:    instrutorNome: instrutorTexto,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:74:    instrutorId: null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:141:                  qh.categoria, qh.numero_certificado, qh.instrutor, qh.carga_horaria,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:171:      instrutor: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:311:        instrutor: original.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:319:            renovada, numero_certificado, instrutor, carga_horaria, tipo_treinamento, status,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:333:          original.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:424:        instrutor_id: z.number().int().positive().optional(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:425:        instrutor: z.string().max(200).optional(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:543:    const instrutorResolution = await resolveInstrutorNomePorPayload(db, tenantCtx.empresaId, {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:544:      instrutor: parsed.data.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:545:      instrutor_id: parsed.data.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:547:    if (instrutorResolution.error) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:548:      return c.json({ success: false, error: instrutorResolution.error }, 400);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:550:    const instrutor = instrutorResolution.instrutorNome;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:560:        instrutor: instrutor || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:581:            instrutor: instrutor || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:613:            data_conclusao, data_vencimento, validade_meses, instrutor, observacoes, 
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:627:          instrutor || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:709:        instrutor: instrutor || null,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:779:    const instrutorResolution = await resolveInstrutorNomePorPayload(db, tenantCtx.empresaId, {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:780:      instrutor: body?.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:781:      instrutor_id: body?.instrutor_id,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:783:    if (instrutorResolution.error) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:784:      return c.json({ success: false, error: instrutorResolution.error }, 400);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:786:    const instrutorNormalizado = instrutorResolution.instrutorNome;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:840:             instrutor = ?,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:850:        instrutorNormalizado,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:860:        `SELECT id, data_conclusao, data_vencimento, observacoes, instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:871:        instrutor: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:876:    if (registroAtualizado && registroAtualizado.instrutor !== instrutorNormalizado) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:877:      console.warn('[qualificacoes/historico] instrutor mismatch after update, retrying', {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:879:        requested: instrutorNormalizado,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:880:        stored: registroAtualizado.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:886:              SET instrutor = ?,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:890:        .bind(instrutorNormalizado, id)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:895:          `SELECT id, data_conclusao, data_vencimento, observacoes, instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:906:          instrutor: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:924:        instrutor: instrutorNormalizado,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes/historico-write.ts:961:        instrutor: registroAtualizado?.instrutor ?? instrutorNormalizado,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/importacao/columnMappings.ts:459:      instrutor: ['instrutor', 'instructor', 'trainer'],
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/config/backup-modules.ts:44:      'instrutores_simulador',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:119:  it('resolve os dados do instrutor pelo nome na empresa e faz fallback para nome livre', async () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:174:  it('resolve o funcionario do instrutor por nome e evita cair no aluno do historico', async () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:230:  it('adapta o template do instrutor com texto correto, label e css A4', () => {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:235:          <div>Certificamos que o profissional abaixo ministrou, como instrutor, o seguinte treinamento:o treinamento descrito neste documento.</div>
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:243:      'Certificamos que o profissional abaixo ministrou, como instrutor, o treinamento descrito neste documento.',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:248:      'Certificamos que o profissional abaixo ministrou, como instrutor, o treinamento descrito neste documento. o treinamento descrito neste documento.',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:251:    expect(html).toContain('airtrust-instrutor-a4-fix');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:293:    expect(html).toContain('airtrust-instrutor-a4-fix');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/__tests__/routes/qualificacoes-certificados-helpers.test.ts:315:    expect(html).toContain('airtrust-instrutor-a4-fix');
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/exportacao.ts:52:          f.is_instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/exportacao.ts:95:      { header: 'Instrutor', key: 'is_instrutor', width: 10 },
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/exportacao.ts:126:        is_instrutor: row.is_instrutor ? 'Sim' : 'Não',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/exportacao.ts:227:        qh.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/exportacao.ts:357:      { header: 'Instrutor', key: 'instrutor', width: 28 },
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/exportacao.ts:401:        instrutor: r.instrutor || '',
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/simuladores-core.ts:7: *   2. sessoes      — registers /sessoes, /agendamentos, /instrutores, /participantes
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:446:  const instrutor = await resolveFuncionarioInstrutorNaEmpresa(db, {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:452:    nome: String(instrutor?.nome || nomeInstrutor).trim(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:453:    cpf: String(instrutor?.cpf || '').trim(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:454:    codigoAnac: String(instrutor?.codigo_anac || '').trim(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:455:    matricula: String(instrutor?.matricula || '').trim(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:456:    funcao: String(instrutor?.funcao || params.fallbackFuncao || 'Instrutor').trim(),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:468:    ? `<style id="airtrust-instrutor-a4-fix">
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:611:    : `<style id="airtrust-instrutor-a4-fix">
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:739:  if (templateHtml.includes('airtrust-instrutor-a4-fix')) {
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:756:    'Certificamos que o profissional abaixo ministrou, como instrutor, o treinamento descrito neste documento.';
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:780:      /Certificamos que o profissional abaixo ministrou,\s*como instrutor,\s*o seguinte treinamento:\s*o?\s*treinamento descrito neste documento\.?/gi,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:784:      /Certificamos que o profissional abaixo ministrou,\s*como instrutor,\s*o seguinte treinamento:?/gi,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts:788:      /Certificamos que o profissional abaixo ministrou, como instrutor, o treinamento descrito neste documento\.\s*o treinamento descrito neste documento\.?/gi,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:742:  instrutor: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:763:    instrutor_nome?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:764:    instrutor_guerra?: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:840:    instrutor:
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:841:      trimOrNull(context.treinamento.instrutor_nome) ||
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:842:      trimOrNull(context.treinamento.instrutor_guerra) ||
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:865:  instrutor: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:883:    '{{INSTRUTOR}}': escapeHtml(input.instrutor),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/treinamentos-convocacao-email.ts:1081:          instrutor: input.preview.instrutor,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/pdf-ficha.service.ts:16:  instrutor_nome: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/pdf-ficha.service.ts:17:  instrutor_codigo_anac: string;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/pdf-ficha.service.ts:26:  assinatura_instrutor_timestamp: string | null;
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/pdf-ficha.service.ts:216:    dados.instrutor_nome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/pdf-ficha.service.ts:224:    `ANAC: ${dados.instrutor_codigo_anac}`,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/pdf-ficha.service.ts:427:  drawSignatureStatus(page, fontRegular, dados.assinatura_instrutor_timestamp, rightX, labelY - 12);
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:538:    const [periodos, porTipo, porSimulador, instrutores] = await Promise.all([
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:591:      // Por instrutor (agendamentos futuros por instrutor responsável)
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:595:             COALESCE(f.nome, 'Instrutor Desconhecido') as instrutorNome,
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:599:           LEFT JOIN funcionarios f ON f.id = sa.instrutor_id AND f.deleted_at IS NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:604:           AND sa.instrutor_id IS NOT NULL
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:605:           GROUP BY sa.instrutor_id, f.nome
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:642:      porInstrutor: (instrutores.results || []).map((row: Record<string, unknown>) => ({
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:643:        instrutorNome: String(row.instrutorNome || 'Instrutor Desconhecido'),
+/Users/filipedaumas/Documents/Airtrust/worker-airtrust/src/services/dashboardService.ts:676:           JOIN funcionarios f ON f.id = sa.instrutor_id

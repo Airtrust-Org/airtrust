@@ -1,0 +1,7 @@
+
+==========================================
+ FASE 31 - ANÁLISE DE CONCILIAÇÃO
+==========================================
+
+[0;34m[INFO][0m 1. Verificando estrutura das tabelas...
+--- Colunas de funcionarios ---

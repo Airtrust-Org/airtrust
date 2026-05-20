@@ -1,0 +1,15 @@
+AIRTRUST PERFORMANCE TEST REPORT
+Date: Thu Nov  6 19:37:11 -03 2025
+==================================
+
+DETAILED METRICS:
+
+0:
+  Average Response Time: 1000.000 ms
+  Cache Hit Rate: 0%
+
+SUMMARY:
+Total Endpoints: 1
+Excellent: 0 | Good: 0 | OK: 0 | Slow: 1
+Cache Hit Rate: 0%
+Overall Grade: A

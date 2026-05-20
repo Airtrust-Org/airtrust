@@ -1,0 +1,4854 @@
+import { useState, useEffect, useMemo, Suspense, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  CheckCircle2,
+  Check,
+  Pencil,
+  Edit2,
+  Trash2,
+  RefreshCw,
+  Award,
+  BellRing,
+  Mail,
+  Plus,
+  History,
+  Bookmark,
+  FolderOpen,
+  Search,
+  ListFilter,
+  Columns2,
+  AlertCircle,
+  RotateCcw,
+  BadgeCheck,
+  ShieldCheck,
+  Tag,
+  Palette,
+  CalendarDays,
+  Grid3x3,
+} from 'lucide-react';
+import AppLayout from '@/react-app/components/AppLayout';
+import Button from '@/react-app/components/Button';
+import {
+  useQualificacoesHistorico,
+  useQualificacaoTipos,
+} from '@/react-app/hooks/useQualificacoesExt';
+import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
+import {
+  useEnviarConvocacaoTreinamento,
+  usePreviewConvocacaoTreinamento,
+  useReenviarConvocacaoTreinamento,
+  useTreinamentosPlanejados,
+  type TreinamentoPlanejado,
+  type TreinamentoPlanejadoConvocacaoPreview,
+} from '@/react-app/hooks/useTreinamentosPlanejados';
+import { useAeronavesConfig } from '@/react-app/hooks/useAeronavesConfig';
+import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { clearApiCacheByPattern, useApi } from '@/react-app/hooks/useApi';
+import { DataTable, Column, SortConfig } from '@/components/ui/DataTable';
+import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
+import { Modal } from '@/components/ui/Modal';
+import { ModalAlertaEAD } from '@/react-app/components/modals/ModalAlertaEAD';
+import PageHeader from '@/react-app/components/PageHeader';
+import { lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
+// 🚀 LAZY LOADING: Modais carregados apenas quando necessário
+const ModalAtribuirQualificacao = lazyWithRetry(
+  () =>
+    import('@/react-app/components/modals/ModalAtribuirQualificacao').then((m) => ({
+      default: m.ModalAtribuirQualificacao,
+    })),
+  'ModalAtribuirQualificacao',
+);
+const ModalRenovarQualificacao = lazyWithRetry(
+  () =>
+    import('@/react-app/components/modals/ModalRenovarQualificacao').then((m) => ({
+      default: m.ModalRenovarQualificacao,
+    })),
+  'ModalRenovarQualificacao',
+);
+import { FormField, TextInput, Select, TextArea, FormActions } from '@/components/ui/Form';
+import ModernCheckbox from '@/react-app/components/shared/ModernCheckbox';
+import { showToast } from '@/react-app/utils/toast';
+import { safeDelete } from '@/react-app/utils/safeDelete';
+import { logger } from '@/react-app/utils/logger';
+import { apiFetch } from '@/react-app/lib/apiFetch';
+const ModalCertificado = lazyWithRetry(
+  () =>
+    import('@/react-app/components/modals/ModalCertificado').then((m) => ({
+      default: m.ModalCertificado,
+    })),
+  'ModalCertificado',
+);
+import ConfirmDeleteModal from '@/react-app/components/modals/ConfirmDeleteModal';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
+import { QualificacoesCalendario } from '@/components/qualificacoes/QualificacoesCalendario';
+import {
+  buildPlanejadasRelacionadasMap,
+  computeHistoricoHeaderStats,
+  findPlanejadaRelacionada,
+  getHistoricoDisplayStatus,
+  getPlanejamentoRelacionamentoKey as getPlanejamentoRelacionamentoKeyBase,
+} from '@/react-app/pages/qualificacoes/historicoStatusUtils';
+import { readUserPreference, writeUserPreference } from '@/react-app/utils/userPreferences';
+
+const ALL_STATUS_VALUES = [
+  'VALIDA',
+  'VENCIDA',
+  'VENCENDO_30',
+  'RENOVADA',
+  'PLANEJADA',
+  'CANCELADA',
+] as const;
+
+const historicoActionButtonClass =
+  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
+
+const historicoActionDangerButtonClass =
+  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 shadow-sm transition hover:bg-rose-50';
+
+const QUALIFICACOES_PREFS_KEY = 'qualificacoes_prefs_v1';
+
+interface QualificacoesPrefs {
+  activeTab?: 'historico' | 'tipos' | 'categorias' | 'planejados';
+  planejadosViewMode?: 'list' | 'calendar';
+  limit?: number;
+  searchTerm?: string;
+  sortColumn?: string | null;
+  sortDirection?: 'asc' | 'desc' | null;
+  aeronaveFilter?: string;
+  categoriaFilter?: string;
+  statusFiltro?: string[];
+}
+
+export default function Qualificacoes() {
+  const initialPrefs = useMemo(
+    () => readUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {}),
+    [],
+  );
+
+  const [searchParams] = useSearchParams();
+  const highlightedHistoricoId = useMemo(() => {
+    const rawId = searchParams.get('id');
+    if (!rawId) return null;
+    const parsedId = Number(rawId);
+    return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
+  }, [searchParams]);
+  const [activeTab, setActiveTab] = useState<'historico' | 'tipos' | 'categorias' | 'planejados'>(
+    initialPrefs.activeTab ?? 'historico',
+  );
+  const [planejadosViewMode, setPlanejadosViewMode] = useState<'list' | 'calendar'>(
+    initialPrefs.planejadosViewMode ?? 'list',
+  );
+  const [limit, setLimit] = useState(initialPrefs.limit ?? 50); // Paginação: 50 registros por página
+  const [page, setPage] = useState(1); // Página atual
+  const [searchTerm, setSearchTerm] = useState(''); // Termo de busca
+  const [debouncedSearch, setDebouncedSearch] = useState(''); // Busca com debounce para API
+
+  // Estado de ordenação server-side
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    column: initialPrefs.sortColumn ?? 'data_vencimento',
+    direction: initialPrefs.sortDirection ?? 'asc',
+  });
+
+  // Debounce do searchTerm para evitar muitas requisições
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1); // Reset para página 1 ao buscar
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Hook de aeronaves
+  const { aeronaves: aeronavesConfig } = useAeronavesConfig();
+  const [aeronaveFilter, setAeronaveFilter] = useState(initialPrefs.aeronaveFilter ?? '');
+  const [categoriaFilter, setCategoriaFilter] = useState(initialPrefs.categoriaFilter ?? '');
+
+  // Estado para filtrar por status - renovadas e apagadas ficam ocultas por padrao.
+  const [statusFiltro, setStatusFiltro] = useState<Set<string>>(
+    new Set(
+      highlightedHistoricoId
+        ? ALL_STATUS_VALUES
+        : ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
+    ),
+  );
+
+  const getDefaultHistoricoStatusSet = useCallback(
+    () =>
+      new Set(
+        highlightedHistoricoId
+          ? ALL_STATUS_VALUES
+          : ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
+      ),
+    [highlightedHistoricoId],
+  );
+
+  const applySingleStatusFromChip = useCallback((status: string) => {
+    setActiveTab('historico');
+    setPage(1);
+    setStatusFiltro(new Set([status]));
+  }, []);
+
+  const resetStatusFromChip = useCallback(() => {
+    setActiveTab('historico');
+    setPage(1);
+    setStatusFiltro(getDefaultHistoricoStatusSet());
+  }, [getDefaultHistoricoStatusSet]);
+
+  const isOnlyStatusSelected = useCallback(
+    (status: string) => statusFiltro.size === 1 && statusFiltro.has(status),
+    [statusFiltro],
+  );
+
+  const isHistoricoTab = activeTab === 'historico';
+  const isPlanejadosTab = activeTab === 'planejados';
+  const usesHistoricoDataset = isHistoricoTab || isPlanejadosTab;
+
+  useEffect(() => {
+    writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
+      activeTab,
+      planejadosViewMode,
+      limit,
+      searchTerm,
+      sortColumn: sortConfig.column,
+      sortDirection: sortConfig.direction,
+      aeronaveFilter,
+      categoriaFilter,
+      statusFiltro: [...statusFiltro],
+    });
+  }, [
+    activeTab,
+    planejadosViewMode,
+    limit,
+    searchTerm,
+    sortConfig.column,
+    sortConfig.direction,
+    aeronaveFilter,
+    categoriaFilter,
+    statusFiltro,
+  ]);
+
+  const effectiveHistoricoStatusFiltro = useMemo(
+    () => (isPlanejadosTab ? ['PLANEJADA'] : [...statusFiltro]),
+    [isPlanejadosTab, statusFiltro],
+  );
+
+  const {
+    historico,
+    stats: historicoStats,
+    loading,
+    error: historicoError,
+    carregarHistorico,
+    meta: historicoMeta, // Meta da paginação para contagem correta após filtro
+  } = useQualificacoesHistorico(
+    undefined,
+    limit,
+    page,
+    true,
+    debouncedSearch,
+    sortConfig.column || 'data_vencimento',
+    (sortConfig.direction?.toUpperCase() as 'ASC' | 'DESC') || 'ASC',
+    aeronaveFilter,
+    categoriaFilter,
+    effectiveHistoricoStatusFiltro,
+    highlightedHistoricoId || undefined,
+  );
+
+  const { historico: historicoPlanejadoRelacionado } = useQualificacoesHistorico(
+    undefined,
+    500,
+    1,
+    false,
+    debouncedSearch,
+    sortConfig.column || 'data_vencimento',
+    (sortConfig.direction?.toUpperCase() as 'ASC' | 'DESC') || 'ASC',
+    aeronaveFilter,
+    categoriaFilter,
+    ['PLANEJADA'],
+  );
+
+  const treinamentosPlanejadosConvocacaoQuery = useTreinamentosPlanejados({
+    status: 'PLANEJADO',
+  });
+  const previewConvocacaoPlanejada = usePreviewConvocacaoTreinamento();
+  const enviarConvocacaoPlanejada = useEnviarConvocacaoTreinamento();
+  const reenviarConvocacaoPlanejada = useReenviarConvocacaoTreinamento();
+
+  const historicoTotal = historicoMeta?.total ?? 0;
+
+  // 🎯 Stats corretos do endpoint de dashboard
+  const [dashboardStats, setDashboardStats] = useState({
+    total: 0,
+    validas: 0,
+    vencendo: 0,
+    vencidas: 0,
+    renovadas: 0,
+    planejadas: 0,
+  });
+
+  // 🔍 Aplicar filtros da URL ao montar componente
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'planejados') {
+      setActiveTab('planejados');
+    }
+
+    if (highlightedHistoricoId) {
+      setActiveTab('historico');
+      setPage(1);
+      setSearchTerm('');
+      setDebouncedSearch('');
+      setStatusFiltro(new Set(ALL_STATUS_VALUES));
+      return;
+    }
+
+    const statusParam = searchParams.get('status');
+    if (statusParam) {
+      // Mapear parâmetros da URL para valores do Set
+      const statusMap: Record<string, string[]> = {
+        vencida: ['VENCIDA'],
+        vencendo: ['VENCENDO_30'],
+        valida: ['VALIDA'],
+        planejada: ['PLANEJADA'],
+        cancelada: ['CANCELADA'],
+      };
+
+      const statusValues = statusMap[statusParam.toLowerCase()];
+      if (statusValues) {
+        setStatusFiltro(new Set(statusValues));
+      }
+    }
+  }, [highlightedHistoricoId, searchParams]);
+
+  // Modal de alerta EAD
+  const [alertaEADModal, setAlertaEADModal] = useState<{
+    isOpen: boolean;
+    qualificacao: any;
+  }>({ isOpen: false, qualificacao: null });
+
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  // Buscar stats do dashboard
+  useEffect(() => {
+    const carregarStats = async () => {
+      try {
+        setLoadingStats(true);
+        const token = getAccessToken();
+        // Cache busting
+        const response = await fetch(
+          `${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`,
+          {
+            headers: token
+              ? {
+                  Authorization: `Bearer ${token}`,
+                  'Cache-Control': 'no-cache',
+                  Pragma: 'no-cache',
+                }
+              : {},
+          },
+        );
+        if (!response.ok) throw new Error('Erro ao carregar stats');
+        const json = await response.json();
+        const data = json.data || json;
+        setDashboardStats({
+          total: data.total_ativas || 0,
+          validas: data.validas || 0,
+          vencendo: data.a_vencer_30_dias || 0,
+          vencidas: data.vencidas || 0,
+          renovadas: data.renovadas || 0,
+          planejadas: data.planejadas || 0,
+        });
+      } catch (error) {
+        console.error('Erro ao carregar stats do dashboard:', error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    carregarStats();
+  }, []);
+
+  const stats = historicoStats;
+
+  const [showModal, setShowModal] = useState(false);
+  // Tipos agora são fornecidos pelo hook dedicado useQualificacaoTipos
+  type TipoQualificacao = {
+    id: string | number;
+    tipo?: string | null;
+    nome: string;
+    codigo?: string | null;
+    categoria?: string | null;
+    validade?: number | null;
+    observacoes?: string | null;
+    ativo?: boolean | number;
+    descricao?: string | null;
+    conteudo_programatico?: string | null;
+    carga_horaria?: number | null;
+    carga_horaria_inicial?: number | null;
+    carga_horaria_recorrente?: number | null;
+    vencimento_fim_mes?: number; // 0 = dia exato, 1 = fim do mês
+    is_check?: number | boolean | null;
+    created_at?: string;
+    updated_at?: string | null;
+  };
+
+  type Categoria = {
+    id?: number;
+    nome: string;
+    descricao?: string | null;
+    cor?: string | null;
+  };
+
+  const [editingQualificacao, setEditingQualificacao] = useState<HistoricoItem | null>(null);
+
+  // Estado para modal de renovação
+  const [showRenovarModal, setShowRenovarModal] = useState(false);
+  const [qualificacaoParaRenovar, setQualificacaoParaRenovar] = useState<HistoricoItem | null>(
+    null,
+  );
+  const [showPlanejadaModal, setShowPlanejadaModal] = useState(false);
+  const [planejadaSelecionada, setPlanejadaSelecionada] = useState<HistoricoItem | null>(null);
+  const [novaDataPlanejada, setNovaDataPlanejada] = useState('');
+  const [salvandoPlanejadaId, setSalvandoPlanejadaId] = useState<number | null>(null);
+  const [showConvocacaoPlanejadaModal, setShowConvocacaoPlanejadaModal] = useState(false);
+  const [planejadaConvocacaoSelecionada, setPlanejadaConvocacaoSelecionada] =
+    useState<HistoricoItem | null>(null);
+  const [turmaConvocacaoSelecionadaId, setTurmaConvocacaoSelecionadaId] = useState<number | null>(
+    null,
+  );
+  const [convocacaoPlanejadaPreview, setConvocacaoPlanejadaPreview] =
+    useState<TreinamentoPlanejadoConvocacaoPreview | null>(null);
+  const [confirmarReenvioConvocacaoPlanejada, setConfirmarReenvioConvocacaoPlanejada] =
+    useState(false);
+  const [ignorarSemEmailConvocacaoPlanejada, setIgnorarSemEmailConvocacaoPlanejada] =
+    useState(false);
+  const [escopoEnvioConvocacaoPlanejada, setEscopoEnvioConvocacaoPlanejada] = useState<
+    'turma' | 'funcionario'
+  >('turma');
+  const [enviandoConvocacaoPlanejadaFallback, setEnviandoConvocacaoPlanejadaFallback] =
+    useState(false);
+  const [gestoresCcDisponiveis, setGestoresCcDisponiveis] = useState<
+    Array<{
+      id: number;
+      nome: string;
+      email: string;
+      cargo?: string | null;
+      empresa?: string | null;
+      ativo: boolean;
+    }>
+  >([]);
+  const [carregandoGestoresCc, setCarregandoGestoresCc] = useState(false);
+  const [gestoresCcSelecionadosIds, setGestoresCcSelecionadosIds] = useState<number[]>([]);
+  const [showTurmaPlanejadaModal, setShowTurmaPlanejadaModal] = useState(false);
+  const [turmaPlanejadaQualificacaoCodigo, setTurmaPlanejadaQualificacaoCodigo] = useState('');
+  const [turmaPlanejadaData, setTurmaPlanejadaData] = useState('');
+  const [turmaPlanejadaHorario, setTurmaPlanejadaHorario] = useState('');
+  const [turmaPlanejadaLocal, setTurmaPlanejadaLocal] = useState('');
+  const [turmaPlanejadaInstrutor, setTurmaPlanejadaInstrutor] = useState('');
+  const [turmaPlanejadaObservacoes, setTurmaPlanejadaObservacoes] = useState('');
+  const [turmaPlanejadaTipoTreinamento, setTurmaPlanejadaTipoTreinamento] = useState<
+    'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO'
+  >('INICIAL');
+  const [turmaPlanejadaParticipantesSelecionados, setTurmaPlanejadaParticipantesSelecionados] =
+    useState<number[]>([]);
+  const [buscaParticipanteTurmaPlanejada, setBuscaParticipanteTurmaPlanejada] = useState('');
+  const [salvandoTurmaPlanejada, setSalvandoTurmaPlanejada] = useState(false);
+
+  // Estados para modais de qualificação (showModal já existe acima)
+  const [modalEditarAberto, setModalEditarAberto] = useState(false); // Modal de editar simplificado
+  const [registroSelecionado, setRegistroSelecionado] = useState<HistoricoItem | null>(null);
+
+  // Estado para tipos de qualificação
+  // Hook de tipos (carrega quando aba 'tipos' ativa)
+  const {
+    tipos,
+    loading: loadingTipos,
+    refetch: refetchTipos,
+    error: tiposError,
+  } = useQualificacaoTipos(activeTab === 'tipos' || showTurmaPlanejadaModal, 200);
+
+  const { data: funcionariosAtivosData = [], isLoading: loadingFuncionariosAtivos } =
+    useFuncionariosAtivos();
+  // Remover estados locais desnecessários
+  const [showTipoModal, setShowTipoModal] = useState(false);
+  const [editingTipo, setEditingTipo] = useState<TipoQualificacao | null>(null);
+  const [searchTipos, setSearchTipos] = useState(''); // Campo de busca para tipos
+
+  // Estado para categorias
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [showCategoriaModal, setShowCategoriaModal] = useState(false);
+  const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null);
+  const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
+  const [novaCategoriaDesc, setNovaCategoriaDesc] = useState('');
+
+  const getTipoTreinamentoDisplay = (value?: string | null, validadeMeses?: number | null) => {
+    const tipo = String(value || '')
+      .trim()
+      .toUpperCase();
+
+    if (tipo === 'SEMESTRAL' || Number(validadeMeses || 0) === 6) {
+      return {
+        value: 'SEMESTRAL',
+        label: 'Semestral',
+        className: 'bg-emerald-100 text-emerald-800',
+      };
+    }
+
+    if (tipo === 'INICIAL') {
+      return {
+        value: 'INICIAL',
+        label: 'Inicial',
+        className: 'bg-amber-100 text-amber-800',
+      };
+    }
+
+    return {
+      value: 'RECORRENTE',
+      label: 'Periódico',
+      className: 'bg-sky-100 text-sky-800',
+    };
+  };
+
+  const [showCertModal, setShowCertModal] = useState(false);
+  const [historicoSelecionado, setHistoricoSelecionado] = useState<HistoricoItem | null>(null);
+  const [certificadoOverrides, setCertificadoOverrides] = useState<Record<number, boolean>>({});
+  const historicoSelecionadoId = historicoSelecionado?.id;
+
+  // Estados para confirmação de exclusão
+  const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: number; nome: string } | null>(
+    null,
+  );
+  const [deletandoId, setDeletandoId] = useState<number | null>(null);
+
+  // Paginação agora é server-side (gerenciada por limit/page no hook)
+
+  // Estado para painel de configuração de colunas por aba
+  const [columnConfigOpen, setColumnConfigOpen] = useState<'historico' | 'tipos' | null>(null);
+  const [savingTipo, setSavingTipo] = useState(false);
+
+  const funcionariosAtivos = useMemo(
+    () =>
+      [...funcionariosAtivosData].sort((a, b) =>
+        String(a?.nome || '').localeCompare(String(b?.nome || ''), 'pt-BR'),
+      ),
+    [funcionariosAtivosData],
+  );
+
+  const funcionariosAtivosMap = useMemo(
+    () =>
+      new Map(
+        funcionariosAtivos.map((funcionario) => [Number(funcionario.id || 0), funcionario.nome]),
+      ),
+    [funcionariosAtivos],
+  );
+
+  const participantesTurmaPlanejadaFiltrados = useMemo(() => {
+    const termo = buscaParticipanteTurmaPlanejada.trim().toLowerCase();
+    if (!termo) return funcionariosAtivos;
+    return funcionariosAtivos.filter((funcionario) => {
+      const nome = String(funcionario.nome || '').toLowerCase();
+      const matricula = String(funcionario.matricula || '').toLowerCase();
+      return nome.includes(termo) || matricula.includes(termo);
+    });
+  }, [buscaParticipanteTurmaPlanejada, funcionariosAtivos]);
+
+  const totalParticipantesTurmaPlanejadaFiltrados = participantesTurmaPlanejadaFiltrados.length;
+  const totalParticipantesTurmaPlanejadaSelecionados =
+    turmaPlanejadaParticipantesSelecionados.length;
+
+  const abrirModalTurmaPlanejada = useCallback(() => {
+    setTurmaPlanejadaQualificacaoCodigo((prev) => prev || String(tipos[0]?.codigo || ''));
+    setTurmaPlanejadaData('');
+    setTurmaPlanejadaHorario('');
+    setTurmaPlanejadaLocal('');
+    setTurmaPlanejadaInstrutor('');
+    setTurmaPlanejadaObservacoes('');
+    setTurmaPlanejadaTipoTreinamento('INICIAL');
+    setTurmaPlanejadaParticipantesSelecionados([]);
+    setBuscaParticipanteTurmaPlanejada('');
+    setShowTurmaPlanejadaModal(true);
+  }, [tipos]);
+
+  const fecharModalTurmaPlanejada = useCallback(() => {
+    if (salvandoTurmaPlanejada) return;
+    setShowTurmaPlanejadaModal(false);
+  }, [salvandoTurmaPlanejada]);
+
+  const alternarSelecaoParticipanteTurmaPlanejada = useCallback((funcionarioId: number) => {
+    setTurmaPlanejadaParticipantesSelecionados((prev) => {
+      if (prev.includes(funcionarioId)) {
+        return prev.filter((id) => id !== funcionarioId);
+      }
+      return [...prev, funcionarioId];
+    });
+  }, []);
+
+  const selecionarTodosParticipantesFiltradosTurmaPlanejada = useCallback(() => {
+    setTurmaPlanejadaParticipantesSelecionados((prev) => {
+      const idsFiltrados = participantesTurmaPlanejadaFiltrados
+        .map((funcionario) => Number(funcionario.id || 0))
+        .filter((id) => id > 0);
+      const set = new Set(prev);
+      idsFiltrados.forEach((id) => set.add(id));
+      return Array.from(set);
+    });
+  }, [participantesTurmaPlanejadaFiltrados]);
+
+  const limparParticipantesFiltradosTurmaPlanejada = useCallback(() => {
+    const idsFiltrados = new Set(
+      participantesTurmaPlanejadaFiltrados
+        .map((funcionario) => Number(funcionario.id || 0))
+        .filter((id) => id > 0),
+    );
+    setTurmaPlanejadaParticipantesSelecionados((prev) =>
+      prev.filter((id) => !idsFiltrados.has(id)),
+    );
+  }, [participantesTurmaPlanejadaFiltrados]);
+
+  const salvarTurmaPlanejada = useCallback(async () => {
+    if (!turmaPlanejadaQualificacaoCodigo) {
+      showToast.error('Selecione a qualificação da turma.');
+      return;
+    }
+    if (!turmaPlanejadaData) {
+      showToast.error('Informe a data planejada da turma.');
+      return;
+    }
+    if (turmaPlanejadaParticipantesSelecionados.length === 0) {
+      showToast.error('Selecione ao menos um participante.');
+      return;
+    }
+
+    const detalhesTurma = [
+      turmaPlanejadaLocal ? `Local: ${turmaPlanejadaLocal}` : '',
+      turmaPlanejadaHorario ? `Horario: ${turmaPlanejadaHorario}` : '',
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    const observacoesComTurma = [
+      '[TURMA PLANEJADA]' + (detalhesTurma ? ` ${detalhesTurma}` : ''),
+      turmaPlanejadaObservacoes.trim(),
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    setSalvandoTurmaPlanejada(true);
+    let sucessos = 0;
+    const falhas: string[] = [];
+    const participantesIds = Array.from(new Set(turmaPlanejadaParticipantesSelecionados));
+    const token = getAccessToken();
+
+    for (const funcionarioId of participantesIds) {
+      try {
+        const response = await apiFetch('/api/qualificacoes/historico', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            funcionario_id: funcionarioId,
+            qualificacao_codigo: turmaPlanejadaQualificacaoCodigo,
+            data_conclusao: turmaPlanejadaData,
+            status: 'PLANEJADA',
+            tipo_treinamento: turmaPlanejadaTipoTreinamento,
+            instrutor: turmaPlanejadaInstrutor || undefined,
+            observacoes: observacoesComTurma || undefined,
+          }),
+        });
+
+        const json = (await response.json().catch(() => ({}))) as {
+          success?: boolean;
+          error?: string;
+        };
+
+        if (!response.ok || !json.success) {
+          const nome = funcionariosAtivosMap.get(funcionarioId) || `Funcionario ${funcionarioId}`;
+          falhas.push(`${nome}: ${json.error || `HTTP ${response.status}`}`);
+          continue;
+        }
+
+        sucessos += 1;
+      } catch (error) {
+        const nome = funcionariosAtivosMap.get(funcionarioId) || `Funcionario ${funcionarioId}`;
+        falhas.push(`${nome}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
+    }
+
+    if (sucessos > 0) {
+      await carregarHistorico();
+      try {
+        const statsResponse = await fetch(
+          `${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`,
+        );
+        if (statsResponse.ok) {
+          const json = await statsResponse.json();
+          const data = json.data || json;
+          setDashboardStats({
+            total: data.total_ativas || 0,
+            validas: data.validas || 0,
+            vencendo: data.a_vencer_30_dias || 0,
+            vencidas: data.vencidas || 0,
+            renovadas: data.renovadas || 0,
+            planejadas: data.planejadas || 0,
+          });
+        }
+      } catch {
+        // no-op
+      }
+    }
+
+    if (falhas.length === 0) {
+      showToast.success(`${sucessos} qualificacao(oes) planejada(s) criada(s) com sucesso.`);
+      setShowTurmaPlanejadaModal(false);
+    } else if (sucessos > 0) {
+      showToast.error(
+        `Turma criada parcialmente: ${sucessos} sucesso(s), ${falhas.length} falha(s). ${falhas[0]}`,
+      );
+    } else {
+      showToast.error(`Falha ao criar turma planejada. ${falhas[0] || ''}`);
+    }
+
+    setSalvandoTurmaPlanejada(false);
+  }, [
+    carregarHistorico,
+    funcionariosAtivosMap,
+    turmaPlanejadaData,
+    turmaPlanejadaHorario,
+    turmaPlanejadaInstrutor,
+    turmaPlanejadaLocal,
+    turmaPlanejadaObservacoes,
+    turmaPlanejadaParticipantesSelecionados,
+    turmaPlanejadaQualificacaoCodigo,
+    turmaPlanejadaTipoTreinamento,
+  ]);
+
+  // Usar useApi para carregar tipos com autenticação automática
+  // Removido uso direto de useApi para tipos (substituído por hook dedicado)
+
+  // Usar useApi para carregar categorias
+  const {
+    data: categoriasData,
+    error: categoriasError,
+    refetch: refetchCategorias,
+  } = useApi('/categorias');
+
+  // Atualizar tipos quando dados forem carregados
+  // Removido efeito de sincronização antigo (tiposData)
+
+  // Atualizar categorias quando dados forem carregados
+  useEffect(() => {
+    if (categoriasData) {
+      const cats = Array.isArray(categoriasData)
+        ? categoriasData
+        : (categoriasData as { data?: Categoria[] })?.data || [];
+      setCategorias(cats as Categoria[]);
+    }
+  }, [categoriasData]);
+
+  const normalizeCategoriaKey = (value?: string | null) =>
+    (value ?? '').toString().trim().toUpperCase();
+
+  const getCategoriaCorDisplay = (categoriaNome?: string | null, corOriginal?: string | null) => {
+    const categoriaKey = normalizeCategoriaKey(categoriaNome)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (categoriaKey === 'LICENCA') {
+      return '#0f766e';
+    }
+    return corOriginal || undefined;
+  };
+
+  const normalizeTipoCodigo = (value?: string | null) =>
+    (value ?? '').toString().trim().toUpperCase();
+
+  const categoriasMap = useMemo(() => {
+    const map = new Map<string, Categoria>();
+    categorias.forEach((cat) => {
+      if (!cat?.nome) return;
+      map.set(normalizeCategoriaKey(cat.nome), cat);
+    });
+    return map;
+  }, [categorias]);
+
+  // Carregar categorias ao abrir a aba histórico (para garantir cores)
+  useEffect(() => {
+    if (usesHistoricoDataset) {
+      refetchCategorias();
+    }
+  }, [refetchCategorias, usesHistoricoDataset]);
+
+  // Tipo para itens do histórico
+  type HistoricoItem = (typeof historico)[number] & {
+    total_certificados?: number;
+    tem_certificado?: number | boolean;
+    certificado_arquivo_id?: number | null;
+    certificado_url?: string | null;
+    categoria?: string;
+    qualificacao_categoria?: string;
+    funcionario_nome?: string;
+    tipo_nome?: string;
+    qualificacao_nome?: string;
+    instrutor?: string | null;
+  };
+
+  const getHistoricoStatus = useCallback(
+    (item: HistoricoItem): string => getHistoricoDisplayStatus(item),
+    [],
+  );
+
+  const getPlanejamentoRelacionamentoKey = useCallback(
+    (item: HistoricoItem): string | null => getPlanejamentoRelacionamentoKeyBase(item),
+    [],
+  );
+
+  const planejadasRelacionadasMap = useMemo(
+    () => buildPlanejadasRelacionadasMap(historicoPlanejadoRelacionado as HistoricoItem[]),
+    [historicoPlanejadoRelacionado],
+  );
+
+  const getPlanejadaRelacionada = useCallback(
+    (item: HistoricoItem): HistoricoItem | null =>
+      findPlanejadaRelacionada(item, planejadasRelacionadasMap),
+    [planejadasRelacionadasMap],
+  );
+
+  const hasCertificateSummary = useCallback(
+    (item: Pick<HistoricoItem, 'certificado_arquivo_id' | 'certificado_url' | 'tem_certificado'>) =>
+      Boolean(item.certificado_arquivo_id || item.certificado_url || item.tem_certificado),
+    [],
+  );
+
+  // Agora o filtro é feito no backend via API
+  // O historico já vem filtrado pelo debouncedSearch
+  // Filtrar por status baseado no statusFiltro
+  const applyCertificadoStateLocal = useCallback(
+    (historicoId: number, temCertificados: boolean) => {
+      setCertificadoOverrides((prev) => ({ ...prev, [historicoId]: temCertificados }));
+      setHistoricoSelecionado((prev) =>
+        prev && prev.id === historicoId
+          ? {
+              ...prev,
+              tem_certificado: temCertificados ? 1 : 0,
+              certificado_url: temCertificados ? prev.certificado_url || 'ativo' : null,
+              certificado_arquivo_id: temCertificados
+                ? (prev.certificado_arquivo_id ?? prev.id)
+                : null,
+            }
+          : prev,
+      );
+    },
+    [],
+  );
+
+  const hasArchivedCertificate = useCallback(
+    (item: HistoricoItem) => certificadoOverrides[item.id] ?? false,
+    [certificadoOverrides],
+  );
+
+  const syncCertificadoState = useCallback(
+    async (historicoId: number, temCertificados: boolean) => {
+      applyCertificadoStateLocal(historicoId, temCertificados);
+      await carregarHistorico();
+    },
+    [applyCertificadoStateLocal, carregarHistorico],
+  );
+
+  const handleCertificadosChange = useCallback(
+    (historicoId: number, temCertificados: boolean) => {
+      applyCertificadoStateLocal(historicoId, temCertificados);
+    },
+    [applyCertificadoStateLocal],
+  );
+
+  const handleCertificadosUploadSuccess = useCallback(
+    (temCertificados: boolean) => {
+      if (!historicoSelecionadoId) return;
+      void syncCertificadoState(historicoSelecionadoId, temCertificados);
+    },
+    [historicoSelecionadoId, syncCertificadoState],
+  );
+
+  const handleCertificadosDeleteSuccess = useCallback(
+    (temCertificados: boolean) => {
+      if (!historicoSelecionadoId) return;
+      void syncCertificadoState(historicoSelecionadoId, temCertificados);
+    },
+    [historicoSelecionadoId, syncCertificadoState],
+  );
+
+  const historicoItensPagina = useMemo(
+    () => (historico as HistoricoItem[]).filter((item) => item?.id),
+    [historico],
+  );
+
+  const historicoItensPaginaKey = useMemo(
+    () =>
+      historicoItensPagina
+        .map((item) => `${item.id}:${item.certificado_arquivo_id ?? 'null'}`)
+        .join('|'),
+    [historicoItensPagina],
+  );
+
+  const historicoItensPaginaEstado = useMemo(() => {
+    return historicoItensPagina
+      .map((item) => ({
+        id: item.id,
+        hasCertificate: hasCertificateSummary(item),
+      }))
+      .filter((item) => Number.isFinite(item.id));
+  }, [hasCertificateSummary, historicoItensPagina]);
+
+  useEffect(() => {
+    setCertificadoOverrides((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      for (const item of historicoItensPaginaEstado) {
+        if (next[item.id] !== item.hasCertificate) {
+          next[item.id] = item.hasCertificate;
+          changed = true;
+        }
+      }
+
+      for (const key of Object.keys(next)) {
+        const id = Number(key);
+        if (!historicoItensPaginaEstado.some((item) => item.id === id)) {
+          delete next[id];
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [historicoItensPaginaEstado]);
+
+  const filteredHistorico = (historico as HistoricoItem[]).filter((item) =>
+    statusFiltro.has(getHistoricoStatus(item)),
+  );
+
+  const prioritizedHistorico = useMemo(() => {
+    const parseDateForPriority = (value?: string | null): Date | null => {
+      if (!value) return null;
+      const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(value);
+      if (m) {
+        const year = Number(m[1]);
+        const month = Number(m[2]);
+        const day = Number(m[3]);
+        return new Date(year, month - 1, day);
+      }
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const shouldPrioritize = (item: HistoricoItem): boolean => {
+      const status = String(
+        (item as HistoricoItem & { qualificacao_status?: string }).qualificacao_status || '',
+      ).toUpperCase();
+      if (status !== 'PLANEJADA') return false;
+
+      const dataRef =
+        (item as HistoricoItem & { data_realizacao?: string; data_conclusao?: string })
+          .data_realizacao || item.data_conclusao;
+      const data = parseDateForPriority(dataRef);
+      if (!data) return false;
+
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      return data <= hoje;
+    };
+
+    return [...filteredHistorico].sort((a, b) => {
+      const destaqueA = highlightedHistoricoId && a.id === highlightedHistoricoId ? 1 : 0;
+      const destaqueB = highlightedHistoricoId && b.id === highlightedHistoricoId ? 1 : 0;
+      if (destaqueA !== destaqueB) {
+        return destaqueB - destaqueA;
+      }
+
+      const prioridadeA = shouldPrioritize(a) ? 1 : 0;
+      const prioridadeB = shouldPrioritize(b) ? 1 : 0;
+      return prioridadeB - prioridadeA;
+    });
+  }, [filteredHistorico, highlightedHistoricoId]);
+
+  const planejadosHistorico = useMemo(() => {
+    const items = prioritizedHistorico.filter((item) => {
+      return getHistoricoStatus(item) === 'PLANEJADA';
+    });
+
+    return items.sort((a, b) => {
+      const dataA = parseDateLocal(
+        (a as HistoricoItem & { data_realizacao?: string }).data_realizacao || a.data_conclusao,
+      );
+      const dataB = parseDateLocal(
+        (b as HistoricoItem & { data_realizacao?: string }).data_realizacao || b.data_conclusao,
+      );
+
+      if (!dataA && !dataB) return 0;
+      if (!dataA) return 1;
+      if (!dataB) return -1;
+      return dataA.getTime() - dataB.getTime();
+    });
+  }, [getHistoricoStatus, prioritizedHistorico]);
+
+  const planejadosStats = useMemo(() => {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    return planejadosHistorico.reduce(
+      (acc, item) => {
+        acc.total += 1;
+        const data = parseDateLocal(
+          (item as HistoricoItem & { data_realizacao?: string }).data_realizacao ||
+            item.data_conclusao,
+        );
+        if (!data) {
+          acc.semData += 1;
+          return acc;
+        }
+        if (data < hoje) {
+          acc.atrasados += 1;
+        } else {
+          acc.futuros += 1;
+        }
+        return acc;
+      },
+      { total: 0, futuros: 0, atrasados: 0, semData: 0 },
+    );
+  }, [planejadosHistorico]);
+
+  const isDefaultStatusFilter = useMemo(
+    () =>
+      statusFiltro.size === ALL_STATUS_VALUES.length &&
+      ALL_STATUS_VALUES.every((status) => statusFiltro.has(status)),
+    [statusFiltro],
+  );
+
+  const shouldUseLocalHistoricoHeaderStats = Boolean(
+    debouncedSearch.trim() || aeronaveFilter || categoriaFilter || !isDefaultStatusFilter,
+  );
+
+  const localHistoricoStats = useMemo(
+    () =>
+      computeHistoricoHeaderStats(
+        filteredHistorico,
+        statusFiltro,
+        historicoMeta?.total ?? filteredHistorico.length,
+        historicoPlanejadoRelacionado.length,
+      ),
+    [filteredHistorico, historicoMeta?.total, historicoPlanejadoRelacionado.length, statusFiltro],
+  );
+
+  const historicoHeaderStats = shouldUseLocalHistoricoHeaderStats
+    ? localHistoricoStats
+    : {
+        ...stats,
+        planejadas: Math.max(stats.planejadas || 0, historicoPlanejadoRelacionado.length),
+      };
+
+  const historicoTableLoading = loading && prioritizedHistorico.length === 0;
+  const planejadosTableLoading = loading && planejadosHistorico.length === 0;
+
+  // Filtrar tipos baseado no searchTipos
+  const filteredTipos = tipos.filter((tipo) => {
+    if (!searchTipos.trim()) return true;
+    const searchLower = searchTipos.toLowerCase();
+    return (
+      tipo.nome?.toLowerCase().includes(searchLower) ||
+      tipo.codigo?.toLowerCase().includes(searchLower) ||
+      tipo.categoria?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const getStatusColor = (status: string) => {
+    if (status === 'RENOVADA') return 'bg-blue-600/10 text-blue-600';
+    if (status === 'VALIDA') return 'bg-success-600/10 text-success-600';
+    if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30')
+      return 'bg-warning-600/10 text-warning-600';
+    if (status === 'PLANEJADA') return 'bg-purple-600/10 text-purple-600';
+    if (status === 'CANCELADA') return 'bg-slate-600/10 text-slate-600';
+    return 'bg-danger-600/10 text-danger-600';
+  };
+
+  const getStatusDotColor = (status: string) => {
+    if (status === 'VALIDA') return 'bg-success-600';
+    if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30') return 'bg-warning-600';
+    if (status === 'PLANEJADA') return 'bg-purple-600';
+    if (status === 'CANCELADA') return 'bg-slate-600';
+    return 'bg-danger-600';
+  };
+
+  const getStatusLabel = (status: string) => {
+    if (status === 'RENOVADA') return 'Renovada';
+    if (status === 'VALIDA') return 'Válida';
+    if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30') return 'Vencendo';
+    if (status === 'PLANEJADA') return 'Planejada';
+    if (status === 'CANCELADA') return 'Cancelada';
+    return 'Vencida';
+  };
+
+  const handleNew = () => {
+    setEditingQualificacao(null);
+    setShowModal(true);
+  };
+
+  const handleEdit = (qualificacao: HistoricoItem) => {
+    console.log('🔧 [handleEdit] CHAMADO! Qualificacao:', qualificacao);
+    console.log('🔧 [handleEdit] modalEditarAberto antes:', modalEditarAberto);
+    console.log('🔧 [handleEdit] registroSelecionado antes:', registroSelecionado);
+
+    logger.info('[handleEdit] Abrindo modal EDITAR para:', qualificacao);
+    setRegistroSelecionado(qualificacao);
+    setModalEditarAberto(true);
+
+    console.log('🔧 [handleEdit] States atualizados - modal deve abrir agora');
+  };
+
+  // Form de edição herdado substituído pelo ModalAtribuirQualificacao
+  // Shape usada para mapear histórico -> habilitação esperada pelo modal novo
+  interface HabilitacaoShape {
+    id?: number;
+    funcionario_id?: number;
+    qualificacao_id?: number;
+    qualificacao_codigo?: string;
+    qualificacao_nome?: string;
+    data_conclusao?: string;
+    data_vencimento?: string;
+    numero_certificado?: string;
+    instrutor?: string;
+    observacoes?: string;
+    tipo_treinamento?: string;
+  }
+
+  const handleRenovar = (row: HistoricoItem) => {
+    // Abrir modal de renovação com os campos esperados
+    setQualificacaoParaRenovar(row);
+    setShowRenovarModal(true);
+  };
+
+  // Confirmar qualificação planejada como concluída
+  const handleConfirmar = async (
+    row: HistoricoItem,
+    renovarAnterior = true,
+    pedirConfirmacao = true,
+  ) => {
+    if (
+      pedirConfirmacao &&
+      !(await confirmDialog('Confirmar que esta qualificação foi realizada conforme planejado?'))
+    ) {
+      return false;
+    }
+
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        showToast.error('Token não encontrado. Faça login novamente.');
+        return false;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/qualificacoes/historico/${row.id}/confirmar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ renovar_anterior: renovarAnterior }),
+      });
+
+      if (response.ok) {
+        showToast.success('Qualificação confirmada com sucesso!');
+        emitirEventoModulo({
+          modulo: 'qualificacoes',
+          tipo: 'QUALIFICACAO_ATUALIZADA',
+          funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
+        });
+        await recarregarHistoricoEStats(token);
+        return true;
+      } else {
+        const error = await response.json();
+        showToast.error(error.error || 'Erro ao confirmar qualificação');
+      }
+    } catch (error) {
+      console.error('Erro ao confirmar:', error);
+      showToast.error('Erro ao confirmar qualificação');
+    }
+
+    return false;
+  };
+
+  // Destacar qualificações planejadas com data já ultrapassada
+  const isPlanejadaVencida = (item: HistoricoItem): boolean => {
+    const status = String(
+      (item as HistoricoItem & { qualificacao_status?: string }).qualificacao_status || '',
+    ).toUpperCase();
+    if (status !== 'PLANEJADA') return false;
+    const dataRef =
+      (item as HistoricoItem & { data_realizacao?: string; data_conclusao?: string })
+        .data_realizacao || item.data_conclusao;
+    const data = parseDateLocal(dataRef);
+    if (!data) return false;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    return data < hoje;
+  };
+
+  // Ícone inline replace do modal — operador vê a linha colorida + ícone na tabela, não modal interruptivo
+
+  // Cancelar qualificação planejada
+  const handleCancelar = async (row: HistoricoItem) => {
+    if (
+      !(await confirmDialog(
+        'Cancelar esta qualificação planejada? Esta ação não pode ser desfeita.',
+      ))
+    )
+      return;
+
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        showToast.error('Token não encontrado. Faça login novamente.');
+        return false;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/qualificacoes/historico/${row.id}/cancelar`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        showToast.success('Qualificação cancelada com sucesso!');
+        emitirEventoModulo({
+          modulo: 'qualificacoes',
+          tipo: 'QUALIFICACAO_ATUALIZADA',
+          funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
+        });
+        await recarregarHistoricoEStats(token);
+        return true;
+      } else {
+        const error = await response.json();
+        showToast.error(error.error || 'Erro ao cancelar qualificação');
+      }
+    } catch (error) {
+      console.error('Erro ao cancelar:', error);
+      showToast.error('Erro ao cancelar qualificação');
+    }
+
+    return false;
+  };
+
+  const handleReagendarPlanejada = async (row: HistoricoItem, novaData: string) => {
+    if (!novaData) {
+      showToast.error('Informe a nova data planejada');
+      return false;
+    }
+
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        showToast.error('Token não encontrado. Faça login novamente.');
+        return false;
+      }
+
+      setSalvandoPlanejadaId(row.id);
+
+      const response = await fetch(`${API_BASE_URL}/qualificacoes/historico/${row.id}/reagendar`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nova_data_planejada: novaData }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        showToast.error(error.error || 'Erro ao reagendar qualificação');
+        return false;
+      }
+
+      showToast.success('Qualificação reagendada com sucesso!');
+      emitirEventoModulo({
+        modulo: 'qualificacoes',
+        tipo: 'QUALIFICACAO_ATUALIZADA',
+        funcionarioIds: row.funcionario_id ? [row.funcionario_id] : undefined,
+      });
+      await recarregarHistoricoEStats(token);
+      return true;
+    } catch (error) {
+      console.error('Erro ao reagendar qualificação:', error);
+      showToast.error('Erro ao reagendar qualificação');
+      return false;
+    } finally {
+      setSalvandoPlanejadaId(null);
+    }
+  };
+
+  // ModalRenovarQualificacao cuidará do POST e do loading; aqui apenas controlamos abertura/fechamento
+
+  const handleDeletear = (row: HistoricoItem) => {
+    setShowConfirmDelete({
+      id: row.id,
+      nome: `${row.funcionario_nome} - ${row.qualificacao_nome || row.qualificacao_codigo}`,
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!showConfirmDelete) return;
+
+    const { id, nome } = showConfirmDelete;
+    setDeletandoId(id);
+
+    try {
+      logger.info('[Deletar] Iniciando deleção da qualificação:', id);
+
+      const apiUrl = API_BASE_URL;
+      const token = getAccessToken();
+
+      logger.info('[Deletar] Token presente:', !!token);
+
+      if (!token) {
+        showToast.error('Token não encontrado. Faça login novamente.');
+        setDeletandoId(null);
+        return;
+      }
+
+      const url = `${apiUrl}/qualificacoes/historico/${id}`;
+      logger.info('[Deletar] URL:', url);
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      logger.info('[Deletar] Response status:', response.status);
+      const json = await response.json();
+
+      if (json.success) {
+        showToast.success(`"${nome}" deletada com sucesso!`);
+        setShowConfirmDelete(null);
+
+        // Recarregar dados
+        await carregarHistorico();
+        // Recarregar stats também
+        const statsResponse = await fetch(
+          `${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`,
+          {
+            headers: token
+              ? {
+                  Authorization: `Bearer ${token}`,
+                  'Cache-Control': 'no-cache',
+                  Pragma: 'no-cache',
+                }
+              : {},
+          },
+        );
+        if (statsResponse.ok) {
+          const json = await statsResponse.json();
+          const data = json.data || json;
+          setDashboardStats({
+            total: data.total_ativas || 0,
+            validas: data.validas || 0,
+            vencendo: data.a_vencer_30_dias || 0,
+            vencidas: data.vencidas || 0,
+            renovadas: data.renovadas || 0,
+            planejadas: data.planejadas || 0,
+          });
+        }
+      } else {
+        const error = await response.json();
+        console.error('[Deletar] Erro na resposta:', error);
+
+        // Mensagem específica para erro 403 (permissão negada)
+        if (response.status === 403) {
+          showToast.error('Permissão negada. Apenas administradores podem deletar qualificações.');
+        } else {
+          showToast.error(error.error || 'Erro ao deletar qualificação');
+        }
+      }
+    } catch (error) {
+      console.error('[Deletar] Erro ao deletar:', error);
+      showToast.error('Erro ao deletar qualificação');
+    } finally {
+      setDeletandoId(null);
+    }
+  };
+
+  // Definir colunas da tabela de histórico (limpas e corrigidas)
+  function parseDateLocal(value?: string | null): Date | null {
+    if (!value) return null;
+    const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(value);
+    if (m) {
+      const year = Number(m[1]);
+      const month = Number(m[2]);
+      const day = Number(m[3]);
+      return new Date(year, month - 1, day);
+    }
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const formatDateInputValue = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getDataMinimaPlanejada = (): string => {
+    const amanha = new Date();
+    amanha.setHours(0, 0, 0, 0);
+    amanha.setDate(amanha.getDate() + 1);
+    return formatDateInputValue(amanha);
+  };
+
+  const sugerirNovaDataPlanejada = (item?: HistoricoItem | null): string => {
+    const dataBase = parseDateLocal(
+      (item as HistoricoItem & { data_realizacao?: string })?.data_realizacao ||
+        item?.data_conclusao,
+    );
+    const sugerida = dataBase ?? new Date();
+    sugerida.setHours(0, 0, 0, 0);
+    sugerida.setDate(sugerida.getDate() + 1);
+
+    const minima = parseDateLocal(getDataMinimaPlanejada());
+    if (minima && sugerida < minima) {
+      return formatDateInputValue(minima);
+    }
+
+    return formatDateInputValue(sugerida);
+  };
+
+  const recarregarHistoricoEStats = useCallback(
+    async (token?: string | null) => {
+      await carregarHistorico();
+
+      const statsResponse = await fetch(`${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`, {
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
+            }
+          : {},
+      });
+
+      if (!statsResponse.ok) {
+        throw new Error('Erro ao carregar stats');
+      }
+
+      const json = await statsResponse.json();
+      const data = json.data || json;
+      setDashboardStats({
+        total: data.total_ativas || 0,
+        validas: data.validas || 0,
+        vencendo: data.a_vencer_30_dias || 0,
+        vencidas: data.vencidas || 0,
+        renovadas: data.renovadas || 0,
+        planejadas: data.planejadas || 0,
+      });
+    },
+    [carregarHistorico],
+  );
+
+  const fecharModalPlanejada = () => {
+    setShowPlanejadaModal(false);
+    setPlanejadaSelecionada(null);
+    setNovaDataPlanejada('');
+  };
+
+  const abrirModalPlanejada = (row: HistoricoItem) => {
+    setPlanejadaSelecionada(row);
+    setNovaDataPlanejada(sugerirNovaDataPlanejada(row));
+    setShowPlanejadaModal(true);
+  };
+
+  const getTurmasPlanejadasDisponiveis = useCallback(
+    (item: HistoricoItem): TreinamentoPlanejado[] => {
+      const normalizeText = (value?: string | null) =>
+        (value ?? '')
+          .toString()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toUpperCase();
+      const normalizeCode = (value?: string | null) =>
+        (value ?? '').toString().trim().toUpperCase();
+      const isSameDate = (left?: string | null, right?: string | null) =>
+        String(left || '').slice(0, 10) === String(right || '').slice(0, 10);
+
+      const qualificacaoId = Number(item.qualificacao_id || 0);
+      const qualificacaoCodigo = normalizeCode(item.qualificacao_codigo || item.codigo || '');
+      const qualificacaoNome = normalizeText(item.qualificacao_nome || '');
+      const funcionarioId = Number(item.funcionario_id || 0);
+      const dataPlanejadaItem =
+        (item as HistoricoItem & { data_realizacao?: string }).data_realizacao ||
+        item.data_conclusao ||
+        null;
+
+      return (treinamentosPlanejadosConvocacaoQuery.data?.items || [])
+        .filter((treinamento) => {
+          const statusTreinamento = normalizeText(treinamento.status);
+          if (statusTreinamento !== 'PLANEJADO') return false;
+          if (
+            !treinamento.participantes.some(
+              (participante) => Number(participante.funcionario_id) === funcionarioId,
+            )
+          ) {
+            return false;
+          }
+
+          if (qualificacaoId > 0 && Number(treinamento.qualificacao_tipo_id) === qualificacaoId) {
+            return true;
+          }
+
+          const treinamentoCodigo = normalizeCode(treinamento.qualificacao_codigo || '');
+          if (qualificacaoCodigo && treinamentoCodigo === qualificacaoCodigo) {
+            return true;
+          }
+
+          const treinamentoNome = normalizeText(
+            treinamento.qualificacao_nome || treinamento.titulo || '',
+          );
+          if (
+            qualificacaoNome &&
+            treinamentoNome &&
+            (treinamentoNome.includes(qualificacaoNome) ||
+              qualificacaoNome.includes(treinamentoNome))
+          ) {
+            return true;
+          }
+
+          if (isSameDate(treinamento.data_prevista, dataPlanejadaItem)) {
+            return true;
+          }
+
+          return false;
+        })
+        .sort((left, right) => {
+          const leftKey = `${left.data_prevista} ${left.hora_inicio || '99:99'}`;
+          const rightKey = `${right.data_prevista} ${right.hora_inicio || '99:99'}`;
+          return leftKey.localeCompare(rightKey);
+        });
+    },
+    [treinamentosPlanejadosConvocacaoQuery.data?.items],
+  );
+
+  const turmasPlanejadasDisponiveis = useMemo(
+    () =>
+      planejadaConvocacaoSelecionada
+        ? getTurmasPlanejadasDisponiveis(planejadaConvocacaoSelecionada)
+        : [],
+    [getTurmasPlanejadasDisponiveis, planejadaConvocacaoSelecionada],
+  );
+
+  const carregarGestoresCcDisponiveis = useCallback(async () => {
+    setCarregandoGestoresCc(true);
+    try {
+      const token = getAccessToken();
+      const response = await apiFetch('/api/notificacoes/convocacoes/gestores', {
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : undefined,
+      });
+
+      const json = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        data?: Array<{
+          id: number;
+          nome: string;
+          email: string;
+          cargo?: string | null;
+          empresa?: string | null;
+          ativo: boolean;
+        }>;
+      };
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || `HTTP ${response.status}`);
+      }
+
+      const gestoresAtivos = (json.data || []).filter((gestor) => gestor.ativo);
+      setGestoresCcDisponiveis(gestoresAtivos);
+      setGestoresCcSelecionadosIds(gestoresAtivos.map((gestor) => gestor.id));
+    } catch (error) {
+      setGestoresCcDisponiveis([]);
+      setGestoresCcSelecionadosIds([]);
+      showToast.error(error instanceof Error ? error.message : 'Falha ao carregar gestores em CC.');
+    } finally {
+      setCarregandoGestoresCc(false);
+    }
+  }, []);
+
+  const fecharModalConvocacaoPlanejada = useCallback(() => {
+    setShowConvocacaoPlanejadaModal(false);
+    setPlanejadaConvocacaoSelecionada(null);
+    setTurmaConvocacaoSelecionadaId(null);
+    setConvocacaoPlanejadaPreview(null);
+    setConfirmarReenvioConvocacaoPlanejada(false);
+    setIgnorarSemEmailConvocacaoPlanejada(false);
+    setEscopoEnvioConvocacaoPlanejada('turma');
+    setGestoresCcDisponiveis([]);
+    setGestoresCcSelecionadosIds([]);
+  }, []);
+
+  const abrirModalConvocacaoPlanejada = useCallback(
+    (item: HistoricoItem) => {
+      const turmas = getTurmasPlanejadasDisponiveis(item);
+      setPlanejadaConvocacaoSelecionada(item);
+      setTurmaConvocacaoSelecionadaId(turmas[0]?.id || null);
+      setConvocacaoPlanejadaPreview(null);
+      setConfirmarReenvioConvocacaoPlanejada(false);
+      setIgnorarSemEmailConvocacaoPlanejada(false);
+      setEscopoEnvioConvocacaoPlanejada('turma');
+      setShowConvocacaoPlanejadaModal(true);
+      void carregarGestoresCcDisponiveis();
+    },
+    [carregarGestoresCcDisponiveis, getTurmasPlanejadasDisponiveis],
+  );
+
+  const prepararConvocacaoPlanejada = useCallback(async () => {
+    if (!turmaConvocacaoSelecionadaId) {
+      showToast.error('Selecione uma turma planejada para convocação.');
+      return;
+    }
+
+    try {
+      const preview = await previewConvocacaoPlanejada.mutateAsync({
+        id: turmaConvocacaoSelecionadaId,
+        gestores_cc_ids: gestoresCcSelecionadosIds,
+      });
+      setConvocacaoPlanejadaPreview(preview);
+      setConfirmarReenvioConvocacaoPlanejada(Boolean(preview.ultima_convocacao_em));
+      setIgnorarSemEmailConvocacaoPlanejada(false);
+    } catch (error) {
+      showToast.error(error instanceof Error ? error.message : 'Falha ao preparar convocação.');
+    }
+  }, [gestoresCcSelecionadosIds, previewConvocacaoPlanejada, turmaConvocacaoSelecionadaId]);
+
+  const confirmarConvocacaoPlanejada = useCallback(async () => {
+    if (!turmaConvocacaoSelecionadaId || !convocacaoPlanejadaPreview) return;
+
+    try {
+      if (escopoEnvioConvocacaoPlanejada === 'funcionario' && planejadaConvocacaoSelecionada) {
+        await reenviarConvocacaoPlanejada.mutateAsync({
+          id: turmaConvocacaoSelecionadaId,
+          funcionario_id: Number(planejadaConvocacaoSelecionada.funcionario_id),
+          gestores_cc_ids: gestoresCcSelecionadosIds,
+        });
+        showToast.success('Convocação enviada apenas para o funcionário selecionado.');
+      } else {
+        await enviarConvocacaoPlanejada.mutateAsync({
+          id: turmaConvocacaoSelecionadaId,
+          force_resend: confirmarReenvioConvocacaoPlanejada,
+          skip_missing_email: ignorarSemEmailConvocacaoPlanejada,
+          gestores_cc_ids: gestoresCcSelecionadosIds,
+        });
+        showToast.success('Convocação enviada para toda a turma selecionada.');
+      }
+      fecharModalConvocacaoPlanejada();
+    } catch (error) {
+      showToast.error(error instanceof Error ? error.message : 'Falha ao enviar convocação.');
+    }
+  }, [
+    convocacaoPlanejadaPreview,
+    escopoEnvioConvocacaoPlanejada,
+    confirmarReenvioConvocacaoPlanejada,
+    enviarConvocacaoPlanejada,
+    fecharModalConvocacaoPlanejada,
+    ignorarSemEmailConvocacaoPlanejada,
+    planejadaConvocacaoSelecionada,
+    reenviarConvocacaoPlanejada,
+    gestoresCcSelecionadosIds,
+    turmaConvocacaoSelecionadaId,
+  ]);
+
+  const participanteConvocacaoSelecionado = useMemo(() => {
+    if (!convocacaoPlanejadaPreview || !planejadaConvocacaoSelecionada) return null;
+    const funcionarioId = Number(planejadaConvocacaoSelecionada.funcionario_id || 0);
+    return (
+      convocacaoPlanejadaPreview.participantes.find(
+        (item) => item.funcionario_id === funcionarioId,
+      ) || null
+    );
+  }, [convocacaoPlanejadaPreview, planejadaConvocacaoSelecionada]);
+
+  const enviarConvocacaoPlanejadaFallback = useCallback(async () => {
+    if (!planejadaConvocacaoSelecionada) return;
+
+    const dataPlanejada =
+      (
+        planejadaConvocacaoSelecionada as HistoricoItem & {
+          data_realizacao?: string;
+        }
+      ).data_realizacao || planejadaConvocacaoSelecionada.data_conclusao;
+
+    if (!dataPlanejada) {
+      showToast.error('Data planejada não encontrada para montar a turma.');
+      return;
+    }
+
+    const normalize = (value?: string | null) =>
+      String(value || '')
+        .trim()
+        .toUpperCase();
+    const dataRef = String(dataPlanejada).slice(0, 10);
+    const codigoRef = normalize(
+      planejadaConvocacaoSelecionada.qualificacao_codigo || planejadaConvocacaoSelecionada.codigo,
+    );
+    const nomeRef = normalize(
+      planejadaConvocacaoSelecionada.qualificacao_nome || planejadaConvocacaoSelecionada.tipo_nome,
+    );
+
+    const turmaFuncionarioIds = Array.from(
+      new Set(
+        planejadosHistorico
+          .filter((item) => {
+            const itemData = String(
+              (
+                item as HistoricoItem & {
+                  data_realizacao?: string;
+                }
+              ).data_realizacao ||
+                item.data_conclusao ||
+                '',
+            ).slice(0, 10);
+            if (itemData !== dataRef) return false;
+
+            const itemCodigo = normalize(item.qualificacao_codigo || item.codigo);
+            const itemNome = normalize(item.qualificacao_nome || item.tipo_nome);
+
+            const codigoMatch = Boolean(codigoRef && itemCodigo && codigoRef === itemCodigo);
+            const nomeMatch = Boolean(nomeRef && itemNome && nomeRef === itemNome);
+
+            if (codigoRef || nomeRef) return codigoMatch || nomeMatch;
+            return true;
+          })
+          .map((item) => Number(item.funcionario_id || 0))
+          .filter((id) => id > 0),
+      ),
+    );
+
+    const funcionarioSelecionadoId = Number(planejadaConvocacaoSelecionada.funcionario_id || 0);
+    if (turmaFuncionarioIds.length === 0 && funcionarioSelecionadoId > 0) {
+      turmaFuncionarioIds.push(funcionarioSelecionadoId);
+    }
+
+    if (turmaFuncionarioIds.length === 0) {
+      showToast.error('Não foi possível identificar os tripulantes da turma planejada.');
+      return;
+    }
+
+    setEnviandoConvocacaoPlanejadaFallback(true);
+    try {
+      const token = getAccessToken();
+      const response = await apiFetch('/api/notificacoes/convocacoes/planejadas/enviar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          turma_funcionario_ids: turmaFuncionarioIds,
+          qualificacao_nome:
+            planejadaConvocacaoSelecionada.qualificacao_nome ||
+            planejadaConvocacaoSelecionada.tipo_nome ||
+            planejadaConvocacaoSelecionada.qualificacao_codigo ||
+            planejadaConvocacaoSelecionada.codigo ||
+            undefined,
+          qualificacao_id: Number(planejadaConvocacaoSelecionada.qualificacao_id || 0) || undefined,
+          qualificacao_codigo:
+            planejadaConvocacaoSelecionada.qualificacao_codigo ||
+            planejadaConvocacaoSelecionada.codigo ||
+            undefined,
+          data_planejada: dataRef,
+          funcionario_id:
+            escopoEnvioConvocacaoPlanejada === 'funcionario' ? funcionarioSelecionadoId : undefined,
+          escopo: escopoEnvioConvocacaoPlanejada,
+          gestores_cc_ids: gestoresCcSelecionadosIds,
+          instrutor: (planejadaConvocacaoSelecionada as HistoricoItem).instrutor || undefined,
+          local: (() => {
+            const obs = String((planejadaConvocacaoSelecionada as HistoricoItem).observacoes || '');
+            const m = obs.match(/Local:\s*([^|]+)/i);
+            return m ? m[1].trim() : undefined;
+          })(),
+          horario: (() => {
+            const obs = String((planejadaConvocacaoSelecionada as HistoricoItem).observacoes || '');
+            const m = obs.match(/Horario:\s*([^|]+)/i);
+            return m ? m[1].trim() : undefined;
+          })(),
+        }),
+      });
+
+      const json = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        data?: {
+          enviados?: number;
+          falhas?: number;
+        };
+      };
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || `HTTP ${response.status}`);
+      }
+
+      const enviados = Number(json.data?.enviados || 0);
+      const falhas = Number(json.data?.falhas || 0);
+      showToast.success(
+        falhas > 0
+          ? `Convocação enviada (${enviados} sucesso, ${falhas} falha).`
+          : `Convocação enviada com sucesso para ${enviados} participante(s).`,
+      );
+      fecharModalConvocacaoPlanejada();
+    } catch (error) {
+      showToast.error(error instanceof Error ? error.message : 'Falha ao enviar convocação.');
+    } finally {
+      setEnviandoConvocacaoPlanejadaFallback(false);
+    }
+  }, [
+    escopoEnvioConvocacaoPlanejada,
+    fecharModalConvocacaoPlanejada,
+    gestoresCcSelecionadosIds,
+    planejadaConvocacaoSelecionada,
+    planejadosHistorico,
+  ]);
+
+  const historicoColumns: Column<HistoricoItem>[] = [
+    {
+      id: 'acoes',
+      label: 'Ações',
+      accessor: (row) => row.id,
+      sortable: false,
+      visible: true,
+      width: '200px',
+      minWidth: '200px',
+      render: (value, row) => {
+        const item = row as HistoricoItem & {
+          qualificacao_status?: string;
+          data_realizacao?: string;
+          data_conclusao?: string;
+          categoria?: string;
+          qualificacao_categoria?: string;
+          data_vencimento?: string;
+        };
+        const status = item.qualificacao_status || 'CONCLUIDA';
+        const isPlanejada = status === 'PLANEJADA';
+        const isCancelada = status === 'CANCELADA';
+
+        // Verificar se a data planejada já passou (para mostrar botão de confirmar)
+        const dataRealizacao = item.data_realizacao || item.data_conclusao;
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const dataPlanejada = parseDateLocal(dataRealizacao);
+        const dataPlanejadaPassou = Boolean(dataPlanejada && dataPlanejada <= hoje);
+
+        // Verificar se é EAD ou CMA vencido ou vencendo
+        const categoria = (item.categoria || item.qualificacao_categoria || '').toUpperCase();
+        const nomeQualificacao = (item.qualificacao_nome || '').toUpperCase();
+        const isCMA =
+          categoria === 'CMA' ||
+          categoria === 'EXAME' ||
+          nomeQualificacao.includes('MÉDICO') ||
+          nomeQualificacao.includes('MEDICO');
+        const isEAD = categoria === 'EAD' || categoria === 'TREINAMENTO EAD';
+        const isEADouCMA = isEAD || isCMA;
+
+        const statusHistorico = getHistoricoStatus(item);
+        const isVencida = statusHistorico === 'VENCIDA';
+        const isVencendo = statusHistorico === 'VENCENDO_30';
+        const mostrarAlertaEAD =
+          isEADouCMA && (isVencida || isVencendo) && !isPlanejada && !isCancelada;
+
+        return (
+          <div className="flex items-center gap-1">
+            {isPlanejada && (
+              <button
+                type="button"
+                onClick={() => handleCancelar(item)}
+                title="Excluir qualificação planejada"
+                className={historicoActionDangerButtonClass}
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </button>
+            )}
+
+            {!isPlanejada && (
+              <button
+                type="button"
+                onClick={() => handleDeletear(item)}
+                title="Deletar qualificação"
+                className={historicoActionDangerButtonClass}
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </button>
+            )}
+
+            {!isCancelada && (
+              <button
+                type="button"
+                onClick={() => handleEdit(item)}
+                title="Editar qualificação"
+                className={historicoActionButtonClass}
+              >
+                <Edit2 className="w-4 h-4 text-indigo-600" />
+              </button>
+            )}
+
+            {!isPlanejada && !isCancelada && (
+              <button
+                type="button"
+                onClick={() => handleRenovar(item)}
+                title="Renovar qualificação"
+                className={historicoActionButtonClass}
+              >
+                <RefreshCw className="w-4 h-4 text-violet-600" />
+              </button>
+            )}
+
+            {isPlanejada && dataPlanejadaPassou && (
+              <button
+                type="button"
+                onClick={() => abrirModalPlanejada(item)}
+                title="Informar se o treinamento planejado foi realizado"
+                className={`${historicoActionButtonClass} animate-pulse`}
+              >
+                <CheckCircle2 className="w-4 h-4 text-amber-500" />
+              </button>
+            )}
+
+            {isPlanejada && !dataPlanejadaPassou && (
+              <button
+                type="button"
+                onClick={() => abrirModalPlanejada(item)}
+                title="Reagendar qualificação planejada"
+                className={historicoActionButtonClass}
+              >
+                <RotateCcw className="w-4 h-4 text-sky-600" />
+              </button>
+            )}
+
+            {isPlanejada && (
+              <button
+                type="button"
+                onClick={() => abrirModalConvocacaoPlanejada(item)}
+                title="Selecionar turma planejada para enviar convocação"
+                className={historicoActionButtonClass}
+              >
+                <Mail className="w-4 h-4 text-emerald-600" />
+              </button>
+            )}
+
+            {!isCancelada && !isPlanejada && (
+              <button
+                type="button"
+                onClick={async () => {
+                  setHistoricoSelecionado(item);
+                  setShowCertModal(true);
+                }}
+                title={
+                  hasArchivedCertificate(item)
+                    ? 'Certificado arquivado ✓'
+                    : 'Clique para gerenciar certificado'
+                }
+                className={historicoActionButtonClass}
+              >
+                <Award
+                  className={`w-4 h-4 ${hasArchivedCertificate(item) ? 'text-emerald-600' : 'text-slate-500'}`}
+                />
+              </button>
+            )}
+
+            {mostrarAlertaEAD && (
+              <button
+                type="button"
+                onClick={async () => {
+                  setAlertaEADModal({
+                    isOpen: true,
+                    qualificacao: item,
+                  });
+                }}
+                title="Enviar alerta de treinamento vencido"
+                className={historicoActionButtonClass}
+              >
+                <BellRing className="w-4 h-4 text-amber-500" />
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'status',
+      label: 'Status',
+      accessor: (row) => row.status,
+      sortable: true,
+      visible: true,
+      width: '115px',
+      render: (value, row) => {
+        const item = row as HistoricoItem & { qualificacao_status?: string };
+
+        // Priorizar qualificacao_status do banco (PLANEJADA, CONCLUIDA, CANCELADA)
+        const qualificacaoStatus = item.qualificacao_status?.toUpperCase();
+
+        // Se é PLANEJADA ou CANCELADA, usar diretamente
+        if (qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'CANCELADA') {
+          return (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(
+                qualificacaoStatus,
+              )}`}
+            >
+              <span className={`h-2 w-2 rounded-full ${getStatusDotColor(qualificacaoStatus)}`} />
+              {getStatusLabel(qualificacaoStatus)}
+            </span>
+          );
+        }
+
+        // Para CONCLUIDA, usar a lógica de status derivado (VALIDA, VENCIDA, etc.)
+        const statusHistorico = getHistoricoStatus(item);
+        const ehRenovadaFlag =
+          (row as unknown as { renovada?: number | boolean }).renovada === 1 ||
+          (row as unknown as { renovada?: number | boolean }).renovada === true;
+        const ehRenovada = ehRenovadaFlag || statusHistorico === 'RENOVADA';
+        const status = ehRenovada ? 'RENOVADA' : statusHistorico;
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                ehRenovada ? 'bg-blue-600/10 text-blue-600' : getStatusColor(status)
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  ehRenovada ? 'bg-primary' : getStatusDotColor(status)
+                }`}
+              />
+              {ehRenovada ? 'Renovada' : getStatusLabel(status)}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      id: 'funcionario',
+      label: 'Funcionário',
+      accessor: (row) => row.funcionario_nome,
+      sortable: true,
+      visible: true,
+      width: '200px',
+      render: (value, row) => {
+        const nome = String(value ?? '');
+        return (
+          <div className="flex min-w-0 flex-col">
+            <FuncionarioLink
+              funcionarioId={row.funcionario_id}
+              nome={nome}
+              className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900"
+            />
+            {row.funcionario_codigo_anac && (
+              <span
+                className="line-clamp-1 whitespace-normal break-words text-xs font-normal text-slate-500"
+                title="Código CANAC"
+              >
+                CANAC: {row.funcionario_codigo_anac}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'qualificacao',
+      label: 'Qualificação',
+      accessor: (row) =>
+        row.qualificacao_nome || row.qualificacao_desc || row.qualificacao_codigo || '-',
+      sortable: true,
+      visible: true,
+      width: '250px',
+      render: (value) => (
+        <span className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900">
+          {String(value ?? '')}
+        </span>
+      ),
+    },
+    {
+      id: 'tipo_treinamento',
+      label: 'Tipo',
+      accessor: (row) => {
+        return getTipoTreinamentoDisplay(
+          (row as { tipo_treinamento?: string | null }).tipo_treinamento || null,
+          Number(
+            (row as { validade_meses?: number | null; qualificacao_validade?: number | null })
+              .validade_meses ??
+              (row as { qualificacao_validade?: number | null }).qualificacao_validade ??
+              0,
+          ),
+        ).value;
+      },
+      sortable: true,
+      visible: true,
+      width: '105px',
+      render: (value) => {
+        const display = getTipoTreinamentoDisplay(String(value || ''));
+        return (
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${display.className}`}
+          >
+            {display.label}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'codigo',
+      label: 'Código',
+      accessor: (row) =>
+        (row as HistoricoItem & { codigo_legacy?: string }).qualificacao_codigo ||
+        (row as HistoricoItem & { codigo_legacy?: string }).codigo ||
+        (row as HistoricoItem & { codigo_legacy?: string }).codigo_legacy ||
+        '-',
+      sortable: true,
+      visible: true,
+      width: '90px',
+      render: (value, row) => {
+        const r = row as HistoricoItem & { codigo_legacy?: string };
+        const display =
+          String(value || r.qualificacao_codigo || r.codigo || r.codigo_legacy || '-') || '-';
+        return <span className="text-sm font-normal text-slate-900">{display}</span>;
+      },
+    },
+    {
+      id: 'aeronave',
+      label: 'Equipamento',
+      accessor: (row) => (row as any).modelo_aeronave || '-',
+      sortable: true,
+      visible: true,
+      width: '115px',
+      render: (value) => (
+        <span className="text-sm font-normal text-slate-900">{String(value ?? '-')}</span>
+      ),
+    },
+    {
+      id: 'categoria',
+      label: 'Categoria',
+      accessor: (row) => row.qualificacao_categoria || row.categoria || '-',
+      sortable: true,
+      visible: true,
+      width: '145px',
+      render: (value, row) => {
+        const categoriaName = String(value ?? '');
+        // 1. Prioridade: cor vinda diretamente do backend (JOIN com qualificacoes_categorias)
+        const corDireta = (row as any).categoria_cor;
+        // 2. Fallback: buscar no mapa local de categorias (caso backend não retorne cor)
+        const categoriaByName = !corDireta
+          ? categoriasMap.get(normalizeCategoriaKey(categoriaName))
+          : undefined;
+        const categoriaById =
+          !corDireta && (row as { categoria_id?: number }).categoria_id
+            ? categorias.find((c) => c.id === (row as { categoria_id?: number }).categoria_id)
+            : undefined;
+
+        const corFinal = getCategoriaCorDisplay(
+          categoriaName,
+          corDireta || categoriaByName?.cor || categoriaById?.cor,
+        );
+        let corBg = '#f1f5f9';
+        let corText = '#64748b';
+
+        if (corFinal) {
+          // Normalizar hex: #rgb -> #rrggbb
+          let hex = corFinal.replace('#', '');
+          if (hex.length === 3) {
+            hex = hex
+              .split('')
+              .map((c: string) => c + c)
+              .join('');
+          }
+          corBg = `#${hex}22`;
+          corText = `#${hex}`;
+        }
+
+        return (
+          <span
+            key={`cat-${(row as any).id}-${value}-${corFinal || 'default'}`}
+            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+            style={{ backgroundColor: corBg, color: corText }}
+          >
+            {categoriaName}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'realizado',
+      label: 'Realizado',
+      accessor: (row) => {
+        const d = row.data_realizacao || row.data_conclusao || row.data_emissao;
+        return d ? parseDateLocal(d) : '';
+      },
+      sortable: true,
+      visible: true,
+      width: '135px',
+      render: (value, row) => {
+        if (!value || value === '-')
+          return <span className="text-sm font-normal text-slate-400">-</span>;
+        const data = value as Date;
+        const qualificacaoStatus = String(
+          (row as unknown as { qualificacao_status?: string | null }).qualificacao_status || '',
+        ).toUpperCase();
+        const isPlanejada = qualificacaoStatus === 'PLANEJADA';
+        const validadeMeses =
+          (
+            row as unknown as {
+              validade_meses?: number;
+              validade?: number;
+              qualificacao_validade?: number;
+            }
+          ).validade_meses ??
+          (
+            row as unknown as {
+              validade_meses?: number;
+              validade?: number;
+              qualificacao_validade?: number;
+            }
+          ).validade ??
+          (
+            row as unknown as {
+              validade_meses?: number;
+              validade?: number;
+              qualificacao_validade?: number;
+            }
+          ).qualificacao_validade ??
+          null;
+        return (
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-slate-900">
+              {data.toLocaleDateString('pt-BR')}
+            </span>
+            <span className="text-xs font-normal text-slate-500">
+              {isPlanejada
+                ? 'Data planejada'
+                : validadeMeses
+                  ? `Valid. ${validadeMeses} meses.`
+                  : 'Valid. -'}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      id: 'vencimento',
+      label: 'Vencimento',
+      accessor: (row) => {
+        const d = row.data_vencimento || row.data_validade;
+        return d ? parseDateLocal(d) : '';
+      },
+      sortable: true,
+      visible: true,
+      width: '155px',
+      render: (value, row) => {
+        if (!value || value === '-')
+          return <span className="text-sm font-normal text-slate-400">-</span>;
+        const dataVenc = value as Date;
+        const hoje = new Date();
+        const diasRestantes = Math.floor(
+          (dataVenc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const planejadaRelacionada = getPlanejadaRelacionada(row as HistoricoItem);
+        return (
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-slate-900">
+              {dataVenc.toLocaleDateString('pt-BR')}
+            </span>
+            {diasRestantes >= 0 ? (
+              <span className="text-xs font-normal text-slate-500">
+                {diasRestantes === 0 ? 'Hoje' : `${diasRestantes} dias`}
+              </span>
+            ) : (
+              // Mostrar "vencida há xxx dias" APENAS se NÃO for renovada
+              !(
+                (row as unknown as { renovada?: number | boolean }).renovada === 1 ||
+                (row as unknown as { renovada?: number | boolean }).renovada === true
+              ) && (
+                <>
+                  <span className="text-xs font-medium text-danger-600">
+                    Vencida há {Math.abs(diasRestantes)} dias
+                  </span>
+                  {planejadaRelacionada && (
+                    <span className="text-[11px] font-medium text-purple-600">Já planejada</span>
+                  )}
+                </>
+              )
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+
+  return (
+    <AppLayout>
+      {/* Page Header */}
+      <PageHeader
+        className="mb-8"
+        title="Qualificações e Certificações"
+        subtitle="Gerencie qualificações, certificações e treinamentos dos funcionários."
+        actions={
+          <>
+            <button
+              onClick={handleNew}
+              className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary/90"
+            >
+              <Plus className="w-4 h-4" />
+              Incluir Qualificação
+            </button>
+          </>
+        }
+      />
+
+      {/* Main content container */}
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        {/* Tabs + Search + Configurar Colunas */}
+        <div className="border-b border-slate-200 dark:border-slate-800">
+          <div className="flex flex-wrap items-start gap-4 p-4 xl:flex-nowrap xl:items-center">
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+              <button
+                onClick={() => setActiveTab('historico')}
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                  activeTab === 'historico'
+                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                <History size={16} className={activeTab === 'historico' ? 'text-blue-600' : ''} />
+                Histórico
+              </button>
+              <button
+                onClick={() => setActiveTab('planejados')}
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                  activeTab === 'planejados'
+                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                <CalendarDays
+                  size={16}
+                  className={activeTab === 'planejados' ? 'text-blue-600' : ''}
+                />
+                Planejados
+              </button>
+              <button
+                onClick={() => setActiveTab('tipos')}
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                  activeTab === 'tipos'
+                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Bookmark size={16} className={activeTab === 'tipos' ? 'text-blue-600' : ''} />
+                Modelos
+              </button>
+              <button
+                onClick={() => setActiveTab('categorias')}
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                  activeTab === 'categorias'
+                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                <FolderOpen
+                  size={16}
+                  className={activeTab === 'categorias' ? 'text-blue-600' : ''}
+                />
+                Categorias
+              </button>
+            </div>
+            {/* Search Bar */}
+            {usesHistoricoDataset && (
+              <div className="relative min-w-[260px] flex-1 xl:max-w-md">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={16}
+                />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome, código ANAC, qualificação, equipamento..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
+                />
+              </div>
+            )}
+            {activeTab === 'tipos' && (
+              <div className="relative min-w-[260px] flex-1 xl:max-w-md">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={16}
+                />
+                <input
+                  type="text"
+                  placeholder="Buscar modelos por nome, código ou categoria..."
+                  value={searchTipos}
+                  onChange={(e) => setSearchTipos(e.target.value)}
+                  className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
+                />
+              </div>
+            )}
+            {/* Botões de ação - Novo Modelo/Categoria + Configurar Colunas */}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {/* Filtro de Equipamento e Exportação */}
+              {usesHistoricoDataset && (
+                <>
+                  <div className="relative">
+                    <select
+                      value={aeronaveFilter}
+                      onChange={(e) => {
+                        setAeronaveFilter(e.target.value);
+                        setPage(1);
+                      }}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 pr-8 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600 bg-white appearance-none cursor-pointer"
+                    >
+                      <option value="">Todos os equipamentos</option>
+                      {aeronavesConfig.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.modelo || a.codigo || (a as { nome?: string }).nome || String(a.id)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="relative">
+                    <select
+                      value={categoriaFilter}
+                      onChange={(e) => {
+                        setCategoriaFilter(e.target.value);
+                        setPage(1);
+                      }}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 pr-8 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600 bg-white appearance-none cursor-pointer"
+                    >
+                      <option value="">Todas as categorias</option>
+                      {categorias
+                        .slice()
+                        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+                        .map((cat) => (
+                          <option key={cat.id ?? cat.nome} value={cat.nome}>
+                            {cat.nome}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </>
+              )}
+              {activeTab === 'tipos' && (
+                <button
+                  onClick={async () => {
+                    setEditingTipo({
+                      id: '',
+                      nome: '',
+                      codigo: '',
+                      tipo: null,
+                      categoria: '',
+                      validade: null,
+                      observacoes: null,
+                      ativo: 1,
+                      descricao: null,
+                      conteudo_programatico: null,
+                      carga_horaria: null,
+                      carga_horaria_inicial: null,
+                      carga_horaria_recorrente: null,
+                      vencimento_fim_mes: 0,
+                      is_check: 0,
+                    });
+                    setShowTipoModal(true);
+                  }}
+                  className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Novo Modelo</span>
+                </button>
+              )}
+              {isPlanejadosTab && (
+                <button
+                  onClick={() => abrirModalTurmaPlanejada()}
+                  className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Incluir Turma</span>
+                </button>
+              )}
+              {activeTab === 'categorias' && (
+                <button
+                  onClick={async () => {
+                    setEditingCategoria(null);
+                    setNovaCategoriaNome('');
+                    setNovaCategoriaDesc('');
+                    setShowCategoriaModal(true);
+                  }}
+                  className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nova Categoria</span>
+                </button>
+              )}
+              {isHistoricoTab && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                    className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <ListFilter className="w-4 h-4" />
+                    <span>Filtrar Status ({statusFiltro.size}/6)</span>
+                  </button>
+
+                  {statusDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-slate-200 shadow-lg p-3 min-w-[200px]">
+                      <div className="text-xs font-medium text-slate-500 mb-2">Exibir status:</div>
+                      {[
+                        { key: 'VALIDA', label: 'Válidas', color: 'text-green-600' },
+                        {
+                          key: 'VENCENDO_30',
+                          label: 'Vencendo (30 dias)',
+                          color: 'text-amber-600',
+                        },
+                        { key: 'VENCIDA', label: 'Vencidas', color: 'text-red-600' },
+                        { key: 'RENOVADA', label: 'Renovadas', color: 'text-blue-600' },
+                        { key: 'PLANEJADA', label: 'Planejadas', color: 'text-purple-600' },
+                        { key: 'CANCELADA', label: 'Canceladas', color: 'text-slate-500' },
+                      ].map(({ key, label, color }) => (
+                        <label
+                          key={key}
+                          className="flex items-center gap-2 py-1 cursor-pointer select-none hover:bg-slate-50 px-1 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={statusFiltro.has(key)}
+                            onChange={(e) => {
+                              const newSet = new Set(statusFiltro);
+                              if (e.target.checked) {
+                                newSet.add(key);
+                              } else {
+                                newSet.delete(key);
+                              }
+                              setStatusFiltro(newSet);
+                            }}
+                            className="w-4 h-4 rounded border-slate-300"
+                          />
+                          <span className={`text-sm ${color}`}>{label}</span>
+                        </label>
+                      ))}
+                      <div className="border-t border-slate-200 mt-2 pt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setStatusFiltro(
+                              new Set([
+                                'VALIDA',
+                                'VENCIDA',
+                                'VENCENDO_30',
+                                'RENOVADA',
+                                'PLANEJADA',
+                                'CANCELADA',
+                              ]),
+                            )
+                          }
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Selecionar todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusFiltro(new Set())}
+                          className="text-xs text-slate-500 hover:underline"
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <button
+                onClick={() =>
+                  setColumnConfigOpen((prev) =>
+                    prev === (activeTab === 'tipos' ? 'tipos' : 'historico')
+                      ? null
+                      : activeTab === 'tipos'
+                        ? 'tipos'
+                        : 'historico',
+                  )
+                }
+                className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Columns2 className="w-4 h-4" />
+                <span>Configurar colunas</span>
+              </button>
+            </div>
+          </div>
+
+          {isHistoricoTab && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              <button
+                type="button"
+                onClick={resetStatusFromChip}
+                title="Limpar filtro rápido de status"
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 transition hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                <span>Total</span>
+                <strong className="text-slate-700 dark:text-slate-200">
+                  {loadingStats && !shouldUseLocalHistoricoHeaderStats
+                    ? '...'
+                    : historicoHeaderStats.total}
+                </strong>
+              </button>
+              <button
+                type="button"
+                onClick={() => applySingleStatusFromChip('VENCENDO_30')}
+                title="Filtrar apenas vencendo"
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                  isOnlyStatusSelected('VENCENDO_30')
+                    ? 'ring-2 ring-amber-300 bg-amber-100 text-amber-800'
+                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300'
+                }`}
+              >
+                <span>Vencendo</span>
+                <strong>
+                  {loadingStats && !shouldUseLocalHistoricoHeaderStats
+                    ? '...'
+                    : historicoHeaderStats.vencendo}
+                </strong>
+              </button>
+              <button
+                type="button"
+                onClick={() => applySingleStatusFromChip('VENCIDA')}
+                title="Filtrar apenas vencidas"
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                  isOnlyStatusSelected('VENCIDA')
+                    ? 'ring-2 ring-red-300 bg-red-100 text-red-800'
+                    : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300'
+                }`}
+              >
+                <span>Vencidas</span>
+                <strong>
+                  {loadingStats && !shouldUseLocalHistoricoHeaderStats
+                    ? '...'
+                    : historicoHeaderStats.vencidas}
+                </strong>
+              </button>
+              <button
+                type="button"
+                onClick={() => applySingleStatusFromChip('PLANEJADA')}
+                title="Filtrar apenas planejadas"
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                  isOnlyStatusSelected('PLANEJADA')
+                    ? 'ring-2 ring-purple-300 bg-purple-100 text-purple-800'
+                    : 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-500/10 dark:text-purple-300'
+                }`}
+              >
+                <span>Planejadas</span>
+                <strong>
+                  {loadingStats && !shouldUseLocalHistoricoHeaderStats
+                    ? '...'
+                    : historicoHeaderStats.planejadas || 0}
+                </strong>
+              </button>
+              <button
+                type="button"
+                onClick={() => applySingleStatusFromChip('RENOVADA')}
+                title="Filtrar apenas renovadas"
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                  isOnlyStatusSelected('RENOVADA')
+                    ? 'ring-2 ring-blue-300 bg-blue-100 text-blue-800'
+                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-300'
+                }`}
+              >
+                <span>Renovadas</span>
+                <strong>
+                  {loadingStats && !shouldUseLocalHistoricoHeaderStats
+                    ? '...'
+                    : historicoHeaderStats.renovadas}
+                </strong>
+              </button>
+            </div>
+          )}
+
+          {isPlanejadosTab && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+                <span>Total</span>
+                <strong className="text-slate-700 dark:text-slate-200">
+                  {planejadosStats.total}
+                </strong>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-1 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300">
+                <span>Futuros</span>
+                <strong>{planejadosStats.futuros}</strong>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                <span>Atrasados</span>
+                <strong>{planejadosStats.atrasados}</strong>
+              </span>
+              {planejadosStats.semData > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <span>Sem data</span>
+                  <strong>{planejadosStats.semData}</strong>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Error Banners */}
+        {usesHistoricoDataset && historicoError && (
+          <div className="mx-4 mt-4 mb-2 rounded-md border border-danger-300 bg-danger-50 p-4 flex gap-3">
+            <AlertCircle className="w-6 h-6 text-danger-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-danger-700 mb-1">
+                Erro ao carregar histórico
+              </p>
+              <p className="text-xs text-danger-600 mb-3 break-all">{historicoError}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => carregarHistorico()}
+                  className="inline-flex items-center gap-1 rounded-md bg-danger-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-danger-700"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Tentar novamente
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="inline-flex items-center gap-1 rounded-md border border-danger-300 px-3 py-1.5 text-xs font-medium text-danger-700 hover:bg-danger-100"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Recarregar página
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'tipos' && tiposError && (
+          <div className="mx-4 mt-4 mb-2 rounded-md border border-danger-300 bg-danger-50 p-4 flex gap-3">
+            <AlertCircle className="w-6 h-6 text-danger-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-danger-700 mb-1">
+                Erro ao carregar tipos de qualificação
+              </p>
+              <p className="text-xs text-danger-600 mb-3 break-all">{tiposError}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => refetchTipos()}
+                  className="inline-flex items-center gap-1 rounded-md bg-danger-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-danger-700"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Tentar novamente
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="inline-flex items-center gap-1 rounded-md border border-danger-300 px-3 py-1.5 text-xs font-medium text-danger-700 hover:bg-danger-100"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Recarregar página
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isHistoricoTab && highlightedHistoricoId && (
+          <div className="mx-4 mt-4 mb-2 rounded-md border border-sky-200 bg-sky-50 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-sky-800">
+                Registro do histórico em foco: #{highlightedHistoricoId}
+              </p>
+              <p className="text-xs text-sky-700 mt-1">
+                Os filtros de status foram ampliados para garantir que o registro vinculado pelo
+                EdApp fique visível.
+              </p>
+            </div>
+            <a
+              href="/qualificacoes"
+              className="inline-flex items-center gap-2 rounded-md border border-sky-300 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100"
+            >
+              Limpar foco
+            </a>
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="min-h-[300px]">
+          {activeTab === 'historico' && (
+            <DataTable
+              key={`historico-page-${page}-limit-${limit}`}
+              tableId="qualificacoes-historico"
+              data={prioritizedHistorico}
+              columns={historicoColumns}
+              rowClassName={(row) => {
+                const item = row as HistoricoItem;
+                const classNames: string[] = [];
+
+                if (item.id === highlightedHistoricoId) {
+                  classNames.push('bg-sky-50 ring-1 ring-inset ring-sky-300');
+                }
+
+                if (isPlanejadaVencida(item)) {
+                  classNames.push('bg-amber-50 border-l-4 border-amber-400');
+                }
+
+                return classNames.join(' ');
+              }}
+              loading={historicoTableLoading}
+              // Column config control
+              columnConfigOpen={columnConfigOpen === 'historico'}
+              onColumnConfigOpenChange={(open) => setColumnConfigOpen(open ? 'historico' : null)}
+              showInternalColumnConfigButton={false}
+              // Ordenação server-side
+              sortConfig={sortConfig}
+              onSortChange={(newSortConfig) => {
+                setSortConfig(newSortConfig);
+                setPage(1); // Reset para página 1 ao ordenar
+              }}
+              // Paginação server-side com opções 50/100
+              // Usa meta.total quando há busca, senão usa stats.total
+              page={page}
+              pageSize={limit}
+              total={historicoMeta?.total ?? stats.total}
+              onPageChange={(newPage) => setPage(newPage)}
+              onPageSizeChange={(size) => {
+                setLimit(size);
+                setPage(1); // Reset para página 1 ao mudar tamanho
+              }}
+              pageSizeOptions={[50, 100]}
+              emptyState={
+                <div className="text-center py-12">
+                  <ShieldCheck className="mx-auto mb-4 text-slate-300" size={60} />
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    Nenhuma qualificação encontrada
+                  </h3>
+                  <p className="text-sm text-slate-600 mb-4">
+                    {historicoTotal > 0 || (historico as HistoricoItem[]).length > 0
+                      ? 'Os filtros atuais esconderam os registros carregados.'
+                      : 'Comece adicionando a primeira qualificação ao sistema'}
+                  </p>
+                  {historicoTotal > 0 || (historico as HistoricoItem[]).length > 0 ? (
+                    <button
+                      onClick={() =>
+                        setStatusFiltro(
+                          new Set([
+                            'VALIDA',
+                            'VENCIDA',
+                            'VENCENDO_30',
+                            'RENOVADA',
+                            'PLANEJADA',
+                            'CANCELADA',
+                          ]),
+                        )
+                      }
+                      className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                    >
+                      <ListFilter className="w-4 h-4" />
+                      <span>Mostrar todos os status</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleNew}
+                      className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Adicionar Qualificação</span>
+                    </button>
+                  )}
+                </div>
+              }
+            />
+          )}
+
+          {activeTab === 'tipos' && (
+            <>
+              {loadingTipos ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                </div>
+              ) : (
+                <DataTable
+                  tableId="qualificacoes-tipos"
+                  data={filteredTipos}
+                  columns={[
+                    {
+                      id: 'acoes',
+                      label: 'Ações',
+                      accessor: (row) => row.id,
+                      sortable: false,
+                      visible: true,
+                      render: (value, row) => (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={async () => {
+                              await safeDelete({
+                                url: `${API_BASE_URL}/qualificacoes/tipos`,
+                                id: row.id,
+                                itemName: row.nome || 'modelo',
+                                onSuccess: () => {
+                                  showToast.success('Modelo deletado com sucesso!');
+                                  refetchTipos();
+                                },
+                                onError: () => {
+                                  showToast.error('Erro ao deletar modelo');
+                                },
+                              });
+                            }}
+                            className={historicoActionDangerButtonClass}
+                            title="Excluir modelo"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setEditingTipo({
+                                id: row.id ?? String(row.nome || 'tipo'),
+                                nome: row.nome || '',
+                                codigo: row.codigo ?? null,
+                                tipo: (row as { tipo?: string | null }).tipo ?? null,
+                                categoria: row.categoria ?? null,
+                                validade: row.validade ?? null,
+                                observacoes: row.observacoes ?? null,
+                                ativo: row.ativo ?? 1,
+                                descricao: row.descricao ?? null,
+                                conteudo_programatico:
+                                  (row as { conteudo_programatico?: string | null })
+                                    .conteudo_programatico ?? null,
+                                carga_horaria:
+                                  (row as { carga_horaria?: number | null }).carga_horaria ?? null,
+                                carga_horaria_inicial:
+                                  (row as { carga_horaria_inicial?: number | null })
+                                    .carga_horaria_inicial ?? null,
+                                carga_horaria_recorrente:
+                                  (row as { carga_horaria_recorrente?: number | null })
+                                    .carga_horaria_recorrente ?? null,
+                                vencimento_fim_mes: (row as any).vencimento_fim_mes ?? 0,
+                                is_check: (row as { is_check?: number | boolean | null }).is_check
+                                  ? 1
+                                  : 0,
+                                created_at: row.created_at,
+                                updated_at: row.updated_at ?? null,
+                              });
+                              setShowTipoModal(true);
+                            }}
+                            className={historicoActionButtonClass}
+                            title="Editar modelo"
+                          >
+                            <Pencil className="w-4 h-4 text-indigo-600" />
+                          </button>
+                        </div>
+                      ),
+                    },
+                    {
+                      id: 'nome',
+                      label: 'Nome',
+                      accessor: (row) => row.nome,
+                      sortable: true,
+                      visible: true,
+                      render: (value) => (
+                        <span className="text-sm font-medium text-slate-900">
+                          {String(value ?? '')}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: 'status',
+                      label: 'Status',
+                      accessor: (row) =>
+                        row.ativo === 1 || row.ativo === true ? 'ATIVO' : 'INATIVO',
+                      sortable: true,
+                      visible: true,
+                      render: (value) => {
+                        const isAtivo = value === 'ATIVO';
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                              isAtivo
+                                ? 'bg-success-600/10 text-success-600'
+                                : 'bg-slate-500/10 text-slate-500'
+                            }`}
+                          >
+                            <span
+                              className={`h-2 w-2 rounded-full ${
+                                isAtivo ? 'bg-success-600' : 'bg-slate-500'
+                              }`}
+                            />
+                            {isAtivo ? 'Ativo' : 'Inativo'}
+                          </span>
+                        );
+                      },
+                    },
+                    {
+                      id: 'codigo',
+                      label: 'Código',
+                      accessor: (row) => row.codigo || '-',
+                      sortable: true,
+                      visible: true,
+                      render: (value) => (
+                        <span className="text-sm font-normal text-slate-600">
+                          {String(value ?? '')}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: 'categoria',
+                      label: 'Categoria',
+                      accessor: (row) => row.categoria,
+                      sortable: true,
+                      visible: true,
+                      render: (value, row) => {
+                        // Procurar a categoria nas categorias carregadas para pegar a cor real
+                        const categoria = categorias.find((c) => c.nome === value);
+                        let corBg = '#f1f5f9';
+                        let corText = '#64748b';
+
+                        const categoriaCor = getCategoriaCorDisplay(
+                          String(value ?? ''),
+                          categoria?.cor,
+                        );
+
+                        if (categoriaCor) {
+                          // Normalizar hex: #rgb -> #rrggbb
+                          let hex = categoriaCor.replace('#', '');
+                          if (hex.length === 3) {
+                            hex = hex
+                              .split('')
+                              .map((c) => c + c)
+                              .join('');
+                          }
+                          corBg = `#${hex}22`;
+                          corText = `#${hex}`;
+                        }
+
+                        return (
+                          <span
+                            key={`tipo-cat-${(row as any).id}-${value}-${
+                              categoriaCor || 'default'
+                            }`}
+                            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                            style={{
+                              backgroundColor: corBg,
+                              color: corText,
+                            }}
+                          >
+                            {String(value ?? '')}
+                          </span>
+                        );
+                      },
+                    },
+                    {
+                      id: 'validade',
+                      label: 'Valid.',
+                      accessor: (row) => row.validade || '-',
+                      sortable: true,
+                      visible: true,
+                      render: (value) => (
+                        <span className="text-sm font-normal text-slate-600">
+                          {value === '-' ? '-' : `${value} meses`}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: 'total_no_historico',
+                      label: 'Registros',
+                      accessor: (row) => (row as any).total_no_historico ?? 0,
+                      sortable: true,
+                      visible: true,
+                      render: (value) => {
+                        const count = Number(value ?? 0);
+                        return (
+                          <span
+                            className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                              count === 0
+                                ? 'bg-slate-100 text-slate-400'
+                                : 'bg-blue-50 text-blue-700'
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        );
+                      },
+                    },
+                  ]}
+                  loading={false}
+                  // Column config control
+                  columnConfigOpen={columnConfigOpen === 'tipos'}
+                  onColumnConfigOpenChange={(open) => setColumnConfigOpen(open ? 'tipos' : null)}
+                  showInternalColumnConfigButton={false}
+                  emptyState={
+                    <div className="text-center py-12">
+                      <Tag className="mx-auto mb-4 text-slate-300" size={60} />
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                        Nenhum modelo cadastrado
+                      </h3>
+                      <p className="text-sm text-slate-600 mb-6">
+                        Configure os modelos de qualificações disponíveis no sistema
+                      </p>
+                      <button
+                        onClick={() => setShowTipoModal(true)}
+                        className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Novo Modelo</span>
+                      </button>
+                    </div>
+                  }
+                />
+              )}
+            </>
+          )}
+
+          {activeTab === 'categorias' && (
+            <div>
+              {categoriasError && (
+                <div className="mx-4 mb-4 rounded-md border border-danger-300 bg-danger-50 p-4 flex gap-3">
+                  <AlertCircle className="w-6 h-6 text-danger-600 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-danger-700 mb-1">
+                      Erro ao carregar categorias
+                    </p>
+                    <p className="text-xs text-danger-600 mb-3 break-all">{categoriasError}</p>
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="inline-flex items-center gap-1 rounded-md bg-danger-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-danger-700"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Recarregar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-24">
+                        Ações
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-32">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                        Categoria
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                        Conteúdo
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {categorias.map((cat) => (
+                      <tr key={cat.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={async () => {
+                                if (
+                                  !(await confirmDialog(
+                                    'Tem certeza que deseja deletar esta categoria?',
+                                  ))
+                                )
+                                  return;
+                                try {
+                                  const token = getAccessToken();
+                                  const apiUrl = API_BASE_URL;
+                                  const response = await fetch(`${apiUrl}/categorias/${cat.id}`, {
+                                    method: 'DELETE',
+                                    headers: {
+                                      Authorization: `Bearer ${token}`,
+                                    },
+                                  });
+                                  if (response.ok) {
+                                    showToast.success('Categoria deletada com sucesso!');
+                                    setCategorias(categorias.filter((c) => c.id !== cat.id));
+                                  } else {
+                                    const errorData = await response.json().catch(() => ({}));
+                                    if (response.status === 403) {
+                                      showToast.error(
+                                        'Permissão negada. Apenas administradores podem deletar categorias.',
+                                      );
+                                    } else {
+                                      showToast.error(
+                                        errorData.error || 'Erro ao deletar categoria',
+                                      );
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Erro ao deletar categoria:', error);
+                                  showToast.error('Erro ao deletar categoria');
+                                }
+                              }}
+                              className={historicoActionDangerButtonClass}
+                              title="Deletar"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                setEditingCategoria(cat);
+                                setNovaCategoriaNome(cat.nome);
+                                setNovaCategoriaDesc(cat.descricao || '');
+                                setShowCategoriaModal(true);
+                              }}
+                              className={historicoActionButtonClass}
+                              title="Editar"
+                            >
+                              <Pencil className="w-4 h-4 text-indigo-600" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-success-600/10 text-success-600">
+                            <span className="h-2 w-2 rounded-full bg-success-600" />
+                            ATIVO
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="h-3 w-3 rounded-full flex-shrink-0"
+                              style={{
+                                backgroundColor:
+                                  getCategoriaCorDisplay(cat.nome, cat.cor) || '#9ca3af',
+                              }}
+                            />
+                            <span className="font-medium text-slate-900">{cat.nome}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-slate-600 line-clamp-2">
+                            {cat.descricao || '-'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {categorias.length === 0 && (
+                <div className="text-center py-12">
+                  <Palette className="mx-auto mb-4 text-slate-300" size={60} />
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    Nenhuma categoria encontrada
+                  </h3>
+                  <p className="text-sm text-slate-600">Crie a primeira categoria</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isPlanejadosTab && (
+            <div className="space-y-4">
+              {/* Toggle visualization mode */}
+              <div className="flex items-center gap-2 px-4 pt-2">
+                <button
+                  onClick={() => setPlanejadosViewMode('list')}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    planejadosViewMode === 'list'
+                      ? 'bg-primary text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <ListFilter className="w-4 h-4" />
+                  Lista
+                </button>
+                <button
+                  onClick={() => setPlanejadosViewMode('calendar')}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    planejadosViewMode === 'calendar'
+                      ? 'bg-primary text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Grid3x3 className="w-4 h-4" />
+                  Calendário
+                </button>
+              </div>
+
+              {/* List view */}
+              {planejadosViewMode === 'list' && (
+                <DataTable
+                  key={`planejados-page-${page}-limit-${limit}`}
+                  tableId="qualificacoes-historico"
+                  data={planejadosHistorico}
+                  columns={historicoColumns}
+                  rowClassName={(row) => {
+                    const item = row as HistoricoItem;
+                    return isPlanejadaVencida(item)
+                      ? 'bg-amber-50 border-l-4 border-amber-400'
+                      : '';
+                  }}
+                  loading={planejadosTableLoading}
+                  columnConfigOpen={columnConfigOpen === 'historico'}
+                  onColumnConfigOpenChange={(open) =>
+                    setColumnConfigOpen(open ? 'historico' : null)
+                  }
+                  showInternalColumnConfigButton={false}
+                  sortConfig={sortConfig}
+                  onSortChange={(newSortConfig) => {
+                    setSortConfig(newSortConfig);
+                    setPage(1);
+                  }}
+                  page={page}
+                  pageSize={limit}
+                  total={historicoMeta?.total ?? planejadosHistorico.length}
+                  onPageChange={(newPage) => setPage(newPage)}
+                  onPageSizeChange={(size) => {
+                    setLimit(size);
+                    setPage(1);
+                  }}
+                  pageSizeOptions={[50, 100]}
+                  emptyState={
+                    <div className="text-center py-12">
+                      <CalendarDays className="mx-auto mb-4 text-slate-300" size={60} />
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                        Nenhum treinamento planejado encontrado
+                      </h3>
+                      <p className="text-sm text-slate-600 mb-4">
+                        Os treinamentos futuros aparecem aqui quando a qualificação é criada no
+                        Histórico com data planejada.
+                      </p>
+                    </div>
+                  }
+                />
+              )}
+
+              {/* Calendar view */}
+              {planejadosViewMode === 'calendar' && (
+                <div className="px-4">
+                  <QualificacoesCalendario
+                    qualificacoes={planejadosHistorico}
+                    onOpenQualificacao={(qualificacao) =>
+                      abrirModalPlanejada(qualificacao as HistoricoItem)
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {isPlanejadosTab && false && (
+            <DataTable
+              key={`planejados-page-${page}-limit-${limit}`}
+              tableId="qualificacoes-historico"
+              data={planejadosHistorico}
+              columns={historicoColumns}
+              rowClassName={(row) => {
+                const item = row as HistoricoItem;
+                return isPlanejadaVencida(item) ? 'bg-amber-50 border-l-4 border-amber-400' : '';
+              }}
+              loading={planejadosTableLoading}
+              columnConfigOpen={columnConfigOpen === 'historico'}
+              onColumnConfigOpenChange={(open) => setColumnConfigOpen(open ? 'historico' : null)}
+              showInternalColumnConfigButton={false}
+              sortConfig={sortConfig}
+              onSortChange={(newSortConfig) => {
+                setSortConfig(newSortConfig);
+                setPage(1);
+              }}
+              page={page}
+              pageSize={limit}
+              total={historicoMeta?.total ?? planejadosHistorico.length}
+              onPageChange={(newPage) => setPage(newPage)}
+              onPageSizeChange={(size) => {
+                setLimit(size);
+                setPage(1);
+              }}
+              pageSizeOptions={[50, 100]}
+              emptyState={
+                <div className="text-center py-12">
+                  <CalendarDays className="mx-auto mb-4 text-slate-300" size={60} />
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    Nenhum treinamento planejado encontrado
+                  </h3>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Os treinamentos futuros aparecem aqui quando a qualificação é criada no
+                    Histórico com data planejada.
+                  </p>
+                </div>
+              }
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Modal de Categoria */}
+      <Modal
+        isOpen={showCategoriaModal}
+        onClose={() => {
+          setShowCategoriaModal(false);
+          setEditingCategoria(null);
+          setNovaCategoriaNome('');
+          setNovaCategoriaDesc('');
+        }}
+        title={editingCategoria ? 'Editar Categoria' : 'Nova Categoria'}
+        size="md"
+      >
+        <div className="space-y-4">
+          <FormField label="Nome" required>
+            <TextInput
+              placeholder="Ex: LICENÇA, EXAME, TREINAMENTO..."
+              value={novaCategoriaNome}
+              onChange={(e) => setNovaCategoriaNome(e.target.value)}
+              autoFocus
+            />
+          </FormField>
+
+          <FormField label="Descrição">
+            <TextArea
+              rows={3}
+              placeholder="Descrição opcional da categoria..."
+              value={novaCategoriaDesc}
+              onChange={(e) => setNovaCategoriaDesc(e.target.value)}
+            />
+          </FormField>
+
+          <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={async () => {
+                setShowCategoriaModal(false);
+                setEditingCategoria(null);
+                setNovaCategoriaNome('');
+                setNovaCategoriaDesc('');
+              }}
+              className="px-6 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!novaCategoriaNome.trim()) {
+                  showToast.error('Nome é obrigatório');
+                  return;
+                }
+
+                try {
+                  const token = getAccessToken();
+                  const apiUrl = API_BASE_URL;
+
+                  const method = editingCategoria ? 'PUT' : 'POST';
+                  const url = editingCategoria
+                    ? `${apiUrl}/categorias/${editingCategoria.id}`
+                    : `${apiUrl}/categorias`;
+
+                  const response = await fetch(url, {
+                    method,
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                      nome: novaCategoriaNome,
+                      descricao: novaCategoriaDesc || null,
+                    }),
+                  });
+
+                  if (response.ok) {
+                    showToast.success(
+                      editingCategoria ? 'Categoria atualizada!' : 'Categoria criada!',
+                    );
+                    setShowCategoriaModal(false);
+                    setEditingCategoria(null);
+                    setNovaCategoriaNome('');
+                    setNovaCategoriaDesc('');
+                    // Recarregar categorias
+                    const categoriasResponse = await fetch(`${apiUrl}/categorias`, {
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                      },
+                    });
+                    if (categoriasResponse.ok) {
+                      const data = await categoriasResponse.json();
+                      setCategorias(data.data || []);
+                    }
+                  } else {
+                    showToast.error(editingCategoria ? 'Erro ao atualizar' : 'Erro ao criar');
+                  }
+                } catch {
+                  showToast.error('Erro ao salvar categoria');
+                }
+              }}
+              className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-2"
+            >
+              <Check className="w-4 h-4" />
+              {editingCategoria ? 'Atualizar' : 'Criar'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de Renovação (componentizado) */}
+      <Suspense fallback={null}>
+        <ModalRenovarQualificacao
+          isOpen={showRenovarModal}
+          onClose={() => {
+            setShowRenovarModal(false);
+            setQualificacaoParaRenovar(null);
+          }}
+          qualificacao={
+            qualificacaoParaRenovar
+              ? {
+                  id: (qualificacaoParaRenovar.id as number) || 0,
+                  funcionario_nome: qualificacaoParaRenovar.funcionario_nome || '',
+                  qualificacao_nome: qualificacaoParaRenovar.qualificacao_nome || '',
+                  qualificacao_codigo:
+                    (
+                      qualificacaoParaRenovar as unknown as {
+                        qualificacao_codigo?: string;
+                        codigo?: string;
+                      }
+                    ).qualificacao_codigo ||
+                    (qualificacaoParaRenovar as unknown as { codigo?: string }).codigo ||
+                    '-',
+                  data_vencimento:
+                    (qualificacaoParaRenovar.data_vencimento as string) ||
+                    (qualificacaoParaRenovar as unknown as { data_validade?: string })
+                      .data_validade ||
+                    '',
+                  data_realizacao:
+                    (qualificacaoParaRenovar.data_conclusao as string) ||
+                    (qualificacaoParaRenovar as unknown as { data_emissao?: string })
+                      .data_emissao ||
+                    '',
+                }
+              : null
+          }
+          onSuccess={async () => {
+            // ⚡ ATUALIZAÇÃO IMEDIATA - CRÍTICO PARA COMPLIANCE
+            await carregarHistorico();
+            // Recarregar stats também
+            try {
+              const statsResponse = await fetch(`${API_BASE_URL}/dashboard/qualificacoes`);
+              if (statsResponse.ok) {
+                const json = await statsResponse.json();
+                const data = json.data || json;
+                setDashboardStats({
+                  total: data.total_ativas || 0,
+                  validas: data.validas || 0,
+                  vencendo: data.a_vencer_30_dias || 0,
+                  vencidas: data.vencidas || 0,
+                  renovadas: data.renovadas || 0,
+                  planejadas: data.planejadas || 0,
+                });
+              }
+            } catch (error) {
+              console.error('Erro ao atualizar stats:', error);
+            }
+          }}
+        />
+      </Suspense>
+
+      {/* Modal novo unificado (atribuir/editar) */}
+      <Suspense fallback={null}>
+        <ModalAtribuirQualificacao
+          isOpen={showModal}
+          onClose={() => {
+            setShowModal(false);
+            setEditingQualificacao(null);
+          }}
+          habilitacao={
+            editingQualificacao
+              ? (() => {
+                  const e = editingQualificacao as unknown as HabilitacaoShape;
+                  return {
+                    id: e.id!,
+                    funcionario_id: e.funcionario_id!,
+                    qualificacao_id: e.qualificacao_id!,
+                    qualificacao_codigo:
+                      e.qualificacao_codigo ||
+                      (editingQualificacao as unknown as { codigo?: string }).codigo,
+                    qualificacao_nome: e.qualificacao_nome,
+                    data_conclusao: e.data_conclusao,
+                    data_vencimento: e.data_vencimento,
+                    numero_certificado: e.numero_certificado,
+                    instrutor: e.instrutor,
+                    observacoes: e.observacoes,
+                    tipo_treinamento: e.tipo_treinamento,
+                  };
+                })()
+              : undefined
+          }
+          onSuccess={async () => {
+            // ⚡ ATUALIZAÇÃO IMEDIATA - CRÍTICO PARA COMPLIANCE
+            await carregarHistorico();
+            // Recarregar stats também
+            try {
+              const statsResponse = await fetch(`${API_BASE_URL}/dashboard/qualificacoes`);
+              if (statsResponse.ok) {
+                const json = await statsResponse.json();
+                const data = json.data || json;
+                setDashboardStats({
+                  total: data.total_ativas || 0,
+                  validas: data.validas || 0,
+                  vencendo: data.a_vencer_30_dias || 0,
+                  vencidas: data.vencidas || 0,
+                  renovadas: data.renovadas || 0,
+                  planejadas: data.planejadas || 0,
+                });
+              }
+            } catch (error) {
+              console.error('Erro ao atualizar stats:', error);
+            }
+            setShowModal(false);
+            setEditingQualificacao(null);
+          }}
+        />
+      </Suspense>
+
+      <Modal
+        isOpen={showConvocacaoPlanejadaModal && !!planejadaConvocacaoSelecionada}
+        onClose={fecharModalConvocacaoPlanejada}
+        title="Convocar turma planejada"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {!convocacaoPlanejadaPreview ? (
+            <>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">
+                  {planejadaConvocacaoSelecionada?.funcionario_nome || '-'}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {planejadaConvocacaoSelecionada?.qualificacao_nome || '-'}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  A lista abaixo mostra apenas turmas em status planejado e vinculadas ao mesmo
+                  funcionário e à mesma qualificação desta linha.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Gestores em CC
+                  </p>
+                  <span className="text-xs text-slate-500">
+                    {gestoresCcSelecionadosIds.length} selecionado(s)
+                  </span>
+                </div>
+
+                {carregandoGestoresCc ? (
+                  <p className="mt-2 text-sm text-slate-500">Carregando gestores em cópia...</p>
+                ) : gestoresCcDisponiveis.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-500">Nenhum gestor ativo cadastrado.</p>
+                ) : (
+                  <>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                        onClick={() =>
+                          setGestoresCcSelecionadosIds(
+                            gestoresCcDisponiveis.map((gestor) => gestor.id),
+                          )
+                        }
+                      >
+                        Marcar todos
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                        onClick={() => setGestoresCcSelecionadosIds([])}
+                      >
+                        Limpar
+                      </button>
+                    </div>
+
+                    <div className="mt-2 max-h-36 space-y-2 overflow-y-auto pr-1">
+                      {gestoresCcDisponiveis.map((gestor) => (
+                        <label
+                          key={gestor.id}
+                          className="flex items-start gap-2 text-sm text-slate-700"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={gestoresCcSelecionadosIds.includes(gestor.id)}
+                            onChange={(event) => {
+                              setGestoresCcSelecionadosIds((current) => {
+                                if (event.target.checked) {
+                                  return current.includes(gestor.id)
+                                    ? current
+                                    : [...current, gestor.id];
+                                }
+                                return current.filter((id) => id !== gestor.id);
+                              });
+                            }}
+                          />
+                          <span>
+                            {gestor.nome}{' '}
+                            <span className="text-slate-500">&lt;{gestor.email}&gt;</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {treinamentosPlanejadosConvocacaoQuery.isLoading ? (
+                <p className="text-sm text-slate-500">Carregando turmas planejadas...</p>
+              ) : turmasPlanejadasDisponiveis.length === 0 ? (
+                <>
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Escopo do envio
+                    </p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-700">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="escopo-convocacao-planejada"
+                          checked={escopoEnvioConvocacaoPlanejada === 'turma'}
+                          onChange={() => setEscopoEnvioConvocacaoPlanejada('turma')}
+                        />
+                        Enviar para todos os tripulantes da turma
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="escopo-convocacao-planejada"
+                          checked={escopoEnvioConvocacaoPlanejada === 'funcionario'}
+                          onChange={() => setEscopoEnvioConvocacaoPlanejada('funcionario')}
+                        />
+                        Enviar apenas para{' '}
+                        {planejadaConvocacaoSelecionada?.funcionario_nome ||
+                          'o tripulante da linha'}
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <Button variant="secondary" onClick={fecharModalConvocacaoPlanejada}>
+                      Fechar
+                    </Button>
+                    <Button
+                      onClick={() => void enviarConvocacaoPlanejadaFallback()}
+                      disabled={enviandoConvocacaoPlanejadaFallback || carregandoGestoresCc}
+                    >
+                      {enviandoConvocacaoPlanejadaFallback ? 'Enviando...' : 'Enviar convocação'}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Escopo do envio
+                    </p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-700">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="escopo-convocacao-planejada"
+                          checked={escopoEnvioConvocacaoPlanejada === 'turma'}
+                          onChange={() => setEscopoEnvioConvocacaoPlanejada('turma')}
+                        />
+                        Enviar para todos da turma
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="escopo-convocacao-planejada"
+                          checked={escopoEnvioConvocacaoPlanejada === 'funcionario'}
+                          onChange={() => setEscopoEnvioConvocacaoPlanejada('funcionario')}
+                        />
+                        Enviar apenas para{' '}
+                        {planejadaConvocacaoSelecionada?.funcionario_nome ||
+                          'o funcionário da linha'}
+                      </label>
+                    </div>
+                  </div>
+
+                  {turmasPlanejadasDisponiveis.map((turma) => (
+                    <label
+                      key={turma.id}
+                      className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3 hover:border-slate-300"
+                    >
+                      <input
+                        type="radio"
+                        name="turma-convocacao-planejada"
+                        checked={turmaConvocacaoSelecionadaId === turma.id}
+                        onChange={() => setTurmaConvocacaoSelecionadaId(turma.id)}
+                        className="mt-1"
+                      />
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {turma.titulo?.trim() || turma.qualificacao_nome || 'Turma planejada'}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {formatDateLabel(turma.data_prevista)} ·{' '}
+                          {turma.hora_inicio || 'Horário a definir'}
+                          {turma.local ? ` · ${turma.local}` : ''}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {turma.convocados_total} convocados · {turma.confirmados_total}{' '}
+                          confirmados
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {!treinamentosPlanejadosConvocacaoQuery.isLoading &&
+                turmasPlanejadasDisponiveis.length > 0 && (
+                  <div className="flex justify-end gap-3">
+                    <Button variant="secondary" onClick={fecharModalConvocacaoPlanejada}>
+                      Fechar
+                    </Button>
+                    <Button
+                      onClick={() => void prepararConvocacaoPlanejada()}
+                      disabled={
+                        !turmaConvocacaoSelecionadaId ||
+                        previewConvocacaoPlanejada.isPending ||
+                        carregandoGestoresCc
+                      }
+                    >
+                      {previewConvocacaoPlanejada.isPending
+                        ? 'Preparando...'
+                        : 'Preparar convocação'}
+                    </Button>
+                  </div>
+                )}
+            </>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Turma
+                  </p>
+                  <p className="mt-2 font-semibold text-slate-900">
+                    {convocacaoPlanejadaPreview.treinamento_nome}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {convocacaoPlanejadaPreview.modalidade}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Envio
+                  </p>
+                  <p className="mt-2 font-semibold text-slate-900">
+                    {escopoEnvioConvocacaoPlanejada === 'funcionario'
+                      ? participanteConvocacaoSelecionado?.status === 'ready'
+                        ? '1 válido de 1'
+                        : '0 válidos de 1'
+                      : `${convocacaoPlanejadaPreview.destinatarios_validos} válidos de ${convocacaoPlanejadaPreview.destinatarios_total}`}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    CC:{' '}
+                    {gestoresCcDisponiveis
+                      .filter((item) => gestoresCcSelecionadosIds.includes(item.id))
+                      .map((item) => item.email)
+                      .join(', ') || 'Sem cópia'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                <p>
+                  <strong>Data:</strong> {convocacaoPlanejadaPreview.data_inicio}
+                </p>
+                <p>
+                  <strong>Horário:</strong> {convocacaoPlanejadaPreview.horario}
+                </p>
+                <p>
+                  <strong>Local:</strong> {convocacaoPlanejadaPreview.local}
+                </p>
+              </div>
+
+              {escopoEnvioConvocacaoPlanejada === 'turma' &&
+                (convocacaoPlanejadaPreview.ausentes_email.length > 0 ||
+                  convocacaoPlanejadaPreview.invalidos_email.length > 0) && (
+                  <label className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <input
+                      type="checkbox"
+                      checked={ignorarSemEmailConvocacaoPlanejada}
+                      onChange={(event) =>
+                        setIgnorarSemEmailConvocacaoPlanejada(event.target.checked)
+                      }
+                      className="mt-1"
+                    />
+                    <span>Ignorar participantes sem e-mail válido e enviar para os demais.</span>
+                  </label>
+                )}
+
+              {escopoEnvioConvocacaoPlanejada === 'funcionario' &&
+                participanteConvocacaoSelecionado?.status !== 'ready' && (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    O funcionário selecionado está sem e-mail válido para envio individual.
+                  </div>
+                )}
+
+              {escopoEnvioConvocacaoPlanejada === 'turma' &&
+                convocacaoPlanejadaPreview.ultima_convocacao_em && (
+                  <label className="flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                    <input
+                      type="checkbox"
+                      checked={confirmarReenvioConvocacaoPlanejada}
+                      onChange={(event) =>
+                        setConfirmarReenvioConvocacaoPlanejada(event.target.checked)
+                      }
+                      className="mt-1"
+                    />
+                    <span>Esta turma já recebeu convocação. Confirmo o reenvio.</span>
+                  </label>
+                )}
+
+              {convocacaoPlanejadaPreview.avisos.length > 0 && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  {convocacaoPlanejadaPreview.avisos.map((aviso) => (
+                    <p key={aviso}>{aviso}</p>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <Button variant="secondary" onClick={() => setConvocacaoPlanejadaPreview(null)}>
+                  Voltar
+                </Button>
+                <Button
+                  onClick={() => void confirmarConvocacaoPlanejada()}
+                  disabled={
+                    enviarConvocacaoPlanejada.isPending ||
+                    reenviarConvocacaoPlanejada.isPending ||
+                    carregandoGestoresCc ||
+                    (escopoEnvioConvocacaoPlanejada === 'turma' &&
+                      Boolean(convocacaoPlanejadaPreview.ultima_convocacao_em) &&
+                      !confirmarReenvioConvocacaoPlanejada) ||
+                    (escopoEnvioConvocacaoPlanejada === 'turma' &&
+                      (convocacaoPlanejadaPreview.ausentes_email.length || 0) +
+                        (convocacaoPlanejadaPreview.invalidos_email.length || 0) >
+                        0 &&
+                      !ignorarSemEmailConvocacaoPlanejada) ||
+                    (escopoEnvioConvocacaoPlanejada === 'funcionario' &&
+                      participanteConvocacaoSelecionado?.status !== 'ready')
+                  }
+                >
+                  {enviarConvocacaoPlanejada.isPending || reenviarConvocacaoPlanejada.isPending
+                    ? 'Enviando...'
+                    : escopoEnvioConvocacaoPlanejada === 'funcionario'
+                      ? 'Enviar para funcionário'
+                      : 'Enviar convocação'}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showTurmaPlanejadaModal}
+        onClose={fecharModalTurmaPlanejada}
+        title="Incluir turma planejada"
+        size="xl"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={fecharModalTurmaPlanejada}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void salvarTurmaPlanejada()} disabled={salvandoTurmaPlanejada}>
+              {salvandoTurmaPlanejada ? 'Salvando...' : 'Salvar turma'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Qualificacao" required>
+              <Select
+                value={turmaPlanejadaQualificacaoCodigo}
+                onChange={(e) => setTurmaPlanejadaQualificacaoCodigo(e.target.value)}
+                options={[
+                  { value: '', label: '-- Selecione --' },
+                  ...tipos
+                    .filter((tipo) => Boolean(tipo?.codigo && tipo?.nome))
+                    .map((tipo) => ({
+                      value: String(tipo.codigo || ''),
+                      label: `${tipo.codigo} - ${tipo.nome}`,
+                    })),
+                ]}
+              />
+            </FormField>
+            <FormField label="Data planejada" required>
+              <TextInput
+                type="date"
+                value={turmaPlanejadaData}
+                min={getDataMinimaPlanejada()}
+                onChange={(e) => setTurmaPlanejadaData(e.target.value)}
+              />
+            </FormField>
+            <FormField label="Horario">
+              <TextInput
+                type="time"
+                value={turmaPlanejadaHorario}
+                onChange={(e) => setTurmaPlanejadaHorario(e.target.value)}
+              />
+            </FormField>
+            <FormField label="Local">
+              <TextInput
+                value={turmaPlanejadaLocal}
+                onChange={(e) => setTurmaPlanejadaLocal(e.target.value)}
+                placeholder="Ex: Sala de Treinamento 2"
+              />
+            </FormField>
+            <FormField label="Tipo de treinamento">
+              <Select
+                value={turmaPlanejadaTipoTreinamento}
+                onChange={(e) =>
+                  setTurmaPlanejadaTipoTreinamento(
+                    e.target.value as
+                      | 'INICIAL'
+                      | 'RECORRENTE'
+                      | 'SEMESTRAL'
+                      | 'UPGRADE'
+                      | 'ESPECIFICO',
+                  )
+                }
+                options={[
+                  { value: 'INICIAL', label: 'Inicial' },
+                  { value: 'RECORRENTE', label: 'Periodico' },
+                  { value: 'SEMESTRAL', label: 'Semestral' },
+                  { value: 'UPGRADE', label: 'Upgrade' },
+                  { value: 'ESPECIFICO', label: 'Especifico' },
+                ]}
+              />
+            </FormField>
+            <FormField label="Instrutor">
+              <TextInput
+                value={turmaPlanejadaInstrutor}
+                onChange={(e) => setTurmaPlanejadaInstrutor(e.target.value)}
+                placeholder="Nome do instrutor"
+              />
+            </FormField>
+            <div className="md:col-span-2">
+              <FormField label="Observacoes">
+                <TextArea
+                  rows={3}
+                  value={turmaPlanejadaObservacoes}
+                  onChange={(e) => setTurmaPlanejadaObservacoes(e.target.value)}
+                  placeholder="Informacoes adicionais para todos os participantes"
+                />
+              </FormField>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-slate-900">Participantes da turma</p>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                {totalParticipantesTurmaPlanejadaSelecionados} selecionado(s)
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={buscaParticipanteTurmaPlanejada}
+                onChange={(e) => setBuscaParticipanteTurmaPlanejada(e.target.value)}
+                placeholder="Buscar por nome ou matricula"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm md:max-w-sm"
+              />
+              <button
+                type="button"
+                onClick={selecionarTodosParticipantesFiltradosTurmaPlanejada}
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Selecionar filtrados ({totalParticipantesTurmaPlanejadaFiltrados})
+              </button>
+              <button
+                type="button"
+                onClick={limparParticipantesFiltradosTurmaPlanejada}
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Limpar filtrados
+              </button>
+            </div>
+
+            <div className="mt-3 max-h-64 overflow-auto rounded-md border border-slate-200">
+              {loadingFuncionariosAtivos ? (
+                <p className="p-3 text-sm text-slate-500">Carregando funcionarios...</p>
+              ) : participantesTurmaPlanejadaFiltrados.length === 0 ? (
+                <p className="p-3 text-sm text-slate-500">Nenhum funcionario encontrado.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {participantesTurmaPlanejadaFiltrados.map((funcionario) => {
+                    const funcionarioId = Number(funcionario.id || 0);
+                    const checked = turmaPlanejadaParticipantesSelecionados.includes(funcionarioId);
+                    return (
+                      <li key={funcionarioId} className="px-3 py-2 hover:bg-slate-50">
+                        <label className="flex cursor-pointer items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              alternarSelecaoParticipanteTurmaPlanejada(funcionarioId)
+                            }
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-900">
+                              {funcionario.nome}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {funcionario.matricula || 'Sem matricula'}
+                            </p>
+                          </div>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showPlanejadaModal && !!planejadaSelecionada}
+        onClose={fecharModalPlanejada}
+        title={planejadaSelecionada?.qualificacao_nome || 'Treinamento planejado'}
+        size="lg"
+        footer={
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+            <button
+              type="button"
+              onClick={fecharModalPlanejada}
+              disabled={salvandoPlanejadaId === planejadaSelecionada?.id}
+              className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Fechar
+            </button>
+            {planejadaSelecionada && (
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const reagendou = await handleReagendarPlanejada(
+                      planejadaSelecionada,
+                      novaDataPlanejada,
+                    );
+                    if (reagendou) {
+                      fecharModalPlanejada();
+                    }
+                  }}
+                  disabled={salvandoPlanejadaId === planejadaSelecionada.id}
+                  className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-4 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {salvandoPlanejadaId === planejadaSelecionada.id
+                    ? 'Processando...'
+                    : 'Nao foi realizado, reagendar'}
+                </button>
+
+                {(() => {
+                  const dataPlanejada = parseDateLocal(
+                    (planejadaSelecionada as HistoricoItem & { data_realizacao?: string })
+                      .data_realizacao || planejadaSelecionada.data_conclusao,
+                  );
+                  const hoje = new Date();
+                  hoje.setHours(0, 0, 0, 0);
+                  const podeConfirmar = Boolean(dataPlanejada && dataPlanejada <= hoje);
+
+                  if (!podeConfirmar) {
+                    return null;
+                  }
+
+                  return (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setSalvandoPlanejadaId(planejadaSelecionada.id);
+                        const confirmou = await handleConfirmar(planejadaSelecionada, true, false);
+                        setSalvandoPlanejadaId(null);
+                        if (confirmou) {
+                          fecharModalPlanejada();
+                        }
+                      }}
+                      disabled={salvandoPlanejadaId === planejadaSelecionada.id}
+                      className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {salvandoPlanejadaId === planejadaSelecionada.id
+                        ? 'Processando...'
+                        : 'Foi realizado'}
+                    </button>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        }
+      >
+        {planejadaSelecionada && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700 ring-1 ring-purple-200">
+                  Planejada
+                </span>
+                {planejadaSelecionada.qualificacao_codigo && (
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                    {planejadaSelecionada.qualificacao_codigo}
+                  </span>
+                )}
+                {(planejadaSelecionada as HistoricoItem & { tipo_treinamento?: string | null })
+                  .tipo_treinamento && (
+                  <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
+                    {
+                      getTipoTreinamentoDisplay(
+                        (
+                          planejadaSelecionada as HistoricoItem & {
+                            tipo_treinamento?: string | null;
+                          }
+                        ).tipo_treinamento || null,
+                        (
+                          planejadaSelecionada as HistoricoItem & {
+                            qualificacao_validade?: number | null;
+                          }
+                        ).qualificacao_validade || null,
+                      ).label
+                    }
+                  </span>
+                )}
+              </div>
+              <p className="mt-3 text-sm text-slate-600">
+                Revise os dados do planejamento. Se o treinamento foi executado na data prevista,
+                confirme para concluir o registro e aplicar a lógica de renovação. Se não foi
+                realizado, informe uma nova data futura para manter o planejamento ativo.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                  Funcionario
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {planejadaSelecionada.funcionario_nome || '-'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                  Qualificacao
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {planejadaSelecionada.qualificacao_nome || '-'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                  Data planejada
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {(() => {
+                    const dataAtual =
+                      (planejadaSelecionada as HistoricoItem & { data_realizacao?: string })
+                        .data_realizacao || planejadaSelecionada.data_conclusao;
+                    return dataAtual
+                      ? parseDateLocal(dataAtual)?.toLocaleDateString('pt-BR') || dataAtual
+                      : '-';
+                  })()}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                  Vencimento
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {planejadaSelecionada.data_vencimento
+                    ? parseDateLocal(planejadaSelecionada.data_vencimento)?.toLocaleDateString(
+                        'pt-BR',
+                      ) || planejadaSelecionada.data_vencimento
+                    : '-'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                  Instrutor
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {planejadaSelecionada.instrutor || '-'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                  Registro
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  #{planejadaSelecionada.id}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                Observacoes
+              </p>
+              <p className="mt-2 text-sm text-slate-700">
+                {planejadaSelecionada.observacoes ||
+                  'Sem observacoes adicionais neste planejamento.'}
+              </p>
+            </div>
+
+            <FormField label="Nova data planejada">
+              <TextInput
+                type="date"
+                value={novaDataPlanejada}
+                min={getDataMinimaPlanejada()}
+                onChange={(e) => setNovaDataPlanejada(e.target.value)}
+              />
+              <p className="mt-2 text-xs text-slate-500">
+                Use uma nova data apenas quando o treinamento não tiver sido realizado e precisar
+                ser reagendado.
+              </p>
+            </FormField>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de Edição Completa (substitui ModalEditarQualificacaoSimples) */}
+      <Suspense fallback={null}>
+        <ModalAtribuirQualificacao
+          isOpen={modalEditarAberto && !!registroSelecionado}
+          onClose={() => {
+            setModalEditarAberto(false);
+            setRegistroSelecionado(null);
+          }}
+          habilitacao={
+            registroSelecionado
+              ? (() => {
+                  const r = registroSelecionado as unknown as HabilitacaoShape;
+                  return {
+                    id: r.id!,
+                    funcionario_id: r.funcionario_id!,
+                    qualificacao_id: r.qualificacao_id!,
+                    qualificacao_codigo:
+                      r.qualificacao_codigo ||
+                      (registroSelecionado as unknown as { codigo?: string }).codigo,
+                    qualificacao_nome: r.qualificacao_nome,
+                    data_conclusao: r.data_conclusao,
+                    data_vencimento: r.data_vencimento,
+                    numero_certificado: r.numero_certificado,
+                    instrutor: r.instrutor,
+                    observacoes: r.observacoes,
+                    tipo_treinamento: r.tipo_treinamento,
+                  };
+                })()
+              : undefined
+          }
+          onSuccess={async () => {
+            // ⚡ ATUALIZAÇÃO IMEDIATA - CRÍTICO PARA COMPLIANCE
+            await carregarHistorico();
+            // Recarregar stats também
+            try {
+              const statsResponse = await fetch(`${API_BASE_URL}/dashboard/qualificacoes`);
+              if (statsResponse.ok) {
+                const json = await statsResponse.json();
+                const data = json.data || json;
+                setDashboardStats({
+                  total: data.total_ativas || 0,
+                  validas: data.validas || 0,
+                  vencendo: data.a_vencer_30_dias || 0,
+                  vencidas: data.vencidas || 0,
+                  renovadas: data.renovadas || 0,
+                  planejadas: data.planejadas || 0,
+                });
+              }
+            } catch (error) {
+              console.error('Erro ao atualizar stats:', error);
+            }
+            setModalEditarAberto(false);
+            setRegistroSelecionado(null);
+          }}
+        />
+      </Suspense>
+
+      {/* Modal de Renovação (duplicado) */}
+      {/* Removido: usamos ModalRenovarQualificacao acima para UI consistente */}
+      {/* <Modal
+        isOpen={showRenovarModal}
+        onClose={() => {
+          setShowRenovarModal(false);
+          setQualificacaoParaRenovar(null);
+        }}
+        title={`Renovar Qualificação${
+          qualificacaoParaRenovar ? ` - ${qualificacaoParaRenovar.qualificacao_nome}` : ''
+        }`}
+        size="md"
+      >
+        <div className="space-y-4">
+          {qualificacaoParaRenovar && (
+            <div className="rounded-lg bg-slate-50 p-4 space-y-2">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase">Funcionário</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {qualificacaoParaRenovar.funcionario_nome}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase">Qualificação</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {qualificacaoParaRenovar.qualificacao_nome}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-between items-start pt-2 border-t border-slate-200">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase">Data Anterior</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {qualificacaoParaRenovar.data_conclusao
+                      ? new Date(qualificacaoParaRenovar.data_conclusao).toLocaleDateString('pt-BR')
+                      : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase">Vence em</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {qualificacaoParaRenovar.data_vencimento
+                      ? new Date(qualificacaoParaRenovar.data_vencimento).toLocaleDateString(
+                          'pt-BR',
+                        )
+                      : '-'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <FormField label="Nova Data de Realização" required>
+            <TextInput
+              type="date"
+              value={novaDataRealizacao}
+              onChange={(e) => setNovaDataRealizacao(e.target.value)}
+            />
+            <p className="text-xs text-slate-500 mt-2">
+              Nova data de vencimento será calculada automaticamente (+1 ano)
+            </p>
+          </FormField>
+
+          <FormActions
+            onCancel={() => {
+              setShowRenovarModal(false);
+              setQualificacaoParaRenovar(null);
+              setNovaDataRealizacao('');
+            }}
+            onSubmit={handleConfirmarRenovacao}
+            submitLabel={renovandoId === qualificacaoParaRenovar?.id ? 'Renovando...' : 'Renovar'}
+            submitDisabled={renovandoId === qualificacaoParaRenovar?.id}
+          />
+        </div>
+      </Modal> */}
+
+      {/* Modal de Modelo de Qualificação */}
+      <Modal
+        isOpen={showTipoModal}
+        onClose={() => {
+          setShowTipoModal(false);
+          setEditingTipo(null);
+        }}
+        title={editingTipo ? 'Editar Modelo de Qualificação' : 'Novo Modelo de Qualificação'}
+        size="lg"
+        footer={
+          <FormActions
+            onCancel={() => {
+              if (savingTipo) return;
+              setShowTipoModal(false);
+              setEditingTipo(null);
+            }}
+            onSubmit={async () => {
+              if (savingTipo) return;
+
+              // Validação mínima
+              if (
+                !editingTipo ||
+                !editingTipo.nome?.trim() ||
+                !editingTipo.codigo?.trim() ||
+                !editingTipo.categoria?.trim()
+              ) {
+                showToast.error('Nome, Código e Categoria são obrigatórios');
+                return;
+              }
+
+              const codigoNormalizado = normalizeTipoCodigo(editingTipo.codigo);
+
+              const duplicateTipo = tipos.find((tipo) => {
+                if (!tipo) return false;
+                if (editingTipo.id && String(tipo.id) === String(editingTipo.id)) return false;
+                return normalizeTipoCodigo(tipo.codigo) === codigoNormalizado;
+              });
+
+              if (duplicateTipo) {
+                showToast.error(`Código já existe: ${codigoNormalizado}`);
+                return;
+              }
+
+              try {
+                setSavingTipo(true);
+                const token = getAccessToken();
+                const apiUrl = API_BASE_URL;
+
+                if (!token) {
+                  showToast.error('Token não encontrado. Faça login novamente.');
+                  return;
+                }
+
+                // Determinar se é criação ou atualização
+                // IDs de tipos são strings (formato: tipo-{timestamp}-{random})
+                const isEdit = !!(editingTipo.id && String(editingTipo.id).trim().length > 0);
+                const method = isEdit ? 'PUT' : 'POST';
+                const url = isEdit
+                  ? `${apiUrl}/qualificacoes/tipos/${editingTipo.id}`
+                  : `${apiUrl}/qualificacoes/tipos`;
+
+                // Construir payload
+                const payload: Record<string, unknown> = {
+                  nome: editingTipo.nome?.trim() || '',
+                  codigo: codigoNormalizado,
+                  categoria: editingTipo.categoria?.trim() || '',
+                  conteudo_programatico: editingTipo.conteudo_programatico?.trim() || null,
+                  carga_horaria_inicial:
+                    editingTipo.carga_horaria_inicial != null
+                      ? Number(editingTipo.carga_horaria_inicial)
+                      : null,
+                  carga_horaria_recorrente:
+                    editingTipo.carga_horaria_recorrente != null
+                      ? Number(editingTipo.carga_horaria_recorrente)
+                      : null,
+                  ativo: editingTipo.ativo ?? 1,
+                  vencimento_fim_mes: editingTipo.vencimento_fim_mes ?? 0,
+                  is_check: editingTipo.is_check ? 1 : 0,
+                };
+
+                // Campos opcionais - só adicionar se tiverem valor
+                if (editingTipo.validade != null) {
+                  payload.validade = editingTipo.validade;
+                }
+                if (editingTipo.descricao?.trim() || editingTipo.observacoes?.trim()) {
+                  payload.descricao =
+                    editingTipo.descricao?.trim() || editingTipo.observacoes?.trim() || null;
+                }
+
+                const response = await fetch(url, {
+                  method,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify(payload),
+                });
+
+                if (response.ok) {
+                  clearApiCacheByPattern('/qualificacoes/tipos');
+                  showToast.success(isEdit ? 'Modelo atualizado!' : 'Modelo criado!');
+                  setShowTipoModal(false);
+                  setEditingTipo(null);
+                  // Recarregar lista de tipos
+                  try {
+                    await refetchTipos();
+                  } catch (e) {
+                    // Silencioso - refetch pode não estar disponível em alguns fluxos
+                    logger.warn('[Qualificacoes] refetchTipos falhou', e);
+                  }
+                } else {
+                  const err = await response.json().catch(() => null);
+                  console.error('[SalvarTipo] erro response', err);
+                  showToast.error(
+                    err?.error ||
+                      (response.status === 409
+                        ? `Código já existe: ${codigoNormalizado}`
+                        : 'Erro ao salvar modelo'),
+                  );
+                }
+              } catch (error) {
+                console.error('[SalvarTipo] erro', error);
+                showToast.error('Erro ao salvar modelo');
+              } finally {
+                setSavingTipo(false);
+              }
+            }}
+            submitLabel="Salvar"
+            loading={savingTipo}
+            submitDisabled={savingTipo}
+          />
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <FormField label="Nome" required>
+              <TextInput
+                placeholder="Ex: CRM - Crew Resource Management"
+                value={editingTipo?.nome || ''}
+                onChange={(e) =>
+                  setEditingTipo((prev) => ({
+                    ...(prev || {
+                      id: '',
+                      nome: '',
+                      codigo: '',
+                      categoria: '',
+                      validade: null,
+                      ativo: 1,
+                      vencimento_fim_mes: 0,
+                      conteudo_programatico: null,
+                      carga_horaria: null,
+                      carga_horaria_inicial: null,
+                      carga_horaria_recorrente: null,
+                      is_check: 0,
+                    }),
+                    nome: (e.target as HTMLInputElement).value,
+                  }))
+                }
+              />
+            </FormField>
+          </div>
+
+          <FormField label="Código" required>
+            <TextInput
+              placeholder="Ex: CRM"
+              value={editingTipo?.codigo || ''}
+              onChange={(e) =>
+                setEditingTipo((prev) => ({
+                  ...(prev || {
+                    id: '',
+                    nome: '',
+                    codigo: '',
+                    categoria: '',
+                    validade: null,
+                    ativo: 1,
+                    vencimento_fim_mes: 0,
+                    conteudo_programatico: null,
+                    carga_horaria: null,
+                    carga_horaria_inicial: null,
+                    carga_horaria_recorrente: null,
+                    is_check: 0,
+                  }),
+                  codigo: (e.target as HTMLInputElement).value,
+                }))
+              }
+            />
+          </FormField>
+
+          <FormField label="Categoria" required>
+            <Select
+              value={editingTipo?.categoria || ''}
+              onChange={(e) =>
+                setEditingTipo((prev) => ({
+                  ...(prev || {
+                    id: '',
+                    nome: '',
+                    codigo: '',
+                    categoria: '',
+                    validade: null,
+                    ativo: 1,
+                    vencimento_fim_mes: 0,
+                    conteudo_programatico: null,
+                    carga_horaria: null,
+                    carga_horaria_inicial: null,
+                    carga_horaria_recorrente: null,
+                    is_check: 0,
+                  }),
+                  categoria: (e.target as HTMLSelectElement).value,
+                }))
+              }
+              options={[
+                { value: '', label: '-- Selecione uma categoria --' },
+                ...categorias.map((cat) => ({
+                  value: cat.nome,
+                  label: cat.nome,
+                })),
+              ]}
+            />
+          </FormField>
+
+          <FormField label="Validade (meses)">
+            <TextInput
+              type="number"
+              placeholder="Ex: 12"
+              value={editingTipo?.validade?.toString() || ''}
+              onChange={(e) =>
+                setEditingTipo((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        validade: (e.target as HTMLInputElement).value
+                          ? parseInt((e.target as HTMLInputElement).value, 10)
+                          : null,
+                      }
+                    : prev,
+                )
+              }
+            />
+          </FormField>
+
+          <FormField label="Carga Horária Inicial (h)">
+            <TextInput
+              type="number"
+              placeholder="Ex: 16"
+              value={editingTipo?.carga_horaria_inicial?.toString() || ''}
+              onChange={(e) =>
+                setEditingTipo((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        carga_horaria_inicial: (e.target as HTMLInputElement).value
+                          ? Number((e.target as HTMLInputElement).value)
+                          : null,
+                      }
+                    : prev,
+                )
+              }
+            />
+          </FormField>
+
+          <FormField label="Carga Horária Periódico / Semestral (h)">
+            <TextInput
+              type="number"
+              placeholder="Ex: 8"
+              value={editingTipo?.carga_horaria_recorrente?.toString() || ''}
+              onChange={(e) =>
+                setEditingTipo((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        carga_horaria_recorrente: (e.target as HTMLInputElement).value
+                          ? Number((e.target as HTMLInputElement).value)
+                          : null,
+                      }
+                    : prev,
+                )
+              }
+            />
+          </FormField>
+
+          <FormField label="Vencimento">
+            <Select
+              value={editingTipo?.vencimento_fim_mes?.toString() || '0'}
+              onChange={(e) =>
+                setEditingTipo((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        vencimento_fim_mes: parseInt((e.target as HTMLSelectElement).value, 10),
+                      }
+                    : prev,
+                )
+              }
+              options={[
+                { value: '0', label: 'No dia exato' },
+                { value: '1', label: 'No fim do mês' },
+              ]}
+            />
+          </FormField>
+
+          <div className="md:col-span-2">
+            <FormField label="Descrição">
+              <TextArea
+                rows={2}
+                placeholder="Descrição resumida do modelo de qualificação..."
+                value={editingTipo?.descricao || ''}
+                onChange={(e) =>
+                  setEditingTipo((prev) =>
+                    prev ? { ...prev, descricao: (e.target as HTMLTextAreaElement).value } : prev,
+                  )
+                }
+              />
+            </FormField>
+          </div>
+
+          <div className="md:col-span-2">
+            <FormField label="Conteúdo Programático">
+              <TextArea
+                rows={5}
+                placeholder="Liste o conteúdo programático que deve aparecer no certificado..."
+                value={editingTipo?.conteudo_programatico || ''}
+                onChange={(e) =>
+                  setEditingTipo((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          conteudo_programatico: (e.target as HTMLTextAreaElement).value,
+                        }
+                      : prev,
+                  )
+                }
+              />
+            </FormField>
+          </div>
+        </div>
+      </Modal>
+
+      {historicoSelecionado && historicoSelecionado.id && (
+        <Suspense fallback={null}>
+          <ModalCertificado
+            isOpen={showCertModal}
+            onClose={() => {
+              setShowCertModal(false);
+              setHistoricoSelecionado(null);
+              // Forçar refetch completo para atualizar indicador de certificado
+              carregarHistorico();
+            }}
+            onCertificadosChange={handleCertificadosChange}
+            qualificacao={{
+              id: historicoSelecionado.id,
+              funcionario_id: historicoSelecionado.funcionario_id,
+              funcionario_nome: historicoSelecionado.funcionario_nome || '',
+              matricula: historicoSelecionado.funcionario_matricula || '',
+              qualificacao_nome:
+                historicoSelecionado.qualificacao_nome ||
+                String(
+                  (historicoSelecionado as unknown as Record<string, unknown>).tipo_nome || '',
+                ),
+              codigo:
+                historicoSelecionado.qualificacao_codigo ||
+                String(
+                  (historicoSelecionado as unknown as Record<string, unknown>).tipo_codigo ||
+                    historicoSelecionado.codigo ||
+                    '',
+                ),
+              data_conclusao:
+                historicoSelecionado.data_conclusao || historicoSelecionado.data_realizacao || '',
+              instrutor: historicoSelecionado.instrutor,
+            }}
+            onUploadSuccess={handleCertificadosUploadSuccess}
+            onDeleteSuccess={handleCertificadosDeleteSuccess}
+          />
+        </Suspense>
+      )}
+
+      {/* Modal de Confirmação de Delete */}
+      <ConfirmDeleteModal
+        isOpen={!!showConfirmDelete}
+        onClose={() => setShowConfirmDelete(null)}
+        onConfirm={handleConfirmDelete}
+        message="Tem certeza que deseja deletar esta qualificação?"
+        itemName={showConfirmDelete?.nome || ''}
+        loading={deletandoId !== null}
+      />
+
+      {/* Modal de Alerta EAD */}
+      {alertaEADModal.isOpen && alertaEADModal.qualificacao && (
+        <ModalAlertaEAD
+          isOpen={alertaEADModal.isOpen}
+          onClose={() => setAlertaEADModal({ isOpen: false, qualificacao: null })}
+          qualificacao={alertaEADModal.qualificacao}
+        />
+      )}
+    </AppLayout>
+  );
+}

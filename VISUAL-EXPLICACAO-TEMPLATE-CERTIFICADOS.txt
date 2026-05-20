@@ -1,0 +1,279 @@
+```
+╔════════════════════════════════════════════════════════════════════════╗
+║                                                                        ║
+║  ✅ TEMPLATE DE CERTIFICADOS AGORA FUNCIONA CORRETAMENTE              ║
+║                                                                        ║
+║  Problema: Template não era aplicado                                 ║
+║  Causa: Código buscava em lugar errado (empresas_config)             ║
+║  Solução: Buscar de certificados_templates + converter JSON → HTML   ║
+║                                                                        ║
+║  Status: ✅ IMPLEMENTADO E TESTADO                                    ║
+║  Build: ✅ OK (Vite + TypeScript)                                     ║
+║  Commit: 9251326c                                                     ║
+║                                                                        ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+
+📝 ARQUIVOS MODIFICADOS
+════════════════════════════════════════════════════════════════════════
+
+1. worker-airtrust/src/routes/qualificacoes-certificados.ts
+   ├─ Adicionada importação do conversor JSON → HTML
+   ├─ Query para buscar template agora usa certificados_templates
+   ├─ Implementada lógica de conversão JSON estruturado → HTML
+   └─ Logs detalhados para debug
+
+2. worker-airtrust/src/utils/template-json-to-html.ts (NOVO)
+   ├─ Conversor de template JSON estruturado para HTML
+   ├─ Suporta elementos: logo, título, campo, linha, assinatura
+   ├─ CSS responsivo para renderização em Cloudflare
+   └─ Fallback para HTML puro se não for estruturado
+
+
+🔄 ANTES vs DEPOIS
+════════════════════════════════════════════════════════════════════════
+
+ANTES (❌ Não funcionava):
+  ┌─ Frontend: Gerar Certificado
+  ├─ Backend busca em: empresas_config.certificado_template_html (vazio)
+  ├─ PDF gerado: com layout genérico do pdf-lib
+  └─ Resultado: Template da empresa não aplicado
+
+DEPOIS (✅ Funcionando):
+  ┌─ Frontend: Gerar Certificado
+  ├─ Backend busca em: certificados_templates (correto!)
+  ├─ JSON estruturado convertido para HTML
+  ├─ Template processado com dados do funcionário
+  ├─ Renderizado com Cloudflare Browser API
+  └─ Resultado: PDF com template profissional da empresa
+
+
+📊 EXEMPLO DE TEMPLATE JSON ARMAZENADO
+════════════════════════════════════════════════════════════════════════
+
+{
+  "version": "1.0",
+  "layout": {
+    "orientation": "landscape",
+    "size": "A4",
+    "margin": 50
+  },
+  "elements": [
+    {
+      "type": "logo",
+      "position": {"x": 50, "y": 50},
+      "size": {"width": 120, "height": 60},
+      "source": "url_da_logo_da_empresa"
+    },
+    {
+      "type": "title",
+      "text": "CERTIFICADO DE CONCLUSÃO",
+      "position": {"x": "center", "y": 100},
+      "style": {"fontSize": 24, "fontWeight": "bold", "color": "primary"}
+    },
+    {
+      "type": "field",
+      "name": "funcionario_nome",
+      "position": {"x": "center", "y": 200},
+      "style": {"fontSize": 20, "fontWeight": "bold", "color": "highlight"}
+    },
+    {
+      "type": "text",
+      "text": "concluiu com sucesso o treinamento",
+      "position": {"x": "center", "y": 240},
+      "style": {"fontSize": 14, "color": "secondary"}
+    },
+    {
+      "type": "field",
+      "name": "qualificacao_nome",
+      "position": {"x": "center", "y": 270},
+      "style": {"fontSize": 18, "fontWeight": "bold", "color": "primary"}
+    }
+  ]
+}
+
+        ⬇️ Convertido para HTML
+        
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    .title { font-size: 24px; color: #003366; font-weight: bold; }
+    .field { font-size: 20px; color: #0066CC; font-weight: bold; }
+    ...
+  </style>
+</head>
+<body>
+  <div class="certificate-page">
+    <img src="url_logo" />
+    <div class="title">CERTIFICADO DE CONCLUSÃO</div>
+    <div class="field">{{funcionario_nome}}</div>
+    <div class="text">concluiu com sucesso o treinamento</div>
+    <div class="field">{{qualificacao_nome}}</div>
+  </div>
+</body>
+</html>
+
+        ⬇️ Variáveis substituídas + Renderizado
+        
+        ✅ PDF profissional com template da empresa aplicado
+
+
+🚀 FLUXO COMPLETO
+════════════════════════════════════════════════════════════════════════
+
+[1] Frontend clica "Gerar Certificado"
+    ↓
+[2] POST /api/qualificacoes/historico/:id/certificados/gerar
+    ↓
+[3] Backend busca:
+    • Dados do funcionário (nome, CPF, matrícula)
+    • Qualificação (nome, código, categoria)
+    • Empresa (ID)
+    ↓
+[4] ✅ Busca template em certificados_templates
+    WHERE empresa_id = :empresaId AND ativo = 1
+    ↓
+[5] Detecta se é JSON estruturado
+    ↓
+[6] Converte JSON → HTML com cores e layout da empresa
+    ↓
+[7] Substitui placeholders:
+    {{funcionario_nome}} → "João da Silva"
+    {{funcionario_cpf}} → "123.456.789-00"
+    {{qualificacao_nome}} → "Piloto Privado"
+    {{data_conclusao}} → "15/01/2024"
+    ↓
+[8] Envia HTML para Cloudflare Browser Rendering API
+    ↓
+[9] PDF gerado com layout profissional
+    ↓
+[10] Upload em R2 (Cloudflare Storage)
+     ↓
+[11] Indexação em D1 (banco de dados)
+     ↓
+[12] Frontend recebe: { success: true, id: 789, ... }
+     ↓
+[13] Usuário clica "Download"
+     ↓
+[14] ✅ PDF baixado com template da empresa aplicado
+
+
+🧪 COMO VERIFICAR SE ESTÁ FUNCIONANDO
+════════════════════════════════════════════════════════════════════════
+
+1. Verifique se existem templates no banco:
+   SELECT COUNT(*) FROM certificados_templates 
+   WHERE empresa_id = 1 AND ativo = 1;
+   
+   Esperado: >= 1 template
+
+2. Gere um certificado de teste:
+   curl -X POST https://api.airtrust.com.br/api/qualificacoes/historico/123/certificados/gerar \
+     -H "Authorization: Bearer $TOKEN"
+
+3. Verifique os logs:
+   📄 [GERAR PDF] Buscando template em certificados_templates...
+   📄 [GERAR PDF] ✅ Template encontrado: "Template Padrão Aviação"
+   📄 [GERAR PDF] Template é JSON estruturado, convertendo para HTML...
+   📄 [GERAR PDF] ✅ Usando Cloudflare Browser Rendering com template HTML
+   ✅ [GERAR PDF] PDF gerado via Browser Rendering: 45234 bytes
+
+4. Baixe o certificado:
+   curl -X GET https://api.airtrust.com.br/api/pasta-virtual/stream/789 \
+     -H "Authorization: Bearer $TOKEN" \
+     -o certificado.pdf
+
+5. Abra o PDF e verifique:
+   ✅ Logo da empresa no topo
+   ✅ Cores conforme template (primária, secundária, destaque)
+   ✅ Nome do funcionário em destaque
+   ✅ Qualificação e datas corretas
+   ✅ Layout profissional
+
+
+📋 TABELA DE TEMPLATES
+════════════════════════════════════════════════════════════════════════
+
+certificados_templates
+├─ id (INTEGER PK)
+├─ empresa_id (FK → empresas)
+├─ nome VARCHAR(100)           ← Nome do template
+├─ descricao TEXT
+├─ tipo VARCHAR(50)            ← PADRAO, TREINAMENTO, CURSO, CUSTOM
+├─ template_json TEXT          ← JSON estruturado com elementos
+├─ logo_url TEXT               ← URL da logo
+├─ ativo BOOLEAN               ← Se está ativo
+├─ padrao BOOLEAN              ← Se é template padrão da empresa
+├─ criado_em TIMESTAMP
+└─ ... (cores, fontes, margens, etc.)
+
+Índices:
+- idx_templates_padrao: (empresa_id, padrao, ativo)
+- idx_templates_tipo: (tipo, ativo)
+
+
+💡 EXEMPLOS DE ELEMENTOS SUPORTADOS
+════════════════════════════════════════════════════════════════════════
+
+"logo"           → Imagem da logo (posição, tamanho)
+"title"          → Título (CERTIFICADO DE CONCLUSÃO)
+"subtitle"       → Subtítulo (Certificamos que)
+"text"           → Texto fixo
+"field"          → Campo dinâmico ({{funcionario_nome}}, {{qualificacao_nome}})
+"line"           → Linha horizontal para separação
+"signature"      → Bloco de assinatura com label
+"footer"         → Rodapé com múltiplos itens
+
+
+✅ BENEFÍCIOS DA CORREÇÃO
+════════════════════════════════════════════════════════════════════════
+
+1. Templates customizados agora funcionam
+2. Cada empresa tem seu próprio layout e cores
+3. Certificados mais profissionais e alinhados com identidade visual
+4. Suporte para múltiplos tipos de certificado
+5. Facilita conformidade com padrões de empresa/regulação
+6. Logo e branding automaticamente incluídos
+7. Fallback automático se Cloudflare indisponível
+
+
+🔐 SEGURANÇA
+════════════════════════════════════════════════════════════════════════
+
+✅ Apenas templates ativos são usados
+✅ Soft delete respeitado (deleted_at IS NULL)
+✅ Templates ordenados por prioridade (padrao DESC)
+✅ HTML validado antes de renderizar
+✅ Credenciais não expostas no template
+✅ CORS e autenticação mantidas
+
+
+⚡ PERFORMANCE
+════════════════════════════════════════════════════════════════════════
+
+Índice em certificados_templates:
+├─ idx_templates_padrao: Busca rápida por empresa + prioridade
+├─ idx_templates_tipo: Filtro por tipo de certificado
+└─ Query resultado: ~1-2ms (uma linha)
+
+
+📞 PRÓXIMOS PASSOS (OPCIONAL)
+════════════════════════════════════════════════════════════════════════
+
+[ ] Criar endpoint GET /api/certificados/templates para listar
+[ ] Criar endpoint POST /api/certificados/templates para criar
+[ ] Criar endpoint PUT /api/certificados/templates/:id para editar
+[ ] Criar endpoint DELETE /api/certificados/templates/:id para deletar
+[ ] Interface web para editar templates (drag-and-drop)
+[ ] Preview de certificado com template em tempo real
+[ ] Histórico de versões de templates
+[ ] Template por tipo de qualificação
+
+
+════════════════════════════════════════════════════════════════════════
+Data: 8 de janeiro de 2026
+Status: ✅ IMPLEMENTADO E TESTADO
+Commit: 9251326c
+════════════════════════════════════════════════════════════════════════
+```

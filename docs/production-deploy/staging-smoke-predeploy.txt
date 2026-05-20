@@ -1,0 +1,3 @@
+staging_health=200
+staging_version=200
+staging_login=200

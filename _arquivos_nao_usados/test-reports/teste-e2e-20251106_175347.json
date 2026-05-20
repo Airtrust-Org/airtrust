@@ -1,0 +1,148 @@
+{
+  "test_execution": {
+    "timestamp": "2025-11-06T20:54:16Z",
+    "base_url": "https://0199d03e-fe13-77d7-a6e7-7d94d446894b.airtrust.workers.dev",
+    "total_tests": 12,
+    "passed": 8,
+    "failed": 4,
+    "critical_failed": 0,
+    "pass_rate": "66%"
+  },
+  "tests": [
+    {
+      "id": 1,
+      "name": "Health Check",
+      "method": "GET",
+      "endpoint": "/health",
+      "http_code": 200,
+      "success": true,
+      "category": "health",
+      "is_critical": true
+    },
+    {
+      "id": 2,
+      "name": "Listar Funcionários",
+      "method": "GET",
+      "endpoint": "/api/v2/funcionarios",
+      "http_code": 200,
+      "success": true,
+      "category": "listagem",
+      "is_critical": true
+    },
+    {
+      "id": 3,
+      "name": "Listar Instrutores",
+      "method": "GET",
+      "endpoint": "/api/v2/funcionarios/instrutores",
+      "http_code": 200,
+      "success": true,
+      "category": "listagem",
+      "is_critical": true
+    },
+    {
+      "id": 4,
+      "name": "Listar Simuladores",
+      "method": "GET",
+      "endpoint": "/api/v2/simuladores",
+      "http_code": 401,
+      "success": false,
+      "category": "listagem",
+      "is_critical": false,
+      "error": "Unauthorized - Requer autenticação"
+    },
+    {
+      "id": 5,
+      "name": "Listar Agendamentos",
+      "method": "GET",
+      "endpoint": "/api/v2/agendamentos",
+      "http_code": 200,
+      "success": true,
+      "category": "listagem",
+      "is_critical": true
+    },
+    {
+      "id": 6,
+      "name": "Listar Fichas",
+      "method": "GET",
+      "endpoint": "/api/v2/fichas",
+      "http_code": 200,
+      "success": true,
+      "category": "listagem",
+      "is_critical": true
+    },
+    {
+      "id": 7,
+      "name": "Listar Manobras",
+      "method": "GET",
+      "endpoint": "/api/v2/manobras",
+      "http_code": 200,
+      "success": true,
+      "category": "listagem",
+      "is_critical": true
+    },
+    {
+      "id": 8,
+      "name": "Listar Qualificações",
+      "method": "GET",
+      "endpoint": "/api/v2/qualificacoes",
+      "http_code": 200,
+      "success": true,
+      "category": "listagem",
+      "is_critical": true
+    },
+    {
+      "id": 9,
+      "name": "Listar Habilitações",
+      "method": "GET",
+      "endpoint": "/api/v2/habilitacoes",
+      "http_code": 200,
+      "success": true,
+      "category": "listagem",
+      "is_critical": true
+    },
+    {
+      "id": 10,
+      "name": "Templates Consolidado",
+      "method": "GET",
+      "endpoint": "/api/v2/simuladores-consolidado/templates",
+      "http_code": 404,
+      "success": false,
+      "category": "consolidado",
+      "is_critical": false,
+      "error": "Endpoint não encontrado - Não implementado"
+    },
+    {
+      "id": 11,
+      "name": "Equipamentos Consolidado",
+      "method": "GET",
+      "endpoint": "/api/v2/simuladores-consolidado/equipamentos",
+      "http_code": 404,
+      "success": false,
+      "category": "consolidado",
+      "is_critical": false,
+      "error": "Endpoint não encontrado - Não implementado"
+    },
+    {
+      "id": 12,
+      "name": "Manobras Disponíveis",
+      "method": "GET",
+      "endpoint": "/api/v2/simuladores-consolidado/manobras-disponiveis",
+      "http_code": 404,
+      "success": false,
+      "category": "consolidado",
+      "is_critical": false,
+      "error": "Endpoint não encontrado - Não implementado"
+    }
+  ],
+  "summary": {
+    "critical_endpoints_status": "✅ TODOS OS ENDPOINTS CRÍTICOS PASSARAM",
+    "health_check": "✅ OK",
+    "authentication": "⚠️ Simuladores requer auth",
+    "missing_endpoints": 3,
+    "recommendations": [
+      "Implementar endpoints consolidados faltantes",
+      "Adicionar autenticação ao teste de simuladores",
+      "Sistema está funcional para operação básica"
+    ]
+  }
+}

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teste Modals Fichas - Automático</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 20px;
+        background: #f8fafc;
+      }
+      .test-container {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      .test-step {
+        padding: 12px;
+        margin: 8px 0;
+        border-radius: 6px;
+        border-left: 4px solid #94a3b8;
+        background: #f1f5f9;
+      }
+      .test-step.running {
+        border-left-color: #3b82f6;
+        background: #dbeafe;
+      }
+      .test-step.success {
+        border-left-color: #10b981;
+        background: #d1fae5;
+      }
+      .test-step.error {
+        border-left-color: #ef4444;
+        background: #fee2e2;
+      }
+      button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        margin: 10px 5px;
+      }
+      button:hover {
+        background: #2563eb;
+      }
+      button.secondary {
+        background: #64748b;
+      }
+      button.secondary:hover {
+        background: #475569;
+      }
+      .log {
+        font-family: monospace;
+        font-size: 12px;
+        padding: 12px;
+        background: #1e293b;
+        color: #e2e8f0;
+        border-radius: 6px;
+        overflow-x: auto;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .result {
+        padding: 16px;
+        margin: 16px 0;
+        border-radius: 6px;
+        font-weight: 600;
+      }
+      .result.success {
+        background: #d1fae5;
+        color: #065f46;
+        border: 2px solid #10b981;
+      }
+      .result.error {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 2px solid #ef4444;
+      }
+      iframe {
+        width: 100%;
+        height: 800px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="test-container">
+      <h1>🧪 Teste Automático - Modals de Fichas</h1>
+      <p>Este teste verifica se os botões "Avaliar" e "Assinar" abrem os modais corretos.</p>
+
+      <button onclick="runTest()">▶️ Executar Teste</button>
+      <button class="secondary" onclick="openApp()">🌐 Abrir App Manualmente</button>
+
+      <div id="steps"></div>
+      <div id="result"></div>
+      <div id="log" class="log" style="display: none"></div>
+    </div>
+
+    <iframe id="app" src="about:blank" style="display: none"></iframe>
+
+    <script>
+      const steps = [
+        { name: '1. Carregando página de fichas', action: 'navigate' },
+        { name: '2. Aguardando carregamento da lista', action: 'waitList' },
+        { name: '3. Verificando botão "Avaliar"', action: 'checkAvaliar' },
+        { name: '4. Clicando em "Avaliar"', action: 'clickAvaliar' },
+        { name: '5. Verificando se modal de avaliação abriu', action: 'checkModalAvaliar' },
+        { name: '6. Fechando modal de avaliação', action: 'closeModalAvaliar' },
+        { name: '7. Verificando botão "Assinar (Instrutor)"', action: 'checkAssinar' },
+        { name: '8. Clicando em "Assinar (Instrutor)"', action: 'clickAssinar' },
+        { name: '9. Verificando se modal de assinatura abriu', action: 'checkModalAssinatura' },
+        { name: '10. Fechando modal de assinatura', action: 'closeModalAssinatura' },
+      ];
+
+      function log(msg) {
+        const logEl = document.getElementById('log');
+        logEl.style.display = 'block';
+        logEl.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function updateStep(index, status) {
+        const stepsEl = document.getElementById('steps');
+        let html = '';
+        steps.forEach((step, i) => {
+          let className = 'test-step';
+          if (i < index) className += ' success';
+          else if (i === index) className += ` ${status}`;
+          html += `<div class="${className}">${step.name}</div>`;
+        });
+        stepsEl.innerHTML = html;
+      }
+
+      function showResult(success, message) {
+        const resultEl = document.getElementById('result');
+        resultEl.className = `result ${success ? 'success' : 'error'}`;
+        resultEl.textContent = message;
+      }
+
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      async function runTest() {
+        document.getElementById('result').innerHTML = '';
+        document.getElementById('log').innerHTML = '';
+        const iframe = document.getElementById('app');
+        iframe.style.display = 'block';
+
+        try {
+          log('🚀 Iniciando teste automático...');
+
+          // Step 1: Navigate
+          updateStep(0, 'running');
+          log('Navegando para http://localhost:3000/simuladores (tab Fichas)');
+          iframe.src = 'http://localhost:3000/simuladores';
+          await sleep(2000);
+          updateStep(0, 'success');
+
+          // Step 2: Wait for list
+          updateStep(1, 'running');
+          log('Aguardando carregamento da página...');
+          await sleep(3000);
+
+          const doc = iframe.contentDocument || iframe.contentWindow.document;
+          log(`Documento carregado: ${doc.title}`);
+
+          // Clicar na tab "Fichas de Sessão"
+          const tabs = doc.querySelectorAll('button');
+          let fichasTab = null;
+          tabs.forEach((tab) => {
+            if (tab.textContent.includes('Fichas de Sessão')) {
+              fichasTab = tab;
+            }
+          });
+
+          if (fichasTab) {
+            log('✅ Tab "Fichas de Sessão" encontrada - clicando...');
+            fichasTab.click();
+            await sleep(2000);
+          } else {
+            throw new Error('Tab "Fichas de Sessão" não encontrada');
+          }
+
+          updateStep(1, 'success');
+
+          // Step 3: Check Avaliar button
+          updateStep(2, 'running');
+          const avaliarButtons = Array.from(doc.querySelectorAll('button')).filter((btn) =>
+            btn.textContent.includes('Avaliar'),
+          );
+          log(`Botões "Avaliar" encontrados: ${avaliarButtons.length}`);
+
+          if (avaliarButtons.length === 0) {
+            throw new Error('❌ Nenhum botão "Avaliar" encontrado!');
+          }
+          updateStep(2, 'success');
+
+          // Step 4: Click Avaliar
+          updateStep(3, 'running');
+          log('Clicando no primeiro botão "Avaliar"...');
+          avaliarButtons[0].click();
+          await sleep(1500);
+          updateStep(3, 'success');
+
+          // Step 5: Check Modal Avaliar opened
+          updateStep(4, 'running');
+          const modalAvaliar = doc.querySelector('[class*="fixed"][class*="inset-0"]');
+          const modalTitle = doc.querySelector('h2');
+
+          if (!modalAvaliar) {
+            throw new Error('❌ Modal não abriu! Element fixed inset-0 não encontrado');
+          }
+
+          log(`✅ Modal encontrado!`);
+          log(`Título do modal: ${modalTitle ? modalTitle.textContent : 'não encontrado'}`);
+
+          const isAvaliarModal =
+            modalTitle &&
+            (modalTitle.textContent.includes('Avaliar') ||
+              doc.body.textContent.includes('manobra') ||
+              doc.body.textContent.includes('Observações Gerais'));
+
+          if (!isAvaliarModal) {
+            throw new Error('❌ Modal aberto NÃO é o modal de avaliação!');
+          }
+
+          log('✅ Modal de AVALIAÇÃO confirmado!');
+          updateStep(4, 'success');
+
+          // Step 6: Close Modal Avaliar
+          updateStep(5, 'running');
+          const closeButtons = doc.querySelectorAll('button');
+          let closeBtn = null;
+          closeButtons.forEach((btn) => {
+            if (btn.textContent.includes('Cancelar') || btn.innerHTML.includes('X')) {
+              closeBtn = btn;
+            }
+          });
+
+          if (closeBtn) {
+            log('Fechando modal de avaliação...');
+            closeBtn.click();
+            await sleep(1000);
+          }
+          updateStep(5, 'success');
+
+          // Step 7: Check Assinar button
+          updateStep(6, 'running');
+          const assinarButtons = Array.from(doc.querySelectorAll('button')).filter((btn) =>
+            btn.textContent.includes('Assinar (Instrutor)'),
+          );
+          log(`Botões "Assinar (Instrutor)" encontrados: ${assinarButtons.length}`);
+
+          if (assinarButtons.length === 0) {
+            throw new Error('❌ Nenhum botão "Assinar (Instrutor)" encontrado!');
+          }
+          updateStep(6, 'success');
+
+          // Step 8: Click Assinar
+          updateStep(7, 'running');
+          log('Clicando no primeiro botão "Assinar (Instrutor)"...');
+          assinarButtons[0].click();
+          await sleep(1500);
+          updateStep(7, 'success');
+
+          // Step 9: Check Modal Assinatura opened
+          updateStep(8, 'running');
+          const modalAssinatura = doc.querySelector('[class*="fixed"][class*="inset-0"]');
+          const modalTitle2 = doc.querySelector('h2');
+
+          if (!modalAssinatura) {
+            throw new Error('❌ Modal de assinatura não abriu!');
+          }
+
+          log(`✅ Modal encontrado!`);
+          log(`Título do modal: ${modalTitle2 ? modalTitle2.textContent : 'não encontrado'}`);
+
+          const isAssinaturaModal =
+            modalTitle2 &&
+            (modalTitle2.textContent.includes('Assinatura') ||
+              doc.body.textContent.includes('Canvas') ||
+              doc.body.textContent.includes('nome completo') ||
+              doc.body.textContent.includes('Instrutor'));
+
+          if (!isAssinaturaModal) {
+            throw new Error('❌ Modal aberto NÃO é o modal de assinatura!');
+          }
+
+          log('✅ Modal de ASSINATURA confirmado!');
+          updateStep(8, 'success');
+
+          // Step 10: Close Modal Assinatura
+          updateStep(9, 'running');
+          const closeButtons2 = doc.querySelectorAll('button');
+          let closeBtn2 = null;
+          closeButtons2.forEach((btn) => {
+            if (btn.textContent.includes('Cancelar') || btn.innerHTML.includes('X')) {
+              closeBtn2 = btn;
+            }
+          });
+
+          if (closeBtn2) {
+            log('Fechando modal de assinatura...');
+            closeBtn2.click();
+            await sleep(1000);
+          }
+          updateStep(9, 'success');
+
+          // Success!
+          log('');
+          log('🎉 TESTE COMPLETO - TODOS OS MODAIS FUNCIONANDO!');
+          showResult(true, '✅ SUCESSO! Os botões "Avaliar" e "Assinar" abrem os modais corretos!');
+        } catch (error) {
+          log(`❌ ERRO: ${error.message}`);
+          showResult(false, `❌ FALHOU: ${error.message}`);
+        }
+      }
+
+      function openApp() {
+        window.open('http://localhost:3000/simuladores', '_blank');
+      }
+    </script>
+  </body>
+</html>

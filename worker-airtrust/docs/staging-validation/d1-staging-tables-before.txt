@@ -1,0 +1,44 @@
+
+ ⛅️ wrangler 4.47.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.30ms
+[
+  {
+    "results": [
+      {
+        "name": "_cf_KV"
+      },
+      {
+        "name": "d1_migrations"
+      },
+      {
+        "name": "documentos"
+      },
+      {
+        "name": "sqlite_sequence"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.3023
+      },
+      "duration": 0.3023,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 57344,
+      "rows_read": 16,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

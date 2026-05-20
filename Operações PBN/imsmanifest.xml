@@ -1,0 +1,126 @@
+<manifest xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1" xsi:schemaLocation="http://www.imsproject.org/xsd/imscp_rootv1p1p2 imscp_rootv1p1p2.xsd http://www.imsglobal.org/xsd/imsmd_rootv1p2p1 imsmd_rootv1p2p1.xsd http://www.adlnet.org/xsd/adlcp_rootv1p2 adlcp_rootv1p2.xsd" identifier="com.edapp.69e3caac9a6ccb851df94d6e">
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+  <organizations default="ed_app">
+    <organization identifier="ed_app">
+      <title>PBN</title>
+      <item identifier="item_1" identifierref="resource_1" isvisible="true">
+        <title>PBN</title>
+      </item>
+    </organization>
+  </organizations>
+  <resources>
+    <resource identifier="resource_1" type="webcontent" adlcp:scormtype="sco" href="index.html">
+      <file href="fit_content_assets/0001-1676870055140806134_ssebai.png"/>
+      <file href="fit_content_assets/Screenshot_2024-11-07_185331_kuc1nx.png"/>
+      <file href="fit_content_assets/pbn_0_ertrqo.jpg"/>
+      <file href="fit_content_assets/frspt-02-662883-g001_rimyjj.jpg"/>
+      <file href="fit_content_assets/fnbeh-15-633872-g003_t4gsgm.jpg"/>
+      <file href="fit_content_assets/images_10_p2lfqh.jpg"/>
+      <file href="fit_content_assets/1520125698506_ixlnfy.jpg"/>
+      <file href="fit_content_assets/Screenshot_2024-11-07_183711_tzkxij.png"/>
+      <file href="fit_content_assets/Screenshot_2024-11-07_183756_hucce2.png"/>
+      <file href="fit_content_assets/Screenshot_2024-11-07_184021_bcufoq.png"/>
+      <file href="fit_content_assets/unnamed_ezreno.gif"/>
+      <file href="fit_content_assets/GPS_Satellite_NASA_art-iif_kqicz2.jpg"/>
+      <file href="fit_content_assets/gps_satellite_constellation_pncreu.jpg"/>
+      <file href="fit_content_assets/Work_Breakdown_Structure_of_Aircraft_System_xfw8wf.jpg"/>
+      <file href="fit_content_assets/220px-Airbus_A380_cockpit_vyvo08.jpg"/>
+      <file href="fit_content_assets/CNS-aircraft-sattelite-comunicaciones-OACI-2023-400x240_qxdbhh.jpg"/>
+      <file href="fit_content_assets/images_10_kj5ebh.jpg"/>
+      <file href="fit_content_assets/GNSS-1024x683_ff7rck.jpg"/>
+      <file href="fit_content_assets/image_y0kn0k.png"/>
+      <file href="fit_content_assets/segments-in-a-satellite-system_zua3jw.png"/>
+      <file href="fit_content_assets/240124-gnss-aviation-2-scaled_hqlzsf.jpg"/>
+      <file href="fit_content_assets/unnamed_tgohnm.gif"/>
+      <file href="fit_content_assets/images_1_bhvgfi.png"/>
+      <file href="fit_content_assets/si_gps_fa_flat_11-1-12b_lzjzkc.jpg"/>
+      <file href="fit_content_assets/urban-canyon_mu3ocf.jpg"/>
+      <file href="fit_content_assets/p1bdiqllehmk31fr87387s91pqs6.jpg.optimal_wievf9.jpg"/>
+      <file href="fit_content_assets/Lpb8V_cr2vfp.jpg"/>
+      <file href="fit_content_assets/gnss_segments_oh5w2l.jpg"/>
+      <file href="fit_content_assets/LOIdowngrade_ayzkyc.png"/>
+      <file href="fit_content_assets/DTW_Triple_Arrivals_qv32x6.jpg"/>
+      <file href="fit_content_assets/amt-13-4963-2020-avatar-web_wj6pk8.png"/>
+      <file href="fit_content_assets/airac2105.jpg.a470e2e2edebb7251fef0f4ec9d67635_e0carc.jpg"/>
+      <file href="fit_content_assets/ifd540440_fmlg71.jpg"/>
+      <file href="fit_content_assets/mcdu_pos_sensors_qo0q8w.png"/>
+      <file href="fit_content_assets/3Xqzo_accmls.jpg"/>
+      <file href="fit_content_assets/abeam_route_executed_figure_3_tfmydp.gif"/>
+      <file href="fit_content_assets/2016.04.17-03.23-flyhpa-571301c89c7ff-600x468_tldwds.jpg"/>
+      <file href="fit_content_assets/Provisional-Level-1-Alert-On-Modified-FMS-Route_hsazfd.png"/>
+      <file href="fit_content_assets/eXZBL_y1hqoj.jpg"/>
+      <file href="fit_content_assets/EVWKS_uctqp9.jpg"/>
+      <file href="fit_content_assets/Screenshot_2024-11-07_183756_iilmw1.png"/>
+      <file href="fit_content_assets/hmnmhbnm_wx1daz.png"/>
+      <file href="fit_content_assets/i340076_ldyvz3.jpg"/>
+      <file href="fit_content_assets/aasas_ksr1lv.png"/>
+      <file href="fit_content_assets/PBN_-_DECEA_ehy0f3.mp4"/>
+      <file href="adlcp_rootv1p2.xsd"/>
+      <file href="ims_xml.xsd"/>
+      <file href="imscp_rootv1p1p2.xsd"/>
+      <file href="imsmd_rootv1p2p1.xsd"/>
+      <file href="app.07c4586bb0edca1b.js"/>
+      <file href="app.07c4586bb0edca1b.js.map"/>
+      <file href="app.cc0d588970e1f88e.css"/>
+      <file href="app.cc0d588970e1f88e.css.map"/>
+      <file href="assets/NotoSans-Italic.f322611529c721d3.woff"/>
+      <file href="assets/NotoSans-Regular.d443fda2a79a3b67.woff"/>
+      <file href="assets/NotoSans-SemiBold.53a4b677893d7a69.woff"/>
+      <file href="assets/expand-icon.48a012d165f293b4.png"/>
+      <file href="assets/icons.44f5cb81fb0dba41.woff"/>
+      <file href="assets/loader.7afc5dbc230dd2de.gif"/>
+      <file href="assets/rotate-device.6f802beb1090241b.png"/>
+      <file href="audio/achievement.mp3"/>
+      <file href="audio/correct.mp3"/>
+      <file href="audio/game-music-slow.mp3"/>
+      <file href="audio/go.mp3"/>
+      <file href="audio/incorrect.mp3"/>
+      <file href="audio/new-star.mp3"/>
+      <file href="audio/ready.mp3"/>
+      <file href="audio/spin-fail.mp3"/>
+      <file href="audio/spin-stop.mp3"/>
+      <file href="audio/spin-success.mp3"/>
+      <file href="audio/spin-win.mp3"/>
+      <file href="audio/spinning.mp3"/>
+      <file href="audio/tally-score.mp3"/>
+      <file href="audio/welcome.mp3"/>
+      <file href="img/examples/flow-1.png"/>
+      <file href="img/examples/flow-2.png"/>
+      <file href="img/examples/parallax-1.png"/>
+      <file href="img/examples/parallax-2.png"/>
+      <file href="img/examples/parallax-3.png"/>
+      <file href="img/examples/product-1-xl.png"/>
+      <file href="img/examples/product-1.png"/>
+      <file href="img/examples/product-2.png"/>
+      <file href="img/examples/product-3.png"/>
+      <file href="img/examples/product-laptop.png"/>
+      <file href="img/examples/product-phone.png"/>
+      <file href="img/examples/product-tablet.png"/>
+      <file href="img/expand-browser.png"/>
+      <file href="img/expand-icon.png"/>
+      <file href="img/rotate-device.png"/>
+      <file href="img/templates/loader-light.gif"/>
+      <file href="img/templates/loader.gif"/>
+      <file href="img/templates/star-default.png"/>
+      <file href="img/templates/star-earned.png"/>
+      <file href="img/templates/star-light.png"/>
+      <file href="img/video/empty.png"/>
+      <file href="index.html"/>
+      <file href="modules.473fbbfd66fb5923.js"/>
+      <file href="modules.473fbbfd66fb5923.js.map"/>
+      <file href="modules.a5b0990ec50f29b5.css"/>
+      <file href="modules.a5b0990ec50f29b5.css.map"/>
+      <file href="player.html"/>
+      <file href="runtime.670f4cabae4eeec9.js"/>
+      <file href="scorm.2aa5f200ece6542d.js"/>
+      <file href="scorm.2aa5f200ece6542d.js.map"/>
+      <file href="vendors.9d8f217301be500e.js"/>
+      <file href="vendors.9d8f217301be500e.js.map"/>
+      <file href="video/example.mp4"/>
+      <file href="config.json"/>
+    </resource>
+  </resources>
+</manifest>

@@ -1,0 +1,24 @@
+{
+  "title": "Briefing Interativo DEV",
+  "language": "pt-BR",
+  "defaultLanguage": "pt-BR",
+  "mainLibrary": "H5P.AirtrustGreeting",
+  "embedTypes": ["div"],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "AirTrust",
+      "role": "Author"
+    }
+  ],
+  "source": "https://airtrust.online",
+  "preloadedDependencies": [
+    {
+      "machineName": "H5P.AirtrustGreeting",
+      "majorVersion": 1,
+      "minorVersion": 0
+    }
+  ],
+  "dynamicDependencies": [],
+  "editorDependencies": []
+}

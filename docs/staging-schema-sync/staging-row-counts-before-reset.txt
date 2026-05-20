@@ -1,0 +1,268 @@
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.36ms
+[
+  {
+    "results": [
+      {
+        "table_name": "usuarios",
+        "rows": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.3606
+      },
+      "duration": 0.3606,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 327680,
+      "rows_read": 1,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.24ms
+[
+  {
+    "results": [
+      {
+        "table_name": "funcionarios",
+        "rows": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2366
+      },
+      "duration": 0.2366,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 327680,
+      "rows_read": 1,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.32ms
+[
+  {
+    "results": [
+      {
+        "table_name": "qualificacoes_historico",
+        "rows": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.3242
+      },
+      "duration": 0.3242,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 327680,
+      "rows_read": 1,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.28ms
+[
+  {
+    "results": [
+      {
+        "table_name": "qualificacoes_tipos",
+        "rows": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2833
+      },
+      "duration": 0.2833,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 327680,
+      "rows_read": 1,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.26ms
+[
+  {
+    "results": [
+      {
+        "table_name": "simuladores",
+        "rows": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2614
+      },
+      "duration": 0.2614,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 327680,
+      "rows_read": 1,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]
+
+ ⛅️ wrangler 4.75.0 (update available 4.91.0)
+─────────────────────────────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler configuration:[0m
+
+    - No environment found in configuration with name "staging".
+      Before using `--env=staging` there should be an equivalent environment section in the configuration.
+  
+      Consider adding an environment configuration section to the Wrangler configuration file:
+      ```
+      [env.staging]
+      ```
+  
+
+
+🌀 Executing on remote database airtrust-db-staging (b7f50907-c110-45f5-ad17-e97ea47f2826):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mA request to the Cloudflare API (/accounts/4dca4e5fddc6a351651dd224f456586f/d1/database/b7f50907-c110-45f5-ad17-e97ea47f2826/query) failed.[0m
+
+  no such table: empresas: SQLITE_ERROR [code: 7500]
+  
+  If you think this is a bug, please open an issue at: [4mhttps://github.com/cloudflare/workers-sdk/issues/new/choose[0m
+
+
+🪵  Logs were written to "/Users/filipedaumas/Library/Preferences/.wrangler/logs/wrangler-2026-05-15_03-44-05_739.log"

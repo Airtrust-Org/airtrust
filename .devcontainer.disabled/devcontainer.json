@@ -1,0 +1,14 @@
+{
+  "name": "AirTrust Dev",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "forwardPorts": [3000, 8787, 5173],
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  }
+}

@@ -1,0 +1,1 @@
+SELECT funcionario_id, qualificacao_codigo, tipo_codigo, categoria, COUNT(*) as duplicatas FROM qualificacoes_historico WHERE deleted_at IS NULL GROUP BY funcionario_id, qualificacao_codigo, tipo_codigo, categoria HAVING COUNT(*) > 1 ORDER BY duplicatas DESC LIMIT 50;

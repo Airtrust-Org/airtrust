@@ -1,0 +1,208 @@
+-- =============================================================================
+-- SEED: 12 SESSÕES AW139 - CADASTRO COMPLETO DE MANOBRAS
+-- Data: 2025-11-20
+-- Estrutura: cadastro_manobras (tipo_sessao, tipo_aeronave, codigo, descricao, categoria, ordem, obrigatoria)
+-- =============================================================================
+DELETE FROM cadastro_manobras WHERE tipo_aeronave = 'AW139';
+
+-- SESSÃO 1/12: FAMILIARIZAÇÃO VFR BÁSICO (22 manobras)
+INSERT INTO cadastro_manobras (tipo_sessao, tipo_aeronave, codigo, descricao, categoria, ordem, obrigatoria) VALUES
+('A139-I-01/12', 'AW139', 'FLY-BAS-X1', 'Controle geral VFR', 'NORMAL', 1, 1),
+('A139-I-01/12', 'AW139', 'FLY-BAS-X3', 'Hover & taxi', 'NORMAL', 2, 1),
+('A139-I-01/12', 'AW139', 'OPS-NRM-X1', 'Procedimentos normais', 'NORMAL', 3, 1),
+('A139-I-01/12', 'AW139', 'OPS-NRM-X2', 'Decolagens & pousos', 'NORMAL', 4, 1),
+('A139-I-01/12', 'AW139', 'OPS-NRM-X3', 'Circuito de tráfego', 'NORMAL', 5, 1),
+('A139-I-01/12', 'AW139', 'WAR-LOW-29', 'Rotor RPM low', 'ANORMAL', 6, 1),
+('A139-I-01/12', 'AW139', 'WAR-HIG-29', 'Rotor RPM high', 'ANORMAL', 7, 1),
+('A139-I-01/12', 'AW139', 'CAU-HOT-65', 'Hot start', 'ANORMAL', 8, 1),
+('A139-I-01/12', 'AW139', 'CAU-CST-59', 'Compressor stall', 'EMERGENCIA', 9, 1),
+('A139-I-01/12', 'AW139', 'CAU-OVS-64', 'Engine overspeed', 'EMERGENCIA', 10, 1),
+('A139-I-01/12', 'AW139', 'CAU-NGO-63', 'NG overspeed', 'EMERGENCIA', 11, 1),
+('A139-I-01/12', 'AW139', 'CAU-CND-61', 'Compressor no demand', 'ANORMAL', 12, 1),
+('A139-I-01/12', 'AW139', 'CAU-TNF-62', 'Throttle non-follow', 'ANORMAL', 13, 1),
+('A139-I-01/12', 'AW139', 'CAU-FLO-73', 'Fuel low', 'ANORMAL', 14, 1),
+('A139-I-01/12', 'AW139', 'CAU-2FP-74', 'Double fuel pump failure', 'EMERGENCIA', 15, 1),
+('A139-I-01/12', 'AW139', 'CAU-EFP-75', 'Engine fuel pump failure', 'ANORMAL', 16, 1),
+('A139-I-01/12', 'AW139', 'WAR-OIL-18', 'Oil pressure low', 'EMERGENCIA', 17, 1),
+('A139-I-01/12', 'AW139', 'CAU-LIC-60', 'OEI limit timer', 'ANORMAL', 18, 1),
+('A139-I-01/12', 'AW139', 'WAR-EEC-18', 'EEC failure', 'EMERGENCIA', 19, 1),
+('A139-I-01/12', 'AW139', 'WAR-IDL-16', 'Engine stuck IDLE', 'EMERGENCIA', 20, 1),
+('A139-I-01/12', 'AW139', 'WAR-GER-27', 'Landing gear emergency', 'EMERGENCIA', 21, 1),
+('A139-I-01/12', 'AW139', 'FLY-BAS-17', 'Autorotação', 'EMERGENCIA', 22, 1),
+
+-- SESSÃO 2/12: EMERGÊNCIAS POWERPLANT & AUTOROTAÇÕES (18 manobras)
+('A139-I-02/12', 'AW139', 'WAR-PWR-15', 'Engine failure', 'EMERGENCIA', 1, 1),
+('A139-I-02/12', 'AW139', 'WAR-PWR-16', 'Dual engine failure', 'EMERGENCIA', 2, 1),
+('A139-I-02/12', 'AW139', 'WAR-PWR-17', 'Engine fire in flight', 'EMERGENCIA', 3, 1),
+('A139-I-02/12', 'AW139', 'WAR-PWR-20', 'Engine oil pressure low', 'EMERGENCIA', 4, 1),
+('A139-I-02/12', 'AW139', 'WAR-PWR-21', 'Engine chip detected', 'ANORMAL', 5, 1),
+('A139-I-02/12', 'AW139', 'WAR-PWR-22', 'Engine overspeed', 'EMERGENCIA', 6, 1),
+('A139-I-02/12', 'AW139', 'WAR-PWR-23', 'Engine overtemp', 'EMERGENCIA', 7, 1),
+('A139-I-02/12', 'AW139', 'WAR-PWR-24', 'Compressor stall', 'EMERGENCIA', 8, 1),
+('A139-I-02/12', 'AW139', 'WAR-PWR-28', 'Engine vibration high', 'EMERGENCIA', 9, 1),
+('A139-I-02/12', 'AW139', 'FLY-BAS-17', 'Autorotação entry', 'EMERGENCIA', 10, 1),
+('A139-I-02/12', 'AW139', 'FLY-BAS-17', 'Autorotação 180°', 'EMERGENCIA', 11, 1),
+('A139-I-02/12', 'AW139', 'FLY-BAS-17', 'Autorotação 360°', 'EMERGENCIA', 12, 1),
+('A139-I-02/12', 'AW139', 'FLY-BAS-17', 'Autorotação baixa altura', 'EMERGENCIA', 13, 1),
+('A139-I-02/12', 'AW139', 'FLY-BAS-17', 'Autorotação com vento', 'EMERGENCIA', 14, 1),
+('A139-I-02/12', 'AW139', 'FLY-BAS-17', 'Autorotação com pouso', 'EMERGENCIA', 15, 1),
+('A139-I-02/12', 'AW139', 'OPS-ESP-X2', 'OEI hover', 'EMERGENCIA', 16, 1),
+('A139-I-02/12', 'AW139', 'OPS-APP-X1', 'OEI approach', 'EMERGENCIA', 17, 1),
+('A139-I-02/12', 'AW139', 'OPS-NRM-X2', 'OEI landing', 'EMERGENCIA', 18, 1),
+
+-- SESSÃO 3/12: SISTEMA ELÉTRICO & NOTURNO (15 manobras)
+('A139-I-03/12', 'AW139', 'CAU-ELEC-57', 'Generator offline', 'ANORMAL', 1, 1),
+('A139-I-03/12', 'AW139', 'CAU-ELEC-58', 'Battery discharge', 'ANORMAL', 2, 1),
+('A139-I-03/12', 'AW139', 'CAU-ELEC-59', 'Inverter failure', 'ANORMAL', 3, 1),
+('A139-I-03/12', 'AW139', 'WAR-ELEC-55', 'Battery hot', 'EMERGENCIA', 4, 1),
+('A139-I-03/12', 'AW139', 'WAR-ELEC-56', 'Electrical system failure', 'EMERGENCIA', 5, 1),
+('A139-I-03/12', 'AW139', 'CAU-PWR-31', 'Generator failure', 'ANORMAL', 6, 1),
+('A139-I-03/12', 'AW139', 'INTEGR-04', 'Total electrical failure night IMC', 'EMERGENCIA', 7, 1),
+('A139-I-03/12', 'AW139', 'OPS-ESP-X1', 'Voo noturno', 'NORMAL', 8, 1),
+('A139-I-03/12', 'AW139', 'OPS-NRM-X2', 'Decolagens noturnas', 'NORMAL', 9, 1),
+('A139-I-03/12', 'AW139', 'OPS-NRM-X2', 'Pousos noturnos', 'NORMAL', 10, 1),
+('A139-I-03/12', 'AW139', 'OPS-NAV-X1', 'Navegação noturna', 'NORMAL', 11, 1),
+('A139-I-03/12', 'AW139', 'FLY-BAS-X3', 'Hover noturno', 'NORMAL', 12, 1),
+('A139-I-03/12', 'AW139', 'WAR-PWR-15', 'Engine failure noturno', 'EMERGENCIA', 13, 1),
+('A139-I-03/12', 'AW139', 'FLY-BAS-17', 'Autorotação noturna', 'EMERGENCIA', 14, 1),
+('A139-I-03/12', 'AW139', 'WAR-FIRE-66', 'Smoke detected noturno', 'EMERGENCIA', 15, 1),
+
+-- SESSÃO 4/12: INTRODUÇÃO IFR & NAVEGAÇÃO BÁSICA (14 manobras)
+('A139-I-04/12', 'AW139', 'FLY-BAS-X2', 'Controle geral IFR', 'NORMAL', 1, 1),
+('A139-I-04/12', 'AW139', 'FLY-BAS-X4', 'Recuperação atitudes anormais', 'EMERGENCIA', 2, 1),
+('A139-I-04/12', 'AW139', 'SR', 'Stall Recovery', 'EMERGENCIA', 3, 1),
+('A139-I-04/12', 'AW139', 'OPS-NAV-X2', 'Navegação IFR', 'NORMAL', 4, 1),
+('A139-I-04/12', 'AW139', 'OPS-APP-X1', 'Aproximação ILS', 'NORMAL', 5, 1),
+('A139-I-04/12', 'AW139', 'OPS-APP-X2', 'Aproximação VOR', 'NORMAL', 6, 1),
+('A139-I-04/12', 'AW139', 'OPS-APP-X3', 'Aproximação NDB', 'NORMAL', 7, 1),
+('A139-I-04/12', 'AW139', 'GA', 'Go Around', 'NORMAL', 8, 1),
+('A139-I-04/12', 'AW139', 'NDB', 'NDB Approach', 'NORMAL', 9, 1),
+('A139-I-04/12', 'AW139', 'OPS-APP-X1', 'ILS approach to minimums', 'NORMAL', 10, 1),
+('A139-I-04/12', 'AW139', 'OPS-APP-X2', 'Circle to land', 'NORMAL', 11, 1),
+('A139-I-04/12', 'AW139', 'CAU-AVIO-62', 'Navigation system failure', 'ANORMAL', 12, 1),
+('A139-I-04/12', 'AW139', 'CAU-AVIO-63', 'Communication system failure', 'ANORMAL', 13, 1),
+('A139-I-04/12', 'AW139', 'WAR-AVIO-64', 'TCAS failure', 'ANORMAL', 14, 1),
+
+-- SESSÃO 5/12: AFCS INTRODUÇÃO & AUTOPILOT (12 manobras)
+('A139-I-05/12', 'AW139', 'CAU-AFCS-60', 'AFCS failure', 'ANORMAL', 1, 1),
+('A139-I-05/12', 'AW139', 'CAU-AFCS-61', 'Autopilot disconnect', 'ANORMAL', 2, 1),
+('A139-I-05/12', 'AW139', 'FLY-BAS-X2', 'Autopilot engagement', 'NORMAL', 3, 1),
+('A139-I-05/12', 'AW139', 'FLY-BAS-X2', 'Autopilot modes', 'NORMAL', 4, 1),
+('A139-I-05/12', 'AW139', 'OPS-NAV-X2', 'Autopilot navegação', 'NORMAL', 5, 1),
+('A139-I-05/12', 'AW139', 'OPS-APP-X1', 'Autopilot approach', 'NORMAL', 6, 1),
+('A139-I-05/12', 'AW139', 'OPS-APP-X1', 'Coupled ILS approach', 'NORMAL', 7, 1),
+('A139-I-05/12', 'AW139', 'FLY-BAS-X2', 'Autopilot go-around', 'NORMAL', 8, 1),
+('A139-I-05/12', 'AW139', 'CAU-AFCS-60', 'AFCS partial failure', 'ANORMAL', 9, 1),
+('A139-I-05/12', 'AW139', 'CAU-AFCS-61', 'Autopilot malfunction', 'ANORMAL', 10, 1),
+('A139-I-05/12', 'AW139', 'FLY-BAS-X4', 'Upset recovery com AFCS off', 'EMERGENCIA', 11, 1),
+('A139-I-05/12', 'AW139', 'FLY-BAS-X2', 'Manual reversion', 'ANORMAL', 12, 1),
+
+-- SESSÃO 6/12: AFCS DEGRADAÇÕES & MANUAL REVERSION (10 manobras)
+('A139-I-06/12', 'AW139', 'CAU-AFCS-60', 'AFCS total failure', 'EMERGENCIA', 1, 1),
+('A139-I-06/12', 'AW139', 'CAU-AFCS-61', 'Autopilot runaway', 'EMERGENCIA', 2, 1),
+('A139-I-06/12', 'AW139', 'FLY-BAS-X2', 'Full manual reversion IFR', 'EMERGENCIA', 3, 1),
+('A139-I-06/12', 'AW139', 'FLY-BAS-X4', 'Upset recovery manual', 'EMERGENCIA', 4, 1),
+('A139-I-06/12', 'AW139', 'OPS-NAV-X2', 'Navegação sem AFCS', 'NORMAL', 5, 1),
+('A139-I-06/12', 'AW139', 'OPS-APP-X1', 'Approach manual sem AFCS', 'NORMAL', 6, 1),
+('A139-I-06/12', 'AW139', 'FLY-BAS-X3', 'Hover sem AFCS', 'NORMAL', 7, 1),
+('A139-I-06/12', 'AW139', 'WAR-PWR-15', 'Engine failure sem AFCS', 'EMERGENCIA', 8, 1),
+('A139-I-06/12', 'AW139', 'FLY-BAS-17', 'Autorotação sem AFCS', 'EMERGENCIA', 9, 1),
+('A139-I-06/12', 'AW139', 'OPS-APP-X1', 'Landing sem AFCS', 'NORMAL', 10, 1),
+
+-- SESSÃO 7/12: AVIÔNICOS FAILURES & PARTIAL PANEL (11 manobras)
+('A139-I-07/12', 'AW139', 'CAU-AVIO-62', 'GPS failure', 'ANORMAL', 1, 1),
+('A139-I-07/12', 'AW139', 'CAU-AVIO-63', 'Radio failure', 'ANORMAL', 2, 1),
+('A139-I-07/12', 'AW139', 'WAR-AVIO-64', 'FMS failure', 'ANORMAL', 3, 1),
+('A139-I-07/12', 'AW139', 'FLY-BAS-X2', 'Partial panel IFR', 'NORMAL', 4, 1),
+('A139-I-07/12', 'AW139', 'OPS-NAV-X2', 'Navegação partial panel', 'NORMAL', 5, 1),
+('A139-I-07/12', 'AW139', 'OPS-APP-X1', 'ILS partial panel', 'NORMAL', 6, 1),
+('A139-I-07/12', 'AW139', 'OPS-APP-X2', 'VOR partial panel', 'NORMAL', 7, 1),
+('A139-I-07/12', 'AW139', 'OPS-APP-X3', 'NDB partial panel', 'NORMAL', 8, 1),
+('A139-I-07/12', 'AW139', 'GA', 'Go-around partial panel', 'NORMAL', 9, 1),
+('A139-I-07/12', 'AW139', 'FLY-BAS-X4', 'Upset recovery partial panel', 'EMERGENCIA', 10, 1),
+('A139-I-07/12', 'AW139', 'WAR-ELEC-56', 'Total avionics failure', 'EMERGENCIA', 11, 1),
+
+-- SESSÃO 8/12: ROTOR, TRANSMISSÃO & HIDRÁULICO (13 manobras)
+('A139-I-08/12', 'AW139', 'WAR-ROTR-45', 'Rotor NR low', 'EMERGENCIA', 1, 1),
+('A139-I-08/12', 'AW139', 'WAR-ROTR-46', 'Rotor NR high', 'EMERGENCIA', 2, 1),
+('A139-I-08/12', 'AW139', 'WAR-ROTR-47', 'Rotor vibration high', 'EMERGENCIA', 3, 1),
+('A139-I-08/12', 'AW139', 'WAR-TRAN-48', 'Transmission chip detected', 'EMERGENCIA', 4, 1),
+('A139-I-08/12', 'AW139', 'WAR-TRAN-49', 'Transmission oil pressure low', 'EMERGENCIA', 5, 1),
+('A139-I-08/12', 'AW139', 'CAU-TRAN-50', 'Transmission oil temperature high', 'ANORMAL', 6, 1),
+('A139-I-08/12', 'AW139', 'CAU-TRAN-51', 'Transmission filter bypass', 'ANORMAL', 7, 1),
+('A139-I-08/12', 'AW139', 'CAU-HYD-52', 'Hydraulic pressure low', 'ANORMAL', 8, 1),
+('A139-I-08/12', 'AW139', 'CAU-HYD-53', 'Hydraulic fluid low', 'ANORMAL', 9, 1),
+('A139-I-08/12', 'AW139', 'CAU-HYD-54', 'Hydraulic pump failure', 'ANORMAL', 10, 1),
+('A139-I-08/12', 'AW139', 'FLY-BAS-X3', 'Hover hydraulics degraded', 'NORMAL', 11, 1),
+('A139-I-08/12', 'AW139', 'FLY-BAS-17', 'Autorotação hydraulics off', 'EMERGENCIA', 12, 1),
+('A139-I-08/12', 'AW139', 'OPS-NRM-X2', 'Landing hydraulics degraded', 'NORMAL', 13, 1),
+
+-- SESSÃO 9/12: FOGO, FUMAÇA & HIGH-STRESS (12 manobras)
+('A139-I-09/12', 'AW139', 'WAR-PWR-17', 'Engine fire in flight', 'EMERGENCIA', 1, 1),
+('A139-I-09/12', 'AW139', 'WAR-PWR-19', 'APU fire', 'EMERGENCIA', 2, 1),
+('A139-I-09/12', 'AW139', 'WAR-FIRE-65', 'Fire warning', 'EMERGENCIA', 3, 1),
+('A139-I-09/12', 'AW139', 'WAR-FIRE-66', 'Smoke detected', 'EMERGENCIA', 4, 1),
+('A139-I-09/12', 'AW139', 'CAU-MISC-68', 'Cabin smoke', 'EMERGENCIA', 5, 1),
+('A139-I-09/12', 'AW139', 'WAR-PWR-16', 'Dual engine failure fire', 'EMERGENCIA', 6, 1),
+('A139-I-09/12', 'AW139', 'INTEGR-01', 'Emergency evacuation', 'EMERGENCIA', 7, 1),
+('A139-I-09/12', 'AW139', 'FLY-BAS-17', 'Autorotação após fire', 'EMERGENCIA', 8, 1),
+('A139-I-09/12', 'AW139', 'INTEGR-02', 'Ditching offshore', 'EMERGENCIA', 9, 1),
+('A139-I-09/12', 'AW139', 'INTEGR-03', 'Forced landing terrain', 'EMERGENCIA', 10, 1),
+('A139-I-09/12', 'AW139', 'WAR-MISC-67', 'Landing gear locked up', 'EMERGENCIA', 11, 1),
+('A139-I-09/12', 'AW139', 'OPS-NRM-X2', 'Emergency landing procedure', 'EMERGENCIA', 12, 1),
+
+-- SESSÃO 10/12: OFFSHORE & PERFORMANCE OPERATIONS (10 manobras)
+('A139-I-10/12', 'AW139', 'OPS-ESP-X2', 'Helideck operations', 'NORMAL', 1, 1),
+('A139-I-10/12', 'AW139', 'FLY-BAS-X3', 'Precision hover helideck', 'NORMAL', 2, 1),
+('A139-I-10/12', 'AW139', 'OPS-NRM-X2', 'Limited space landing', 'NORMAL', 3, 1),
+('A139-I-10/12', 'AW139', 'WAR-PWR-15', 'Engine failure offshore', 'EMERGENCIA', 4, 1),
+('A139-I-10/12', 'AW139', 'INTEGR-02', 'Ditching procedure', 'EMERGENCIA', 5, 1),
+('A139-I-10/12', 'AW139', 'INTEGR-03', 'Water impact', 'EMERGENCIA', 6, 1),
+('A139-I-10/12', 'AW139', 'WAR-MISC-68', 'Floatation activation', 'EMERGENCIA', 7, 1),
+('A139-I-10/12', 'AW139', 'FLY-BAS-17', 'Autorotação sobre água', 'EMERGENCIA', 8, 1),
+('A139-I-10/12', 'AW139', 'OPS-NAV-X1', 'Overwater navigation', 'NORMAL', 9, 1),
+('A139-I-10/12', 'AW139', 'CAU-FUEL-41', 'Fuel management long range', 'NORMAL', 10, 1),
+
+-- SESSÃO 11/12: LOFT - LINE ORIENTED FLIGHT TRAINING (8 cenários integrados)
+('A139-I-11/12', 'AW139', 'INTEGR-01', 'Cenário 1: Emergency full', 'EMERGENCIA', 1, 1),
+('A139-I-11/12', 'AW139', 'INTEGR-02', 'Cenário 2: Ditching', 'EMERGENCIA', 2, 1),
+('A139-I-11/12', 'AW139', 'INTEGR-03', 'Cenário 3: Terrain forced landing', 'EMERGENCIA', 3, 1),
+('A139-I-11/12', 'AW139', 'INTEGR-04', 'Cenário 4: Night IMC failures', 'EMERGENCIA', 4, 1),
+('A139-I-11/12', 'AW139', 'OPS-NAV-X2', 'Flight planning execution', 'NORMAL', 5, 1),
+('A139-I-11/12', 'AW139', 'OPS-APP-X1', 'Full IFR approach', 'NORMAL', 6, 1),
+('A139-I-11/12', 'AW139', 'WAR-PWR-16', 'In-flight decision making', 'EMERGENCIA', 7, 1),
+('A139-I-11/12', 'AW139', 'FLY-BAS-17', 'Crew resource management', 'EMERGENCIA', 8, 1),
+
+-- SESSÃO 12/12: PROFICIENCY CHECK FINAL (20 manobras críticas)
+('A139-I-12/12', 'AW139', 'FLY-BAS-X1', 'VFR flight control', 'NORMAL', 1, 1),
+('A139-I-12/12', 'AW139', 'FLY-BAS-X2', 'IFR flight control', 'NORMAL', 2, 1),
+('A139-I-12/12', 'AW139', 'FLY-BAS-X3', 'Hover precision', 'NORMAL', 3, 1),
+('A139-I-12/12', 'AW139', 'FLY-BAS-X4', 'Upset recovery', 'EMERGENCIA', 4, 1),
+('A139-I-12/12', 'AW139', 'OPS-NAV-X2', 'IFR navigation', 'NORMAL', 5, 1),
+('A139-I-12/12', 'AW139', 'OPS-APP-X1', 'ILS approach', 'NORMAL', 6, 1),
+('A139-I-12/12', 'AW139', 'OPS-APP-X2', 'VOR approach', 'NORMAL', 7, 1),
+('A139-I-12/12', 'AW139', 'GA', 'Go-around execution', 'NORMAL', 8, 1),
+('A139-I-12/12', 'AW139', 'WAR-PWR-15', 'Single engine failure', 'EMERGENCIA', 9, 1),
+('A139-I-12/12', 'AW139', 'WAR-PWR-16', 'Dual engine failure', 'EMERGENCIA', 10, 1),
+('A139-I-12/12', 'AW139', 'WAR-PWR-17', 'Engine fire', 'EMERGENCIA', 11, 1),
+('A139-I-12/12', 'AW139', 'FLY-BAS-17', 'Autorotação touchdown', 'EMERGENCIA', 12, 1),
+('A139-I-12/12', 'AW139', 'WAR-ELEC-56', 'Electrical emergency', 'EMERGENCIA', 13, 1),
+('A139-I-12/12', 'AW139', 'CAU-AFCS-60', 'AFCS malfunction', 'ANORMAL', 14, 1),
+('A139-I-12/12', 'AW139', 'WAR-ROTR-47', 'Rotor vibration', 'EMERGENCIA', 15, 1),
+('A139-I-12/12', 'AW139', 'WAR-FIRE-66', 'Smoke/fire procedure', 'EMERGENCIA', 16, 1),
+('A139-I-12/12', 'AW139', 'INTEGR-01', 'High-stress scenario 1', 'EMERGENCIA', 17, 1),
+('A139-I-12/12', 'AW139', 'INTEGR-02', 'High-stress scenario 2', 'EMERGENCIA', 18, 1),
+('A139-I-12/12', 'AW139', 'OPS-ESP-X2', 'Special operations', 'NORMAL', 19, 1),
+('A139-I-12/12', 'AW139', 'OPS-ESP-X1', 'Night operations', 'NORMAL', 20, 1);
+
+-- Verificar resultado
+SELECT 
+    tipo_sessao,
+    COUNT(*) as total_manobras,
+    SUM(CASE WHEN categoria = 'EMERGENCIA' THEN 1 ELSE 0 END) as emergencias,
+    SUM(CASE WHEN categoria = 'ANORMAL' THEN 1 ELSE 0 END) as anormais,
+    SUM(CASE WHEN categoria = 'NORMAL' THEN 1 ELSE 0 END) as normais
+FROM cadastro_manobras
+WHERE tipo_aeronave = 'AW139'
+GROUP BY tipo_sessao
+ORDER BY tipo_sessao;

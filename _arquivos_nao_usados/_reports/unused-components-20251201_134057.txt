@@ -1,0 +1,4 @@
+RELATÓRIO DE COMPONENTES NÃO USADOS - simuladores
+Data: Mon Dec  1 13:40:57 -03 2025
+========================================
+

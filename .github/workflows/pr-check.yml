@@ -1,0 +1,39 @@
+name: 🔍 PR Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check:
+    name: 🧪 Check PR
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: 📚 Install dependencies
+        run: npm ci
+      
+      - name: 🔍 Lint
+        run: npm run lint || echo "⚠️ Lint não configurado"
+        continue-on-error: true
+      
+      - name: 🏗️ Build
+        run: npm run build
+      
+      - name: ✅ PR is valid
+        run: |
+          echo "✅ ================================"
+          echo "✅ PR VALIDADO COM SUCESSO!"
+          echo "✅ ================================"
+          echo "📝 PR: ${{ github.event.pull_request.title }}"
+          echo "👤 Author: ${{ github.actor }}"
+          echo "🔗 URL: ${{ github.event.pull_request.html_url }}"

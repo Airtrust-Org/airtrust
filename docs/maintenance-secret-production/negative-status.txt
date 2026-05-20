@@ -1,0 +1,3 @@
+frms_no_secret=403
+frms_bad_secret=403
+sigvoos_bad_secret=403

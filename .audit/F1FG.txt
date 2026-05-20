@@ -1,0 +1,65 @@
+## F1.F
+-rw-r--r--  1 filipedaumas  staff    2161 Mar  5 16:04 worker-airtrust/migrations/0230_escalas_tipos_evento_config.sql
+-rw-r--r--  1 filipedaumas  staff    1232 Mar  5 14:28 worker-airtrust/migrations/0231_escalas_templates_tripulacao.sql
+-rw-r--r--  1 filipedaumas  staff    1054 Mar  5 14:28 worker-airtrust/migrations/0232_notificacoes_inapp.sql
+-rw-r--r--  1 filipedaumas  staff     778 Mar  5 16:15 worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql
+
+## F1.G
+worker-airtrust/migrations/0062_consolidate_ssot_preserve_data.sql:  f.escala AS funcionario_escala,
+worker-airtrust/migrations/0130_remover_coluna_canac.sql:  escala TEXT,
+worker-airtrust/migrations/0130_remover_coluna_canac.sql:  numero, complemento, bairro, cidade, estado, escala, created_at, updated_at,
+worker-airtrust/migrations/0212_frms_module.sql:CREATE TABLE IF NOT EXISTS frms_escala_quinzenal (
+worker-airtrust/migrations/0212_frms_module.sql:CREATE INDEX IF NOT EXISTS idx_frms_escala_trip ON frms_escala_quinzenal(tripulante_id);
+worker-airtrust/migrations/0212_frms_module.sql:CREATE INDEX IF NOT EXISTS idx_frms_escala_periodo ON frms_escala_quinzenal(data_inicio_embarque, data_fim_folga);
+worker-airtrust/migrations/0212_frms_module.sql:CREATE INDEX IF NOT EXISTS idx_frms_escala_deleted ON frms_escala_quinzenal(deleted_at);
+worker-airtrust/migrations/0212_frms_module.sql:CREATE UNIQUE INDEX IF NOT EXISTS idx_frms_escala_uq ON frms_escala_quinzenal(tripulante_id, ano, ciclo) WHERE deleted_at IS NULL;
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:-- Objetivo: Criar tabelas para escalas mensais, tripulações,
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:--           eventos, restrições e auditoria de escala
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE TABLE IF NOT EXISTS padroes_escala (
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE TABLE IF NOT EXISTS escalas_mensais (
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE UNIQUE INDEX IF NOT EXISTS idx_escalas_mensais_mes_ano_empresa
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:  ON escalas_mensais(mes, ano, empresa_id) WHERE deleted_at IS NULL;
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE TABLE IF NOT EXISTS escala_tripulacoes (
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:  escala_id TEXT NOT NULL,
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:  padrao_escala_id TEXT,
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE INDEX IF NOT EXISTS idx_escala_tripulacoes_escala ON escala_tripulacoes(escala_id) WHERE deleted_at IS NULL;
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE INDEX IF NOT EXISTS idx_escala_tripulacoes_pic ON escala_tripulacoes(pic_id) WHERE deleted_at IS NULL;
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE TABLE IF NOT EXISTS escala_eventos (
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:  escala_id TEXT NOT NULL,
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE INDEX IF NOT EXISTS idx_escala_eventos_escala ON escala_eventos(escala_id) WHERE deleted_at IS NULL;
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE INDEX IF NOT EXISTS idx_escala_eventos_funcionario ON escala_eventos(funcionario_id) WHERE deleted_at IS NULL;
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE INDEX IF NOT EXISTS idx_escala_eventos_datas ON escala_eventos(data_inicio, data_fim) WHERE deleted_at IS NULL;
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:-- 6. Log de alterações da escala (auditoria)
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE TABLE IF NOT EXISTS escala_auditoria (
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:  escala_id TEXT NOT NULL,
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:CREATE INDEX IF NOT EXISTS idx_escala_auditoria_escala ON escala_auditoria(escala_id);
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:-- 7. Seed de padrões de escala iniciais
+worker-airtrust/migrations/0228_create_modulo_escalas.sql:INSERT OR IGNORE INTO padroes_escala (id, nome, dias_trabalho, dias_folga, descricao, ativo, created_at, updated_at)
+worker-airtrust/migrations/0229_add_escalas_quinzenas.sql:-- Migration 0229: Add escalas_quinzenas table
+worker-airtrust/migrations/0229_add_escalas_quinzenas.sql:CREATE TABLE IF NOT EXISTS escalas_quinzenas (
+worker-airtrust/migrations/0229_add_escalas_quinzenas.sql:CREATE INDEX IF NOT EXISTS idx_escalas_quinzenas_empresa_ano
+worker-airtrust/migrations/0229_add_escalas_quinzenas.sql:  ON escalas_quinzenas(empresa_id, ano);
+worker-airtrust/migrations/0230_escalas_tipos_evento_config.sql:-- Migration: 0230_escalas_tipos_evento_config
+worker-airtrust/migrations/0230_escalas_tipos_evento_config.sql:CREATE TABLE IF NOT EXISTS escalas_tipos_evento_config (
+worker-airtrust/migrations/0230_escalas_tipos_evento_config.sql:  ON escalas_tipos_evento_config(empresa_id)
+worker-airtrust/migrations/0230_escalas_tipos_evento_config.sql:INSERT OR IGNORE INTO escalas_tipos_evento_config
+worker-airtrust/migrations/0231_escalas_templates_tripulacao.sql:-- Migration: 0231_escalas_templates_tripulacao
+worker-airtrust/migrations/0231_escalas_templates_tripulacao.sql:CREATE TABLE IF NOT EXISTS escalas_templates_tripulacao (
+worker-airtrust/migrations/0231_escalas_templates_tripulacao.sql:  padrao_escala_id TEXT,
+worker-airtrust/migrations/0231_escalas_templates_tripulacao.sql:CREATE INDEX IF NOT EXISTS idx_escalas_templates_empresa
+worker-airtrust/migrations/0231_escalas_templates_tripulacao.sql:  ON escalas_templates_tripulacao(empresa_id)
+worker-airtrust/migrations/0231_escalas_templates_tripulacao.sql:CREATE INDEX IF NOT EXISTS idx_escalas_templates_aeronave
+worker-airtrust/migrations/0231_escalas_templates_tripulacao.sql:  ON escalas_templates_tripulacao(empresa_id, aeronave)
+worker-airtrust/migrations/0232_notificacoes_inapp.sql:-- Notificações in-app (sino no header) — escalas publicadas, CMA vencendo, etc.
+worker-airtrust/migrations/0232_notificacoes_inapp.sql:  tipo            TEXT    NOT NULL, -- 'escala_publicada','cma_vencendo','escala_alterada'
+worker-airtrust/migrations/0232_notificacoes_inapp.sql:  referencia_id   TEXT,             -- id da escala ou qualificacao
+worker-airtrust/migrations/0232_notificacoes_inapp.sql:  referencia_tipo TEXT,             -- 'escala' | 'qualificacao'
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:-- 0233_escalas_publicacao_snapshots.sql
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:-- Persistência de snapshots reais no momento da publicação da escala
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:CREATE TABLE IF NOT EXISTS escala_publicacao_snapshots (
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:  escala_id TEXT NOT NULL,
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:  FOREIGN KEY (escala_id) REFERENCES escalas_mensais(id)
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:CREATE INDEX IF NOT EXISTS idx_escala_publicacao_snapshots_escala
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:  ON escala_publicacao_snapshots(escala_id, publicado_em DESC)
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:CREATE INDEX IF NOT EXISTS idx_escala_publicacao_snapshots_empresa
+worker-airtrust/migrations/0233_escalas_publicacao_snapshots.sql:  ON escala_publicacao_snapshots(empresa_id, escala_id, publicado_em DESC)

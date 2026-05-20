@@ -1,0 +1,2 @@
+login_http_status=200
+token_extracted=yes

@@ -1,0 +1,62 @@
+docs(d1): sistema completo de prevenção e diagnóstico de problemas D1
+
+## 📦 Arquivos Criados
+
+### Documentação
+- PREVENCAO_PROBLEMAS_D1.md (20 KB): Guia completo de prevenção
+- GUIA_RAPIDO_D1.md (6 KB): Referência rápida de comandos  
+- POST_MORTEM_D1_20NOV2025.md (6 KB): Análise root cause
+
+### Scripts de Automação
+- scripts/sync-schema-from-production.sh: Sincroniza schema prod→local
+- scripts/validate-data-consistency.sh: Valida integridade dados
+- scripts/diagnose-d1-issue.sh: Diagnóstico completo D1
+- scripts/validate-schema-parity.py: Compara schemas local vs prod
+
+### NPM Scripts (package.json)
+- npm run db:schema:sync: Sincroniza schema
+- npm run db:data:validate: Valida dados
+- npm run db:seed:production: Popula dados
+- npm run db:backup: Backup manual
+- npm run db:reset:local: Reset completo
+- npm run db:diagnose: Diagnóstico completo
+
+## 🎯 Problemas Resolvidos
+
+1. ✅ Múltiplos databases SQLite (wrangler cria vários arquivos)
+2. ✅ Cache do Worker (não recarrega dados automaticamente)
+3. ✅ Schema inconsistente local vs produção
+4. ✅ Uso incorreto de sqlite3 direto (bypass wrangler)
+5. ✅ API retornando vazio mas CLI com dados
+
+## 💡 Root Causes Documentadas
+
+- Wrangler CLI vs Worker runtime usam databases diferentes
+- Worker mantém conexão D1 em cache
+- Migrations não aplicadas automaticamente em local
+- Developers usando sqlite3 direto nos arquivos .wrangler/
+
+## ✅ Soluções Implementadas
+
+- Scripts de sincronização automática
+- Validação de consistência de dados
+- Diagnóstico one-click (npm run db:diagnose)
+- Documentação completa (DO's e DON'Ts)
+- Post-mortem com lições aprendidas
+
+## 🚀 Impacto
+
+❌ Antes: 3 horas debugando problemas D1
+✅ Agora: 5 minutos com npm run db:diagnose
+
+## 📚 Documentação
+
+Toda documentação criada:
+- Atualizado _DOCUMENTACAO_INDEX.md
+- Guias práticos com comandos copy-paste
+- Post-mortem para referência futura
+
+---
+
+Resolves: Problemas recorrentes com D1 local development
+Prevents: Problemas similares no futuro

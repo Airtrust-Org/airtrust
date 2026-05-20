@@ -1,0 +1,53 @@
+[
+  {
+    "name": "title",
+    "type": "text",
+    "label": "Título",
+    "default": "Briefing Operacional"
+  },
+  {
+    "name": "intro",
+    "type": "text",
+    "widget": "textarea",
+    "label": "Introdução",
+    "important": true
+  },
+  {
+    "name": "checklist",
+    "type": "list",
+    "label": "Checklist",
+    "entity": "item",
+    "min": 1,
+    "field": {
+      "name": "item",
+      "type": "group",
+      "label": "Item",
+      "fields": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Texto"
+        }
+      ]
+    }
+  },
+  {
+    "name": "completionLabel",
+    "type": "text",
+    "label": "Texto do botão",
+    "default": "Registrar briefing como concluído"
+  },
+  {
+    "name": "completionMessage",
+    "type": "text",
+    "widget": "textarea",
+    "label": "Mensagem de conclusão",
+    "default": "Briefing concluído com sucesso."
+  },
+  {
+    "name": "accentColor",
+    "type": "text",
+    "label": "Cor de destaque",
+    "default": "#0f766e"
+  }
+]

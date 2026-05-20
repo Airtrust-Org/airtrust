@@ -1,0 +1,19 @@
+{
+  "development": {
+    "disableTracking": true,
+    "disableFeaturePolicyWarnings": true,
+    "disableSentry": true,
+    "optimizeForDev": true,
+    "silenceConsoleWarnings": true,
+    "fastMode": true
+  },
+  "performance": {
+    "disableSourceMaps": true,
+    "optimizeChunks": true,
+    "minifyConsole": true
+  },
+  "security": {
+    "blockTrackingScripts": true,
+    "enforceCSP": true
+  }
+}

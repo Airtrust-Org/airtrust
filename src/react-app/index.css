@@ -1,0 +1,1170 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import './styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================
+   🎨 AIRTRUST DESIGN SYSTEM v1.0
+   Design System Global - CSS Variables
+   Base: Padrão Visual da página Habilitações
+   ======================================== */
+
+:root {
+  /* ========== 🎯 CORES PRIMÁRIAS ========== */
+  --color-primary: #10b77f;
+  --color-primary-dark: #0d9e6e;
+  --color-primary-light: #e6f9f1;
+
+  /* ========== ✅ CORES SEMÂNTICAS ========== */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-critical: #ef4444;
+  --color-error: #ef4444;
+  --color-info: #0ea5e9;
+
+  /* ========== ⚫ PALETA NEUTRA (Grays) ========== */
+  --color-gray-0: #ffffff;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #606c8a;
+  --color-gray-700: #374151;
+  --color-gray-900: #111318;
+
+  /* ========== 🔤 TIPOGRAFIA ========== */
+  --font-family-base:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
+    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-family-mono: 'Menlo', 'Monaco', 'Courier New', monospace;
+
+  /* Font Sizes */
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  --font-size-3xl: 24px;
+  --font-size-4xl: 30px;
+
+  /* Font Weights */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Line Heights */
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* ========== 📏 ESPAÇAMENTO ========== */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+
+  /* ========== 🔲 BORDER RADIUS ========== */
+  --border-radius-sm: 4px;
+  --border-radius: 6px;
+  --border-radius-lg: 8px;
+  --border-radius-xl: 12px;
+
+  /* ========== 🌫️ SOMBRAS (Box Shadows) ========== */
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+
+  /* ========== ⏱️ TRANSIÇÕES E ANIMAÇÕES ========== */
+  --transition-fast: 0.15s cubic-bezier(0.23, 1, 0.32, 1);
+  --transition-base: 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+  --transition-slow: 0.3s cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* ========== 📐 DIMENSÕES PADRÃO ========== */
+  --input-height: 36px;
+  --input-height-sm: 28px;
+  --input-height-lg: 40px;
+  --button-height: 36px;
+  --button-height-sm: 28px;
+  --button-height-lg: 40px;
+  --sidebar-width: 200px;
+  --header-height: 48px;
+  --container-max-width: 1200px;
+
+  /* ========== 🎨 GRADIENTS ========== */
+  --gradient-page-bg: linear-gradient(to bottom right, #f8fafc, #eff6ff);
+  --gradient-primary: linear-gradient(135deg, #10b77f 0%, #0d9e6e 100%);
+  --gradient-success: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+
+  /* ========== 🎨 CARD BORDERS ========== */
+  --card-border-primary: 2px solid #10b77f;
+  --card-border-success: 2px solid #22c55e;
+  --card-border-warning: 2px solid #f59e0b;
+  --card-border-error: 2px solid #ef4444;
+  --card-border-neutral: 2px solid #6b7280;
+
+  /* ========== 🎨 CARD BACKGROUNDS ========== */
+  --card-bg-primary: rgba(0, 102, 204, 0.05);
+  --card-bg-success: rgba(34, 197, 94, 0.05);
+  --card-bg-warning: rgba(245, 158, 11, 0.05);
+  --card-bg-error: rgba(239, 68, 68, 0.05);
+  --card-bg-neutral: rgba(107, 114, 128, 0.05);
+
+  /* Cores com melhor contraste */
+  --color-text-primary: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-tertiary: #6b7280;
+
+  /* Theme tokens */
+  --theme-bg-base: #f8fafc;
+  --theme-bg-surface: #ffffff;
+  --theme-bg-elevated: #f1f5f9;
+  --theme-border: #e2e8f0;
+  --theme-border-muted: #cbd5e1;
+  --theme-text-primary: #0f172a;
+  --theme-text-muted: #475569;
+  --theme-text-subtle: #64748b;
+  --theme-accent: #10b77f;
+  --theme-accent-hover: #0d9e6e;
+  --theme-accent-subtle: rgba(16, 183, 127, 0.12);
+  --theme-danger: #ef4444;
+  --theme-warning: #f59e0b;
+  --theme-success: #22c55e;
+  --theme-info: #3b82f6;
+}
+
+.dark {
+  --theme-bg-base: #060b14;
+  --theme-bg-surface: #0f172a;
+  --theme-bg-elevated: #1e293b;
+  --theme-border: #1e293b;
+  --theme-border-muted: #334155;
+  --theme-text-primary: #f1f5f9;
+  --theme-text-muted: #94a3b8;
+  --theme-text-subtle: #64748b;
+  --theme-accent: #3b82f6;
+  --theme-accent-hover: #2563eb;
+  --theme-accent-subtle: rgba(59, 130, 246, 0.1);
+  --theme-danger: #ef4444;
+  --theme-warning: #f59e0b;
+  --theme-success: #22c55e;
+  --theme-info: #3b82f6;
+}
+
+/* ========== CARD VARIANTS COM CORES ========== */
+.card {
+  background: var(--color-gray-0);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-base), border-color var(--transition-base);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.card-elevated {
+  box-shadow: var(--shadow-lg);
+}
+
+.card-primary {
+  border-left: var(--card-border-primary) !important;
+  background: var(--card-bg-primary) !important;
+}
+
+.card-success {
+  border-left: var(--card-border-success) !important;
+  background: var(--card-bg-success) !important;
+}
+
+.card-warning {
+  border-left: var(--card-border-warning) !important;
+  background: var(--card-bg-warning) !important;
+}
+
+.card-error {
+  border-left: var(--card-border-error) !important;
+  background: var(--card-bg-error) !important;
+}
+
+.card-info {
+  border-left: 2px solid var(--color-info) !important;
+  background: rgba(14, 165, 233, 0.05) !important;
+}
+
+.card-neutral {
+  border-left: var(--card-border-neutral) !important;
+  background: var(--card-bg-neutral) !important;
+}
+
+/* ✅ BUG-A11Y-004: Screen Reader Only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ✅ BUG-A11Y-002: Focus visível para navegação por teclado */
+*:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* ✅ BUG-UX-006: Responsividade Mobile Completa */
+@media (max-width: 768px) {
+  /* Tabelas responsivas */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Cards empilhados em mobile */
+  .grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Modais em tela cheia em mobile */
+  .modal-mobile-full {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Texto menor em mobile */
+  .text-responsive {
+    font-size: 0.875rem;
+  }
+
+  /* Padding reduzido em mobile */
+  .p-mobile-sm {
+    padding: 0.5rem !important;
+  }
+
+  /* Botões full width em mobile */
+  .btn-mobile-full {
+    width: 100% !important;
+  }
+
+  /* Esconder em mobile */
+  .hidden-mobile {
+    display: none !important;
+  }
+
+  /* Mostrar apenas em mobile */
+  .show-mobile {
+    display: block !important;
+  }
+}
+
+/* Touch targets mínimos (44x44px) — apenas mobile */
+@media (max-width: 768px) {
+  button,
+  a,
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+}
+
+/* Prevenir zoom em inputs no iOS */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+body {
+  margin: 0;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Roboto',
+    'Oxygen',
+    'Ubuntu',
+    'Cantarell',
+    'Fira Sans',
+    'Droid Sans',
+    'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  background-color: var(--theme-bg-base);
+  color: var(--theme-text-primary);
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base);
+}
+
+html,
+#root {
+  background-color: var(--theme-bg-base);
+}
+
+.airtrust-global-standard {
+  background-color: var(--theme-bg-base);
+  color: var(--theme-text-primary);
+}
+
+/* Material Symbols global style */
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
+/* Loading spinner otimizado */
+.animate-spin {
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-pulse {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Componentes críticos de layout */
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.bg-gray-50 {
+  background-color: #f9fafb;
+}
+
+/* Performance optimizations */
+* {
+  box-sizing: border-box;
+}
+
+.dark .bg-white {
+  background-color: var(--theme-bg-surface) !important;
+}
+
+.dark .bg-white\/15 {
+  background-color: rgba(241, 245, 249, 0.15) !important;
+}
+
+.dark .bg-white\/70,
+.dark .bg-white\/80,
+.dark .bg-white\/90,
+.dark .bg-slate-50,
+.dark .bg-slate-50\/50,
+.dark .bg-slate-50\/80,
+.dark .bg-slate-100 {
+  background-color: var(--theme-bg-elevated) !important;
+}
+
+.dark .bg-slate-200 {
+  background-color: var(--theme-border-muted) !important;
+}
+
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-300,
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: var(--theme-border) !important;
+}
+
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--theme-border) !important;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-gray-900,
+.dark .text-gray-800 {
+  color: var(--theme-text-primary) !important;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-600,
+.dark .text-gray-700,
+.dark .text-gray-600 {
+  color: var(--theme-text-muted) !important;
+}
+
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-gray-500,
+.dark .text-gray-400 {
+  color: var(--theme-text-subtle) !important;
+}
+
+.dark .placeholder\:text-slate-400::placeholder,
+.dark .placeholder\:text-gray-400::placeholder {
+  color: var(--theme-text-subtle) !important;
+}
+
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-white:hover {
+  background-color: var(--theme-bg-elevated) !important;
+}
+
+.dark .hover\:bg-slate-100:hover {
+  background-color: #243449 !important;
+}
+
+.dark .hover\:border-slate-300:hover,
+.dark .hover\:border-gray-300:hover {
+  border-color: var(--theme-border-muted) !important;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  color: var(--theme-text-primary);
+}
+
+/* Lazy load de estilos não críticos */
+@layer components {
+  /* Typography utilities from Design Guide */
+  .h1-page-title {
+    @apply text-3xl font-bold text-slate-800 dark:text-white tracking-[-0.015em];
+  }
+  .h2-section-title {
+    @apply text-lg font-bold text-slate-800 dark:text-white tracking-[-0.015em];
+  }
+  .h3-subsection-title {
+    @apply text-lg font-bold text-slate-800 dark:text-white;
+  }
+
+  .body-large {
+    @apply text-base font-normal text-slate-700 dark:text-slate-300;
+  }
+  .body-small {
+    @apply text-sm font-normal text-slate-600 dark:text-slate-400;
+  }
+  .body-xs {
+    @apply text-xs font-medium text-slate-500 dark:text-slate-400;
+  }
+
+  .label-medium {
+    @apply text-sm font-medium text-slate-600 dark:text-slate-300;
+  }
+  .label-small {
+    @apply text-xs font-medium text-slate-500 dark:text-slate-400;
+  }
+
+  .data-value {
+    @apply text-sm font-semibold text-slate-800 dark:text-white;
+  }
+  .data-value-large {
+    @apply text-4xl font-bold text-primary-600;
+  }
+
+  .nav-link {
+    @apply text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary-600 dark:hover:text-white;
+  }
+  .nav-link-active {
+    @apply text-sm font-medium text-white bg-primary-600/20 dark:bg-primary-600/30 rounded-full px-4 py-1.5;
+  }
+
+  /* Badge base utilities */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .badge-success {
+    @apply badge bg-success-600/10 text-success-600;
+  }
+  .badge-warning {
+    @apply badge bg-warning-600/10 text-warning-600;
+  }
+  .badge-primary {
+    @apply badge bg-primary-600/10 text-primary-600;
+  }
+  .badge-critical {
+    @apply badge bg-danger-600/10 text-danger-600;
+  }
+
+  /* Estilos específicos para o formulário de agendamento */
+  .formulario-agendamento-avancado {
+    max-width: 100%;
+  }
+
+  .formulario-agendamento-avancado .secao-datetime {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border: 1px solid #cbd5e1;
+  }
+
+  .formulario-agendamento-avancado .datetime-grid {
+    gap: 1rem;
+  }
+
+  .formulario-agendamento-avancado .datetime-group label {
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .formulario-agendamento-avancado .auto-badge {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .formulario-agendamento-avancado input:focus,
+  .formulario-agendamento-avancado select:focus,
+  .formulario-agendamento-avancado textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+  }
+
+  .formulario-agendamento-avancado .controles-duracao {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+  }
+
+  .formulario-agendamento-avancado .info-duracao {
+    color: #059669;
+    font-weight: 600;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .formulario-agendamento-avancado .erro-duracao {
+    color: #dc2626;
+    font-weight: 600;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Componentes de status */
+  .status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .status-indicator.success {
+    background-color: #dcfce7;
+    color: #166534;
+  }
+
+  .status-indicator.error {
+    background-color: #fee2e2;
+    color: #991b1b;
+  }
+
+  .status-indicator.warning {
+    background-color: #fef3c7;
+    color: #92400e;
+  }
+
+  .status-indicator.info {
+    background-color: #dbeafe;
+    color: #1e40af;
+  }
+}
+
+/* Estilos para participantes */
+@layer utilities {
+  .formulario-agendamento-avancado .participante-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+  }
+
+  .formulario-agendamento-avancado .participante-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Animation delays */
+  .animation-delay-75 {
+    animation-delay: 75ms;
+  }
+
+  .animation-delay-150 {
+    animation-delay: 150ms;
+  }
+
+  .animation-delay-50 {
+    animation-delay: 50ms;
+  }
+
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+}
+
+/* Media queries para responsividade */
+@media (max-width: 768px) {
+  .formulario-agendamento-avancado .datetime-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .formulario-agendamento-avancado .controles-duracao {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 1024px) {
+  .formulario-agendamento-avancado .datetime-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Modal personalizado para duração */
+.modal-duracao-overlay {
+  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.modal-duracao-content {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transform: scale(0.95);
+  opacity: 0;
+  animation: modalEnter 0.3s ease-out forwards;
+}
+
+@keyframes modalEnter {
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Otimizações para rendering */
+.will-change-transform {
+  will-change: transform;
+}
+
+.contain-layout {
+  contain: layout;
+}
+
+.contain-paint {
+  contain: paint;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* Animações para o sistema de alertas */
+@keyframes slide-in {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+/* Animações adicionais para accordion */
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+.animate-accordion-down {
+  animation: accordion-down 0.2s ease-out;
+}
+
+.animate-accordion-up {
+  animation: accordion-up 0.2s ease-out;
+}
+
+/* Transições suaves para hover */
+.transition-all {
+  transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-fast), box-shadow var(--transition-base);
+}
+
+/* Indicadores visuais */
+.urgency-indicator {
+  position: relative;
+}
+
+.urgency-indicator::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+}
+
+.urgency-critico::before {
+  background-color: #dc2626;
+}
+
+.urgency-urgente::before {
+  background-color: #ea580c;
+}
+
+.urgency-normal::before {
+  background-color: #059669;
+}
+
+/* ========================================
+   ANIMAÇÕES PROFISSIONAIS
+   ======================================== */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s ease-out;
+}
+
+button {
+  transition: transform 100ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+/* Hover effects — only on devices with true hover */
+@media (hover: hover) and (pointer: fine) {
+  .hover-lift {
+    transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+  }
+  .hover-lift:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* ========================================
+   📱 RESPONSIVIDADE & MOBILE
+   ======================================== */
+
+/* Prevenir zoom em inputs mobile */
+@media screen and (max-width: 768px) {
+  input[type='text'],
+  input[type='number'],
+  input[type='email'],
+  input[type='tel'],
+  input[type='password'],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch targets mínimos (44px recomendado Apple/Google) */
+@media (max-width: 768px) {
+  button,
+  a,
+  input[type='button'],
+  input[type='submit'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Animação de menu mobile */
+@keyframes slide-in-from-top {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-in {
+  animation: slide-in-from-top 0.2s ease-out;
+}
+
+/* Melhorar scroll em mobile */
+@media (max-width: 768px) {
+  body {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Ocultar scrollbars mas manter funcionalidade */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Container responsivo com padding seguro */
+.container-responsive {
+  width: 100%;
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+/* Safe area para dispositivos com notch */
+@supports (padding: max(0px)) {
+  .safe-area-inset {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+/* ========================================
+   🌐 PADRONIZAÇÃO VISUAL GLOBAL (APP)
+   Escopo: todas as telas com AppLayout
+   ======================================== */
+
+.airtrust-global-standard .text-gray-900 {
+  color: rgb(15 23 42 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .text-gray-800 {
+  color: rgb(30 41 59 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .text-gray-700 {
+  color: rgb(51 65 85 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .text-gray-600 {
+  color: rgb(71 85 105 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .text-gray-500 {
+  color: rgb(100 116 139 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .text-gray-400 {
+  color: rgb(148 163 184 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .bg-gray-50 {
+  background-color: rgb(248 250 252 / var(--tw-bg-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .bg-gray-100 {
+  background-color: rgb(241 245 249 / var(--tw-bg-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .bg-gray-200 {
+  background-color: rgb(226 232 240 / var(--tw-bg-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .border-gray-100 {
+  border-color: rgb(241 245 249 / var(--tw-border-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .border-gray-200 {
+  border-color: rgb(226 232 240 / var(--tw-border-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .border-gray-300 {
+  border-color: rgb(203 213 225 / var(--tw-border-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .divide-gray-50 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(248 250 252 / var(--tw-divide-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(241 245 249 / var(--tw-divide-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .hover\:bg-gray-50:hover {
+  background-color: rgb(248 250 252 / var(--tw-bg-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .hover\:text-gray-600:hover {
+  color: rgb(71 85 105 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .hover\:text-gray-700:hover {
+  color: rgb(51 65 85 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .hover\:text-gray-900:hover {
+  color: rgb(15 23 42 / var(--tw-text-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .hover\:border-gray-400:hover {
+  border-color: rgb(148 163 184 / var(--tw-border-opacity, 1)) !important;
+}
+
+.airtrust-global-standard .rounded-2xl,
+.airtrust-global-standard .rounded-xl {
+  border-radius: 0.5rem !important;
+}
+
+.airtrust-global-standard .shadow-md {
+  box-shadow:
+    0 1px 3px 0 rgba(15, 23, 42, 0.1),
+    0 1px 2px -1px rgba(15, 23, 42, 0.1) !important;
+}
+
+.airtrust-global-standard .shadow-lg {
+  box-shadow:
+    0 4px 6px -1px rgba(15, 23, 42, 0.1),
+    0 2px 4px -2px rgba(15, 23, 42, 0.1) !important;
+}
+
+.airtrust-global-standard table {
+  table-layout: auto;
+}
+
+.airtrust-global-standard table.table-fixed {
+  table-layout: fixed !important;
+}
+
+.airtrust-global-standard table thead th {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.airtrust-global-standard table tbody td {
+  vertical-align: top;
+}
+
+.airtrust-global-standard .airtrust-cell-content {
+  display: -webkit-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.airtrust-global-standard table tbody td > p,
+.airtrust-global-standard table tbody td > span,
+.airtrust-global-standard table tbody td > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.airtrust-global-standard h1,
+.airtrust-global-standard h2 {
+  letter-spacing: -0.015em;
+}
+
+html.airtrust-no-animations *,
+html.airtrust-no-animations *::before,
+html.airtrust-no-animations *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ========================================
+   📐 OTIMIZAÇÃO PARA RESOLUÇÃO HD (1366x768)
+   Reduz espaçamento, fontes e elementos
+   para caber confortavelmente em monitores HD
+   ======================================== */
+
+@media (max-width: 1440px) {
+  /* Tipografia levemente menor */
+  .h1-page-title {
+    font-size: 1.5rem !important;
+  }
+  .data-value-large {
+    font-size: 2rem !important;
+  }
+
+  /* Reduzir padding vertical das páginas */
+  .layout-content-container {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+}
+
+@media (max-height: 800px) {
+  /* Header mais compacto em telas com pouca altura */
+  .airtrust-global-standard > header {
+    --header-height: 44px;
+  }
+
+  /* Menos margem inferior em títulos */
+  .page-header {
+    margin-bottom: 0.75rem;
+  }
+  .page-header h1 {
+    font-size: 1.5rem;
+  }
+  .page-header p {
+    font-size: 0.875rem;
+  }
+}

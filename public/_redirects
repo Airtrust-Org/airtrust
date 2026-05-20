@@ -1,0 +1,8 @@
+# Cloudflare Pages SPA Redirects
+# Preservar API e assets sem reescrita
+/api/* /api/:splat 200
+/assets/* /assets/:splat 200
+/sw.js /sw.js 200
+
+# SPA Fallback - todas as outras rotas vão para index.html
+/* /index.html 200
