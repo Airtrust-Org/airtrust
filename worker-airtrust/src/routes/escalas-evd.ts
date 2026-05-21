@@ -10,7 +10,10 @@
  *   GET    /api/evd?data=YYYY-MM-DD             — listar voos do dia
  *   GET    /api/evd/:id                          — detalhe
  *   GET    /api/evd/:id/justificativas           — listar justificativas estruturadas
+ *   GET    /api/evd/publicacoes?data=YYYY-MM-DD  — listar publicações diárias por revisão
+ *   GET    /api/evd/publicacoes/:id              — detalhe da publicação diária
  *   POST   /api/evd                              — criar voo
+ *   POST   /api/evd/publicacoes                  — publicar escala diária agregada por data
  *   POST   /api/evd/:id/justificativas           — criar justificativa estruturada
  *   PUT    /api/evd/:id                          — atualizar voo
  *   DELETE /api/evd/:id                          — soft delete
@@ -109,6 +112,13 @@ const publicarSchema = z
   })
   .strict();
 
+const publicacaoDiariaSchema = z
+  .object({
+    data_ref: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    observacoes: z.string().trim().max(2000).optional(),
+  })
+  .strict();
+
 type EvdTripulacaoConflitoRow = {
   id: string;
   pic_id: number | null;
@@ -152,6 +162,50 @@ type MonthlyAvailabilityResult = {
 type RoleContext = {
   funcao: string | null;
   cargo: string | null;
+};
+
+type EvdPublicacaoItemRow = {
+  id: string;
+  escala_id: string | null;
+  status: string | null;
+  data: string;
+  pic_id: number | null;
+  sic_id: number | null;
+  pic_nome: string | null;
+  pic_guerra: string | null;
+  sic_nome: string | null;
+  sic_guerra: string | null;
+  pic_funcao: string | null;
+  sic_funcao: string | null;
+  aeronave_prefixo: string | null;
+  aeronave_modelo: string | null;
+  hora_apresentacao: string | null;
+  hora_decolagem_prevista: string | null;
+  hora_pouso_previsto: string | null;
+  hora_decolagem_real: string | null;
+  hora_pouso_real: string | null;
+  hora_corte_motor: string | null;
+  repouso_minimo_ok: number | null;
+  origem: string | null;
+  destino: string | null;
+  tipo_missao: string | null;
+  observacoes: string | null;
+  aprovado_em: string | null;
+};
+
+type EvdPublicacaoJustificativaRow = {
+  id: string;
+  escala_voo_diaria_id: string;
+  funcionario_id: number | null;
+  papel: string | null;
+  origem_alerta: string;
+  tipo_alerta: string | null;
+  nivel_alerta: string | null;
+  decisao: string;
+  justificativa: string;
+  alerta_ref_id: string | null;
+  criado_por: string | null;
+  created_at: string;
 };
 
 function normalizeModeloOperacional(value: string | null | undefined): string | null {
@@ -655,6 +709,282 @@ async function insertEvdJustificativa(params: {
     .first();
 }
 
+function canonicalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalizeJsonValue(item));
+  }
+  if (value && typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    const ordered: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      const child = source[key];
+      if (child === undefined) continue;
+      ordered[key] = canonicalizeJsonValue(child);
+    }
+    return ordered;
+  }
+  return value;
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(canonicalizeJsonValue(value));
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const payload = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', payload);
+  return Array.from(new Uint8Array(digest))
+    .map((part) => part.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function listEvdItemsByDate(params: {
+  db: D1Database;
+  empresaId: number;
+  dataRef: string;
+}): Promise<EvdPublicacaoItemRow[]> {
+  const rows = await params.db
+    .prepare(
+      `SELECT
+          e.id,
+          e.escala_id,
+          e.status,
+          e.data,
+          e.pic_id,
+          e.sic_id,
+          fp.nome AS pic_nome,
+          fp.guerra AS pic_guerra,
+          fs.nome AS sic_nome,
+          fs.guerra AS sic_guerra,
+          e.pic_funcao,
+          e.sic_funcao,
+          e.aeronave_prefixo,
+          e.aeronave_modelo,
+          e.hora_apresentacao,
+          e.hora_decolagem_prevista,
+          e.hora_pouso_previsto,
+          e.hora_decolagem_real,
+          e.hora_pouso_real,
+          e.hora_corte_motor,
+          e.repouso_minimo_ok,
+          e.origem,
+          e.destino,
+          e.tipo_missao,
+          e.observacoes,
+          e.aprovado_em
+       FROM escala_voo_diaria e
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       WHERE e.empresa_id = ?
+         AND e.data = ?
+         AND e.deleted_at IS NULL
+       ORDER BY COALESCE(e.hora_apresentacao, '99:99'), COALESCE(e.hora_decolagem_prevista, '99:99'), e.id`,
+    )
+    .bind(params.empresaId, params.dataRef)
+    .all<EvdPublicacaoItemRow>();
+
+  return rows.results || [];
+}
+
+async function listEvdJustificativasByDateItems(params: {
+  db: D1Database;
+  empresaId: number;
+  itemIds: string[];
+}): Promise<Record<string, EvdPublicacaoJustificativaRow[]>> {
+  if (params.itemIds.length === 0) return {};
+  const placeholders = params.itemIds.map(() => '?').join(', ');
+  const rows = await params.db
+    .prepare(
+      `SELECT
+          id,
+          escala_voo_diaria_id,
+          funcionario_id,
+          papel,
+          origem_alerta,
+          tipo_alerta,
+          nivel_alerta,
+          decisao,
+          justificativa,
+          alerta_ref_id,
+          criado_por,
+          created_at
+       FROM escala_voo_diaria_justificativas
+       WHERE empresa_id = ?
+         AND deleted_at IS NULL
+         AND escala_voo_diaria_id IN (${placeholders})
+       ORDER BY created_at ASC`,
+    )
+    .bind(params.empresaId, ...params.itemIds)
+    .all<EvdPublicacaoJustificativaRow>();
+
+  const grouped: Record<string, EvdPublicacaoJustificativaRow[]> = {};
+  for (const row of rows.results || []) {
+    if (!grouped[row.escala_voo_diaria_id]) grouped[row.escala_voo_diaria_id] = [];
+    grouped[row.escala_voo_diaria_id].push(row);
+  }
+  return grouped;
+}
+
+async function validateEvdItemForDailyPublication(params: {
+  db: D1Database;
+  empresaId: number;
+  voo: EvdPublicacaoItemRow;
+  hasStructuredJustificativa: boolean;
+}): Promise<{ ok: true; warnings: string[] } | { ok: false; error: string; code: string }> {
+  if (!params.voo.pic_id || !params.voo.sic_id) {
+    return { ok: false, error: `${MSG_PUBLISH_CREW_REQUIRED} [voo:${params.voo.id}]`, code: 'CREW_REQUIRED' };
+  }
+
+  if (params.voo.pic_id === params.voo.sic_id) {
+    return { ok: false, error: `${MSG_PIC_SIC_SAME} [voo:${params.voo.id}]`, code: 'PIC_SIC_SAME' };
+  }
+
+  const hasConflict = await hasCrewConflict({
+    db: params.db,
+    empresaId: params.empresaId,
+    data: params.voo.data,
+    picId: params.voo.pic_id,
+    sicId: params.voo.sic_id,
+    window: {
+      hora_apresentacao: params.voo.hora_apresentacao,
+      hora_decolagem_prevista: params.voo.hora_decolagem_prevista,
+      hora_pouso_previsto: params.voo.hora_pouso_previsto,
+    },
+    excludeId: params.voo.id,
+  });
+  if (hasConflict) {
+    return { ok: false, error: `${MSG_DUPLICATE_CREW} [voo:${params.voo.id}]`, code: 'DUPLICATE_CREW' };
+  }
+
+  if (Number(params.voo.repouso_minimo_ok ?? 1) === 0) {
+    return { ok: false, error: `${MSG_REST_INVALID} [voo:${params.voo.id}]`, code: 'REST_INVALID' };
+  }
+
+  const operationalChecks = await collectOperationalWarningsAndBlocks({
+    db: params.db,
+    empresaId: params.empresaId,
+    data: params.voo.data,
+    escalaId: params.voo.escala_id || null,
+    picId: params.voo.pic_id,
+    sicId: params.voo.sic_id,
+    aeronavePrefixo: params.voo.aeronave_prefixo,
+    aeronaveModelo: params.voo.aeronave_modelo,
+  });
+  if (operationalChecks.hardError) {
+    return {
+      ok: false,
+      error: `${operationalChecks.hardError} [voo:${params.voo.id}]`,
+      code: 'OPERATIONAL_HARD_BLOCK',
+    };
+  }
+
+  if (operationalChecks.requiresOperationalJustification) {
+    const hasLegacyObservacao = String(params.voo.observacoes || '').trim().length >= 10;
+    if (!params.hasStructuredJustificativa && !hasLegacyObservacao) {
+      return {
+        ok: false,
+        error: `${MSG_PIC_ROLE_REVIEW} [voo:${params.voo.id}]`,
+        code: 'OPERATIONAL_ROLE_REVIEW_REQUIRED',
+      };
+    }
+  }
+
+  return { ok: true, warnings: operationalChecks.warnings };
+}
+
+async function buildDailyPublicationSnapshot(params: {
+  db: D1Database;
+  empresaId: number;
+  dataRef: string;
+  revisao: number;
+  publicadoEm: string;
+  publicadoPor: string | null;
+  observacoes: string | null;
+}) {
+  const voos = await listEvdItemsByDate({
+    db: params.db,
+    empresaId: params.empresaId,
+    dataRef: params.dataRef,
+  });
+  const justificativasPorVoo = await listEvdJustificativasByDateItems({
+    db: params.db,
+    empresaId: params.empresaId,
+    itemIds: voos.map((item) => item.id),
+  });
+
+  const payload = {
+    schema_version: 'evd_daily_publicacao_v1',
+    empresa_id: String(params.empresaId),
+    data_ref: params.dataRef,
+    revisao: params.revisao,
+    status: 'PUBLICADA',
+    publicado_por: params.publicadoPor,
+    publicado_em: params.publicadoEm,
+    observacoes: params.observacoes,
+    frms_resumo: {
+      included: false,
+      reason:
+        'Resumo FRMS não incluído no snapshot nesta fase para evitar acoplamento/sensibilidade até B3-c.',
+    },
+    itens: voos.map((voo) => ({
+      id: voo.id,
+      escala_id: voo.escala_id,
+      status: String(voo.status || 'RASCUNHO').toUpperCase(),
+      data: voo.data,
+      aeronave_prefixo: voo.aeronave_prefixo,
+      aeronave_modelo: voo.aeronave_modelo,
+      tripulacao: {
+        pic: {
+          id: voo.pic_id,
+          nome: voo.pic_nome,
+          nome_guerra: voo.pic_guerra,
+          funcao: voo.pic_funcao,
+        },
+        sic: {
+          id: voo.sic_id,
+          nome: voo.sic_nome,
+          nome_guerra: voo.sic_guerra,
+          funcao: voo.sic_funcao,
+        },
+      },
+      horarios: {
+        hora_apresentacao: voo.hora_apresentacao,
+        hora_decolagem_prevista: voo.hora_decolagem_prevista,
+        hora_pouso_previsto: voo.hora_pouso_previsto,
+        hora_decolagem_real: voo.hora_decolagem_real,
+        hora_pouso_real: voo.hora_pouso_real,
+        hora_corte_motor: voo.hora_corte_motor,
+      },
+      rota: {
+        origem: voo.origem,
+        destino: voo.destino,
+        tipo_missao: voo.tipo_missao,
+      },
+      observacoes_gerais: voo.observacoes,
+      flags_operacionais: {
+        repouso_minimo_ok: Number(voo.repouso_minimo_ok ?? 1) === 1,
+      },
+      justificativas: (justificativasPorVoo[voo.id] || []).map((just) => ({
+        id: just.id,
+        funcionario_id: just.funcionario_id,
+        papel: just.papel,
+        origem_alerta: just.origem_alerta,
+        tipo_alerta: just.tipo_alerta,
+        nivel_alerta: just.nivel_alerta,
+        decisao: just.decisao,
+        justificativa: just.justificativa,
+        alerta_ref_id: just.alerta_ref_id,
+        criado_por: just.criado_por,
+        created_at: just.created_at,
+      })),
+    })),
+  };
+
+  const payloadCanonical = stableStringify(payload);
+  const checksum = await sha256Hex(payloadCanonical);
+  return { payload, payloadCanonical, checksum };
+}
+
 // GET /api/evd?data=YYYY-MM-DD
 evdRoutes.get('/', async (c) => {
   const db = c.env.DB;
@@ -716,6 +1046,103 @@ evdRoutes.get('/semana', async (c) => {
   return c.json({ success: true, data: voos.results || [] });
 });
 
+// GET /api/evd/publicacoes?data=YYYY-MM-DD
+evdRoutes.get('/publicacoes', async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const dataRef = c.req.query('data');
+
+  if (!dataRef || !/^\d{4}-\d{2}-\d{2}$/.test(dataRef)) {
+    return c.json(
+      { success: false, error: 'Parâmetro obrigatório: data=YYYY-MM-DD' },
+      400,
+    );
+  }
+
+  const rows = await db
+    .prepare(
+      `SELECT
+          id,
+          empresa_id,
+          data_ref,
+          revisao,
+          status,
+          checksum,
+          observacoes,
+          publicado_por,
+          publicado_em,
+          created_at
+       FROM escala_voo_diaria_publicacoes
+       WHERE empresa_id = ?
+         AND data_ref = ?
+         AND deleted_at IS NULL
+       ORDER BY revisao DESC, publicado_em DESC`,
+    )
+    .bind(String(empresaId), dataRef)
+    .all();
+
+  return c.json({ success: true, data: rows.results || [] });
+});
+
+// GET /api/evd/publicacoes/:id
+evdRoutes.get('/publicacoes/:id', async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const id = c.req.param('id');
+
+  const row = await db
+    .prepare(
+      `SELECT
+          id,
+          empresa_id,
+          data_ref,
+          revisao,
+          status,
+          payload_json,
+          checksum,
+          observacoes,
+          publicado_por,
+          publicado_em,
+          created_at
+       FROM escala_voo_diaria_publicacoes
+       WHERE id = ?
+         AND empresa_id = ?
+         AND deleted_at IS NULL
+       LIMIT 1`,
+    )
+    .bind(id, String(empresaId))
+    .first<{
+      id: string;
+      empresa_id: string;
+      data_ref: string;
+      revisao: number;
+      status: string;
+      payload_json: string;
+      checksum: string;
+      observacoes: string | null;
+      publicado_por: string | null;
+      publicado_em: string;
+      created_at: string;
+    }>();
+
+  if (!row) return c.json({ success: false, error: 'Publicação não encontrada' }, 404);
+
+  let payload: unknown = null;
+  try {
+    payload = JSON.parse(row.payload_json);
+  } catch {
+    payload = null;
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      ...row,
+      payload_json: payload,
+    },
+  });
+});
+
 // GET /api/evd/:id
 evdRoutes.get('/:id', async (c) => {
   const db = c.env.DB;
@@ -738,6 +1165,142 @@ evdRoutes.get('/:id', async (c) => {
 
   if (!voo) return c.json({ success: false, error: 'Voo não encontrado' }, 404);
   return c.json({ success: true, data: voo });
+});
+
+// POST /api/evd/publicacoes
+evdRoutes.post('/publicacoes', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const userIdRaw = c.get('userId');
+  const userId = userIdRaw ? String(userIdRaw) : null;
+
+  const body = await c.req.json();
+  const parsed = publicacaoDiariaSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { success: false, error: 'Dados inválidos', details: parsed.error.flatten() },
+      400,
+    );
+  }
+
+  const dataRef = parsed.data.data_ref;
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const voos = await listEvdItemsByDate({
+    db,
+    empresaId,
+    dataRef,
+  });
+
+  if (voos.length === 0) {
+    return c.json(
+      { success: false, error: `Nenhum item de escala diária encontrado para ${dataRef}.` },
+      400,
+    );
+  }
+
+  const justificativasPorVoo = await listEvdJustificativasByDateItems({
+    db,
+    empresaId,
+    itemIds: voos.map((item) => item.id),
+  });
+
+  const warnings: Array<{ voo_id: string; mensagem: string }> = [];
+  for (const voo of voos) {
+    const validation = await validateEvdItemForDailyPublication({
+      db,
+      empresaId,
+      voo,
+      hasStructuredJustificativa: Boolean((justificativasPorVoo[voo.id] || []).length > 0),
+    });
+
+    if (!validation.ok) {
+      return c.json(
+        {
+          success: false,
+          error: validation.error,
+          code: validation.code,
+          voo_id: voo.id,
+        },
+        400,
+      );
+    }
+
+    for (const warning of validation.warnings) {
+      warnings.push({ voo_id: voo.id, mensagem: warning });
+    }
+  }
+
+  const nextRevisaoRow = await db
+    .prepare(
+      `SELECT COALESCE(MAX(revisao), -1) + 1 AS next_revisao
+       FROM escala_voo_diaria_publicacoes
+       WHERE empresa_id = ?
+         AND data_ref = ?
+         AND deleted_at IS NULL`,
+    )
+    .bind(String(empresaId), dataRef)
+    .first<{ next_revisao: number | null }>();
+  const revisao = Number(nextRevisaoRow?.next_revisao ?? 0);
+
+  const snapshot = await buildDailyPublicationSnapshot({
+    db,
+    empresaId,
+    dataRef,
+    revisao,
+    publicadoEm: now,
+    publicadoPor: userId,
+    observacoes: parsed.data.observacoes?.trim() || null,
+  });
+
+  const publicacaoId = crypto.randomUUID();
+  await db
+    .prepare(
+      `INSERT INTO escala_voo_diaria_publicacoes
+         (id, empresa_id, data_ref, revisao, status, payload_json, checksum, observacoes, publicado_por, publicado_em, created_at)
+       VALUES (?, ?, ?, ?, 'PUBLICADA', ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      publicacaoId,
+      String(empresaId),
+      dataRef,
+      revisao,
+      snapshot.payloadCanonical,
+      snapshot.checksum,
+      parsed.data.observacoes?.trim() || null,
+      userId,
+      now,
+      now,
+    )
+    .run();
+
+  await db
+    .prepare(
+      `UPDATE escala_voo_diaria
+          SET status = 'PUBLICADA',
+              aprovado_em = ?,
+              updated_at = ?
+        WHERE empresa_id = ?
+          AND data = ?
+          AND deleted_at IS NULL`,
+    )
+    .bind(now, now, empresaId, dataRef)
+    .run();
+
+  return c.json({
+    success: true,
+    data: {
+      id: publicacaoId,
+      empresa_id: String(empresaId),
+      data_ref: dataRef,
+      revisao,
+      status: 'PUBLICADA',
+      checksum: snapshot.checksum,
+      observacoes: parsed.data.observacoes?.trim() || null,
+      publicado_por: userId,
+      publicado_em: now,
+      warnings,
+    },
+  });
 });
 
 // GET /api/evd/:id/justificativas
