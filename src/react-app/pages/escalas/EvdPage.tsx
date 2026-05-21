@@ -104,6 +104,13 @@ interface EvdJustificativaPayload {
   alerta_ref_id?: string | null;
 }
 
+interface PublishApiError {
+  message: string;
+  code?: string;
+  requiresJustificativa?: boolean;
+  warnings?: string[];
+}
+
 function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -199,6 +206,22 @@ function buildFrmsJustificativaPayload(params: {
   };
 }
 
+function buildOperationalJustificativaPayload(params: {
+  justificativa: string;
+  picId: number | null;
+}): EvdJustificativaPayload {
+  return {
+    funcionario_id: params.picId,
+    papel: params.picId ? 'PIC' : 'OUTRO',
+    origem_alerta: 'OPERACIONAL',
+    tipo_alerta: 'ROLE_TEXT_REVIEW',
+    nivel_alerta: 'REVIEW_REQUIRED',
+    decisao: 'MANTER_ESCALA',
+    justificativa: params.justificativa.trim(),
+    alerta_ref_id: null,
+  };
+}
+
 export default function EvdPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -285,18 +308,27 @@ export default function EvdPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload || {}),
       });
+      const responseJson = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        code?: string;
+        requires_justificativa?: boolean;
+        warnings?: string[];
+      };
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || 'Erro ao publicar');
+        const publishError: PublishApiError = {
+          message: responseJson.error || 'Erro ao publicar',
+          code: responseJson.code,
+          requiresJustificativa: Boolean(responseJson.requires_justificativa),
+          warnings: Array.isArray(responseJson.warnings) ? responseJson.warnings : [],
+        };
+        throw publishError;
       }
-      return res.json();
+      return responseJson;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
       toast.success('Escala diária publicada');
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Erro ao publicar');
     },
   });
 
@@ -350,7 +382,35 @@ export default function EvdPage() {
       publishPayload.require_justificativa = true;
     }
 
-    publicarMutation.mutate({ id: voo.id, payload: publishPayload });
+    try {
+      await publicarMutation.mutateAsync({ id: voo.id, payload: publishPayload });
+    } catch (err) {
+      const publishErr = err as PublishApiError;
+      if (publishErr?.requiresJustificativa && publishErr.code === 'OPERATIONAL_ROLE_REVIEW_REQUIRED') {
+        const warningLabel =
+          publishErr.warnings && publishErr.warnings.length > 0
+            ? `\n\n${publishErr.warnings.join('\n')}`
+            : '';
+        const justificativaTxt = window.prompt(
+          `${publishErr.message || 'Revisão operacional obrigatória para função PIC.'}${warningLabel}\n\nInforme justificativa operacional estruturada para publicar:`,
+        );
+        if (!justificativaTxt || justificativaTxt.trim().length < 10) {
+          toast.error('Justificativa operacional obrigatória (mínimo 10 caracteres).');
+          return;
+        }
+        const payload = {
+          require_justificativa: true,
+          justificativa: buildOperationalJustificativaPayload({
+            justificativa: justificativaTxt,
+            picId: toNumericId(voo.pic_id),
+          }),
+        };
+        await publicarMutation.mutateAsync({ id: voo.id, payload });
+        return;
+      }
+
+      toast.error(publishErr?.message || 'Erro ao publicar');
+    }
   }
 
   return (

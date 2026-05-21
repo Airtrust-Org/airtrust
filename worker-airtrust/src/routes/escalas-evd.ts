@@ -25,6 +25,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { verificarHabilitacaoModelo } from './escalas-alocacoes-helpers-internal';
 
 const evdRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -37,6 +38,13 @@ const MSG_PIC_SIC_SAME = 'PIC e SIC não podem ser o mesmo tripulante.';
 const MSG_DUPLICATE_CREW =
   'Tripulante já alocado em outra escala diária na mesma data/intervalo.';
 const MSG_REST_INVALID = 'Repouso mínimo não atendido.';
+const MSG_AIRCRAFT_UNAVAILABLE = 'Aeronave indisponível ou inativa no cadastro mestre.';
+const MSG_MODEL_QUALIFICATION = 'Tripulante sem habilitação cadastrada para o modelo da aeronave.';
+const MSG_MONTHLY_UNAVAILABLE = 'Tripulante indisponível na escala mensal para esta data/período.';
+const MSG_PIC_ROLE_REVIEW =
+  'Função PIC requer validação operacional: cadastro de função não é canônico.';
+const MSG_AIRCRAFT_UNRESOLVED =
+  'Aeronave não resolvida no cadastro mestre; validações de modelo não aplicadas.';
 
 const evdCreateSchema = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -126,6 +134,342 @@ type EvdJustificativaInsert = {
   justificativa: string;
   alerta_ref_id: string | null;
 };
+
+type MasterAeronaveResolution = {
+  resolved: boolean;
+  aeronaveId: number | null;
+  prefixo: string | null;
+  modeloNormalizado: string | null;
+  active: boolean;
+  warnings: string[];
+};
+
+type MonthlyAvailabilityResult = {
+  blocked: boolean;
+  message?: string;
+};
+
+type RoleContext = {
+  funcao: string | null;
+  cargo: string | null;
+};
+
+function normalizeModeloOperacional(value: string | null | undefined): string | null {
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '');
+  if (!normalized) return null;
+  if (normalized.includes('SK76') || normalized.includes('S76')) return 'SK76';
+  if (normalized.includes('AW139')) return 'AW139';
+  return normalized;
+}
+
+function isStatusAeronaveAtivo(value: string | null | undefined): boolean {
+  return String(value || 'ATIVO')
+    .trim()
+    .toUpperCase() === 'ATIVO';
+}
+
+function normalizeRoleText(value: string | null | undefined): string {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isCopilotRoleText(value: string | null | undefined): boolean {
+  const role = normalizeRoleText(value);
+  if (!role) return false;
+  return (
+    role.includes('COPILOTO') ||
+    role === 'COP' ||
+    role === 'SIC' ||
+    role.includes('COPILOT')
+  );
+}
+
+function hasCanonicalCommanderHint(value: string | null | undefined): boolean {
+  const role = normalizeRoleText(value);
+  if (!role) return false;
+  return role.includes('COMANDANTE') || role.includes('PIC') || role.includes('CMT');
+}
+
+async function resolveMasterAeronave(params: {
+  db: D1Database;
+  empresaId: number;
+  aeronavePrefixo?: string | null;
+  aeronaveModeloLivre?: string | null;
+}): Promise<MasterAeronaveResolution> {
+  const prefixoInput = String(params.aeronavePrefixo || '').trim().toUpperCase();
+  if (!prefixoInput) {
+    return {
+      resolved: false,
+      aeronaveId: null,
+      prefixo: null,
+      modeloNormalizado: normalizeModeloOperacional(params.aeronaveModeloLivre),
+      active: true,
+      warnings: [],
+    };
+  }
+
+  const aeronave = await params.db
+    .prepare(
+      `SELECT id, prefixo, modelo, status, empresa_id
+         FROM aeronaves
+        WHERE deleted_at IS NULL
+          AND UPPER(TRIM(COALESCE(prefixo, ''))) = ?
+        ORDER BY
+          CASE
+            WHEN empresa_id = ? THEN 0
+            WHEN empresa_id IS NULL THEN 1
+            ELSE 2
+          END,
+          id
+        LIMIT 1`,
+    )
+    .bind(prefixoInput, params.empresaId)
+    .first<{
+      id: number;
+      prefixo: string | null;
+      modelo: string | null;
+      status: string | null;
+      empresa_id: number | null;
+    }>();
+
+  if (!aeronave) {
+    return {
+      resolved: false,
+      aeronaveId: null,
+      prefixo: prefixoInput,
+      modeloNormalizado: normalizeModeloOperacional(params.aeronaveModeloLivre),
+      active: true,
+      warnings: [MSG_AIRCRAFT_UNRESOLVED],
+    };
+  }
+
+  return {
+    resolved: true,
+    aeronaveId: Number(aeronave.id),
+    prefixo: String(aeronave.prefixo || prefixoInput).toUpperCase(),
+    modeloNormalizado: normalizeModeloOperacional(aeronave.modelo || params.aeronaveModeloLivre),
+    active: isStatusAeronaveAtivo(aeronave.status),
+    warnings: [],
+  };
+}
+
+async function getRoleContext(
+  db: D1Database,
+  empresaId: number,
+  funcionarioId: number,
+): Promise<RoleContext | null> {
+  const row = await db
+    .prepare(
+      `SELECT funcao, cargo
+         FROM funcionarios
+        WHERE id = ?
+          AND deleted_at IS NULL
+          AND COALESCE(ativo, 1) = 1
+          AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
+          AND (empresa_id IS NULL OR empresa_id = ?)
+        LIMIT 1`,
+    )
+    .bind(funcionarioId, empresaId)
+    .first<RoleContext>();
+  return row || null;
+}
+
+async function hasReliableQualificationSource(
+  db: D1Database,
+  funcionarioId: number,
+): Promise<boolean> {
+  const funcionario = await db
+    .prepare(
+      `SELECT modelo_aeronave_id, aeronave
+         FROM funcionarios
+        WHERE id = ?
+          AND deleted_at IS NULL
+          AND COALESCE(ativo, 1) = 1
+        LIMIT 1`,
+    )
+    .bind(funcionarioId)
+    .first<{ modelo_aeronave_id: string | null; aeronave: string | null }>();
+
+  if (!funcionario) return false;
+
+  const hasActiveAssociacao = await db
+    .prepare(
+      `SELECT 1
+         FROM funcionarios_aeronaves fa
+        WHERE CAST(fa.funcionario_id AS INTEGER) = ?
+          AND fa.deleted_at IS NULL
+          AND COALESCE(fa.ativo, 1) = 1
+          AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))
+        LIMIT 1`,
+    )
+    .bind(funcionarioId)
+    .first<{ 1: number }>();
+
+  if (hasActiveAssociacao) return true;
+
+  return (
+    String(funcionario.modelo_aeronave_id || '').trim().length > 0 ||
+    String(funcionario.aeronave || '').trim().length > 0
+  );
+}
+
+async function validateCrewAvailabilityOnMonthlyScale(params: {
+  db: D1Database;
+  funcionarioId: number;
+  data: string;
+  escalaId?: string | null;
+}): Promise<MonthlyAvailabilityResult> {
+  const ferias = await params.db
+    .prepare(
+      `SELECT tipo
+         FROM funcionario_ferias
+        WHERE CAST(funcionario_id AS INTEGER) = ?
+          AND deleted_at IS NULL
+          AND NOT (data_fim < ? OR data_inicio > ?)
+        LIMIT 1`,
+    )
+    .bind(params.funcionarioId, params.data, params.data)
+    .first<{ tipo: string | null }>();
+
+  if (ferias) {
+    return {
+      blocked: true,
+      message: MSG_MONTHLY_UNAVAILABLE,
+    };
+  }
+
+  const conflitos = await params.db
+    .prepare(
+      `SELECT
+         CAST(ea.escala_id AS TEXT) AS escala_id,
+         ea.aeronave_id,
+         ea.situacao_tipo,
+         COALESCE(est.bloqueia_alocacao, 1) AS bloqueia_alocacao
+       FROM escala_alocacoes ea
+       LEFT JOIN escala_situacao_tipos est
+         ON UPPER(est.codigo) = UPPER(COALESCE(ea.situacao_tipo, ''))
+        AND est.deleted_at IS NULL
+      WHERE CAST(ea.funcionario_id AS INTEGER) = ?
+        AND ea.deleted_at IS NULL
+        AND ea.status != 'cancelado'
+        AND NOT (ea.data_fim < ? OR ea.data_inicio > ?)`,
+    )
+    .bind(params.funcionarioId, params.data, params.data)
+    .all<{
+      escala_id: string | null;
+      aeronave_id: number | null;
+      situacao_tipo: string | null;
+      bloqueia_alocacao: number | null;
+    }>();
+
+  for (const row of conflitos.results || []) {
+    if (row.aeronave_id != null) {
+      if (params.escalaId && String(row.escala_id || '') === String(params.escalaId)) {
+        continue;
+      }
+      // Sem escala_id vinculada no EVD não há como afirmar conflito operacional com segurança.
+      if (!params.escalaId) continue;
+      return { blocked: true, message: MSG_MONTHLY_UNAVAILABLE };
+    }
+
+    const situacao = String(row.situacao_tipo || '').trim().toUpperCase();
+    if (!situacao || situacao === 'FOLGA') continue;
+    if (Number(row.bloqueia_alocacao ?? 1) === 1) {
+      return { blocked: true, message: MSG_MONTHLY_UNAVAILABLE };
+    }
+  }
+
+  return { blocked: false };
+}
+
+async function collectOperationalWarningsAndBlocks(params: {
+  db: D1Database;
+  empresaId: number;
+  data: string;
+  escalaId?: string | null;
+  picId: number | null;
+  sicId: number | null;
+  aeronavePrefixo?: string | null;
+  aeronaveModelo?: string | null;
+}): Promise<{ hardError: string | null; warnings: string[]; requiresOperationalJustification: boolean }> {
+  const warnings: string[] = [];
+  let requiresOperationalJustification = false;
+  const crewIds = [params.picId, params.sicId].filter((id): id is number => Boolean(id));
+
+  const aeronave = await resolveMasterAeronave({
+    db: params.db,
+    empresaId: params.empresaId,
+    aeronavePrefixo: params.aeronavePrefixo,
+    aeronaveModeloLivre: params.aeronaveModelo,
+  });
+
+  warnings.push(...aeronave.warnings);
+
+  if (aeronave.resolved && !aeronave.active) {
+    return { hardError: MSG_AIRCRAFT_UNAVAILABLE, warnings, requiresOperationalJustification };
+  }
+
+  if (aeronave.resolved && aeronave.aeronaveId && crewIds.length > 0) {
+    const knownModel = ['AW139', 'SK76'].includes(String(aeronave.modeloNormalizado || ''));
+    if (knownModel) {
+      for (const crewId of crewIds) {
+        const reliableSource = await hasReliableQualificationSource(params.db, crewId);
+        if (!reliableSource) {
+          warnings.push(
+            `Habilitação de modelo não pôde ser confirmada no cadastro para tripulante ${crewId}; revisão operacional recomendada.`,
+          );
+          continue;
+        }
+        const hab = await verificarHabilitacaoModelo(
+          params.db,
+          String(crewId),
+          aeronave.aeronaveId,
+          params.empresaId,
+        );
+        if (!hab.habilitado) {
+          return { hardError: MSG_MODEL_QUALIFICATION, warnings, requiresOperationalJustification };
+        }
+      }
+    } else if (aeronave.modeloNormalizado) {
+      warnings.push(
+        `Modelo ${aeronave.modeloNormalizado} fora do escopo AW139/SK76 para bloqueio automático nesta fase.`,
+      );
+    }
+  }
+
+  for (const crewId of crewIds) {
+    const availability = await validateCrewAvailabilityOnMonthlyScale({
+      db: params.db,
+      funcionarioId: crewId,
+      data: params.data,
+      escalaId: params.escalaId || null,
+    });
+    if (availability.blocked) {
+      return { hardError: availability.message || MSG_MONTHLY_UNAVAILABLE, warnings, requiresOperationalJustification };
+    }
+  }
+
+  if (params.picId) {
+    const picRole = await getRoleContext(params.db, params.empresaId, params.picId);
+    if (
+      picRole &&
+      (isCopilotRoleText(picRole.funcao) || isCopilotRoleText(picRole.cargo)) &&
+      !hasCanonicalCommanderHint(picRole.funcao) &&
+      !hasCanonicalCommanderHint(picRole.cargo)
+    ) {
+      warnings.push(MSG_PIC_ROLE_REVIEW);
+      requiresOperationalJustification = true;
+    }
+  }
+
+  return { hardError: null, warnings, requiresOperationalJustification };
+}
 
 function parseTimeToMinutes(value: string | null | undefined): number | null {
   if (!value || !/^\d{2}:\d{2}$/.test(value)) return null;
@@ -494,6 +838,20 @@ evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
   }
 
   const warnings: string[] = [];
+  const operationalChecks = await collectOperationalWarningsAndBlocks({
+    db,
+    empresaId,
+    data: d.data,
+    escalaId: d.escala_id || null,
+    picId: d.pic_id ?? null,
+    sicId: d.sic_id ?? null,
+    aeronavePrefixo: d.aeronave_prefixo || null,
+    aeronaveModelo: d.aeronave_modelo || null,
+  });
+  if (operationalChecks.hardError) {
+    return c.json({ success: false, error: operationalChecks.hardError }, 400);
+  }
+  warnings.push(...operationalChecks.warnings);
 
   // Validação de repouso para PIC
   if (d.pic_id) {
@@ -576,7 +934,17 @@ evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
     )
     .run();
 
-  return c.json({ success: true, data: { id, warnings } }, 201);
+  return c.json(
+    {
+      success: true,
+      data: {
+        id,
+        warnings,
+        require_justificativa_operacional: operationalChecks.requiresOperationalJustification,
+      },
+    },
+    201,
+  );
 });
 
 // PUT /api/evd/:id
@@ -700,7 +1068,7 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
 
   const voo = await db
     .prepare(
-      `SELECT id, status, data, pic_id, sic_id, repouso_minimo_ok, observacoes,
+      `SELECT id, status, data, escala_id, pic_id, sic_id, aeronave_prefixo, aeronave_modelo, repouso_minimo_ok, observacoes,
               hora_apresentacao, hora_decolagem_prevista, hora_pouso_previsto
          FROM escala_voo_diaria
         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
@@ -710,8 +1078,11 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
       id: string;
       status: string;
       data: string;
+      escala_id: string | null;
       pic_id: number | null;
       sic_id: number | null;
+      aeronave_prefixo: string | null;
+      aeronave_modelo: string | null;
       repouso_minimo_ok: number;
       observacoes: string | null;
       hora_apresentacao: string | null;
@@ -752,6 +1123,20 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
     return c.json({ success: false, error: MSG_REST_INVALID }, 400);
   }
 
+  const operationalChecks = await collectOperationalWarningsAndBlocks({
+    db,
+    empresaId,
+    data: voo.data,
+    escalaId: voo.escala_id || null,
+    picId: voo.pic_id,
+    sicId: voo.sic_id,
+    aeronavePrefixo: voo.aeronave_prefixo,
+    aeronaveModelo: voo.aeronave_modelo,
+  });
+  if (operationalChecks.hardError) {
+    return c.json({ success: false, error: operationalChecks.hardError }, 400);
+  }
+
   if (publishInput.justificativa) {
     await insertEvdJustificativa({
       db,
@@ -771,7 +1156,7 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
     });
   }
 
-  if (publishInput.require_justificativa) {
+  if (publishInput.require_justificativa || operationalChecks.requiresOperationalJustification) {
     const existingJustificativa = await db
       .prepare(
         `SELECT id
@@ -785,11 +1170,18 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
     const hasStructuredJustificativa = Boolean(existingJustificativa?.id);
     const hasLegacyObservacao = (voo.observacoes || '').trim().length >= 10;
     if (!hasStructuredJustificativa && !hasLegacyObservacao) {
+      const code = operationalChecks.requiresOperationalJustification
+        ? 'OPERATIONAL_ROLE_REVIEW_REQUIRED'
+        : 'JUSTIFICATIVA_OPERACIONAL_OBRIGATORIA';
       return c.json(
         {
           success: false,
-          error:
-            'Justificativa operacional obrigatória para publicação com revisão FRMS/operacional.',
+          code,
+          requires_justificativa: true,
+          warnings: operationalChecks.warnings,
+          error: operationalChecks.requiresOperationalJustification
+            ? MSG_PIC_ROLE_REVIEW
+            : 'Justificativa operacional obrigatória para publicação com revisão FRMS/operacional.',
         },
         400,
       );
