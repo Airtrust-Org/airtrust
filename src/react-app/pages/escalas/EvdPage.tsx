@@ -9,11 +9,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plane,
   Plus,
-  Calendar,
   Clock,
   Users,
   MapPin,
-  Edit3,
   Trash2,
   CheckCircle,
   AlertTriangle,
@@ -21,6 +19,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Send,
+  History,
+  FileText,
+  Printer,
+  X,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
@@ -111,6 +113,77 @@ interface PublishApiError {
   warnings?: string[];
 }
 
+interface EvdPublicacaoResumo {
+  id: string;
+  empresa_id: string;
+  data_ref: string;
+  revisao: number;
+  status: string;
+  checksum: string;
+  observacoes: string | null;
+  publicado_por: string | null;
+  publicado_em: string;
+  created_at: string;
+}
+
+interface EvdPublicacaoJustificativa {
+  id: string;
+  funcionario_id: number | null;
+  papel: string | null;
+  origem_alerta: string;
+  tipo_alerta: string | null;
+  nivel_alerta: string | null;
+  decisao: string;
+  justificativa: string;
+  alerta_ref_id: string | null;
+  criado_por: string | null;
+  created_at: string;
+}
+
+interface EvdPublicacaoSnapshotItem {
+  id: string;
+  status: string;
+  data: string;
+  aeronave_prefixo: string | null;
+  aeronave_modelo: string | null;
+  tripulacao?: {
+    pic?: { id: number | null; nome: string | null; nome_guerra: string | null; funcao: string | null };
+    sic?: { id: number | null; nome: string | null; nome_guerra: string | null; funcao: string | null };
+  };
+  horarios?: {
+    hora_apresentacao: string | null;
+    hora_decolagem_prevista: string | null;
+    hora_pouso_previsto: string | null;
+    hora_decolagem_real?: string | null;
+    hora_pouso_real?: string | null;
+    hora_corte_motor?: string | null;
+  };
+  rota?: {
+    origem: string | null;
+    destino: string | null;
+    tipo_missao: string | null;
+  };
+  observacoes_gerais?: string | null;
+  justificativas?: EvdPublicacaoJustificativa[];
+}
+
+interface EvdPublicacaoSnapshot {
+  schema_version?: string;
+  empresa_id?: string;
+  data_ref?: string;
+  revisao?: number;
+  status?: string;
+  publicado_por?: string | null;
+  publicado_em?: string | null;
+  observacoes?: string | null;
+  frms_resumo?: { included?: boolean; reason?: string };
+  itens?: EvdPublicacaoSnapshotItem[];
+}
+
+interface EvdPublicacaoDetalhe extends EvdPublicacaoResumo {
+  payload_json: EvdPublicacaoSnapshot | null;
+}
+
 function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -118,6 +191,29 @@ function toLocalDateStr(d: Date) {
 function formatDateBR(dateStr: string) {
   const [y, m, d] = dateStr.split('-');
   return `${d}/${m}/${y}`;
+}
+
+function formatDateTimeBR(value: string | null | undefined) {
+  if (!value) return '—';
+  const date = new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('pt-BR');
+}
+
+function shortChecksum(value: string | null | undefined) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '—';
+  if (normalized.length <= 12) return normalized;
+  return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+}
+
+function escapeHtml(value: string | null | undefined) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -227,11 +323,21 @@ export default function EvdPage() {
   const queryClient = useQueryClient();
   const [data, setData] = useState(toLocalDateStr(new Date()));
   const [showForm, setShowForm] = useState(false);
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [snapshotDetail, setSnapshotDetail] = useState<EvdPublicacaoDetalhe | null>(null);
+  const [publishingDay, setPublishingDay] = useState(false);
 
   const { data: voosRaw, loading } = useApi<{ success: boolean; data: EvdVoo[] }>(
     `/api/evd?data=${data}`,
   );
   const voos = voosRaw?.data || [];
+  const { data: publicacoesRaw, loading: loadingPublicacoes } = useApi<{
+    success: boolean;
+    data: EvdPublicacaoResumo[];
+  }>(`/api/evd/publicacoes?data=${data}`);
+  const publicacoes = publicacoesRaw?.data || [];
+  const ultimaPublicacao = publicacoes[0] || null;
   const { data: frmsDailyRaw } = useApi<{
     success: boolean;
     data?: { items?: FrmsDailyFatigueItem[] };
@@ -289,6 +395,177 @@ export default function EvdPage() {
     const d = new Date(data + 'T12:00:00');
     d.setDate(d.getDate() + delta);
     setData(toLocalDateStr(d));
+  }
+
+  function buildPrintHtml(publicacao: EvdPublicacaoDetalhe) {
+    const payload = publicacao.payload_json;
+    const itens = payload?.itens || [];
+    const rows = itens
+      .map((item) => {
+        const pic = item.tripulacao?.pic?.nome_guerra || item.tripulacao?.pic?.nome || '—';
+        const sic = item.tripulacao?.sic?.nome_guerra || item.tripulacao?.sic?.nome || '—';
+        const horarios = [
+          item.horarios?.hora_apresentacao ? `Apres ${item.horarios?.hora_apresentacao}` : null,
+          item.horarios?.hora_decolagem_prevista
+            ? `Dec ${item.horarios?.hora_decolagem_prevista}`
+            : null,
+          item.horarios?.hora_pouso_previsto ? `Pouso ${item.horarios?.hora_pouso_previsto}` : null,
+        ]
+          .filter(Boolean)
+          .join(' | ');
+        return `<tr>
+          <td>${escapeHtml(item.aeronave_prefixo || '—')}</td>
+          <td>${escapeHtml(item.aeronave_modelo || '—')}</td>
+          <td>${escapeHtml(pic)}</td>
+          <td>${escapeHtml(sic)}</td>
+          <td>${escapeHtml(horarios || '—')}</td>
+          <td>${escapeHtml(item.rota?.origem || '—')} → ${escapeHtml(item.rota?.destino || '—')}</td>
+          <td>${escapeHtml(item.rota?.tipo_missao || '—')}</td>
+          <td>${escapeHtml(item.observacoes_gerais || '')}</td>
+        </tr>`;
+      })
+      .join('');
+
+    const justificativas = itens
+      .flatMap((item) =>
+        (item.justificativas || []).map(
+          (just) => `<li><strong>${escapeHtml(item.aeronave_prefixo || item.id)}</strong> — ${
+            just.papel ? `${escapeHtml(just.papel)}: ` : ''
+          }${escapeHtml(just.justificativa)}</li>`,
+        ),
+      )
+      .join('');
+
+    return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Escala Diária de Voo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 18px; color: #0f172a; font-size: 12px; }
+    h1 { margin: 0 0 6px; font-size: 20px; }
+    .meta { margin-bottom: 14px; color: #334155; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; }
+    .section { margin-top: 14px; }
+    @media print { body { margin: 8mm; } }
+  </style>
+</head>
+<body>
+  <h1>Escala Diária de Voo</h1>
+  <div class="meta">
+    Data: ${escapeHtml(payload?.data_ref || publicacao.data_ref)} |
+    Revisão: ${publicacao.revisao} |
+    Status: ${escapeHtml(publicacao.status)} |
+    Publicado em: ${escapeHtml(formatDateTimeBR(publicacao.publicado_em))} |
+    Checksum: ${escapeHtml(publicacao.checksum)}
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Aeronave</th>
+        <th>Modelo</th>
+        <th>PIC</th>
+        <th>SIC</th>
+        <th>Horários</th>
+        <th>Origem/Destino</th>
+        <th>Missão</th>
+        <th>Observações</th>
+      </tr>
+    </thead>
+    <tbody>${rows || '<tr><td colspan="8">Sem itens na revisão.</td></tr>'}</tbody>
+  </table>
+  <div class="section">
+    <strong>Justificativas operacionais</strong>
+    <ul>${justificativas || '<li>Sem justificativas estruturadas.</li>'}</ul>
+  </div>
+  <div class="section">
+    <em>Este documento contém apenas status operacional e justificativas da escala. Dados sensíveis do check-in FRMS não são incluídos.</em>
+  </div>
+</body>
+</html>`;
+  }
+
+  async function loadPublicacao(id: string) {
+    setSnapshotLoading(true);
+    try {
+      const res = await apiFetch(`/api/evd/publicacoes/${id}`);
+      const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        data?: EvdPublicacaoDetalhe;
+      };
+      if (!res.ok || !json.success || !json.data) {
+        toast.error(json.error || 'Erro ao carregar revisão');
+        return null;
+      }
+      setSnapshotDetail(json.data);
+      setSnapshotOpen(true);
+      return json.data;
+    } finally {
+      setSnapshotLoading(false);
+    }
+  }
+
+  async function handlePrintPublicacao(id: string) {
+    const current = snapshotDetail?.id === id ? snapshotDetail : await loadPublicacao(id);
+    if (!current) return;
+    const html = buildPrintHtml(current);
+    const win = window.open('', '_blank');
+    if (!win) {
+      toast.error('Não foi possível abrir janela de impressão.');
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
+  async function handlePublishDay() {
+    if (voos.length === 0) {
+      toast.error('Não há itens para publicar neste dia.');
+      return;
+    }
+    const confirm = window.confirm(
+      `Publicar a escala diária completa de ${formatDateBR(data)}?\nIsso criará uma nova revisão.`,
+    );
+    if (!confirm) return;
+    const observacoes = window.prompt('Observações da publicação (opcional):', '');
+    if (observacoes === null) return;
+
+    setPublishingDay(true);
+    try {
+      const res = await apiFetch('/api/evd/publicacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data_ref: data, observacoes: observacoes.trim() || undefined }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        data?: {
+          id: string;
+          revisao: number;
+          checksum: string;
+          publicado_em: string;
+          publicado_por: string | null;
+        };
+      };
+      if (!res.ok || !json.success || !json.data) {
+        toast.error(json.error || 'Erro ao publicar escala do dia');
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/evd/publicacoes?data=${data}`] });
+      toast.success(
+        `Escala do dia publicada. Rev ${json.data.revisao} • checksum ${shortChecksum(json.data.checksum)}`,
+      );
+    } finally {
+      setPublishingDay(false);
+    }
   }
 
   // Publicar voo
@@ -433,9 +710,19 @@ export default function EvdPage() {
               <p className="text-sm text-slate-500 mt-0.5">PRC-OPS-009 §4.3</p>
             </div>
           </div>
-          <Button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" /> Novo Voo
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={handlePublishDay}
+              disabled={publishingDay || voos.length === 0}
+              className="flex items-center gap-2"
+            >
+              <Send className="h-4 w-4" />
+              {publishingDay ? 'Publicando...' : 'Publicar escala do dia'}
+            </Button>
+            <Button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" /> Novo Voo
+            </Button>
+          </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -484,6 +771,184 @@ export default function EvdPage() {
             <ChevronRight className="h-5 w-5 text-slate-600" />
           </button>
         </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+              <History className="h-4 w-4 text-slate-500" />
+              Histórico de publicações ({formatDateBR(data)})
+            </h2>
+            {ultimaPublicacao ? (
+              <span className="text-xs text-slate-500">
+                Última revisão: <strong>R{ultimaPublicacao.revisao}</strong>
+              </span>
+            ) : null}
+          </div>
+
+          {loadingPublicacoes ? (
+            <p className="text-sm text-slate-500">Carregando revisões...</p>
+          ) : publicacoes.length === 0 ? (
+            <p className="text-sm text-slate-500">Nenhuma publicação diária registrada para esta data.</p>
+          ) : (
+            <div className="space-y-2">
+              {publicacoes.slice(0, 5).map((pub) => (
+                <div
+                  key={pub.id}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="text-xs text-slate-600 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-800">R{pub.revisao}</span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                        {pub.status}
+                      </span>
+                      <span>checksum {shortChecksum(pub.checksum)}</span>
+                    </div>
+                    <div>
+                      Publicado em {formatDateTimeBR(pub.publicado_em)}
+                      {pub.publicado_por ? ` • por ${pub.publicado_por}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => loadPublicacao(pub.id)}
+                      disabled={snapshotLoading}
+                      className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Ver revisão
+                    </button>
+                    <button
+                      onClick={() => void handlePrintPublicacao(pub.id)}
+                      disabled={snapshotLoading}
+                      className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      Imprimir revisão
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {snapshotOpen && snapshotDetail && (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-slate-600" />
+                  Revisão R{snapshotDetail.revisao} • {formatDateBR(snapshotDetail.data_ref)}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Status <strong>{snapshotDetail.status}</strong> • Publicado em{' '}
+                  {formatDateTimeBR(snapshotDetail.publicado_em)}
+                  {snapshotDetail.publicado_por ? ` • por ${snapshotDetail.publicado_por}` : ''}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Checksum: <span className="font-mono">{snapshotDetail.checksum}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSnapshotOpen(false);
+                  setSnapshotDetail(null);
+                }}
+                className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+              >
+                <X className="h-3.5 w-3.5" />
+                Fechar
+              </button>
+            </div>
+
+            {snapshotDetail.payload_json?.frms_resumo?.included === false && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                Resumo FRMS não incluído no snapshot desta revisão.
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs border border-slate-200">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="px-2 py-2 text-left">Aeronave</th>
+                    <th className="px-2 py-2 text-left">Modelo</th>
+                    <th className="px-2 py-2 text-left">PIC</th>
+                    <th className="px-2 py-2 text-left">SIC</th>
+                    <th className="px-2 py-2 text-left">Horários</th>
+                    <th className="px-2 py-2 text-left">Rota/Missão</th>
+                    <th className="px-2 py-2 text-left">Observações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(snapshotDetail.payload_json?.itens || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-2 py-3 text-center text-slate-500">
+                        Sem itens neste snapshot.
+                      </td>
+                    </tr>
+                  ) : (
+                    (snapshotDetail.payload_json?.itens || []).map((item) => (
+                      <tr key={item.id} className="border-t border-slate-100 align-top">
+                        <td className="px-2 py-2 font-mono">{item.aeronave_prefixo || '—'}</td>
+                        <td className="px-2 py-2">{item.aeronave_modelo || '—'}</td>
+                        <td className="px-2 py-2">
+                          {item.tripulacao?.pic?.nome_guerra ||
+                            item.tripulacao?.pic?.nome ||
+                            '—'}
+                        </td>
+                        <td className="px-2 py-2">
+                          {item.tripulacao?.sic?.nome_guerra ||
+                            item.tripulacao?.sic?.nome ||
+                            '—'}
+                        </td>
+                        <td className="px-2 py-2">
+                          <div>
+                            Apres: {item.horarios?.hora_apresentacao || '—'} | Dec:{' '}
+                            {item.horarios?.hora_decolagem_prevista || '—'} | Pouso:{' '}
+                            {item.horarios?.hora_pouso_previsto || '—'}
+                          </div>
+                        </td>
+                        <td className="px-2 py-2">
+                          <div>
+                            {(item.rota?.origem || '—') + ' → ' + (item.rota?.destino || '—')}
+                          </div>
+                          <div className="text-slate-500">{item.rota?.tipo_missao || '—'}</div>
+                        </td>
+                        <td className="px-2 py-2">{item.observacoes_gerais || '—'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+              <p className="text-xs font-medium text-slate-700 mb-2">Justificativas operacionais</p>
+              <div className="space-y-2">
+                {(snapshotDetail.payload_json?.itens || []).flatMap((item) => {
+                  const justificativas = item.justificativas || [];
+                  if (justificativas.length === 0) return [];
+                  return justificativas.map((just) => (
+                    <div key={just.id} className="text-xs text-slate-700 rounded border border-slate-200 bg-white px-2 py-2">
+                      <p className="font-medium">
+                        {item.aeronave_prefixo || item.id}
+                        {just.papel ? ` • ${just.papel}` : ''}
+                        {just.origem_alerta ? ` • ${just.origem_alerta}` : ''}
+                      </p>
+                      <p>{just.justificativa}</p>
+                    </div>
+                  ));
+                })}
+                {(snapshotDetail.payload_json?.itens || []).every(
+                  (item) => (item.justificativas || []).length === 0,
+                ) && <p className="text-xs text-slate-500">Sem justificativas estruturadas.</p>}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create form (simple inline) */}
         {showForm && (
