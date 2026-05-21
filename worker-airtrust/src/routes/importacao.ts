@@ -267,7 +267,7 @@ async function executarImportacaoHistoricoEmLotes(
  * GET /api/importacao/template/historico
  */
 app.get('/template/:entidade', async (c: Context) => {
-  const entidade = c.req.param('entidade');
+  const entidade = c.req.param('entidade') ?? '';
   const format = c.req.query('format') || 'csv';
   const db = c.env.DB;
 
@@ -322,7 +322,7 @@ app.post('/validar/:entidade', async (c: Context) => {
   const logger = createLogger(c, 'ImportacaoRoute');
 
   try {
-    const entidade = c.req.param('entidade');
+    const entidade = c.req.param('entidade') ?? '';
     const db = c.env.DB;
 
     logger.info('Request de validação recebida', {
@@ -415,7 +415,7 @@ app.post('/executar/:entidade', async (c: Context) => {
   const logger = createLogger(c, 'ImportacaoRoute');
 
   try {
-    const entidade = c.req.param('entidade');
+    const entidade = c.req.param('entidade') ?? '';
     const db = c.env.DB;
 
     logger.info('Request de execução recebida', {
@@ -525,7 +525,7 @@ app.post('/executar/:entidade', async (c: Context) => {
  */
 app.post('/validar-json/:entidade', async (c: Context) => {
   try {
-    const entidade = c.req.param('entidade');
+    const entidade = c.req.param('entidade') ?? '';
     const db = c.env.DB;
 
     console.log(`[VALIDACAO] Iniciando: entidade=${entidade}`);
@@ -935,7 +935,7 @@ app.post('/batch-historico-v3', async (c: Context) => {
  */
 app.post('/executar-json/:entidade', async (c: Context) => {
   try {
-    const entidade = c.req.param('entidade');
+    const entidade = c.req.param('entidade') ?? '';
     const db = c.env.DB;
 
     const service = getImportService(entidade, db);

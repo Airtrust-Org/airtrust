@@ -618,7 +618,7 @@ app.get('/alertas/vencimentos', async (c: Context<{ Bindings: Env }>) => {
 app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
   const logger = createLogger(c, 'Alertas.eadVencido');
   try {
-    const id = parseInt(c.req.param('id'), 10);
+    const id = parseInt(c.req.param('id') ?? '', 10);
     const empresaId = getEmpresaId(c as any);
 
     console.log('[ALERTAS] Recebido ID:', id);

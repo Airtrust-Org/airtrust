@@ -53,7 +53,7 @@ const frmsRelatoriosConfig = new Hono<{ Bindings: Env; Variables: { userId?: str
 frmsRelatoriosConfig.get(
   '/relatorios/individual/:tripulante_id',
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulante_id');
+    const tripulanteId = c.req.param('tripulante_id') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -305,7 +305,7 @@ frmsRelatoriosConfig.get(
 frmsRelatoriosConfig.put(
   '/notificacoes/:id/ler',
   safe(async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const userId = await resolveFuncionarioId(c);
     await marcarNotificacaoLida(c.env.DB, id, userId);
     return c.json({ success: true });

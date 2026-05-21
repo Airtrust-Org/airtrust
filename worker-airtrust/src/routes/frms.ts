@@ -1083,7 +1083,7 @@ frmsRoutes.get(
   '/score-atual/:funcionarioid',
   rateLimiter({ maxRequests: 180, windowSeconds: 60, keyPrefix: 'frms-score' }),
   safe(async (c) => {
-    const funcionarioId = c.req.param('funcionarioid');
+    const funcionarioId = c.req.param('funcionarioid') ?? '';
     const empresaId = getEmpresaIdSafe(c);
 
     if (empresaId) {
@@ -1429,7 +1429,7 @@ frmsRoutes.put(
   '/jornadas/:id',
   rateLimiter({ maxRequests: 60, windowSeconds: 60, keyPrefix: 'frms-jornadas' }),
   safe(async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const empresaId = getEmpresaIdSafe(c);
     const denied = await assertJornadaEmpresa(c, id);
     if (denied) return denied;
@@ -1500,7 +1500,7 @@ frmsRoutes.put(
 frmsRoutes.patch(
   '/jornada/:jornadaId/sono',
   safe(async (c) => {
-    const jornadaId = c.req.param('jornadaId');
+    const jornadaId = c.req.param('jornadaId') ?? '';
     const denied = await assertJornadaEmpresa(c, jornadaId);
     if (denied) return denied;
 
@@ -1607,7 +1607,7 @@ frmsRoutes.delete(
   '/jornadas/mes/:tripulanteId',
   requireRole('admin'),
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulanteId');
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -1651,7 +1651,7 @@ frmsRoutes.delete(
 frmsRoutes.delete(
   '/jornadas/:id',
   safe(async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const denied = await assertJornadaEmpresa(c, id);
     if (denied) return denied;
 
@@ -1673,7 +1673,7 @@ frmsRoutes.delete(
 frmsRoutes.get(
   '/jornadas/:tripulante_id',
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulante_id');
+    const tripulanteId = c.req.param('tripulante_id') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -1716,7 +1716,7 @@ frmsRoutes.get(
 frmsRoutes.get(
   '/acumulo/:tripulante_id',
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulante_id');
+    const tripulanteId = c.req.param('tripulante_id') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -1813,7 +1813,7 @@ frmsRoutes.get(
 frmsRoutes.get(
   '/tripulante/:id/jornadas',
   safe(async (c) => {
-    const tripulanteId = c.req.param('id');
+    const tripulanteId = c.req.param('id') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -1913,7 +1913,7 @@ frmsRoutes.get(
 frmsRoutes.get(
   '/tripulante/:id/explicacao-dia',
   safe(async (c) => {
-    const tripulanteId = c.req.param('id');
+    const tripulanteId = c.req.param('id') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -2062,7 +2062,7 @@ frmsRoutes.get(
 frmsRoutes.get(
   '/comparar-dias/:tripulanteId',
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulanteId');
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -2202,8 +2202,8 @@ frmsRoutes.get(
 frmsRoutes.post(
   '/simular-cenario/:tripulanteId/:data',
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulanteId');
-    const data = c.req.param('data');
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
+    const data = c.req.param('data') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -2373,8 +2373,8 @@ frmsRoutes.post(
 frmsRoutes.post(
   '/justificativas/:tripulanteId/:data',
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulanteId');
-    const data = c.req.param('data');
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
+    const data = c.req.param('data') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -2597,7 +2597,7 @@ frmsRoutes.post(
 frmsRoutes.get(
   '/justificativas/:tripulanteId',
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulanteId');
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -2927,7 +2927,7 @@ frmsRoutes.post(
 frmsRoutes.put(
   '/alertas/:id/visualizar',
   safe(async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const denied = await assertAlertaEmpresa(c, id);
     if (denied) return denied;
 
@@ -2943,7 +2943,7 @@ frmsRoutes.put(
 frmsRoutes.put(
   '/alertas/:id/resolver',
   safe(async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const denied = await assertAlertaEmpresa(c, id);
     if (denied) return denied;
 
@@ -3029,7 +3029,7 @@ frmsRoutes.post(
 frmsRoutes.get(
   '/escalas/:tripulante_id',
   safe(async (c) => {
-    const tripulanteId = c.req.param('tripulante_id');
+    const tripulanteId = c.req.param('tripulante_id') ?? '';
     const denied = await assertTripulanteEmpresa(c, tripulanteId);
     if (denied) return denied;
 
@@ -3044,7 +3044,7 @@ frmsRoutes.get(
 frmsRoutes.put(
   '/escalas/:id',
   safe(async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     const body = await c.req.json();
     const parsed = escalaUpdateSchema.safeParse(body);
     if (!parsed.success) {
@@ -3066,7 +3066,7 @@ frmsRoutes.put(
 frmsRoutes.delete(
   '/escalas/:id',
   safe(async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id') ?? '';
     // Look up tripulante_id before soft-deleting
     const escalaDel = await c.env.DB.prepare(
       'SELECT tripulante_id FROM frms_escala_quinzenal WHERE id = ? AND deleted_at IS NULL',
