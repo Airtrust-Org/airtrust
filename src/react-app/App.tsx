@@ -276,7 +276,7 @@ function HomeRouter() {
   const { user, isLoading } = useAuth();
   if (isLoading) return null;
   const role = user?.role?.toUpperCase() ?? '';
-  if (role === 'ALUNO' || role === 'INSTRUTOR' || role === 'USUARIO') return <HomePerfil />;
+  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR' || role === 'USUARIO') return <HomePerfil />;
   return <DashboardPrincipal />;
 }
 
@@ -284,7 +284,7 @@ function LmsEntryRouter() {
   const { user, isLoading } = useAuth();
   if (isLoading) return null;
   const role = user?.role?.toUpperCase() ?? '';
-  if (role === 'ALUNO' || role === 'INSTRUTOR') return <Navigate to="/lms/cursos" replace />;
+  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') return <Navigate to="/lms/cursos" replace />;
   return <LmsDashboard />;
 }
 
