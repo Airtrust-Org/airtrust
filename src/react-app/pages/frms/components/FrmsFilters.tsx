@@ -14,7 +14,7 @@ const PERIODO_OPTIONS: { label: string; value: FrmsFiltersState['periodo'] }[] =
 
 const MODO_OPTIONS: Array<{ value: FrmsFiltersState['modoPainel']; label: string }> = [
   { value: 'OPERACIONAL', label: 'Ultimos dias' },
-  { value: 'PLANEJADO', label: 'Planejada do mes' },
+  { value: 'PLANEJADO', label: 'Mensal' },
 ];
 
 const STATUS_OPTIONS = [

@@ -545,7 +545,7 @@ function DashboardContent() {
                   <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
                     <CalendarRange className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                     {isMonthMode
-                      ? `Planejada · ${monthLabel(filters.mesReferencia)}`
+                      ? `Mensal · ${monthLabel(filters.mesReferencia)}`
                       : `Últimos ${periodoNumDias} dias`}
                   </span>
                   <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
@@ -618,11 +618,11 @@ function DashboardContent() {
                 <Button
                   variant="secondary"
                   onClick={() => navigate('/frms/checkin')}
-                  className="hidden sm:inline-flex gap-2.5 px-4"
-                  title="Check-in diário de fadiga"
+                  className="inline-flex gap-2.5 px-4"
+                  title="Fadiga diária"
                 >
                   <ClipboardCheck className="h-4 w-4 shrink-0" />
-                  <span>Check-in de Fadiga</span>
+                  <span>Fadiga Diária</span>
                 </Button>
                 <Button
                   variant="secondary"

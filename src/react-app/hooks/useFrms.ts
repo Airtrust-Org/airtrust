@@ -546,6 +546,14 @@ export interface FrmsFadigaCheckinRow {
   status_operacional: 'APTO' | 'MONITORADO' | 'RESTRITO' | 'NAO_APTO';
   recomendacao: string;
   apto: number;
+  fit_for_duty?: boolean;
+  wake_time?: string | null;
+  horas_sono_48h?: number | null;
+  subjective_fatigue_level?: number | null;
+  sleepiness_level?: number | null;
+  computed_risk_level?: 'normal' | 'attention' | 'critical' | 'unfit_for_duty' | 'not_submitted';
+  requires_operational_review?: number;
+  data_source?: 'crew_reported' | 'default_estimate' | 'not_applicable';
   requires_frat_review: number;
   frat_sugerido_nivel: string | null;
   associado_frat_avaliacao_id: string | null;
@@ -614,6 +622,64 @@ export function useFrmsFadigaPainel(data?: string) {
     bypassGetCache: true,
     dedupeInitial: false,
   });
+}
+
+export interface FrmsDailyFatigueStatus {
+  date: string;
+  funcionario_id?: number;
+  status: 'normal' | 'attention' | 'critical' | 'unfit_for_duty' | 'not_submitted' | 'no_duty';
+  submitted: boolean;
+  data_source: 'crew_reported' | 'default_estimate' | 'not_applicable';
+  confidence: 'reported' | 'reduced';
+  message: string;
+  requires_operational_review: boolean | number;
+  sleep_hours_24h: number;
+  sleep_hours_48h?: number | null;
+  wake_time: string;
+  fit_for_duty?: boolean | null;
+}
+
+export interface FrmsDailyFatigueAlert {
+  id: string;
+  tripulante_id: number | string;
+  tripulante_nome?: string;
+  nivel: string;
+  tipo_limite: string;
+  mensagem: string;
+  resolvido: number;
+  resolvido_em: string | null;
+  created_at: string;
+  alert_type?: string;
+  requires_operational_review?: number;
+}
+
+export function useFrmsDailyFatigue(date?: string, scope?: 'team') {
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  if (scope) params.set('scope', scope);
+  const query = params.toString();
+  return useApi<{ date: string; items?: FrmsDailyFatigueStatus[] } & FrmsDailyFatigueStatus>(
+    `/api/frms/daily-fatigue${query ? `?${query}` : ''}`,
+    {
+      requireAuth: false,
+      bypassGetCache: true,
+      dedupeInitial: false,
+    },
+  );
+}
+
+export function useFrmsDailyFatigueAlerts(date?: string) {
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  const query = params.toString();
+  return useApi<{ count: number; items: FrmsDailyFatigueAlert[] }>(
+    `/api/frms/daily-fatigue/alerts${query ? `?${query}` : ''}`,
+    {
+      requireAuth: false,
+      bypassGetCache: true,
+      dedupeInitial: false,
+    },
+  );
 }
 
 export function useFrmsFadigaAnalytics(dias = 30) {
