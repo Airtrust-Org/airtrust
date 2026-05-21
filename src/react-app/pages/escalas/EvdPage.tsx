@@ -1,21 +1,19 @@
 /**
- * EvdPage — Escala de Voo Diária (PRC-OPS-009 §4.3)
+ * EvdPage — Escala Diária de Voo (EDV) — PRC-OPS-009 §4.3
  *
- * Interface para gerenciar a programação diária de voos derivada da EST mensal.
- * Visualização por dia com cards de voo, criação inline e publicação.
+ * Atribuição diária de tripulação por aeronave. Estrutura por prefixo/matrícula,
+ * não por voo/trecho. Visualização em tabela por aeronave com publicação versionada.
  */
 import { useState, useMemo } from 'react';
-import { useNavigate, NavLink } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   Plane,
   Plus,
   Clock,
   Users,
-  MapPin,
   Trash2,
   CheckCircle,
   AlertTriangle,
-  ArrowLeft,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -28,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
+import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
 import { useApi } from '@/react-app/hooks/useApi';
 import { apiFetch } from '@/react-app/lib/apiFetch';
@@ -322,7 +321,6 @@ function buildOperationalJustificativaPayload(params: {
 }
 
 export default function EvdPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [data, setData] = useState(toLocalDateStr(new Date()));
   const [showForm, setShowForm] = useState(false);
@@ -407,22 +405,19 @@ export default function EvdPage() {
       .map((item) => {
         const pic = item.tripulacao?.pic?.nome_guerra || item.tripulacao?.pic?.nome || '—';
         const sic = item.tripulacao?.sic?.nome_guerra || item.tripulacao?.sic?.nome || '—';
-        const horarios = [
-          item.horarios?.hora_apresentacao ? `Apres ${item.horarios?.hora_apresentacao}` : null,
-          item.horarios?.hora_decolagem_prevista
-            ? `Dec ${item.horarios?.hora_decolagem_prevista}`
-            : null,
-          item.horarios?.hora_pouso_previsto ? `Pouso ${item.horarios?.hora_pouso_previsto}` : null,
-        ]
-          .filter(Boolean)
-          .join(' | ');
+        const apres = item.horarios?.hora_apresentacao || '—';
+        const inicio = item.horarios?.hora_decolagem_prevista || '—';
+        const termino = item.horarios?.hora_pouso_previsto || '—';
+        const base = item.rota?.origem || '—';
         return `<tr>
           <td>${escapeHtml(item.aeronave_prefixo || '—')}</td>
           <td>${escapeHtml(item.aeronave_modelo || '—')}</td>
           <td>${escapeHtml(pic)}</td>
           <td>${escapeHtml(sic)}</td>
-          <td>${escapeHtml(horarios || '—')}</td>
-          <td>${escapeHtml(item.rota?.origem || '—')} → ${escapeHtml(item.rota?.destino || '—')}</td>
+          <td>${escapeHtml(apres)}</td>
+          <td>${escapeHtml(inicio)}</td>
+          <td>${escapeHtml(termino)}</td>
+          <td>${escapeHtml(base)}</td>
           <td>${escapeHtml(item.rota?.tipo_missao || '—')}</td>
           <td>${escapeHtml(item.observacoes_gerais || '')}</td>
         </tr>`;
@@ -467,17 +462,19 @@ export default function EvdPage() {
   <table>
     <thead>
       <tr>
-        <th>Aeronave</th>
+        <th>Matrícula</th>
         <th>Modelo</th>
-        <th>PIC</th>
-        <th>SIC</th>
-        <th>Horários</th>
-        <th>Origem/Destino</th>
-        <th>Missão</th>
+        <th>Comandante (PIC)</th>
+        <th>Copiloto (SIC)</th>
+        <th>Apresentação</th>
+        <th>Início</th>
+        <th>Término</th>
+        <th>Base/Local</th>
+        <th>Tipo Operação</th>
         <th>Observações</th>
       </tr>
     </thead>
-    <tbody>${rows || '<tr><td colspan="8">Sem itens na revisão.</td></tr>'}</tbody>
+    <tbody>${rows || '<tr><td colspan="10">Sem itens na revisão.</td></tr>'}</tbody>
   </table>
   <div class="section">
     <strong>Justificativas operacionais</strong>
@@ -695,24 +692,10 @@ export default function EvdPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/escalas')}
-              className="p-2 rounded-lg hover:bg-slate-100 transition"
-            >
-              <ArrowLeft className="h-5 w-5 text-slate-600" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <Plane className="h-5 w-5 text-blue-600" />
-                Escala Diária de Voo
-              </h1>
-              <p className="text-sm text-slate-500 mt-0.5">PRC-OPS-009 §4.3</p>
-            </div>
-          </div>
+      <PageHeader
+        title="Escala Diária de Voo"
+        subtitle="Atribuição diária de tripulação por aeronave — PRC-OPS-009 §4.3"
+        actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
               onClick={handlePublishDay}
@@ -723,10 +706,11 @@ export default function EvdPage() {
               {publishingDay ? 'Publicando...' : 'Publicar escala do dia'}
             </Button>
             <Button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" /> Novo Voo
+              <Plus className="h-4 w-4" /> Nova Atribuição
             </Button>
           </div>
-        </div>
+        }
+      />
 
         {/* Subnavegação do módulo Escalas */}
         <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -791,31 +775,12 @@ export default function EvdPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
-              FRMS Diário (placeholder)
-            </span>
-            <span className="text-xs text-slate-500">
-              Status de risco será integrado de forma não invasiva nas próximas fases.
-            </span>
-          </div>
-          <ul className="mt-3 space-y-1 text-sm text-slate-700">
-            <li>Defina PIC/SIC por aeronave para a operação diária.</li>
-            <li>A escala diária usa a escala mensal como base de disponibilidade.</li>
-            <li>Status de fadiga/FRMS será usado como apoio à decisão operacional.</li>
-          </ul>
-          <p className="mt-3 text-xs text-slate-500">
-            A escala não exibe dados sensíveis do check-in de fadiga. Apenas status resumido e
-            necessidade de revisão operacional.
-          </p>
-        </div>
-
+      <div className="space-y-4">
         {/* Date navigation */}
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <button
             onClick={() => changeDay(-1)}
-            className="p-2 rounded-lg hover:bg-slate-100 transition"
+            className="p-2 rounded-lg hover:bg-slate-100 transition dark:hover:bg-slate-800"
           >
             <ChevronLeft className="h-5 w-5 text-slate-600" />
           </button>
@@ -824,15 +789,15 @@ export default function EvdPage() {
               type="date"
               value={data}
               onChange={(e) => setData(e.target.value)}
-              className="text-lg font-bold text-slate-900 bg-transparent border-none text-center cursor-pointer"
+              className="text-lg font-bold text-slate-900 bg-transparent border-none text-center cursor-pointer dark:text-slate-100"
             />
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               {weekday}, {formatDateBR(data)}
             </p>
           </div>
           <button
             onClick={() => changeDay(1)}
-            className="p-2 rounded-lg hover:bg-slate-100 transition"
+            className="p-2 rounded-lg hover:bg-slate-100 transition dark:hover:bg-slate-800"
           >
             <ChevronRight className="h-5 w-5 text-slate-600" />
           </button>
@@ -939,19 +904,21 @@ export default function EvdPage() {
               <table className="min-w-full text-xs border border-slate-200">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
-                    <th className="px-2 py-2 text-left">Aeronave</th>
+                    <th className="px-2 py-2 text-left">Matrícula</th>
                     <th className="px-2 py-2 text-left">Modelo</th>
-                    <th className="px-2 py-2 text-left">PIC</th>
-                    <th className="px-2 py-2 text-left">SIC</th>
-                    <th className="px-2 py-2 text-left">Horários</th>
-                    <th className="px-2 py-2 text-left">Rota/Missão</th>
+                    <th className="px-2 py-2 text-left">Comandante (PIC)</th>
+                    <th className="px-2 py-2 text-left">Copiloto (SIC)</th>
+                    <th className="px-2 py-2 text-left">Apresentação</th>
+                    <th className="px-2 py-2 text-left">Início</th>
+                    <th className="px-2 py-2 text-left">Término</th>
+                    <th className="px-2 py-2 text-left">Base/Missão</th>
                     <th className="px-2 py-2 text-left">Observações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(snapshotDetail.payload_json?.itens || []).length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-2 py-3 text-center text-slate-500">
+                      <td colSpan={9} className="px-2 py-3 text-center text-slate-500">
                         Sem itens neste snapshot.
                       </td>
                     </tr>
@@ -970,17 +937,11 @@ export default function EvdPage() {
                             item.tripulacao?.sic?.nome ||
                             '—'}
                         </td>
+                        <td className="px-2 py-2">{item.horarios?.hora_apresentacao || '—'}</td>
+                        <td className="px-2 py-2">{item.horarios?.hora_decolagem_prevista || '—'}</td>
+                        <td className="px-2 py-2">{item.horarios?.hora_pouso_previsto || '—'}</td>
                         <td className="px-2 py-2">
-                          <div>
-                            Apres: {item.horarios?.hora_apresentacao || '—'} | Dec:{' '}
-                            {item.horarios?.hora_decolagem_prevista || '—'} | Pouso:{' '}
-                            {item.horarios?.hora_pouso_previsto || '—'}
-                          </div>
-                        </td>
-                        <td className="px-2 py-2">
-                          <div>
-                            {(item.rota?.origem || '—') + ' → ' + (item.rota?.destino || '—')}
-                          </div>
+                          <div>{item.rota?.origem || '—'}</div>
                           <div className="text-slate-500">{item.rota?.tipo_missao || '—'}</div>
                         </td>
                         <td className="px-2 py-2">{item.observacoes_gerais || '—'}</td>
@@ -1029,162 +990,179 @@ export default function EvdPage() {
           />
         )}
 
-        {/* Voos list */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
-          </div>
-        ) : voos.length === 0 ? (
-          <div className="text-center py-20 text-slate-400">
-            <Plane className="h-12 w-12 mx-auto mb-3 opacity-40" />
-            <p>Nenhum voo programado para {formatDateBR(data)}</p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="mt-4 text-blue-600 hover:underline text-sm"
-            >
-              Criar primeiro voo do dia
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {voos.map((voo) => (
-              <div
-                key={voo.id}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition"
+        {/* Tabela de atribuições por aeronave */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+            </div>
+          ) : voos.length === 0 ? (
+            <div className="text-center py-20 text-slate-400 dark:text-slate-500">
+              <Plane className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-medium">Nenhuma aeronave escalada para {formatDateBR(data)}</p>
+              <button
+                onClick={() => setShowForm(true)}
+                className="mt-4 text-sm text-blue-600 hover:underline dark:text-blue-400"
               >
-                <div className="flex items-start justify-between gap-4">
-                  {/* Left: details */}
-                  <div className="flex-1 min-w-0 space-y-2">
-                    {/* Route + missao */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${statusBadge(voo.status)}`}
+                Adicionar primeira aeronave à escala
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Matrícula</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Modelo</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Comandante (PIC)</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">FRMS</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Copiloto (SIC)</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">FRMS</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Apresentação</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Início</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Término</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Base</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Status</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {voos.map((voo) => {
+                    const picSignal = toNumericId(voo.pic_id) ? frmsByTripulante.get(Number(voo.pic_id)) : null;
+                    const sicSignal = toNumericId(voo.sic_id) ? frmsByTripulante.get(Number(voo.sic_id)) : null;
+                    const hasFrmsAlert = isFrmsRelevant(picSignal) || isFrmsRelevant(sicSignal);
+                    return (
+                      <tr
+                        key={voo.id}
+                        className={[
+                          'align-top transition-colors',
+                          hasFrmsAlert ? 'bg-amber-50/40 dark:bg-amber-500/5' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
+                        ].join(' ')}
                       >
-                        {voo.status}
-                      </span>
-                      <span className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                        {voo.tipo_missao}
-                      </span>
-                      {voo.aeronave_prefixo && (
-                        <span className="text-xs font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
-                          {voo.aeronave_prefixo}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Route */}
-                    <div className="flex items-center gap-2 text-sm text-slate-700">
-                      <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                      <span>{voo.origem || '—'}</span>
-                      <span className="text-slate-400">→</span>
-                      <span>{voo.destino || '—'}</span>
-                    </div>
-
-                    {/* Crew */}
-                    <div className="flex items-center gap-4 text-xs text-slate-500">
-                      <Users className="h-3.5 w-3.5" />
-                      <span>
-                        <strong>PIC:</strong> {voo.pic_guerra || voo.pic_nome || '—'}{' '}
-                        {voo.pic_funcao && `(${voo.pic_funcao})`}
-                      </span>
-                      <span>
-                        <strong>SIC:</strong> {voo.sic_guerra || voo.sic_nome || '—'}{' '}
-                        {voo.sic_funcao && `(${voo.sic_funcao})`}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                      {toNumericId(voo.pic_id) && frmsByTripulante.get(Number(voo.pic_id)) ? (
-                        <span
-                          className={`inline-flex items-center rounded border px-2 py-0.5 font-medium ${frmsTone(frmsByTripulante.get(Number(voo.pic_id))!.status)}`}
-                        >
-                          PIC FRMS: {frmsByTripulante.get(Number(voo.pic_id))!.statusLabel}
-                          {frmsByTripulante.get(Number(voo.pic_id))!.requiresReview ? ' • revisão' : ''}
-                          {frmsByTripulante.get(Number(voo.pic_id))!.hasAlert ? ' • alerta' : ''}
-                        </span>
-                      ) : null}
-                      {toNumericId(voo.sic_id) && frmsByTripulante.get(Number(voo.sic_id)) ? (
-                        <span
-                          className={`inline-flex items-center rounded border px-2 py-0.5 font-medium ${frmsTone(frmsByTripulante.get(Number(voo.sic_id))!.status)}`}
-                        >
-                          SIC FRMS: {frmsByTripulante.get(Number(voo.sic_id))!.statusLabel}
-                          {frmsByTripulante.get(Number(voo.sic_id))!.requiresReview ? ' • revisão' : ''}
-                          {frmsByTripulante.get(Number(voo.sic_id))!.hasAlert ? ' • alerta' : ''}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {(isFrmsRelevant(
-                      toNumericId(voo.pic_id) ? frmsByTripulante.get(Number(voo.pic_id)) : null,
-                    ) ||
-                      isFrmsRelevant(
-                        toNumericId(voo.sic_id) ? frmsByTripulante.get(Number(voo.sic_id)) : null,
-                      )) && (
-                      <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded-lg w-fit">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        FRMS requer revisão operacional para este tripulante. A fadiga não bloqueia
-                        automaticamente a escala, mas exige justificativa.
-                      </div>
-                    )}
-
-                    {/* Times */}
-                    <div className="flex items-center gap-4 text-xs text-slate-500">
-                      <Clock className="h-3.5 w-3.5" />
-                      {voo.hora_apresentacao && <span>Apres: {voo.hora_apresentacao}</span>}
-                      {voo.hora_decolagem_prevista && (
-                        <span>Dec: {voo.hora_decolagem_prevista}</span>
-                      )}
-                      {voo.hora_pouso_previsto && <span>Pouso: {voo.hora_pouso_previsto}</span>}
-                      {voo.hora_decolagem_real && (
-                        <span className="text-emerald-600">
-                          Real dec: {voo.hora_decolagem_real}
-                        </span>
-                      )}
-                      {voo.hora_pouso_real && (
-                        <span className="text-emerald-600">Real pouso: {voo.hora_pouso_real}</span>
-                      )}
-                    </div>
-
-                    {/* Rest warning */}
-                    {voo.repouso_minimo_ok === 0 && (
-                      <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 px-2 py-1 rounded-lg w-fit">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        Repouso insuficiente (&lt;12h30) — PRC-OPS-009 §6.1.6
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right: actions */}
-                  <div className="flex flex-col gap-1.5">
-                    {voo.status === 'RASCUNHO' && (
-                      <>
-                        <button
-                          onClick={() => handlePublish(voo)}
-                          disabled={publicarMutation.isPending}
-                          className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 transition px-2 py-1 rounded hover:bg-emerald-50"
-                        >
-                          <Send className="h-3 w-3" /> Publicar
-                        </button>
-                        <button
-                          onClick={() => deleteMutation.mutate(voo.id)}
-                          disabled={deleteMutation.isPending}
-                          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition px-2 py-1 rounded hover:bg-red-50"
-                        >
-                          <Trash2 className="h-3 w-3" /> Excluir
-                        </button>
-                      </>
-                    )}
-                    {voo.status === 'PUBLICADA' && (
-                      <span className="flex items-center gap-1 text-xs text-emerald-600">
-                        <CheckCircle className="h-3.5 w-3.5" /> Publicada
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                        {/* Matrícula */}
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded dark:bg-blue-500/10 dark:text-blue-300">
+                            {voo.aeronave_prefixo || '—'}
+                          </span>
+                        </td>
+                        {/* Modelo */}
+                        <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                          {voo.aeronave_modelo || '—'}
+                        </td>
+                        {/* PIC */}
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className="text-xs font-medium text-slate-800 dark:text-slate-100">
+                            {voo.pic_guerra || voo.pic_nome || '—'}
+                          </span>
+                          {voo.pic_funcao && (
+                            <span className="ml-1 text-[10px] text-slate-400">({voo.pic_funcao})</span>
+                          )}
+                          {voo.repouso_minimo_ok === 0 && (
+                            <div className="mt-0.5 flex items-center gap-1 text-[10px] text-red-600">
+                              <AlertTriangle className="h-3 w-3" /> Repouso &lt;12h30
+                            </div>
+                          )}
+                        </td>
+                        {/* FRMS PIC */}
+                        <td className="px-3 py-3">
+                          {picSignal ? (
+                            <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${frmsTone(picSignal.status)}`}>
+                              {picSignal.statusLabel}
+                              {picSignal.requiresReview ? ' ⚑' : ''}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300">—</span>
+                          )}
+                        </td>
+                        {/* SIC */}
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className="text-xs font-medium text-slate-800 dark:text-slate-100">
+                            {voo.sic_guerra || voo.sic_nome || '—'}
+                          </span>
+                          {voo.sic_funcao && (
+                            <span className="ml-1 text-[10px] text-slate-400">({voo.sic_funcao})</span>
+                          )}
+                        </td>
+                        {/* FRMS SIC */}
+                        <td className="px-3 py-3">
+                          {sicSignal ? (
+                            <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${frmsTone(sicSignal.status)}`}>
+                              {sicSignal.statusLabel}
+                              {sicSignal.requiresReview ? ' ⚑' : ''}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300">—</span>
+                          )}
+                        </td>
+                        {/* Apresentação */}
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap dark:text-slate-300">
+                          {voo.hora_apresentacao || '—'}
+                        </td>
+                        {/* Início */}
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap dark:text-slate-300">
+                          {voo.hora_decolagem_prevista || '—'}
+                          {voo.hora_decolagem_real && (
+                            <div className="text-[10px] text-emerald-600">R: {voo.hora_decolagem_real}</div>
+                          )}
+                        </td>
+                        {/* Término */}
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap dark:text-slate-300">
+                          {voo.hora_pouso_previsto || '—'}
+                          {voo.hora_pouso_real && (
+                            <div className="text-[10px] text-emerald-600">R: {voo.hora_pouso_real}</div>
+                          )}
+                        </td>
+                        {/* Base/Local */}
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap dark:text-slate-300">
+                          {voo.origem || '—'}
+                        </td>
+                        {/* Status */}
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${statusBadge(voo.status)}`}>
+                            {voo.status}
+                          </span>
+                          {hasFrmsAlert && (
+                            <div className="mt-0.5 flex items-center gap-0.5 text-[10px] text-amber-600">
+                              <AlertTriangle className="h-3 w-3" /> revisão FRMS
+                            </div>
+                          )}
+                        </td>
+                        {/* Ações */}
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1">
+                            {voo.status === 'RASCUNHO' && (
+                              <>
+                                <button
+                                  onClick={() => handlePublish(voo)}
+                                  disabled={publicarMutation.isPending}
+                                  className="flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-800 transition px-2 py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
+                                >
+                                  <Send className="h-3 w-3" /> Publicar
+                                </button>
+                                <button
+                                  onClick={() => deleteMutation.mutate(voo.id)}
+                                  disabled={deleteMutation.isPending}
+                                  className="flex items-center gap-1 text-[11px] text-red-500 hover:text-red-700 transition px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10"
+                                >
+                                  <Trash2 className="h-3 w-3" /> Excluir
+                                </button>
+                              </>
+                            )}
+                            {voo.status === 'PUBLICADA' && (
+                              <span className="flex items-center gap-1 text-[11px] text-emerald-600">
+                                <CheckCircle className="h-3.5 w-3.5" /> Publicada
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </AppLayout>
   );
@@ -1286,7 +1264,7 @@ function EvdCreateForm({
       };
 
       if (!res.ok || !json.success) {
-        setError(json.error || 'Erro ao criar voo');
+        setError(json.error || 'Erro ao criar atribuição');
         return;
       }
 
@@ -1328,17 +1306,17 @@ function EvdCreateForm({
   }
 
   return (
-    <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-5 shadow-sm">
-      <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+    <div className="rounded-2xl border border-blue-200 bg-blue-50/30 p-5 shadow-sm dark:border-blue-500/30 dark:bg-blue-500/5">
+      <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2 dark:text-slate-100">
         <Plus className="h-4 w-4 text-blue-600" />
-        Novo Voo — {formatDateBR(data)}
+        Nova Atribuição — {formatDateBR(data)}
       </h3>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {/* PIC */}
+          {/* Comandante */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">PIC</label>
+            <label className="block text-xs text-slate-500 mb-1">Comandante (PIC)</label>
             <select
               value={form.pic_id}
               onChange={(e) => setForm({ ...form, pic_id: e.target.value })}
@@ -1353,9 +1331,9 @@ function EvdCreateForm({
             </select>
           </div>
 
-          {/* SIC */}
+          {/* Copiloto */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">SIC</label>
+            <label className="block text-xs text-slate-500 mb-1">Copiloto (SIC)</label>
             <select
               value={form.sic_id}
               onChange={(e) => setForm({ ...form, sic_id: e.target.value })}
@@ -1393,9 +1371,9 @@ function EvdCreateForm({
             />
           </div>
 
-          {/* Decolagem prevista */}
+          {/* Início */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Decolagem prevista</label>
+            <label className="block text-xs text-slate-500 mb-1">Início</label>
             <input
               type="time"
               value={form.hora_decolagem_prevista}
@@ -1404,9 +1382,9 @@ function EvdCreateForm({
             />
           </div>
 
-          {/* Pouso previsto */}
+          {/* Término */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Pouso previsto</label>
+            <label className="block text-xs text-slate-500 mb-1">Término</label>
             <input
               type="time"
               value={form.hora_pouso_previsto}
@@ -1415,33 +1393,33 @@ function EvdCreateForm({
             />
           </div>
 
-          {/* Origem */}
+          {/* Base/Local */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Origem</label>
+            <label className="block text-xs text-slate-500 mb-1">Base / Local</label>
             <input
               type="text"
               value={form.origem}
               onChange={(e) => setForm({ ...form, origem: e.target.value.toUpperCase() })}
-              placeholder="SBCB"
+              placeholder="SBCB / Plataforma / Base"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
 
-          {/* Destino */}
+          {/* Localidade de operação */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Destino</label>
+            <label className="block text-xs text-slate-500 mb-1">Localidade de operação</label>
             <input
               type="text"
               value={form.destino}
               onChange={(e) => setForm({ ...form, destino: e.target.value.toUpperCase() })}
-              placeholder="Plataforma / ICAO"
+              placeholder="Plataforma / ICAO destino"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
 
-          {/* Tipo missão */}
+          {/* Tipo de operação */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Tipo missão</label>
+            <label className="block text-xs text-slate-500 mb-1">Tipo de operação</label>
             <select
               value={form.tipo_missao}
               onChange={(e) => setForm({ ...form, tipo_missao: e.target.value })}
@@ -1501,7 +1479,7 @@ function EvdCreateForm({
             Cancelar
           </button>
           <Button type="submit" disabled={submitting}>
-            {submitting ? 'Criando...' : 'Criar Voo'}
+            {submitting ? 'Criando...' : 'Criar Atribuição'}
           </Button>
         </div>
       </form>
