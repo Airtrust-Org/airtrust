@@ -5,7 +5,7 @@
  * Visualização por dia com cards de voo, criação inline e publicação.
  */
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 import {
   Plane,
   Plus,
@@ -16,12 +16,15 @@ import {
   CheckCircle,
   AlertTriangle,
   ArrowLeft,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Send,
   History,
   FileText,
   Printer,
+  Settings,
+  User,
   X,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -722,6 +725,69 @@ export default function EvdPage() {
             <Button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2">
               <Plus className="h-4 w-4" /> Novo Voo
             </Button>
+          </div>
+        </div>
+
+        {/* Subnavegação do módulo Escalas */}
+        <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <NavLink
+            to="/escalas"
+            end
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
+                isActive
+                  ? 'bg-slate-900 text-white dark:bg-slate-700'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+              ].join(' ')
+            }
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            Escala Mensal
+          </NavLink>
+          <NavLink
+            to="/escalas/diaria"
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
+                isActive
+                  ? 'bg-slate-900 text-white dark:bg-slate-700'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+              ].join(' ')
+            }
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            Escala Diária de Voo
+          </NavLink>
+          <NavLink
+            to="/escalas/minha-escala"
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
+                isActive
+                  ? 'bg-slate-900 text-white dark:bg-slate-700'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+              ].join(' ')
+            }
+          >
+            <User className="w-3.5 h-3.5" />
+            Minha Escala
+          </NavLink>
+          <div className="ml-auto">
+            <NavLink
+              to="/escalas/configuracoes"
+              className={({ isActive }) =>
+                [
+                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
+                  isActive
+                    ? 'bg-slate-900 text-white dark:bg-slate-700'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                ].join(' ')
+              }
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Configurações
+            </NavLink>
           </div>
         </div>
 
