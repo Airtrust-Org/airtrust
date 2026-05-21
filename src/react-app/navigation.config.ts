@@ -97,8 +97,8 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
         },
         {
           id: 'evd',
-          label: 'Voo Diário (EVD)',
-          path: '/escalas/evd',
+          label: 'Escala Diária de Voo',
+          path: '/escalas/diaria',
         },
         {
           id: 'frms',
