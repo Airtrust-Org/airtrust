@@ -51,7 +51,7 @@ function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
       icon: <HeartPulse className="w-7 h-7" />,
       title: 'Fadiga Diária',
       description: 'Registre rapidamente seu estado antes da jornada.',
-      route: '/frms/fadiga-checkin',
+      route: '/frms/checkin',
       color: 'bg-amber-50',
       iconColor: 'text-amber-600',
     });
