@@ -202,10 +202,13 @@ export default function FrmsCheckinFadiga() {
 
   // Step 1 — KSS
   const [kss, setKss] = useState(5);
+  const [sleepinessLevel, setSleepinessLevel] = useState(5);
+  const [subjectiveFatigueLevel, setSubjectiveFatigueLevel] = useState(5);
 
   // Step 2 — Sono
   const [horaDormiu, setHoraDormiu] = useState('22:00');
   const [horaAcordou, setHoraAcordou] = useState('06:00');
+  const [horasSono48h, setHorasSono48h] = useState(16);
   const [qualidadeSono, setQualidadeSono] = useState(3);
   const [jornadaInicio, setJornadaInicio] = useState('07:00');
 
@@ -244,6 +247,8 @@ export default function FrmsCheckinFadiga() {
     const kssScore = (kss - 1) * 10;
     const sonoScore = Math.max(0, 8 - horasSono) * 8;
     const qualScore = (5 - qualidadeSono) * 8;
+    const subjetivoScore = subjectiveFatigueLevel * 4;
+    const sonolenciaScore = sleepinessLevel * 4;
     const sintomasScore =
       (fadiga_fisica +
         fadiga_mental +
@@ -251,11 +256,21 @@ export default function FrmsCheckinFadiga() {
         sonolencia_diurna +
         irritabilidade) *
       4;
-    return Math.max(0, Math.min(100, Math.round(kssScore + sonoScore + qualScore + sintomasScore)));
+    return Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(
+          kssScore + sonoScore + qualScore + subjetivoScore + sonolenciaScore + sintomasScore,
+        ),
+      ),
+    );
   }, [
     kss,
     horasSono,
     qualidadeSono,
+    subjectiveFatigueLevel,
+    sleepinessLevel,
     fadiga_fisica,
     fadiga_mental,
     dificuldade_concentracao,
@@ -283,11 +298,17 @@ export default function FrmsCheckinFadiga() {
     }
     try {
       const result = await submitMutation.mutateAsync({
+        reference_date: today,
         data_checkin: today,
         hora_dormiu: horaDormiu,
         hora_acordou: horaAcordou,
+        wake_time: horaAcordou,
+        horas_sono_24h: horasSono,
+        horas_sono_48h: horasSono48h,
         qualidade_sono: qualidadeSono,
         kss_score: kss,
+        subjective_fatigue_level: subjectiveFatigueLevel,
+        sleepiness_level: sleepinessLevel,
         sintomas: {
           fadiga_fisica,
           fadiga_mental,
@@ -296,11 +317,13 @@ export default function FrmsCheckinFadiga() {
           irritabilidade,
         },
         apto,
+        fit_for_duty: apto === 1,
         motivo_inaptidao: apto === 0 ? motivoInaptidao : undefined,
         meds_ult_12h: medsUlt12h,
         alcool_ult_12h: alcoolUlt12h,
         risco_autoavaliado: riscoAutoavaliado,
         jornada_inicio_prevista: jornadaInicio,
+        free_text_notes: observacoes || undefined,
         observacoes: observacoes || undefined,
         aceite_termos: true,
         aceite_privacidade: true,
@@ -325,7 +348,7 @@ export default function FrmsCheckinFadiga() {
   };
 
   const TABS: { key: TabType; label: string; icon: React.ReactNode }[] = [
-    { key: 'form', label: 'Check-in', icon: <CheckCircle2 className="h-4 w-4" /> },
+    { key: 'form', label: 'Fadiga Diária', icon: <CheckCircle2 className="h-4 w-4" /> },
     { key: 'historico', label: 'Histórico', icon: <History className="h-4 w-4" /> },
     ...(canViewTeam
       ? [{ key: 'gestor' as TabType, label: 'Equipe', icon: <Users className="h-4 w-4" /> }]
@@ -336,8 +359,8 @@ export default function FrmsCheckinFadiga() {
     <AppLayout>
       <div className="space-y-4">
         <PageHeader
-          title="Check-in de Fadiga"
-          subtitle="Autoavaliação diária do tripulante com recomendação operacional FRMS"
+          title="Fadiga Diária"
+          subtitle="Autorrelato diário de fadiga para gerenciamento de risco e revisão operacional"
           actions={
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={() => navigate('/frms')}>
@@ -373,6 +396,11 @@ export default function FrmsCheckinFadiga() {
 
         {activeTab === 'form' && (
           <>
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              Este registro é usado para gerenciamento de risco de fadiga e revisão operacional. Em
+              caso de fadiga significativa, informe também sua coordenação conforme procedimento da
+              empresa.
+            </div>
             {existente ? (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                 Check-in de hoje já registrado. Você pode atualizar os dados e reenviar.
@@ -423,6 +451,34 @@ export default function FrmsCheckinFadiga() {
                     <div className="rounded-xl bg-slate-50 p-3 text-sm font-medium text-slate-800">
                       KSS {kss} — {KSS_LABELS[kss]}
                     </div>
+                    <Section
+                      label={`Como você avalia sua fadiga agora? ${subjectiveFatigueLevel}/10`}
+                    >
+                      <input
+                        type="range"
+                        min={0}
+                        max={10}
+                        step={1}
+                        value={subjectiveFatigueLevel}
+                        onChange={(e) => setSubjectiveFatigueLevel(Number(e.target.value))}
+                        className="w-full accent-amber-600"
+                      />
+                    </Section>
+                    <Section label={`Como está sua sonolência agora? ${sleepinessLevel}/10`}>
+                      <input
+                        type="range"
+                        min={0}
+                        max={10}
+                        step={1}
+                        value={sleepinessLevel}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          setSleepinessLevel(value);
+                          setKss(Math.min(9, Math.max(1, Math.round((value / 10) * 8) + 1)));
+                        }}
+                        className="w-full accent-indigo-600"
+                      />
+                    </Section>
                   </div>
                 )}
 
@@ -451,6 +507,17 @@ export default function FrmsCheckinFadiga() {
                     <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2 text-sm text-blue-700">
                       Duração calculada: <strong>{horasSono}h</strong>
                     </div>
+                    <Section label="Quantas horas você dormiu nas últimas 48h?">
+                      <input
+                        type="number"
+                        min={0}
+                        max={48}
+                        step={0.5}
+                        value={horasSono48h}
+                        onChange={(e) => setHorasSono48h(Number(e.target.value))}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </Section>
                     <Section label={`Qualidade do sono: ${qualidadeSono}/5`}>
                       <input
                         type="range"
@@ -578,7 +645,15 @@ export default function FrmsCheckinFadiga() {
                         h)
                       </p>
                       <p>
+                        <span className="font-medium">Sono últimas 48h:</span> {horasSono48h}h
+                      </p>
+                      <p>
                         <span className="font-medium">Qualidade do sono:</span> {qualidadeSono}/5
+                      </p>
+                      <p>
+                        <span className="font-medium">Fadiga subjetiva:</span>{' '}
+                        {subjectiveFatigueLevel}/10 |{' '}
+                        <span className="font-medium">Sonolência:</span> {sleepinessLevel}/10
                       </p>
                       <p>
                         <span className="font-medium">Jornada prevista:</span> {jornadaInicio}
@@ -668,7 +743,7 @@ export default function FrmsCheckinFadiga() {
                       disabled={!aceiteTermos || !aceitePrivacidade}
                       className="w-full"
                     >
-                      Confirmar Check-in de Fadiga
+                      Confirmar Fadiga Diária
                     </Button>
                   </div>
                 )}

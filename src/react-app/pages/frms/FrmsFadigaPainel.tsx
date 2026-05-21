@@ -4,7 +4,11 @@ import { BarChart3, Calendar, ShieldAlert } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
-import { useFrmsFadigaPainel, useFrmsFadigaAnalytics } from '@/react-app/hooks/useFrms';
+import {
+  useFrmsDailyFatigue,
+  useFrmsDailyFatigueAlerts,
+  useFrmsFadigaAnalytics,
+} from '@/react-app/hooks/useFrms';
 
 function getTodayLocalKey(): string {
   const now = new Date();
@@ -17,18 +21,47 @@ function getTodayLocalKey(): string {
 export default function FrmsFadigaPainel() {
   const navigate = useNavigate();
   const [data, setData] = useState(getTodayLocalKey());
-  const { data: painelData, loading, refetch } = useFrmsFadigaPainel(data);
+  const { data: dailyData, loading, refetch } = useFrmsDailyFatigue(data, 'team');
+  const { data: alertsData } = useFrmsDailyFatigueAlerts(data);
   const { data: analyticsData } = useFrmsFadigaAnalytics(30);
 
-  const resumo = painelData?.resumo || {};
-  const itens = painelData?.itens || [];
+  const itens = Array.isArray((dailyData as { items?: unknown[] } | null)?.items)
+    ? (((dailyData as { items?: unknown[] } | null)?.items || []) as Array<Record<string, unknown>>)
+    : [];
+  const alertItems = Array.isArray((alertsData as { items?: unknown[] } | null)?.items)
+    ? (((alertsData as { items?: unknown[] } | null)?.items || []) as Array<Record<string, unknown>>)
+    : [];
+
+  const resumo = useMemo(() => {
+    const total = itens.filter((item) => item.status !== 'no_duty').length;
+    const submitted = itens.filter(
+      (item) => item.status !== 'not_submitted' && item.status !== 'no_duty',
+    ).length;
+    const critical = itens.filter(
+      (item) => item.status === 'critical' || item.status === 'unfit_for_duty',
+    ).length;
+    const attention = itens.filter((item) => item.status === 'attention').length;
+    const notSubmitted = itens.filter((item) => item.status === 'not_submitted').length;
+    const scores = itens
+      .map((item) => Number(item.score_fadiga || 0))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    return {
+      total,
+      submitted,
+      critical,
+      attention,
+      notSubmitted,
+      mediaScore: scores.length ? scores.reduce((acc, curr) => acc + curr, 0) / scores.length : 0,
+    };
+  }, [itens]);
 
   const taxaRisco = useMemo(() => {
-    const total = Number(resumo.total_checkins || 0);
-    const altoCritico = Number(resumo.alto || 0) + Number(resumo.critico || 0);
+    const total = Number(resumo.total || 0);
+    const altoCritico = Number(resumo.attention || 0) + Number(resumo.critical || 0);
     if (!total) return 0;
     return Math.round((altoCritico / total) * 100);
-  }, [resumo.alto, resumo.critico, resumo.total_checkins]);
+  }, [resumo.attention, resumo.critical, resumo.total]);
 
   return (
     <AppLayout>
@@ -39,7 +72,7 @@ export default function FrmsFadigaPainel() {
           actions={
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={() => navigate('/frms/checkin')}>
-                Abrir Check-in
+                Fadiga Diária
               </Button>
               <Button variant="secondary" onClick={() => navigate('/frms/fadiga-historico')}>
                 Histórico
@@ -69,23 +102,23 @@ export default function FrmsFadigaPainel() {
         <div className="grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Check-ins</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {Number(resumo.total_checkins || 0)}
-            </p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{Number(resumo.submitted || 0)}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Score médio</p>
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              {Math.round(Number(resumo.media_score || 0))}
+              {Math.round(Number(resumo.mediaScore || 0))}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Alto + Crítico</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Atenção + Crítica</p>
             <p className="mt-2 text-2xl font-bold text-amber-600">{taxaRisco}%</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Críticos</p>
-            <p className="mt-2 text-2xl font-bold text-red-600">{Number(resumo.critico || 0)}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Não preenchida</p>
+            <p className="mt-2 text-2xl font-bold text-violet-600">
+              {Number(resumo.notSubmitted || 0)}
+            </p>
           </div>
         </div>
 
@@ -99,22 +132,37 @@ export default function FrmsFadigaPainel() {
               <div className="py-10 text-center text-sm text-slate-400">Carregando painel...</div>
             ) : itens.length === 0 ? (
               <div className="py-10 text-center text-sm text-slate-400">
-                Sem check-ins para esta data.
+                Sem registros para esta data.
               </div>
             ) : (
               <div className="space-y-2">
                 {itens.map((item) => {
-                  const nivel = item.nivel_fadiga;
+                  const status = String(item.status || '');
                   const tone =
-                    nivel === 'CRITICO'
+                    status === 'critical' || status === 'unfit_for_duty'
                       ? 'bg-red-50 border-red-200 text-red-700'
-                      : nivel === 'ALTO'
+                      : status === 'attention'
                         ? 'bg-amber-50 border-amber-200 text-amber-700'
-                        : nivel === 'MODERADO'
-                          ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
+                        : status === 'not_submitted'
+                          ? 'bg-violet-50 border-violet-200 text-violet-700'
                           : 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                  const statusLabel =
+                    status === 'not_submitted'
+                      ? 'Não preenchida'
+                      : status === 'attention'
+                        ? 'Atenção'
+                        : status === 'critical' || status === 'unfit_for_duty'
+                          ? 'Crítica'
+                          : status === 'normal'
+                            ? 'Preenchida'
+                            : 'Sem jornada';
+                  const sourceLabel =
+                    String(item.data_source || 'crew_reported') === 'default_estimate'
+                      ? 'Não preenchido pelo tripulante — usando estimativa padrão'
+                      : 'Informado pelo tripulante';
+
                   return (
-                    <div key={item.id} className={`rounded-xl border px-3 py-3 ${tone}`}>
+                    <div key={String(item.funcionario_id)} className={`rounded-xl border px-3 py-3 ${tone}`}>
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold">
@@ -122,17 +170,14 @@ export default function FrmsFadigaPainel() {
                               to={`/frms/tripulante/${encodeURIComponent(String(item.funcionario_id || ''))}`}
                               className="text-sm font-semibold hover:underline"
                             >
-                              {item.funcionario_nome || `#${item.funcionario_id}`}
+                              {String(item.funcionario_nome || `#${item.funcionario_id}`)}
                             </Link>
                           </p>
-                          <p className="text-xs opacity-80">
-                            {item.status_operacional} • KSS {item.kss_score} • Sono{' '}
-                            {item.horas_sono}h
-                          </p>
+                          <p className="text-xs opacity-80">{statusLabel} • {sourceLabel}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-bold">{item.score_fadiga}</p>
-                          <p className="text-[11px] uppercase tracking-wide">{item.nivel_fadiga}</p>
+                          <p className="text-lg font-bold">{Number(item.score_fadiga || 0)}</p>
+                          <p className="text-[11px] uppercase tracking-wide">{statusLabel}</p>
                         </div>
                       </div>
                     </div>
@@ -155,19 +200,47 @@ export default function FrmsFadigaPainel() {
                 >
                   <div className="flex items-center justify-between">
                     <span>{String(row.data_checkin)}</span>
-                    <span className="font-semibold">
-                      {Math.round(Number(row.media_score || 0))}
-                    </span>
+                    <span className="font-semibold">{Math.round(Number(row.media_score || 0))}</span>
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {Number(row.alto_critico || 0)} alto/crítico • {Number(row.requer_frat || 0)}{' '}
-                    revisão FRAT
+                    {Number(row.alto_critico || 0)} alto/crítico • {Number(row.requer_frat || 0)} revisão FRAT
                   </div>
                 </div>
               ))}
             </div>
           </aside>
         </div>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Alertas de Fadiga Diária</p>
+              <p className="text-xs text-slate-500">
+                Sinalizações operacionais para revisão humana da escala.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={() => navigate('/frms/escalas')}>
+              Revisar escala
+            </Button>
+          </div>
+          {alertItems.length === 0 ? (
+            <p className="text-sm text-slate-500">Sem alertas de fadiga diária na data selecionada.</p>
+          ) : (
+            <div className="space-y-2">
+              {alertItems.map((alert) => (
+                <div
+                  key={String(alert.id)}
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                >
+                  <p className="font-medium text-slate-800">
+                    {String(alert.tripulante_nome || `Tripulante #${alert.tripulante_id}`)}
+                  </p>
+                  <p className="text-slate-600">{String(alert.mensagem || '')}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </AppLayout>
   );
