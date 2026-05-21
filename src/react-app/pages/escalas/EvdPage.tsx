@@ -24,7 +24,8 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
-import { useApi, useApiMutation } from '@/react-app/hooks/useApi';
+import { useApi } from '@/react-app/hooks/useApi';
+import { apiFetch } from '@/react-app/lib/apiFetch';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface EvdVoo {
@@ -135,7 +136,7 @@ export default function EvdPage() {
             <div>
               <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <Plane className="h-5 w-5 text-blue-600" />
-                Escala de Voo Diária (EVD)
+                Escala Diária de Voo
               </h1>
               <p className="text-sm text-slate-500 mt-0.5">PRC-OPS-009 §4.3</p>
             </div>
@@ -143,6 +144,22 @@ export default function EvdPage() {
           <Button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" /> Novo Voo
           </Button>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+              FRMS Diário (placeholder)
+            </span>
+            <span className="text-xs text-slate-500">
+              Status de risco será integrado de forma não invasiva nas próximas fases.
+            </span>
+          </div>
+          <ul className="mt-3 space-y-1 text-sm text-slate-700">
+            <li>Defina PIC/SIC por aeronave para a operação diária.</li>
+            <li>A escala diária usa a escala mensal como base de disponibilidade.</li>
+            <li>Status de fadiga/FRMS será usado como apoio à decisão operacional.</li>
+          </ul>
         </div>
 
         {/* Date navigation */}

@@ -673,6 +673,14 @@ export default function App() {
                       }
                     />
                     <Route
+                      path="/escalas/diaria"
+                      element={
+                        <ProtectedRoute>
+                          <EvdPage />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
                       path="/escalas/evd"
                       element={
                         <ProtectedRoute>
