@@ -88,6 +88,22 @@ interface FrmsTripulanteSignal {
   hasAlert: boolean;
 }
 
+interface EvdJustificativaPayload {
+  funcionario_id?: number | null;
+  papel?: 'PIC' | 'SIC' | 'OUTRO' | null;
+  origem_alerta: 'FRMS' | 'REPOUSO' | 'DUPLICIDADE' | 'OPERACIONAL' | 'OUTRO';
+  tipo_alerta?: string | null;
+  nivel_alerta?: string | null;
+  decisao:
+    | 'MANTER_ESCALA'
+    | 'SUBSTITUIR'
+    | 'ACIONAR_STANDBY'
+    | 'ADICIONAR_OBSERVACAO'
+    | 'OUTRO';
+  justificativa: string;
+  alerta_ref_id?: string | null;
+}
+
 function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -138,6 +154,49 @@ function frmsTone(status: FrmsDailyFatigueItem['status']) {
     return 'bg-violet-50 text-violet-700 border-violet-200';
   }
   return 'bg-slate-50 text-slate-600 border-slate-200';
+}
+
+function frmsSeverity(signal: FrmsTripulanteSignal | null | undefined): string {
+  if (!signal) return 'NONE';
+  if (signal.status === 'unfit_for_duty') return 'UNFIT_FOR_DUTY';
+  if (signal.status === 'critical') return 'CRITICAL';
+  if (signal.status === 'attention') return 'ATTENTION';
+  if (signal.requiresReview) return 'REVIEW_REQUIRED';
+  if (signal.hasAlert) return 'ALERT';
+  return 'NORMAL';
+}
+
+function buildFrmsJustificativaPayload(params: {
+  justificativa: string;
+  picId: number | null;
+  sicId: number | null;
+  picSignal: FrmsTripulanteSignal | null | undefined;
+  sicSignal: FrmsTripulanteSignal | null | undefined;
+}): EvdJustificativaPayload {
+  let funcionarioId: number | null = null;
+  let papel: 'PIC' | 'SIC' | 'OUTRO' = 'OUTRO';
+  let signal: FrmsTripulanteSignal | null | undefined = null;
+
+  if (isFrmsRelevant(params.picSignal) && params.picId) {
+    funcionarioId = params.picId;
+    papel = 'PIC';
+    signal = params.picSignal;
+  } else if (isFrmsRelevant(params.sicSignal) && params.sicId) {
+    funcionarioId = params.sicId;
+    papel = 'SIC';
+    signal = params.sicSignal;
+  }
+
+  return {
+    funcionario_id: funcionarioId,
+    papel,
+    origem_alerta: 'FRMS',
+    tipo_alerta: signal?.hasAlert ? 'DAILY_ALERT' : 'DAILY_STATUS_REVIEW',
+    nivel_alerta: frmsSeverity(signal),
+    decisao: 'MANTER_ESCALA',
+    justificativa: params.justificativa.trim(),
+    alerta_ref_id: null,
+  };
 }
 
 export default function EvdPage() {
@@ -211,8 +270,21 @@ export default function EvdPage() {
 
   // Publicar voo
   const publicarMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiFetch(`/api/evd/${id}/publicar`, { method: 'POST' });
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload?: {
+        require_justificativa?: boolean;
+        justificativa?: EvdJustificativaPayload;
+      };
+    }) => {
+      const res = await apiFetch(`/api/evd/${id}/publicar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {}),
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as { error?: string }).error || 'Erro ao publicar');
@@ -249,30 +321,36 @@ export default function EvdPage() {
     const sicSignal = toNumericId(voo.sic_id) ? frmsByTripulante.get(Number(voo.sic_id)) : null;
     const needsJustificativa = isFrmsRelevant(picSignal) || isFrmsRelevant(sicSignal);
 
-    if (needsJustificativa && (voo.observacoes || '').trim().length < 10) {
-      const justificativa = window.prompt(
-        'FRMS requer revisão operacional para este tripulante. Informe justificativa operacional para publicar:',
-      );
-      if (!justificativa || justificativa.trim().length < 10) {
-        toast.error('Informe justificativa operacional em observações (mínimo 10 caracteres).');
-        return;
+    let publishPayload: { require_justificativa?: boolean; justificativa?: EvdJustificativaPayload } = {};
+    if (needsJustificativa) {
+      const existingRes = await apiFetch(`/api/evd/${voo.id}/justificativas`);
+      const existingJson = (await existingRes.json().catch(() => ({}))) as {
+        success?: boolean;
+        data?: unknown[];
+      };
+      const hasStructured = existingRes.ok && existingJson.success && (existingJson.data || []).length > 0;
+
+      if (!hasStructured) {
+        const justificativaTxt = window.prompt(
+          'FRMS requer revisão operacional para este tripulante. Informe justificativa operacional estruturada para publicar:',
+        );
+        if (!justificativaTxt || justificativaTxt.trim().length < 10) {
+          toast.error('Justificativa operacional obrigatória (mínimo 10 caracteres).');
+          return;
+        }
+        publishPayload.justificativa = buildFrmsJustificativaPayload({
+          justificativa: justificativaTxt,
+          picId: toNumericId(voo.pic_id),
+          sicId: toNumericId(voo.sic_id),
+          picSignal,
+          sicSignal,
+        });
       }
 
-      const updateRes = await apiFetch(`/api/evd/${voo.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ observacoes: justificativa.trim() }),
-      });
-      if (!updateRes.ok) {
-        const err = await updateRes.json().catch(() => ({}));
-        toast.error(
-          (err as { error?: string }).error || 'Erro ao salvar justificativa operacional',
-        );
-        return;
-      }
+      publishPayload.require_justificativa = true;
     }
 
-    publicarMutation.mutate(voo.id);
+    publicarMutation.mutate({ id: voo.id, payload: publishPayload });
   }
 
   return (
@@ -545,6 +623,7 @@ function EvdCreateForm({
     destino: '',
     tipo_missao: 'OFFSHORE',
     observacoes: '',
+    justificativa_operacional: '',
   });
   const [error, setError] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -564,6 +643,12 @@ function EvdCreateForm({
     });
   }, [funcRaw]);
 
+  const selectedPicId = form.pic_id ? Number(form.pic_id) : null;
+  const selectedSicId = form.sic_id ? Number(form.sic_id) : null;
+  const frmsPic = selectedPicId ? frmsByTripulante.get(selectedPicId) : null;
+  const frmsSic = selectedSicId ? frmsByTripulante.get(selectedSicId) : null;
+  const needsStructuredJustificativa = isFrmsRelevant(frmsPic) || isFrmsRelevant(frmsSic);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -573,13 +658,11 @@ function EvdCreateForm({
     try {
       const picId = form.pic_id ? Number(form.pic_id) : null;
       const sicId = form.sic_id ? Number(form.sic_id) : null;
-      const frmsPic = picId ? frmsByTripulante.get(picId) : null;
-      const frmsSic = sicId ? frmsByTripulante.get(sicId) : null;
       const needsJustificativa = isFrmsRelevant(frmsPic) || isFrmsRelevant(frmsSic);
 
-      if (needsJustificativa && form.observacoes.trim().length < 10) {
+      if (needsJustificativa && form.justificativa_operacional.trim().length < 10) {
         setError(
-          'FRMS requer revisão operacional para PIC/SIC selecionado. Informe justificativa em observações (mínimo 10 caracteres).',
+          'FRMS requer revisão operacional para PIC/SIC selecionado. Informe justificativa operacional (mínimo 10 caracteres).',
         );
         setSubmitting(false);
         return;
@@ -620,8 +703,29 @@ function EvdCreateForm({
         setWarnings(json.data.warnings);
       }
 
-      if (needsJustificativa) {
-        toast.success('Escala criada com justificativa operacional FRMS.');
+      if (needsJustificativa && json.data?.id) {
+        const justificativaPayload = buildFrmsJustificativaPayload({
+          justificativa: form.justificativa_operacional,
+          picId,
+          sicId,
+          picSignal: frmsPic,
+          sicSignal: frmsSic,
+        });
+        const justRes = await apiFetch(`/api/evd/${json.data.id}/justificativas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(justificativaPayload),
+        });
+        if (!justRes.ok) {
+          const err = await justRes.json().catch(() => ({}));
+          setError(
+            (err as { error?: string }).error ||
+              'Voo criado, mas falhou ao registrar justificativa operacional estruturada.',
+          );
+          setSubmitting(false);
+          return;
+        }
+        toast.success('Escala criada com justificativa operacional estruturada.');
       }
 
       onCreated();
@@ -763,9 +867,7 @@ function EvdCreateForm({
 
         {/* Observações */}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
-            Observações / justificativa operacional quando houver alerta FRMS
-          </label>
+          <label className="block text-xs text-slate-500 mb-1">Observações gerais</label>
           <textarea
             value={form.observacoes}
             onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
@@ -773,6 +875,21 @@ function EvdCreateForm({
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
+
+        {needsStructuredJustificativa && (
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">
+              Justificativa operacional FRMS (estruturada)
+            </label>
+            <textarea
+              value={form.justificativa_operacional}
+              onChange={(e) => setForm({ ...form, justificativa_operacional: e.target.value })}
+              rows={3}
+              className="w-full rounded-lg border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm"
+              placeholder="Descreva decisão operacional sem incluir dados sensíveis do check-in."
+            />
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
         {warnings.length > 0 && (

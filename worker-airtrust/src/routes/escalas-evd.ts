@@ -9,7 +9,9 @@
  * Endpoints:
  *   GET    /api/evd?data=YYYY-MM-DD             — listar voos do dia
  *   GET    /api/evd/:id                          — detalhe
+ *   GET    /api/evd/:id/justificativas           — listar justificativas estruturadas
  *   POST   /api/evd                              — criar voo
+ *   POST   /api/evd/:id/justificativas           — criar justificativa estruturada
  *   PUT    /api/evd/:id                          — atualizar voo
  *   DELETE /api/evd/:id                          — soft delete
  *   POST   /api/evd/:id/publicar                 — mudar status para PUBLICADA
@@ -18,13 +20,13 @@
 
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
 import type { D1Database } from '@cloudflare/workers-types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 
-const evdRoutes = new Hono<{ Bindings: Env }>();
+const evdRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 evdRoutes.use('*', auth());
 
@@ -75,6 +77,30 @@ const evdCreateSchema = z.object({
   observacoes: z.string().optional(),
 });
 
+const justificativaCreateSchema = z
+  .object({
+    funcionario_id: z.number().int().positive().nullable().optional(),
+    papel: z.string().trim().min(1).max(32).nullable().optional(),
+    origem_alerta: z
+      .enum(['FRMS', 'REPOUSO', 'DUPLICIDADE', 'OPERACIONAL', 'OUTRO'])
+      .default('OPERACIONAL'),
+    tipo_alerta: z.string().trim().min(1).max(64).nullable().optional(),
+    nivel_alerta: z.string().trim().min(1).max(64).nullable().optional(),
+    decisao: z
+      .enum(['MANTER_ESCALA', 'SUBSTITUIR', 'ACIONAR_STANDBY', 'ADICIONAR_OBSERVACAO', 'OUTRO'])
+      .default('MANTER_ESCALA'),
+    justificativa: z.string().trim().min(10).max(2000),
+    alerta_ref_id: z.string().trim().max(128).nullable().optional(),
+  })
+  .strict();
+
+const publicarSchema = z
+  .object({
+    require_justificativa: z.boolean().optional(),
+    justificativa: justificativaCreateSchema.optional(),
+  })
+  .strict();
+
 type EvdTripulacaoConflitoRow = {
   id: string;
   pic_id: number | null;
@@ -88,6 +114,17 @@ type EvdTimeWindowSource = {
   hora_apresentacao?: string | null;
   hora_decolagem_prevista?: string | null;
   hora_pouso_previsto?: string | null;
+};
+
+type EvdJustificativaInsert = {
+  funcionario_id: number | null;
+  papel: string | null;
+  origem_alerta: 'FRMS' | 'REPOUSO' | 'DUPLICIDADE' | 'OPERACIONAL' | 'OUTRO';
+  tipo_alerta: string | null;
+  nivel_alerta: string | null;
+  decisao: 'MANTER_ESCALA' | 'SUBSTITUIR' | 'ACIONAR_STANDBY' | 'ADICIONAR_OBSERVACAO' | 'OUTRO';
+  justificativa: string;
+  alerta_ref_id: string | null;
 };
 
 function parseTimeToMinutes(value: string | null | undefined): number | null {
@@ -215,6 +252,65 @@ async function calcRepouso(
   };
 }
 
+async function evdExistsForEmpresa(
+  db: D1Database,
+  empresaId: number,
+  evdId: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      'SELECT id FROM escala_voo_diaria WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+    )
+    .bind(evdId, empresaId)
+    .first<{ id: string }>();
+  return Boolean(row?.id);
+}
+
+async function insertEvdJustificativa(params: {
+  db: D1Database;
+  empresaId: number;
+  evdId: string;
+  userId: string | null;
+  payload: EvdJustificativaInsert;
+}) {
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const id = crypto.randomUUID();
+  await params.db
+    .prepare(
+      `INSERT INTO escala_voo_diaria_justificativas (
+         id, empresa_id, escala_voo_diaria_id, funcionario_id, papel,
+         origem_alerta, tipo_alerta, nivel_alerta, decisao, justificativa,
+         alerta_ref_id, criado_por, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      id,
+      params.empresaId,
+      params.evdId,
+      params.payload.funcionario_id,
+      params.payload.papel,
+      params.payload.origem_alerta,
+      params.payload.tipo_alerta,
+      params.payload.nivel_alerta,
+      params.payload.decisao,
+      params.payload.justificativa,
+      params.payload.alerta_ref_id,
+      params.userId,
+      now,
+    )
+    .run();
+
+  return params.db
+    .prepare(
+      `SELECT id, empresa_id, escala_voo_diaria_id, funcionario_id, papel, origem_alerta,
+              tipo_alerta, nivel_alerta, decisao, justificativa, alerta_ref_id, criado_por, created_at
+         FROM escala_voo_diaria_justificativas
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(id, params.empresaId)
+    .first();
+}
+
 // GET /api/evd?data=YYYY-MM-DD
 evdRoutes.get('/', async (c) => {
   const db = c.env.DB;
@@ -298,6 +394,68 @@ evdRoutes.get('/:id', async (c) => {
 
   if (!voo) return c.json({ success: false, error: 'Voo não encontrado' }, 404);
   return c.json({ success: true, data: voo });
+});
+
+// GET /api/evd/:id/justificativas
+evdRoutes.get('/:id/justificativas', async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const evdId = c.req.param('id');
+
+  const exists = await evdExistsForEmpresa(db, empresaId, evdId);
+  if (!exists) return c.json({ success: false, error: 'Voo não encontrado' }, 404);
+
+  const rows = await db
+    .prepare(
+      `SELECT id, empresa_id, escala_voo_diaria_id, funcionario_id, papel, origem_alerta,
+              tipo_alerta, nivel_alerta, decisao, justificativa, alerta_ref_id, criado_por, created_at
+         FROM escala_voo_diaria_justificativas
+        WHERE empresa_id = ? AND escala_voo_diaria_id = ? AND deleted_at IS NULL
+        ORDER BY created_at DESC`,
+    )
+    .bind(empresaId, evdId)
+    .all();
+
+  return c.json({ success: true, data: rows.results || [] });
+});
+
+// POST /api/evd/:id/justificativas
+evdRoutes.post('/:id/justificativas', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const evdId = c.req.param('id');
+  const userId = c.get('userId');
+
+  const exists = await evdExistsForEmpresa(db, empresaId, evdId);
+  if (!exists) return c.json({ success: false, error: 'Voo não encontrado' }, 404);
+
+  const body = await c.req.json();
+  const parsed = justificativaCreateSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { success: false, error: 'Dados inválidos', details: parsed.error.flatten() },
+      400,
+    );
+  }
+
+  const created = await insertEvdJustificativa({
+    db,
+    empresaId,
+    evdId,
+    userId: userId ? String(userId) : null,
+    payload: {
+      funcionario_id: parsed.data.funcionario_id ?? null,
+      papel: parsed.data.papel ?? null,
+      origem_alerta: parsed.data.origem_alerta,
+      tipo_alerta: parsed.data.tipo_alerta ?? null,
+      nivel_alerta: parsed.data.nivel_alerta ?? null,
+      decisao: parsed.data.decisao,
+      justificativa: parsed.data.justificativa,
+      alerta_ref_id: parsed.data.alerta_ref_id ?? null,
+    },
+  });
+
+  return c.json({ success: true, data: created }, 201);
 });
 
 // POST /api/evd
@@ -523,10 +681,26 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
+  const userId = c.get('userId');
+  let publishInput: z.infer<typeof publicarSchema> = {};
+
+  try {
+    const rawBody = await c.req.json();
+    const parsedBody = publicarSchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return c.json(
+        { success: false, error: 'Dados inválidos', details: parsedBody.error.flatten() },
+        400,
+      );
+    }
+    publishInput = parsedBody.data;
+  } catch {
+    publishInput = {};
+  }
 
   const voo = await db
     .prepare(
-      `SELECT id, status, data, pic_id, sic_id, repouso_minimo_ok,
+      `SELECT id, status, data, pic_id, sic_id, repouso_minimo_ok, observacoes,
               hora_apresentacao, hora_decolagem_prevista, hora_pouso_previsto
          FROM escala_voo_diaria
         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
@@ -539,6 +713,7 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
       pic_id: number | null;
       sic_id: number | null;
       repouso_minimo_ok: number;
+      observacoes: string | null;
       hora_apresentacao: string | null;
       hora_decolagem_prevista: string | null;
       hora_pouso_previsto: string | null;
@@ -575,6 +750,50 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
   // Block publication if rest violation
   if (voo.repouso_minimo_ok === 0) {
     return c.json({ success: false, error: MSG_REST_INVALID }, 400);
+  }
+
+  if (publishInput.justificativa) {
+    await insertEvdJustificativa({
+      db,
+      empresaId,
+      evdId: voo.id,
+      userId: userId ? String(userId) : null,
+      payload: {
+        funcionario_id: publishInput.justificativa.funcionario_id ?? null,
+        papel: publishInput.justificativa.papel ?? null,
+        origem_alerta: publishInput.justificativa.origem_alerta,
+        tipo_alerta: publishInput.justificativa.tipo_alerta ?? null,
+        nivel_alerta: publishInput.justificativa.nivel_alerta ?? null,
+        decisao: publishInput.justificativa.decisao,
+        justificativa: publishInput.justificativa.justificativa,
+        alerta_ref_id: publishInput.justificativa.alerta_ref_id ?? null,
+      },
+    });
+  }
+
+  if (publishInput.require_justificativa) {
+    const existingJustificativa = await db
+      .prepare(
+        `SELECT id
+           FROM escala_voo_diaria_justificativas
+          WHERE empresa_id = ? AND escala_voo_diaria_id = ? AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(empresaId, voo.id)
+      .first<{ id: string }>();
+
+    const hasStructuredJustificativa = Boolean(existingJustificativa?.id);
+    const hasLegacyObservacao = (voo.observacoes || '').trim().length >= 10;
+    if (!hasStructuredJustificativa && !hasLegacyObservacao) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Justificativa operacional obrigatória para publicação com revisão FRMS/operacional.',
+        },
+        400,
+      );
+    }
   }
 
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
