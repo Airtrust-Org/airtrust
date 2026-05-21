@@ -127,7 +127,7 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
         },
         {
           id: 'frms-checkin-fadiga',
-          label: 'Check-in de Fadiga',
+          label: 'Fadiga Diária',
           path: '/frms/checkin',
         },
         {

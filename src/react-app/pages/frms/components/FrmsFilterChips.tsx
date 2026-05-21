@@ -19,7 +19,7 @@ export default function FrmsFilterChips() {
   if (filters.modoPainel === 'PLANEJADO') {
     chips.push({
       key: 'modoPainel',
-      label: `Planejada: ${monthLabel(filters.mesReferencia)}`,
+      label: `Mensal: ${monthLabel(filters.mesReferencia)}`,
       onRemove: () => setFilter('modoPainel', 'OPERACIONAL'),
     });
   } else if (filters.periodo !== 30) {
