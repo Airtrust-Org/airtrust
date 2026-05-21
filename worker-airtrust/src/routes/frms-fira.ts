@@ -360,7 +360,7 @@ firaRoutes.post(
   '/importacao/fira/:importacaoId/confirmar',
   requireRole('admin'),
   safe(async (c) => {
-    const importacaoId = c.req.param('importacaoId');
+    const importacaoId = c.req.param('importacaoId') ?? '';
     const empresaId = getEmpresaIdSafe(c);
     const operadorId = await resolveFuncionarioId(c);
     const body = await c.req.json<{
@@ -418,7 +418,7 @@ firaRoutes.post(
 firaRoutes.patch(
   '/importacao/fira/:importacaoId/vincular-tripulante',
   safe(async (c) => {
-    const importacaoId = c.req.param('importacaoId');
+    const importacaoId = c.req.param('importacaoId') ?? '';
     const empresaId = getEmpresaIdSafe(c);
     const body = await c.req.json<{ tripulante_id: string }>();
     if (!body.tripulante_id) {
@@ -462,7 +462,7 @@ firaRoutes.get(
 firaRoutes.get(
   '/importacao/fira/:importacaoId',
   safe(async (c) => {
-    const importacaoId = c.req.param('importacaoId');
+    const importacaoId = c.req.param('importacaoId') ?? '';
     const empresaId = getEmpresaIdSafe(c);
     const row = await buscarImportacaoFiraById(c.env.DB, importacaoId, empresaId);
     if (!row) return c.json({ success: false, error: 'Não encontrado', code: 'NOT_FOUND' }, 404);
@@ -477,7 +477,7 @@ firaRoutes.get(
 firaRoutes.delete(
   '/importacao/fira/:importacaoId',
   safe(async (c) => {
-    const importacaoId = c.req.param('importacaoId');
+    const importacaoId = c.req.param('importacaoId') ?? '';
     const empresaId = getEmpresaIdSafe(c);
     const operadorId = await resolveFuncionarioId(c);
     await deletarImportacaoFira(c.env.DB, importacaoId, operadorId, empresaId);

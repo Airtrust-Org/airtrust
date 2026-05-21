@@ -104,7 +104,7 @@ writeRouter.post(
     await ensureHistoricoSchema(db);
     await ensureQualificacoesTiposTrainingSchema(db);
 
-    const id = parseInt(c.req.param('id'), 10);
+    const id = parseInt(c.req.param('id') ?? '', 10);
 
     if (isNaN(id)) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -803,7 +803,7 @@ writeRouter.put(
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
-    const id = parseInt(c.req.param('id'));
+    const id = parseInt(c.req.param('id') ?? '');
 
     await ensureHistoricoSchema(db);
     await ensureQualificacoesTiposTrainingSchema(db);
@@ -1027,7 +1027,7 @@ writeRouter.patch(
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
-    const id = parseInt(c.req.param('id'), 10);
+    const id = parseInt(c.req.param('id') ?? '', 10);
 
     if (isNaN(id) || id <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -1158,7 +1158,7 @@ writeRouter.post(
 
     await ensureHistoricoSchema(db);
 
-    const id = parseInt(c.req.param('id'), 10);
+    const id = parseInt(c.req.param('id') ?? '', 10);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const userId = ((c as any).get('userId') as number | undefined) ?? null;
     let renovarAnterior = true;
@@ -1295,7 +1295,7 @@ writeRouter.patch(
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
-    const id = parseInt(c.req.param('id'), 10);
+    const id = parseInt(c.req.param('id') ?? '', 10);
 
     if (isNaN(id) || id <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -1365,7 +1365,7 @@ writeRouter.delete(
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
-    const id = parseInt(c.req.param('id'));
+    const id = parseInt(c.req.param('id') ?? '');
 
     if (isNaN(id) || id <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
