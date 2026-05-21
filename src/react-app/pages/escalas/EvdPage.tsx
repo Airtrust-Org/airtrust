@@ -27,6 +27,7 @@ import Button from '@/react-app/components/Button';
 import { useApi } from '@/react-app/hooks/useApi';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 interface EvdVoo {
   id: string;
@@ -56,6 +57,37 @@ interface EvdVoo {
   observacoes: string | null;
 }
 
+interface FrmsDailyFatigueItem {
+  funcionario_id: number | string;
+  funcionario_nome?: string;
+  status:
+    | 'normal'
+    | 'attention'
+    | 'critical'
+    | 'unfit_for_duty'
+    | 'not_submitted'
+    | 'no_duty';
+  status_label?: string;
+  requires_operational_review?: number | boolean;
+  data_source?: 'crew_reported' | 'default_estimate' | 'not_applicable' | string;
+}
+
+interface FrmsDailyFatigueAlertItem {
+  tripulante_id: number | string;
+  nivel?: string;
+  tipo_limite?: string;
+  alert_type?: string;
+  requires_operational_review?: number | boolean;
+}
+
+interface FrmsTripulanteSignal {
+  status: FrmsDailyFatigueItem['status'];
+  statusLabel: string;
+  dataSource: string;
+  requiresReview: boolean;
+  hasAlert: boolean;
+}
+
 function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -78,6 +110,36 @@ function statusBadge(status: string) {
   }
 }
 
+function toNumericId(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+function isFrmsRelevant(signal: FrmsTripulanteSignal | null | undefined): boolean {
+  if (!signal) return false;
+  return (
+    signal.status === 'attention' ||
+    signal.status === 'critical' ||
+    signal.status === 'unfit_for_duty' ||
+    signal.requiresReview ||
+    signal.hasAlert
+  );
+}
+
+function frmsTone(status: FrmsDailyFatigueItem['status']) {
+  if (status === 'critical' || status === 'unfit_for_duty') {
+    return 'bg-red-50 text-red-700 border-red-200';
+  }
+  if (status === 'attention') {
+    return 'bg-amber-50 text-amber-700 border-amber-200';
+  }
+  if (status === 'not_submitted') {
+    return 'bg-violet-50 text-violet-700 border-violet-200';
+  }
+  return 'bg-slate-50 text-slate-600 border-slate-200';
+}
+
 export default function EvdPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -88,9 +150,58 @@ export default function EvdPage() {
     `/api/evd?data=${data}`,
   );
   const voos = voosRaw?.data || [];
+  const { data: frmsDailyRaw } = useApi<{
+    success: boolean;
+    data?: { items?: FrmsDailyFatigueItem[] };
+  }>(`/api/frms/daily-fatigue?date=${data}&scope=team`);
+  const { data: frmsAlertsRaw } = useApi<{
+    success: boolean;
+    data?: { items?: FrmsDailyFatigueAlertItem[] };
+  }>(`/api/frms/daily-fatigue/alerts?date=${data}`);
 
   const selectedDate = new Date(data + 'T12:00:00');
   const weekday = WEEKDAY_LABELS[selectedDate.getDay()];
+  const frmsDailyItems = frmsDailyRaw?.data?.items || [];
+  const frmsAlertItems = frmsAlertsRaw?.data?.items || [];
+
+  const frmsByTripulante = useMemo(() => {
+    const map = new Map<number, FrmsTripulanteSignal>();
+
+    for (const item of frmsDailyItems) {
+      const id = toNumericId(item.funcionario_id);
+      if (!id) continue;
+      map.set(id, {
+        status: item.status,
+        statusLabel: item.status_label || item.status,
+        dataSource: String(item.data_source || 'not_applicable'),
+        requiresReview:
+          item.requires_operational_review === true || Number(item.requires_operational_review) === 1,
+        hasAlert: false,
+      });
+    }
+
+    for (const alert of frmsAlertItems) {
+      const id = toNumericId(alert.tripulante_id);
+      if (!id) continue;
+      const existing = map.get(id);
+      if (existing) {
+        existing.hasAlert = true;
+        map.set(id, existing);
+        continue;
+      }
+      map.set(id, {
+        status: 'attention',
+        statusLabel: 'Atenção',
+        dataSource: 'not_applicable',
+        requiresReview:
+          alert.requires_operational_review === true ||
+          Number(alert.requires_operational_review) === 1,
+        hasAlert: true,
+      });
+    }
+
+    return map;
+  }, [frmsAlertItems, frmsDailyItems]);
 
   function changeDay(delta: number) {
     const d = new Date(data + 'T12:00:00');
@@ -108,7 +219,13 @@ export default function EvdPage() {
       }
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/evd'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
+      toast.success('Escala diária publicada');
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Erro ao publicar');
+    },
   });
 
   // Delete voo
@@ -118,8 +235,45 @@ export default function EvdPage() {
       if (!res.ok) throw new Error('Erro ao excluir');
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/evd'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
+      toast.success('Registro removido');
+    },
+    onError: () => {
+      toast.error('Erro ao excluir');
+    },
   });
+
+  async function handlePublish(voo: EvdVoo) {
+    const picSignal = toNumericId(voo.pic_id) ? frmsByTripulante.get(Number(voo.pic_id)) : null;
+    const sicSignal = toNumericId(voo.sic_id) ? frmsByTripulante.get(Number(voo.sic_id)) : null;
+    const needsJustificativa = isFrmsRelevant(picSignal) || isFrmsRelevant(sicSignal);
+
+    if (needsJustificativa && (voo.observacoes || '').trim().length < 10) {
+      const justificativa = window.prompt(
+        'FRMS requer revisão operacional para este tripulante. Informe justificativa operacional para publicar:',
+      );
+      if (!justificativa || justificativa.trim().length < 10) {
+        toast.error('Informe justificativa operacional em observações (mínimo 10 caracteres).');
+        return;
+      }
+
+      const updateRes = await apiFetch(`/api/evd/${voo.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observacoes: justificativa.trim() }),
+      });
+      if (!updateRes.ok) {
+        const err = await updateRes.json().catch(() => ({}));
+        toast.error(
+          (err as { error?: string }).error || 'Erro ao salvar justificativa operacional',
+        );
+        return;
+      }
+    }
+
+    publicarMutation.mutate(voo.id);
+  }
 
   return (
     <AppLayout>
@@ -160,6 +314,10 @@ export default function EvdPage() {
             <li>A escala diária usa a escala mensal como base de disponibilidade.</li>
             <li>Status de fadiga/FRMS será usado como apoio à decisão operacional.</li>
           </ul>
+          <p className="mt-3 text-xs text-slate-500">
+            A escala não exibe dados sensíveis do check-in de fadiga. Apenas status resumido e
+            necessidade de revisão operacional.
+          </p>
         </div>
 
         {/* Date navigation */}
@@ -198,6 +356,7 @@ export default function EvdPage() {
               setShowForm(false);
               queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
             }}
+            frmsByTripulante={frmsByTripulante}
           />
         )}
 
@@ -265,6 +424,40 @@ export default function EvdPage() {
                       </span>
                     </div>
 
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                      {toNumericId(voo.pic_id) && frmsByTripulante.get(Number(voo.pic_id)) ? (
+                        <span
+                          className={`inline-flex items-center rounded border px-2 py-0.5 font-medium ${frmsTone(frmsByTripulante.get(Number(voo.pic_id))!.status)}`}
+                        >
+                          PIC FRMS: {frmsByTripulante.get(Number(voo.pic_id))!.statusLabel}
+                          {frmsByTripulante.get(Number(voo.pic_id))!.requiresReview ? ' • revisão' : ''}
+                          {frmsByTripulante.get(Number(voo.pic_id))!.hasAlert ? ' • alerta' : ''}
+                        </span>
+                      ) : null}
+                      {toNumericId(voo.sic_id) && frmsByTripulante.get(Number(voo.sic_id)) ? (
+                        <span
+                          className={`inline-flex items-center rounded border px-2 py-0.5 font-medium ${frmsTone(frmsByTripulante.get(Number(voo.sic_id))!.status)}`}
+                        >
+                          SIC FRMS: {frmsByTripulante.get(Number(voo.sic_id))!.statusLabel}
+                          {frmsByTripulante.get(Number(voo.sic_id))!.requiresReview ? ' • revisão' : ''}
+                          {frmsByTripulante.get(Number(voo.sic_id))!.hasAlert ? ' • alerta' : ''}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {(isFrmsRelevant(
+                      toNumericId(voo.pic_id) ? frmsByTripulante.get(Number(voo.pic_id)) : null,
+                    ) ||
+                      isFrmsRelevant(
+                        toNumericId(voo.sic_id) ? frmsByTripulante.get(Number(voo.sic_id)) : null,
+                      )) && (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded-lg w-fit">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        FRMS requer revisão operacional para este tripulante. A fadiga não bloqueia
+                        automaticamente a escala, mas exige justificativa.
+                      </div>
+                    )}
+
                     {/* Times */}
                     <div className="flex items-center gap-4 text-xs text-slate-500">
                       <Clock className="h-3.5 w-3.5" />
@@ -297,7 +490,7 @@ export default function EvdPage() {
                     {voo.status === 'RASCUNHO' && (
                       <>
                         <button
-                          onClick={() => publicarMutation.mutate(voo.id)}
+                          onClick={() => handlePublish(voo)}
                           disabled={publicarMutation.isPending}
                           className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 transition px-2 py-1 rounded hover:bg-emerald-50"
                         >
@@ -334,10 +527,12 @@ function EvdCreateForm({
   data,
   onClose,
   onCreated,
+  frmsByTripulante,
 }: {
   data: string;
   onClose: () => void;
   onCreated: () => void;
+  frmsByTripulante: Map<number, FrmsTripulanteSignal>;
 }) {
   const [form, setForm] = useState({
     pic_id: '',
@@ -376,6 +571,20 @@ function EvdCreateForm({
     setSubmitting(true);
 
     try {
+      const picId = form.pic_id ? Number(form.pic_id) : null;
+      const sicId = form.sic_id ? Number(form.sic_id) : null;
+      const frmsPic = picId ? frmsByTripulante.get(picId) : null;
+      const frmsSic = sicId ? frmsByTripulante.get(sicId) : null;
+      const needsJustificativa = isFrmsRelevant(frmsPic) || isFrmsRelevant(frmsSic);
+
+      if (needsJustificativa && form.observacoes.trim().length < 10) {
+        setError(
+          'FRMS requer revisão operacional para PIC/SIC selecionado. Informe justificativa em observações (mínimo 10 caracteres).',
+        );
+        setSubmitting(false);
+        return;
+      }
+
       const body = {
         data,
         pic_id: form.pic_id ? Number(form.pic_id) : undefined,
@@ -409,6 +618,10 @@ function EvdCreateForm({
 
       if (json.data?.warnings?.length) {
         setWarnings(json.data.warnings);
+      }
+
+      if (needsJustificativa) {
+        toast.success('Escala criada com justificativa operacional FRMS.');
       }
 
       onCreated();
@@ -550,7 +763,9 @@ function EvdCreateForm({
 
         {/* Observações */}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Observações</label>
+          <label className="block text-xs text-slate-500 mb-1">
+            Observações / justificativa operacional quando houver alerta FRMS
+          </label>
           <textarea
             value={form.observacoes}
             onChange={(e) => setForm({ ...form, observacoes: e.target.value })}

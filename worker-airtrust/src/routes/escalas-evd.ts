@@ -30,6 +30,12 @@ evdRoutes.use('*', auth());
 
 const REPOUSO_MINIMO_MIN = 12 * 60 + 30; // 12h30 em minutos (PRC-OPS-009 §6.1.6)
 
+const MSG_PUBLISH_CREW_REQUIRED = 'PIC e SIC são obrigatórios para publicar.';
+const MSG_PIC_SIC_SAME = 'PIC e SIC não podem ser o mesmo tripulante.';
+const MSG_DUPLICATE_CREW =
+  'Tripulante já alocado em outra escala diária na mesma data/intervalo.';
+const MSG_REST_INVALID = 'Repouso mínimo não atendido.';
+
 const evdCreateSchema = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   escala_id: z.string().optional(),
@@ -68,6 +74,105 @@ const evdCreateSchema = z.object({
   tipo_missao: z.enum(['OFFSHORE', 'INSTRUCAO', 'CHECK', 'FERRY', 'OUTRO']).default('OFFSHORE'),
   observacoes: z.string().optional(),
 });
+
+type EvdTripulacaoConflitoRow = {
+  id: string;
+  pic_id: number | null;
+  sic_id: number | null;
+  hora_apresentacao: string | null;
+  hora_decolagem_prevista: string | null;
+  hora_pouso_previsto: string | null;
+};
+
+type EvdTimeWindowSource = {
+  hora_apresentacao?: string | null;
+  hora_decolagem_prevista?: string | null;
+  hora_pouso_previsto?: string | null;
+};
+
+function parseTimeToMinutes(value: string | null | undefined): number | null {
+  if (!value || !/^\d{2}:\d{2}$/.test(value)) return null;
+  const [hh, mm] = value.split(':').map(Number);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+    return null;
+  }
+  return hh * 60 + mm;
+}
+
+function buildTimeWindow(source: EvdTimeWindowSource): { start: number; end: number } | null {
+  const start =
+    parseTimeToMinutes(source.hora_apresentacao) ??
+    parseTimeToMinutes(source.hora_decolagem_prevista);
+  const endRaw =
+    parseTimeToMinutes(source.hora_pouso_previsto) ??
+    parseTimeToMinutes(source.hora_decolagem_prevista) ??
+    parseTimeToMinutes(source.hora_apresentacao);
+
+  if (start == null || endRaw == null) return null;
+  let end = endRaw;
+  if (end <= start) end += 24 * 60;
+  return { start, end };
+}
+
+function timeWindowsOverlap(
+  a: EvdTimeWindowSource,
+  b: EvdTimeWindowSource,
+): boolean {
+  const wa = buildTimeWindow(a);
+  const wb = buildTimeWindow(b);
+  // Regra conservadora: se faltarem horários suficientes, considera sobreposição.
+  if (!wa || !wb) return true;
+  return wa.start < wb.end && wb.start < wa.end;
+}
+
+async function hasCrewConflict(params: {
+  db: D1Database;
+  empresaId: number;
+  data: string;
+  picId: number | null;
+  sicId: number | null;
+  window: EvdTimeWindowSource;
+  excludeId?: string;
+}): Promise<boolean> {
+  const crewIds = [params.picId, params.sicId].filter(
+    (id): id is number => typeof id === 'number' && Number.isFinite(id),
+  );
+  if (crewIds.length === 0) return false;
+
+  const placeholders = crewIds.map(() => '?').join(', ');
+  const bindings: unknown[] = [params.empresaId, params.data, ...crewIds, ...crewIds];
+  let excludeSql = '';
+  if (params.excludeId) {
+    excludeSql = 'AND id != ?';
+    bindings.push(params.excludeId);
+  }
+
+  const rows = await params.db
+    .prepare(
+      `SELECT id, pic_id, sic_id, hora_apresentacao, hora_decolagem_prevista, hora_pouso_previsto
+         FROM escala_voo_diaria
+        WHERE empresa_id = ?
+          AND data = ?
+          AND deleted_at IS NULL
+          AND UPPER(COALESCE(status, 'RASCUNHO')) != 'CANCELADA'
+          AND (
+            pic_id IN (${placeholders})
+            OR sic_id IN (${placeholders})
+          )
+          ${excludeSql}`,
+    )
+    .bind(...bindings)
+    .all<EvdTripulacaoConflitoRow>();
+
+  for (const row of rows.results || []) {
+    const overlap = timeWindowsOverlap(params.window, row);
+    if (!overlap) continue;
+    const sameCrew =
+      crewIds.includes(Number(row.pic_id)) || crewIds.includes(Number(row.sic_id));
+    if (sameCrew) return true;
+  }
+  return false;
+}
 
 // Helper: calcular repouso desde último corte motor
 async function calcRepouso(
@@ -210,6 +315,26 @@ evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
   }
 
   const d = parsed.data;
+  if (d.pic_id && d.sic_id && d.pic_id === d.sic_id) {
+    return c.json({ success: false, error: MSG_PIC_SIC_SAME }, 400);
+  }
+
+  const hasConflict = await hasCrewConflict({
+    db,
+    empresaId,
+    data: d.data,
+    picId: d.pic_id ?? null,
+    sicId: d.sic_id ?? null,
+    window: {
+      hora_apresentacao: d.hora_apresentacao,
+      hora_decolagem_prevista: d.hora_decolagem_prevista,
+      hora_pouso_previsto: d.hora_pouso_previsto,
+    },
+  });
+  if (hasConflict) {
+    return c.json({ success: false, error: MSG_DUPLICATE_CREW }, 409);
+  }
+
   const warnings: string[] = [];
 
   // Validação de repouso para PIC
@@ -312,6 +437,20 @@ evdRoutes.put('/:id', requireRole('admin', 'manager'), async (c) => {
 
   if (!existing) return c.json({ success: false, error: 'Voo não encontrado' }, 404);
 
+  const nextPicId =
+    'pic_id' in body ? (body.pic_id == null ? null : Number(body.pic_id)) : null;
+  const nextSicId =
+    'sic_id' in body ? (body.sic_id == null ? null : Number(body.sic_id)) : null;
+  if (
+    typeof nextPicId === 'number' &&
+    typeof nextSicId === 'number' &&
+    Number.isFinite(nextPicId) &&
+    Number.isFinite(nextSicId) &&
+    nextPicId === nextSicId
+  ) {
+    return c.json({ success: false, error: MSG_PIC_SIC_SAME }, 400);
+  }
+
   const fields: string[] = [];
   const values: unknown[] = [];
 
@@ -387,34 +526,55 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
 
   const voo = await db
     .prepare(
-      'SELECT id, status, pic_id, sic_id, repouso_minimo_ok FROM escala_voo_diaria WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      `SELECT id, status, data, pic_id, sic_id, repouso_minimo_ok,
+              hora_apresentacao, hora_decolagem_prevista, hora_pouso_previsto
+         FROM escala_voo_diaria
+        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
     .bind(id, empresaId)
     .first<{
       id: string;
       status: string;
+      data: string;
       pic_id: number | null;
       sic_id: number | null;
       repouso_minimo_ok: number;
+      hora_apresentacao: string | null;
+      hora_decolagem_prevista: string | null;
+      hora_pouso_previsto: string | null;
     }>();
 
   if (!voo) return c.json({ success: false, error: 'Voo não encontrado' }, 404);
   if (voo.status === 'PUBLICADA') return c.json({ success: false, error: 'Voo já publicado' }, 400);
 
-  // Block publication if rest violation
-  if (voo.repouso_minimo_ok === 0) {
-    return c.json(
-      {
-        success: false,
-        error: 'Não é possível publicar: violação de repouso mínimo 12h30 (PRC-OPS-009 §6.1.6)',
-      },
-      400,
-    );
+  if (!voo.pic_id || !voo.sic_id) {
+    return c.json({ success: false, error: MSG_PUBLISH_CREW_REQUIRED }, 400);
   }
 
-  // Check tripulação
-  if (!voo.pic_id || !voo.sic_id) {
-    return c.json({ success: false, error: 'Tripulação incompleta (PIC e SIC obrigatórios)' }, 400);
+  if (voo.pic_id === voo.sic_id) {
+    return c.json({ success: false, error: MSG_PIC_SIC_SAME }, 400);
+  }
+
+  const conflictOnPublish = await hasCrewConflict({
+    db,
+    empresaId,
+    data: voo.data,
+    picId: voo.pic_id,
+    sicId: voo.sic_id,
+    window: {
+      hora_apresentacao: voo.hora_apresentacao,
+      hora_decolagem_prevista: voo.hora_decolagem_prevista,
+      hora_pouso_previsto: voo.hora_pouso_previsto,
+    },
+    excludeId: voo.id,
+  });
+  if (conflictOnPublish) {
+    return c.json({ success: false, error: MSG_DUPLICATE_CREW }, 409);
+  }
+
+  // Block publication if rest violation
+  if (voo.repouso_minimo_ok === 0) {
+    return c.json({ success: false, error: MSG_REST_INVALID }, 400);
   }
 
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
