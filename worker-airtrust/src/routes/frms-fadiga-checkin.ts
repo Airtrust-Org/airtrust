@@ -38,6 +38,30 @@ type FadigaConfigRow = {
   janela_fim: string;
 };
 
+type DailyRiskLevel = 'normal' | 'attention' | 'critical' | 'unfit_for_duty';
+
+type NormalizedCheckinInput = {
+  dataCheckin: string;
+  horaDormiu: string;
+  horaAcordou: string;
+  horasSono24h: number;
+  horasSono48h: number | null;
+  qualidadeSono: number;
+  kssScore: number;
+  subjectiveFatigueLevel: number | null;
+  sleepinessLevel: number | null;
+  apto: 0 | 1;
+  motivoInaptidao: string | null;
+  medsUlt12h: 0 | 1;
+  alcoolUlt12h: 0 | 1;
+  riscoAutoavaliado: number | null;
+  jornadaInicioPrevista: string | null;
+  observacoes: string | null;
+  sintomas: CheckinCreateInput['sintomas'];
+  aceiteTermos: boolean;
+  aceitePrivacidade: boolean;
+};
+
 function nowSql(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
 }
@@ -49,6 +73,25 @@ function todayIso(): string {
 function csvEscape(value: unknown): string {
   const text = value === null || value === undefined ? '' : String(value);
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function parseTimeToMinutes(value: string): number | null {
+  if (!/^\d{2}:\d{2}$/.test(value)) return null;
+  const [h, m] = value.split(':').map(Number);
+  if (!Number.isInteger(h) || !Number.isInteger(m)) return null;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+}
+
+function minutesToTime(minutes: number): string {
+  const normalized = ((minutes % 1440) + 1440) % 1440;
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 function isManagerPlus(c: FrmsContext): boolean {
@@ -179,7 +222,83 @@ function mapNivelToLegacy(
   return 'CRITICO';
 }
 
-function buildScoreInput(input: CheckinCreateInput, horasSono: number): FadigaScoreInput {
+/**
+ * Resolves the canonical fit-for-duty value from the two accepted fields.
+ * Returns { conflict: true } if both fields are present with contradictory values.
+ * fit_for_duty is the canonical field; apto is accepted as legacy compatibility only.
+ */
+function normalizeFitForDutyPayload(
+  input: Pick<CheckinCreateInput, 'fit_for_duty' | 'apto'>,
+): { apto: 0 | 1 } | { conflict: true } {
+  const hasApto = typeof input.apto === 'number';
+  const hasFitForDuty = typeof input.fit_for_duty === 'boolean';
+  if (hasApto && hasFitForDuty) {
+    if ((input.apto === 1) !== input.fit_for_duty) return { conflict: true };
+    return { apto: input.fit_for_duty ? 1 : 0 };
+  }
+  if (hasFitForDuty) return { apto: input.fit_for_duty ? 1 : 0 };
+  if (hasApto) return { apto: input.apto === 0 ? 0 : 1 };
+  return { apto: 1 };
+}
+
+function normalizeCheckinInput(input: CheckinCreateInput): NormalizedCheckinInput {
+  const dataCheckin = input.reference_date || input.data_checkin || todayIso();
+  const horaAcordou = input.wake_time || input.hora_acordou || '06:00';
+  const horaDormiu = input.hora_dormiu || '22:00';
+  const horasSono24h =
+    typeof input.horas_sono_24h === 'number'
+      ? clamp(input.horas_sono_24h, 0, 24)
+      : calcularHorasSono(horaDormiu, horaAcordou);
+  const sleepinessLevel =
+    typeof input.sleepiness_level === 'number' ? clamp(input.sleepiness_level, 0, 10) : null;
+  const kssScore =
+    typeof input.kss_score === 'number'
+      ? clamp(input.kss_score, 1, 9)
+      : sleepinessLevel == null
+        ? 5
+        : clamp(Math.round((sleepinessLevel / 10) * 8) + 1, 1, 9);
+  const subjectiveFatigueLevel =
+    typeof input.subjective_fatigue_level === 'number'
+      ? clamp(input.subjective_fatigue_level, 0, 10)
+      : null;
+  // fit_for_duty is canonical; apto is legacy. Conflict is caught upstream by normalizeFitForDutyPayload.
+  const aptoNormalizado: 0 | 1 =
+    typeof input.fit_for_duty === 'boolean'
+      ? input.fit_for_duty ? 1 : 0
+      : typeof input.apto === 'number'
+        ? input.apto === 0 ? 0 : 1
+        : 1;
+  const riscoAutoavaliado =
+    typeof input.risco_autoavaliado === 'number'
+      ? clamp(input.risco_autoavaliado, 1, 10)
+      : subjectiveFatigueLevel;
+  const observacoes = input.free_text_notes || input.observacoes || null;
+
+  return {
+    dataCheckin,
+    horaDormiu,
+    horaAcordou,
+    horasSono24h,
+    horasSono48h:
+      typeof input.horas_sono_48h === 'number' ? clamp(input.horas_sono_48h, 0, 48) : null,
+    qualidadeSono: clamp(input.qualidade_sono ?? 3, 1, 5),
+    kssScore,
+    subjectiveFatigueLevel,
+    sleepinessLevel,
+    apto: aptoNormalizado,
+    motivoInaptidao: input.motivo_inaptidao ?? null,
+    medsUlt12h: input.meds_ult_12h === 1 ? 1 : 0,
+    alcoolUlt12h: input.alcool_ult_12h === 1 ? 1 : 0,
+    riscoAutoavaliado,
+    jornadaInicioPrevista: input.jornada_inicio_prevista ?? null,
+    observacoes,
+    sintomas: input.sintomas,
+    aceiteTermos: input.aceite_termos === true,
+    aceitePrivacidade: input.aceite_privacidade === true,
+  };
+}
+
+function buildScoreInput(input: NormalizedCheckinInput): FadigaScoreInput {
   const sintomasJson: Record<string, number> | null = input.sintomas
     ? Object.entries(input.sintomas).reduce<Record<string, number>>((acc, [key, value]) => {
         if (key !== 'descricao_dor' && typeof value === 'number') {
@@ -190,14 +309,31 @@ function buildScoreInput(input: CheckinCreateInput, horasSono: number): FadigaSc
     : null;
 
   return {
-    kss_score: input.kss_score,
-    horas_sono: horasSono,
-    qualidade_sono: input.qualidade_sono,
+    kss_score: input.kssScore,
+    horas_sono: input.horasSono24h,
+    qualidade_sono: input.qualidadeSono,
     sintomas_json: sintomasJson,
     apto: input.apto,
-    meds_ult_12h: input.meds_ult_12h,
-    alcool_ult_12h: input.alcool_ult_12h,
+    meds_ult_12h: input.medsUlt12h,
+    alcool_ult_12h: input.alcoolUlt12h,
   };
+}
+
+function evaluateDailyRisk(input: NormalizedCheckinInput): DailyRiskLevel {
+  if (input.apto === 0) return 'unfit_for_duty';
+  if (input.horasSono24h < 4) return 'critical';
+  if ((input.subjectiveFatigueLevel ?? 0) >= 8) return 'critical';
+  if ((input.sleepinessLevel ?? 0) >= 8) return 'critical';
+  if (input.horasSono24h < 5) return 'attention';
+  if ((input.subjectiveFatigueLevel ?? 0) >= 6) return 'attention';
+  if ((input.sleepinessLevel ?? 0) >= 6) return 'attention';
+  return 'normal';
+}
+
+function mapRiskToSeverity(level: DailyRiskLevel): 'ATENCAO' | 'CRITICO' | null {
+  if (level === 'attention') return 'ATENCAO';
+  if (level === 'critical' || level === 'unfit_for_duty') return 'CRITICO';
+  return null;
 }
 
 async function computeContextoPiloto(
@@ -269,6 +405,203 @@ async function computeContextoPiloto(
   };
 }
 
+async function getFrmsSleepDefaults(db: D1Database): Promise<{
+  horasSonoPadrao: number;
+  minutosAntesApresentacao: number;
+}> {
+  const rows = await db
+    .prepare(
+      `SELECT nome, valor_numerico
+         FROM frms_configuracao_limites
+        WHERE nome IN ('HORAS_SONO_PADRAO', 'MINUTOS_ANTES_APRESENTACAO')
+          AND ativo = 1
+          AND deleted_at IS NULL`,
+    )
+    .all<{ nome: string; valor_numerico: number }>();
+
+  const horasSonoPadrao = clamp(
+    Number(rows.results?.find((r) => r.nome === 'HORAS_SONO_PADRAO')?.valor_numerico ?? 8),
+    4,
+    12,
+  );
+  const minutosAntesApresentacao = clamp(
+    Number(
+      rows.results?.find((r) => r.nome === 'MINUTOS_ANTES_APRESENTACAO')?.valor_numerico ?? 90,
+    ),
+    30,
+    240,
+  );
+
+  return {
+    horasSonoPadrao,
+    minutosAntesApresentacao,
+  };
+}
+
+function computeWakeTimeFromJornada(
+  horaApresentacao: string | null | undefined,
+  minutosAntesApresentacao: number,
+): string {
+  const startMin = parseTimeToMinutes(horaApresentacao || '');
+  if (startMin == null) return '06:00';
+  return minutesToTime(startMin - minutosAntesApresentacao);
+}
+
+async function createDailyFatigueAlert(params: {
+  db: D1Database;
+  empresaId: number;
+  tripulanteId: number;
+  dataCheckin: string;
+  riskLevel: DailyRiskLevel;
+  scoreFadiga: number;
+  horasSono24h: number;
+  wakeTime: string;
+  checkinId: string;
+}): Promise<void> {
+  const severity = mapRiskToSeverity(params.riskLevel);
+  if (!severity) return;
+
+  const existing = await params.db
+    .prepare(
+      `SELECT id
+         FROM frms_alerta
+        WHERE tripulante_id = ?
+          AND tipo_limite = 'REPOUSO'
+          AND nivel = ?
+          AND date(created_at) = ?
+          AND mensagem LIKE '[FADIGA_DIARIA]%'
+          AND resolvido = 0
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(String(params.tripulanteId), severity, params.dataCheckin)
+    .first<{ id: string }>();
+
+  if (existing?.id) return;
+
+  const riskLabel =
+    params.riskLevel === 'unfit_for_duty'
+      ? 'daily_fatigue_unfit_for_duty'
+      : params.riskLevel === 'critical'
+        ? 'daily_fatigue_critical'
+        : 'daily_fatigue_attention';
+
+  const mensagem =
+    `[FADIGA_DIARIA] ${riskLabel}: revisão operacional necessária. ` +
+    `Data ${params.dataCheckin}. Sono 24h ${params.horasSono24h.toFixed(1)}h. ` +
+    `Despertar ${params.wakeTime}. Score ${params.scoreFadiga}.`;
+
+  const now = nowSql();
+  await params.db
+    .prepare(
+      `INSERT INTO frms_alerta (
+         id, tripulante_id, jornada_id, tipo_limite, nivel,
+         percentual_atingido, valor_atual_min, valor_limite_min, mensagem,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      crypto.randomUUID(),
+      String(params.tripulanteId),
+      null,
+      'REPOUSO',
+      severity,
+      params.scoreFadiga,
+      Math.round(params.horasSono24h * 60),
+      300,
+      mensagem,
+      now,
+      now,
+    )
+    .run();
+}
+
+async function buildDailyFatigueStatus(params: {
+  db: D1Database;
+  empresaId: number;
+  funcionarioId: number;
+  date: string;
+}): Promise<Record<string, unknown>> {
+  const [defaults, checkin, jornada] = await Promise.all([
+    getFrmsSleepDefaults(params.db),
+    params.db
+      .prepare(
+        `SELECT
+            id, data_checkin, hora_checkin, horas_sono, horas_sono_48h, wake_time,
+            qualidade_sono, kss_score, subjective_fatigue_level, sleepiness_level,
+            fit_for_duty, score_fadiga, nivel_fadiga, status_operacional,
+            computed_risk_level, requires_operational_review, observacoes, submitted_at
+         FROM frms_fadiga_checkin
+         WHERE empresa_id = ?
+           AND funcionario_id = ?
+           AND data_checkin = ?
+           AND deleted_at IS NULL
+         LIMIT 1`,
+      )
+      .bind(params.empresaId, params.funcionarioId, params.date)
+      .first<Record<string, unknown>>(),
+    params.db
+      .prepare(
+        `SELECT id, hora_apresentacao
+         FROM frms_jornada
+         WHERE tripulante_id = ?
+           AND data = ?
+           AND deleted_at IS NULL
+           AND status IN ('ES','TS','TV','EX','RE','SA')
+         LIMIT 1`,
+      )
+      .bind(params.funcionarioId, params.date)
+      .first<{ id: string; hora_apresentacao: string | null }>(),
+  ]);
+
+  const wakeEstimated = computeWakeTimeFromJornada(
+    jornada?.hora_apresentacao,
+    defaults.minutosAntesApresentacao,
+  );
+
+  if (!checkin) {
+    return {
+      status: 'not_submitted',
+      submitted: false,
+      data_source: 'default_estimate',
+      confidence: 'reduced',
+      message:
+        'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão. Revisão operacional necessária.',
+      requires_operational_review: true,
+      sleep_hours_24h: defaults.horasSonoPadrao,
+      wake_time: wakeEstimated,
+      fit_for_duty: null,
+      has_jornada: Boolean(jornada?.id),
+      jornada_id: jornada?.id ?? null,
+    };
+  }
+
+  const riskLevel = String(checkin.computed_risk_level || 'normal');
+  return {
+    status: riskLevel,
+    submitted: true,
+    data_source: 'crew_reported',
+    confidence: 'reported',
+    message:
+      riskLevel === 'normal'
+        ? 'Fadiga diária informada pelo tripulante.'
+        : 'Fadiga diária informada pelo tripulante com revisão operacional necessária.',
+    requires_operational_review: Number(checkin.requires_operational_review || 0) === 1,
+    sleep_hours_24h: Number(checkin.horas_sono || 0),
+    sleep_hours_48h:
+      checkin.horas_sono_48h == null ? null : Number(checkin.horas_sono_48h || 0),
+    wake_time: String(checkin.wake_time || wakeEstimated),
+    fit_for_duty:
+      checkin.fit_for_duty == null ? null : Number(checkin.fit_for_duty || 0) === 1,
+    score_fadiga: Number(checkin.score_fadiga || 0),
+    nivel_fadiga: String(checkin.nivel_fadiga || ''),
+    status_operacional: String(checkin.status_operacional || ''),
+    checkin,
+    has_jornada: Boolean(jornada?.id),
+    jornada_id: jornada?.id ?? null,
+  };
+}
+
 router.get('/fadiga-checkin/hoje', async (c) => {
   try {
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
@@ -321,6 +654,289 @@ router.get('/fadiga-checkin/me', async (c) => {
   }
 });
 
+router.get('/fadiga-checkin/config', async (c) => {
+  try {
+    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const config = await getConfig(c.env.DB, empresaId);
+    return c.json({ success: true, data: config });
+  } catch {
+    return c.json({ success: false, error: 'Erro ao carregar configuração de fadiga diária' }, 500);
+  }
+});
+
+router.get('/daily-fatigue', async (c) => {
+  try {
+    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const date = c.req.query('date') || todayIso();
+    const scope = (c.req.query('scope') || '').toLowerCase();
+    const canSeeTeam = isManagerPlus(c) && scope === 'team';
+
+    if (!canSeeTeam) {
+      const funcionarioId = await resolveFuncionarioId(c);
+      if (!funcionarioId) {
+        return c.json(
+          { success: false, error: 'Funcionário não encontrado para o usuário atual' },
+          404,
+        );
+      }
+      const status = await buildDailyFatigueStatus({
+        db: c.env.DB,
+        empresaId,
+        funcionarioId,
+        date,
+      });
+      return c.json({
+        success: true,
+        data: {
+          date,
+          funcionario_id: funcionarioId,
+          ...status,
+        },
+      });
+    }
+
+    const limit = Math.min(Math.max(Number(c.req.query('limit') || 100), 1), 500);
+    const offset = Math.max(Number(c.req.query('offset') || 0), 0);
+
+    const defaults = await getFrmsSleepDefaults(c.env.DB);
+    const rows = await c.env.DB
+      .prepare(
+        `SELECT
+            f.id AS funcionario_id,
+            f.nome AS funcionario_nome,
+            COALESCE(f.cargo, f.funcao) AS cargo,
+            fj.id AS jornada_id,
+            fj.hora_apresentacao,
+            ch.id AS checkin_id,
+            ch.hora_checkin,
+            ch.horas_sono,
+            ch.horas_sono_48h,
+            ch.wake_time,
+            ch.score_fadiga,
+            ch.nivel_fadiga,
+            ch.status_operacional,
+            ch.computed_risk_level,
+            ch.requires_operational_review
+         FROM funcionarios f
+         LEFT JOIN frms_jornada fj
+           ON fj.tripulante_id = f.id
+          AND fj.data = ?
+          AND fj.deleted_at IS NULL
+          AND fj.status IN ('ES','TS','TV','EX','RE','SA')
+         LEFT JOIN frms_fadiga_checkin ch
+           ON ch.funcionario_id = f.id
+          AND ch.empresa_id = f.empresa_id
+          AND ch.data_checkin = ?
+          AND ch.deleted_at IS NULL
+         WHERE f.empresa_id = ?
+           AND f.deleted_at IS NULL
+           AND COALESCE(f.ativo, 1) = 1
+           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+           AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
+         ORDER BY
+           CASE
+             WHEN ch.id IS NULL AND fj.id IS NOT NULL THEN 1
+             WHEN ch.computed_risk_level IN ('critical', 'unfit_for_duty') THEN 2
+             WHEN ch.computed_risk_level = 'attention' THEN 3
+             ELSE 4
+           END,
+           f.nome ASC
+         LIMIT ? OFFSET ?`,
+      )
+      .bind(date, date, empresaId, limit, offset)
+      .all<Record<string, unknown>>();
+
+    const itens = (rows.results || []).map((row) => {
+      const hasCheckin = Boolean(row.checkin_id);
+      const wakeEstimated = computeWakeTimeFromJornada(
+        String(row.hora_apresentacao || ''),
+        defaults.minutosAntesApresentacao,
+      );
+      const status = hasCheckin
+        ? String(row.computed_risk_level || 'normal')
+        : row.jornada_id
+          ? 'not_submitted'
+          : 'no_duty';
+      const source =
+        status === 'not_submitted'
+          ? 'default_estimate'
+          : hasCheckin
+            ? 'crew_reported'
+            : 'not_applicable';
+      const reviewRequired =
+        status === 'not_submitted' ||
+        status === 'attention' ||
+        status === 'critical' ||
+        status === 'unfit_for_duty';
+
+      return {
+        ...row,
+        date,
+        status,
+        data_source: source,
+        sleep_hours_24h: hasCheckin ? Number(row.horas_sono || 0) : defaults.horasSonoPadrao,
+        sleep_hours_48h: hasCheckin
+          ? row.horas_sono_48h == null
+            ? null
+            : Number(row.horas_sono_48h || 0)
+          : null,
+        wake_time: hasCheckin ? String(row.wake_time || wakeEstimated) : wakeEstimated,
+        requires_operational_review: reviewRequired ? 1 : 0,
+        status_label:
+          status === 'not_submitted'
+            ? 'Não preenchida'
+            : status === 'attention'
+              ? 'Atenção'
+              : status === 'critical' || status === 'unfit_for_duty'
+                ? 'Crítica'
+                : status === 'normal'
+                  ? 'Preenchida'
+                  : 'Sem jornada',
+      };
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        date,
+        defaults: {
+          horas_sono_padrao: defaults.horasSonoPadrao,
+          minutos_antes_apresentacao: defaults.minutosAntesApresentacao,
+        },
+        items: itens,
+        pagination: { limit, offset },
+      },
+    });
+  } catch {
+    return c.json({ success: false, error: 'Erro ao carregar status de fadiga diária' }, 500);
+  }
+});
+
+router.get('/daily-fatigue/alerts', async (c) => {
+  try {
+    const date = c.req.query('date') || todayIso();
+    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    if (!isManagerPlus(c)) {
+      const funcionarioId = await resolveFuncionarioId(c);
+      if (!funcionarioId) {
+        return c.json(
+          { success: false, error: 'Funcionário não encontrado para o usuário atual' },
+          404,
+        );
+      }
+      const status = await buildDailyFatigueStatus({
+        db: c.env.DB,
+        empresaId,
+        funcionarioId,
+        date,
+      });
+      const statusName = String(status.status || '');
+      const shouldAlert =
+        statusName === 'not_submitted' ||
+        statusName === 'attention' ||
+        statusName === 'critical' ||
+        statusName === 'unfit_for_duty';
+      return c.json({
+        success: true,
+        data: {
+          date,
+          count: shouldAlert ? 1 : 0,
+          items: shouldAlert
+            ? [
+                {
+                  id: `daily-fatigue-self-${funcionarioId}-${date}`,
+                  tripulante_id: funcionarioId,
+                  nivel:
+                    statusName === 'attention' || statusName === 'not_submitted'
+                      ? 'ATENCAO'
+                      : 'CRITICO',
+                  tipo_limite: statusName,
+                  mensagem:
+                    statusName === 'not_submitted'
+                      ? 'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão.'
+                      : 'Fadiga diária com revisão operacional necessária.',
+                  created_at: `${date} 00:00:00`,
+                  resolvido: 0,
+                  resolvido_em: null,
+                  requires_operational_review: 1,
+                },
+              ]
+            : [],
+        },
+      });
+    }
+
+    const rows = await c.env.DB
+      .prepare(
+        `SELECT a.id, a.tripulante_id, a.nivel, a.tipo_limite, a.mensagem, a.created_at, a.resolvido, a.resolvido_em,
+                f.nome AS tripulante_nome
+         FROM frms_alerta a
+         LEFT JOIN funcionarios f ON f.id = a.tripulante_id
+         WHERE a.deleted_at IS NULL
+           AND a.tipo_limite = 'REPOUSO'
+           AND a.mensagem LIKE '[FADIGA_DIARIA]%'
+           AND date(a.created_at) = ?
+           AND f.empresa_id = ?
+         ORDER BY
+           CASE a.nivel WHEN 'CRITICO' THEN 1 WHEN 'ATENCAO' THEN 2 ELSE 3 END,
+           a.created_at DESC`,
+      )
+      .bind(date, empresaId)
+      .all<Record<string, unknown>>();
+
+    const teamResponse = await router.fetch(
+      new Request(`${c.req.url.split('?')[0].replace('/daily-fatigue/alerts', '/daily-fatigue')}?date=${encodeURIComponent(date)}&scope=team`, c.req.raw),
+      c.env,
+      c.executionCtx,
+    );
+    const teamPayload = (await teamResponse.json()) as {
+      data?: { items?: Array<Record<string, unknown>> };
+    };
+    const syntheticNotSubmitted = (teamPayload.data?.items || [])
+      .filter((item) => item.status === 'not_submitted')
+      .map((item) => ({
+        id: `daily-fatigue-not-submitted-${item.funcionario_id}-${date}`,
+        tripulante_id: item.funcionario_id,
+        nivel: 'ATENCAO',
+        tipo_limite: 'daily_fatigue_not_submitted',
+        mensagem:
+          'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão. Revisão operacional necessária.',
+        created_at: `${date} 00:00:00`,
+        resolvido: 0,
+        resolvido_em: null,
+        tripulante_nome: item.funcionario_nome,
+        requires_operational_review: 1,
+        alert_type: 'daily_fatigue_not_submitted',
+      }));
+
+    const persisted = (rows.results || []).map((row) => ({
+      ...row,
+      requires_operational_review: 1,
+      alert_type: String(row.mensagem || '').includes('daily_fatigue_unfit_for_duty')
+        ? 'daily_fatigue_unfit_for_duty'
+        : String(row.mensagem || '').includes('daily_fatigue_critical')
+          ? 'daily_fatigue_critical'
+          : 'daily_fatigue_attention',
+    }));
+    const items = [...syntheticNotSubmitted, ...persisted];
+
+    return c.json({
+      success: true,
+      data: {
+        date,
+        count: items.length,
+        items,
+      },
+    });
+  } catch {
+    return c.json({ success: false, error: 'Erro ao carregar alertas de fadiga diária' }, 500);
+  }
+});
+
+router.post('/daily-fatigue', async (c) => {
+  return router.fetch(new Request(c.req.url.replace('/daily-fatigue', '/fadiga-checkin'), c.req.raw), c.env, c.executionCtx);
+});
+
 router.post('/fadiga-checkin', async (c) => {
   try {
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
@@ -339,9 +955,16 @@ router.post('/fadiga-checkin', async (c) => {
       return c.json({ success: false, error: parsed.error.flatten() }, 400);
     }
 
-    const input = parsed.data;
-    const dataCheckin = input.data_checkin || todayIso();
-    const horasSono = calcularHorasSono(input.hora_dormiu, input.hora_acordou);
+    const fitNorm = normalizeFitForDutyPayload(parsed.data);
+    if ('conflict' in fitNorm) {
+      return c.json(
+        { success: false, error: 'payload_conflict', message: 'fit_for_duty e apto possuem valores conflitantes' },
+        400,
+      );
+    }
+
+    const input = normalizeCheckinInput(parsed.data);
+    const dataCheckin = input.dataCheckin;
 
     const config = await getConfig(c.env.DB, empresaId);
     if (!config.ativo) {
@@ -357,7 +980,31 @@ router.post('/fadiga-checkin', async (c) => {
       peso_sintomas: config.peso_sintomas,
     };
 
-    const score = calcularScoreFadiga(buildScoreInput(input, horasSono), scoreConfig);
+    const scoreBase = calcularScoreFadiga(buildScoreInput(input), scoreConfig);
+    const dailyRiskLevel = evaluateDailyRisk(input);
+    const finalNivel =
+      dailyRiskLevel === 'unfit_for_duty' || dailyRiskLevel === 'critical'
+        ? 'VERMELHO'
+        : dailyRiskLevel === 'attention' && scoreBase.nivel_fadiga === 'VERDE'
+          ? 'AMARELO'
+          : scoreBase.nivel_fadiga;
+    const finalStatusOperacional =
+      dailyRiskLevel === 'unfit_for_duty'
+        ? 'NAO_APTO'
+        : dailyRiskLevel === 'critical'
+          ? 'RESTRITO'
+          : scoreBase.status_operacional;
+    const requiresOperationalReview =
+      dailyRiskLevel !== 'normal' || scoreBase.requires_frat_review === 1 ? 1 : 0;
+    const wakeTime = input.horaAcordou;
+    const recomendacaoFinal =
+      dailyRiskLevel === 'unfit_for_duty'
+        ? 'Revisão operacional imediata: tripulante reportou condição não segura para jornada.'
+        : dailyRiskLevel === 'critical'
+          ? 'Risco crítico em fadiga diária: revisão operacional imediata recomendada.'
+          : dailyRiskLevel === 'attention'
+            ? 'Sinalização de atenção em fadiga diária: revisar jornada com coordenação.'
+            : scoreBase.recomendacao;
 
     const now = nowSql();
     const existing = await c.env.DB.prepare(
@@ -395,30 +1042,47 @@ router.post('/fadiga-checkin', async (c) => {
                meds_ult_12h = ?,
                alcool_ult_12h = ?,
                risco_autoavaliado = ?,
+               horas_sono_48h = ?,
+               wake_time = ?,
+               subjective_fatigue_level = ?,
+               sleepiness_level = ?,
+               fit_for_duty = ?,
+               computed_risk_level = ?,
+               requires_operational_review = ?,
+               report_source = 'CREW_REPORTED',
+               submitted_at = ?,
                origem_registro = 'TRIPULANTE',
                updated_at = ?
            WHERE id = ?`,
       )
         .bind(
           horaCheckin,
-          input.kss_score,
-          horasSono,
-          input.qualidade_sono,
+          input.kssScore,
+          input.horasSono24h,
+          input.qualidadeSono,
           sintomasJson,
-          input.observacoes ?? null,
-          score.score_fadiga,
-          score.nivel_fadiga,
-          score.status_operacional,
-          score.recomendacao,
+          input.observacoes,
+          scoreBase.score_fadiga,
+          finalNivel,
+          finalStatusOperacional,
+          recomendacaoFinal,
           input.apto,
-          score.requires_frat_review,
-          score.frat_sugerido_nivel,
-          input.jornada_inicio_prevista ?? null,
+          requiresOperationalReview,
+          scoreBase.frat_sugerido_nivel,
+          input.jornadaInicioPrevista,
           null,
           null,
-          input.meds_ult_12h,
-          input.alcool_ult_12h,
-          input.risco_autoavaliado ?? null,
+          input.medsUlt12h,
+          input.alcoolUlt12h,
+          input.riscoAutoavaliado,
+          input.horasSono48h,
+          wakeTime,
+          input.subjectiveFatigueLevel,
+          input.sleepinessLevel,
+          input.apto,
+          dailyRiskLevel,
+          requiresOperationalReview,
+          now,
           now,
           checkinId,
         )
@@ -433,8 +1097,10 @@ router.post('/fadiga-checkin', async (c) => {
              apto, requires_frat_review, frat_sugerido_nivel, associado_frat_avaliacao_id,
              jornada_inicio_prevista, jornada_fim_prevista, horas_acordado,
              meds_ult_12h, alcool_ult_12h, risco_autoavaliado,
+             horas_sono_48h, wake_time, subjective_fatigue_level, sleepiness_level,
+             fit_for_duty, computed_risk_level, requires_operational_review, report_source, submitted_at,
              origem_registro, created_by, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
         .bind(
           checkinId,
@@ -442,25 +1108,34 @@ router.post('/fadiga-checkin', async (c) => {
           funcionarioId,
           dataCheckin,
           horaCheckin,
-          input.kss_score,
-          horasSono,
-          input.qualidade_sono,
+          input.kssScore,
+          input.horasSono24h,
+          input.qualidadeSono,
           sintomasJson,
-          input.observacoes ?? null,
-          score.score_fadiga,
-          score.nivel_fadiga,
-          score.status_operacional,
-          score.recomendacao,
+          input.observacoes,
+          scoreBase.score_fadiga,
+          finalNivel,
+          finalStatusOperacional,
+          recomendacaoFinal,
           input.apto,
-          score.requires_frat_review,
-          score.frat_sugerido_nivel,
+          requiresOperationalReview,
+          scoreBase.frat_sugerido_nivel,
           null,
-          input.jornada_inicio_prevista ?? null,
+          input.jornadaInicioPrevista,
           null,
           null,
-          input.meds_ult_12h,
-          input.alcool_ult_12h,
-          input.risco_autoavaliado ?? null,
+          input.medsUlt12h,
+          input.alcoolUlt12h,
+          input.riscoAutoavaliado,
+          input.horasSono48h,
+          wakeTime,
+          input.subjectiveFatigueLevel,
+          input.sleepinessLevel,
+          input.apto,
+          dailyRiskLevel,
+          requiresOperationalReview,
+          'CREW_REPORTED',
+          now,
           'TRIPULANTE',
           userId || null,
           now,
@@ -474,7 +1149,7 @@ router.post('/fadiga-checkin', async (c) => {
       checkinId,
       funcionarioId,
       dataCheckin,
-      horasSono,
+      input.horasSono24h,
       empresaId,
     );
 
@@ -489,29 +1164,45 @@ router.post('/fadiga-checkin', async (c) => {
         checkinId,
         eventType,
         JSON.stringify({
-          score_fadiga: score.score_fadiga,
-          nivel_fadiga: score.nivel_fadiga,
-          status_operacional: score.status_operacional,
-          componentes: score.componentes,
+          score_fadiga: scoreBase.score_fadiga,
+          nivel_fadiga: finalNivel,
+          status_operacional: finalStatusOperacional,
+          computed_risk_level: dailyRiskLevel,
+          requires_operational_review: requiresOperationalReview,
+          componentes: scoreBase.componentes,
         }),
         now,
       )
       .run();
 
-    if (score.nivel_fadiga === 'LARANJA' || score.nivel_fadiga === 'VERMELHO') {
+    await createDailyFatigueAlert({
+      db: c.env.DB,
+      empresaId,
+      tripulanteId: funcionarioId,
+      dataCheckin,
+      riskLevel: dailyRiskLevel,
+      scoreFadiga: scoreBase.score_fadiga,
+      horasSono24h: input.horasSono24h,
+      wakeTime,
+      checkinId,
+    });
+
+    if (dailyRiskLevel !== 'normal' || finalNivel === 'LARANJA' || finalNivel === 'VERMELHO') {
       await c.env.DB.prepare(
         `INSERT INTO notificacoes_sistema
            (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
            VALUES ('FRMS_CHECKIN_FADIGA', 'ALTA', 'Check-in de fadiga em atenção', ?, 'frms', ?, datetime('now'), datetime('now'))`,
       )
         .bind(
-          `Tripulante #${funcionarioId} registrou nível ${score.nivel_fadiga} em ${dataCheckin}.`,
+          `Tripulante #${funcionarioId} registrou risco ${dailyRiskLevel} em ${dataCheckin}. Revisão operacional necessária.`,
           JSON.stringify({
             empresa_id: empresaId,
             funcionario_id: funcionarioId,
             checkin_id: checkinId,
-            score_fadiga: score.score_fadiga,
-            nivel_fadiga: score.nivel_fadiga,
+            score_fadiga: scoreBase.score_fadiga,
+            nivel_fadiga: finalNivel,
+            computed_risk_level: dailyRiskLevel,
+            requires_operational_review: requiresOperationalReview,
           }),
         )
         .run();
@@ -524,7 +1215,11 @@ router.post('/fadiga-checkin', async (c) => {
           crypto.randomUUID(),
           empresaId,
           checkinId,
-          JSON.stringify({ nivel_fadiga: score.nivel_fadiga, score_fadiga: score.score_fadiga }),
+          JSON.stringify({
+            nivel_fadiga: finalNivel,
+            score_fadiga: scoreBase.score_fadiga,
+            computed_risk_level: dailyRiskLevel,
+          }),
           now,
         )
         .run();
@@ -539,8 +1234,10 @@ router.post('/fadiga-checkin', async (c) => {
       dados_novos: {
         funcionario_id: funcionarioId,
         data_checkin: dataCheckin,
-        score_fadiga: score.score_fadiga,
-        nivel_fadiga: score.nivel_fadiga,
+        score_fadiga: scoreBase.score_fadiga,
+        nivel_fadiga: finalNivel,
+        computed_risk_level: dailyRiskLevel,
+        requires_operational_review: requiresOperationalReview,
       },
       ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
       user_agent: c.req.header('user-agent'),
@@ -555,7 +1252,8 @@ router.post('/fadiga-checkin', async (c) => {
         checkin_id: checkinId,
         funcionario_id: funcionarioId,
         data_checkin: dataCheckin,
-        nivel_fadiga: score.nivel_fadiga,
+        nivel_fadiga: finalNivel,
+        computed_risk_level: dailyRiskLevel,
       },
       ipAddress: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || undefined,
       userAgent: c.req.header('user-agent') || undefined,
@@ -572,22 +1270,29 @@ router.post('/fadiga-checkin', async (c) => {
           funcionario_id: funcionarioId,
           data_checkin: dataCheckin,
           hora_checkin: horaCheckin,
-          kss_score: input.kss_score,
-          horas_sono: horasSono,
-          qualidade_sono: input.qualidade_sono,
+          kss_score: input.kssScore,
+          horas_sono: input.horasSono24h,
+          horas_sono_48h: input.horasSono48h,
+          wake_time: wakeTime,
+          qualidade_sono: input.qualidadeSono,
           sintomas_json: input.sintomas,
-          observacoes: input.observacoes ?? null,
-          score_fadiga: score.score_fadiga,
-          nivel_fadiga: score.nivel_fadiga,
-          status_operacional: score.status_operacional,
-          recomendacao: score.recomendacao,
+          observacoes: input.observacoes,
+          score_fadiga: scoreBase.score_fadiga,
+          nivel_fadiga: finalNivel,
+          status_operacional: finalStatusOperacional,
+          recomendacao: recomendacaoFinal,
+          subjective_fatigue_level: input.subjectiveFatigueLevel,
+          sleepiness_level: input.sleepinessLevel,
+          fit_for_duty: input.apto === 1,
+          computed_risk_level: dailyRiskLevel,
+          requires_operational_review: requiresOperationalReview,
           apto: input.apto,
-          requires_frat_review: score.requires_frat_review,
-          frat_sugerido_nivel: score.frat_sugerido_nivel,
-          jornada_inicio_prevista: input.jornada_inicio_prevista ?? null,
-          meds_ult_12h: input.meds_ult_12h,
-          alcool_ult_12h: input.alcool_ult_12h,
-          risco_autoavaliado: input.risco_autoavaliado ?? null,
+          requires_frat_review: requiresOperationalReview,
+          frat_sugerido_nivel: scoreBase.frat_sugerido_nivel,
+          jornada_inicio_prevista: input.jornadaInicioPrevista,
+          meds_ult_12h: input.medsUlt12h,
+          alcool_ult_12h: input.alcoolUlt12h,
+          risco_autoavaliado: input.riscoAutoavaliado,
         },
         sincronizacao_frms: {
           sincronizado: sync.sincronizado,
@@ -769,6 +1474,50 @@ router.get('/fadiga-checkin/painel-gestor', requireRole('manager'), async (c) =>
     return c.json({ success: true, data: rows.results || [] });
   } catch {
     return c.json({ success: false, error: 'Erro ao carregar painel do gestor' }, 500);
+  }
+});
+
+router.get('/fadiga-checkin/painel', requireRole('manager'), async (c) => {
+  try {
+    const date = c.req.query('data') || todayIso();
+    const response = await router.fetch(
+      new Request(`${c.req.url.split('?')[0].replace('/fadiga-checkin/painel', '/daily-fatigue')}?date=${encodeURIComponent(date)}&scope=team`, c.req.raw),
+      c.env,
+      c.executionCtx,
+    );
+    const payload = (await response.json()) as {
+      success?: boolean;
+      data?: { items?: Array<Record<string, unknown>> };
+    };
+    const items = payload.data?.items || [];
+    const total = items.filter((item) => item.status !== 'no_duty').length;
+    const critico = items.filter(
+      (item) => item.status === 'critical' || item.status === 'unfit_for_duty',
+    ).length;
+    const atencao = items.filter((item) => item.status === 'attention').length;
+    const naoPreenchida = items.filter((item) => item.status === 'not_submitted').length;
+    const mediaScoreRaw = items
+      .map((item) => Number(item.score_fadiga || 0))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    return c.json({
+      success: true,
+      data: {
+        data: date,
+        resumo: {
+          total_checkins: total,
+          critico,
+          alto: atencao,
+          nao_preenchida: naoPreenchida,
+          media_score: mediaScoreRaw.length
+            ? mediaScoreRaw.reduce((acc, curr) => acc + curr, 0) / mediaScoreRaw.length
+            : 0,
+        },
+        itens: items,
+      },
+    });
+  } catch {
+    return c.json({ success: false, error: 'Erro ao carregar painel diário de fadiga' }, 500);
   }
 });
 
