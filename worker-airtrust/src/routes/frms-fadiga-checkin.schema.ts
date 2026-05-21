@@ -69,9 +69,14 @@ export const CheckinCreateSchema = z
     path: ['horas_sono_24h'],
   })
   .refine((data) => {
-    const aptoNormalizado =
-      typeof data.apto === 'number' ? data.apto : data.fit_for_duty === false ? 0 : 1;
-    return !(aptoNormalizado === 0 && !data.motivo_inaptidao);
+    // fit_for_duty is canonical; apto is legacy fallback
+    const fitForDutyNorm =
+      typeof data.fit_for_duty === 'boolean'
+        ? data.fit_for_duty
+        : typeof data.apto === 'number'
+          ? data.apto === 1
+          : true;
+    return !(fitForDutyNorm === false && !data.motivo_inaptidao);
   }, {
     message: 'motivo_inaptidao é obrigatório quando fit_for_duty/apto indicar inaptidão',
     path: ['motivo_inaptidao'],

@@ -222,6 +222,25 @@ function mapNivelToLegacy(
   return 'CRITICO';
 }
 
+/**
+ * Resolves the canonical fit-for-duty value from the two accepted fields.
+ * Returns { conflict: true } if both fields are present with contradictory values.
+ * fit_for_duty is the canonical field; apto is accepted as legacy compatibility only.
+ */
+function normalizeFitForDutyPayload(
+  input: Pick<CheckinCreateInput, 'fit_for_duty' | 'apto'>,
+): { apto: 0 | 1 } | { conflict: true } {
+  const hasApto = typeof input.apto === 'number';
+  const hasFitForDuty = typeof input.fit_for_duty === 'boolean';
+  if (hasApto && hasFitForDuty) {
+    if ((input.apto === 1) !== input.fit_for_duty) return { conflict: true };
+    return { apto: input.fit_for_duty ? 1 : 0 };
+  }
+  if (hasFitForDuty) return { apto: input.fit_for_duty ? 1 : 0 };
+  if (hasApto) return { apto: input.apto === 0 ? 0 : 1 };
+  return { apto: 1 };
+}
+
 function normalizeCheckinInput(input: CheckinCreateInput): NormalizedCheckinInput {
   const dataCheckin = input.reference_date || input.data_checkin || todayIso();
   const horaAcordou = input.wake_time || input.hora_acordou || '06:00';
@@ -242,11 +261,12 @@ function normalizeCheckinInput(input: CheckinCreateInput): NormalizedCheckinInpu
     typeof input.subjective_fatigue_level === 'number'
       ? clamp(input.subjective_fatigue_level, 0, 10)
       : null;
-  const aptoNormalizado =
-    typeof input.apto === 'number'
-      ? (input.apto === 0 ? 0 : 1)
-      : input.fit_for_duty === false
-        ? 0
+  // fit_for_duty is canonical; apto is legacy. Conflict is caught upstream by normalizeFitForDutyPayload.
+  const aptoNormalizado: 0 | 1 =
+    typeof input.fit_for_duty === 'boolean'
+      ? input.fit_for_duty ? 1 : 0
+      : typeof input.apto === 'number'
+        ? input.apto === 0 ? 0 : 1
         : 1;
   const riscoAutoavaliado =
     typeof input.risco_autoavaliado === 'number'
@@ -450,6 +470,7 @@ async function createDailyFatigueAlert(params: {
           AND nivel = ?
           AND date(created_at) = ?
           AND mensagem LIKE '[FADIGA_DIARIA]%'
+          AND resolvido = 0
           AND deleted_at IS NULL
         LIMIT 1`,
     )
@@ -674,6 +695,9 @@ router.get('/daily-fatigue', async (c) => {
       });
     }
 
+    const limit = Math.min(Math.max(Number(c.req.query('limit') || 100), 1), 500);
+    const offset = Math.max(Number(c.req.query('offset') || 0), 0);
+
     const defaults = await getFrmsSleepDefaults(c.env.DB);
     const rows = await c.env.DB
       .prepare(
@@ -716,9 +740,10 @@ router.get('/daily-fatigue', async (c) => {
              WHEN ch.computed_risk_level = 'attention' THEN 3
              ELSE 4
            END,
-           f.nome ASC`,
+           f.nome ASC
+         LIMIT ? OFFSET ?`,
       )
-      .bind(date, date, empresaId)
+      .bind(date, date, empresaId, limit, offset)
       .all<Record<string, unknown>>();
 
     const itens = (rows.results || []).map((row) => {
@@ -779,6 +804,7 @@ router.get('/daily-fatigue', async (c) => {
           minutos_antes_apresentacao: defaults.minutosAntesApresentacao,
         },
         items: itens,
+        pagination: { limit, offset },
       },
     });
   } catch {
@@ -927,6 +953,14 @@ router.post('/fadiga-checkin', async (c) => {
     const parsed = CheckinCreateSchema.safeParse(body);
     if (!parsed.success) {
       return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    }
+
+    const fitNorm = normalizeFitForDutyPayload(parsed.data);
+    if ('conflict' in fitNorm) {
+      return c.json(
+        { success: false, error: 'payload_conflict', message: 'fit_for_duty e apto possuem valores conflitantes' },
+        400,
+      );
     }
 
     const input = normalizeCheckinInput(parsed.data);
