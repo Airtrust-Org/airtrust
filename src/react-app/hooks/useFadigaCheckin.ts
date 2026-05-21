@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/react-app/lib/apiFetch';
+import { getAccessToken } from '@/react-app/config/api';
 
 export interface FadigaCheckinItem {
   id: string;
@@ -79,8 +80,10 @@ export interface FadigaAnalyticsResponse {
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAccessToken();
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   const response = await apiFetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     ...init,
   });
   const json = (await response.json()) as { success: boolean; data?: T; error?: string };
