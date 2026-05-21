@@ -14,6 +14,7 @@ import {
   CalendarClock,
   CheckCircle2,
   LockKeyhole,
+  HeartPulse,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -43,6 +44,18 @@ interface AccessCard {
 
 function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
   const cards: AccessCard[] = [];
+
+  // Fadiga Diária — primeiro card para tripulantes/instrutores
+  if (['ALUNO', 'INSTRUTOR', 'USUARIO'].includes(role)) {
+    cards.push({
+      icon: <HeartPulse className="w-7 h-7" />,
+      title: 'Fadiga Diária',
+      description: 'Registre rapidamente seu estado antes da jornada.',
+      route: '/frms/fadiga-checkin',
+      color: 'bg-amber-50',
+      iconColor: 'text-amber-600',
+    });
+  }
 
   // Minha Escala
   if (can('self.escala')) {
