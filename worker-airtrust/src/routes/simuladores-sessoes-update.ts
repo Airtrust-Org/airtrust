@@ -432,9 +432,11 @@ app.put('/sessoes/:id', async (c) => {
     )
       .bind(id)
       .first();
+    console.log('[QUAL_PLANEJADA] PUT: hasPlanejadas=', !!hasPlanejadas, 'sessaoId=', id);
     if (!hasPlanejadas) {
       const tipoSessaoPut = (b.tipo_sessao || (a as any).tipo_sessao || '').toString();
       let modeloIdPut = Number(templateIdFinal || (a as any).template_id || 0) || null;
+      console.log('[QUAL_PLANEJADA] PUT: tipoSessaoPut=', tipoSessaoPut, 'modeloIdPut(inicial)=', modeloIdPut, 'templateIdFinal=', templateIdFinal);
       if (!modeloIdPut && tipoSessaoPut) {
         const fallbackModelo = await c.env.DB.prepare(
           `SELECT ms.id
@@ -447,8 +449,10 @@ app.put('/sessoes/:id', async (c) => {
         )
           .bind(tipoSessaoPut, modeloAeronaveSessao)
           .first<{ id: number }>();
+        console.log('[QUAL_PLANEJADA] PUT: fallbackModelo=', fallbackModelo, 'modeloAeronaveSessao=', modeloAeronaveSessao);
         if (fallbackModelo) modeloIdPut = fallbackModelo.id;
       }
+      console.log('[QUAL_PLANEJADA] PUT: modeloIdPut(final)=', modeloIdPut);
       if (modeloIdPut) {
         const participantesRows = await c.env.DB.prepare(
           `SELECT DISTINCT fs.colaborador_id_aluno AS funcionario_id
@@ -457,6 +461,7 @@ app.put('/sessoes/:id', async (c) => {
         )
           .bind(id)
           .all<{ funcionario_id: number }>();
+        console.log('[QUAL_PLANEJADA] PUT: participantes=', participantesRows.results?.length || 0);
         if (participantesRows.results?.length) {
           try {
             await criarQualificacoesPlanejadas(c.env.DB, {
@@ -467,6 +472,7 @@ app.put('/sessoes/:id', async (c) => {
               participantes: participantesRows.results,
               empresaId: Number((c as any).get('empresaId') || 0),
             });
+            console.log('[QUAL_PLANEJADA] PUT: criadas com sucesso');
           } catch (err) {
             console.error('[QUAL_PLANEJADA] PUT: Falha ao criar planejadas:', err);
           }
