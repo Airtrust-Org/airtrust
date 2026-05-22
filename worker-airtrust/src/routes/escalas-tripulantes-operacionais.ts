@@ -137,6 +137,7 @@ tripulantesOperacionais.get('/', auth(), async (c) => {
     soft_conflict?: boolean;
     conflict_reason?: string | null;
     conflict_code?: string | null;
+    motivo_bloqueio?: string | null;
   };
   let tripulantesComQuinzena: TripulanteComQuinzena[] = tripulantes;
   if (tripulantes.length > 0) {
@@ -378,6 +379,32 @@ tripulantesOperacionais.get('/', auth(), async (c) => {
       };
     });
   }
+
+  // Na EVD, FRMS crítico/violação é soft_conflict selecionável — não hard block.
+  // A coordenação/gestor de segurança pode escalar com justificativa visível.
+  // CMA vencido e outros hard blocks operacionais continuam bloqueando.
+  tripulantesComQuinzena = tripulantesComQuinzena.map((tripulante) => {
+    if (tripulante.status_operacional !== 'BLOQUEADO_FRMS' || tripulante.pode_ser_alocado)
+      return tripulante;
+    return {
+      ...tripulante,
+      pode_ser_alocado: true,
+      soft_conflict: true,
+      conflict_code: 'FRMS_CRITICAL',
+      conflict_reason: 'Alerta FRMS crítico ou violação não resolvida',
+      motivo_bloqueio: null,
+    };
+  });
+
+  // Garantir que todo hard block restante tenha motivo_bloqueio legível.
+  tripulantesComQuinzena = tripulantesComQuinzena.map((tripulante) => {
+    if (tripulante.pode_ser_alocado || tripulante.motivo_bloqueio) return tripulante;
+    const motivo =
+      tripulante.status_operacional === 'BLOQUEADO_CMA'
+        ? 'CMA vencido ou sem registro válido'
+        : 'Indisponível por restrição operacional';
+    return { ...tripulante, motivo_bloqueio: motivo };
+  });
 
   const aptos = tripulantesComQuinzena.filter((tripulante) => tripulante.pode_ser_alocado);
   const bloqueados = tripulantesComQuinzena.filter((tripulante) => !tripulante.pode_ser_alocado);
