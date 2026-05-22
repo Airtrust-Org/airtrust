@@ -1644,6 +1644,7 @@ function EvdCreateForm({
 
       const body = {
         data,
+        escala_id: escalaId || undefined,
         pic_id: picId,
         sic_id: sicId,
         pic_funcao: picSelecionado?.role || 'Qualificação: a validar',
@@ -1928,7 +1929,7 @@ function EvdCreateForm({
                 type="text"
                 value={form.base}
                 onChange={(e) => setForm((prev) => ({ ...prev, base: e.target.value.toUpperCase() }))}
-                placeholder="SBCB / Base"
+                placeholder="Ex.: SBME"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
             </div>

@@ -44,6 +44,10 @@ const MSG_REST_INVALID = 'Repouso mínimo não atendido.';
 const MSG_AIRCRAFT_UNAVAILABLE = 'Aeronave indisponível ou inativa no cadastro mestre.';
 const MSG_MODEL_QUALIFICATION = 'Tripulante sem habilitação cadastrada para o modelo da aeronave.';
 const MSG_MONTHLY_UNAVAILABLE = 'Tripulante indisponível na escala mensal para esta data/período.';
+const MSG_FERIAS_UNAVAILABLE = 'Tripulante em afastamento/férias neste período.';
+const MSG_SITUACAO_BLOCK = (situacao: string) =>
+  `Tripulante indisponível: situação ${situacao} em outra escala.`;
+const MSG_OTHER_ESCALA_BLOCK = 'Tripulante alocado operacionalmente em outra escala neste período.';
 const MSG_PIC_ROLE_REVIEW =
   'Função PIC requer validação operacional: cadastro de função não é canônico.';
 const MSG_AIRCRAFT_UNRESOLVED =
@@ -394,7 +398,7 @@ async function validateCrewAvailabilityOnMonthlyScale(params: {
   if (ferias) {
     return {
       blocked: true,
-      message: MSG_MONTHLY_UNAVAILABLE,
+      message: MSG_FERIAS_UNAVAILABLE,
     };
   }
 
@@ -424,18 +428,27 @@ async function validateCrewAvailabilityOnMonthlyScale(params: {
 
   for (const row of conflitos.results || []) {
     if (row.aeronave_id != null) {
+      // Mesma escala mensal: alocação operacional já contemplada — não bloquear.
       if (params.escalaId && String(row.escala_id || '') === String(params.escalaId)) {
         continue;
       }
       // Sem escala_id vinculada no EVD não há como afirmar conflito operacional com segurança.
       if (!params.escalaId) continue;
-      return { blocked: true, message: MSG_MONTHLY_UNAVAILABLE };
+      return { blocked: true, message: MSG_OTHER_ESCALA_BLOCK };
     }
 
     const situacao = String(row.situacao_tipo || '').trim().toUpperCase();
     if (!situacao || situacao === 'FOLGA') continue;
+    // Mesma escala mensal: situação já contemplada no contexto da escala — não bloquear.
+    // (Consistente com lógica do GET /tripulantes-operacionais via mesmoEscalaAtual.)
+    if (params.escalaId && String(row.escala_id || '') === String(params.escalaId)) {
+      continue;
+    }
     if (Number(row.bloqueia_alocacao ?? 1) === 1) {
-      return { blocked: true, message: MSG_MONTHLY_UNAVAILABLE };
+      return {
+        blocked: true,
+        message: MSG_SITUACAO_BLOCK(situacao),
+      };
     }
   }
 
