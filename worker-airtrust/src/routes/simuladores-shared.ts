@@ -497,7 +497,7 @@ export async function criarQualificacoesPlanejadas(
     participantes: Array<{ funcionario_id: number }>;
     empresaId: number;
   },
-): Promise<void> {
+): Promise<{ criadas: number; puladas: number; conflitosUniques: number }> {
   const modelo = await db
     .prepare(
       `SELECT ms.gera_qualificacao, ms.qualificacao_tipo_id, ms.duracao_estimada,
@@ -519,7 +519,7 @@ export async function criarQualificacoesPlanejadas(
     }>();
 
   if (!modelo || !modelo.gera_qualificacao || !modelo.qualificacao_tipo_id || !modelo.qual_codigo) {
-    return;
+    return { criadas: 0, puladas: 0, conflitosUniques: 0 };
   }
 
   // Mapear tipo_sessao → tipo_treinamento (CHECK constraint: INICIAL, RECORRENTE, SEMESTRAL, UPGRADE, ESPECIFICO)
@@ -531,8 +531,12 @@ export async function criarQualificacoesPlanejadas(
   const tipoTreinamento = TIPO_TREINAMENTO_MAP[params.tipoSessao?.toUpperCase()] || params.tipoSessao || null;
 
   const stmts: ReturnType<typeof db.prepare>[] = [];
+  let criadas = 0;
+  let puladas = 0;
+  let conflitosUniques = 0;
 
   for (const part of params.participantes) {
+    // Check 1: already has a planejada linked to this session
     const existing = await db
       .prepare(
         `SELECT id FROM qualificacoes_historico
@@ -541,7 +545,30 @@ export async function criarQualificacoesPlanejadas(
       .bind(params.sessaoId, part.funcionario_id)
       .first();
 
-    if (existing) continue;
+    if (existing) {
+      puladas++;
+      continue;
+    }
+
+    // Check 2: UNIQUE constraint on (funcionario_id, qualificacao_codigo, data_conclusao)
+    // If a non-deleted record exists for this person+code+date (any status, any session),
+    // the INSERT would fail with SQLITE_CONSTRAINT_UNIQUE.
+    const uniqueConflict = await db
+      .prepare(
+        `SELECT id, status, sessao_id FROM qualificacoes_historico
+         WHERE funcionario_id = ?
+           AND qualificacao_codigo = ?
+           AND data_conclusao = ?
+           AND deleted_at IS NULL
+         LIMIT 1`,
+      )
+      .bind(part.funcionario_id, modelo.qual_codigo, params.data)
+      .first<{ id: number; status: string; sessao_id: number | null }>();
+
+    if (uniqueConflict) {
+      conflitosUniques++;
+      continue;
+    }
 
     stmts.push(
       db
@@ -570,5 +597,8 @@ export async function criarQualificacoesPlanejadas(
 
   if (stmts.length > 0) {
     await db.batch(stmts);
+    criadas = stmts.length;
   }
+
+  return { criadas, puladas, conflitosUniques };
 }

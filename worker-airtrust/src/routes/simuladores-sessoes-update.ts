@@ -487,7 +487,7 @@ app.put('/sessoes/:id', async (c) => {
         diag.numParticipantes = participantesRows.length;
         if (participantesRows.length > 0) {
           try {
-            await criarQualificacoesPlanejadas(c.env.DB, {
+            const res = await criarQualificacoesPlanejadas(c.env.DB, {
               sessaoId: Number(id),
               modeloId: modeloIdPut,
               tipoSessao: tipoSessaoPut,
@@ -495,7 +495,10 @@ app.put('/sessoes/:id', async (c) => {
               participantes: participantesRows,
               empresaId: Number((c as any).get('empresaId') || 0),
             });
-            diag.resultado = 'criadas';
+            diag.resultado = res.criadas > 0 ? 'criadas' : 'sem_novas';
+            diag.criadas = res.criadas;
+            diag.puladas = res.puladas;
+            diag.conflitosUniques = res.conflitosUniques;
           } catch (err: any) {
             diag.resultado = 'erro';
             diag.erro = err?.message || String(err);
