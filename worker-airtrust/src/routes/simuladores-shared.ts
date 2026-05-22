@@ -450,3 +450,94 @@ export async function audit(db: D1Database, p: any) {
     console.error('audit:', e);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPER: Criar qualificações PLANEJADAS ao agendar uma sessão
+// Vincula pelo campo sessao_id (migration 0098). Sem duplication: verifica
+// existência prévia pelo par (sessao_id, funcionario_id).
+// ─────────────────────────────────────────────────────────────────────────────
+export async function criarQualificacoesPlanejadas(
+  db: D1Database,
+  params: {
+    sessaoId: number;
+    modeloId: number;
+    tipoSessao: string;
+    data: string;
+    participantes: Array<{ funcionario_id: number }>;
+    empresaId: number;
+  },
+): Promise<void> {
+  const modelo = await db
+    .prepare(
+      `SELECT ms.gera_qualificacao, ms.qualificacao_tipo_id, ms.duracao_estimada,
+              qt.codigo  AS qual_codigo,
+              qt.categoria AS qual_categoria,
+              qt.validade  AS qual_validade
+       FROM modelos_sessao ms
+       LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id AND qt.deleted_at IS NULL
+       WHERE ms.id = ? AND ms.deleted_at IS NULL`,
+    )
+    .bind(params.modeloId)
+    .first<{
+      gera_qualificacao: number;
+      qualificacao_tipo_id: number | null;
+      duracao_estimada: number | null;
+      qual_codigo: string | null;
+      qual_categoria: string | null;
+      qual_validade: number | null;
+    }>();
+
+  if (!modelo || !modelo.gera_qualificacao || !modelo.qualificacao_tipo_id || !modelo.qual_codigo) {
+    return;
+  }
+
+  // Mapear tipo_sessao → tipo_treinamento (CHECK constraint: INICIAL, RECORRENTE, SEMESTRAL, UPGRADE, ESPECIFICO)
+  const TIPO_TREINAMENTO_MAP: Record<string, string> = {
+    INI: 'INICIAL',
+    PER: 'RECORRENTE',
+    SEM: 'SEMESTRAL',
+  };
+  const tipoTreinamento = TIPO_TREINAMENTO_MAP[params.tipoSessao?.toUpperCase()] || params.tipoSessao || null;
+
+  const stmts: ReturnType<typeof db.prepare>[] = [];
+
+  for (const part of params.participantes) {
+    const existing = await db
+      .prepare(
+        `SELECT id FROM qualificacoes_historico
+         WHERE sessao_id = ? AND funcionario_id = ? AND deleted_at IS NULL LIMIT 1`,
+      )
+      .bind(params.sessaoId, part.funcionario_id)
+      .first();
+
+    if (existing) continue;
+
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO qualificacoes_historico
+             (funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
+              data_conclusao, validade_meses, status, renovada,
+              carga_horaria, tipo_treinamento, empresa_id, sessao_id,
+              created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'PLANEJADA', 0, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+        )
+        .bind(
+          part.funcionario_id,
+          modelo.qualificacao_tipo_id,
+          modelo.qual_codigo,
+          modelo.qual_categoria || null,
+          params.data,
+          modelo.qual_validade || null,
+          modelo.duracao_estimada || null,
+          tipoTreinamento,
+          params.empresaId,
+          params.sessaoId,
+        ),
+    );
+  }
+
+  if (stmts.length > 0) {
+    await db.batch(stmts);
+  }
+}
