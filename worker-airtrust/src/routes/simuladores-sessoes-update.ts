@@ -22,6 +22,7 @@ import {
   resolveTemplateIdSessao,
   normalizeChecksSessao,
   criarQualificacoesPlanejadas,
+  listarParticipantesDaSessaoParaQualificacao,
 } from './simuladores-shared';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -440,39 +441,58 @@ app.put('/sessoes/:id', async (c) => {
       diag.tipoSessao = tipoSessaoPut;
       diag.modeloIdInicial = modeloIdPut;
       diag.templateIdFinal = templateIdFinal;
+
+      // Robust model fallback: prioritize gera_qualificacao=1, then name match
       if (!modeloIdPut && tipoSessaoPut) {
-        const fallbackModelo = await c.env.DB.prepare(
-          `SELECT ms.id
+        const upperNome = String(b.tema_sessao || (a as any).nome || '').trim().toUpperCase();
+
+        // Priority 1: model with gera_qualificacao=1 matching tipo_sessao + modelo_aeronave
+        let fallbackModelo = await c.env.DB.prepare(
+          `SELECT ms.id, ms.nome
            FROM modelos_sessao ms
            INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
            WHERE ts.codigo = ?
              AND ms.modelo_aeronave = ?
              AND ms.deleted_at IS NULL
+             AND ms.gera_qualificacao = 1
+           ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
            LIMIT 1`,
         )
-          .bind(tipoSessaoPut, modeloAeronaveSessao)
-          .first<{ id: number }>();
+          .bind(tipoSessaoPut, modeloAeronaveSessao, upperNome)
+          .first<{ id: number; nome: string }>();
+
+        // Priority 2: any model matching tipo_sessao + modelo_aeronave (prefer name match)
+        if (!fallbackModelo) {
+          fallbackModelo = await c.env.DB.prepare(
+            `SELECT ms.id, ms.nome
+             FROM modelos_sessao ms
+             INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+             WHERE ts.codigo = ?
+               AND ms.modelo_aeronave = ?
+               AND ms.deleted_at IS NULL
+             ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
+             LIMIT 1`,
+          )
+            .bind(tipoSessaoPut, modeloAeronaveSessao, upperNome)
+            .first<{ id: number; nome: string }>();
+        }
+
         diag.fallbackModelo = fallbackModelo?.id ?? null;
         if (fallbackModelo) modeloIdPut = fallbackModelo.id;
       }
       diag.modeloIdFinal = modeloIdPut;
+
       if (modeloIdPut) {
-        const participantesRows = await c.env.DB.prepare(
-          `SELECT DISTINCT fs.colaborador_id_aluno AS funcionario_id
-           FROM fichas_sessao fs
-           WHERE fs.agendamento_slot_id = ? AND fs.deleted_at IS NULL`,
-        )
-          .bind(id)
-          .all<{ funcionario_id: number }>();
-        diag.numParticipantes = participantesRows.results?.length || 0;
-        if (participantesRows.results?.length) {
+        const participantesRows = await listarParticipantesDaSessaoParaQualificacao(c.env.DB, id);
+        diag.numParticipantes = participantesRows.length;
+        if (participantesRows.length > 0) {
           try {
             await criarQualificacoesPlanejadas(c.env.DB, {
               sessaoId: Number(id),
               modeloId: modeloIdPut,
               tipoSessao: tipoSessaoPut,
               data: b.data || (a as any).data,
-              participantes: participantesRows.results,
+              participantes: participantesRows,
               empresaId: Number((c as any).get('empresaId') || 0),
             });
             diag.resultado = 'criadas';
