@@ -427,16 +427,19 @@ app.put('/sessoes/:id', async (c) => {
     }
 
     // Criar qualificações PLANEJADAS se a sessão ainda não as tiver (ex: sessão criada antes do deploy)
+    const diag: Record<string, unknown> = {};
     const hasPlanejadas = await c.env.DB.prepare(
       "SELECT 1 FROM qualificacoes_historico WHERE sessao_id=? AND status='PLANEJADA' AND deleted_at IS NULL LIMIT 1",
     )
       .bind(id)
       .first();
-    console.log('[QUAL_PLANEJADA] PUT: hasPlanejadas=', !!hasPlanejadas, 'sessaoId=', id);
+    diag.hasPlanejadas = !!hasPlanejadas;
     if (!hasPlanejadas) {
       const tipoSessaoPut = (b.tipo_sessao || (a as any).tipo_sessao || '').toString();
       let modeloIdPut = Number(templateIdFinal || (a as any).template_id || 0) || null;
-      console.log('[QUAL_PLANEJADA] PUT: tipoSessaoPut=', tipoSessaoPut, 'modeloIdPut(inicial)=', modeloIdPut, 'templateIdFinal=', templateIdFinal);
+      diag.tipoSessao = tipoSessaoPut;
+      diag.modeloIdInicial = modeloIdPut;
+      diag.templateIdFinal = templateIdFinal;
       if (!modeloIdPut && tipoSessaoPut) {
         const fallbackModelo = await c.env.DB.prepare(
           `SELECT ms.id
@@ -449,10 +452,10 @@ app.put('/sessoes/:id', async (c) => {
         )
           .bind(tipoSessaoPut, modeloAeronaveSessao)
           .first<{ id: number }>();
-        console.log('[QUAL_PLANEJADA] PUT: fallbackModelo=', fallbackModelo, 'modeloAeronaveSessao=', modeloAeronaveSessao);
+        diag.fallbackModelo = fallbackModelo?.id ?? null;
         if (fallbackModelo) modeloIdPut = fallbackModelo.id;
       }
-      console.log('[QUAL_PLANEJADA] PUT: modeloIdPut(final)=', modeloIdPut);
+      diag.modeloIdFinal = modeloIdPut;
       if (modeloIdPut) {
         const participantesRows = await c.env.DB.prepare(
           `SELECT DISTINCT fs.colaborador_id_aluno AS funcionario_id
@@ -461,7 +464,7 @@ app.put('/sessoes/:id', async (c) => {
         )
           .bind(id)
           .all<{ funcionario_id: number }>();
-        console.log('[QUAL_PLANEJADA] PUT: participantes=', participantesRows.results?.length || 0);
+        diag.numParticipantes = participantesRows.results?.length || 0;
         if (participantesRows.results?.length) {
           try {
             await criarQualificacoesPlanejadas(c.env.DB, {
@@ -472,12 +475,19 @@ app.put('/sessoes/:id', async (c) => {
               participantes: participantesRows.results,
               empresaId: Number((c as any).get('empresaId') || 0),
             });
-            console.log('[QUAL_PLANEJADA] PUT: criadas com sucesso');
-          } catch (err) {
-            console.error('[QUAL_PLANEJADA] PUT: Falha ao criar planejadas:', err);
+            diag.resultado = 'criadas';
+          } catch (err: any) {
+            diag.resultado = 'erro';
+            diag.erro = err?.message || String(err);
           }
+        } else {
+          diag.resultado = 'sem_participantes';
         }
+      } else {
+        diag.resultado = 'sem_modelo';
       }
+    } else {
+      diag.resultado = 'ja_tem_planejadas';
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -875,7 +885,7 @@ app.put('/sessoes/:id', async (c) => {
       }
     }
 
-    return c.json({ success: true, data: u });
+    return c.json({ success: true, data: u, _diag_planejadas: diag });
   } catch (e: any) {
     console.error('[PUT /sessoes] ERRO:', e);
     return c.json({ success: false, error: e.message }, 500);
