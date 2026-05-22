@@ -14,7 +14,7 @@ export const Header: React.FC = () => {
     { label: 'Painel', path: '/' },
     { label: 'Funcionários', path: '/funcionarios' },
     { label: 'Qualificações', path: '/qualificacoes' },
-    { label: 'Simuladores', path: '/simuladores' },
+    { label: 'Simuladores & Voo', path: '/simuladores' },
     { label: 'LMS', path: '/lms/cursos' },
     { label: 'Escala', path: '/escalas' },
     { label: 'FRMS', path: '/frms' },

@@ -24,7 +24,11 @@ const TabAgenda = lazyWithRetry(
   () => import('./simuladores/agenda/CalendarioAgendamentos'),
   'SimuladoresTabAgenda',
 );
-const TabFichas = lazyWithRetry(() => import('./simuladores/fichas/index'), 'SimuladoresTabFichas');
+const TabFichas = lazyWithRetry(
+  () =>
+    import('./simuladores/fichas/index').then((m) => ({ default: m.FichasAvaliacaoContent })),
+  'SimuladoresTabFichas',
+);
 const TabGestaoWrapper = lazyWithRetry(
   () => import('./simuladores/tabs/TabGestaoWrapper'),
   'SimuladoresTabGestao',

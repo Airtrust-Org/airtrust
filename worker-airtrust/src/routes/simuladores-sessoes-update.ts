@@ -416,6 +416,15 @@ app.put('/sessoes/:id', async (c) => {
       .bind(...updateBinds)
       .run();
 
+    // Sincronizar data_conclusao nas qualificações PLANEJADAS vinculadas (se a data mudou)
+    if (b.data && b.data !== (a as any).data) {
+      await c.env.DB.prepare(
+        "UPDATE qualificacoes_historico SET data_conclusao=?, updated_at=datetime('now') WHERE sessao_id=? AND status='PLANEJADA' AND deleted_at IS NULL",
+      )
+        .bind(b.data, id)
+        .run();
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // SINCRONIZAR instrutor_id nas fichas quando o instrutor da sessão muda.
     // Apenas fichas ainda não assinadas pelo instrutor (não concluídas).
@@ -856,6 +865,13 @@ app.delete('/sessoes/:id', async (c) => {
     // Soft delete das fichas vinculadas à sessão
     await c.env.DB.prepare(
       "UPDATE fichas_sessao SET deleted_at=datetime('now') WHERE agendamento_slot_id=?",
+    )
+      .bind(id)
+      .run();
+
+    // Cancelar qualificações PLANEJADAS vinculadas à sessão
+    await c.env.DB.prepare(
+      "UPDATE qualificacoes_historico SET deleted_at=datetime('now') WHERE sessao_id=? AND status='PLANEJADA' AND deleted_at IS NULL",
     )
       .bind(id)
       .run();

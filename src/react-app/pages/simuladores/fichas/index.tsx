@@ -149,7 +149,7 @@ const formatarHora = (dataHora?: string) => {
   return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 };
 
-export default function FichasSessao() {
+export function FichasAvaliacaoContent() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, isGestor, isAluno, isInstrutor } = usePermissions();
@@ -872,7 +872,7 @@ export default function FichasSessao() {
   };
 
   return (
-    <AppLayout>
+    <>
       <div className="space-y-4">
         {/* Busca e Filtros */}
         {!showAlunoSimplificado && (
@@ -1411,6 +1411,14 @@ export default function FichasSessao() {
           </div>
         )}
       </div>
+    </>
+  );
+}
+
+export default function FichasSessao() {
+  return (
+    <AppLayout>
+      <FichasAvaliacaoContent />
     </AppLayout>
   );
 }

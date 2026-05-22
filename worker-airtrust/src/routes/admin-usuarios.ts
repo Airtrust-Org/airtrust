@@ -323,18 +323,33 @@ adminUsuariosRoutes.get('/:id', async (c) => {
       SELECT
         u.id, u.email, u.nome, u.perfil, u.active,
         u.funcionario_id, f.nome AS funcionario_nome,
-        ue.empresa_id, u.created_at, u.last_login
+        (SELECT empresa_id FROM usuarios_empresas WHERE usuario_id = u.id LIMIT 1) AS empresa_id,
+        u.created_at, u.last_login
       FROM usuarios u
-      INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
       LEFT JOIN funcionarios f ON f.id = u.funcionario_id AND f.deleted_at IS NULL
       WHERE u.id = ? AND u.deleted_at IS NULL
       LIMIT 1
     `,
     )
-    .bind(empresaId, id)
+    .bind(id)
     .first<UserDetail>();
 
   if (!user) throw notFound('Usuário não encontrado');
+
+  // Verificar vínculo com a empresa (apenas para GESTOR — ADMIN pode ver qualquer usuário)
+  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
+    const vinculo = await db
+      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
+      .bind(id, empresaId)
+      .first();
+
+    if (!vinculo) {
+      throw forbidden(
+        'Usuário não pertence à sua empresa',
+        'WRONG_TENANT',
+      );
+    }
+  }
 
   // Carregar permissões individuais
   const permissoes = await db
@@ -492,17 +507,31 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     active?: boolean;
   }>();
 
-  // Verificar que usuário pertence à empresa
+  // Verificar que usuário existe
   const existente = await db
     .prepare(
       `SELECT u.id, u.perfil FROM usuarios u
-       INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
        WHERE u.id = ? AND u.deleted_at IS NULL LIMIT 1`,
     )
-    .bind(empresaId, id)
+    .bind(id)
     .first<{ id: number; perfil: string }>();
 
   if (!existente) throw notFound('Usuário não encontrado');
+
+  // Verificar vínculo com a empresa (apenas para GESTOR — ADMIN pode editar qualquer usuário)
+  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
+    const vinculo = await db
+      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
+      .bind(id, empresaId)
+      .first();
+
+    if (!vinculo) {
+      throw forbidden(
+        'Usuário não pertence à sua empresa',
+        'WRONG_TENANT',
+      );
+    }
+  }
 
   // Gestor não pode editar ADMINISTRADOR
   const targetPerfil = body?.perfil?.toUpperCase() || existente.perfil.toUpperCase();
@@ -587,16 +616,31 @@ adminUsuariosRoutes.delete('/:id', async (c) => {
 
   const db = c.env.DB;
 
+  // Buscar usuário (sem restrição de empresa para não bloquear órfãos)
   const existente = await db
     .prepare(
       `SELECT u.id, u.perfil FROM usuarios u
-       INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
        WHERE u.id = ? AND u.deleted_at IS NULL LIMIT 1`,
     )
-    .bind(empresaId, id)
+    .bind(id)
     .first<{ id: number; perfil: string }>();
 
   if (!existente) throw notFound('Usuário não encontrado');
+
+  // Verificar vínculo com a empresa (apenas para GESTOR — ADMIN pode gerenciar qualquer usuário)
+  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
+    const vinculo = await db
+      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
+      .bind(id, empresaId)
+      .first();
+
+    if (!vinculo) {
+      throw forbidden(
+        'Usuário não pertence à sua empresa',
+        'WRONG_TENANT',
+      );
+    }
+  }
 
   // Gestor não pode deletar ADMINISTRADOR
   if (
@@ -626,6 +670,7 @@ adminUsuariosRoutes.delete('/:id', async (c) => {
 adminUsuariosRoutes.post('/:id/invite', async (c) => {
   requireAdminOrGestor(getCallerRole(c), 'reenviar convite');
   const callerId = getCallerId(c);
+  const callerRole = getCallerRole(c);
   const { empresaId } = getTenantContext(c);
   const id = Number(c.req.param('id'));
   const db = c.env.DB;
@@ -634,13 +679,27 @@ adminUsuariosRoutes.post('/:id/invite', async (c) => {
   const user = await db
     .prepare(
       `SELECT u.id, u.email, u.nome, u.perfil FROM usuarios u
-       INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
        WHERE u.id = ? AND u.deleted_at IS NULL LIMIT 1`,
     )
-    .bind(empresaId, id)
+    .bind(id)
     .first<{ id: number; email: string; nome: string; perfil: string }>();
 
   if (!user) throw notFound('Usuário não encontrado');
+
+  // Verificar vínculo com a empresa (apenas para GESTOR)
+  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
+    const vinculo = await db
+      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
+      .bind(id, empresaId)
+      .first();
+
+    if (!vinculo) {
+      throw forbidden(
+        'Usuário não pertence à sua empresa',
+        'WRONG_TENANT',
+      );
+    }
+  }
 
   // Invalidar convites anteriores
   await db
@@ -690,6 +749,7 @@ adminUsuariosRoutes.post('/:id/invite', async (c) => {
 // ---------------------------------------------------------------------------
 adminUsuariosRoutes.get('/:id/permissoes', async (c) => {
   requireAdminOrGestor(getCallerRole(c), 'ver permissões');
+  const callerRole = getCallerRole(c);
   const { empresaId } = getTenantContext(c);
   const id = Number(c.req.param('id'));
   const db = c.env.DB;
@@ -698,13 +758,26 @@ adminUsuariosRoutes.get('/:id/permissoes', async (c) => {
   const exists = await db
     .prepare(
       `SELECT u.id FROM usuarios u
-       INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
        WHERE u.id = ? AND u.deleted_at IS NULL LIMIT 1`,
     )
-    .bind(empresaId, id)
+    .bind(id)
     .first();
 
   if (!exists) throw notFound('Usuário não encontrado');
+
+  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
+    const vinculo = await db
+      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
+      .bind(id, empresaId)
+      .first();
+
+    if (!vinculo) {
+      throw forbidden(
+        'Usuário não pertence à sua empresa',
+        'WRONG_TENANT',
+      );
+    }
+  }
 
   const permissoes = await db
     .prepare(
@@ -737,13 +810,27 @@ adminUsuariosRoutes.put('/:id/permissoes', async (c) => {
   const targetUser = await db
     .prepare(
       `SELECT u.id, u.perfil FROM usuarios u
-       INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
        WHERE u.id = ? AND u.deleted_at IS NULL LIMIT 1`,
     )
-    .bind(empresaId, id)
+    .bind(id)
     .first<{ id: number; perfil: string }>();
 
   if (!targetUser) throw notFound('Usuário não encontrado');
+
+  // Verificar vínculo com a empresa (apenas para GESTOR)
+  if (callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
+    const vinculo = await db
+      .prepare(`SELECT 1 FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
+      .bind(id, empresaId)
+      .first();
+
+    if (!vinculo) {
+      throw forbidden(
+        'Usuário não pertence à sua empresa',
+        'WRONG_TENANT',
+      );
+    }
+  }
 
   // Gestor não pode alterar permissões de ADMINISTRADOR
   if (
@@ -793,14 +880,13 @@ adminUsuariosRoutes.patch('/:id/reset-senha', async (c) => {
     throw badRequest('A nova senha deve ter no mínimo 8 caracteres', 'PASSWORD_TOO_SHORT');
   }
 
-  // Verificar que o usuário pertence à empresa (segurança multi-tenant)
+  // Buscar usuário (rota já exige ADMIN, não precisa de restrição de empresa)
   const user = await db
     .prepare(
       `SELECT u.id, u.email, u.nome FROM usuarios u
-       INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
        WHERE u.id = ? AND u.deleted_at IS NULL LIMIT 1`,
     )
-    .bind(empresaId, id)
+    .bind(id)
     .first<{ id: number; email: string; nome: string }>();
 
   if (!user) throw notFound('Usuário não encontrado');

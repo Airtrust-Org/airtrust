@@ -338,7 +338,10 @@ tripulantesOperacionais.get('/', auth(), async (c) => {
     tripulantesComQuinzena = tripulantesComQuinzena.map((tripulante) => {
       const conflito = conflitosPorFuncionario.get(tripulante.funcionario_id);
       if (!conflito) return tripulante;
-      if (!tripulante.pode_ser_alocado) return tripulante;
+      // Tripulantes bloqueados por CMA/FRMS não devem ser desbloqueados por mesma-escala.
+      // Mas tripulantes bloqueados apenas pela quinzena (OUT_OF_QUINZENA) devem poder
+      // passar pelo mesmoEscalaAtual — a mesma escala mensal tem prioridade sobre a quinzena.
+      if (!tripulante.pode_ser_alocado && tripulante.conflict_code !== 'OUT_OF_QUINZENA') return tripulante;
 
       const mesmoEscalaAtual = escalaId && conflito.escala_id === escalaId;
       if (mesmoEscalaAtual) {
