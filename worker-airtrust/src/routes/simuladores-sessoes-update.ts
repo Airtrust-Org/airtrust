@@ -451,7 +451,7 @@ app.put('/sessoes/:id', async (c) => {
       }
       if (modeloIdPut) {
         const participantesRows = await c.env.DB.prepare(
-          `SELECT DISTINCT fs.funcionario_id
+          `SELECT DISTINCT fs.colaborador_id_aluno AS funcionario_id
            FROM fichas_sessao fs
            WHERE fs.agendamento_slot_id = ? AND fs.deleted_at IS NULL`,
         )
