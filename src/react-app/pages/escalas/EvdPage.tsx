@@ -61,6 +61,36 @@ interface EvdVoo {
   observacoes: string | null;
 }
 
+interface AeronaveAtiva {
+  id: number;
+  modelo: string | null;
+  prefixo: string | null;
+  status: string | null;
+}
+
+interface TripulanteOperacionalItem {
+  funcionario_id: string;
+  nome: string;
+  nome_guerra: string | null;
+  role: string;
+  status_operacional: 'APTO' | 'ATENCAO_CMA' | 'ATENCAO_FRMS' | 'BLOQUEADO_CMA' | 'BLOQUEADO_FRMS';
+  pode_ser_alocado: boolean;
+  motivo_bloqueio?: string | null;
+  quinzena?: string | null;
+}
+
+interface TripulantesOperacionaisResponse {
+  success: boolean;
+  data?: {
+    tripulantes: TripulanteOperacionalItem[];
+    resumo?: {
+      total_aptos: number;
+      total_bloqueados: number;
+      sem_habilitacao?: string | null;
+    };
+  };
+}
+
 interface FrmsDailyFatigueItem {
   funcionario_id: number | string;
   funcionario_nome?: string;
@@ -320,10 +350,113 @@ function buildOperationalJustificativaPayload(params: {
   };
 }
 
+function normalizePrefixo(value: string | null | undefined): string {
+  return String(value || '')
+    .trim()
+    .toUpperCase();
+}
+
+function getQuinzenaByDate(dateStr: string): 'primeira' | 'segunda' {
+  const [_, __, day] = String(dateStr).split('-');
+  return Number(day || 1) <= 15 ? 'primeira' : 'segunda';
+}
+
+function getAircraftStatusMeta(statusRaw: string | null | undefined): {
+  code: 'D' | 'I' | 'M';
+  label: 'Disponível' | 'Indisponível' | 'Manutenção';
+  tone: string;
+} {
+  const status = String(statusRaw || 'ATIVO').trim().toUpperCase();
+  if (
+    status.includes('MANUT') ||
+    status === 'M' ||
+    status === 'MX' ||
+    status === 'MAINTENANCE'
+  ) {
+    return {
+      code: 'M',
+      label: 'Manutenção',
+      tone: 'bg-amber-100 text-amber-700',
+    };
+  }
+  if (
+    status === 'INATIVO' ||
+    status === 'INDISPONIVEL' ||
+    status === 'INDISPONÍVEL' ||
+    status === 'I'
+  ) {
+    return {
+      code: 'I',
+      label: 'Indisponível',
+      tone: 'bg-rose-100 text-rose-700',
+    };
+  }
+  return {
+    code: 'D',
+    label: 'Disponível',
+    tone: 'bg-emerald-100 text-emerald-700',
+  };
+}
+
+function isAeronaveAtiva(statusRaw: string | null | undefined): boolean {
+  const meta = getAircraftStatusMeta(statusRaw);
+  return meta.code !== 'I';
+}
+
+function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
+  short: string;
+  long: 'FRMS OK' | 'Atenção' | 'Revisão operacional' | 'Sem check-in' | 'Indisponível';
+} {
+  if (!signal) {
+    return { short: 'SC', long: 'Sem check-in' };
+  }
+  if (signal.status === 'critical' || signal.status === 'unfit_for_duty') {
+    return { short: 'REV', long: 'Revisão operacional' };
+  }
+  if (signal.status === 'attention') {
+    return { short: 'ATN', long: 'Atenção' };
+  }
+  if (signal.status === 'not_submitted') {
+    return { short: 'SC', long: 'Sem check-in' };
+  }
+  if (signal.requiresReview || signal.hasAlert) {
+    return { short: 'REV', long: 'Revisão operacional' };
+  }
+  return { short: 'OK', long: 'FRMS OK' };
+}
+
+function extractExtraCrew(observacoes: string | null | undefined): string {
+  const text = String(observacoes || '');
+  const match = text.match(/\[EXTRA:([^\]]+)\]/i);
+  return match ? match[1].trim() : '';
+}
+
+function stripExtraCrewTag(observacoes: string | null | undefined): string {
+  return String(observacoes || '')
+    .replace(/\[EXTRA:[^\]]+\]\s*/gi, '')
+    .trim();
+}
+
+function buildObservacoesComExtra(params: {
+  observacoes: string;
+  tripulanteExtra: string;
+}): string | undefined {
+  const parts: string[] = [];
+  if (params.tripulanteExtra.trim()) {
+    parts.push(`[EXTRA:${params.tripulanteExtra.trim()}]`);
+  }
+  if (params.observacoes.trim()) {
+    parts.push(params.observacoes.trim());
+  }
+  const merged = parts.join(' ').trim();
+  return merged || undefined;
+}
+
 export default function EvdPage() {
   const queryClient = useQueryClient();
   const [data, setData] = useState(toLocalDateStr(new Date()));
   const [showForm, setShowForm] = useState(false);
+  const [selectedAircraftForForm, setSelectedAircraftForForm] = useState('');
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [snapshotDetail, setSnapshotDetail] = useState<EvdPublicacaoDetalhe | null>(null);
@@ -339,19 +472,36 @@ export default function EvdPage() {
   }>(`/api/evd/publicacoes?data=${data}`);
   const publicacoes = publicacoesRaw?.data || [];
   const ultimaPublicacao = publicacoes[0] || null;
-  const { data: frmsDailyRaw } = useApi<{
+  const { data: frmsDailyRaw, error: frmsDailyError } = useApi<{
     success: boolean;
     data?: { items?: FrmsDailyFatigueItem[] };
   }>(`/api/frms/daily-fatigue?date=${data}&scope=team`);
-  const { data: frmsAlertsRaw } = useApi<{
+  const { data: frmsAlertsRaw, error: frmsAlertsError } = useApi<{
     success: boolean;
     data?: { items?: FrmsDailyFatigueAlertItem[] };
   }>(`/api/frms/daily-fatigue/alerts?date=${data}`);
+  const { data: aeronavesRaw, loading: loadingAeronaves } = useApi<{
+    success: boolean;
+    data: AeronaveAtiva[];
+  }>('/api/aeronaves');
 
   const selectedDate = new Date(data + 'T12:00:00');
   const weekday = WEEKDAY_LABELS[selectedDate.getDay()];
   const frmsDailyItems = frmsDailyRaw?.data?.items || [];
   const frmsAlertItems = frmsAlertsRaw?.data?.items || [];
+  const frmsUnavailable = Boolean(frmsDailyError || frmsAlertsError);
+  const aeronavesAtivas = useMemo(
+    () => (aeronavesRaw?.data || []).filter((a) => isAeronaveAtiva(a.status)),
+    [aeronavesRaw?.data],
+  );
+  const aeronavesByPrefix = useMemo(() => {
+    const map = new Map<string, AeronaveAtiva>();
+    for (const aeronave of aeronavesAtivas) {
+      const key = normalizePrefixo(aeronave.prefixo);
+      if (key) map.set(key, aeronave);
+    }
+    return map;
+  }, [aeronavesAtivas]);
 
   const frmsByTripulante = useMemo(() => {
     const map = new Map<number, FrmsTripulanteSignal>();
@@ -391,6 +541,23 @@ export default function EvdPage() {
 
     return map;
   }, [frmsAlertItems, frmsDailyItems]);
+
+  const resumoAeronavesDoDia = useMemo(() => {
+    const alocadasPorPrefixo = new Map(
+      voos
+        .map((item) => [normalizePrefixo(item.aeronave_prefixo), item] as const)
+        .filter(([prefixo]) => prefixo.length > 0),
+    );
+
+    return aeronavesAtivas.map((aeronave) => {
+      const prefixo = normalizePrefixo(aeronave.prefixo);
+      const alocacao = alocadasPorPrefixo.get(prefixo);
+      return {
+        aeronave,
+        alocacao,
+      };
+    });
+  }, [aeronavesAtivas, voos]);
 
   function changeDay(delta: number) {
     const d = new Date(data + 'T12:00:00');
@@ -694,7 +861,7 @@ export default function EvdPage() {
     <AppLayout>
       <PageHeader
         title="Escala Diária de Voo"
-        subtitle="Atribuição diária de tripulação por aeronave — PRC-OPS-009 §4.3"
+        subtitle="Designação diária de tripulação por aeronave"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -705,8 +872,16 @@ export default function EvdPage() {
               <Send className="h-4 w-4" />
               {publishingDay ? 'Publicando...' : 'Publicar escala do dia'}
             </Button>
-            <Button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" /> Nova Atribuição
+            <Button
+              onClick={() => {
+                if (!selectedAircraftForForm && resumoAeronavesDoDia[0]?.aeronave?.prefixo) {
+                  setSelectedAircraftForForm(normalizePrefixo(resumoAeronavesDoDia[0].aeronave.prefixo));
+                }
+                setShowForm(!showForm);
+              }}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" /> Designar tripulação
             </Button>
           </div>
         }
@@ -802,6 +977,67 @@ export default function EvdPage() {
             <ChevronRight className="h-5 w-5 text-slate-600" />
           </button>
         </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                Aeronaves do dia
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Selecione uma aeronave ativa para iniciar a designação
+              </p>
+            </div>
+            <span className="text-xs text-slate-500">
+              {resumoAeronavesDoDia.length} ativas
+            </span>
+          </div>
+          {loadingAeronaves ? (
+            <p className="text-sm text-slate-500">Carregando aeronaves ativas...</p>
+          ) : resumoAeronavesDoDia.length === 0 ? (
+            <p className="text-sm text-amber-700">Sem aeronave ativa para esta base.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              {resumoAeronavesDoDia.map(({ aeronave, alocacao }) => {
+                const meta = getAircraftStatusMeta(aeronave.status);
+                const prefixo = normalizePrefixo(aeronave.prefixo) || 'SEM-PREFIXO';
+                return (
+                  <button
+                    key={`${aeronave.id}-${prefixo}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedAircraftForForm(prefixo);
+                      setShowForm(true);
+                    }}
+                    className="flex items-start justify-between rounded-xl border border-slate-200 px-3 py-2 text-left hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    <div>
+                      <p className="font-mono text-sm font-semibold text-slate-900">{prefixo}</p>
+                      <p className="text-xs text-slate-500">{aeronave.modelo || 'Modelo não informado'}</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {alocacao
+                          ? `${alocacao.pic_guerra || alocacao.pic_nome || 'PIC pendente'} / ${alocacao.sic_guerra || alocacao.sic_nome || 'SIC pendente'}`
+                          : 'Sem tripulação designada'}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.tone}`}
+                    >
+                      {meta.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {frmsUnavailable && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            FRMS indisponível no momento. A escala segue visível, mas o status resumido de fadiga
+            pode ficar incompleto.
+          </div>
+        )}
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -981,12 +1217,16 @@ export default function EvdPage() {
         {showForm && (
           <EvdCreateForm
             data={data}
+            selectedAircraftPrefix={selectedAircraftForForm}
+            aeronavesAtivas={aeronavesAtivas}
             onClose={() => setShowForm(false)}
             onCreated={() => {
               setShowForm(false);
+              setSelectedAircraftForForm('');
               queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
             }}
             frmsByTripulante={frmsByTripulante}
+            frmsUnavailable={frmsUnavailable}
           />
         )}
 
@@ -1001,28 +1241,45 @@ export default function EvdPage() {
               <Plane className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p className="text-sm font-medium">Nenhuma aeronave escalada para {formatDateBR(data)}</p>
               <button
-                onClick={() => setShowForm(true)}
+                onClick={() => {
+                  if (resumoAeronavesDoDia[0]?.aeronave?.prefixo) {
+                    setSelectedAircraftForForm(
+                      normalizePrefixo(resumoAeronavesDoDia[0].aeronave.prefixo),
+                    );
+                  }
+                  setShowForm(true);
+                }}
                 className="mt-4 text-sm text-blue-600 hover:underline dark:text-blue-400"
               >
-                Adicionar primeira aeronave à escala
+                Designar primeira aeronave
               </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
+              <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                Fadiga (F): `OK` = FRMS OK, `ATN` = Atenção, `REV` = Revisão operacional, `SC`
+                = Sem check-in, `IND` = FRMS indisponível.
+              </div>
               <table className="min-w-full text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
                   <tr>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Matrícula</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Modelo</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Comandante (PIC)</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">FRMS</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Copiloto (SIC)</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">FRMS</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Apresentação</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Início</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Término</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Base</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300">Status</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Tipo</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Matrícula</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Status ANV</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Comandante</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">F</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Q</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">P</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Copiloto</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">F</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Q</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">P</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Tripulante extra</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Base</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Apresentação</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Início</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Término</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600">Observações</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300">Ações</th>
                   </tr>
                 </thead>
@@ -1031,6 +1288,17 @@ export default function EvdPage() {
                     const picSignal = toNumericId(voo.pic_id) ? frmsByTripulante.get(Number(voo.pic_id)) : null;
                     const sicSignal = toNumericId(voo.sic_id) ? frmsByTripulante.get(Number(voo.sic_id)) : null;
                     const hasFrmsAlert = isFrmsRelevant(picSignal) || isFrmsRelevant(sicSignal);
+                    const picFrms = frmsUnavailable
+                      ? { short: 'IND', long: 'Indisponível' as const }
+                      : getFrmsRosterLabel(picSignal);
+                    const sicFrms = frmsUnavailable
+                      ? { short: 'IND', long: 'Indisponível' as const }
+                      : getFrmsRosterLabel(sicSignal);
+                    const prefixoNormalizado = normalizePrefixo(voo.aeronave_prefixo);
+                    const aeronaveCadastro = aeronavesByPrefix.get(prefixoNormalizado);
+                    const statusAnv = getAircraftStatusMeta(aeronaveCadastro?.status);
+                    const tripulanteExtra = extractExtraCrew(voo.observacoes);
+                    const observacoesLimpas = stripExtraCrewTag(voo.observacoes);
                     return (
                       <tr
                         key={voo.id}
@@ -1039,95 +1307,61 @@ export default function EvdPage() {
                           hasFrmsAlert ? 'bg-amber-50/40 dark:bg-amber-500/5' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
                         ].join(' ')}
                       >
-                        {/* Matrícula */}
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">
+                          {voo.aeronave_modelo || aeronaveCadastro?.modelo || '—'}
+                        </td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           <span className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded dark:bg-blue-500/10 dark:text-blue-300">
                             {voo.aeronave_prefixo || '—'}
                           </span>
                         </td>
-                        {/* Modelo */}
-                        <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
-                          {voo.aeronave_modelo || '—'}
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${statusAnv.tone}`}>
+                            {statusAnv.code}
+                          </span>
                         </td>
-                        {/* PIC */}
                         <td className="px-3 py-3 whitespace-nowrap">
                           <span className="text-xs font-medium text-slate-800 dark:text-slate-100">
                             {voo.pic_guerra || voo.pic_nome || '—'}
                           </span>
-                          {voo.pic_funcao && (
-                            <span className="ml-1 text-[10px] text-slate-400">({voo.pic_funcao})</span>
-                          )}
                           {voo.repouso_minimo_ok === 0 && (
                             <div className="mt-0.5 flex items-center gap-1 text-[10px] text-red-600">
                               <AlertTriangle className="h-3 w-3" /> Repouso &lt;12h30
                             </div>
                           )}
                         </td>
-                        {/* FRMS PIC */}
                         <td className="px-3 py-3">
-                          {picSignal ? (
-                            <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${frmsTone(picSignal.status)}`}>
-                              {picSignal.statusLabel}
-                              {picSignal.requiresReview ? ' ⚑' : ''}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-slate-300">—</span>
-                          )}
+                          <span className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                            {picFrms.short}
+                          </span>
                         </td>
-                        {/* SIC */}
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.pic_funcao || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">PIC</td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           <span className="text-xs font-medium text-slate-800 dark:text-slate-100">
                             {voo.sic_guerra || voo.sic_nome || '—'}
                           </span>
-                          {voo.sic_funcao && (
-                            <span className="ml-1 text-[10px] text-slate-400">({voo.sic_funcao})</span>
-                          )}
                         </td>
-                        {/* FRMS SIC */}
                         <td className="px-3 py-3">
-                          {sicSignal ? (
-                            <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${frmsTone(sicSignal.status)}`}>
-                              {sicSignal.statusLabel}
-                              {sicSignal.requiresReview ? ' ⚑' : ''}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-slate-300">—</span>
-                          )}
-                        </td>
-                        {/* Apresentação */}
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap dark:text-slate-300">
-                          {voo.hora_apresentacao || '—'}
-                        </td>
-                        {/* Início */}
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap dark:text-slate-300">
-                          {voo.hora_decolagem_prevista || '—'}
-                          {voo.hora_decolagem_real && (
-                            <div className="text-[10px] text-emerald-600">R: {voo.hora_decolagem_real}</div>
-                          )}
-                        </td>
-                        {/* Término */}
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap dark:text-slate-300">
-                          {voo.hora_pouso_previsto || '—'}
-                          {voo.hora_pouso_real && (
-                            <div className="text-[10px] text-emerald-600">R: {voo.hora_pouso_real}</div>
-                          )}
-                        </td>
-                        {/* Base/Local */}
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap dark:text-slate-300">
-                          {voo.origem || '—'}
-                        </td>
-                        {/* Status */}
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${statusBadge(voo.status)}`}>
-                            {voo.status}
+                          <span className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                            {sicFrms.short}
                           </span>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.sic_funcao || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">SIC</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{tripulanteExtra || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.origem || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_apresentacao || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_decolagem_prevista || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_pouso_previsto || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600">
+                          <div>{observacoesLimpas || '—'}</div>
                           {hasFrmsAlert && (
                             <div className="mt-0.5 flex items-center gap-0.5 text-[10px] text-amber-600">
                               <AlertTriangle className="h-3 w-3" /> revisão FRMS
                             </div>
                           )}
                         </td>
-                        {/* Ações */}
                         <td className="px-3 py-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
                             {voo.status === 'RASCUNHO' && (
@@ -1172,51 +1406,74 @@ export default function EvdPage() {
 
 function EvdCreateForm({
   data,
+  selectedAircraftPrefix,
+  aeronavesAtivas,
   onClose,
   onCreated,
   frmsByTripulante,
+  frmsUnavailable,
 }: {
   data: string;
+  selectedAircraftPrefix: string;
+  aeronavesAtivas: AeronaveAtiva[];
   onClose: () => void;
   onCreated: () => void;
   frmsByTripulante: Map<number, FrmsTripulanteSignal>;
+  frmsUnavailable: boolean;
 }) {
   const [form, setForm] = useState({
+    aeronave_prefixo: selectedAircraftPrefix || '',
     pic_id: '',
     sic_id: '',
-    aeronave_prefixo: '',
+    qualificacao_comandante: '',
+    assento_comandante: 'PIC',
+    qualificacao_copiloto: '',
+    assento_copiloto: 'SIC',
+    tripulante_extra: '',
+    base: '',
     hora_apresentacao: '',
     hora_decolagem_prevista: '',
     hora_pouso_previsto: '',
-    origem: '',
-    destino: '',
-    tipo_missao: 'OFFSHORE',
     observacoes: '',
     justificativa_operacional: '',
   });
   const [error, setError] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const quinzena = getQuinzenaByDate(data);
 
-  // Load funcionarios for picker
-  const { data: funcRaw } = useApi<{
-    data: { id: number; nome: string; guerra: string | null; funcao: string | null }[];
-  }>('/api/funcionarios?limit=200&page=1&status=ativos&orderBy=nome&order=ASC');
-  const pilotos = useMemo(() => {
-    const all = funcRaw?.data || [];
-    return all.filter((f) => {
-      const fn = (f.funcao || '').toUpperCase();
-      return (
-        fn.includes('PILOT') || fn.includes('COMAND') || fn === 'PIC' || fn === 'SIC' || !f.funcao
-      );
-    });
-  }, [funcRaw]);
+  const aeronaveSelecionada = useMemo(() => {
+    const alvo = normalizePrefixo(form.aeronave_prefixo);
+    return aeronavesAtivas.find((item) => normalizePrefixo(item.prefixo) === alvo) || null;
+  }, [aeronavesAtivas, form.aeronave_prefixo]);
+
+  const tripulantesUrl = aeronaveSelecionada
+    ? `/api/escalas/tripulantes-operacionais?aeronave_id=${aeronaveSelecionada.id}&incluir_bloqueados=true&data_inicio=${data}&data_fim=${data}&quinzena=${quinzena}`
+    : '';
+  const {
+    data: tripulantesRaw,
+    loading: loadingTripulantes,
+    error: tripulantesError,
+  } = useApi<TripulantesOperacionaisResponse>(tripulantesUrl, {
+    enabled: Boolean(aeronaveSelecionada),
+  });
+
+  const tripulantes = tripulantesRaw?.data?.tripulantes || [];
+  const tripulantesAptos = tripulantes.filter((item) => item.pode_ser_alocado);
+  const tripulantesBloqueados = tripulantes.filter((item) => !item.pode_ser_alocado);
 
   const selectedPicId = form.pic_id ? Number(form.pic_id) : null;
   const selectedSicId = form.sic_id ? Number(form.sic_id) : null;
   const frmsPic = selectedPicId ? frmsByTripulante.get(selectedPicId) : null;
   const frmsSic = selectedSicId ? frmsByTripulante.get(selectedSicId) : null;
   const needsStructuredJustificativa = isFrmsRelevant(frmsPic) || isFrmsRelevant(frmsSic);
+  const bloqueioElegibilidade = Boolean(tripulantesError);
+
+  const picSelecionado = tripulantesAptos.find((item) => Number(item.funcionario_id) === selectedPicId);
+  const sicSelecionado = tripulantesAptos.find((item) => Number(item.funcionario_id) === selectedSicId);
+
+  const frmsPicLabel = frmsUnavailable ? 'FRMS indisponível' : getFrmsRosterLabel(frmsPic).long;
+  const frmsSicLabel = frmsUnavailable ? 'FRMS indisponível' : getFrmsRosterLabel(frmsSic).long;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1225,8 +1482,28 @@ function EvdCreateForm({
     setSubmitting(true);
 
     try {
+      if (!aeronaveSelecionada) {
+        setError('Selecione uma aeronave ativa.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (bloqueioElegibilidade) {
+        setError(
+          'Fonte de disponibilidade indisponível. Não é permitido escalar tripulante sem validação de quinzena/disponibilidade.',
+        );
+        setSubmitting(false);
+        return;
+      }
+
       const picId = form.pic_id ? Number(form.pic_id) : null;
       const sicId = form.sic_id ? Number(form.sic_id) : null;
+      if (picId && sicId && picId === sicId) {
+        setError('Comandante e copiloto não podem ser o mesmo tripulante.');
+        setSubmitting(false);
+        return;
+      }
+
       const needsJustificativa = isFrmsRelevant(frmsPic) || isFrmsRelevant(frmsSic);
 
       if (needsJustificativa && form.justificativa_operacional.trim().length < 10) {
@@ -1241,14 +1518,19 @@ function EvdCreateForm({
         data,
         pic_id: form.pic_id ? Number(form.pic_id) : undefined,
         sic_id: form.sic_id ? Number(form.sic_id) : undefined,
-        aeronave_prefixo: form.aeronave_prefixo || undefined,
+        pic_funcao: form.qualificacao_comandante || picSelecionado?.role || undefined,
+        sic_funcao: form.qualificacao_copiloto || sicSelecionado?.role || undefined,
+        aeronave_prefixo: aeronaveSelecionada.prefixo || undefined,
+        aeronave_modelo: aeronaveSelecionada.modelo || undefined,
         hora_apresentacao: form.hora_apresentacao || undefined,
         hora_decolagem_prevista: form.hora_decolagem_prevista || undefined,
         hora_pouso_previsto: form.hora_pouso_previsto || undefined,
-        origem: form.origem || undefined,
-        destino: form.destino || undefined,
-        tipo_missao: form.tipo_missao,
-        observacoes: form.observacoes || undefined,
+        origem: form.base || undefined,
+        tipo_missao: 'OFFSHORE',
+        observacoes: buildObservacoesComExtra({
+          observacoes: form.observacoes,
+          tripulanteExtra: form.tripulante_extra,
+        }),
       };
 
       const res = await apiFetch('/api/evd', {
@@ -1289,7 +1571,7 @@ function EvdCreateForm({
           const err = await justRes.json().catch(() => ({}));
           setError(
             (err as { error?: string }).error ||
-              'Voo criado, mas falhou ao registrar justificativa operacional estruturada.',
+              'Escala criada, mas falhou ao registrar justificativa operacional estruturada.',
           );
           setSubmitting(false);
           return;
@@ -1298,7 +1580,7 @@ function EvdCreateForm({
       }
 
       onCreated();
-    } catch (err) {
+    } catch {
       setError('Erro de rede');
     } finally {
       setSubmitting(false);
@@ -1307,62 +1589,203 @@ function EvdCreateForm({
 
   return (
     <div className="rounded-2xl border border-blue-200 bg-blue-50/30 p-5 shadow-sm dark:border-blue-500/30 dark:bg-blue-500/5">
-      <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2 dark:text-slate-100">
+      <h3 className="mb-4 flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
         <Plus className="h-4 w-4 text-blue-600" />
-        Nova Atribuição — {formatDateBR(data)}
+        Designar tripulação para aeronave — {formatDateBR(data)}
       </h3>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {/* Comandante */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Comandante (PIC)</label>
+            <label className="mb-1 block text-xs text-slate-500">Aeronave ativa (obrigatório)</label>
+            <select
+              value={form.aeronave_prefixo}
+              onChange={(e) => {
+                setForm((prev) => ({
+                  ...prev,
+                  aeronave_prefixo: e.target.value,
+                  pic_id: '',
+                  sic_id: '',
+                  qualificacao_comandante: '',
+                  qualificacao_copiloto: '',
+                }));
+              }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              required
+            >
+              <option value="">Selecione</option>
+              {aeronavesAtivas.map((aeronave) => {
+                const prefixo = normalizePrefixo(aeronave.prefixo);
+                const meta = getAircraftStatusMeta(aeronave.status);
+                return (
+                  <option key={aeronave.id} value={prefixo}>
+                    {prefixo} — {aeronave.modelo || 'Sem modelo'} ({meta.label})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Status da aeronave</label>
+            <input
+              type="text"
+              value={aeronaveSelecionada ? getAircraftStatusMeta(aeronaveSelecionada.status).label : '—'}
+              readOnly
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Modelo</label>
+            <input
+              type="text"
+              value={aeronaveSelecionada?.modelo || '—'}
+              readOnly
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Comandante</label>
             <select
               value={form.pic_id}
               onChange={(e) => setForm({ ...form, pic_id: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
             >
               <option value="">Selecione</option>
-              {pilotos.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.guerra || p.nome} {p.funcao ? `(${p.funcao})` : ''}
-                </option>
-              ))}
+              {tripulantesAptos.map((p) => {
+                const frms = frmsUnavailable
+                  ? 'FRMS indisponível'
+                  : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
+                return (
+                  <option key={p.funcionario_id} value={p.funcionario_id}>
+                    {(p.nome_guerra || p.nome).trim()} ({p.role}) — {frms}
+                  </option>
+                );
+              })}
+              {tripulantesBloqueados.length > 0 && (
+                <optgroup label="Indisponíveis (bloqueados)">
+                  {tripulantesBloqueados.map((p) => (
+                    <option key={`b-pic-${p.funcionario_id}`} value="" disabled>
+                      {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 
-          {/* Copiloto */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Copiloto (SIC)</label>
-            <select
-              value={form.sic_id}
-              onChange={(e) => setForm({ ...form, sic_id: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="">Selecione</option>
-              {pilotos.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.guerra || p.nome} {p.funcao ? `(${p.funcao})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Aeronave */}
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Aeronave (prefixo)</label>
+            <label className="mb-1 block text-xs text-slate-500">Qualificação comandante</label>
             <input
               type="text"
-              value={form.aeronave_prefixo}
-              onChange={(e) => setForm({ ...form, aeronave_prefixo: e.target.value.toUpperCase() })}
-              placeholder="PR-ABC"
+              value={form.qualificacao_comandante}
+              onChange={(e) => setForm({ ...form, qualificacao_comandante: e.target.value })}
+              placeholder={picSelecionado?.role || 'Ex.: SK76 PIC'}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
 
-          {/* Hora apresentação */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Apresentação</label>
+            <label className="mb-1 block text-xs text-slate-500">Assento comandante</label>
+            <input
+              type="text"
+              value={form.assento_comandante}
+              onChange={(e) => setForm({ ...form, assento_comandante: e.target.value.toUpperCase() })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Copiloto</label>
+            <select
+              value={form.sic_id}
+              onChange={(e) => setForm({ ...form, sic_id: e.target.value })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
+            >
+              <option value="">Selecione</option>
+              {tripulantesAptos.map((p) => {
+                const frms = frmsUnavailable
+                  ? 'FRMS indisponível'
+                  : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
+                return (
+                  <option key={`sic-${p.funcionario_id}`} value={p.funcionario_id}>
+                    {(p.nome_guerra || p.nome).trim()} ({p.role}) — {frms}
+                  </option>
+                );
+              })}
+              {tripulantesBloqueados.length > 0 && (
+                <optgroup label="Indisponíveis (bloqueados)">
+                  {tripulantesBloqueados.map((p) => (
+                    <option key={`b-sic-${p.funcionario_id}`} value="" disabled>
+                      {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Qualificação copiloto</label>
+            <input
+              type="text"
+              value={form.qualificacao_copiloto}
+              onChange={(e) => setForm({ ...form, qualificacao_copiloto: e.target.value })}
+              placeholder={sicSelecionado?.role || 'Ex.: SK76 SIC'}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Assento copiloto</label>
+            <input
+              type="text"
+              value={form.assento_copiloto}
+              onChange={(e) => setForm({ ...form, assento_copiloto: e.target.value.toUpperCase() })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Tripulante extra (opcional)</label>
+            <input
+              type="text"
+              value={form.tripulante_extra}
+              onChange={(e) => setForm({ ...form, tripulante_extra: e.target.value })}
+              placeholder="Nome ou função"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Base</label>
+            <input
+              type="text"
+              value={form.base}
+              onChange={(e) => setForm({ ...form, base: e.target.value.toUpperCase() })}
+              placeholder="SBCB / Base"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <p>
+              Quinzena operacional: <strong>{quinzena === 'primeira' ? '1ª' : '2ª'}</strong>
+            </p>
+            <p>
+              FRMS comandante: <strong>{selectedPicId ? frmsPicLabel : '—'}</strong>
+            </p>
+            <p>
+              FRMS copiloto: <strong>{selectedSicId ? frmsSicLabel : '—'}</strong>
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Apresentação</label>
             <input
               type="time"
               value={form.hora_apresentacao}
@@ -1371,9 +1794,8 @@ function EvdCreateForm({
             />
           </div>
 
-          {/* Início */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Início</label>
+            <label className="mb-1 block text-xs text-slate-500">Início</label>
             <input
               type="time"
               value={form.hora_decolagem_prevista}
@@ -1382,9 +1804,8 @@ function EvdCreateForm({
             />
           </div>
 
-          {/* Término */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Término</label>
+            <label className="mb-1 block text-xs text-slate-500">Término</label>
             <input
               type="time"
               value={form.hora_pouso_previsto}
@@ -1392,51 +1813,29 @@ function EvdCreateForm({
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
-
-          {/* Base/Local */}
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Base / Local</label>
-            <input
-              type="text"
-              value={form.origem}
-              onChange={(e) => setForm({ ...form, origem: e.target.value.toUpperCase() })}
-              placeholder="SBCB / Plataforma / Base"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          {/* Localidade de operação */}
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Localidade de operação</label>
-            <input
-              type="text"
-              value={form.destino}
-              onChange={(e) => setForm({ ...form, destino: e.target.value.toUpperCase() })}
-              placeholder="Plataforma / ICAO destino"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          {/* Tipo de operação */}
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Tipo de operação</label>
-            <select
-              value={form.tipo_missao}
-              onChange={(e) => setForm({ ...form, tipo_missao: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="OFFSHORE">Offshore</option>
-              <option value="INSTRUCAO">Instrução</option>
-              <option value="CHECK">Check</option>
-              <option value="FERRY">Ferry</option>
-              <option value="OUTRO">Outro</option>
-            </select>
-          </div>
         </div>
 
-        {/* Observações */}
+        {tripulantesRaw?.data?.resumo?.sem_habilitacao && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            {tripulantesRaw.data.resumo.sem_habilitacao}
+          </div>
+        )}
+
+        {tripulantesError && (
+          <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+            Disponibilidade/quinzena indisponível para validação. Seleção de tripulantes bloqueada
+            para evitar escala cega.
+          </div>
+        )}
+
+        {frmsUnavailable && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            FRMS indisponível. O status exibido será “FRMS indisponível” até retorno do serviço.
+          </div>
+        )}
+
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Observações gerais</label>
+          <label className="mb-1 block text-xs text-slate-500">Observações</label>
           <textarea
             value={form.observacoes}
             onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
@@ -1447,7 +1846,7 @@ function EvdCreateForm({
 
         {needsStructuredJustificativa && (
           <div>
-            <label className="block text-xs text-slate-500 mb-1">
+            <label className="mb-1 block text-xs text-slate-500">
               Justificativa operacional FRMS (estruturada)
             </label>
             <textarea
@@ -1460,9 +1859,9 @@ function EvdCreateForm({
           </div>
         )}
 
-        {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
         {warnings.length > 0 && (
-          <div className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
+          <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
             <p className="font-medium">Avisos:</p>
             {warnings.map((w, i) => (
               <p key={i}>• {w}</p>
@@ -1474,12 +1873,12 @@ function EvdCreateForm({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 transition"
+            className="px-4 py-2 text-sm text-slate-600 transition hover:text-slate-900"
           >
             Cancelar
           </button>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? 'Criando...' : 'Criar Atribuição'}
+          <Button type="submit" disabled={submitting || bloqueioElegibilidade}>
+            {submitting ? 'Salvando...' : 'Salvar designação'}
           </Button>
         </div>
       </form>
