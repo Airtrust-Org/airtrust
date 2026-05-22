@@ -88,6 +88,10 @@ interface TripulanteOperacionalItem {
   pode_ser_alocado: boolean;
   motivo_bloqueio?: string | null;
   quinzena?: string | null;
+  /** Conflito suave com escala mensal (selecionavel mas requer justificativa). */
+  soft_conflict?: boolean;
+  conflict_reason?: string | null;
+  conflict_code?: string | null;
 }
 
 interface TripulantesOperacionaisData {
@@ -1635,8 +1639,18 @@ function EvdCreateForm({
       const needsJustificativa = isFrmsRelevant(frmsPic) || isFrmsRelevant(frmsSic);
 
       if (needsJustificativa && form.justificativa_operacional.trim().length < 10) {
+        const frmsReasons: string[] = [];
+        if (isFrmsRelevant(frmsPic) && picSelecionado) {
+          const nome = (picSelecionado.nome_guerra || picSelecionado.nome).trim();
+          frmsReasons.push(`PIC ${nome}: ${frmsPic?.statusLabel || 'revisao FRMS'}`);
+        }
+        if (isFrmsRelevant(frmsSic) && sicSelecionado) {
+          const nome = (sicSelecionado.nome_guerra || sicSelecionado.nome).trim();
+          frmsReasons.push(`SIC ${nome}: ${frmsSic?.statusLabel || 'revisao FRMS'}`);
+        }
+        const motivoTexto = frmsReasons.length > 0 ? ` Motivos: ${frmsReasons.join('; ')}.` : '';
         setError(
-          'FRMS requer revisão operacional para PIC/SIC selecionado. Informe justificativa operacional (mínimo 10 caracteres).',
+          `Justificativa operacional obrigatoria (min. 10 caracteres).${motivoTexto}`,
         );
         setSubmitting(false);
         return;
@@ -1806,9 +1820,10 @@ function EvdCreateForm({
                     const frms = frmsUnavailable
                       ? '?'
                       : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
+                    const conflictNote = p.soft_conflict ? ' [!] Conflito escala' : '';
                     return (
                       <option key={p.funcionario_id} value={p.funcionario_id}>
-                        {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}
+                        {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}{conflictNote}
                       </option>
                     );
                   })}
@@ -1846,9 +1861,10 @@ function EvdCreateForm({
                     const frms = frmsUnavailable
                       ? '?'
                       : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
+                    const conflictNote = p.soft_conflict ? ' [!] Conflito escala' : '';
                     return (
                       <option key={`sic-${p.funcionario_id}`} value={p.funcionario_id}>
-                        {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}
+                        {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}{conflictNote}
                       </option>
                     );
                   })}
@@ -1986,17 +2002,47 @@ function EvdCreateForm({
           />
         </div>
 
+        {(picSelecionado?.soft_conflict || sicSelecionado?.soft_conflict) && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            <p className="font-semibold mb-1">Conflito com escala mensal:</p>
+            {picSelecionado?.soft_conflict && (
+              <p>• PIC: {picSelecionado.conflict_reason || 'Alocado em outra escala'}</p>
+            )}
+            {sicSelecionado?.soft_conflict && (
+              <p>• SIC: {sicSelecionado.conflict_reason || 'Alocado em outra escala'}</p>
+            )}
+            <p className="mt-1 text-amber-600">
+              A designacao sera salva com aviso. Registre a decisao operacional nas observacoes.
+            </p>
+          </div>
+        )}
+
         {needsStructuredJustificativa && (
           <div>
-            <label className="mb-1 block text-xs text-slate-500">
-              Justificativa operacional FRMS (estruturada)
+            <label className="mb-1 block text-xs font-medium text-amber-700">
+              Justificativa operacional FRMS (obrigatoria)
             </label>
+            <div className="mb-2 rounded bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+              <p className="font-medium mb-0.5">Revisao necessaria por:</p>
+              {isFrmsRelevant(frmsPic) && picSelecionado && (
+                <p>
+                  • PIC {(picSelecionado.nome_guerra || picSelecionado.nome).trim()}:{' '}
+                  {frmsPicLabel}
+                </p>
+              )}
+              {isFrmsRelevant(frmsSic) && sicSelecionado && (
+                <p>
+                  • SIC {(sicSelecionado.nome_guerra || sicSelecionado.nome).trim()}:{' '}
+                  {frmsSicLabel}
+                </p>
+              )}
+            </div>
             <textarea
               value={form.justificativa_operacional}
               onChange={(e) => setForm({ ...form, justificativa_operacional: e.target.value })}
               rows={3}
               className="w-full rounded-lg border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm"
-              placeholder="Descreva decisão operacional sem incluir dados sensíveis do check-in."
+              placeholder="Descreva decisao operacional sem incluir dados sensiveis do check-in."
             />
           </div>
         )}

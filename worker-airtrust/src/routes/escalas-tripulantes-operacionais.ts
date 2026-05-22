@@ -133,6 +133,10 @@ tripulantesOperacionais.get('/', auth(), async (c) => {
     quinzena?: string | null;
     is_instrutor?: number | null;
     is_checador?: number | null;
+    /** Conflito suave com escala mensal diferente (nao bloqueia, permite selecao com aviso). */
+    soft_conflict?: boolean;
+    conflict_reason?: string | null;
+    conflict_code?: string | null;
   };
   let tripulantesComQuinzena: TripulanteComQuinzena[] = tripulantes;
   if (tripulantes.length > 0) {
@@ -330,14 +334,26 @@ tripulantesOperacionais.get('/', auth(), async (c) => {
         };
       }
 
+      // Ferias RH reais (escala_alocacao_id IS NULL filtrado na query): bloqueio duro.
+      if (conflito.origem === 'funcionario_ferias') {
+        return {
+          ...tripulante,
+          pode_ser_alocado: false,
+          motivo_bloqueio: conflito.motivo || 'Tripulante em afastamento/ferias no periodo',
+          ja_alocado_em: conflito,
+        };
+      }
+
+      // Conflito com outra escala mensal: soft conflict — selecionavel com aviso.
       return {
         ...tripulante,
-        pode_ser_alocado: false,
-        motivo_bloqueio:
-          conflito.motivo ||
-          (mesmoEscalaAtual
-            ? 'Tripulante já possui alocação sobreposta nesta escala'
-            : 'Tripulante já possui alocação sobreposta em outra escala'),
+        pode_ser_alocado: true,
+        soft_conflict: true,
+        conflict_reason: conflito.motivo || 'Alocado em outra aeronave/escala mensal',
+        conflict_code:
+          conflito.origem === 'alocacao_operacional'
+            ? 'MONTHLY_AIRCRAFT_DIFFERENCE'
+            : 'MONTHLY_SITUATION_CONFLICT',
         ja_alocado_em: conflito,
       };
     });
