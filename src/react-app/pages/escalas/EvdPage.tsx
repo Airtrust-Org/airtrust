@@ -373,6 +373,11 @@ function getQuinzenaByDate(dateStr: string): 'primeira' | 'segunda' {
   return Number(day || 1) <= 15 ? 'primeira' : 'segunda';
 }
 
+function getFrmsReferenceDate(dataEscala: string): string {
+  const today = toLocalDateStr(new Date());
+  return dataEscala > today ? today : dataEscala;
+}
+
 function getAircraftStatusMeta(statusRaw: string | null | undefined): {
   code: 'D' | 'I' | 'M';
   label: 'Disponível' | 'Indisponível' | 'Manutenção';
@@ -417,10 +422,17 @@ function isAeronaveAtiva(statusRaw: string | null | undefined): boolean {
 
 function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
   short: string;
-  long: 'FRMS OK' | 'Atenção' | 'Revisão operacional' | 'Sem check-in' | 'Sem jornada' | 'Indisponível';
+  long:
+    | 'FRMS OK'
+    | 'Atenção'
+    | 'Revisão operacional'
+    | 'Sem check-in'
+    | 'Sem jornada'
+    | 'Sem referência'
+    | 'Indisponível';
 } {
   if (!signal) {
-    return { short: 'SC', long: 'Sem check-in' };
+    return { short: '—', long: 'Sem referência' };
   }
   if (signal.status === 'no_duty') {
     return { short: '—', long: 'Sem jornada' };
@@ -438,6 +450,22 @@ function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
     return { short: 'REV', long: 'Revisão operacional' };
   }
   return { short: 'OK', long: 'FRMS OK' };
+}
+
+function getFrmsReasonLine(
+  signal: FrmsTripulanteSignal | null | undefined,
+  frmsReferenceDate: string,
+): string {
+  const dateRef = formatDateBR(frmsReferenceDate);
+  if (!signal) return `Sem referência FRMS para ${dateRef}`;
+  if (signal.status === 'not_submitted') return `Sem check-in na data de referência FRMS ${dateRef}`;
+  if (signal.status === 'no_duty') return `Sem jornada registrada na data de referência FRMS ${dateRef}`;
+  if (signal.status === 'attention') return `Atenção FRMS na data de referência ${dateRef}`;
+  if (signal.status === 'critical' || signal.status === 'unfit_for_duty') {
+    return `Status FRMS crítico/inapto na data de referência ${dateRef}`;
+  }
+  if (signal.requiresReview || signal.hasAlert) return `Alerta FRMS ativo na referência ${dateRef}`;
+  return `FRMS OK em ${dateRef}`;
 }
 
 function normalizeCrewRole(value: string | null | undefined): string {
@@ -521,14 +549,16 @@ export default function EvdPage() {
   const { data: publicacoesRaw, loading: loadingPublicacoes } = useApi<EvdPublicacaoResumo[]>(
     `/api/evd/publicacoes?data=${data}`,
   );
+  const frmsReferenceDate = getFrmsReferenceDate(data);
+  const frmsUsingPreviousDayContext = frmsReferenceDate !== data;
   const publicacoes = publicacoesRaw || [];
   const ultimaPublicacao = publicacoes[0] || null;
   const { data: frmsDailyRaw, error: frmsDailyError } = useApi<{ items?: FrmsDailyFatigueItem[] }>(
-    `/api/frms/daily-fatigue?date=${data}&scope=team`,
+    `/api/frms/daily-fatigue?date=${frmsReferenceDate}&scope=team`,
   );
   const { data: frmsAlertsRaw, error: frmsAlertsError } = useApi<{
     items?: FrmsDailyFatigueAlertItem[];
-  }>(`/api/frms/daily-fatigue/alerts?date=${data}`);
+  }>(`/api/frms/daily-fatigue/alerts?date=${frmsReferenceDate}`);
   const { data: aeronavesRaw, loading: loadingAeronaves } = useApi<AeronaveAtiva[]>(
     '/api/aeronaves?somente_ativas=1',
   );
@@ -874,7 +904,7 @@ export default function EvdPage() {
 
       if (!hasStructured) {
         const justificativaTxt = window.prompt(
-          'FRMS requer revisão operacional para este tripulante. Informe justificativa operacional estruturada para publicar:',
+          `FRMS requer revisão operacional para este tripulante (referência ${formatDateBR(frmsReferenceDate)}). Informe justificativa operacional estruturada para publicar:`,
         );
         if (!justificativaTxt || justificativaTxt.trim().length < 10) {
           toast.error('Justificativa operacional obrigatória (mínimo 10 caracteres).');
@@ -1105,15 +1135,22 @@ export default function EvdPage() {
 
         {frmsDailyUnavailable && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            FRMS indisponível no momento. A escala segue visível, mas o status resumido de fadiga
-            pode ficar incompleto.
+            FRMS indisponível na referência {formatDateBR(frmsReferenceDate)}. A escala segue
+            visível, mas o status resumido de fadiga pode ficar incompleto.
           </div>
         )}
         {frmsAlertsUnavailable && (
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Alertas FRMS indisponíveis; status diário carregado.
+            Alertas FRMS indisponíveis na referência {formatDateBR(frmsReferenceDate)}; status
+            diário carregado.
           </div>
         )}
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          FRMS referência: {formatDateBR(frmsReferenceDate)} para escala de {formatDateBR(data)}.
+          {frmsUsingPreviousDayContext
+            ? ' Ausência de check-in do dia futuro não gera alerta na montagem D-1.'
+            : ' Como a montagem é no mesmo dia da operação, a referência FRMS é a própria data.'}
+        </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -1303,6 +1340,7 @@ export default function EvdPage() {
             }}
             frmsByTripulante={frmsByTripulante}
             frmsUnavailable={frmsUnavailable}
+            frmsReferenceDate={frmsReferenceDate}
             escalaId={escalaAtiva?.id ?? null}
           />
         )}
@@ -1335,7 +1373,7 @@ export default function EvdPage() {
             <div className="overflow-x-auto">
               <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
                 Fadiga (F): `OK` = FRMS OK, `ATN` = Atenção, `REV` = Revisão operacional, `SC`
-                = Sem check-in, `IND` = FRMS indisponível.
+                = Sem check-in na data de referência FRMS, `IND` = FRMS indisponível.
               </div>
               <table className="min-w-full text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
@@ -1485,6 +1523,7 @@ function EvdCreateForm({
   onCreated,
   frmsByTripulante,
   frmsUnavailable,
+  frmsReferenceDate,
   escalaId,
 }: {
   data: string;
@@ -1494,6 +1533,7 @@ function EvdCreateForm({
   onCreated: () => void;
   frmsByTripulante: Map<number, FrmsTripulanteSignal>;
   frmsUnavailable: boolean;
+  frmsReferenceDate: string;
   escalaId: string | null;
 }) {
   const [form, setForm] = useState({
@@ -1554,8 +1594,12 @@ function EvdCreateForm({
   const picSelecionado = tripulantesAptos.find((item) => Number(item.funcionario_id) === selectedPicId);
   const sicSelecionado = tripulantesAptos.find((item) => Number(item.funcionario_id) === selectedSicId);
 
-  const frmsPicLabel = frmsUnavailable ? 'FRMS indisponível' : (frmsPic ? getFrmsRosterLabel(frmsPic).long : '—');
-  const frmsSicLabel = frmsUnavailable ? 'FRMS indisponível' : (frmsSic ? getFrmsRosterLabel(frmsSic).long : '—');
+  const frmsPicLabel = frmsUnavailable
+    ? 'FRMS indisponível'
+    : getFrmsReasonLine(frmsPic, frmsReferenceDate);
+  const frmsSicLabel = frmsUnavailable
+    ? 'FRMS indisponível'
+    : getFrmsReasonLine(frmsSic, frmsReferenceDate);
 
   function handleHorarioBlur(
     campo: 'hora_apresentacao' | 'hora_decolagem_prevista' | 'hora_pouso_previsto',
@@ -1642,11 +1686,11 @@ function EvdCreateForm({
         const frmsReasons: string[] = [];
         if (isFrmsRelevant(frmsPic) && picSelecionado) {
           const nome = (picSelecionado.nome_guerra || picSelecionado.nome).trim();
-          frmsReasons.push(`PIC ${nome}: ${frmsPic?.statusLabel || 'revisao FRMS'}`);
+          frmsReasons.push(`PIC ${nome}: ${getFrmsReasonLine(frmsPic, frmsReferenceDate)}`);
         }
         if (isFrmsRelevant(frmsSic) && sicSelecionado) {
           const nome = (sicSelecionado.nome_guerra || sicSelecionado.nome).trim();
-          frmsReasons.push(`SIC ${nome}: ${frmsSic?.statusLabel || 'revisao FRMS'}`);
+          frmsReasons.push(`SIC ${nome}: ${getFrmsReasonLine(frmsSic, frmsReferenceDate)}`);
         }
         const motivoTexto = frmsReasons.length > 0 ? ` Motivos: ${frmsReasons.join('; ')}.` : '';
         setError(
@@ -1983,7 +2027,8 @@ function EvdCreateForm({
 
         {frmsUnavailable && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            FRMS indisponível. Status de fadiga indisponível; exibindo ? até retorno do serviço.
+            FRMS indisponível na data de referência {formatDateBR(frmsReferenceDate)}. Status de
+            fadiga indisponível; exibindo ? até retorno do serviço.
           </div>
         )}
         {!escalaId && (
@@ -1991,16 +2036,6 @@ function EvdCreateForm({
             Escala mensal não identificada para esta data; disponibilidade pode ficar restritiva.
           </div>
         )}
-
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">Observações</label>
-          <textarea
-            value={form.observacoes}
-            onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-            rows={2}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
 
         {(picSelecionado?.soft_conflict || sicSelecionado?.soft_conflict) && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -2024,16 +2059,20 @@ function EvdCreateForm({
             </label>
             <div className="mb-2 rounded bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
               <p className="font-medium mb-0.5">Revisao necessaria por:</p>
+              <p className="mb-1">
+                Referência FRMS: {formatDateBR(frmsReferenceDate)} (escala para{' '}
+                {formatDateBR(data)}).
+              </p>
               {isFrmsRelevant(frmsPic) && picSelecionado && (
                 <p>
                   • PIC {(picSelecionado.nome_guerra || picSelecionado.nome).trim()}:{' '}
-                  {frmsPicLabel}
+                  {getFrmsReasonLine(frmsPic, frmsReferenceDate)}
                 </p>
               )}
               {isFrmsRelevant(frmsSic) && sicSelecionado && (
                 <p>
                   • SIC {(sicSelecionado.nome_guerra || sicSelecionado.nome).trim()}:{' '}
-                  {frmsSicLabel}
+                  {getFrmsReasonLine(frmsSic, frmsReferenceDate)}
                 </p>
               )}
             </div>
