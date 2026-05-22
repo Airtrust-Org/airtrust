@@ -161,10 +161,11 @@ else
   fi
 
   # 3c: soft_conflict note rendered in selectable group (not disabled)
-  if grep -q "soft_conflict.*Conflito escala" "$FRONTEND_FILE"; then
-    check "Frontend renders soft_conflict with [!] Conflito escala label" "PASS"
+  # The ternary may span multiple lines; check each label separately.
+  if grep -q "Conflito escala" "$FRONTEND_FILE" && grep -q "'FRMS_CRITICAL'" "$FRONTEND_FILE"; then
+    check "Frontend renders soft_conflict label ([!] Conflito escala / [!] Alerta FRMS by conflict_code)" "PASS"
   else
-    check "Frontend renders soft_conflict with [!] Conflito escala label" \
+    check "Frontend renders soft_conflict label ([!] Conflito escala / [!] Alerta FRMS by conflict_code)" \
       "WARN — verify soft_conflict visual indicator in dropdown"
   fi
 
@@ -186,6 +187,80 @@ if [[ -f "$DIAG_FILE" ]]; then
   else
     check "Diagnostic script tracks soft_conflict_quinzena" \
       "WARN — diagnostic script may still use old fora_quinzena metric"
+  fi
+fi
+
+# ── Gate 5: Backend — BLOQUEADO_CMA hard block com motivo explícito ──────────
+
+if [[ -f "$TRIP_FILE" ]]; then
+  # 5a: BLOQUEADO_CMA still hard-blocks with readable motivo
+  if grep -q "BLOQUEADO_CMA" "$TRIP_FILE" && grep -q "CMA vencido" "$TRIP_FILE"; then
+    check "Backend derives motivo_bloqueio for BLOQUEADO_CMA (hard block)" "PASS"
+  else
+    check "Backend derives motivo_bloqueio for BLOQUEADO_CMA (hard block)" \
+      "FAIL — BLOQUEADO_CMA must produce motivo string 'CMA vencido...'"
+  fi
+
+  # 5b: motivo_bloqueio derivation guards on !pode_ser_alocado for remaining hard blocks
+  if grep -q "pode_ser_alocado.*motivo_bloqueio\|motivo_bloqueio.*pode_ser_alocado" "$TRIP_FILE"; then
+    check "Backend motivo_bloqueio derivation guards on !pode_ser_alocado" "PASS"
+  else
+    check "Backend motivo_bloqueio derivation guards on !pode_ser_alocado" \
+      "WARN — verify derivation pass only fires for actual hard blocks"
+  fi
+
+  # 5c: TripulanteComQuinzena type includes motivo_bloqueio field
+  if grep -q "motivo_bloqueio\?:" "$TRIP_FILE"; then
+    check "TripulanteComQuinzena type includes motivo_bloqueio field" "PASS"
+  else
+    check "TripulanteComQuinzena type includes motivo_bloqueio field" \
+      "FAIL — motivo_bloqueio must be in TripulanteComQuinzena type"
+  fi
+fi
+
+# ── Gate 6: Backend — BLOQUEADO_FRMS vira soft_conflict na EVD ───────────────
+
+if [[ -f "$TRIP_FILE" ]]; then
+  # 6a: FRMS_CRITICAL conflict_code must be set
+  if grep -q "FRMS_CRITICAL" "$TRIP_FILE"; then
+    check "Backend FRMS normalization uses conflict_code FRMS_CRITICAL" "PASS"
+  else
+    check "Backend FRMS normalization uses conflict_code FRMS_CRITICAL" \
+      "FAIL — normalization pass must set conflict_code: 'FRMS_CRITICAL'"
+  fi
+
+  # 6b: FRMS normalization must set soft_conflict: true
+  FRMS_BLOCK=$(grep -A10 "BLOQUEADO_FRMS.*pode_ser_alocado\|status_operacional.*BLOQUEADO_FRMS" "$TRIP_FILE" 2>/dev/null || true)
+  if echo "$FRMS_BLOCK" | grep -q "soft_conflict: true"; then
+    check "Backend FRMS normalization sets soft_conflict: true" "PASS"
+  else
+    check "Backend FRMS normalization sets soft_conflict: true" \
+      "FAIL — BLOQUEADO_FRMS must produce soft_conflict: true in EVD endpoint"
+  fi
+
+  # 6c: FRMS normalization must set pode_ser_alocado: true (not hard block)
+  if echo "$FRMS_BLOCK" | grep -q "pode_ser_alocado: true"; then
+    check "Backend FRMS normalization sets pode_ser_alocado: true" "PASS"
+  else
+    check "Backend FRMS normalization sets pode_ser_alocado: true" \
+      "FAIL — BLOQUEADO_FRMS must not leave pode_ser_alocado: false in EVD"
+  fi
+
+  # 6d: FRMS normalization must set motivo_bloqueio: null (not expose block reason as hard block)
+  if grep -A12 "status_operacional !== 'BLOQUEADO_FRMS'" "$TRIP_FILE" | grep -q "motivo_bloqueio: null"; then
+    check "Backend FRMS normalization clears motivo_bloqueio (null)" "PASS"
+  else
+    check "Backend FRMS normalization clears motivo_bloqueio (null)" \
+      "WARN — FRMS soft_conflict should set motivo_bloqueio: null"
+  fi
+
+  # 6e: Anti-regression — BLOQUEADO_FRMS must NOT appear as hard block in final pass
+  # The old string 'Bloqueio FRMS' must not exist (it was the hard-block motivo)
+  if grep -q "'Bloqueio FRMS" "$TRIP_FILE" || grep -q "\"Bloqueio FRMS" "$TRIP_FILE"; then
+    check "Backend does NOT hard-block BLOQUEADO_FRMS with motivo string" \
+      "FAIL — old 'Bloqueio FRMS' hard-block motivo found; remove it"
+  else
+    check "Backend does NOT hard-block BLOQUEADO_FRMS with motivo string" "PASS"
   fi
 fi
 

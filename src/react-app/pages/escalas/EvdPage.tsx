@@ -1571,6 +1571,7 @@ function EvdCreateForm({
   const tripulantes = tripulantesRaw?.tripulantes || [];
   const tripulantesAptos = tripulantes.filter((item) => item.pode_ser_alocado);
   const tripulantesBloqueados = tripulantes.filter((item) => !item.pode_ser_alocado);
+
   const picCandidatosCanonicos = tripulantesAptos.filter((item) => roleCanBePic(item.role));
   const sicCandidatosCanonicos = tripulantesAptos.filter((item) => roleCanBeSic(item.role));
   const picFallbackHeuristico = picCandidatosCanonicos.length === 0 && tripulantesAptos.length > 0;
@@ -1864,7 +1865,11 @@ function EvdCreateForm({
                     const frms = frmsUnavailable
                       ? '?'
                       : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
-                    const conflictNote = p.soft_conflict ? ' [!] Conflito escala' : '';
+                    const conflictNote = p.soft_conflict
+                      ? p.conflict_code === 'FRMS_CRITICAL'
+                        ? ' [!] Alerta FRMS'
+                        : ' [!] Conflito escala'
+                      : '';
                     return (
                       <option key={p.funcionario_id} value={p.funcionario_id}>
                         {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}{conflictNote}
@@ -1905,7 +1910,11 @@ function EvdCreateForm({
                     const frms = frmsUnavailable
                       ? '?'
                       : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
-                    const conflictNote = p.soft_conflict ? ' [!] Conflito escala' : '';
+                    const conflictNote = p.soft_conflict
+                      ? p.conflict_code === 'FRMS_CRITICAL'
+                        ? ' [!] Alerta FRMS'
+                        : ' [!] Conflito escala'
+                      : '';
                     return (
                       <option key={`sic-${p.funcionario_id}`} value={p.funcionario_id}>
                         {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}{conflictNote}
