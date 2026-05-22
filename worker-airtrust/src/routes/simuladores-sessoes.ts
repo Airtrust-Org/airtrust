@@ -38,7 +38,7 @@ import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 // Vincula pelo campo sessao_id (migration 0098). Sem duplication: verifica
 // existência prévia pelo par (sessao_id, funcionario_id).
 // ─────────────────────────────────────────────────────────────────────────────
-async function criarQualificacoesPlanejadas(
+export async function criarQualificacoesPlanejadas(
   db: D1Database,
   params: {
     sessaoId: number;
@@ -899,7 +899,22 @@ app.post('/sessoes', async (c) => {
 
     // 5. QUALIFICAÇÕES PLANEJADAS — criar entrada planejada para cada participante
     //    se o modelo de sessão configurar "gera_qualificacao = 1".
-    const modeloIdParaQual = Number(templateIdFinal || modelo_sessao_id || 0) || null;
+    let modeloIdParaQual = Number(templateIdFinal || modelo_sessao_id || 0) || null;
+    // Fallback: buscar por tipo_sessao + modelo_aeronave (mesmo critério das manobras)
+    if (!modeloIdParaQual && tipo_sessao) {
+      const fallbackModelo = await c.env.DB.prepare(
+        `SELECT ms.id
+         FROM modelos_sessao ms
+         INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+         WHERE ts.codigo = ?
+           AND ms.modelo_aeronave = ?
+           AND ms.deleted_at IS NULL
+         LIMIT 1`,
+      )
+        .bind(tipo_sessao, modeloAeronaveSessao)
+        .first<{ id: number }>();
+      if (fallbackModelo) modeloIdParaQual = fallbackModelo.id;
+    }
     if (modeloIdParaQual) {
       try {
         const empresaIdQual = Number((c as any).get('empresaId') || 0);
