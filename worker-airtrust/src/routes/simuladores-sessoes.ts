@@ -74,6 +74,14 @@ export async function criarQualificacoesPlanejadas(
     return;
   }
 
+  // Mapear tipo_sessao → tipo_treinamento (CHECK constraint: INICIAL, RECORRENTE, SEMESTRAL, UPGRADE, ESPECIFICO)
+  const TIPO_TREINAMENTO_MAP: Record<string, string> = {
+    INI: 'INICIAL',
+    PER: 'RECORRENTE',
+    SEM: 'SEMESTRAL',
+  };
+  const tipoTreinamento = TIPO_TREINAMENTO_MAP[params.tipoSessao?.toUpperCase()] || params.tipoSessao || null;
+
   const stmts: ReturnType<typeof db.prepare>[] = [];
 
   for (const part of params.participantes) {
@@ -106,7 +114,7 @@ export async function criarQualificacoesPlanejadas(
           params.data,
           modelo.qual_validade || null,
           modelo.duracao_estimada || null,
-          params.tipoSessao || null,
+          tipoTreinamento,
           params.empresaId,
           params.sessaoId,
         ),
