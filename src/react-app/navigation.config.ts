@@ -144,7 +144,7 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
     },
     {
       id: 'simuladores',
-      label: 'Simuladores',
+      label: 'Simuladores & Voo',
       icon: 'Calendar',
       expandable: true,
       children: [

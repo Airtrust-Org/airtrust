@@ -521,7 +521,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
             >
               <option value="">Todos</option>
               <option value="SIMULADOR">Simulador</option>
-              <option value="AERONAVE">Aeronave</option>
+              <option value="AERONAVE">Voo</option>
             </select>
           </div>
 
@@ -604,7 +604,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Nome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase min-w-[110px]">
                 Dispositivo
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -647,7 +647,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                   <td className="px-4 py-3">
                     {(modelo.tipo || 'SIMULADOR') === 'AERONAVE' ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700">
-                        ✈️ Aeronave
+                        ✈️ Voo
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">

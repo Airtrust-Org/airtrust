@@ -1,0 +1,355 @@
+-- =============================================================================
+-- 0375: SK76 Inicial — Redistribuir classificação PF (A/B/AB)
+-- Objetivo: balancear 7A + 7B + 8AB por sessão = 84A + 84B + 96AB total
+-- Regra: cada sessão é executada 2x (1x com cada tripulante como PF).
+--   PF:A  → só o tripulante A executa como PF
+--   PF:B  → só o tripulante B executa como PF
+--   PF:AB → ambos executam como PF (cada um na sua vez)
+-- =============================================================================
+
+-- Limpa vínculos atuais dos 12 modelos para re-inserção determinística
+DELETE FROM modelos_sessao_manobras
+WHERE modelo_id IN (
+  SELECT id FROM modelos_sessao
+  WHERE codigo IN (
+    'SK76-I-01/12','SK76-I-02/12','SK76-I-03/12','SK76-I-04/12',
+    'SK76-I-05/12','SK76-I-06/12','SK76-I-07/12','SK76-I-08/12',
+    'SK76-I-09/12','SK76-I-10/12','SK76-I-11/12','SK76-I-12/12'
+  )
+);
+
+-- Reinsere os 264 vínculos (22 por sessão) com nova distribuição PF
+WITH mapa(codigo_sessao, ordem, manobra_codigo, pf) AS (
+VALUES
+-- ── SESSÃO 01/12: FAMILIARIZAÇÃO VFR (7A/7B/8AB) ──
+('SK76-I-01/12',  1, '76-POUAB', 'PF:AB'),
+('SK76-I-01/12',  2, '76-POUMO', 'PF:A'),
+('SK76-I-01/12',  3, '76-AUTAG', 'PF:B'),
+('SK76-I-01/12',  4, '76-MOTHV', 'PF:A'),
+('SK76-I-01/12',  5, '76-MOTCA', 'PF:A'),
+('SK76-I-01/12',  6, '76-MOTCB', 'PF:B'),
+('SK76-I-01/12',  7, '76-MOTCZ', 'PF:AB'),
+('SK76-I-01/12',  8, '76-MOTAP', 'PF:B'),
+('SK76-I-01/12',  9, '76-DCUMN', 'PF:AB'),
+('SK76-I-01/12', 10, '76-DCUDG', 'PF:A'),
+('SK76-I-01/12', 11, '76-COMBX', 'PF:B'),
+('SK76-I-01/12', 12, '76-FLWNR', 'PF:A'),
+('SK76-I-01/12', 13, '76-OILMT', 'PF:B'),
+('SK76-I-01/12', 14, '76-FALGC', 'PF:A'),
+('SK76-I-01/12', 15, '76-HIDPB', 'PF:B'),
+('SK76-I-01/12', 16, '76-APXPR', 'PF:AB'),
+('SK76-I-01/12', 17, '76-APXNP', 'PF:A'),
+('SK76-I-01/12', 18, '76-APXPI', 'PF:B'),
+('SK76-I-01/12', 19, '76-ARRIF', 'PF:AB'),
+('SK76-I-01/12', 20, '76-APXOI', 'PF:AB'),
+('SK76-I-01/12', 21, '76-APXAL', 'PF:AB'),
+('SK76-I-01/12', 22, '76-PRGGP', 'PF:AB'),
+
+-- ── SESSÃO 02/12: EMERGÊNCIAS DE MOTOR, OEI E AUTORROTAÇÃO (7A/7B/8AB) ──
+('SK76-I-02/12',  1, '76-AUTAG', 'PF:AB'),
+('SK76-I-02/12',  2, '76-POUMO', 'PF:A'),
+('SK76-I-02/12',  3, '76-MOTCA', 'PF:B'),
+('SK76-I-02/12',  4, '76-MOTCB', 'PF:A'),
+('SK76-I-02/12',  5, '76-MOTHV', 'PF:B'),
+('SK76-I-02/12',  6, '76-MOTCZ', 'PF:AB'),
+('SK76-I-02/12',  7, '76-MOTAP', 'PF:A'),
+('SK76-I-02/12',  8, '76-APXAL', 'PF:AB'),
+('SK76-I-02/12',  9, '76-APXOI', 'PF:AB'),
+('SK76-I-02/12', 10, '76-DCU1M', 'PF:A'),
+('SK76-I-02/12', 11, '76-DCU2M', 'PF:B'),
+('SK76-I-02/12', 12, '76-N1TQF', 'PF:B'),
+('SK76-I-02/12', 13, '76-OILMT', 'PF:A'),
+('SK76-I-02/12', 14, '76-COMBX', 'PF:B'),
+('SK76-I-02/12', 15, '76-FLWNR', 'PF:A'),
+('SK76-I-02/12', 16, '76-POUAB', 'PF:AB'),
+('SK76-I-02/12', 17, '76-PRGGP', 'PF:AB'),
+('SK76-I-02/12', 18, '76-DECSI', 'PF:AB'),
+('SK76-I-02/12', 19, '76-APXPR', 'PF:A'),
+('SK76-I-02/12', 20, '76-APXNP', 'PF:B'),
+('SK76-I-02/12', 21, '76-APXPI', 'PF:B'),
+('SK76-I-02/12', 22, '76-ARRIF', 'PF:AB'),
+
+-- ── SESSÃO 03/12: SISTEMA ELÉTRICO, BARRAS, GERADORES (7A/7B/8AB) ──
+('SK76-I-03/12',  1, '76-FALGC', 'PF:A'),
+('SK76-I-03/12',  2, '76-FALGD', 'PF:B'),
+('SK76-I-03/12',  3, '76-SOBGD', 'PF:A'),
+('SK76-I-03/12',  4, '76-FALGA', 'PF:B'),
+('SK76-I-03/12',  5, '76-FALEB', 'PF:AB'),
+('SK76-I-03/12',  6, '76-FALIV', 'PF:A'),
+('SK76-I-03/12',  7, '76-FALFF', 'PF:B'),
+('SK76-I-03/12',  8, '76-PER26', 'PF:A'),
+('SK76-I-03/12',  9, '76-FALRM', 'PF:B'),
+('SK76-I-03/12', 10, '76-FALEF', 'PF:AB'),
+('SK76-I-03/12', 11, '76-FALAD', 'PF:A'),
+('SK76-I-03/12', 12, '76-PERAT', 'PF:B'),
+('SK76-I-03/12', 13, '76-DECSI', 'PF:AB'),
+('SK76-I-03/12', 14, '76-APXPR', 'PF:AB'),
+('SK76-I-03/12', 15, '76-APXNP', 'PF:A'),
+('SK76-I-03/12', 16, '76-POUAB', 'PF:AB'),
+('SK76-I-03/12', 17, '76-POUMO', 'PF:AB'),
+('SK76-I-03/12', 18, '76-AUTAG', 'PF:B'),
+('SK76-I-03/12', 19, '76-MOTCZ', 'PF:AB'),
+('SK76-I-03/12', 20, '76-ARRIF', 'PF:AB'),
+('SK76-I-03/12', 21, '76-APXOI', 'PF:A'),
+('SK76-I-03/12', 22, '76-HIDPB', 'PF:B'),
+
+-- ── SESSÃO 04/12: INTRODUÇÃO IFR, NAVEGAÇÃO E APROXIMAÇÕES (7A/7B/8AB) ──
+('SK76-I-04/12',  1, '76-PRGGP', 'PF:AB'),
+('SK76-I-04/12',  2, '76-DECSI', 'PF:AB'),
+('SK76-I-04/12',  3, '76-APXPR', 'PF:AB'),
+('SK76-I-04/12',  4, '76-APXNP', 'PF:A'),
+('SK76-I-04/12',  5, '76-APXPI', 'PF:B'),
+('SK76-I-04/12',  6, '76-ARRIF', 'PF:AB'),
+('SK76-I-04/12',  7, '76-APXOI', 'PF:A'),
+('SK76-I-04/12',  8, '76-APXAL', 'PF:B'),
+('SK76-I-04/12',  9, '76-FALPA', 'PF:A'),
+('SK76-I-04/12', 10, '76-FALFD', 'PF:B'),
+('SK76-I-04/12', 11, '76-FALTS', 'PF:A'),
+('SK76-I-04/12', 12, '76-FALAD', 'PF:B'),
+('SK76-I-04/12', 13, '76-PERAT', 'PF:A'),
+('SK76-I-04/12', 14, '76-PER26', 'PF:B'),
+('SK76-I-04/12', 15, '76-POUMO', 'PF:AB'),
+('SK76-I-04/12', 16, '76-POUAB', 'PF:AB'),
+('SK76-I-04/12', 17, '76-AUTAG', 'PF:A'),
+('SK76-I-04/12', 18, '76-MOTCZ', 'PF:AB'),
+('SK76-I-04/12', 19, '76-MOTAP', 'PF:AB'),
+('SK76-I-04/12', 20, '76-HIDPB', 'PF:B'),
+('SK76-I-04/12', 21, '76-MGBSF', 'PF:A'),
+('SK76-I-04/12', 22, '76-INCMO', 'PF:B'),
+
+-- ── SESSÃO 05/12: AFCS, FLIGHT DIRECTOR, EFIS E DEGRADAÇÕES (7A/7B/8AB) ──
+('SK76-I-05/12',  1, '76-FALPA', 'PF:A'),
+('SK76-I-05/12',  2, '76-FALFD', 'PF:B'),
+('SK76-I-05/12',  3, '76-FALTS', 'PF:AB'),
+('SK76-I-05/12',  4, '76-FALEF', 'PF:A'),
+('SK76-I-05/12',  5, '76-FALAD', 'PF:B'),
+('SK76-I-05/12',  6, '76-PERAT', 'PF:A'),
+('SK76-I-05/12',  7, '76-FALRM', 'PF:B'),
+('SK76-I-05/12',  8, '76-PRGGP', 'PF:AB'),
+('SK76-I-05/12',  9, '76-APXPR', 'PF:A'),
+('SK76-I-05/12', 10, '76-APXNP', 'PF:B'),
+('SK76-I-05/12', 11, '76-APXPI', 'PF:AB'),
+('SK76-I-05/12', 12, '76-ARRIF', 'PF:AB'),
+('SK76-I-05/12', 13, '76-APXOI', 'PF:A'),
+('SK76-I-05/12', 14, '76-MOTCZ', 'PF:AB'),
+('SK76-I-05/12', 15, '76-MOTAP', 'PF:B'),
+('SK76-I-05/12', 16, '76-POUAB', 'PF:AB'),
+('SK76-I-05/12', 17, '76-POUMO', 'PF:A'),
+('SK76-I-05/12', 18, '76-AUTAG', 'PF:B'),
+('SK76-I-05/12', 19, '76-APXAL', 'PF:AB'),
+('SK76-I-05/12', 20, '76-DECSI', 'PF:AB'),
+('SK76-I-05/12', 21, '76-COMBX', 'PF:A'),
+('SK76-I-05/12', 22, '76-FLWNR', 'PF:B'),
+
+-- ── SESSÃO 06/12: POWERPLANT AVANÇADO, DECU, FALHAS COMBINADAS (7A/7B/8AB) ──
+('SK76-I-06/12',  1, '76-DCUMN', 'PF:A'),
+('SK76-I-06/12',  2, '76-DCUDG', 'PF:B'),
+('SK76-I-06/12',  3, '76-DCU1M', 'PF:A'),
+('SK76-I-06/12',  4, '76-DCU2M', 'PF:B'),
+('SK76-I-06/12',  5, '76-MOTCA', 'PF:A'),
+('SK76-I-06/12',  6, '76-MOTCB', 'PF:B'),
+('SK76-I-06/12',  7, '76-MOTHV', 'PF:AB'),
+('SK76-I-06/12',  8, '76-MOTCZ', 'PF:AB'),
+('SK76-I-06/12',  9, '76-MOTAP', 'PF:AB'),
+('SK76-I-06/12', 10, '76-N1TQF', 'PF:A'),
+('SK76-I-06/12', 11, '76-COMBX', 'PF:B'),
+('SK76-I-06/12', 12, '76-FLWNR', 'PF:A'),
+('SK76-I-06/12', 13, '76-OILMT', 'PF:B'),
+('SK76-I-06/12', 14, '76-POUMO', 'PF:AB'),
+('SK76-I-06/12', 15, '76-AUTAG', 'PF:AB'),
+('SK76-I-06/12', 16, '76-PRGGP', 'PF:AB'),
+('SK76-I-06/12', 17, '76-DECSI', 'PF:AB'),
+('SK76-I-06/12', 18, '76-APXPR', 'PF:A'),
+('SK76-I-06/12', 19, '76-APXNP', 'PF:B'),
+('SK76-I-06/12', 20, '76-APXPI', 'PF:AB'),
+('SK76-I-06/12', 21, '76-ARRIF', 'PF:A'),
+('SK76-I-06/12', 22, '76-APXOI', 'PF:B'),
+
+-- ── SESSÃO 07/12: FALHAS DUPLAS, ENERGIA, GERENCIAMENTO EMERGÊNCIA (7A/7B/8AB) ──
+('SK76-I-07/12',  1, '76-DUAHV', 'PF:A'),
+('SK76-I-07/12',  2, '76-DUADC', 'PF:B'),
+('SK76-I-07/12',  3, '76-DUACZ', 'PF:AB'),
+('SK76-I-07/12',  4, '76-AUTAG', 'PF:AB'),
+('SK76-I-07/12',  5, '76-POUAB', 'PF:B'),
+('SK76-I-07/12',  6, '76-MOTHV', 'PF:A'),
+('SK76-I-07/12',  7, '76-MOTCA', 'PF:B'),
+('SK76-I-07/12',  8, '76-MOTCB', 'PF:A'),
+('SK76-I-07/12',  9, '76-MOTCZ', 'PF:AB'),
+('SK76-I-07/12', 10, '76-MOTAP', 'PF:B'),
+('SK76-I-07/12', 11, '76-APXAL', 'PF:AB'),
+('SK76-I-07/12', 12, '76-APXOI', 'PF:A'),
+('SK76-I-07/12', 13, '76-DCU2M', 'PF:B'),
+('SK76-I-07/12', 14, '76-COMBX', 'PF:A'),
+('SK76-I-07/12', 15, '76-HIDPB', 'PF:AB'),
+('SK76-I-07/12', 16, '76-PRGGP', 'PF:AB'),
+('SK76-I-07/12', 17, '76-DECSI', 'PF:A'),
+('SK76-I-07/12', 18, '76-APXPR', 'PF:B'),
+('SK76-I-07/12', 19, '76-APXNP', 'PF:AB'),
+('SK76-I-07/12', 20, '76-APXPI', 'PF:A'),
+('SK76-I-07/12', 21, '76-ARRIF', 'PF:AB'),
+('SK76-I-07/12', 22, '76-INCMO', 'PF:B'),
+
+-- ── SESSÃO 08/12: MGB, TRANSMISSÃO, ROTOR CAUDA, HIDRÁULICO (7A/7B/8AB) ──
+('SK76-I-08/12',  1, '76-MGBSF', 'PF:A'),
+('SK76-I-08/12',  2, '76-MGBOL', 'PF:B'),
+('SK76-I-08/12',  3, '76-CHPTG', 'PF:A'),
+('SK76-I-08/12',  4, '76-SERTQ', 'PF:A'),
+('SK76-I-08/12',  5, '76-SERJM', 'PF:B'),
+('SK76-I-08/12',  6, '76-AMOTV', 'PF:B'),
+('SK76-I-08/12',  7, '76-TRSRC', 'PF:A'),
+('SK76-I-08/12',  8, '76-CTRRC', 'PF:B'),
+('SK76-I-08/12',  9, '76-HIDPB', 'PF:AB'),
+('SK76-I-08/12', 10, '76-POUAB', 'PF:AB'),
+('SK76-I-08/12', 11, '76-POUMO', 'PF:A'),
+('SK76-I-08/12', 12, '76-MOTCZ', 'PF:AB'),
+('SK76-I-08/12', 13, '76-MOTAP', 'PF:B'),
+('SK76-I-08/12', 14, '76-AUTAG', 'PF:AB'),
+('SK76-I-08/12', 15, '76-APXPR', 'PF:B'),
+('SK76-I-08/12', 16, '76-APXNP', 'PF:A'),
+('SK76-I-08/12', 17, '76-APXPI', 'PF:AB'),
+('SK76-I-08/12', 18, '76-ARRIF', 'PF:AB'),
+('SK76-I-08/12', 19, '76-APXOI', 'PF:A'),
+('SK76-I-08/12', 20, '76-APXAL', 'PF:B'),
+('SK76-I-08/12', 21, '76-PRGGP', 'PF:AB'),
+('SK76-I-08/12', 22, '76-DECSI', 'PF:AB'),
+
+-- ── SESSÃO 09/12: FOGO, FUMAÇA, EMERGÊNCIA CABINE, ALTO ESTRESSE (7A/7B/8AB) ──
+('SK76-I-09/12',  1, '76-INCMO', 'PF:A'),
+('SK76-I-09/12',  2, '76-INCCB', 'PF:B'),
+('SK76-I-09/12',  3, '76-FUMBG', 'PF:AB'),
+('SK76-I-09/12',  4, '76-OILMT', 'PF:A'),
+('SK76-I-09/12',  5, '76-MGBOL', 'PF:B'),
+('SK76-I-09/12',  6, '76-MGBSF', 'PF:A'),
+('SK76-I-09/12',  7, '76-HIDPB', 'PF:AB'),
+('SK76-I-09/12',  8, '76-FALGD', 'PF:B'),
+('SK76-I-09/12',  9, '76-FALEB', 'PF:A'),
+('SK76-I-09/12', 10, '76-FALIV', 'PF:B'),
+('SK76-I-09/12', 11, '76-POUAB', 'PF:AB'),
+('SK76-I-09/12', 12, '76-POUMO', 'PF:A'),
+('SK76-I-09/12', 13, '76-MOTCZ', 'PF:AB'),
+('SK76-I-09/12', 14, '76-AUTAG', 'PF:B'),
+('SK76-I-09/12', 15, '76-ARRIF', 'PF:AB'),
+('SK76-I-09/12', 16, '76-PRGGP', 'PF:AB'),
+('SK76-I-09/12', 17, '76-DECSI', 'PF:A'),
+('SK76-I-09/12', 18, '76-APXPR', 'PF:B'),
+('SK76-I-09/12', 19, '76-APXNP', 'PF:AB'),
+('SK76-I-09/12', 20, '76-APXPI', 'PF:A'),
+('SK76-I-09/12', 21, '76-APXOI', 'PF:B'),
+('SK76-I-09/12', 22, '76-APXAL', 'PF:AB'),
+
+-- ── SESSÃO 10/12: OPERAÇÃO IFR/OEI COMPLEXA (7A/7B/8AB) ──
+('SK76-I-10/12',  1, '76-PRGGP', 'PF:AB'),
+('SK76-I-10/12',  2, '76-DECSI', 'PF:A'),
+('SK76-I-10/12',  3, '76-APXPR', 'PF:B'),
+('SK76-I-10/12',  4, '76-APXNP', 'PF:AB'),
+('SK76-I-10/12',  5, '76-APXPI', 'PF:A'),
+('SK76-I-10/12',  6, '76-ARRIF', 'PF:B'),
+('SK76-I-10/12',  7, '76-APXOI', 'PF:A'),
+('SK76-I-10/12',  8, '76-APXAL', 'PF:AB'),
+('SK76-I-10/12',  9, '76-MOTAP', 'PF:B'),
+('SK76-I-10/12', 10, '76-MOTCZ', 'PF:AB'),
+('SK76-I-10/12', 11, '76-POUMO', 'PF:A'),
+('SK76-I-10/12', 12, '76-FALPA', 'PF:B'),
+('SK76-I-10/12', 13, '76-FALFD', 'PF:A'),
+('SK76-I-10/12', 14, '76-PERAT', 'PF:B'),
+('SK76-I-10/12', 15, '76-FALAD', 'PF:AB'),
+('SK76-I-10/12', 16, '76-POUAB', 'PF:AB'),
+('SK76-I-10/12', 17, '76-AUTAG', 'PF:A'),
+('SK76-I-10/12', 18, '76-MOTHV', 'PF:AB'),
+('SK76-I-10/12', 19, '76-MOTCA', 'PF:AB'),
+('SK76-I-10/12', 20, '76-MOTCB', 'PF:B'),
+('SK76-I-10/12', 21, '76-HIDPB', 'PF:A'),
+('SK76-I-10/12', 22, '76-INCMO', 'PF:B'),
+
+-- ── SESSÃO 11/12: LOFT / LINE ORIENTED FLIGHT TRAINING (7A/7B/8AB) ──
+('SK76-I-11/12',  1, '76-PRGGP', 'PF:AB'),
+('SK76-I-11/12',  2, '76-DECSI', 'PF:A'),
+('SK76-I-11/12',  3, '76-APXPR', 'PF:B'),
+('SK76-I-11/12',  4, '76-APXNP', 'PF:A'),
+('SK76-I-11/12',  5, '76-APXPI', 'PF:B'),
+('SK76-I-11/12',  6, '76-ARRIF', 'PF:AB'),
+('SK76-I-11/12',  7, '76-MOTCZ', 'PF:A'),
+('SK76-I-11/12',  8, '76-APXOI', 'PF:B'),
+('SK76-I-11/12',  9, '76-POUMO', 'PF:AB'),
+('SK76-I-11/12', 10, '76-FALGC', 'PF:A'),
+('SK76-I-11/12', 11, '76-FALGA', 'PF:B'),
+('SK76-I-11/12', 12, '76-FALPA', 'PF:A'),
+('SK76-I-11/12', 13, '76-FALFD', 'PF:B'),
+('SK76-I-11/12', 14, '76-HIDPB', 'PF:AB'),
+('SK76-I-11/12', 15, '76-INCMO', 'PF:A'),
+('SK76-I-11/12', 16, '76-MGBSF', 'PF:B'),
+('SK76-I-11/12', 17, '76-POUAB', 'PF:AB'),
+('SK76-I-11/12', 18, '76-AUTAG', 'PF:AB'),
+('SK76-I-11/12', 19, '76-APXAL', 'PF:AB'),
+('SK76-I-11/12', 20, '76-MOTHV', 'PF:A'),
+('SK76-I-11/12', 21, '76-MOTCA', 'PF:B'),
+('SK76-I-11/12', 22, '76-MOTCB', 'PF:AB'),
+
+-- ── SESSÃO 12/12: PROFICIENCY CHECK / CONSOLIDAÇÃO FINAL (7A/7B/8AB) ──
+('SK76-I-12/12',  1, '76-POUAB', 'PF:AB'),
+('SK76-I-12/12',  2, '76-POUMO', 'PF:A'),
+('SK76-I-12/12',  3, '76-AUTAG', 'PF:B'),
+('SK76-I-12/12',  4, '76-MOTCA', 'PF:A'),
+('SK76-I-12/12',  5, '76-MOTCB', 'PF:B'),
+('SK76-I-12/12',  6, '76-MOTHV', 'PF:AB'),
+('SK76-I-12/12',  7, '76-MOTCZ', 'PF:AB'),
+('SK76-I-12/12',  8, '76-MOTAP', 'PF:A'),
+('SK76-I-12/12',  9, '76-DUAHV', 'PF:B'),
+('SK76-I-12/12', 10, '76-DUADC', 'PF:A'),
+('SK76-I-12/12', 11, '76-DUACZ', 'PF:AB'),
+('SK76-I-12/12', 12, '76-APXPR', 'PF:B'),
+('SK76-I-12/12', 13, '76-APXNP', 'PF:A'),
+('SK76-I-12/12', 14, '76-APXOI', 'PF:AB'),
+('SK76-I-12/12', 15, '76-APXPI', 'PF:AB'),
+('SK76-I-12/12', 16, '76-ARRIF', 'PF:A'),
+('SK76-I-12/12', 17, '76-FALPA', 'PF:B'),
+('SK76-I-12/12', 18, '76-FALFD', 'PF:A'),
+('SK76-I-12/12', 19, '76-FALGD', 'PF:AB'),
+('SK76-I-12/12', 20, '76-INCMO', 'PF:B'),
+('SK76-I-12/12', 21, '76-MGBSF', 'PF:B'),
+('SK76-I-12/12', 22, '76-HIDPB', 'PF:AB')
+)
+INSERT INTO modelos_sessao_manobras (
+  modelo_id,
+  manobra_id,
+  ordem,
+  obrigatoria,
+  observacoes,
+  created_at,
+  updated_at
+)
+SELECT
+  ms.id,
+  m.id,
+  mapa.ordem,
+  1,
+  mapa.pf,
+  datetime('now'),
+  datetime('now')
+FROM mapa
+JOIN modelos_sessao ms
+  ON ms.codigo = mapa.codigo_sessao
+ AND ms.deleted_at IS NULL
+JOIN manobras m
+  ON m.codigo = mapa.manobra_codigo
+ AND m.deleted_at IS NULL
+ON CONFLICT(modelo_id, manobra_id) DO UPDATE SET
+  ordem = excluded.ordem,
+  obrigatoria = excluded.obrigatoria,
+  observacoes = excluded.observacoes,
+  deleted_at = NULL,
+  updated_at = datetime('now');
+
+-- Verificação
+SELECT
+  'Sessão ' || substr(codigo, 9) AS sessao,
+  COUNT(*) AS total,
+  SUM(CASE WHEN observacoes = 'PF:A'  THEN 1 ELSE 0 END) AS A,
+  SUM(CASE WHEN observacoes = 'PF:B'  THEN 1 ELSE 0 END) AS B,
+  SUM(CASE WHEN observacoes = 'PF:AB' THEN 1 ELSE 0 END) AS AB
+FROM modelos_sessao_manobras msm
+JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+WHERE ms.codigo LIKE 'SK76-I-%'
+  AND msm.deleted_at IS NULL
+GROUP BY ms.codigo
+ORDER BY ms.codigo;

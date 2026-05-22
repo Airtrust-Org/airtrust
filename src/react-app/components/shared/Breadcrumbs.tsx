@@ -8,7 +8,7 @@ export function Breadcrumbs() {
   const breadcrumbNames: Record<string, string> = {
     'dashboard': 'Dashboard',
     'funcionarios': 'Funcionários',
-    'simuladores': 'Simuladores',
+    'simuladores': 'Simuladores & Voo',
     'qualificacoes': 'Qualificações',
     'configuracoes': 'Configurações'
   };
