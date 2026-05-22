@@ -21,8 +21,8 @@ import {
   normalizeModeloAeronave,
   resolveTemplateIdSessao,
   normalizeChecksSessao,
+  criarQualificacoesPlanejadas,
 } from './simuladores-shared';
-import { criarQualificacoesPlanejadas } from './simuladores-sessoes';
 
 const app = new Hono<{ Bindings: Env }>();
 
