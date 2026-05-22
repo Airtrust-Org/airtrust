@@ -28,8 +28,14 @@ import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
 import { useApi } from '@/react-app/hooks/useApi';
 import { apiFetch } from '@/react-app/lib/apiFetch';
+import { getAccessToken } from '@/react-app/config/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+
+function authHeaders(): Record<string, string> {
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 interface EvdVoo {
   id: string;
@@ -762,7 +768,7 @@ export default function EvdPage() {
     try {
       const res = await apiFetch('/api/evd/publicacoes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ data_ref: data, observacoes: observacoes.trim() || undefined }),
       });
       const json = (await res.json().catch(() => ({}))) as {
@@ -805,7 +811,7 @@ export default function EvdPage() {
     }) => {
       const res = await apiFetch(`/api/evd/${id}/publicar`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(payload || {}),
       });
       const responseJson = (await res.json().catch(() => ({}))) as {
@@ -835,7 +841,7 @@ export default function EvdPage() {
   // Delete voo
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await apiFetch(`/api/evd/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/evd/${id}`, { method: 'DELETE', headers: { ...authHeaders() } });
       if (!res.ok) throw new Error('Erro ao excluir');
       return res.json();
     },
@@ -855,7 +861,7 @@ export default function EvdPage() {
 
     let publishPayload: { require_justificativa?: boolean; justificativa?: EvdJustificativaPayload } = {};
     if (needsJustificativa) {
-      const existingRes = await apiFetch(`/api/evd/${voo.id}/justificativas`);
+      const existingRes = await apiFetch(`/api/evd/${voo.id}/justificativas`, { headers: { ...authHeaders() } });
       const existingJson = (await existingRes.json().catch(() => ({}))) as {
         success?: boolean;
         data?: unknown[];
@@ -1654,7 +1660,7 @@ function EvdCreateForm({
 
       const res = await apiFetch('/api/evd', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(body),
       });
 
@@ -1683,7 +1689,7 @@ function EvdCreateForm({
         });
         const justRes = await apiFetch(`/api/evd/${json.data.id}/justificativas`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify(justificativaPayload),
         });
         if (!justRes.ok) {
@@ -1879,7 +1885,7 @@ function EvdCreateForm({
                   value={form.hora_apresentacao}
                   onChange={(e) => setForm((prev) => ({ ...prev, hora_apresentacao: e.target.value }))}
                   onBlur={() => handleHorarioBlur('hora_apresentacao', 'Apresentação')}
-                  placeholder="0730 ou 07:30"
+                  placeholder=""
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
@@ -1893,7 +1899,7 @@ function EvdCreateForm({
                     setForm((prev) => ({ ...prev, hora_decolagem_prevista: e.target.value }))
                   }
                   onBlur={() => handleHorarioBlur('hora_decolagem_prevista', 'Início')}
-                  placeholder="0730 ou 07:30"
+                  placeholder=""
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
@@ -1905,7 +1911,7 @@ function EvdCreateForm({
                   value={form.hora_pouso_previsto}
                   onChange={(e) => setForm((prev) => ({ ...prev, hora_pouso_previsto: e.target.value }))}
                   onBlur={() => handleHorarioBlur('hora_pouso_previsto', 'Término')}
-                  placeholder="0730 ou 07:30"
+                  placeholder=""
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
