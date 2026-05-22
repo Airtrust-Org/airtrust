@@ -551,8 +551,6 @@ export async function criarQualificacoesPlanejadas(
     }
 
     // Check 2: UNIQUE constraint on (funcionario_id, qualificacao_codigo, data_conclusao)
-    // If a non-deleted record exists for this person+code+date (any status, any session),
-    // the INSERT would fail with SQLITE_CONSTRAINT_UNIQUE.
     const uniqueConflict = await db
       .prepare(
         `SELECT id, status, sessao_id FROM qualificacoes_historico
@@ -566,8 +564,20 @@ export async function criarQualificacoesPlanejadas(
       .first<{ id: number; status: string; sessao_id: number | null }>();
 
     if (uniqueConflict) {
-      conflitosUniques++;
-      continue;
+      // CANCELADA orphan records (no session link) → soft-delete and proceed
+      if (uniqueConflict.status === 'CANCELADA' && !uniqueConflict.sessao_id) {
+        await db
+          .prepare(
+            `UPDATE qualificacoes_historico
+             SET deleted_at = datetime('now'), updated_at = datetime('now')
+             WHERE id = ?`,
+          )
+          .bind(uniqueConflict.id)
+          .run();
+      } else {
+        conflitosUniques++;
+        continue;
+      }
     }
 
     stmts.push(
