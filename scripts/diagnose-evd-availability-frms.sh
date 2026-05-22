@@ -78,10 +78,18 @@ extract_tripulantes_summary() {
     {
       total: (trip|length),
       elegiveis: (trip|map(select(.pode_ser_alocado==true))|length),
-      bloqueados: (trip|map(select(.pode_ser_alocado!=true))|length),
-      motivos: (
+      elegiveis_sem_conflito: (trip|map(select(.pode_ser_alocado==true and (.soft_conflict//false)==false))|length),
+      elegiveis_conflito_mensal: (trip|map(select(.pode_ser_alocado==true and (.soft_conflict//false)==true))|length),
+      bloqueados_duros: (trip|map(select(.pode_ser_alocado!=true))|length),
+      motivos_bloqueio_duro: (
         trip
         | map(select(.pode_ser_alocado!=true) | (.motivo_bloqueio // "sem_motivo"))
+        | group_by(.)
+        | map({motivo: .[0], count: length})
+      ),
+      conflitos_mensais: (
+        trip
+        | map(select(.pode_ser_alocado==true and (.soft_conflict//false)==true) | (.conflict_reason // (.conflict_code // "conflito_escala")))
         | group_by(.)
         | map({motivo: .[0], count: length})
       ),
@@ -92,7 +100,7 @@ extract_tripulantes_summary() {
         | map({status: .[0], count: length})
       )
     }
-  ' "$TRIP_BODY" 2>/dev/null || echo '{"total":0,"elegiveis":0,"bloqueados":0,"motivos":[],"status_operacional":[]}'
+  ' "$TRIP_BODY" 2>/dev/null || echo '{"total":0,"elegiveis":0,"elegiveis_sem_conflito":0,"elegiveis_conflito_mensal":0,"bloqueados_duros":0,"motivos_bloqueio_duro":[],"conflitos_mensais":[],"status_operacional":[]}'
 }
 
 extract_frms_statuses() {
@@ -213,13 +221,17 @@ echo
 echo "[Resumo]"
 echo "- aeronaves_ativas: ${AER_COUNT}"
 echo "- aeronave_utilizada: id=${AERONAVE_ID:-N/A} prefixo=${AERONAVE_PREFIXO:-N/A} modelo=${AERONAVE_MODELO:-N/A}"
-echo "- tripulantes_total: $(echo "$TRIP_SUMMARY" | jq -r '.total')"
-echo "- tripulantes_elegiveis: $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis')"
-echo "- tripulantes_bloqueados: $(echo "$TRIP_SUMMARY" | jq -r '.bloqueados')"
-echo "- motivos_bloqueio_por_texto:"
-echo "$TRIP_SUMMARY" | jq -r '.motivos[]? | "  * \(.motivo): \(.count)"' || true
-if [[ -z "$ESCALA_ID_INPUT" ]] && [[ "$(echo "$TRIP_SUMMARY" | jq -r '.bloqueados')" -gt 0 ]]; then
-  echo "  NOTA: sem escala_id, bloqueios do tipo 'Alocado em X QN' podem ser falsos positivos da mesma escala mensal"
+echo "- tripulantes_total:               $(echo "$TRIP_SUMMARY" | jq -r '.total')"
+echo "- tripulantes_elegiveis_total:     $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis')"
+echo "- tripulantes_aptos_sem_conflito:  $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis_sem_conflito')"
+echo "- tripulantes_conflito_mensal:     $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis_conflito_mensal') (selecionaveis com aviso)"
+echo "- tripulantes_bloqueados_duros:    $(echo "$TRIP_SUMMARY" | jq -r '.bloqueados_duros') (ferias RH, CMA, hab. modelo)"
+echo "- motivos_bloqueio_duro:"
+echo "$TRIP_SUMMARY" | jq -r '.motivos_bloqueio_duro[]? | "  * \(.motivo): \(.count)"' || true
+echo "- conflitos_escala_mensal_por_motivo:"
+echo "$TRIP_SUMMARY" | jq -r '.conflitos_mensais[]? | "  * \(.motivo): \(.count)"' || true
+if [[ -z "$ESCALA_ID_INPUT" ]]; then
+  echo "  NOTA: sem escala_id — conflitos de mesma escala NAO sao liberados (falsos positivos possiveis)"
 fi
 echo "- status_operacional_tripulantes:"
 echo "$TRIP_SUMMARY" | jq -r '.status_operacional[]? | "  * \(.status): \(.count)"' || true

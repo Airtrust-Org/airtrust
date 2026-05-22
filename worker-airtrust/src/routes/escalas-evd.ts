@@ -159,8 +159,12 @@ type MasterAeronaveResolution = {
 };
 
 type MonthlyAvailabilityResult = {
+  /** Hard block: impede salvar (ferias RH real, habilitacao invalida). */
   blocked: boolean;
+  /** Soft conflict: divergencia com escala mensal — permite salvar com aviso. */
+  soft_conflict?: boolean;
   message?: string;
+  conflict_code?: 'FERIAS_RH' | 'OTHER_ESCALA_OPERATIONAL' | 'OTHER_ESCALA_SITUACAO';
 };
 
 type RoleContext = {
@@ -389,6 +393,7 @@ async function validateCrewAvailabilityOnMonthlyScale(params: {
          FROM funcionario_ferias
         WHERE CAST(funcionario_id AS INTEGER) = ?
           AND deleted_at IS NULL
+          AND escala_alocacao_id IS NULL
           AND NOT (data_fim < ? OR data_inicio > ?)
         LIMIT 1`,
     )
@@ -434,7 +439,13 @@ async function validateCrewAvailabilityOnMonthlyScale(params: {
       }
       // Sem escala_id vinculada no EVD não há como afirmar conflito operacional com segurança.
       if (!params.escalaId) continue;
-      return { blocked: true, message: MSG_OTHER_ESCALA_BLOCK };
+      // Conflito com outra escala mensal: soft conflict (não bloqueia, gera aviso).
+      return {
+        blocked: false,
+        soft_conflict: true,
+        message: MSG_OTHER_ESCALA_BLOCK,
+        conflict_code: 'OTHER_ESCALA_OPERATIONAL',
+      };
     }
 
     const situacao = String(row.situacao_tipo || '').trim().toUpperCase();
@@ -445,9 +456,12 @@ async function validateCrewAvailabilityOnMonthlyScale(params: {
       continue;
     }
     if (Number(row.bloqueia_alocacao ?? 1) === 1) {
+      // Situacao de outra escala mensal: soft conflict (não bloqueia, gera aviso).
       return {
-        blocked: true,
+        blocked: false,
+        soft_conflict: true,
         message: MSG_SITUACAO_BLOCK(situacao),
+        conflict_code: 'OTHER_ESCALA_SITUACAO',
       };
     }
   }
@@ -519,6 +533,11 @@ async function collectOperationalWarningsAndBlocks(params: {
     });
     if (availability.blocked) {
       return { hardError: availability.message || MSG_MONTHLY_UNAVAILABLE, warnings, requiresOperationalJustification };
+    }
+    if (availability.soft_conflict && availability.message) {
+      // Divergencia com escala mensal: permitir salvar, mas exigir justificativa.
+      warnings.push(`Conflito escala mensal: ${availability.message}`);
+      requiresOperationalJustification = true;
     }
   }
 
