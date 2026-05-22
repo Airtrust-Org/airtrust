@@ -88,14 +88,14 @@ extract_tripulantes_summary() {
       elegiveis: (trip|map(select(.pode_ser_alocado==true))|length),
       elegiveis_sem_conflito: (trip|map(select(.pode_ser_alocado==true and (.soft_conflict//false)==false))|length),
       elegiveis_conflito_mensal: (trip|map(select(.pode_ser_alocado==true and (.soft_conflict//false)==true))|length),
-      fora_quinzena: (
+      soft_conflict_quinzena: (
         trip
-        | map(select(.pode_ser_alocado!=true and ((.conflict_code // "") == "OUT_OF_QUINZENA" or ((.motivo_bloqueio // "") | test("quinzena"; "i")))))
+        | map(select((.soft_conflict//false)==true and (.conflict_code // "") == "OUT_OF_QUINZENA"))
         | length
       ),
       hard_blocks: (
         trip
-        | map(select(.pode_ser_alocado!=true and ((.conflict_code // "") != "OUT_OF_QUINZENA")))
+        | map(select(.pode_ser_alocado!=true))
         | length
       ),
       motivos_bloqueio_duro: (
@@ -248,7 +248,7 @@ echo "- tripulantes_total:               $(echo "$TRIP_SUMMARY" | jq -r '.total'
 echo "- tripulantes_elegiveis_total:     $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis')"
 echo "- elegiveis_sem_conflito:          $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis_sem_conflito')"
 echo "- elegiveis_soft_conflict:         $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis_conflito_mensal')"
-echo "- fora_quinzena:                   $(echo "$TRIP_SUMMARY" | jq -r '.fora_quinzena')"
+echo "- soft_conflict_quinzena:          $(echo "$TRIP_SUMMARY" | jq -r '.soft_conflict_quinzena')"
 echo "- hard_blocks:                     $(echo "$TRIP_SUMMARY" | jq -r '.hard_blocks')"
 echo "- motivos_hard_block:"
 echo "$TRIP_SUMMARY" | jq -r '.motivos_bloqueio_duro[]? | "  * \(.motivo): \(.count)"' || true

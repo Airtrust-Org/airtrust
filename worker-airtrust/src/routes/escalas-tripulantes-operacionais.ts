@@ -192,17 +192,18 @@ tripulantesOperacionais.get('/', auth(), async (c) => {
 
       return {
         ...tripulante,
-        pode_ser_alocado: false,
-        motivo_bloqueio: motivoBloqueio,
-        soft_conflict: false,
-        conflict_reason: null,
+        pode_ser_alocado: true,
+        soft_conflict: true,
+        conflict_reason: motivoBloqueio,
         conflict_code: 'OUT_OF_QUINZENA',
       };
     });
 
-    tripulantesComQuinzena = [...tripulantesComQuinzena].sort((a, b) =>
-      Number(b.pode_ser_alocado) - Number(a.pode_ser_alocado),
-    );
+    tripulantesComQuinzena = [...tripulantesComQuinzena].sort((a, b) => {
+      const rank = (t: TripulanteComQuinzena) =>
+        t.pode_ser_alocado ? (t.soft_conflict ? 1 : 0) : 2;
+      return rank(a) - rank(b);
+    });
   }
 
   let conflitosPorFuncionario = new Map<
