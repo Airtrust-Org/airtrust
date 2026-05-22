@@ -480,10 +480,9 @@ export default function EvdPage() {
     success: boolean;
     data?: { items?: FrmsDailyFatigueAlertItem[] };
   }>(`/api/frms/daily-fatigue/alerts?date=${data}`);
-  const { data: aeronavesRaw, loading: loadingAeronaves } = useApi<{
-    success: boolean;
-    data: AeronaveAtiva[];
-  }>('/api/aeronaves');
+  const { data: aeronavesRaw, loading: loadingAeronaves } = useApi<AeronaveAtiva[]>(
+    '/api/aeronaves?somente_ativas=1',
+  );
 
   const selectedDate = new Date(data + 'T12:00:00');
   const weekday = WEEKDAY_LABELS[selectedDate.getDay()];
@@ -491,8 +490,8 @@ export default function EvdPage() {
   const frmsAlertItems = frmsAlertsRaw?.data?.items || [];
   const frmsUnavailable = Boolean(frmsDailyError || frmsAlertsError);
   const aeronavesAtivas = useMemo(
-    () => (aeronavesRaw?.data || []).filter((a) => isAeronaveAtiva(a.status)),
-    [aeronavesRaw?.data],
+    () => (aeronavesRaw || []).filter((a) => isAeronaveAtiva(a.status)),
+    [aeronavesRaw],
   );
   const aeronavesByPrefix = useMemo(() => {
     const map = new Map<string, AeronaveAtiva>();
@@ -995,7 +994,12 @@ export default function EvdPage() {
           {loadingAeronaves ? (
             <p className="text-sm text-slate-500">Carregando aeronaves ativas...</p>
           ) : resumoAeronavesDoDia.length === 0 ? (
-            <p className="text-sm text-amber-700">Sem aeronave ativa para esta base.</p>
+            <div className="space-y-1">
+              <p className="text-sm text-amber-700">Não há aeronaves ativas cadastradas para a empresa.</p>
+              <p className="text-xs text-slate-500">
+                Cadastre ou reative uma aeronave para montar a escala diária.
+              </p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               {resumoAeronavesDoDia.map(({ aeronave, alocacao }) => {
