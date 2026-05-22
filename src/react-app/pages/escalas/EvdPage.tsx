@@ -19,6 +19,7 @@ import {
   History,
   FileText,
   Printer,
+  Eye,
   Settings,
   User,
   X,
@@ -767,6 +768,7 @@ export default function EvdPage() {
     const alertas = resumoAeronavesDoDia.filter(({ hasFrmsAlert }) => hasFrmsAlert).length;
     return { totalAtivas, designadas, pendentes, alertas };
   }, [resumoAeronavesDoDia]);
+  const hasPendingAircraft = resumoOperacional.pendentes > 0;
 
   const refreshEvdData = useCallback(
     async ({ includePublicacoes = false }: { includePublicacoes?: boolean } = {}) => {
@@ -781,6 +783,16 @@ export default function EvdPage() {
     const d = new Date(data + 'T12:00:00');
     d.setDate(d.getDate() + delta);
     setData(toLocalDateStr(d));
+  }
+
+  function openDesignationPanel(prefix?: string) {
+    const targetPrefix = normalizePrefixo(prefix) || firstPendingAircraftPrefix;
+    if (!targetPrefix) {
+      toast.info('Todas as aeronaves ativas já estão designadas para esta data.');
+      return;
+    }
+    setSelectedAircraftForForm(targetPrefix);
+    setShowForm(true);
   }
 
   function buildPrintHtml(publicacao: EvdPublicacaoDetalhe) {
@@ -1091,18 +1103,15 @@ export default function EvdPage() {
             </Button>
             <Button
               onClick={() => {
-                if (!showForm) {
-                  if (firstPendingAircraftPrefix) {
-                    setSelectedAircraftForForm(firstPendingAircraftPrefix);
-                  } else if (!selectedAircraftForForm) {
-                    toast.info('Todas as aeronaves ativas já estão designadas para esta data.');
-                  }
+                if (showForm) {
+                  setShowForm(false);
+                  return;
                 }
-                setShowForm(!showForm);
+                openDesignationPanel();
               }}
               className="flex items-center gap-2"
             >
-              <Plus className="h-4 w-4" /> Designar tripulação
+              <Plus className="h-4 w-4" /> {showForm ? 'Fechar designação' : 'Nova designação'}
             </Button>
           </div>
         }
@@ -1259,123 +1268,210 @@ export default function EvdPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                Aeronaves do dia
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Pendentes podem ser designadas. Aeronaves já designadas devem ser alteradas pelo fluxo de edição/substituição.
-              </p>
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,1fr)] xl:items-start">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  Aeronaves do dia
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Acompanhe pendências de tripulação por aeronave e inicie designação diretamente pelo card.
+                </p>
+              </div>
+              <span className="text-xs text-slate-500">{resumoAeronavesDoDia.length} ativas</span>
             </div>
-            <span className="text-xs text-slate-500">
-              {resumoAeronavesDoDia.length} ativas
-            </span>
-          </div>
-          {loadingAeronaves ? (
-            <p className="text-sm text-slate-500">Carregando aeronaves ativas...</p>
-          ) : resumoAeronavesDoDia.length === 0 ? (
-            <div className="space-y-1">
-              <p className="text-sm text-amber-700">Não há aeronaves ativas cadastradas para a empresa.</p>
-              <p className="text-xs text-slate-500">
-                Cadastre ou reative uma aeronave para montar a escala diária.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {resumoAeronavesDoDia.map(({ aeronave, alocacao, hasFrmsAlert }) => {
-                const metaAnv = getAircraftStatusMeta(aeronave.status);
-                const prefixo = normalizePrefixo(aeronave.prefixo) || 'SEM-PREFIXO';
-                const statusDesignacao = getDesignationStatusMeta({
-                  hasDesignation: Boolean(alocacao),
-                  hasFrmsAlert,
-                  aircraftStatus: metaAnv,
-                });
-                const canDesignar = !alocacao && metaAnv.code === 'D';
-                return (
-                  <article
-                    key={`${aeronave.id}-${prefixo}`}
-                    className={[
-                      'rounded-xl border p-3',
-                      alocacao
-                        ? hasFrmsAlert
-                          ? 'border-amber-200 bg-amber-50/40'
-                          : 'border-emerald-200 bg-emerald-50/30'
-                        : 'border-slate-200 bg-white',
-                    ].join(' ')}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-mono text-sm font-semibold text-slate-900">{prefixo}</p>
-                        <p className="text-xs text-slate-500">{aeronave.modelo || 'Modelo não informado'}</p>
+            {loadingAeronaves ? (
+              <p className="text-sm text-slate-500">Carregando aeronaves ativas...</p>
+            ) : resumoAeronavesDoDia.length === 0 ? (
+              <div className="space-y-1">
+                <p className="text-sm text-amber-700">
+                  Não há aeronaves ativas cadastradas para a empresa.
+                </p>
+                <p className="text-xs text-slate-500">
+                  Cadastre ou reative uma aeronave para montar a escala diária.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {resumoAeronavesDoDia.map(({ aeronave, alocacao, hasFrmsAlert }) => {
+                  const metaAnv = getAircraftStatusMeta(aeronave.status);
+                  const prefixo = normalizePrefixo(aeronave.prefixo) || 'SEM-PREFIXO';
+                  const statusDesignacao = getDesignationStatusMeta({
+                    hasDesignation: Boolean(alocacao),
+                    hasFrmsAlert,
+                    aircraftStatus: metaAnv,
+                  });
+                  const canDesignar = !alocacao && metaAnv.code === 'D';
+
+                  return (
+                    <article
+                      key={`${aeronave.id}-${prefixo}`}
+                      className={[
+                        'rounded-xl border p-3',
+                        alocacao
+                          ? hasFrmsAlert
+                            ? 'border-amber-200 bg-amber-50/40'
+                            : 'border-emerald-200 bg-emerald-50/30'
+                          : 'border-slate-200 bg-white',
+                      ].join(' ')}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-mono text-lg font-semibold leading-none text-slate-900">
+                            {prefixo}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {aeronave.modelo || 'Modelo não informado'}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusDesignacao.tone}`}
+                          >
+                            {statusDesignacao.label}
+                          </span>
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                            ANV: {metaAnv.label === 'Disponível' ? 'Ativa' : metaAnv.label}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusDesignacao.tone}`}
-                        >
-                          {statusDesignacao.label}
-                        </span>
-                        {hasFrmsAlert && (
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-white p-2">
+                        <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            PIC
+                          </p>
+                          <p className="mt-0.5 text-xs font-medium text-slate-800">
+                            {alocacao?.pic_guerra || alocacao?.pic_nome || 'Pendente'}
+                          </p>
+                        </div>
+                        <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            SIC
+                          </p>
+                          <p className="mt-0.5 text-xs font-medium text-slate-800">
+                            {alocacao?.sic_guerra || alocacao?.sic_nome || 'Pendente'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        {hasFrmsAlert ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                             <AlertTriangle className="h-3 w-3" />
                             Alerta FRMS
                           </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-500">
+                            {canDesignar ? 'Pendente de tripulação' : 'Tripulação definida'}
+                          </span>
+                        )}
+                        {canDesignar ? (
+                          <button
+                            type="button"
+                            onClick={() => openDesignationPanel(prefixo)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-100"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Designar tripulação
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              document
+                                .getElementById('evd-escala-dia')
+                                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200"
+                          >
+                            <Eye className="h-3 w-3" />
+                            Ver na escala
+                          </button>
                         )}
                       </div>
-                    </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-white p-2">
-                      <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">PIC</p>
-                        <p className="mt-0.5 text-xs font-medium text-slate-800">
-                          {alocacao?.pic_guerra || alocacao?.pic_nome || 'Pendente'}
-                        </p>
-                      </div>
-                      <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">SIC</p>
-                        <p className="mt-0.5 text-xs font-medium text-slate-800">
-                          {alocacao?.sic_guerra || alocacao?.sic_nome || 'Pendente'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                        ANV: {metaAnv.label === 'Disponível' ? 'Ativa' : metaAnv.label}
-                      </span>
-                      {canDesignar ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedAircraftForForm(prefixo);
-                            setShowForm(true);
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-100"
-                        >
-                          <Plus className="h-3 w-3" />
-                          Designar
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (alocacao) {
-                              toast.info(`Aeronave ${prefixo} já possui designação nesta data.`);
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600"
-                          disabled={!alocacao}
-                        >
-                          {alocacao ? 'Já designada' : 'Sem ação'}
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
+          <aside className="space-y-4 xl:sticky xl:top-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Nova designação
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Selecione aeronave pendente, PIC/SIC, horários e salve a designação do dia.
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <Button
+                  onClick={() => {
+                    if (showForm) {
+                      setShowForm(false);
+                      return;
+                    }
+                    openDesignationPanel();
+                  }}
+                  className="flex items-center gap-2"
+                  disabled={!hasPendingAircraft && !showForm}
+                >
+                  <Plus className="h-4 w-4" />
+                  {showForm ? 'Recolher formulário' : 'Abrir formulário'}
+                </Button>
+                {showForm && (
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(false)}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-100"
+                  >
+                    Fechar
+                  </button>
+                )}
+              </div>
             </div>
-          )}
+
+            {!showForm ? (
+              hasPendingAircraft ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-sm font-medium text-slate-800">
+                    {resumoOperacional.pendentes} pendente(s) aguardando tripulação.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Clique em “Abrir formulário” ou use “Designar tripulação” no card da aeronave.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+                  <p className="text-sm font-medium text-emerald-800">
+                    Todas as aeronaves do dia já possuem tripulação designada.
+                  </p>
+                  <p className="mt-1 text-xs text-emerald-700">
+                    Para alterar uma aeronave já designada, use o fluxo explícito de edição/substituição.
+                  </p>
+                </div>
+              )
+            ) : (
+              <EvdCreateForm
+                data={data}
+                selectedAircraftPrefix={selectedAircraftForForm}
+                aeronavesAtivas={aeronavesAtivas}
+                assignedAircraftPrefixes={assignedAircraftPrefixes}
+                onClose={() => setShowForm(false)}
+                onCreated={async (createdPrefix) => {
+                  await refreshEvdData();
+                  setShowForm(false);
+                  setSelectedAircraftForForm(createdPrefix || '');
+                }}
+                frmsByTripulante={frmsByTripulante}
+                frmsUnavailable={frmsUnavailable}
+                frmsReferenceDate={frmsReferenceDate}
+                escalaId={escalaAtiva?.id ?? null}
+              />
+            )}
+          </aside>
         </section>
 
         {frmsDailyUnavailable && (
@@ -1571,31 +1667,21 @@ export default function EvdPage() {
           </div>
         )}
 
-        {/* Create form (simple inline) */}
-        {showForm && (
-          <EvdCreateForm
-            data={data}
-            selectedAircraftPrefix={selectedAircraftForForm}
-            aeronavesAtivas={aeronavesAtivas}
-            assignedAircraftPrefixes={assignedAircraftPrefixes}
-            onClose={() => setShowForm(false)}
-            onCreated={async (createdPrefix) => {
-              await refreshEvdData();
-              setShowForm(false);
-              setSelectedAircraftForForm(createdPrefix || '');
-            }}
-            frmsByTripulante={frmsByTripulante}
-            frmsUnavailable={frmsUnavailable}
-            frmsReferenceDate={frmsReferenceDate}
-            escalaId={escalaAtiva?.id ?? null}
-          />
-        )}
-
         {/* Tabela de atribuições por aeronave */}
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-            <h3 className="text-sm font-semibold text-slate-800">Escala do dia ({formatDateBR(data)})</h3>
-            <span className="text-xs text-slate-500">
+        <div
+          id="evd-escala-dia"
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+        >
+          <div className="flex flex-col gap-1 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">
+                Escala do dia ({formatDateBR(data)})
+              </h3>
+              <p className="text-xs text-slate-500">
+                Designações publicadas e em rascunho para o dia selecionado.
+              </p>
+            </div>
+            <span className="text-xs font-medium text-slate-500">
               {voos.length} {voos.length === 1 ? 'designação' : 'designações'}
             </span>
           </div>
@@ -1604,18 +1690,12 @@ export default function EvdPage() {
               <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
             </div>
           ) : voos.length === 0 ? (
-            <div className="text-center py-20 text-slate-400 dark:text-slate-500">
+            <div className="py-16 text-center text-slate-400 dark:text-slate-500">
               <Plane className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p className="text-sm font-medium">Nenhuma aeronave escalada para {formatDateBR(data)}</p>
               <button
                 onClick={() => {
-                  if (firstPendingAircraftPrefix) {
-                    setSelectedAircraftForForm(firstPendingAircraftPrefix);
-                  } else {
-                    toast.info('Não há aeronave pendente de designação para esta data.');
-                    return;
-                  }
-                  setShowForm(true);
+                  openDesignationPanel();
                 }}
                 className="mt-4 text-sm text-blue-600 hover:underline dark:text-blue-400"
               >
@@ -1674,20 +1754,20 @@ export default function EvdPage() {
                             : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
                         ].join(' ')}
                       >
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">
+                        <td className="px-3 py-3.5 text-xs text-slate-600 whitespace-nowrap">
                           {voo.aeronave_modelo || aeronaveCadastro?.modelo || '—'}
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           <span className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded dark:bg-blue-500/10 dark:text-blue-300">
                             {voo.aeronave_prefixo || '—'}
                           </span>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${statusAnv.tone}`}>
                             {statusAnv.code}
                           </span>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           <span className="text-xs font-medium text-slate-800 dark:text-slate-100">
                             {voo.pic_guerra || voo.pic_nome || '—'}
                           </span>
@@ -1697,7 +1777,7 @@ export default function EvdPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3.5">
                           <span
                             className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(picFrms.short)}`}
                             title={picFrms.long}
@@ -1705,14 +1785,14 @@ export default function EvdPage() {
                             {picFrms.short}
                           </span>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           <span
                             className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getQualificacaoBadgeTone(voo.pic_funcao)}`}
                           >
                             {voo.pic_funcao || 'a validar'}
                           </span>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
                             PIC
                           </span>
@@ -1722,7 +1802,7 @@ export default function EvdPage() {
                             {voo.sic_guerra || voo.sic_nome || '—'}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3.5">
                           <span
                             className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(sicFrms.short)}`}
                             title={sicFrms.long}
@@ -1730,23 +1810,23 @@ export default function EvdPage() {
                             {sicFrms.short}
                           </span>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           <span
                             className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getQualificacaoBadgeTone(voo.sic_funcao)}`}
                           >
                             {voo.sic_funcao || 'a validar'}
                           </span>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
                             SIC
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.origem || '—'}</td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_apresentacao || '—'}</td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_decolagem_prevista || '—'}</td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_pouso_previsto || '—'}</td>
-                        <td className="px-3 py-3 text-xs text-slate-600">
+                        <td className="px-3 py-3.5 text-xs text-slate-600 whitespace-nowrap">{voo.origem || '—'}</td>
+                        <td className="px-3 py-3.5 text-xs text-slate-600 whitespace-nowrap">{voo.hora_apresentacao || '—'}</td>
+                        <td className="px-3 py-3.5 text-xs text-slate-600 whitespace-nowrap">{voo.hora_decolagem_prevista || '—'}</td>
+                        <td className="px-3 py-3.5 text-xs text-slate-600 whitespace-nowrap">{voo.hora_pouso_previsto || '—'}</td>
+                        <td className="px-3 py-3.5 text-xs text-slate-600">
                           <div>{voo.observacoes || '—'}</div>
                           {hasFrmsAlert && (
                             <div className="mt-0.5 flex items-center gap-0.5 text-[10px] text-amber-600">
@@ -1754,7 +1834,7 @@ export default function EvdPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                        <td className="px-3 py-3.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             {voo.status === 'RASCUNHO' && (
                               <>
@@ -2109,7 +2189,7 @@ function EvdCreateForm({
       {semAeronavesPendentes ? (
         <div className="space-y-3 p-4">
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            Não há aeronaves pendentes para nova designação nesta data.
+            Todas as aeronaves do dia já possuem tripulação designada.
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
             Use o fluxo explícito de edição/substituição para alterar tripulação já designada.
