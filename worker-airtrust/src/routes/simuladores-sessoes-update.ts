@@ -22,6 +22,7 @@ import {
   resolveTemplateIdSessao,
   normalizeChecksSessao,
 } from './simuladores-shared';
+import { criarQualificacoesPlanejadas } from './simuladores-sessoes';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -423,6 +424,54 @@ app.put('/sessoes/:id', async (c) => {
       )
         .bind(b.data, id)
         .run();
+    }
+
+    // Criar qualificações PLANEJADAS se a sessão ainda não as tiver (ex: sessão criada antes do deploy)
+    const hasPlanejadas = await c.env.DB.prepare(
+      "SELECT 1 FROM qualificacoes_historico WHERE sessao_id=? AND status='PLANEJADA' AND deleted_at IS NULL LIMIT 1",
+    )
+      .bind(id)
+      .first();
+    if (!hasPlanejadas) {
+      const tipoSessaoPut = (b.tipo_sessao || (a as any).tipo_sessao || '').toString();
+      let modeloIdPut = Number(templateIdFinal || (a as any).template_id || 0) || null;
+      if (!modeloIdPut && tipoSessaoPut) {
+        const fallbackModelo = await c.env.DB.prepare(
+          `SELECT ms.id
+           FROM modelos_sessao ms
+           INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+           WHERE ts.codigo = ?
+             AND ms.modelo_aeronave = ?
+             AND ms.deleted_at IS NULL
+           LIMIT 1`,
+        )
+          .bind(tipoSessaoPut, modeloAeronaveSessao)
+          .first<{ id: number }>();
+        if (fallbackModelo) modeloIdPut = fallbackModelo.id;
+      }
+      if (modeloIdPut) {
+        const participantesRows = await c.env.DB.prepare(
+          `SELECT DISTINCT fs.funcionario_id
+           FROM fichas_sessao fs
+           WHERE fs.agendamento_slot_id = ? AND fs.deleted_at IS NULL`,
+        )
+          .bind(id)
+          .all<{ funcionario_id: number }>();
+        if (participantesRows.results?.length) {
+          try {
+            await criarQualificacoesPlanejadas(c.env.DB, {
+              sessaoId: Number(id),
+              modeloId: modeloIdPut,
+              tipoSessao: tipoSessaoPut,
+              data: b.data || (a as any).data,
+              participantes: participantesRows.results,
+              empresaId: Number((c as any).get('empresaId') || 0),
+            });
+          } catch (err) {
+            console.error('[QUAL_PLANEJADA] PUT: Falha ao criar planejadas:', err);
+          }
+        }
+      }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
