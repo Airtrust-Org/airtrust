@@ -539,11 +539,15 @@ export async function criarQualificacoesPlanejadas(
     // Check 1: already has a planejada linked to this session
     const existing = await db
       .prepare(
-        `SELECT id FROM qualificacoes_historico
-         WHERE sessao_id = ? AND funcionario_id = ? AND deleted_at IS NULL LIMIT 1`,
+        `SELECT id, status FROM qualificacoes_historico
+         WHERE sessao_id = ?
+           AND funcionario_id = ?
+           AND deleted_at IS NULL
+           AND COALESCE(status, '') <> 'CANCELADA'
+         LIMIT 1`,
       )
       .bind(params.sessaoId, part.funcionario_id)
-      .first();
+      .first<{ id: number; status: string | null }>();
 
     if (existing) {
       puladas++;
@@ -564,8 +568,12 @@ export async function criarQualificacoesPlanejadas(
       .first<{ id: number; status: string; sessao_id: number | null }>();
 
     if (uniqueConflict) {
-      // CANCELADA orphan records (no session link) → soft-delete and proceed
-      if (uniqueConflict.status === 'CANCELADA' && !uniqueConflict.sessao_id) {
+      // CANCELADA orphan records or same-session records can be archived and recreated.
+      // This preserves history while unblocking a new active PLANEJADA record.
+      if (
+        uniqueConflict.status === 'CANCELADA' &&
+        (!uniqueConflict.sessao_id || Number(uniqueConflict.sessao_id) === Number(params.sessaoId))
+      ) {
         await db
           .prepare(
             `UPDATE qualificacoes_historico
