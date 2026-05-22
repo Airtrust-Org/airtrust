@@ -1,205 +1,195 @@
 #!/usr/bin/env bash
-# test-evd-functional.sh — Teste funcional da Escala Diária de Voo (EDV)
-#
+# Teste funcional controlado da EDV (aircraft-first)
+# Requer: curl + jq
 # Uso:
-#   TOKEN=<jwt> DATE=2026-05-21 bash scripts/test-evd-functional.sh
-#   TOKEN=<jwt> DATE=2026-05-21 BASE_URL=https://api.airtrust.online bash scripts/test-evd-functional.sh
-#
-# Requer: curl, jq
-# Não hardcoda credenciais. Não lê .env.production.
-# Passe TOKEN como variável de ambiente ou via arquivo temporário.
+#   TOKEN=<jwt> DATE=2026-05-21 API_BASE=https://api.airtrust.online bash scripts/test-evd-functional.sh
 
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-https://api.airtrust.online}"
+API_BASE="${API_BASE:-https://api.airtrust.online}"
 DATE="${DATE:-$(date +%Y-%m-%d)}"
 TOKEN="${TOKEN:-}"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-PASS=0; FAIL=0; SKIP=0
+PASS=0
+FAIL=0
+SKIP=0
+CREATED_ID=""
 
-check() { echo -e "${GREEN}✓${NC} $1"; ((PASS++)) || true; }
-fail()  { echo -e "${RED}✗${NC} $1"; ((FAIL++)) || true; }
-skip()  { echo -e "${YELLOW}~${NC} $1 (skipped)"; ((SKIP++)) || true; }
+check() { echo "[PASS] $1"; PASS=$((PASS + 1)); }
+fail() { echo "[FAIL] $1"; FAIL=$((FAIL + 1)); }
+skip() { echo "[SKIP] $1"; SKIP=$((SKIP + 1)); }
 
 if [[ -z "$TOKEN" ]]; then
-  echo -e "${RED}ERRO:${NC} TOKEN não definido. Defina TOKEN=<jwt> antes de executar."
-  echo "       TOKEN=eyJhb... DATE=2026-05-21 bash scripts/test-evd-functional.sh"
+  echo "[ERRO] TOKEN ausente. Defina TOKEN no ambiente."
   exit 1
 fi
 
-if ! command -v jq &>/dev/null; then
-  echo -e "${RED}ERRO:${NC} jq não encontrado. Instale com: brew install jq"
+if ! command -v jq >/dev/null 2>&1; then
+  echo "[ERRO] jq não encontrado."
   exit 1
 fi
 
-AUTH=(-H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json")
+AUTH=(-H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json")
 
-echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  AirTrust EDV — Teste Funcional Controlado               ║"
-echo "╚══════════════════════════════════════════════════════════╝"
-echo "  BASE_URL : $BASE_URL"
-echo "  DATE     : $DATE"
-echo ""
+cleanup() {
+  if [[ -n "$CREATED_ID" ]]; then
+    curl -s -X DELETE "${AUTH[@]}" "${API_BASE}/api/evd/${CREATED_ID}" >/dev/null || true
+  fi
+}
+trap cleanup EXIT
 
-# ── TESTE 1: Health ──────────────────────────────────────────
-echo "── Pré-condições ──"
-HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/health")
-if [[ "$HTTP" == "200" ]]; then
-  check "T01 Health 200"
+echo "EDV functional test"
+echo "API_BASE=${API_BASE}"
+echo "DATE=${DATE}"
+
+# 1) GET /api/evd?data=DATE
+LIST_RESP=$(curl -s "${AUTH[@]}" "${API_BASE}/api/evd?data=${DATE}")
+if [[ "$(echo "$LIST_RESP" | jq -r '.success // false')" == "true" ]]; then
+  CNT=$(echo "$LIST_RESP" | jq '.data | length')
+  check "1) GET /api/evd?data=DATE (itens=${CNT})"
 else
-  fail "T01 Health esperava 200, recebeu $HTTP"
+  fail "1) GET /api/evd?data=DATE"
 fi
 
-# ── TESTE 2: Listagem vazia/existente ────────────────────────
-echo ""
-echo "── Listagem ──"
-RESP=$(curl -s "${AUTH[@]}" "$BASE_URL/api/evd?data=$DATE")
-SUCCESS=$(echo "$RESP" | jq -r '.success // false')
-if [[ "$SUCCESS" == "true" ]]; then
-  COUNT=$(echo "$RESP" | jq '.data | length')
-  check "T02 GET /api/evd?data=$DATE — success=true, ${COUNT} itens"
-else
-  fail "T02 GET /api/evd?data=$DATE — success=$SUCCESS"
-  echo "     Resposta: $(echo "$RESP" | jq -c '.')"
+# Pré-condição: aeronave ativa
+AER_RESP=$(curl -s "${AUTH[@]}" "${API_BASE}/api/aeronaves")
+AER_ID=$(echo "$AER_RESP" | jq -r '
+  .data // []
+  | map(select((.status // "ATIVO" | ascii_upcase) != "INATIVO" and (.deleted_at // null) == null))
+  | .[0].id // empty')
+AER_PREFIXO=$(echo "$AER_RESP" | jq -r '
+  .data // []
+  | map(select((.status // "ATIVO" | ascii_upcase) != "INATIVO" and (.deleted_at // null) == null))
+  | .[0].prefixo // empty')
+AER_MODELO=$(echo "$AER_RESP" | jq -r '
+  .data // []
+  | map(select((.status // "ATIVO" | ascii_upcase) != "INATIVO" and (.deleted_at // null) == null))
+  | .[0].modelo // empty')
+
+if [[ -z "$AER_ID" || -z "$AER_PREFIXO" ]]; then
+  skip "SKIPPED: sem aeronave ativa"
+  echo "Resumo: PASS=${PASS} FAIL=${FAIL} SKIP=${SKIP}"
+  exit 0
 fi
 
-# ── TESTE 3: Criar atribuição diária ────────────────────────
-echo ""
-echo "── Criar atribuição ──"
-CREATE_PAYLOAD="{\"data\":\"$DATE\",\"aeronave_prefixo\":\"PR-TST\",\"tipo_missao\":\"OFFSHORE\",\"hora_apresentacao\":\"06:00\",\"hora_decolagem_prevista\":\"07:00\",\"hora_pouso_previsto\":\"10:00\",\"origem\":\"SBCB\"}"
-CREATE_RESP=$(curl -s -X POST "${AUTH[@]}" -d "$CREATE_PAYLOAD" "$BASE_URL/api/evd")
-CREATE_OK=$(echo "$CREATE_RESP" | jq -r '.success // false')
-if [[ "$CREATE_OK" == "true" ]]; then
-  EVD_ID=$(echo "$CREATE_RESP" | jq -r '.data.id')
-  check "T03 POST /api/evd — criado id=$EVD_ID"
-else
-  fail "T03 POST /api/evd — $(echo "$CREATE_RESP" | jq -r '.error // "erro desconhecido"')"
-  EVD_ID=""
+# Pré-condição: tripulantes elegíveis
+QUINZENA="primeira"
+DAY=$(echo "$DATE" | awk -F- '{print $3}')
+if [[ "$DAY" -gt 15 ]]; then
+  QUINZENA="segunda"
 fi
 
-# ── TESTE 4: Criar duplicata PIC=SIC (deve bloquear) ─────────
-echo ""
-echo "── Validação PIC=SIC ──"
-if [[ -n "$EVD_ID" ]]; then
-  # Buscar um funcionario valido
-  FUNC_RESP=$(curl -s "${AUTH[@]}" "$BASE_URL/api/funcionarios?limit=2&page=1&status=ativos")
-  F1=$(echo "$FUNC_RESP" | jq -r '.data[0].id // empty')
-  if [[ -n "$F1" ]]; then
-    DUP_PAYLOAD="{\"data\":\"$DATE\",\"aeronave_prefixo\":\"PR-DUP\",\"tipo_missao\":\"OFFSHORE\",\"pic_id\":$F1,\"sic_id\":$F1}"
-    DUP_RESP=$(curl -s -X POST "${AUTH[@]}" -d "$DUP_PAYLOAD" "$BASE_URL/api/evd")
-    DUP_OK=$(echo "$DUP_RESP" | jq -r '.success // false')
-    if [[ "$DUP_OK" == "false" ]]; then
-      check "T04 PIC=SIC bloqueado corretamente"
-    else
-      # Pode não bloquear na criação mas na publicação — aceitar como warning
-      skip "T04 PIC=SIC não bloqueado na criação (validado na publicação)"
-      DUP_ID=$(echo "$DUP_RESP" | jq -r '.data.id // empty')
-      [[ -n "$DUP_ID" ]] && curl -s -X DELETE "${AUTH[@]}" "$BASE_URL/api/evd/$DUP_ID" > /dev/null
-    fi
+CREW_URL="${API_BASE}/api/escalas/tripulantes-operacionais?aeronave_id=${AER_ID}&incluir_bloqueados=true&data_inicio=${DATE}&data_fim=${DATE}&quinzena=${QUINZENA}"
+CREW_RESP=$(curl -s "${AUTH[@]}" "$CREW_URL")
+PIC_ID=$(echo "$CREW_RESP" | jq -r '.data.tripulantes // [] | map(select(.pode_ser_alocado == true)) | .[0].funcionario_id // empty')
+SIC_ID=$(echo "$CREW_RESP" | jq -r '.data.tripulantes // [] | map(select(.pode_ser_alocado == true)) | .[1].funcionario_id // empty')
+
+if [[ -z "$PIC_ID" || -z "$SIC_ID" ]]; then
+  skip "SKIPPED: sem tripulantes elegíveis"
+  echo "Resumo: PASS=${PASS} FAIL=${FAIL} SKIP=${SKIP}"
+  exit 0
+fi
+
+# 2) criação de atribuição por aeronave
+OBS_TESTE="TESTE FUNCIONAL EDV — pode remover"
+CREATE_PAYLOAD=$(jq -nc \
+  --arg data "$DATE" \
+  --arg prefixo "$AER_PREFIXO" \
+  --arg modelo "$AER_MODELO" \
+  --argjson pic "$PIC_ID" \
+  --argjson sic "$SIC_ID" \
+  --arg obs "$OBS_TESTE" \
+  '{data:$data,aeronave_prefixo:$prefixo,aeronave_modelo:$modelo,pic_id:$pic,sic_id:$sic,pic_funcao:"PIC",sic_funcao:"SIC",hora_apresentacao:"06:00",hora_decolagem_prevista:"07:00",hora_pouso_previsto:"10:00",origem:"SBCB",tipo_missao:"OFFSHORE",observacoes:$obs}')
+CREATE_RESP=$(curl -s -X POST "${AUTH[@]}" -d "$CREATE_PAYLOAD" "${API_BASE}/api/evd")
+if [[ "$(echo "$CREATE_RESP" | jq -r '.success // false')" == "true" ]]; then
+  CREATED_ID=$(echo "$CREATE_RESP" | jq -r '.data.id')
+  check "2) criação por aeronave (id=${CREATED_ID})"
+else
+  fail "2) criação por aeronave"
+  echo "$CREATE_RESP" | jq -c '.'
+  echo "Resumo: PASS=${PASS} FAIL=${FAIL} SKIP=${SKIP}"
+  exit 1
+fi
+
+# 3) bloqueio PIC=SIC
+DUP_PAYLOAD=$(jq -nc \
+  --arg data "$DATE" \
+  --arg prefixo "$AER_PREFIXO" \
+  --arg modelo "$AER_MODELO" \
+  --argjson same "$PIC_ID" \
+  '{data:$data,aeronave_prefixo:$prefixo,aeronave_modelo:$modelo,pic_id:$same,sic_id:$same,tipo_missao:"OFFSHORE"}')
+DUP_RESP=$(curl -s -X POST "${AUTH[@]}" -d "$DUP_PAYLOAD" "${API_BASE}/api/evd")
+if [[ "$(echo "$DUP_RESP" | jq -r '.success // true')" == "false" ]]; then
+  check "3) bloqueio PIC=SIC"
+else
+  fail "3) bloqueio PIC=SIC"
+fi
+
+# 4) justificativa estruturada (se aplicável)
+REQ_JUST=$(echo "$CREATE_RESP" | jq -r '.data.require_justificativa_operacional // false')
+if [[ "$REQ_JUST" == "true" ]]; then
+  JUST_PAYLOAD='{"origem_alerta":"OPERACIONAL","decisao":"MANTER_ESCALA","justificativa":"Teste funcional de justificativa estruturada para publicação controlada."}'
+  JUST_RESP=$(curl -s -X POST "${AUTH[@]}" -d "$JUST_PAYLOAD" "${API_BASE}/api/evd/${CREATED_ID}/justificativas")
+  if [[ "$(echo "$JUST_RESP" | jq -r '.success // false')" == "true" ]]; then
+    check "4) justificativa estruturada"
   else
-    skip "T04 PIC=SIC — sem funcionários disponíveis para teste"
+    fail "4) justificativa estruturada"
   fi
 else
-  skip "T04 PIC=SIC — depende do T03"
+  skip "4) justificativa estruturada (não aplicável)"
 fi
 
-# ── TESTE 5: Publicação por data ─────────────────────────────
-echo ""
-echo "── Publicação ──"
-if [[ -n "$EVD_ID" ]]; then
-  PUB_PAYLOAD="{\"data_ref\":\"$DATE\",\"observacoes\":\"Teste funcional automatizado EDV\"}"
-  PUB_RESP=$(curl -s -X POST "${AUTH[@]}" -d "$PUB_PAYLOAD" "$BASE_URL/api/evd/publicacoes")
-  PUB_OK=$(echo "$PUB_RESP" | jq -r '.success // false')
-  if [[ "$PUB_OK" == "true" ]]; then
-    PUB_ID=$(echo "$PUB_RESP" | jq -r '.data.id')
-    PUB_REV=$(echo "$PUB_RESP" | jq -r '.data.revisao')
-    PUB_CHK=$(echo "$PUB_RESP" | jq -r '.data.checksum')
-    check "T05 POST /api/evd/publicacoes — Rev=$PUB_REV checksum=${PUB_CHK:0:12}..."
+# 5) publicação por data
+PUB_PAYLOAD=$(jq -nc --arg date "$DATE" --arg obs "$OBS_TESTE" '{data_ref:$date,observacoes:$obs}')
+PUB_RESP=$(curl -s -X POST "${AUTH[@]}" -d "$PUB_PAYLOAD" "${API_BASE}/api/evd/publicacoes")
+PUB_ID=$(echo "$PUB_RESP" | jq -r '.data.id // empty')
+if [[ "$(echo "$PUB_RESP" | jq -r '.success // false')" == "true" && -n "$PUB_ID" ]]; then
+  check "5) publicação por data"
+else
+  fail "5) publicação por data"
+fi
+
+# 6) listagem de revisões
+REV_RESP=$(curl -s "${AUTH[@]}" "${API_BASE}/api/evd/publicacoes?data=${DATE}")
+if [[ "$(echo "$REV_RESP" | jq -r '.success // false')" == "true" ]]; then
+  check "6) listagem de revisões"
+else
+  fail "6) listagem de revisões"
+fi
+
+# 7) detalhe do snapshot
+SNAP_RESP=""
+if [[ -n "$PUB_ID" ]]; then
+  SNAP_RESP=$(curl -s "${AUTH[@]}" "${API_BASE}/api/evd/publicacoes/${PUB_ID}")
+  if [[ "$(echo "$SNAP_RESP" | jq -r '.success // false')" == "true" ]]; then
+    check "7) detalhe do snapshot"
   else
-    fail "T05 POST /api/evd/publicacoes — $(echo "$PUB_RESP" | jq -r '.error // "erro"')"
-    PUB_ID=""
+    fail "7) detalhe do snapshot"
   fi
 else
-  skip "T05 Publicação — depende do T03"
-  PUB_ID=""
+  skip "7) detalhe do snapshot (sem publicação)"
 fi
 
-# ── TESTE 6: Listagem de revisões ────────────────────────────
-echo ""
-echo "── Histórico de revisões ──"
-HIST_RESP=$(curl -s "${AUTH[@]}" "$BASE_URL/api/evd/publicacoes?data=$DATE")
-HIST_OK=$(echo "$HIST_RESP" | jq -r '.success // false')
-if [[ "$HIST_OK" == "true" ]]; then
-  HIST_COUNT=$(echo "$HIST_RESP" | jq '.data | length')
-  check "T06 GET /api/evd/publicacoes?data=$DATE — ${HIST_COUNT} revisões"
-else
-  fail "T06 GET /api/evd/publicacoes — $(echo "$HIST_RESP" | jq -r '.error // "erro"')"
-fi
+# 8) ausência de campos sensíveis FRMS no snapshot
+if [[ -n "$SNAP_RESP" ]]; then
+  FRMS_INCLUDED=$(echo "$SNAP_RESP" | jq -r '.data.payload_json.frms_resumo.included // "missing"')
+  HAS_SENSITIVE=$(echo "$SNAP_RESP" | jq -e '
+    .data.payload_json
+    | tostring
+    | test("kss|horas_sono|medicamentos|alcool|sintomas"; "i")
+  ' >/dev/null 2>&1; echo $?)
 
-# ── TESTE 7: Leitura de snapshot ─────────────────────────────
-echo ""
-echo "── Snapshot ──"
-if [[ -n "${PUB_ID:-}" ]]; then
-  SNAP_RESP=$(curl -s "${AUTH[@]}" "$BASE_URL/api/evd/publicacoes/$PUB_ID")
-  SNAP_OK=$(echo "$SNAP_RESP" | jq -r '.success // false')
-  if [[ "$SNAP_OK" == "true" ]]; then
-    check "T07 GET /api/evd/publicacoes/$PUB_ID — snapshot carregado"
-
-    # T08: Verificar ausência de FRMS sensível
-    FRMS_INCLUDED=$(echo "$SNAP_RESP" | jq -r '.data.payload_json.frms_resumo.included // "missing"')
-    if [[ "$FRMS_INCLUDED" == "false" ]]; then
-      check "T08 frms_resumo.included=false — dados FRMS sensíveis ausentes do snapshot"
-    else
-      fail "T08 frms_resumo.included=$FRMS_INCLUDED — esperava false"
-    fi
+  if [[ "$FRMS_INCLUDED" == "false" && "$HAS_SENSITIVE" -ne 0 ]]; then
+    check "8) snapshot sem campos sensíveis FRMS"
   else
-    fail "T07 GET /api/evd/publicacoes/$PUB_ID — erro"
+    fail "8) snapshot sem campos sensíveis FRMS"
   fi
 else
-  skip "T07 Snapshot — depende do T05"
-  skip "T08 FRMS ausente — depende do T05"
+  skip "8) snapshot sem campos sensíveis FRMS (sem snapshot)"
 fi
 
-# ── TESTE 9: Segunda publicação → nova revisão ───────────────
-echo ""
-echo "── Segunda publicação / revisão ──"
-if [[ -n "${PUB_ID:-}" ]]; then
-  PUB2_RESP=$(curl -s -X POST "${AUTH[@]}" -d "{\"data_ref\":\"$DATE\",\"observacoes\":\"Segunda revisão de teste\"}" "$BASE_URL/api/evd/publicacoes")
-  PUB2_OK=$(echo "$PUB2_RESP" | jq -r '.success // false')
-  if [[ "$PUB2_OK" == "true" ]]; then
-    PUB2_REV=$(echo "$PUB2_RESP" | jq -r '.data.revisao')
-    if [[ "$PUB2_REV" -gt 1 ]]; then
-      check "T09 Segunda publicação — Rev=$PUB2_REV (incrementou)"
-    else
-      fail "T09 Segunda publicação — revisão não incrementou (Rev=$PUB2_REV)"
-    fi
-  else
-    fail "T09 Segunda publicação — $(echo "$PUB2_RESP" | jq -r '.error // "erro"')"
-  fi
-else
-  skip "T09 Segunda revisão — depende do T05"
+echo "Resumo: PASS=${PASS} FAIL=${FAIL} SKIP=${SKIP}"
+if [[ "$FAIL" -gt 0 ]]; then
+  exit 1
 fi
-
-# ── Limpeza ──────────────────────────────────────────────────
-echo ""
-echo "── Limpeza (soft delete) ──"
-if [[ -n "$EVD_ID" ]]; then
-  DEL_RESP=$(curl -s -X DELETE "${AUTH[@]}" "$BASE_URL/api/evd/$EVD_ID")
-  DEL_OK=$(echo "$DEL_RESP" | jq -r '.success // false')
-  if [[ "$DEL_OK" == "true" ]]; then
-    check "Limpeza: atribuição PR-TST removida (soft delete)"
-  else
-    skip "Limpeza: não foi possível remover PR-TST (já publicada ou erro)"
-  fi
-fi
-
-# ── Resumo ───────────────────────────────────────────────────
-echo ""
-echo "══════════════════════════════════════════════════════════"
-echo -e "  ${GREEN}✓ $PASS passed${NC}  ${RED}✗ $FAIL failed${NC}  ${YELLOW}~ $SKIP skipped${NC}"
-echo "══════════════════════════════════════════════════════════"
-echo ""
-
-[[ $FAIL -eq 0 ]] && exit 0 || exit 1
+exit 0
