@@ -816,19 +816,40 @@ app.post('/sessoes', async (c) => {
     // 5. QUALIFICAÇÕES PLANEJADAS — criar entrada planejada para cada participante
     //    se o modelo de sessão configurar "gera_qualificacao = 1".
     let modeloIdParaQual = Number(templateIdFinal || modelo_sessao_id || 0) || null;
-    // Fallback: buscar por tipo_sessao + modelo_aeronave (mesmo critério das manobras)
     if (!modeloIdParaQual && tipo_sessao) {
-      const fallbackModelo = await c.env.DB.prepare(
+      const upperNome = String(tema_sessao || '').trim().toUpperCase();
+
+      // Priority 1: model with gera_qualificacao=1, prefer name match
+      let fallbackModelo = await c.env.DB.prepare(
         `SELECT ms.id
          FROM modelos_sessao ms
          INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
          WHERE ts.codigo = ?
            AND ms.modelo_aeronave = ?
            AND ms.deleted_at IS NULL
+           AND ms.gera_qualificacao = 1
+         ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
          LIMIT 1`,
       )
-        .bind(tipo_sessao, modeloAeronaveSessao)
+        .bind(tipo_sessao, modeloAeronaveSessao, upperNome)
         .first<{ id: number }>();
+
+      // Priority 2: any matching model, prefer name match
+      if (!fallbackModelo) {
+        fallbackModelo = await c.env.DB.prepare(
+          `SELECT ms.id
+           FROM modelos_sessao ms
+           INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+           WHERE ts.codigo = ?
+             AND ms.modelo_aeronave = ?
+             AND ms.deleted_at IS NULL
+           ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
+           LIMIT 1`,
+        )
+          .bind(tipo_sessao, modeloAeronaveSessao, upperNome)
+          .first<{ id: number }>();
+      }
+
       if (fallbackModelo) modeloIdParaQual = fallbackModelo.id;
     }
     if (modeloIdParaQual) {

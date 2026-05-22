@@ -456,6 +456,37 @@ export async function audit(db: D1Database, p: any) {
 // Vincula pelo campo sessao_id (migration 0098). Sem duplication: verifica
 // existência prévia pelo par (sessao_id, funcionario_id).
 // ─────────────────────────────────────────────────────────────────────────────
+export async function listarParticipantesDaSessaoParaQualificacao(
+  db: D1Database,
+  sessaoId: string | number,
+): Promise<Array<{ funcionario_id: number }>> {
+  // Primary source: sessoes_participantes (canonical participant table)
+  const partRows = await db
+    .prepare(
+      `SELECT DISTINCT funcionario_id
+       FROM sessoes_participantes
+       WHERE sessao_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(sessaoId)
+    .all<{ funcionario_id: number }>();
+
+  if (partRows.results?.length) {
+    return partRows.results;
+  }
+
+  // Fallback: fichas_sessao (via colaborador_id_aluno)
+  const fichaRows = await db
+    .prepare(
+      `SELECT DISTINCT fs.colaborador_id_aluno AS funcionario_id
+       FROM fichas_sessao fs
+       WHERE fs.agendamento_slot_id = ? AND fs.deleted_at IS NULL`,
+    )
+    .bind(sessaoId)
+    .all<{ funcionario_id: number }>();
+
+  return fichaRows.results || [];
+}
+
 export async function criarQualificacoesPlanejadas(
   db: D1Database,
   params: {
