@@ -4,8 +4,8 @@
  * Atribuição diária de tripulação por aeronave. Estrutura por prefixo/matrícula,
  * não por voo/trecho. Visualização em tabela por aeronave com publicação versionada.
  */
-import { useState, useMemo } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useState, useMemo, useCallback } from 'react';
+import { NavLink, useSearchParams } from 'react-router-dom';
 import {
   Plane,
   Plus,
@@ -29,7 +29,7 @@ import Button from '@/react-app/components/Button';
 import { useApi } from '@/react-app/hooks/useApi';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 function authHeaders(): Record<string, string> {
@@ -232,6 +232,24 @@ function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function isIsoDate(value: string | null | undefined): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+}
+
+function getTomorrowDateStr() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return toLocalDateStr(tomorrow);
+}
+
+function resolveInitialEvdDate(searchParams: URLSearchParams): string {
+  const byData = searchParams.get('data');
+  if (isIsoDate(byData)) return byData;
+  const byDate = searchParams.get('date');
+  if (isIsoDate(byDate)) return byDate;
+  return getTomorrowDateStr();
+}
+
 function formatDateBR(dateStr: string) {
   const [y, m, d] = dateStr.split('-');
   return `${d}/${m}/${y}`;
@@ -415,6 +433,41 @@ function getAircraftStatusMeta(statusRaw: string | null | undefined): {
   };
 }
 
+function getDesignationStatusMeta(params: {
+  hasDesignation: boolean;
+  hasFrmsAlert: boolean;
+  aircraftStatus: ReturnType<typeof getAircraftStatusMeta>;
+}): { label: string; tone: string } {
+  if (params.hasDesignation) {
+    if (params.hasFrmsAlert) {
+      return {
+        label: 'Tripulação designada • alerta',
+        tone: 'bg-amber-100 text-amber-700',
+      };
+    }
+    return {
+      label: 'Tripulação designada',
+      tone: 'bg-emerald-100 text-emerald-700',
+    };
+  }
+  if (params.aircraftStatus.code === 'M') {
+    return {
+      label: 'Manutenção',
+      tone: 'bg-amber-100 text-amber-700',
+    };
+  }
+  if (params.aircraftStatus.code === 'I') {
+    return {
+      label: 'Indisponível',
+      tone: 'bg-rose-100 text-rose-700',
+    };
+  }
+  return {
+    label: 'Pendente de tripulação',
+    tone: 'bg-sky-100 text-sky-700',
+  };
+}
+
 function isAeronaveAtiva(statusRaw: string | null | undefined): boolean {
   const meta = getAircraftStatusMeta(statusRaw);
   return meta.code !== 'I';
@@ -450,6 +503,22 @@ function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
     return { short: 'REV', long: 'Revisão operacional' };
   }
   return { short: 'OK', long: 'FRMS OK' };
+}
+
+function getFrmsBadgeTone(short: string): string {
+  if (short === 'OK') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (short === 'ATN') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (short === 'REV') return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (short === 'SC') return 'border-slate-200 bg-slate-100 text-slate-700';
+  if (short === '?') return 'border-slate-200 bg-slate-100 text-slate-500';
+  return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+function getQualificacaoBadgeTone(funcao: string | null | undefined): string {
+  if (!funcao || funcao.toLowerCase().includes('a validar')) {
+    return 'border-amber-200 bg-amber-50 text-amber-700';
+  }
+  return 'border-sky-200 bg-sky-50 text-sky-700';
 }
 
 function getFrmsReasonLine(
@@ -535,8 +604,8 @@ function normalizeHorarioInput(raw: string): string | null {
 }
 
 export default function EvdPage() {
-  const queryClient = useQueryClient();
-  const [data, setData] = useState(toLocalDateStr(new Date()));
+  const [searchParams] = useSearchParams();
+  const [data, setData] = useState(() => resolveInitialEvdDate(searchParams));
   const [showForm, setShowForm] = useState(false);
   const [selectedAircraftForForm, setSelectedAircraftForForm] = useState('');
   const [snapshotOpen, setSnapshotOpen] = useState(false);
@@ -544,11 +613,17 @@ export default function EvdPage() {
   const [snapshotDetail, setSnapshotDetail] = useState<EvdPublicacaoDetalhe | null>(null);
   const [publishingDay, setPublishingDay] = useState(false);
 
-  const { data: voosRaw, loading } = useApi<EvdVoo[]>(`/api/evd?data=${data}`);
+  const {
+    data: voosRaw,
+    loading,
+    refetch: refetchVoos,
+  } = useApi<EvdVoo[]>(`/api/evd?data=${data}`);
   const voos = voosRaw || [];
-  const { data: publicacoesRaw, loading: loadingPublicacoes } = useApi<EvdPublicacaoResumo[]>(
-    `/api/evd/publicacoes?data=${data}`,
-  );
+  const {
+    data: publicacoesRaw,
+    loading: loadingPublicacoes,
+    refetch: refetchPublicacoes,
+  } = useApi<EvdPublicacaoResumo[]>(`/api/evd/publicacoes?data=${data}`);
   const frmsReferenceDate = getFrmsReferenceDate(data);
   const frmsUsingPreviousDayContext = frmsReferenceDate !== data;
   const publicacoes = publicacoesRaw || [];
@@ -559,14 +634,19 @@ export default function EvdPage() {
   const { data: frmsAlertsRaw, error: frmsAlertsError } = useApi<{
     items?: FrmsDailyFatigueAlertItem[];
   }>(`/api/frms/daily-fatigue/alerts?date=${frmsReferenceDate}`);
-  const { data: aeronavesRaw, loading: loadingAeronaves } = useApi<AeronaveAtiva[]>(
-    '/api/aeronaves?somente_ativas=1',
-  );
+  const {
+    data: aeronavesRaw,
+    loading: loadingAeronaves,
+    refetch: refetchAeronaves,
+  } = useApi<AeronaveAtiva[]>('/api/aeronaves?somente_ativas=1');
 
   const selectedDate = new Date(data + 'T12:00:00');
   const weekday = WEEKDAY_LABELS[selectedDate.getDay()];
   const escalaMes = selectedDate.getMonth() + 1;
   const escalaAno = selectedDate.getFullYear();
+  const todayStr = toLocalDateStr(new Date());
+  const tomorrowStr = getTomorrowDateStr();
+  const isDPlusOne = data === tomorrowStr;
 
   const { data: escalasDoMesRaw } = useApi<EscalaMensal[]>(
     `/api/escalas?mes=${escalaMes}&ano=${escalaAno}`,
@@ -648,12 +728,54 @@ export default function EvdPage() {
     return aeronavesAtivas.map((aeronave) => {
       const prefixo = normalizePrefixo(aeronave.prefixo);
       const alocacao = alocadasPorPrefixo.get(prefixo);
+      const picSignal = toNumericId(alocacao?.pic_id)
+        ? frmsByTripulante.get(Number(alocacao?.pic_id))
+        : null;
+      const sicSignal = toNumericId(alocacao?.sic_id)
+        ? frmsByTripulante.get(Number(alocacao?.sic_id))
+        : null;
       return {
         aeronave,
         alocacao,
+        hasFrmsAlert: isFrmsRelevant(picSignal) || isFrmsRelevant(sicSignal),
       };
     });
-  }, [aeronavesAtivas, voos]);
+  }, [aeronavesAtivas, frmsByTripulante, voos]);
+
+  const assignedAircraftPrefixes = useMemo(() => {
+    const set = new Set<string>();
+    for (const voo of voos) {
+      const prefixo = normalizePrefixo(voo.aeronave_prefixo);
+      if (prefixo) set.add(prefixo);
+    }
+    return set;
+  }, [voos]);
+
+  const firstPendingAircraftPrefix = useMemo(() => {
+    const firstPending = resumoAeronavesDoDia.find(
+      ({ aeronave, alocacao }) => !alocacao && getAircraftStatusMeta(aeronave.status).code === 'D',
+    );
+    return firstPending ? normalizePrefixo(firstPending.aeronave.prefixo) : '';
+  }, [resumoAeronavesDoDia]);
+
+  const resumoOperacional = useMemo(() => {
+    const totalAtivas = resumoAeronavesDoDia.length;
+    const designadas = resumoAeronavesDoDia.filter(({ alocacao }) => Boolean(alocacao)).length;
+    const pendentes = resumoAeronavesDoDia.filter(
+      ({ aeronave, alocacao }) => !alocacao && getAircraftStatusMeta(aeronave.status).code === 'D',
+    ).length;
+    const alertas = resumoAeronavesDoDia.filter(({ hasFrmsAlert }) => hasFrmsAlert).length;
+    return { totalAtivas, designadas, pendentes, alertas };
+  }, [resumoAeronavesDoDia]);
+
+  const refreshEvdData = useCallback(
+    async ({ includePublicacoes = false }: { includePublicacoes?: boolean } = {}) => {
+      const tasks: Array<Promise<unknown>> = [refetchVoos(), refetchAeronaves()];
+      if (includePublicacoes) tasks.push(refetchPublicacoes());
+      await Promise.allSettled(tasks);
+    },
+    [refetchAeronaves, refetchPublicacoes, refetchVoos],
+  );
 
   function changeDay(delta: number) {
     const d = new Date(data + 'T12:00:00');
@@ -821,8 +943,7 @@ export default function EvdPage() {
         return;
       }
 
-      queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
-      queryClient.invalidateQueries({ queryKey: [`/api/evd/publicacoes?data=${data}`] });
+      await refreshEvdData({ includePublicacoes: true });
       toast.success(
         `Escala do dia publicada. Rev ${json.data.revisao} • checksum ${shortChecksum(json.data.checksum)}`,
       );
@@ -866,8 +987,8 @@ export default function EvdPage() {
       }
       return responseJson;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
+    onSuccess: async () => {
+      await refreshEvdData();
       toast.success('Escala diária publicada');
     },
   });
@@ -879,8 +1000,8 @@ export default function EvdPage() {
       if (!res.ok) throw new Error('Erro ao excluir');
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
+    onSuccess: async () => {
+      await refreshEvdData();
       toast.success('Registro removido');
     },
     onError: () => {
@@ -970,8 +1091,12 @@ export default function EvdPage() {
             </Button>
             <Button
               onClick={() => {
-                if (!selectedAircraftForForm && resumoAeronavesDoDia[0]?.aeronave?.prefixo) {
-                  setSelectedAircraftForForm(normalizePrefixo(resumoAeronavesDoDia[0].aeronave.prefixo));
+                if (!showForm) {
+                  if (firstPendingAircraftPrefix) {
+                    setSelectedAircraftForForm(firstPendingAircraftPrefix);
+                  } else if (!selectedAircraftForForm) {
+                    toast.info('Todas as aeronaves ativas já estão designadas para esta data.');
+                  }
                 }
                 setShowForm(!showForm);
               }}
@@ -1046,42 +1171,102 @@ export default function EvdPage() {
           </div>
         </div>
 
-      <div className="space-y-4">
-        {/* Date navigation */}
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <button
-            onClick={() => changeDay(-1)}
-            className="p-2 rounded-lg hover:bg-slate-100 transition dark:hover:bg-slate-800"
-          >
-            <ChevronLeft className="h-5 w-5 text-slate-600" />
-          </button>
-          <div className="text-center">
-            <input
-              type="date"
-              value={data}
-              onChange={(e) => setData(e.target.value)}
-              className="text-lg font-bold text-slate-900 bg-transparent border-none text-center cursor-pointer dark:text-slate-100"
-            />
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {weekday}, {formatDateBR(data)}
-            </p>
-          </div>
-          <button
-            onClick={() => changeDay(1)}
-            className="p-2 rounded-lg hover:bg-slate-100 transition dark:hover:bg-slate-800"
-          >
-            <ChevronRight className="h-5 w-5 text-slate-600" />
-          </button>
-        </div>
+      <div className="space-y-5">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => changeDay(-1)}
+                className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                title="Dia anterior"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Escala do dia
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-2xl font-bold leading-none text-slate-900 dark:text-slate-100">
+                    {formatDateBR(data)}
+                  </p>
+                  {isDPlusOne && (
+                    <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                      D+1 (padrão)
+                    </span>
+                  )}
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                    Hoje: {formatDateBR(todayStr)}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  {weekday}, {formatDateBR(data)}
+                </p>
+              </div>
+              <button
+                onClick={() => changeDay(1)}
+                className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                title="Próximo dia"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-start gap-3">
+              <div className="text-right">
+                <p className="text-xs font-medium text-slate-500">
+                  {isDPlusOne ? 'Planejamento D+1' : 'Data selecionada manualmente'}
+                </p>
+                <input
+                  type="date"
+                  value={data}
+                  onChange={(e) => setData(e.target.value)}
+                  className="mt-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-1 text-slate-500">
+                <Plane className="h-3.5 w-3.5" />
+                <span className="text-[11px] font-medium">Aeronaves ativas</span>
+              </div>
+              <p className="mt-1 text-xl font-bold text-slate-900">{resumoOperacional.totalAtivas}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="flex items-center gap-1 text-emerald-700">
+                <CheckCircle className="h-3.5 w-3.5" />
+                <span className="text-[11px] font-medium">Designadas</span>
+              </div>
+              <p className="mt-1 text-xl font-bold text-emerald-800">{resumoOperacional.designadas}</p>
+            </div>
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+              <div className="flex items-center gap-1 text-sky-700">
+                <Plus className="h-3.5 w-3.5" />
+                <span className="text-[11px] font-medium">Pendentes</span>
+              </div>
+              <p className="mt-1 text-xl font-bold text-sky-800">{resumoOperacional.pendentes}</p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-center gap-1 text-amber-700">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span className="text-[11px] font-medium">Alertas FRMS</span>
+              </div>
+              <p className="mt-1 text-xl font-bold text-amber-800">{resumoOperacional.alertas}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                 Aeronaves do dia
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Selecione uma aeronave ativa para iniciar a designação
+                Pendentes podem ser designadas. Aeronaves já designadas devem ser alteradas pelo fluxo de edição/substituição.
               </p>
             </div>
             <span className="text-xs text-slate-500">
@@ -1098,40 +1283,100 @@ export default function EvdPage() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-              {resumoAeronavesDoDia.map(({ aeronave, alocacao }) => {
-                const meta = getAircraftStatusMeta(aeronave.status);
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {resumoAeronavesDoDia.map(({ aeronave, alocacao, hasFrmsAlert }) => {
+                const metaAnv = getAircraftStatusMeta(aeronave.status);
                 const prefixo = normalizePrefixo(aeronave.prefixo) || 'SEM-PREFIXO';
+                const statusDesignacao = getDesignationStatusMeta({
+                  hasDesignation: Boolean(alocacao),
+                  hasFrmsAlert,
+                  aircraftStatus: metaAnv,
+                });
+                const canDesignar = !alocacao && metaAnv.code === 'D';
                 return (
-                  <button
+                  <article
                     key={`${aeronave.id}-${prefixo}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedAircraftForForm(prefixo);
-                      setShowForm(true);
-                    }}
-                    className="flex items-start justify-between rounded-xl border border-slate-200 px-3 py-2 text-left hover:border-slate-300 hover:bg-slate-50"
+                    className={[
+                      'rounded-xl border p-3',
+                      alocacao
+                        ? hasFrmsAlert
+                          ? 'border-amber-200 bg-amber-50/40'
+                          : 'border-emerald-200 bg-emerald-50/30'
+                        : 'border-slate-200 bg-white',
+                    ].join(' ')}
                   >
-                    <div>
-                      <p className="font-mono text-sm font-semibold text-slate-900">{prefixo}</p>
-                      <p className="text-xs text-slate-500">{aeronave.modelo || 'Modelo não informado'}</p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {alocacao
-                          ? `${alocacao.pic_guerra || alocacao.pic_nome || 'PIC pendente'} / ${alocacao.sic_guerra || alocacao.sic_nome || 'SIC pendente'}`
-                          : 'Sem tripulação designada'}
-                      </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-mono text-sm font-semibold text-slate-900">{prefixo}</p>
+                        <p className="text-xs text-slate-500">{aeronave.modelo || 'Modelo não informado'}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusDesignacao.tone}`}
+                        >
+                          {statusDesignacao.label}
+                        </span>
+                        {hasFrmsAlert && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            <AlertTriangle className="h-3 w-3" />
+                            Alerta FRMS
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.tone}`}
-                    >
-                      {meta.label}
-                    </span>
-                  </button>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-white p-2">
+                      <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">PIC</p>
+                        <p className="mt-0.5 text-xs font-medium text-slate-800">
+                          {alocacao?.pic_guerra || alocacao?.pic_nome || 'Pendente'}
+                        </p>
+                      </div>
+                      <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">SIC</p>
+                        <p className="mt-0.5 text-xs font-medium text-slate-800">
+                          {alocacao?.sic_guerra || alocacao?.sic_nome || 'Pendente'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                        ANV: {metaAnv.label === 'Disponível' ? 'Ativa' : metaAnv.label}
+                      </span>
+                      {canDesignar ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedAircraftForForm(prefixo);
+                            setShowForm(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-100"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Designar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (alocacao) {
+                              toast.info(`Aeronave ${prefixo} já possui designação nesta data.`);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600"
+                          disabled={!alocacao}
+                        >
+                          {alocacao ? 'Já designada' : 'Sem ação'}
+                        </button>
+                      )}
+                    </div>
+                  </article>
                 );
               })}
             </div>
           )}
-        </div>
+        </section>
 
         {frmsDailyUnavailable && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -1332,11 +1577,12 @@ export default function EvdPage() {
             data={data}
             selectedAircraftPrefix={selectedAircraftForForm}
             aeronavesAtivas={aeronavesAtivas}
+            assignedAircraftPrefixes={assignedAircraftPrefixes}
             onClose={() => setShowForm(false)}
-            onCreated={() => {
+            onCreated={async (createdPrefix) => {
+              await refreshEvdData();
               setShowForm(false);
-              setSelectedAircraftForForm('');
-              queryClient.invalidateQueries({ queryKey: ['/api/evd'] });
+              setSelectedAircraftForForm(createdPrefix || '');
             }}
             frmsByTripulante={frmsByTripulante}
             frmsUnavailable={frmsUnavailable}
@@ -1347,6 +1593,12 @@ export default function EvdPage() {
 
         {/* Tabela de atribuições por aeronave */}
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+            <h3 className="text-sm font-semibold text-slate-800">Escala do dia ({formatDateBR(data)})</h3>
+            <span className="text-xs text-slate-500">
+              {voos.length} {voos.length === 1 ? 'designação' : 'designações'}
+            </span>
+          </div>
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
@@ -1357,10 +1609,11 @@ export default function EvdPage() {
               <p className="text-sm font-medium">Nenhuma aeronave escalada para {formatDateBR(data)}</p>
               <button
                 onClick={() => {
-                  if (resumoAeronavesDoDia[0]?.aeronave?.prefixo) {
-                    setSelectedAircraftForForm(
-                      normalizePrefixo(resumoAeronavesDoDia[0].aeronave.prefixo),
-                    );
+                  if (firstPendingAircraftPrefix) {
+                    setSelectedAircraftForForm(firstPendingAircraftPrefix);
+                  } else {
+                    toast.info('Não há aeronave pendente de designação para esta data.');
+                    return;
                   }
                   setShowForm(true);
                 }}
@@ -1416,7 +1669,9 @@ export default function EvdPage() {
                         key={voo.id}
                         className={[
                           'align-top transition-colors',
-                          hasFrmsAlert ? 'bg-amber-50/40 dark:bg-amber-500/5' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
+                          hasFrmsAlert
+                            ? 'bg-amber-50/40 dark:bg-amber-500/5'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
                         ].join(' ')}
                       >
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">
@@ -1443,24 +1698,50 @@ export default function EvdPage() {
                           )}
                         </td>
                         <td className="px-3 py-3">
-                          <span className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                          <span
+                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(picFrms.short)}`}
+                            title={picFrms.long}
+                          >
                             {picFrms.short}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.pic_funcao || 'a validar'}</td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">PIC</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getQualificacaoBadgeTone(voo.pic_funcao)}`}
+                          >
+                            {voo.pic_funcao || 'a validar'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                            PIC
+                          </span>
+                        </td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           <span className="text-xs font-medium text-slate-800 dark:text-slate-100">
                             {voo.sic_guerra || voo.sic_nome || '—'}
                           </span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                          <span
+                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(sicFrms.short)}`}
+                            title={sicFrms.long}
+                          >
                             {sicFrms.short}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.sic_funcao || 'a validar'}</td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">SIC</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getQualificacaoBadgeTone(voo.sic_funcao)}`}
+                          >
+                            {voo.sic_funcao || 'a validar'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                            SIC
+                          </span>
+                        </td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.origem || '—'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_apresentacao || '—'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_decolagem_prevista || '—'}</td>
@@ -1474,20 +1755,20 @@ export default function EvdPage() {
                           )}
                         </td>
                         <td className="px-3 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1.5">
                             {voo.status === 'RASCUNHO' && (
                               <>
                                 <button
                                   onClick={() => handlePublish(voo)}
                                   disabled={publicarMutation.isPending}
-                                  className="flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-800 transition px-2 py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
+                                  className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-100"
                                 >
                                   <Send className="h-3 w-3" /> Publicar
                                 </button>
                                 <button
                                   onClick={() => deleteMutation.mutate(voo.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="flex items-center gap-1 text-[11px] text-red-500 hover:text-red-700 transition px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10"
+                                  className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 transition hover:bg-red-100"
                                 >
                                   <Trash2 className="h-3 w-3" /> Excluir
                                 </button>
@@ -1519,6 +1800,7 @@ function EvdCreateForm({
   data,
   selectedAircraftPrefix,
   aeronavesAtivas,
+  assignedAircraftPrefixes,
   onClose,
   onCreated,
   frmsByTripulante,
@@ -1529,8 +1811,9 @@ function EvdCreateForm({
   data: string;
   selectedAircraftPrefix: string;
   aeronavesAtivas: AeronaveAtiva[];
+  assignedAircraftPrefixes: Set<string>;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (createdPrefix: string) => Promise<void> | void;
   frmsByTripulante: Map<number, FrmsTripulanteSignal>;
   frmsUnavailable: boolean;
   frmsReferenceDate: string;
@@ -1551,11 +1834,27 @@ function EvdCreateForm({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const quinzena = getQuinzenaByDate(data);
+  const selectedAircraftNormalized = normalizePrefixo(selectedAircraftPrefix);
+  const aeronavesDisponiveis = useMemo(
+    () =>
+      aeronavesAtivas.filter((item) => {
+        const prefixo = normalizePrefixo(item.prefixo);
+        if (!prefixo) return false;
+        const status = getAircraftStatusMeta(item.status);
+        if (status.code !== 'D') return false;
+        if (prefixo === selectedAircraftNormalized) return true;
+        return !assignedAircraftPrefixes.has(prefixo);
+      }),
+    [aeronavesAtivas, assignedAircraftPrefixes, selectedAircraftNormalized],
+  );
 
   const aeronaveSelecionada = useMemo(() => {
     const alvo = normalizePrefixo(form.aeronave_prefixo);
-    return aeronavesAtivas.find((item) => normalizePrefixo(item.prefixo) === alvo) || null;
-  }, [aeronavesAtivas, form.aeronave_prefixo]);
+    return aeronavesDisponiveis.find((item) => normalizePrefixo(item.prefixo) === alvo) || null;
+  }, [aeronavesDisponiveis, form.aeronave_prefixo]);
+  const aeronaveJaDesignada = Boolean(
+    form.aeronave_prefixo && assignedAircraftPrefixes.has(normalizePrefixo(form.aeronave_prefixo)),
+  );
 
   const tripulantesUrl = aeronaveSelecionada
     ? `/api/escalas/tripulantes-operacionais?aeronave_id=${aeronaveSelecionada.id}&incluir_bloqueados=true&data_inicio=${data}&data_fim=${data}&quinzena=${quinzena}${escalaId ? `&escala_id=${encodeURIComponent(escalaId)}` : ''}`
@@ -1625,6 +1924,13 @@ function EvdCreateForm({
     try {
       if (!aeronaveSelecionada) {
         setError('Selecione uma aeronave ativa.');
+        setSubmitting(false);
+        return;
+      }
+      if (aeronaveJaDesignada) {
+        setError(
+          'Esta aeronave já possui designação nesta data. Use o fluxo explícito de edição/substituição.',
+        );
         setSubmitting(false);
         return;
       }
@@ -1761,10 +2067,15 @@ function EvdCreateForm({
           setSubmitting(false);
           return;
         }
-        toast.success('Escala criada com justificativa operacional estruturada.');
       }
 
-      onCreated();
+      const createdPrefix = normalizePrefixo(aeronaveSelecionada.prefixo);
+      toast.success(
+        needsJustificativa
+          ? `Designação salva para ${createdPrefix} com justificativa operacional FRMS.`
+          : `Designação salva para ${createdPrefix}.`,
+      );
+      await onCreated(createdPrefix);
     } catch {
       setError('Erro de rede');
     } finally {
@@ -1772,352 +2083,389 @@ function EvdCreateForm({
     }
   }
 
+  const semAeronavesPendentes = aeronavesDisponiveis.length === 0;
+
   return (
-    <div className="rounded-2xl border border-blue-200 bg-blue-50/20 p-4 shadow-sm dark:border-blue-500/30 dark:bg-blue-500/5">
-      <h3 className="mb-4 flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
-        <Plus className="h-4 w-4 text-blue-600" />
-        Designar tripulação para aeronave — {formatDateBR(data)}
-      </h3>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aeronave</h4>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs text-slate-500">Aeronave ativa (obrigatório)</label>
-                <select
-                  value={form.aeronave_prefixo}
-                  onChange={(e) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      aeronave_prefixo: e.target.value,
-                      pic_id: '',
-                      sic_id: '',
-                    }));
-                  }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Selecione</option>
-                  {aeronavesAtivas.map((aeronave) => {
-                    const prefixo = normalizePrefixo(aeronave.prefixo);
-                    const meta = getAircraftStatusMeta(aeronave.status);
-                    return (
-                      <option key={aeronave.id} value={prefixo}>
-                        {prefixo} — {aeronave.modelo || 'Sem modelo'} ({meta.label})
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Status</label>
-                <input
-                  type="text"
-                  value={
-                    aeronaveSelecionada ? getAircraftStatusMeta(aeronaveSelecionada.status).label : '—'
-                  }
-                  readOnly
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Modelo</label>
-                <input
-                  type="text"
-                  value={aeronaveSelecionada?.modelo || '—'}
-                  readOnly
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Quinzena operacional</label>
-                <input
-                  type="text"
-                  value={quinzena === 'primeira' ? '1ª' : '2ª'}
-                  readOnly
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tripulação</h4>
-            <div className="grid grid-cols-1 gap-3">
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">PIC</label>
-                <select
-                  value={form.pic_id}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      pic_id: e.target.value,
-                      sic_id: prev.sic_id === e.target.value ? '' : prev.sic_id,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
-                >
-                  <option value="">Selecione</option>
-                  {picCandidatos.map((p) => {
-                    const frms = frmsUnavailable
-                      ? '?'
-                      : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
-                    const conflictNote = p.soft_conflict
-                      ? p.conflict_code === 'FRMS_CRITICAL'
-                        ? ' [!] Alerta FRMS'
-                        : ' [!] Conflito escala'
-                      : '';
-                    return (
-                      <option key={p.funcionario_id} value={p.funcionario_id}>
-                        {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}{conflictNote}
-                      </option>
-                    );
-                  })}
-                  {picBloqueados.length > 0 && (
-                    <optgroup label="Indisponíveis (bloqueados)">
-                      {picBloqueados.map((p) => (
-                        <option key={`b-pic-${p.funcionario_id}`} value="" disabled>
-                          {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-                <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600">
-                  <span className="rounded bg-slate-100 px-2 py-0.5">
-                    Qualificação: {picSelecionado?.role || 'a validar'}
-                  </span>
-                  <span className="rounded bg-slate-100 px-2 py-0.5">Assento: PIC</span>
-                  <span className="rounded bg-slate-100 px-2 py-0.5">
-                    FRMS: {selectedPicId ? frmsPicLabel : '—'}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">SIC</label>
-                <select
-                  value={form.sic_id}
-                  onChange={(e) => setForm((prev) => ({ ...prev, sic_id: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
-                >
-                  <option value="">Selecione</option>
-                  {sicCandidatos.map((p) => {
-                    const frms = frmsUnavailable
-                      ? '?'
-                      : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
-                    const conflictNote = p.soft_conflict
-                      ? p.conflict_code === 'FRMS_CRITICAL'
-                        ? ' [!] Alerta FRMS'
-                        : ' [!] Conflito escala'
-                      : '';
-                    return (
-                      <option key={`sic-${p.funcionario_id}`} value={p.funcionario_id}>
-                        {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}{conflictNote}
-                      </option>
-                    );
-                  })}
-                  {sicBloqueados.length > 0 && (
-                    <optgroup label="Indisponíveis (bloqueados)">
-                      {sicBloqueados.map((p) => (
-                        <option key={`b-sic-${p.funcionario_id}`} value="" disabled>
-                          {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-                <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600">
-                  <span className="rounded bg-slate-100 px-2 py-0.5">
-                    Qualificação: {sicSelecionado?.role || 'a validar'}
-                  </span>
-                  <span className="rounded bg-slate-100 px-2 py-0.5">Assento: SIC</span>
-                  <span className="rounded bg-slate-100 px-2 py-0.5">
-                    FRMS: {selectedSicId ? frmsSicLabel : '—'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Horários</h4>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Apresentação</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.hora_apresentacao}
-                  onChange={(e) => setForm((prev) => ({ ...prev, hora_apresentacao: e.target.value }))}
-                  onBlur={() => handleHorarioBlur('hora_apresentacao', 'Apresentação')}
-                  placeholder=""
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Início</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.hora_decolagem_prevista}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, hora_decolagem_prevista: e.target.value }))
-                  }
-                  onBlur={() => handleHorarioBlur('hora_decolagem_prevista', 'Início')}
-                  placeholder=""
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Término</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.hora_pouso_previsto}
-                  onChange={(e) => setForm((prev) => ({ ...prev, hora_pouso_previsto: e.target.value }))}
-                  onBlur={() => handleHorarioBlur('hora_pouso_previsto', 'Término')}
-                  placeholder=""
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Base e observações
-            </h4>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">Base</label>
-              <input
-                type="text"
-                value={form.base}
-                onChange={(e) => setForm((prev) => ({ ...prev, base: e.target.value.toUpperCase() }))}
-                placeholder="Ex.: SBME"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">Observações</label>
-              <textarea
-                value={form.observacoes}
-                onChange={(e) => setForm((prev) => ({ ...prev, observacoes: e.target.value }))}
-                rows={2}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-          </section>
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/80">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <Plus className="h-4 w-4 text-blue-600" />
+            Nova designação — {formatDateBR(data)}
+          </h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Preencha aeronave, tripulação, horários e observações para salvar.
+          </p>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          Fechar
+        </button>
+      </div>
 
-        {tripulantesRaw?.resumo?.sem_habilitacao && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            {tripulantesRaw.resumo.sem_habilitacao}
+      {semAeronavesPendentes ? (
+        <div className="space-y-3 p-4">
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            Não há aeronaves pendentes para nova designação nesta data.
           </div>
-        )}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Use o fluxo explícito de edição/substituição para alterar tripulação já designada.
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4 p-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aeronave</h4>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs text-slate-500">
+                    Aeronave pendente de tripulação (obrigatório)
+                  </label>
+                  <select
+                    value={form.aeronave_prefixo}
+                    onChange={(e) => {
+                      setForm((prev) => ({
+                        ...prev,
+                        aeronave_prefixo: e.target.value,
+                        pic_id: '',
+                        sic_id: '',
+                      }));
+                    }}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    required
+                  >
+                    <option value="">Selecione</option>
+                    {aeronavesDisponiveis.map((aeronave) => {
+                      const prefixo = normalizePrefixo(aeronave.prefixo);
+                      const meta = getAircraftStatusMeta(aeronave.status);
+                      return (
+                        <option key={aeronave.id} value={prefixo}>
+                          {prefixo} — {aeronave.modelo || 'Sem modelo'} ({meta.label})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Status</label>
+                  <input
+                    type="text"
+                    value={
+                      aeronaveSelecionada
+                        ? getAircraftStatusMeta(aeronaveSelecionada.status).label === 'Disponível'
+                          ? 'Aeronave ativa'
+                          : getAircraftStatusMeta(aeronaveSelecionada.status).label
+                        : '—'
+                    }
+                    readOnly
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Modelo</label>
+                  <input
+                    type="text"
+                    value={aeronaveSelecionada?.modelo || '—'}
+                    readOnly
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Quinzena operacional</label>
+                  <input
+                    type="text"
+                    value={quinzena === 'primeira' ? '1ª' : '2ª'}
+                    readOnly
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  />
+                </div>
+              </div>
+              {aeronaveJaDesignada && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Esta aeronave já está designada para o dia selecionado.
+                </div>
+              )}
+            </section>
 
-        {(picFallbackHeuristico || sicFallbackHeuristico) && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            Cadastro de função não canônico para toda a tripulação elegível deste modelo. Foi
-            aplicado fallback heurístico com validação operacional.
-          </div>
-        )}
+            <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tripulação</h4>
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">PIC</label>
+                  <select
+                    value={form.pic_id}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        pic_id: e.target.value,
+                        sic_id: prev.sic_id === e.target.value ? '' : prev.sic_id,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
+                  >
+                    <option value="">Selecione</option>
+                    {picCandidatos.map((p) => {
+                      const frms = frmsUnavailable
+                        ? '?'
+                        : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
+                      const conflictNote = p.soft_conflict
+                        ? p.conflict_code === 'FRMS_CRITICAL'
+                          ? ' [!] Alerta FRMS'
+                          : ' [!] Conflito escala'
+                        : '';
+                      return (
+                        <option key={p.funcionario_id} value={p.funcionario_id}>
+                          {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}
+                          {conflictNote}
+                        </option>
+                      );
+                    })}
+                    {picBloqueados.length > 0 && (
+                      <optgroup label="Indisponíveis (bloqueados)">
+                        {picBloqueados.map((p) => (
+                          <option key={`b-pic-${p.funcionario_id}`} value="" disabled>
+                            {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                    <span className="rounded bg-white px-2 py-0.5">Qualificação: {picSelecionado?.role || 'a validar'}</span>
+                    <span className="rounded bg-white px-2 py-0.5">Assento: PIC</span>
+                    <span className="rounded bg-white px-2 py-0.5">FRMS: {selectedPicId ? frmsPicLabel : '—'}</span>
+                  </div>
+                </div>
 
-        {tripulantesError && (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
-            Disponibilidade/quinzena indisponível para validação. Seleção de tripulantes bloqueada
-            para evitar escala cega.
-          </div>
-        )}
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">SIC</label>
+                  <select
+                    value={form.sic_id}
+                    onChange={(e) => setForm((prev) => ({ ...prev, sic_id: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
+                  >
+                    <option value="">Selecione</option>
+                    {sicCandidatos.map((p) => {
+                      const frms = frmsUnavailable
+                        ? '?'
+                        : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
+                      const conflictNote = p.soft_conflict
+                        ? p.conflict_code === 'FRMS_CRITICAL'
+                          ? ' [!] Alerta FRMS'
+                          : ' [!] Conflito escala'
+                        : '';
+                      return (
+                        <option key={`sic-${p.funcionario_id}`} value={p.funcionario_id}>
+                          {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}
+                          {conflictNote}
+                        </option>
+                      );
+                    })}
+                    {sicBloqueados.length > 0 && (
+                      <optgroup label="Indisponíveis (bloqueados)">
+                        {sicBloqueados.map((p) => (
+                          <option key={`b-sic-${p.funcionario_id}`} value="" disabled>
+                            {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                    <span className="rounded bg-white px-2 py-0.5">Qualificação: {sicSelecionado?.role || 'a validar'}</span>
+                    <span className="rounded bg-white px-2 py-0.5">Assento: SIC</span>
+                    <span className="rounded bg-white px-2 py-0.5">FRMS: {selectedSicId ? frmsSicLabel : '—'}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
 
-        {frmsUnavailable && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            FRMS indisponível na data de referência {formatDateBR(frmsReferenceDate)}. Status de
-            fadiga indisponível; exibindo ? até retorno do serviço.
-          </div>
-        )}
-        {!escalaId && (
-          <div className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Escala mensal não identificada para esta data; disponibilidade pode ficar restritiva.
-          </div>
-        )}
+            <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Horários</h4>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Apresentação</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.hora_apresentacao}
+                    onChange={(e) => setForm((prev) => ({ ...prev, hora_apresentacao: e.target.value }))}
+                    onBlur={() => handleHorarioBlur('hora_apresentacao', 'Apresentação')}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Início</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.hora_decolagem_prevista}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, hora_decolagem_prevista: e.target.value }))
+                    }
+                    onBlur={() => handleHorarioBlur('hora_decolagem_prevista', 'Início')}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Término</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.hora_pouso_previsto}
+                    onChange={(e) => setForm((prev) => ({ ...prev, hora_pouso_previsto: e.target.value }))}
+                    onBlur={() => handleHorarioBlur('hora_pouso_previsto', 'Término')}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            </section>
 
-        {(picSelecionado?.soft_conflict || sicSelecionado?.soft_conflict) && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            <p className="font-semibold mb-1">Conflito com escala mensal:</p>
-            {picSelecionado?.soft_conflict && (
-              <p>• PIC: {picSelecionado.conflict_reason || 'Alocado em outra escala'}</p>
-            )}
-            {sicSelecionado?.soft_conflict && (
-              <p>• SIC: {sicSelecionado.conflict_reason || 'Alocado em outra escala'}</p>
-            )}
-            <p className="mt-1 text-amber-600">
-              A designacao sera salva com aviso. Registre a decisao operacional nas observacoes.
-            </p>
+            <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Base e observações
+              </h4>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Base</label>
+                <input
+                  type="text"
+                  value={form.base}
+                  onChange={(e) => setForm((prev) => ({ ...prev, base: e.target.value.toUpperCase() }))}
+                  placeholder="Ex.: SBME"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Observações</label>
+                <textarea
+                  value={form.observacoes}
+                  onChange={(e) => setForm((prev) => ({ ...prev, observacoes: e.target.value }))}
+                  rows={2}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+            </section>
           </div>
-        )}
 
-        {needsStructuredJustificativa && (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-amber-700">
-              Justificativa operacional FRMS (obrigatoria)
-            </label>
-            <div className="mb-2 rounded bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
-              <p className="font-medium mb-0.5">Revisao necessaria por:</p>
-              <p className="mb-1">
-                Referência FRMS: {formatDateBR(frmsReferenceDate)} (escala para{' '}
-                {formatDateBR(data)}).
+          {tripulantesRaw?.resumo?.sem_habilitacao && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              {tripulantesRaw.resumo.sem_habilitacao}
+            </div>
+          )}
+
+          {(picFallbackHeuristico || sicFallbackHeuristico) && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              Cadastro de função não canônico para toda a tripulação elegível deste modelo. Foi
+              aplicado fallback heurístico com validação operacional.
+            </div>
+          )}
+
+          {tripulantesError && (
+            <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+              Disponibilidade/quinzena indisponível para validação. Seleção de tripulantes bloqueada
+              para evitar escala cega.
+            </div>
+          )}
+
+          {frmsUnavailable && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              FRMS indisponível na data de referência {formatDateBR(frmsReferenceDate)}. Status de
+              fadiga indisponível; exibindo ? até retorno do serviço.
+            </div>
+          )}
+          {!escalaId && (
+            <div className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Escala mensal não identificada para esta data; disponibilidade pode ficar restritiva.
+            </div>
+          )}
+
+          {(picSelecionado?.soft_conflict || sicSelecionado?.soft_conflict) && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <p className="mb-1 font-semibold">Conflito com escala mensal:</p>
+              {picSelecionado?.soft_conflict && (
+                <p>• PIC: {picSelecionado.conflict_reason || 'Alocado em outra escala'}</p>
+              )}
+              {sicSelecionado?.soft_conflict && (
+                <p>• SIC: {sicSelecionado.conflict_reason || 'Alocado em outra escala'}</p>
+              )}
+              <p className="mt-1 text-amber-600">
+                A designacao sera salva com aviso. Registre a decisao operacional nas observacoes.
               </p>
-              {isFrmsRelevant(frmsPic) && picSelecionado && (
-                <p>
-                  • PIC {(picSelecionado.nome_guerra || picSelecionado.nome).trim()}:{' '}
-                  {getFrmsReasonLine(frmsPic, frmsReferenceDate)}
-                </p>
-              )}
-              {isFrmsRelevant(frmsSic) && sicSelecionado && (
-                <p>
-                  • SIC {(sicSelecionado.nome_guerra || sicSelecionado.nome).trim()}:{' '}
-                  {getFrmsReasonLine(frmsSic, frmsReferenceDate)}
-                </p>
-              )}
             </div>
-            <textarea
-              value={form.justificativa_operacional}
-              onChange={(e) => setForm({ ...form, justificativa_operacional: e.target.value })}
-              rows={3}
-              className="w-full rounded-lg border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm"
-              placeholder="Descreva decisao operacional sem incluir dados sensiveis do check-in."
-            />
-          </div>
-        )}
+          )}
 
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-        {warnings.length > 0 && (
-          <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            <p className="font-medium">Avisos:</p>
-            {warnings.map((w, i) => (
-              <p key={i}>• {w}</p>
-            ))}
-          </div>
-        )}
+          {needsStructuredJustificativa && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-amber-700">
+                Justificativa operacional FRMS (obrigatoria)
+              </label>
+              <div className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                <p className="mb-0.5 font-medium">Revisao necessaria por:</p>
+                <p className="mb-1">
+                  Referência FRMS: {formatDateBR(frmsReferenceDate)} (escala para{' '}
+                  {formatDateBR(data)}).
+                </p>
+                {isFrmsRelevant(frmsPic) && picSelecionado && (
+                  <p>
+                    • PIC {(picSelecionado.nome_guerra || picSelecionado.nome).trim()}:{' '}
+                    {getFrmsReasonLine(frmsPic, frmsReferenceDate)}
+                  </p>
+                )}
+                {isFrmsRelevant(frmsSic) && sicSelecionado && (
+                  <p>
+                    • SIC {(sicSelecionado.nome_guerra || sicSelecionado.nome).trim()}:{' '}
+                    {getFrmsReasonLine(frmsSic, frmsReferenceDate)}
+                  </p>
+                )}
+              </div>
+              <textarea
+                value={form.justificativa_operacional}
+                onChange={(e) => setForm({ ...form, justificativa_operacional: e.target.value })}
+                rows={3}
+                className="w-full rounded-lg border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm"
+                placeholder="Descreva decisao operacional sem incluir dados sensiveis do check-in."
+              />
+            </div>
+          )}
 
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-slate-600 transition hover:text-slate-900"
-          >
-            Cancelar
-          </button>
-          <Button type="submit" disabled={submitting || bloqueioElegibilidade}>
-            {submitting ? 'Salvando...' : 'Salvar designação'}
-          </Button>
-        </div>
-      </form>
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+          {warnings.length > 0 && (
+            <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              <p className="font-medium">Avisos:</p>
+              {warnings.map((w, i) => (
+                <p key={i}>• {w}</p>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 border-t border-slate-200 pt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              Cancelar
+            </button>
+            <Button
+              type="submit"
+              disabled={
+                submitting ||
+                bloqueioElegibilidade ||
+                aeronaveJaDesignada ||
+                !aeronaveSelecionada
+              }
+            >
+              {submitting ? 'Salvando...' : 'Salvar designação'}
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
