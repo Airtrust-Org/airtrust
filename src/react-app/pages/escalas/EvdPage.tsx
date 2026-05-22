@@ -66,6 +66,13 @@ interface AeronaveAtiva {
   status: string | null;
 }
 
+interface EscalaMensal {
+  id: string;
+  mes: number;
+  ano: number;
+  status: string;
+}
+
 interface TripulanteOperacionalItem {
   funcionario_id: string;
   nome: string;
@@ -400,10 +407,13 @@ function isAeronaveAtiva(statusRaw: string | null | undefined): boolean {
 
 function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
   short: string;
-  long: 'FRMS OK' | 'Atenção' | 'Revisão operacional' | 'Sem check-in' | 'Indisponível';
+  long: 'FRMS OK' | 'Atenção' | 'Revisão operacional' | 'Sem check-in' | 'Sem jornada' | 'Indisponível';
 } {
   if (!signal) {
     return { short: 'SC', long: 'Sem check-in' };
+  }
+  if (signal.status === 'no_duty') {
+    return { short: '—', long: 'Sem jornada' };
   }
   if (signal.status === 'critical' || signal.status === 'unfit_for_duty') {
     return { short: 'REV', long: 'Revisão operacional' };
@@ -515,9 +525,27 @@ export default function EvdPage() {
 
   const selectedDate = new Date(data + 'T12:00:00');
   const weekday = WEEKDAY_LABELS[selectedDate.getDay()];
+  const escalaMes = selectedDate.getMonth() + 1;
+  const escalaAno = selectedDate.getFullYear();
+
+  const { data: escalasDoMesRaw } = useApi<EscalaMensal[]>(
+    `/api/escalas?mes=${escalaMes}&ano=${escalaAno}`,
+  );
+  const escalaAtiva = useMemo(() => {
+    const lista = escalasDoMesRaw || [];
+    if (lista.length === 0) return null;
+    for (const s of ['publicada', 'aprovada', 'rascunho']) {
+      const found = lista.find((e) => e.status === s);
+      if (found) return found;
+    }
+    return lista[0];
+  }, [escalasDoMesRaw]);
+
   const frmsDailyItems = frmsDailyRaw?.items || [];
   const frmsAlertItems = frmsAlertsRaw?.items || [];
-  const frmsUnavailable = Boolean(frmsDailyError || frmsAlertsError);
+  const frmsDailyUnavailable = Boolean(frmsDailyError);
+  const frmsAlertsUnavailable = Boolean(frmsAlertsError) && !frmsDailyError;
+  const frmsUnavailable = frmsDailyUnavailable;
   const aeronavesAtivas = useMemo(
     () => (aeronavesRaw || []).filter((a) => isAeronaveAtiva(a.status)),
     [aeronavesRaw],
@@ -1065,10 +1093,15 @@ export default function EvdPage() {
           )}
         </div>
 
-        {frmsUnavailable && (
+        {frmsDailyUnavailable && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             FRMS indisponível no momento. A escala segue visível, mas o status resumido de fadiga
             pode ficar incompleto.
+          </div>
+        )}
+        {frmsAlertsUnavailable && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Alertas FRMS indisponíveis; status diário carregado.
           </div>
         )}
 
@@ -1260,6 +1293,7 @@ export default function EvdPage() {
             }}
             frmsByTripulante={frmsByTripulante}
             frmsUnavailable={frmsUnavailable}
+            escalaId={escalaAtiva?.id ?? null}
           />
         )}
 
@@ -1320,11 +1354,11 @@ export default function EvdPage() {
                     const picSignal = toNumericId(voo.pic_id) ? frmsByTripulante.get(Number(voo.pic_id)) : null;
                     const sicSignal = toNumericId(voo.sic_id) ? frmsByTripulante.get(Number(voo.sic_id)) : null;
                     const hasFrmsAlert = isFrmsRelevant(picSignal) || isFrmsRelevant(sicSignal);
-                    const picFrms = frmsUnavailable
-                      ? { short: 'IND', long: 'Indisponível' as const }
+                    const picFrms = frmsDailyUnavailable
+                      ? { short: '?', long: 'Indisponível' as const }
                       : getFrmsRosterLabel(picSignal);
-                    const sicFrms = frmsUnavailable
-                      ? { short: 'IND', long: 'Indisponível' as const }
+                    const sicFrms = frmsDailyUnavailable
+                      ? { short: '?', long: 'Indisponível' as const }
                       : getFrmsRosterLabel(sicSignal);
                     const prefixoNormalizado = normalizePrefixo(voo.aeronave_prefixo);
                     const aeronaveCadastro = aeronavesByPrefix.get(prefixoNormalizado);
@@ -1441,6 +1475,7 @@ function EvdCreateForm({
   onCreated,
   frmsByTripulante,
   frmsUnavailable,
+  escalaId,
 }: {
   data: string;
   selectedAircraftPrefix: string;
@@ -1449,6 +1484,7 @@ function EvdCreateForm({
   onCreated: () => void;
   frmsByTripulante: Map<number, FrmsTripulanteSignal>;
   frmsUnavailable: boolean;
+  escalaId: string | null;
 }) {
   const [form, setForm] = useState({
     aeronave_prefixo: selectedAircraftPrefix || '',
@@ -1472,7 +1508,7 @@ function EvdCreateForm({
   }, [aeronavesAtivas, form.aeronave_prefixo]);
 
   const tripulantesUrl = aeronaveSelecionada
-    ? `/api/escalas/tripulantes-operacionais?aeronave_id=${aeronaveSelecionada.id}&incluir_bloqueados=true&data_inicio=${data}&data_fim=${data}&quinzena=${quinzena}`
+    ? `/api/escalas/tripulantes-operacionais?aeronave_id=${aeronaveSelecionada.id}&incluir_bloqueados=true&data_inicio=${data}&data_fim=${data}&quinzena=${quinzena}${escalaId ? `&escala_id=${encodeURIComponent(escalaId)}` : ''}`
     : '';
   const {
     data: tripulantesRaw,
@@ -1508,8 +1544,8 @@ function EvdCreateForm({
   const picSelecionado = tripulantesAptos.find((item) => Number(item.funcionario_id) === selectedPicId);
   const sicSelecionado = tripulantesAptos.find((item) => Number(item.funcionario_id) === selectedSicId);
 
-  const frmsPicLabel = frmsUnavailable ? 'FRMS indisponível' : getFrmsRosterLabel(frmsPic).long;
-  const frmsSicLabel = frmsUnavailable ? 'FRMS indisponível' : getFrmsRosterLabel(frmsSic).long;
+  const frmsPicLabel = frmsUnavailable ? 'FRMS indisponível' : (frmsPic ? getFrmsRosterLabel(frmsPic).long : '—');
+  const frmsSicLabel = frmsUnavailable ? 'FRMS indisponível' : (frmsSic ? getFrmsRosterLabel(frmsSic).long : '—');
 
   function handleHorarioBlur(
     campo: 'hora_apresentacao' | 'hora_decolagem_prevista' | 'hora_pouso_previsto',
@@ -1761,7 +1797,7 @@ function EvdCreateForm({
                   <option value="">Selecione</option>
                   {picCandidatos.map((p) => {
                     const frms = frmsUnavailable
-                      ? 'FRMS indisponível'
+                      ? '?'
                       : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
                     return (
                       <option key={p.funcionario_id} value={p.funcionario_id}>
@@ -1801,7 +1837,7 @@ function EvdCreateForm({
                   <option value="">Selecione</option>
                   {sicCandidatos.map((p) => {
                     const frms = frmsUnavailable
-                      ? 'FRMS indisponível'
+                      ? '?'
                       : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
                     return (
                       <option key={`sic-${p.funcionario_id}`} value={p.funcionario_id}>
@@ -1924,7 +1960,12 @@ function EvdCreateForm({
 
         {frmsUnavailable && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            FRMS indisponível. O status exibido será “FRMS indisponível” até retorno do serviço.
+            FRMS indisponível. Status de fadiga indisponível; exibindo ? até retorno do serviço.
+          </div>
+        )}
+        {!escalaId && (
+          <div className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Escala mensal não identificada para esta data; disponibilidade pode ficar restritiva.
           </div>
         )}
 
