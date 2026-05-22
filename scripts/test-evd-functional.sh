@@ -81,8 +81,27 @@ fi
 
 CREW_URL="${API_BASE}/api/escalas/tripulantes-operacionais?aeronave_id=${AER_ID}&incluir_bloqueados=true&data_inicio=${DATE}&data_fim=${DATE}&quinzena=${QUINZENA}"
 CREW_RESP=$(curl -s "${AUTH[@]}" "$CREW_URL")
-PIC_ID=$(echo "$CREW_RESP" | jq -r '.data.tripulantes // [] | map(select(.pode_ser_alocado == true)) | .[0].funcionario_id // empty')
-SIC_ID=$(echo "$CREW_RESP" | jq -r '.data.tripulantes // [] | map(select(.pode_ser_alocado == true)) | .[1].funcionario_id // empty')
+PIC_ID=$(echo "$CREW_RESP" | jq -r '
+  .data.tripulantes // []
+  | map(select(.pode_ser_alocado == true))
+  | map(select((.role // "" | ascii_upcase) | test("COMANDANTE|PIC|CMT|COMMANDER")))
+  | .[0].funcionario_id // empty')
+
+SIC_ID=$(echo "$CREW_RESP" | jq -r --arg pic "$PIC_ID" '
+  .data.tripulantes // []
+  | map(select(.pode_ser_alocado == true))
+  | map(select((.role // "" | ascii_upcase) | test("COPILOTO|SIC|COP|COMANDANTE|PIC|CMT|COMMANDER")))
+  | map(select((.funcionario_id | tostring) != ($pic | tostring)))
+  | .[0].funcionario_id // empty')
+
+if [[ -z "$PIC_ID" || -z "$SIC_ID" ]]; then
+  PIC_ID=$(echo "$CREW_RESP" | jq -r '.data.tripulantes // [] | map(select(.pode_ser_alocado == true)) | .[0].funcionario_id // empty')
+  SIC_ID=$(echo "$CREW_RESP" | jq -r --arg pic "$PIC_ID" '
+    .data.tripulantes // []
+    | map(select(.pode_ser_alocado == true))
+    | map(select((.funcionario_id | tostring) != ($pic | tostring)))
+    | .[0].funcionario_id // empty')
+fi
 
 if [[ -z "$PIC_ID" || -z "$SIC_ID" ]]; then
   skip "SKIPPED: sem tripulantes elegíveis"
@@ -99,7 +118,7 @@ CREATE_PAYLOAD=$(jq -nc \
   --argjson pic "$PIC_ID" \
   --argjson sic "$SIC_ID" \
   --arg obs "$OBS_TESTE" \
-  '{data:$data,aeronave_prefixo:$prefixo,aeronave_modelo:$modelo,pic_id:$pic,sic_id:$sic,pic_funcao:"PIC",sic_funcao:"SIC",hora_apresentacao:"06:00",hora_decolagem_prevista:"07:00",hora_pouso_previsto:"10:00",origem:"SBCB",tipo_missao:"OFFSHORE",observacoes:$obs}')
+  '{data:$data,aeronave_prefixo:$prefixo,aeronave_modelo:$modelo,pic_id:$pic,sic_id:$sic,hora_apresentacao:"06:00",hora_decolagem_prevista:"07:00",hora_pouso_previsto:"10:00",origem:"SBCB",tipo_missao:"OFFSHORE",observacoes:$obs}')
 CREATE_RESP=$(curl -s -X POST "${AUTH[@]}" -d "$CREATE_PAYLOAD" "${API_BASE}/api/evd")
 if [[ "$(echo "$CREATE_RESP" | jq -r '.success // false')" == "true" ]]; then
   CREATED_ID=$(echo "$CREATE_RESP" | jq -r '.data.id')

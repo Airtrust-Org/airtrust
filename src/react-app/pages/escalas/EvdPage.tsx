@@ -9,8 +9,6 @@ import { NavLink } from 'react-router-dom';
 import {
   Plane,
   Plus,
-  Clock,
-  Users,
   Trash2,
   CheckCircle,
   AlertTriangle,
@@ -79,15 +77,12 @@ interface TripulanteOperacionalItem {
   quinzena?: string | null;
 }
 
-interface TripulantesOperacionaisResponse {
-  success: boolean;
-  data?: {
-    tripulantes: TripulanteOperacionalItem[];
-    resumo?: {
-      total_aptos: number;
-      total_bloqueados: number;
-      sem_habilitacao?: string | null;
-    };
+interface TripulantesOperacionaisData {
+  tripulantes: TripulanteOperacionalItem[];
+  resumo?: {
+    total_aptos: number;
+    total_bloqueados: number;
+    sem_habilitacao?: string | null;
   };
 }
 
@@ -425,31 +420,70 @@ function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
   return { short: 'OK', long: 'FRMS OK' };
 }
 
-function extractExtraCrew(observacoes: string | null | undefined): string {
-  const text = String(observacoes || '');
-  const match = text.match(/\[EXTRA:([^\]]+)\]/i);
-  return match ? match[1].trim() : '';
+function normalizeCrewRole(value: string | null | undefined): string {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
-function stripExtraCrewTag(observacoes: string | null | undefined): string {
-  return String(observacoes || '')
-    .replace(/\[EXTRA:[^\]]+\]\s*/gi, '')
-    .trim();
+function roleCanBePic(value: string | null | undefined): boolean {
+  const role = normalizeCrewRole(value);
+  if (!role) return false;
+  return (
+    role.includes('COMANDANTE') ||
+    role.includes('COMMANDER') ||
+    role.includes('PIC') ||
+    role.includes('CMT')
+  );
 }
 
-function buildObservacoesComExtra(params: {
-  observacoes: string;
-  tripulanteExtra: string;
-}): string | undefined {
-  const parts: string[] = [];
-  if (params.tripulanteExtra.trim()) {
-    parts.push(`[EXTRA:${params.tripulanteExtra.trim()}]`);
+function roleCanBeSic(value: string | null | undefined): boolean {
+  const role = normalizeCrewRole(value);
+  if (!role) return false;
+  return (
+    role.includes('COPILOTO') ||
+    role === 'COP' ||
+    role.includes('SIC') ||
+    role.includes('COPILOT') ||
+    roleCanBePic(role)
+  );
+}
+
+function normalizeHorarioInput(raw: string): string | null {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+
+  let horaTexto = '';
+  let minutoTexto = '';
+
+  if (value.includes(':')) {
+    const [h = '', m = ''] = value.split(':');
+    if (!h || !m) return null;
+    horaTexto = h;
+    minutoTexto = m;
+  } else {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length <= 2) {
+      horaTexto = digits;
+      minutoTexto = '00';
+    } else if (digits.length === 3) {
+      horaTexto = digits.slice(0, 1);
+      minutoTexto = digits.slice(1);
+    } else if (digits.length === 4) {
+      horaTexto = digits.slice(0, 2);
+      minutoTexto = digits.slice(2);
+    } else {
+      return null;
+    }
   }
-  if (params.observacoes.trim()) {
-    parts.push(params.observacoes.trim());
-  }
-  const merged = parts.join(' ').trim();
-  return merged || undefined;
+
+  const hora = Number(horaTexto);
+  const minuto = Number(minutoTexto);
+  if (!Number.isInteger(hora) || !Number.isInteger(minuto)) return null;
+  if (hora < 0 || hora > 23 || minuto < 0 || minuto > 59) return null;
+  return `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`;
 }
 
 export default function EvdPage() {
@@ -462,23 +496,18 @@ export default function EvdPage() {
   const [snapshotDetail, setSnapshotDetail] = useState<EvdPublicacaoDetalhe | null>(null);
   const [publishingDay, setPublishingDay] = useState(false);
 
-  const { data: voosRaw, loading } = useApi<{ success: boolean; data: EvdVoo[] }>(
-    `/api/evd?data=${data}`,
+  const { data: voosRaw, loading } = useApi<EvdVoo[]>(`/api/evd?data=${data}`);
+  const voos = voosRaw || [];
+  const { data: publicacoesRaw, loading: loadingPublicacoes } = useApi<EvdPublicacaoResumo[]>(
+    `/api/evd/publicacoes?data=${data}`,
   );
-  const voos = voosRaw?.data || [];
-  const { data: publicacoesRaw, loading: loadingPublicacoes } = useApi<{
-    success: boolean;
-    data: EvdPublicacaoResumo[];
-  }>(`/api/evd/publicacoes?data=${data}`);
-  const publicacoes = publicacoesRaw?.data || [];
+  const publicacoes = publicacoesRaw || [];
   const ultimaPublicacao = publicacoes[0] || null;
-  const { data: frmsDailyRaw, error: frmsDailyError } = useApi<{
-    success: boolean;
-    data?: { items?: FrmsDailyFatigueItem[] };
-  }>(`/api/frms/daily-fatigue?date=${data}&scope=team`);
+  const { data: frmsDailyRaw, error: frmsDailyError } = useApi<{ items?: FrmsDailyFatigueItem[] }>(
+    `/api/frms/daily-fatigue?date=${data}&scope=team`,
+  );
   const { data: frmsAlertsRaw, error: frmsAlertsError } = useApi<{
-    success: boolean;
-    data?: { items?: FrmsDailyFatigueAlertItem[] };
+    items?: FrmsDailyFatigueAlertItem[];
   }>(`/api/frms/daily-fatigue/alerts?date=${data}`);
   const { data: aeronavesRaw, loading: loadingAeronaves } = useApi<AeronaveAtiva[]>(
     '/api/aeronaves?somente_ativas=1',
@@ -486,8 +515,8 @@ export default function EvdPage() {
 
   const selectedDate = new Date(data + 'T12:00:00');
   const weekday = WEEKDAY_LABELS[selectedDate.getDay()];
-  const frmsDailyItems = frmsDailyRaw?.data?.items || [];
-  const frmsAlertItems = frmsAlertsRaw?.data?.items || [];
+  const frmsDailyItems = frmsDailyRaw?.items || [];
+  const frmsAlertItems = frmsAlertsRaw?.items || [];
   const frmsUnavailable = Boolean(frmsDailyError || frmsAlertsError);
   const aeronavesAtivas = useMemo(
     () => (aeronavesRaw || []).filter((a) => isAeronaveAtiva(a.status)),
@@ -1278,7 +1307,6 @@ export default function EvdPage() {
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">F</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Q</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">P</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Tripulante extra</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Base</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Apresentação</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Início</th>
@@ -1301,8 +1329,6 @@ export default function EvdPage() {
                     const prefixoNormalizado = normalizePrefixo(voo.aeronave_prefixo);
                     const aeronaveCadastro = aeronavesByPrefix.get(prefixoNormalizado);
                     const statusAnv = getAircraftStatusMeta(aeronaveCadastro?.status);
-                    const tripulanteExtra = extractExtraCrew(voo.observacoes);
-                    const observacoesLimpas = stripExtraCrewTag(voo.observacoes);
                     return (
                       <tr
                         key={voo.id}
@@ -1339,7 +1365,7 @@ export default function EvdPage() {
                             {picFrms.short}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.pic_funcao || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.pic_funcao || 'a validar'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">PIC</td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           <span className="text-xs font-medium text-slate-800 dark:text-slate-100">
@@ -1351,15 +1377,14 @@ export default function EvdPage() {
                             {sicFrms.short}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.sic_funcao || '—'}</td>
+                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.sic_funcao || 'a validar'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">SIC</td>
-                        <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{tripulanteExtra || '—'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.origem || '—'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_apresentacao || '—'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_decolagem_prevista || '—'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{voo.hora_pouso_previsto || '—'}</td>
                         <td className="px-3 py-3 text-xs text-slate-600">
-                          <div>{observacoesLimpas || '—'}</div>
+                          <div>{voo.observacoes || '—'}</div>
                           {hasFrmsAlert && (
                             <div className="mt-0.5 flex items-center gap-0.5 text-[10px] text-amber-600">
                               <AlertTriangle className="h-3 w-3" /> revisão FRMS
@@ -1429,11 +1454,6 @@ function EvdCreateForm({
     aeronave_prefixo: selectedAircraftPrefix || '',
     pic_id: '',
     sic_id: '',
-    qualificacao_comandante: '',
-    assento_comandante: 'PIC',
-    qualificacao_copiloto: '',
-    assento_copiloto: 'SIC',
-    tripulante_extra: '',
     base: '',
     hora_apresentacao: '',
     hora_decolagem_prevista: '',
@@ -1458,13 +1478,25 @@ function EvdCreateForm({
     data: tripulantesRaw,
     loading: loadingTripulantes,
     error: tripulantesError,
-  } = useApi<TripulantesOperacionaisResponse>(tripulantesUrl, {
+  } = useApi<TripulantesOperacionaisData>(tripulantesUrl, {
     enabled: Boolean(aeronaveSelecionada),
   });
 
-  const tripulantes = tripulantesRaw?.data?.tripulantes || [];
+  const tripulantes = tripulantesRaw?.tripulantes || [];
   const tripulantesAptos = tripulantes.filter((item) => item.pode_ser_alocado);
   const tripulantesBloqueados = tripulantes.filter((item) => !item.pode_ser_alocado);
+  const picCandidatosCanonicos = tripulantesAptos.filter((item) => roleCanBePic(item.role));
+  const sicCandidatosCanonicos = tripulantesAptos.filter((item) => roleCanBeSic(item.role));
+  const picFallbackHeuristico = picCandidatosCanonicos.length === 0 && tripulantesAptos.length > 0;
+  const sicFallbackHeuristico = sicCandidatosCanonicos.length === 0 && tripulantesAptos.length > 0;
+  const picCandidatos = picFallbackHeuristico ? tripulantesAptos : picCandidatosCanonicos;
+  const sicCandidatos = sicFallbackHeuristico ? tripulantesAptos : sicCandidatosCanonicos;
+  const picBloqueados = tripulantesBloqueados.filter((item) =>
+    picFallbackHeuristico ? true : roleCanBePic(item.role),
+  );
+  const sicBloqueados = tripulantesBloqueados.filter((item) =>
+    sicFallbackHeuristico ? true : roleCanBeSic(item.role),
+  );
 
   const selectedPicId = form.pic_id ? Number(form.pic_id) : null;
   const selectedSicId = form.sic_id ? Number(form.sic_id) : null;
@@ -1478,6 +1510,20 @@ function EvdCreateForm({
 
   const frmsPicLabel = frmsUnavailable ? 'FRMS indisponível' : getFrmsRosterLabel(frmsPic).long;
   const frmsSicLabel = frmsUnavailable ? 'FRMS indisponível' : getFrmsRosterLabel(frmsSic).long;
+
+  function handleHorarioBlur(
+    campo: 'hora_apresentacao' | 'hora_decolagem_prevista' | 'hora_pouso_previsto',
+    label: string,
+  ) {
+    const normalizado = normalizeHorarioInput(form[campo]);
+    if (normalizado === null) {
+      setError(`${label} inválido. Use HHmm ou HH:mm.`);
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, [campo]: normalizado }));
+    setError((prev) => (prev.startsWith(label) ? '' : prev));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1502,8 +1548,44 @@ function EvdCreateForm({
 
       const picId = form.pic_id ? Number(form.pic_id) : null;
       const sicId = form.sic_id ? Number(form.sic_id) : null;
+      if (!picId || !sicId) {
+        setError('Selecione PIC e SIC para salvar a designação.');
+        setSubmitting(false);
+        return;
+      }
       if (picId && sicId && picId === sicId) {
         setError('Comandante e copiloto não podem ser o mesmo tripulante.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (!picCandidatos.some((item) => Number(item.funcionario_id) === picId)) {
+        setError('PIC selecionado não está elegível para esta aeronave/modelo na data.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (!sicCandidatos.some((item) => Number(item.funcionario_id) === sicId)) {
+        setError('SIC selecionado não está elegível para esta aeronave/modelo na data.');
+        setSubmitting(false);
+        return;
+      }
+
+      const horaApresentacao = normalizeHorarioInput(form.hora_apresentacao);
+      if (horaApresentacao === null) {
+        setError('Apresentação inválida. Use HHmm ou HH:mm.');
+        setSubmitting(false);
+        return;
+      }
+      const horaInicio = normalizeHorarioInput(form.hora_decolagem_prevista);
+      if (horaInicio === null) {
+        setError('Início inválido. Use HHmm ou HH:mm.');
+        setSubmitting(false);
+        return;
+      }
+      const horaTermino = normalizeHorarioInput(form.hora_pouso_previsto);
+      if (horaTermino === null) {
+        setError('Término inválido. Use HHmm ou HH:mm.');
         setSubmitting(false);
         return;
       }
@@ -1520,21 +1602,18 @@ function EvdCreateForm({
 
       const body = {
         data,
-        pic_id: form.pic_id ? Number(form.pic_id) : undefined,
-        sic_id: form.sic_id ? Number(form.sic_id) : undefined,
-        pic_funcao: form.qualificacao_comandante || picSelecionado?.role || undefined,
-        sic_funcao: form.qualificacao_copiloto || sicSelecionado?.role || undefined,
+        pic_id: picId,
+        sic_id: sicId,
+        pic_funcao: picSelecionado?.role || 'Qualificação: a validar',
+        sic_funcao: sicSelecionado?.role || 'Qualificação: a validar',
         aeronave_prefixo: aeronaveSelecionada.prefixo || undefined,
         aeronave_modelo: aeronaveSelecionada.modelo || undefined,
-        hora_apresentacao: form.hora_apresentacao || undefined,
-        hora_decolagem_prevista: form.hora_decolagem_prevista || undefined,
-        hora_pouso_previsto: form.hora_pouso_previsto || undefined,
+        hora_apresentacao: horaApresentacao || undefined,
+        hora_decolagem_prevista: horaInicio || undefined,
+        hora_pouso_previsto: horaTermino || undefined,
         origem: form.base || undefined,
         tipo_missao: 'OFFSHORE',
-        observacoes: buildObservacoesComExtra({
-          observacoes: form.observacoes,
-          tripulanteExtra: form.tripulante_extra,
-        }),
+        observacoes: form.observacoes.trim() || undefined,
       };
 
       const res = await apiFetch('/api/evd', {
@@ -1592,236 +1671,247 @@ function EvdCreateForm({
   }
 
   return (
-    <div className="rounded-2xl border border-blue-200 bg-blue-50/30 p-5 shadow-sm dark:border-blue-500/30 dark:bg-blue-500/5">
+    <div className="rounded-2xl border border-blue-200 bg-blue-50/20 p-4 shadow-sm dark:border-blue-500/30 dark:bg-blue-500/5">
       <h3 className="mb-4 flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
         <Plus className="h-4 w-4 text-blue-600" />
         Designar tripulação para aeronave — {formatDateBR(data)}
       </h3>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Aeronave ativa (obrigatório)</label>
-            <select
-              value={form.aeronave_prefixo}
-              onChange={(e) => {
-                setForm((prev) => ({
-                  ...prev,
-                  aeronave_prefixo: e.target.value,
-                  pic_id: '',
-                  sic_id: '',
-                  qualificacao_comandante: '',
-                  qualificacao_copiloto: '',
-                }));
-              }}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              required
-            >
-              <option value="">Selecione</option>
-              {aeronavesAtivas.map((aeronave) => {
-                const prefixo = normalizePrefixo(aeronave.prefixo);
-                const meta = getAircraftStatusMeta(aeronave.status);
-                return (
-                  <option key={aeronave.id} value={prefixo}>
-                    {prefixo} — {aeronave.modelo || 'Sem modelo'} ({meta.label})
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aeronave</h4>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs text-slate-500">Aeronave ativa (obrigatório)</label>
+                <select
+                  value={form.aeronave_prefixo}
+                  onChange={(e) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      aeronave_prefixo: e.target.value,
+                      pic_id: '',
+                      sic_id: '',
+                    }));
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {aeronavesAtivas.map((aeronave) => {
+                    const prefixo = normalizePrefixo(aeronave.prefixo);
+                    const meta = getAircraftStatusMeta(aeronave.status);
+                    return (
+                      <option key={aeronave.id} value={prefixo}>
+                        {prefixo} — {aeronave.modelo || 'Sem modelo'} ({meta.label})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Status</label>
+                <input
+                  type="text"
+                  value={
+                    aeronaveSelecionada ? getAircraftStatusMeta(aeronaveSelecionada.status).label : '—'
+                  }
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Modelo</label>
+                <input
+                  type="text"
+                  value={aeronaveSelecionada?.modelo || '—'}
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Quinzena operacional</label>
+                <input
+                  type="text"
+                  value={quinzena === 'primeira' ? '1ª' : '2ª'}
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                />
+              </div>
+            </div>
+          </section>
 
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Status da aeronave</label>
-            <input
-              type="text"
-              value={aeronaveSelecionada ? getAircraftStatusMeta(aeronaveSelecionada.status).label : '—'}
-              readOnly
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-            />
-          </div>
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tripulação</h4>
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">PIC</label>
+                <select
+                  value={form.pic_id}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      pic_id: e.target.value,
+                      sic_id: prev.sic_id === e.target.value ? '' : prev.sic_id,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
+                >
+                  <option value="">Selecione</option>
+                  {picCandidatos.map((p) => {
+                    const frms = frmsUnavailable
+                      ? 'FRMS indisponível'
+                      : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
+                    return (
+                      <option key={p.funcionario_id} value={p.funcionario_id}>
+                        {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}
+                      </option>
+                    );
+                  })}
+                  {picBloqueados.length > 0 && (
+                    <optgroup label="Indisponíveis (bloqueados)">
+                      {picBloqueados.map((p) => (
+                        <option key={`b-pic-${p.funcionario_id}`} value="" disabled>
+                          {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                  <span className="rounded bg-slate-100 px-2 py-0.5">
+                    Qualificação: {picSelecionado?.role || 'a validar'}
+                  </span>
+                  <span className="rounded bg-slate-100 px-2 py-0.5">Assento: PIC</span>
+                  <span className="rounded bg-slate-100 px-2 py-0.5">
+                    FRMS: {selectedPicId ? frmsPicLabel : '—'}
+                  </span>
+                </div>
+              </div>
 
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Modelo</label>
-            <input
-              type="text"
-              value={aeronaveSelecionada?.modelo || '—'}
-              readOnly
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-            />
-          </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">SIC</label>
+                <select
+                  value={form.sic_id}
+                  onChange={(e) => setForm((prev) => ({ ...prev, sic_id: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
+                >
+                  <option value="">Selecione</option>
+                  {sicCandidatos.map((p) => {
+                    const frms = frmsUnavailable
+                      ? 'FRMS indisponível'
+                      : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
+                    return (
+                      <option key={`sic-${p.funcionario_id}`} value={p.funcionario_id}>
+                        {(p.nome_guerra || p.nome).trim()} ({p.role || 'a validar'}) — {frms}
+                      </option>
+                    );
+                  })}
+                  {sicBloqueados.length > 0 && (
+                    <optgroup label="Indisponíveis (bloqueados)">
+                      {sicBloqueados.map((p) => (
+                        <option key={`b-sic-${p.funcionario_id}`} value="" disabled>
+                          {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                  <span className="rounded bg-slate-100 px-2 py-0.5">
+                    Qualificação: {sicSelecionado?.role || 'a validar'}
+                  </span>
+                  <span className="rounded bg-slate-100 px-2 py-0.5">Assento: SIC</span>
+                  <span className="rounded bg-slate-100 px-2 py-0.5">
+                    FRMS: {selectedSicId ? frmsSicLabel : '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
 
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Comandante</label>
-            <select
-              value={form.pic_id}
-              onChange={(e) => setForm({ ...form, pic_id: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
-            >
-              <option value="">Selecione</option>
-              {tripulantesAptos.map((p) => {
-                const frms = frmsUnavailable
-                  ? 'FRMS indisponível'
-                  : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
-                return (
-                  <option key={p.funcionario_id} value={p.funcionario_id}>
-                    {(p.nome_guerra || p.nome).trim()} ({p.role}) — {frms}
-                  </option>
-                );
-              })}
-              {tripulantesBloqueados.length > 0 && (
-                <optgroup label="Indisponíveis (bloqueados)">
-                  {tripulantesBloqueados.map((p) => (
-                    <option key={`b-pic-${p.funcionario_id}`} value="" disabled>
-                      {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Horários</h4>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Apresentação</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.hora_apresentacao}
+                  onChange={(e) => setForm((prev) => ({ ...prev, hora_apresentacao: e.target.value }))}
+                  onBlur={() => handleHorarioBlur('hora_apresentacao', 'Apresentação')}
+                  placeholder="0730 ou 07:30"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Início</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.hora_decolagem_prevista}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, hora_decolagem_prevista: e.target.value }))
+                  }
+                  onBlur={() => handleHorarioBlur('hora_decolagem_prevista', 'Início')}
+                  placeholder="0730 ou 07:30"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Término</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.hora_pouso_previsto}
+                  onChange={(e) => setForm((prev) => ({ ...prev, hora_pouso_previsto: e.target.value }))}
+                  onBlur={() => handleHorarioBlur('hora_pouso_previsto', 'Término')}
+                  placeholder="0730 ou 07:30"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          </section>
 
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Qualificação comandante</label>
-            <input
-              type="text"
-              value={form.qualificacao_comandante}
-              onChange={(e) => setForm({ ...form, qualificacao_comandante: e.target.value })}
-              placeholder={picSelecionado?.role || 'Ex.: SK76 PIC'}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Assento comandante</label>
-            <input
-              type="text"
-              value={form.assento_comandante}
-              onChange={(e) => setForm({ ...form, assento_comandante: e.target.value.toUpperCase() })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Copiloto</label>
-            <select
-              value={form.sic_id}
-              onChange={(e) => setForm({ ...form, sic_id: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              disabled={!aeronaveSelecionada || bloqueioElegibilidade || loadingTripulantes}
-            >
-              <option value="">Selecione</option>
-              {tripulantesAptos.map((p) => {
-                const frms = frmsUnavailable
-                  ? 'FRMS indisponível'
-                  : getFrmsRosterLabel(frmsByTripulante.get(Number(p.funcionario_id))).long;
-                return (
-                  <option key={`sic-${p.funcionario_id}`} value={p.funcionario_id}>
-                    {(p.nome_guerra || p.nome).trim()} ({p.role}) — {frms}
-                  </option>
-                );
-              })}
-              {tripulantesBloqueados.length > 0 && (
-                <optgroup label="Indisponíveis (bloqueados)">
-                  {tripulantesBloqueados.map((p) => (
-                    <option key={`b-sic-${p.funcionario_id}`} value="" disabled>
-                      {(p.nome_guerra || p.nome).trim()} — {p.motivo_bloqueio || 'Indisponível'}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Qualificação copiloto</label>
-            <input
-              type="text"
-              value={form.qualificacao_copiloto}
-              onChange={(e) => setForm({ ...form, qualificacao_copiloto: e.target.value })}
-              placeholder={sicSelecionado?.role || 'Ex.: SK76 SIC'}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Assento copiloto</label>
-            <input
-              type="text"
-              value={form.assento_copiloto}
-              onChange={(e) => setForm({ ...form, assento_copiloto: e.target.value.toUpperCase() })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Tripulante extra (opcional)</label>
-            <input
-              type="text"
-              value={form.tripulante_extra}
-              onChange={(e) => setForm({ ...form, tripulante_extra: e.target.value })}
-              placeholder="Nome ou função"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Base</label>
-            <input
-              type="text"
-              value={form.base}
-              onChange={(e) => setForm({ ...form, base: e.target.value.toUpperCase() })}
-              placeholder="SBCB / Base"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            <p>
-              Quinzena operacional: <strong>{quinzena === 'primeira' ? '1ª' : '2ª'}</strong>
-            </p>
-            <p>
-              FRMS comandante: <strong>{selectedPicId ? frmsPicLabel : '—'}</strong>
-            </p>
-            <p>
-              FRMS copiloto: <strong>{selectedSicId ? frmsSicLabel : '—'}</strong>
-            </p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Apresentação</label>
-            <input
-              type="time"
-              value={form.hora_apresentacao}
-              onChange={(e) => setForm({ ...form, hora_apresentacao: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Início</label>
-            <input
-              type="time"
-              value={form.hora_decolagem_prevista}
-              onChange={(e) => setForm({ ...form, hora_decolagem_prevista: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Término</label>
-            <input
-              type="time"
-              value={form.hora_pouso_previsto}
-              onChange={(e) => setForm({ ...form, hora_pouso_previsto: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Base e observações
+            </h4>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Base</label>
+              <input
+                type="text"
+                value={form.base}
+                onChange={(e) => setForm((prev) => ({ ...prev, base: e.target.value.toUpperCase() }))}
+                placeholder="SBCB / Base"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Observações</label>
+              <textarea
+                value={form.observacoes}
+                onChange={(e) => setForm((prev) => ({ ...prev, observacoes: e.target.value }))}
+                rows={2}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </section>
         </div>
 
-        {tripulantesRaw?.data?.resumo?.sem_habilitacao && (
+        {tripulantesRaw?.resumo?.sem_habilitacao && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            {tripulantesRaw.data.resumo.sem_habilitacao}
+            {tripulantesRaw.resumo.sem_habilitacao}
+          </div>
+        )}
+
+        {(picFallbackHeuristico || sicFallbackHeuristico) && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            Cadastro de função não canônico para toda a tripulação elegível deste modelo. Foi
+            aplicado fallback heurístico com validação operacional.
           </div>
         )}
 
