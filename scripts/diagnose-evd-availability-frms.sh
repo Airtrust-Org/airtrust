@@ -3,9 +3,17 @@ set -euo pipefail
 
 API_BASE="${API_BASE:-https://api.airtrust.online}"
 DATE="${DATE:-$(date +%F)}"
+DATA_ESCALA="$DATE"
+DATA_MONTAGEM="${DATA_MONTAGEM:-$(date +%F)}"
 TOKEN="${TOKEN:-}"
 AERONAVE_ID_INPUT="${AERONAVE_ID:-}"
 ESCALA_ID_INPUT="${ESCALA_ID:-}"
+
+if [[ "$DATA_ESCALA" > "$DATA_MONTAGEM" ]]; then
+  DATA_FRMS_REFERENCIA="$DATA_MONTAGEM"
+else
+  DATA_FRMS_REFERENCIA="$DATA_ESCALA"
+fi
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "[ERRO] jq não encontrado. Instale jq para executar o diagnóstico."
@@ -13,7 +21,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 if [[ -z "$TOKEN" ]]; then
-  echo "[ERRO] TOKEN ausente. Use: TOKEN=<jwt> DATE=${DATE} API_BASE=${API_BASE} bash scripts/diagnose-evd-availability-frms.sh"
+  echo "[ERRO] TOKEN ausente. Use: TOKEN=<jwt> DATE=${DATE} DATA_MONTAGEM=${DATA_MONTAGEM} API_BASE=${API_BASE} bash scripts/diagnose-evd-availability-frms.sh"
   exit 1
 fi
 
@@ -80,10 +88,19 @@ extract_tripulantes_summary() {
       elegiveis: (trip|map(select(.pode_ser_alocado==true))|length),
       elegiveis_sem_conflito: (trip|map(select(.pode_ser_alocado==true and (.soft_conflict//false)==false))|length),
       elegiveis_conflito_mensal: (trip|map(select(.pode_ser_alocado==true and (.soft_conflict//false)==true))|length),
-      bloqueados_duros: (trip|map(select(.pode_ser_alocado!=true))|length),
+      fora_quinzena: (
+        trip
+        | map(select(.pode_ser_alocado!=true and ((.conflict_code // "") == "OUT_OF_QUINZENA" or ((.motivo_bloqueio // "") | test("quinzena"; "i")))))
+        | length
+      ),
+      hard_blocks: (
+        trip
+        | map(select(.pode_ser_alocado!=true and ((.conflict_code // "") != "OUT_OF_QUINZENA")))
+        | length
+      ),
       motivos_bloqueio_duro: (
         trip
-        | map(select(.pode_ser_alocado!=true) | (.motivo_bloqueio // "sem_motivo"))
+        | map(select(.pode_ser_alocado!=true and ((.conflict_code // "") != "OUT_OF_QUINZENA")) | (.motivo_bloqueio // "sem_motivo"))
         | group_by(.)
         | map({motivo: .[0], count: length})
       ),
@@ -100,7 +117,7 @@ extract_tripulantes_summary() {
         | map({status: .[0], count: length})
       )
     }
-  ' "$TRIP_BODY" 2>/dev/null || echo '{"total":0,"elegiveis":0,"elegiveis_sem_conflito":0,"elegiveis_conflito_mensal":0,"bloqueados_duros":0,"motivos_bloqueio_duro":[],"conflitos_mensais":[],"status_operacional":[]}'
+  ' "$TRIP_BODY" 2>/dev/null || echo '{"total":0,"elegiveis":0,"elegiveis_sem_conflito":0,"elegiveis_conflito_mensal":0,"fora_quinzena":0,"hard_blocks":0,"motivos_bloqueio_duro":[],"conflitos_mensais":[],"status_operacional":[]}'
 }
 
 extract_frms_statuses() {
@@ -170,11 +187,11 @@ fi
 TRIP_SUCCESS="$(json_success "$TRIP_BODY")"
 TRIP_ERROR="$(json_error "$TRIP_BODY")"
 
-FAT_STATUS="$(safe_curl_get "${API_BASE}/api/frms/daily-fatigue?date=${DATE}&scope=team" "$FAT_BODY")"
+FAT_STATUS="$(safe_curl_get "${API_BASE}/api/frms/daily-fatigue?date=${DATA_FRMS_REFERENCIA}&scope=team" "$FAT_BODY")"
 FAT_SUCCESS="$(json_success "$FAT_BODY")"
 FAT_ERROR="$(json_error "$FAT_BODY")"
 
-ALT_STATUS="$(safe_curl_get "${API_BASE}/api/frms/daily-fatigue/alerts?date=${DATE}" "$ALT_BODY")"
+ALT_STATUS="$(safe_curl_get "${API_BASE}/api/frms/daily-fatigue/alerts?date=${DATA_FRMS_REFERENCIA}" "$ALT_BODY")"
 ALT_SUCCESS="$(json_success "$ALT_BODY")"
 ALT_ERROR="$(json_error "$ALT_BODY")"
 
@@ -182,6 +199,7 @@ AER_COUNT="$(extract_aeronaves_count)"
 TRIP_SUMMARY="$(extract_tripulantes_summary)"
 FRMS_STATUSES="$(extract_frms_statuses)"
 ALERT_COUNT="$(extract_alert_count)"
+FRMS_NOT_SUBMITTED_COUNT="$(echo "$FRMS_STATUSES" | jq -r 'map(select(.status=="not_submitted") | .count) | add // 0')"
 
 SENSITIVE_KEYS_ALL="$TMP_DIR/sensitive_keys.txt"
 : > "$SENSITIVE_KEYS_ALL"
@@ -197,65 +215,70 @@ TRIP_URL_LOG="${API_BASE}/api/escalas/tripulantes-operacionais?aeronave_id=${AER
 if [[ -n "$ESCALA_ID_INPUT" ]]; then
   TRIP_URL_LOG="${TRIP_URL_LOG}&escala_id=${ESCALA_ID_INPUT}"
 else
-  TRIP_URL_LOG="${TRIP_URL_LOG} [sem escala_id — bloqueios de mesma escala NÃO serão liberados]"
+  TRIP_URL_LOG="${TRIP_URL_LOG} [sem escala_id — conflitos da mesma escala mensal podem aparecer]"
 fi
 
 echo "=== AirTrust EVD/FRMS Diagnose (read-only) ==="
-echo "DATE=${DATE}"
-echo "API_BASE=${API_BASE}"
-echo "QUINZENA=${QUINZENA}"
-echo "ESCALA_ID=${ESCALA_ID_INPUT:-não informado}"
+echo "data_escala=${DATA_ESCALA}"
+echo "data_montagem=${DATA_MONTAGEM}"
+echo "data_frms_referencia=${DATA_FRMS_REFERENCIA}"
+echo "api_base=${API_BASE}"
+echo "quinzena=${QUINZENA}"
+echo "escala_id=${ESCALA_ID_INPUT:-não informado}"
 echo
+
 echo "[URLs chamadas (sem token)]"
 echo "- aeronaves:    ${API_BASE}/api/aeronaves?somente_ativas=1"
 echo "- tripulantes:  ${TRIP_URL_LOG}"
-echo "- frms-daily:   ${API_BASE}/api/frms/daily-fatigue?date=${DATE}&scope=team"
-echo "- frms-alerts:  ${API_BASE}/api/frms/daily-fatigue/alerts?date=${DATE}"
+echo "- frms-daily:   ${API_BASE}/api/frms/daily-fatigue?date=${DATA_FRMS_REFERENCIA}&scope=team"
+echo "- frms-alerts:  ${API_BASE}/api/frms/daily-fatigue/alerts?date=${DATA_FRMS_REFERENCIA}"
 echo
+
 echo "[HTTP status]"
 echo "- /api/aeronaves?somente_ativas=1 -> ${AER_STATUS} (success=${AER_SUCCESS})"
 echo "- /api/escalas/tripulantes-operacionais -> ${TRIP_STATUS} (success=${TRIP_SUCCESS})"
-echo "- /api/frms/daily-fatigue?date=${DATE}&scope=team -> ${FAT_STATUS} (success=${FAT_SUCCESS})"
-echo "- /api/frms/daily-fatigue/alerts?date=${DATE} -> ${ALT_STATUS} (success=${ALT_SUCCESS})"
+echo "- /api/frms/daily-fatigue?date=${DATA_FRMS_REFERENCIA}&scope=team -> ${FAT_STATUS} (success=${FAT_SUCCESS})"
+echo "- /api/frms/daily-fatigue/alerts?date=${DATA_FRMS_REFERENCIA} -> ${ALT_STATUS} (success=${ALT_SUCCESS})"
 echo
+
 echo "[Resumo]"
 echo "- aeronaves_ativas: ${AER_COUNT}"
 echo "- aeronave_utilizada: id=${AERONAVE_ID:-N/A} prefixo=${AERONAVE_PREFIXO:-N/A} modelo=${AERONAVE_MODELO:-N/A}"
 echo "- tripulantes_total:               $(echo "$TRIP_SUMMARY" | jq -r '.total')"
 echo "- tripulantes_elegiveis_total:     $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis')"
-echo "- tripulantes_aptos_sem_conflito:  $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis_sem_conflito')"
-echo "- tripulantes_conflito_mensal:     $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis_conflito_mensal') (selecionaveis com aviso)"
-echo "- tripulantes_bloqueados_duros:    $(echo "$TRIP_SUMMARY" | jq -r '.bloqueados_duros') (ferias RH, CMA, hab. modelo)"
-echo "- motivos_bloqueio_duro:"
+echo "- elegiveis_sem_conflito:          $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis_sem_conflito')"
+echo "- elegiveis_soft_conflict:         $(echo "$TRIP_SUMMARY" | jq -r '.elegiveis_conflito_mensal')"
+echo "- fora_quinzena:                   $(echo "$TRIP_SUMMARY" | jq -r '.fora_quinzena')"
+echo "- hard_blocks:                     $(echo "$TRIP_SUMMARY" | jq -r '.hard_blocks')"
+echo "- motivos_hard_block:"
 echo "$TRIP_SUMMARY" | jq -r '.motivos_bloqueio_duro[]? | "  * \(.motivo): \(.count)"' || true
-echo "- conflitos_escala_mensal_por_motivo:"
+echo "- soft_conflicts_mensais_por_motivo:"
 echo "$TRIP_SUMMARY" | jq -r '.conflitos_mensais[]? | "  * \(.motivo): \(.count)"' || true
-if [[ -z "$ESCALA_ID_INPUT" ]]; then
-  echo "  NOTA: sem escala_id — conflitos de mesma escala NAO sao liberados (falsos positivos possiveis)"
-fi
 echo "- status_operacional_tripulantes:"
 echo "$TRIP_SUMMARY" | jq -r '.status_operacional[]? | "  * \(.status): \(.count)"' || true
 echo "- frms_daily_statuses:"
 echo "$FRMS_STATUSES" | jq -r '.[]? | "  * \(.status): \(.count)"' || true
-echo "- frms_daily_source: $([ "$FAT_STATUS" -lt 400 ] && [ "$FAT_SUCCESS" = "true" ] && echo "OK" || echo "ERRO")"
-echo "- frms_alerts_source: $([ "$ALT_STATUS" -lt 400 ] && [ "$ALT_SUCCESS" = "true" ] && echo "OK" || echo "ERRO (menor — não bloqueia status diário)")"
 echo "- frms_alert_count: ${ALERT_COUNT}"
+if [[ "$DATA_ESCALA" > "$DATA_FRMS_REFERENCIA" ]]; then
+  echo "- not_submitted_futuro_ignorado: sim (escala futura usa referência D-1)"
+  echo "- not_submitted_na_referencia: ${FRMS_NOT_SUBMITTED_COUNT}"
+else
+  echo "- not_submitted_futuro_ignorado: não (escala no mesmo dia da referência)"
+fi
+
 echo
 echo "[Erros de endpoint]"
 [[ "$AER_STATUS" -ge 400 || "$AER_SUCCESS" != "true" ]] && echo "- aeronaves: HTTP=${AER_STATUS} erro=${AER_ERROR:-sem_detalhe}"
 if [[ "$TRIP_STATUS" -ge 400 || "$TRIP_SUCCESS" != "true" ]]; then
   echo "- tripulantes-operacionais: HTTP=${TRIP_STATUS} erro=${TRIP_ERROR:-sem_detalhe}"
-  if [[ -z "$ESCALA_ID_INPUT" ]]; then
-    echo "  AVISO: escala_id não informado — alocações da escala mensal podem aparecer como conflito"
-  fi
 fi
 if [[ "$FAT_STATUS" -ge 400 || "$FAT_SUCCESS" != "true" ]]; then
   echo "- frms daily-fatigue [CRÍTICO]: HTTP=${FAT_STATUS} erro=${FAT_ERROR:-sem_detalhe}"
-  echo "  IMPACTO: todos os tripulantes mostrarão '?' na coluna FRMS da EVD"
+  echo "  IMPACTO: coluna FRMS da EVD pode ficar incompleta"
 fi
 if [[ "$ALT_STATUS" -ge 400 || "$ALT_SUCCESS" != "true" ]]; then
   echo "- frms alerts [MENOR]: HTTP=${ALT_STATUS} erro=${ALT_ERROR:-sem_detalhe}"
-  echo "  IMPACTO: alertas FRMS não exibidos; status diário segue visível se daily-fatigue OK"
+  echo "  IMPACTO: alertas FRMS adicionais não exibidos; daily-fatigue segue como fonte primária"
 fi
 if [[ "$AER_STATUS" -lt 400 && "$AER_SUCCESS" == "true" && "$TRIP_STATUS" -lt 400 && "$TRIP_SUCCESS" == "true" && "$FAT_STATUS" -lt 400 && "$FAT_SUCCESS" == "true" && "$ALT_STATUS" -lt 400 && "$ALT_SUCCESS" == "true" ]]; then
   echo "- nenhum erro HTTP detectado"

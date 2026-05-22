@@ -177,17 +177,32 @@ tripulantesOperacionais.get('/', auth(), async (c) => {
   }
 
   if (quinzenaFiltro === 'primeira' || quinzenaFiltro === 'segunda') {
-    tripulantesComQuinzena = [...tripulantesComQuinzena].sort((a, b) => {
-      const prioridade = (tripulante: TripulanteComQuinzena) => {
-        const quinzenaPreferencial = normalizeQuinzenaPreferencial(tripulante.quinzena);
+    tripulantesComQuinzena = tripulantesComQuinzena.map((tripulante) => {
+      if (!tripulante.pode_ser_alocado) return tripulante;
 
-        if (quinzenaPreferencial === quinzenaFiltro) return 0;
-        if (quinzenaPreferencial === null || quinzenaPreferencial === 'personalizada') return 1;
-        return 2;
+      const quinzenaPreferencial = normalizeQuinzenaPreferencial(tripulante.quinzena);
+      if (quinzenaPreferencial === quinzenaFiltro) return tripulante;
+
+      let motivoBloqueio = 'Fora da quinzena operacional da escala mensal';
+      if (quinzenaPreferencial === null) {
+        motivoBloqueio = 'Quinzena não cadastrada para o tripulante na escala mensal';
+      } else if (quinzenaPreferencial === 'personalizada') {
+        motivoBloqueio = 'Quinzena personalizada; ajuste a escala mensal antes de escalar na EVD';
+      }
+
+      return {
+        ...tripulante,
+        pode_ser_alocado: false,
+        motivo_bloqueio: motivoBloqueio,
+        soft_conflict: false,
+        conflict_reason: null,
+        conflict_code: 'OUT_OF_QUINZENA',
       };
-
-      return prioridade(a) - prioridade(b);
     });
+
+    tripulantesComQuinzena = [...tripulantesComQuinzena].sort((a, b) =>
+      Number(b.pode_ser_alocado) - Number(a.pode_ser_alocado),
+    );
   }
 
   let conflitosPorFuncionario = new Map<
@@ -323,6 +338,7 @@ tripulantesOperacionais.get('/', auth(), async (c) => {
     tripulantesComQuinzena = tripulantesComQuinzena.map((tripulante) => {
       const conflito = conflitosPorFuncionario.get(tripulante.funcionario_id);
       if (!conflito) return tripulante;
+      if (!tripulante.pode_ser_alocado) return tripulante;
 
       const mesmoEscalaAtual = escalaId && conflito.escala_id === escalaId;
       if (mesmoEscalaAtual) {
