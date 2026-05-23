@@ -14,7 +14,6 @@ import {
   ArrowUpRight,
   ArrowLeft,
 } from 'lucide-react';
-import { SimuladoresCard } from '../components/SimuladoresLayout';
 
 function useCountUp(target: number, duration = 600, start = true) {
   const [value, setValue] = useState(0);
@@ -45,18 +44,14 @@ function useCountUp(target: number, duration = 600, start = true) {
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="h-11 w-11 rounded-2xl bg-slate-200" />
-        <div className="h-4 w-4 rounded bg-slate-200" />
-      </div>
-      <div className="mt-4 space-y-2">
-        <div className="h-5 w-28 rounded bg-slate-200" />
-        <div className="h-4 w-48 rounded bg-slate-100" />
-      </div>
-      <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-4">
-        <div className="h-8 w-16 rounded bg-slate-200" />
-        <div className="h-4 w-24 rounded bg-slate-100" />
+    <div className="animate-pulse rounded-lg border border-gray-200 bg-white p-3.5">
+      <div className="flex items-center gap-3">
+        <div className="h-8 w-8 rounded-lg bg-slate-200 shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-24 rounded bg-slate-200" />
+          <div className="h-3 w-40 rounded bg-slate-100" />
+        </div>
+        <div className="h-5 w-8 rounded bg-slate-100" />
       </div>
     </div>
   );
@@ -79,6 +74,14 @@ interface GestaoStats {
   modelosSessao: number;
 }
 
+const colorClasses: Record<string, { icon: string; badge: string }> = {
+  blue:   { icon: 'bg-blue-100 text-blue-700',       badge: 'bg-blue-50 text-blue-700' },
+  green:  { icon: 'bg-emerald-100 text-emerald-700',  badge: 'bg-emerald-50 text-emerald-700' },
+  purple: { icon: 'bg-violet-100 text-violet-700',    badge: 'bg-violet-50 text-violet-700' },
+  orange: { icon: 'bg-amber-100 text-amber-700',      badge: 'bg-amber-50 text-amber-700' },
+  indigo: { icon: 'bg-indigo-100 text-indigo-700',    badge: 'bg-indigo-50 text-indigo-700' },
+};
+
 export default function TabGestaoWrapper() {
   const [loading, setLoading] = useState(true);
   const [dataReady, setDataReady] = useState(false);
@@ -96,12 +99,14 @@ export default function TabGestaoWrapper() {
   const countCat = useCountUp(stats.categorias, 500, dataReady);
   const countTip = useCountUp(stats.tiposSessao, 500, dataReady);
   const countMod = useCountUp(stats.modelosSessao, 500, dataReady);
+
+  // countMap usa os IDs dos cards como chave
   const countMap: Record<string, number> = {
     simuladores: countSim,
     manobras: countMan,
     categorias: countCat,
-    tiposSessao: countTip,
-    modelosSessao: countMod,
+    tipos: countTip,
+    modelos: countMod,
   };
 
   const fetchData = async () => {
@@ -150,29 +155,26 @@ export default function TabGestaoWrapper() {
     {
       id: 'simuladores' as SubView,
       titulo: 'Simuladores',
-      descricao: 'Gerenciar equipamentos de simulação disponíveis',
+      descricao: 'Equipamentos de simulação disponíveis',
       icon: Plane,
       color: 'blue',
       valor: stats.simuladores,
-      label: 'cadastrados',
     },
     {
       id: 'manobras' as SubView,
       titulo: 'Manobras',
-      descricao: 'Cadastro de manobras e exercícios',
+      descricao: 'Exercícios e procedimentos avaliados',
       icon: Settings,
       color: 'green',
       valor: stats.manobras,
-      label: 'cadastradas',
     },
     {
       id: 'categorias' as SubView,
-      titulo: 'Categorias de Manobra',
-      descricao: 'Classificação de manobras e exercícios',
+      titulo: 'Categorias',
+      descricao: 'Classificação de manobras por tipo',
       icon: ClipboardCheck,
       color: 'purple',
       valor: stats.categorias,
-      label: 'cadastradas',
     },
     {
       id: 'tipos' as SubView,
@@ -181,187 +183,111 @@ export default function TabGestaoWrapper() {
       icon: FileText,
       color: 'orange',
       valor: stats.tiposSessao,
-      label: 'cadastrados',
     },
     {
       id: 'modelos' as SubView,
       titulo: 'Modelos de Sessão',
-      descricao: 'Templates de sessões de treinamento',
+      descricao: 'Templates reutilizáveis de sessões',
       icon: BookOpen,
       color: 'indigo',
       valor: stats.modelosSessao,
-      label: 'cadastrados',
     },
   ];
 
-  const colorClasses: Record<string, string> = {
-    blue: 'bg-blue-50 border-blue-200 text-blue-600',
-    green: 'bg-green-50 border-green-200 text-green-600',
-    purple: 'bg-purple-50 border-purple-200 text-purple-600',
-    orange: 'bg-orange-50 border-orange-200 text-orange-600',
-    indigo: 'bg-indigo-50 border-indigo-200 text-indigo-600',
+  const estruturaCards = gestaoCards.filter((c) => ['simuladores', 'tipos', 'modelos'].includes(c.id));
+  const bibliotecaCards = gestaoCards.filter((c) => ['manobras', 'categorias'].includes(c.id));
+
+  const renderCard = (card: typeof gestaoCards[number]) => {
+    const Icon = card.icon;
+    const colors = colorClasses[card.color];
+    const count = countMap[card.id];
+    return (
+      <button
+        key={card.id}
+        onClick={() => setSubView(card.id)}
+        className="group flex items-center gap-3 w-full rounded-lg border border-gray-200 bg-white p-3.5 text-left transition-all duration-150 hover:border-gray-300 hover:shadow-sm"
+      >
+        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${colors.icon}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900">{card.titulo}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{card.descricao}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-lg font-semibold text-gray-900 tabular-nums">{count}</span>
+          <ArrowUpRight className="h-3.5 w-3.5 text-gray-400 transition-all duration-200 group-hover:text-gray-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+        </div>
+      </button>
+    );
   };
 
-  // Se está em uma sub-view, renderiza o componente correspondente
+  // Sub-view render
   if (subView !== 'menu') {
+    const handleBack = () => {
+      setSubView('menu');
+      fetchData();
+    };
+
     return (
       <div className="animate-fade-in">
-        {/* Botão Voltar */}
-        <button
-          onClick={() => {
-            setSubView('menu');
-            fetchData();
-          }}
-          className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:border-slate-600 mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar para Gestão
-        </button>
-
-        {/* Componente da sub-view */}
-        <div className="space-y-4">
-          {subView === 'simuladores' && <SimuladoresPage embedded />}
-          {subView === 'manobras' && <ManobrasPage embedded />}
-          {subView === 'categorias' && <CategoriasPage embedded />}
-          {subView === 'tipos' && <TiposSessaoPage embedded />}
-          {subView === 'modelos' && <ModelosSessaoPage embedded />}
-        </div>
+        {subView === 'simuladores' && <SimuladoresPage embedded onBack={handleBack} />}
+        {subView === 'manobras' && <ManobrasPage embedded onBack={handleBack} />}
+        {subView === 'categorias' && <CategoriasPage embedded onBack={handleBack} />}
+        {subView === 'tipos' && <TiposSessaoPage embedded onBack={handleBack} />}
+        {subView === 'modelos' && <ModelosSessaoPage embedded onBack={handleBack} />}
       </div>
     );
   }
 
   // Menu principal de gestão
   return (
-    <div className="space-y-4">
-      <SimuladoresCard className="overflow-hidden border-slate-200">
-        <div className="border-b border-slate-200 bg-white px-6 py-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gestão</p>
-          <h2 className="mt-1 text-2xl font-semibold leading-tight text-slate-900">
-            Cadastros do módulo
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Gerencie a estrutura operacional e a biblioteca pedagógica dos simuladores.
-          </p>
-        </div>
+    <div className="animate-fade-in space-y-5">
+      {/* Page header — mesmo estilo das sub-páginas */}
+      <div>
+        <h2 className="text-2xl font-semibold text-gray-900">Gestão</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Gerencie a estrutura operacional e a biblioteca pedagógica dos simuladores.
+        </p>
+      </div>
 
-        {loading && (
-          <div className="grid gap-4 p-6 xl:grid-cols-2">
-            <div className="space-y-4">
-              <div className="h-4 w-40 rounded bg-slate-200 animate-pulse" />
-              <div className="grid gap-4">
-                <SkeletonCard />
-                <SkeletonCard />
-                <SkeletonCard />
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div className="h-4 w-40 rounded bg-slate-200 animate-pulse" />
-              <div className="grid gap-4">
-                <SkeletonCard />
-                <SkeletonCard />
-              </div>
+      {loading ? (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="space-y-3">
+            <div className="h-4 w-32 rounded bg-slate-200 animate-pulse" />
+            <div className="grid gap-2.5">
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
             </div>
           </div>
-        )}
-
-        {!loading && (
-        <div className="grid gap-4 p-6 xl:grid-cols-2">
-          <section className="space-y-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Estrutura operacional
-              </p>
-              <h3 className="mt-1 text-lg font-semibold text-slate-900">
-                Base de sessões e equipamentos
-              </h3>
+          <div className="space-y-3">
+            <div className="h-4 w-32 rounded bg-slate-200 animate-pulse" />
+            <div className="grid gap-2.5">
+              <SkeletonCard />
+              <SkeletonCard />
             </div>
-            <div className="grid gap-4">
-              {gestaoCards
-                .filter((card) => ['simuladores', 'tipos', 'modelos'].includes(card.id))
-                .map((card) => {
-                  const Icon = card.icon;
-                  return (
-                    <button
-                      key={card.id}
-                      onClick={() => setSubView(card.id)}
-                      className="group rounded-2xl border border-slate-200 bg-white p-5 text-left transition-all hover:border-slate-300 hover:shadow-sm"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div
-                          className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${colorClasses[card.color]}`}
-                        >
-                          <Icon className="w-5 h-5" />
-                        </div>
-                        <ArrowUpRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                      </div>
-                      <div className="mt-4">
-                        <h4 className="text-base font-semibold text-slate-900">{card.titulo}</h4>
-                        <p className="mt-1 text-sm text-slate-500">{card.descricao}</p>
-                      </div>
-                      <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-4">
-                        <div>
-                          <span className="text-2xl font-bold text-slate-900 tabular-nums">{countMap[card.id]}</span>
-                          <span className="ml-2 text-xs font-medium text-slate-500">
-                            {card.label}
-                          </span>
-                        </div>
-                        <span className="text-xs font-medium text-slate-700">Abrir cadastro</span>
-                      </div>
-                    </button>
-                  );
-                })}
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-2">
+          {/* Estrutura operacional */}
+          <section className="space-y-2.5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Estrutura operacional</p>
+            <div className="grid gap-2.5">
+              {estruturaCards.map(renderCard)}
             </div>
           </section>
 
-          <section className="space-y-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Biblioteca de avaliação
-              </p>
-              <h3 className="mt-1 text-lg font-semibold text-slate-900">
-                Conteúdo pedagógico das sessões
-              </h3>
-            </div>
-            <div className="grid gap-4">
-              {gestaoCards
-                .filter((card) => ['manobras', 'categorias'].includes(card.id))
-                .map((card) => {
-                  const Icon = card.icon;
-                  return (
-                    <button
-                      key={card.id}
-                      onClick={() => setSubView(card.id)}
-                      className="group rounded-2xl border border-slate-200 bg-white p-5 text-left transition-all hover:border-slate-300 hover:shadow-sm"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div
-                          className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${colorClasses[card.color]}`}
-                        >
-                          <Icon className="w-5 h-5" />
-                        </div>
-                        <ArrowUpRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                      </div>
-                      <div className="mt-4">
-                        <h4 className="text-base font-semibold text-slate-900">{card.titulo}</h4>
-                        <p className="mt-1 text-sm text-slate-500">{card.descricao}</p>
-                      </div>
-                      <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-4">
-                        <div>
-                          <span className="text-2xl font-bold text-slate-900 tabular-nums">{countMap[card.id]}</span>
-                          <span className="ml-2 text-xs font-medium text-slate-500">
-                            {card.label}
-                          </span>
-                        </div>
-                        <span className="text-xs font-medium text-slate-700">Abrir cadastro</span>
-                      </div>
-                    </button>
-                  );
-                })}
+          {/* Biblioteca de avaliação */}
+          <section className="space-y-2.5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Biblioteca de avaliação</p>
+            <div className="grid gap-2.5">
+              {bibliotecaCards.map(renderCard)}
             </div>
           </section>
         </div>
-        )}
-      </SimuladoresCard>
+      )}
     </div>
   );
 }

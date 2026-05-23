@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
-import { Plus, Trash2, Inbox } from 'lucide-react';
+import { Plus, Trash2, Inbox, ArrowLeft } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface Simulador {
@@ -32,7 +32,7 @@ interface Props {
   embedded?: boolean;
 }
 
-export default function CrudSimuladores({ embedded = false }: Props = {}) {
+export default function CrudSimuladores({ embedded = false, onBack }: Props = {}) {
   const [simuladores, setSimuladores] = useState<Simulador[]>([]);
   const [aeronaves, setAeronaves] = useState<ModeloAeronave[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,6 +210,12 @@ export default function CrudSimuladores({ embedded = false }: Props = {}) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
+          {embedded && onBack && (
+            <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1">
+              <ArrowLeft className="w-3 h-3" />
+              Gestão
+            </button>
+          )}
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Simuladores</h2>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Gerencie os simuladores de voo disponíveis</p>
         </div>
@@ -253,7 +259,7 @@ export default function CrudSimuladores({ embedded = false }: Props = {}) {
                 <td className="px-4 py-3.5 text-sm text-gray-600 dark:text-slate-400">{sim.fabricante || '-'}</td>
                 <td className="px-4 py-3.5 text-center">
                   <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    className={`inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-medium ${
                       sim.status === 'ATIVO'
                         ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'
                         : sim.status === 'MANUTENCAO'
@@ -261,7 +267,7 @@ export default function CrudSimuladores({ embedded = false }: Props = {}) {
                           : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-400'
                     }`}
                   >
-                    {sim.status === 'ATIVO' ? 'ATIVO' : sim.status}
+                    {sim.status === 'ATIVO' ? 'Ativo' : sim.status === 'MANUTENCAO' ? 'Em Manutenção' : 'Inativo'}
                   </span>
                 </td>
                 <td className="px-4 py-3.5">
