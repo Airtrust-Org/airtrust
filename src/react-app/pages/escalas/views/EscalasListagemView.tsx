@@ -5,22 +5,20 @@
 
 import {
   ArrowRight,
-  CalendarDays,
   CalendarMinus,
   ChevronLeft,
   ChevronRight,
   Plus,
   Settings,
   Trash2,
-  User,
 } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import { Button } from '@/react-app/components/UI';
 import ModalCriarEscala from '../components/Modais/ModalCriarEscala';
 import ModalFeriasAfastamentoGlobal from '../components/Modais/ModalFeriasAfastamentoGlobal';
+import EscalasTabBar from '../components/EscalasTabBar';
 import { STATUS_CONFIG } from '../utils/statusConfig';
 import { MESES, MESES_CURTOS } from '../EscalaPageContext';
 import { useEscalaPageCtx } from '../EscalaPageContext';
@@ -92,68 +90,7 @@ export default function EscalasListagemView() {
         }
       />
 
-      {/* Subnavegação do módulo Escalas */}
-      <div className="mb-4 flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <NavLink
-          to="/escalas"
-          end
-          className={({ isActive }) =>
-            [
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
-              isActive
-                ? 'bg-slate-900 text-white dark:bg-slate-700'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-            ].join(' ')
-          }
-        >
-          <CalendarDays className="w-3.5 h-3.5" />
-          Escala Mensal
-        </NavLink>
-        <NavLink
-          to="/escalas/diaria"
-          className={({ isActive }) =>
-            [
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
-              isActive
-                ? 'bg-slate-900 text-white dark:bg-slate-700'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-            ].join(' ')
-          }
-        >
-          <CalendarDays className="w-3.5 h-3.5" />
-          Escala Diária de Voo
-        </NavLink>
-        <NavLink
-          to="/escalas/minha-escala"
-          className={({ isActive }) =>
-            [
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
-              isActive
-                ? 'bg-slate-900 text-white dark:bg-slate-700'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-            ].join(' ')
-          }
-        >
-          <User className="w-3.5 h-3.5" />
-          Minha Escala
-        </NavLink>
-        <div className="ml-auto">
-          <NavLink
-            to="/escalas/configuracoes"
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
-                isActive
-                  ? 'bg-slate-900 text-white dark:bg-slate-700'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-              ].join(' ')
-            }
-          >
-            <Settings className="w-3.5 h-3.5" />
-            Configurações
-          </NavLink>
-        </div>
-      </div>
+      <EscalasTabBar />
 
       {/* Filtros */}
       <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
@@ -270,23 +207,6 @@ export default function EscalasListagemView() {
           })}
         </div>
       </div>
-
-      {/* CTA — Escala Diária de Voo */}
-      <NavLink
-        to="/escalas/diaria"
-        className="mb-4 flex items-center gap-4 rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50 to-blue-50 px-5 py-4 shadow-sm transition-all hover:border-sky-300 hover:shadow-md dark:border-sky-500/30 dark:from-sky-500/10 dark:to-blue-500/10 dark:hover:border-sky-500/50"
-      >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">
-          <CalendarDays className="w-5 h-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-sky-900 dark:text-sky-100">Escala Diária de Voo</p>
-          <p className="mt-0.5 text-xs text-sky-700/70 dark:text-sky-300/70">
-            Defina PIC/SIC por aeronave para a operação diária e publique a escala do dia.
-          </p>
-        </div>
-        <ArrowRight className="w-4 h-4 shrink-0 text-sky-600 dark:text-sky-400" />
-      </NavLink>
 
       {/* Grid de cards */}
       {loadingLista ? (
