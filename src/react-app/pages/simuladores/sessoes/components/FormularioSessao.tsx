@@ -10,6 +10,10 @@ const formatTimeInput = (value: string): string => {
   return `${digits.slice(0, 2)}:${digits.slice(2)}`;
 };
 
+const isValidTimeValue = (value: string): boolean => {
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+};
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -64,6 +68,19 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const horaInicio = formData.hora_inicio.trim();
+    const horaFim = formData.hora_fim.trim();
+
+    if (!isValidTimeValue(horaInicio) || !isValidTimeValue(horaFim)) {
+      toast.warning('Informe horários válidos no formato HH:mm (00:00 até 23:59).');
+      return;
+    }
+
+    if (horaInicio >= horaFim) {
+      toast.warning('Hora de início deve ser anterior à hora de término.');
+      return;
+    }
+
     setLoading(true);
 
     try {
