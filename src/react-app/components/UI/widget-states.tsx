@@ -62,6 +62,7 @@ export function WidgetError({
 }: WidgetErrorProps) {
   return (
     <div
+      role="alert"
       className={`flex items-center justify-between gap-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 dark:border-red-900/40 dark:bg-red-900/20 ${className}`}
     >
       <div className="flex items-center gap-2">
