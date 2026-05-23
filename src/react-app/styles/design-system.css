@@ -539,6 +539,19 @@ tbody tr:hover {
   }
 }
 
+@keyframes slide-down {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+    max-height: 2000px;
+  }
+}
+
 @keyframes spin {
   from {
     transform: rotate(0deg);
@@ -558,6 +571,11 @@ tbody tr:hover {
 
 .animate-scale-in {
   animation: scale-in var(--transition-base);
+}
+
+.animate-slide-down {
+  animation: slide-down var(--transition-slow) cubic-bezier(0.23, 1, 0.32, 1);
+  overflow: hidden;
 }
 
 .animate-spin {
