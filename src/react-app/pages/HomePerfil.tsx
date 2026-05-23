@@ -199,118 +199,127 @@ export default function HomePerfil() {
   return (
     <AppLayout>
       <div className="min-h-[calc(100vh-48px)] bg-slate-50">
-        {/* Saudação — compacta no mobile */}
+        {/* Saudação */}
         <div className="bg-white border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-6">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-0.5">
             {perfilLabel}
           </p>
           <h1 className="text-lg sm:text-xl font-bold text-slate-900">Olá, {nome} 👋</h1>
-          <p className="text-sm text-slate-500 mt-0.5">O que você quer fazer hoje?</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">O que você quer fazer hoje?</p>
         </div>
 
-        {/* Cards — full-width stacked on mobile, grid on tablet+ */}
-        <div className="p-4 sm:p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 max-w-4xl">
-            {cards.map((card) => (
+        <div className="p-3 sm:p-4 max-w-4xl mx-auto space-y-4 sm:space-y-6">
+          {/* Cards de acesso */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {cards.map((card, i) => (
               <button
                 key={card.route + card.title}
                 onClick={() => navigate(card.route)}
-                className="group flex items-center gap-4 sm:flex-col sm:items-start bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 text-left shadow-sm active:scale-[0.98] hover:shadow-md hover:border-primary/30 transition-all duration-150"
+                className="group flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-4 text-left shadow-sm active:scale-[0.98] hover:shadow-md hover:border-primary/30 transition-all duration-150 animate-fade-in"
+                style={{ animationDelay: `${i * 50}ms` }}
               >
-                {/* Icon — larger on mobile for tap targets */}
                 <div
-                  className={`w-14 h-14 sm:w-12 sm:h-12 shrink-0 rounded-2xl sm:rounded-xl flex items-center justify-center ${card.color} ${card.iconColor}`}
+                  className={`w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center ${card.color} ${card.iconColor}`}
                 >
                   {card.icon}
                 </div>
 
-                {/* Text */}
-                <div className="flex-1 sm:flex-none">
-                  <h2 className="text-base font-semibold text-slate-900 group-hover:text-primary transition-colors leading-tight">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-primary transition-colors leading-tight">
                     {card.title}
                   </h2>
-                  <p className="text-sm text-slate-500 mt-0.5 leading-relaxed hidden sm:block">
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed line-clamp-2">
                     {card.description}
                   </p>
-                  {/* Mobile: show description smaller */}
-                  <p className="text-xs text-slate-400 mt-0.5 sm:hidden">{card.description}</p>
                 </div>
 
-                {/* Arrow — right side on mobile, bottom on desktop */}
-                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-primary transition-colors sm:hidden shrink-0" />
-                <div className="hidden sm:flex items-center gap-1 text-xs font-semibold text-primary mt-1">
-                  Acessar <ChevronRight className="w-3.5 h-3.5" />
-                </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
             ))}
           </div>
 
-          <div className="max-w-4xl mt-4 sm:mt-6 space-y-4 sm:space-y-6">
+          {cards.length === 0 && (
+            <div className="text-center py-16 text-slate-400">
+              <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p className="text-sm">Nenhuma seção disponível para seu perfil.</p>
+              <p className="text-xs mt-1">Entre em contato com o administrador.</p>
+            </div>
+          )}
+
+          <div className="space-y-4 sm:space-y-6">
             <CardMeusEAD />
 
             <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-4 py-4 sm:px-5 sm:py-5 border-b border-slate-100 flex items-start justify-between gap-3">
-                <div>
-                  <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    <BellRing className="w-4 h-4" />
-                    Notificações de fichas
+              <div className="px-4 py-4 sm:px-5 sm:py-5 border-b border-slate-100">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      <BellRing className="w-4 h-4" />
+                      Notificações de fichas
+                    </div>
+                    <h2 className="mt-2 text-base sm:text-lg font-semibold text-slate-900">
+                      O que ainda depende de você
+                    </h2>
+                    <p className="mt-1 text-xs sm:text-sm text-slate-500">
+                      Pendências e atualizações das suas fichas de simulador.
+                    </p>
                   </div>
-                  <h2 className="mt-2 text-lg font-semibold text-slate-900">
-                    O que ainda depende de você
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Apenas pendências e atualizações ligadas às suas fichas de simulador.
-                  </p>
+                  {notificacoes.length > 0 && (
+                    <button
+                      onClick={() => navigate('/simuladores/fichas')}
+                      className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:text-primary transition-colors shrink-0"
+                    >
+                      Ver fichas
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                {notificacoes.length > 0 && (
-                  <button
-                    onClick={() => navigate('/simuladores/fichas')}
-                    className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:text-primary transition-colors"
-                  >
-                    Ver fichas
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                )}
               </div>
 
-              <div className="p-4 sm:p-5">
+              <div className="p-3 sm:p-5">
                 {carregandoNotificacoes ? (
-                  <div className="text-sm text-slate-400">Carregando notificações...</div>
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-16 rounded-xl bg-slate-100 animate-pulse" />
+                    ))}
+                  </div>
                 ) : notificacoes.length === 0 ? (
-                  <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-5 text-sm text-slate-500">
-                    Nenhuma notificação de ficha pendente no momento.
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-6 text-center">
+                    <p className="text-sm text-slate-500">Nenhuma notificação de ficha pendente.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {notificacoes.map((notificacao) => (
                       <button
                         key={notificacao.id}
                         onClick={() => notificacao.link && navigate(notificacao.link)}
-                        className="w-full text-left rounded-2xl border border-slate-200 bg-slate-50/80 hover:bg-white hover:border-primary/30 transition-all px-4 py-4"
+                        className="w-full text-left rounded-xl border border-slate-200 bg-slate-50/80 hover:bg-white hover:border-primary/30 transition-all duration-150 px-3 sm:px-4 py-3 active:scale-[0.99]"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
-                            <CheckCircle2 className="w-5 h-5" />
+                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <h3 className="text-sm font-semibold text-slate-900">
-                                  {notificacao.titulo}
-                                </h3>
-                                <p className="mt-1 text-sm text-slate-600 leading-relaxed">
-                                  {notificacao.mensagem}
-                                </p>
-                              </div>
-                              <span className="text-xs font-medium text-slate-400 whitespace-nowrap">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="text-sm font-semibold text-slate-900 leading-snug">
+                                {notificacao.titulo}
+                              </h3>
+                              <span className="text-xs font-medium text-slate-400 whitespace-nowrap mt-0.5 hidden sm:inline">
                                 {formatarData(notificacao.created_at)}
                               </span>
                             </div>
-
-                            <div className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-primary">
-                              {notificacao.acao_primaria || 'Abrir'}
-                              <ChevronRight className="w-3.5 h-3.5" />
+                            <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2">
+                              {notificacao.mensagem}
+                            </p>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
+                                {notificacao.acao_primaria || 'Abrir'}
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </span>
+                              <span className="text-xs text-slate-400 sm:hidden">
+                                {formatarData(notificacao.created_at)}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -319,15 +328,20 @@ export default function HomePerfil() {
                   </div>
                 )}
               </div>
+
+              {notificacoes.length > 0 && (
+                <div className="sm:hidden border-t border-slate-100 px-4 py-3">
+                  <button
+                    onClick={() => navigate('/simuladores/fichas')}
+                    className="w-full flex items-center justify-center gap-2 text-sm font-medium text-primary"
+                  >
+                    Ver todas as fichas
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </section>
           </div>
-          {cards.length === 0 && (
-            <div className="text-center py-20 text-slate-400">
-              <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-40" />
-              <p className="text-sm">Nenhuma seção disponível para seu perfil.</p>
-              <p className="text-xs mt-1">Entre em contato com o administrador.</p>
-            </div>
-          )}
         </div>
       </div>
     </AppLayout>
