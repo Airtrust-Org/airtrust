@@ -5,7 +5,7 @@
  * não por voo/trecho. Visualização em tabela por aeronave com publicação versionada.
  */
 import { useState, useMemo, useCallback } from 'react';
-import { NavLink, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plane,
   Plus,
@@ -21,11 +21,11 @@ import {
   Printer,
   Eye,
   Settings,
-  User,
   X,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
+import EscalasTabBar from './components/EscalasTabBar';
 import Button from '@/react-app/components/Button';
 import { useApi } from '@/react-app/hooks/useApi';
 import { apiFetch } from '@/react-app/lib/apiFetch';
@@ -1120,68 +1120,7 @@ export default function EvdPage() {
         }
       />
 
-        {/* Subnavegação do módulo Escalas */}
-        <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <NavLink
-            to="/escalas"
-            end
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
-                isActive
-                  ? 'bg-slate-900 text-white dark:bg-slate-700'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-              ].join(' ')
-            }
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            Escala Mensal
-          </NavLink>
-          <NavLink
-            to="/escalas/diaria"
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
-                isActive
-                  ? 'bg-slate-900 text-white dark:bg-slate-700'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-              ].join(' ')
-            }
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            Escala Diária de Voo
-          </NavLink>
-          <NavLink
-            to="/escalas/minha-escala"
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
-                isActive
-                  ? 'bg-slate-900 text-white dark:bg-slate-700'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-              ].join(' ')
-            }
-          >
-            <User className="w-3.5 h-3.5" />
-            Minha Escala
-          </NavLink>
-          <div className="ml-auto">
-            <NavLink
-              to="/escalas/configuracoes"
-              className={({ isActive }) =>
-                [
-                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
-                  isActive
-                    ? 'bg-slate-900 text-white dark:bg-slate-700'
-                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-                ].join(' ')
-              }
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Configurações
-            </NavLink>
-          </div>
-        </div>
+        <EscalasTabBar />
 
       <div className="space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:p-5">
