@@ -3,7 +3,7 @@
  * Padronizado com SimuladoresLayout
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { toast } from 'sonner';
@@ -30,30 +30,31 @@ export default function TabSessoesWrapper() {
     null,
   );
   const [deletandoId, setDeletandoId] = useState<number | null>(null);
+  const inFlightRef = useRef(false);
 
-  const fetchSessoes = async () => {
+  const fetchSessoes = useCallback(async (showLoader = true) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
 
-      // FILTRO: Sessões dos últimos 30 dias até 6 meses no futuro
+      // Primeira carga menor: últimos 30 dias + próximos 90 dias.
       const hoje = new Date();
       const dataInicio = new Date(hoje);
-      dataInicio.setDate(dataInicio.getDate() - 30); // 30 dias atrás
+      dataInicio.setDate(dataInicio.getDate() - 30);
 
       const dataFim = new Date(hoje);
-      dataFim.setMonth(dataFim.getMonth() + 6); // 6 meses no futuro
+      dataFim.setDate(dataFim.getDate() + 90);
 
       const params = new URLSearchParams({
         data_inicio: dataInicio.toISOString().split('T')[0],
         data_fim: dataFim.toISOString().split('T')[0],
-        t: new Date().getTime().toString(), // Cache bust
+        limit: '120',
       });
 
       const _st = getAccessToken();
       const res = await fetch(`${API_BASE_URL}/simuladores/sessoes?${params}`, {
         headers: {
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
           ...(_st ? { Authorization: `Bearer ${_st}` } : {}),
         },
       });
@@ -64,13 +65,14 @@ export default function TabSessoesWrapper() {
     } catch (error) {
       console.error('Erro ao carregar sessoes:', error);
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchSessoes();
-  }, []);
+    void fetchSessoes();
+  }, [fetchSessoes]);
 
   const handleEditarSessao = (id: number) => {
     const sessao = sessoes.find((s) => s.id === id);
@@ -142,12 +144,10 @@ export default function TabSessoesWrapper() {
         toast.success('Sessão cancelada com sucesso!');
         setShowConfirmDelete(null);
 
-        // Aguardar um pouco para garantir que o servidor processou
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        await fetchSessoes();
+        await fetchSessoes(false);
       } else {
         // Se falhou, reverter optimistic update (recarregar tudo)
-        await fetchSessoes();
+        await fetchSessoes(false);
         toast.error(`Erro ao cancelar sessão: ${data.error}`);
       }
     } catch (error) {
@@ -439,7 +439,7 @@ export default function TabSessoesWrapper() {
         onSuccess={() => {
           setModalNovaSessaoOpen(false);
           setSessaoParaEditar(null);
-          fetchSessoes();
+          void fetchSessoes(false);
           toast.success('Sessão criada/atualizada com sucesso!');
         }}
         sessao={sessaoParaEditar || undefined}

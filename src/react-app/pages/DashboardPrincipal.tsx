@@ -206,6 +206,7 @@ const FRMS_NIVEL_CONF = {
   ATENCAO: { label: 'Atenção', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
   AVISO: { label: 'Aviso', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
 };
+const PASSIVE_REFETCH_GUARD_MS = 45_000;
 
 // ─── Data hook ────────────────────────────────────────────────────────────────
 
@@ -229,12 +230,19 @@ function useDashboardData() {
   const token = getAccessToken();
   const isMountedRef = React.useRef(true);
   const abortControllerRef = React.useRef<AbortController | null>(null);
+  const lastPassiveRefreshRef = React.useRef(0);
 
-  const fetchData = React.useCallback(async () => {
+  type FetchReason = 'initial' | 'manual' | 'poll' | 'visibility' | 'focus';
+  const fetchData = React.useCallback(async (reason: FetchReason = 'manual') => {
     if (!token) {
       if (isMountedRef.current)
         setState((prev) => ({ ...prev, isLoading: false, error: 'Sessão expirada.' }));
       return;
+    }
+    if (reason === 'visibility' || reason === 'focus') {
+      const now = Date.now();
+      if (now - lastPassiveRefreshRef.current < PASSIVE_REFETCH_GUARD_MS) return;
+      lastPassiveRefreshRef.current = now;
     }
 
     abortControllerRef.current?.abort();
@@ -262,21 +270,77 @@ function useDashboardData() {
       const mesInicio = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
       const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
 
-      const [
-        metricsRes,
-        complianceRes,
-        alertasRes,
-        atividadesRes,
-        frmsRes,
-        escalasRes,
-        treinamentosRes,
-        solicitacoesRes,
-        sessoesSimRes,
-      ] = await Promise.all([
+      // Primeira carga: blocos essenciais para liberar o painel principal.
+      const [metricsRes, complianceRes, alertasRes, atividadesRes] = await Promise.all([
         fetch(`${API_BASE}/dashboard/metrics`, opts).catch(() => null),
         fetch(`${API_BASE}/dashboard/compliance-score`, opts).catch(() => null),
         fetch(`${API_BASE}/dashboard/alertas-criticos`, opts).catch(() => null),
         fetch(`${API_BASE}/dashboard/atividades-recentes`, opts).catch(() => null),
+      ]);
+
+      if (controller.signal.aborted || !isMountedRef.current) return;
+
+      const metricsJson = metricsRes?.ok ? await metricsRes.json() : null;
+      const complianceJson = complianceRes?.ok ? await complianceRes.json() : null;
+      const alertasJson = alertasRes?.ok ? await alertasRes.json() : null;
+      const atividadesJson = atividadesRes?.ok ? await atividadesRes.json() : null;
+
+      const newSectionErrors: SectionErrors = {
+        metrics: !metricsJson?.success
+          ? (metricsJson?.error ?? 'Falha ao buscar métricas do painel')
+          : null,
+        compliance: !complianceJson?.success
+          ? (complianceJson?.error ?? 'Falha ao buscar dados de compliance')
+          : null,
+      };
+
+      const alertasNormalizados: AlertaRaw[] = Array.isArray(alertasJson?.data)
+        ? (alertasJson.data as Array<Record<string, unknown>>)
+            .filter((alerta) => !isResolvedRenewalAlert(alerta))
+            .map((alerta) => {
+              const tripulanteDireto = String(
+                alerta.tripulanteId ?? alerta.tripulante_id ?? alerta.funcionario_id ?? '',
+              ).trim();
+              return {
+                id: String(alerta.id ?? ''),
+                tipo: String(alerta.tipo ?? ''),
+                criticidade: String(alerta.criticidade ?? ''),
+                mensagem: String(alerta.mensagem ?? ''),
+                tripulanteNome: String(alerta.tripulanteNome ?? alerta.tripulante_nome ?? '-'),
+                tripulanteMatricula: alerta.tripulanteMatricula
+                  ? String(alerta.tripulanteMatricula)
+                  : undefined,
+                qualificacaoId: alerta.qualificacaoId ? String(alerta.qualificacaoId) : undefined,
+                qualificacaoNome: String(alerta.qualificacaoNome ?? alerta.qualificacao_nome ?? '-'),
+                dataVencimento: alerta.dataVencimento ? String(alerta.dataVencimento) : undefined,
+                diasRestantes: Number(alerta.diasRestantes ?? 0),
+                acaoRecomendada: alerta.acaoRecomendada ? String(alerta.acaoRecomendada) : undefined,
+                urlAcao: alerta.urlAcao ? String(alerta.urlAcao) : undefined,
+                tripulanteId: tripulanteDireto || undefined,
+                renovada: isResolvedRenewalAlert(alerta),
+              };
+            })
+        : [];
+
+      if (isMountedRef.current && !controller.signal.aborted) {
+        setState((prev) => ({
+          // Keep stale data if section failed; use fresh data otherwise.
+          metrics: newSectionErrors.metrics ? prev.metrics : (metricsJson?.data ?? null),
+          compliance: newSectionErrors.compliance
+            ? prev.compliance
+            : (complianceJson?.data ?? null),
+          alertas: alertasNormalizados,
+          atividades: Array.isArray(atividadesJson?.data) ? atividadesJson.data : prev.atividades,
+          isLoading: false,
+          isRevalidating: true,
+          error: null,
+          sectionErrors: newSectionErrors,
+          lastUpdated: new Date(),
+        }));
+      }
+
+      // Segunda carga: dados secundários e listas maiores sem bloquear o primeiro paint.
+      const [frmsRes, escalasRes, treinamentosRes, solicitacoesRes, sessoesSimRes] = await Promise.all([
         fetch(
           `${API_BASE}/frms/alertas?resolvido=false&limit=${frmsPageLimit}&page=1&dataInicio=${mesInicio}`,
           opts,
@@ -294,10 +358,6 @@ function useDashboardData() {
 
       if (controller.signal.aborted || !isMountedRef.current) return;
 
-      const metricsJson = metricsRes?.ok ? await metricsRes.json() : null;
-      const complianceJson = complianceRes?.ok ? await complianceRes.json() : null;
-      const alertasJson = alertasRes?.ok ? await alertasRes.json() : null;
-      const atividadesJson = atividadesRes?.ok ? await atividadesRes.json() : null;
       const frmsJson = frmsRes?.ok ? await frmsRes.json() : null;
       const escalasJson = escalasRes?.ok ? await escalasRes.json() : null;
       const treinamentosJson = treinamentosRes?.ok ? await treinamentosRes.json() : null;
@@ -373,52 +433,9 @@ function useDashboardData() {
         return dataMes === mesAtual;
       });
 
-      const newSectionErrors: SectionErrors = {
-        metrics: !metricsJson?.success
-          ? (metricsJson?.error ?? 'Falha ao buscar métricas do painel')
-          : null,
-        compliance: !complianceJson?.success
-          ? (complianceJson?.error ?? 'Falha ao buscar dados de compliance')
-          : null,
-      };
-
-      const alertasNormalizados: AlertaRaw[] = Array.isArray(alertasJson?.data)
-        ? (alertasJson.data as Array<Record<string, unknown>>)
-            .filter((alerta) => !isResolvedRenewalAlert(alerta))
-            .map((alerta) => {
-              const tripulanteDireto = String(
-                alerta.tripulanteId ?? alerta.tripulante_id ?? alerta.funcionario_id ?? '',
-              ).trim();
-              return {
-                id: String(alerta.id ?? ''),
-                tipo: String(alerta.tipo ?? ''),
-                criticidade: String(alerta.criticidade ?? ''),
-                mensagem: String(alerta.mensagem ?? ''),
-                tripulanteNome: String(alerta.tripulanteNome ?? alerta.tripulante_nome ?? '-'),
-                tripulanteMatricula: alerta.tripulanteMatricula
-                  ? String(alerta.tripulanteMatricula)
-                  : undefined,
-                qualificacaoId: alerta.qualificacaoId ? String(alerta.qualificacaoId) : undefined,
-                qualificacaoNome: String(alerta.qualificacaoNome ?? alerta.qualificacao_nome ?? '-'),
-                dataVencimento: alerta.dataVencimento ? String(alerta.dataVencimento) : undefined,
-                diasRestantes: Number(alerta.diasRestantes ?? 0),
-                acaoRecomendada: alerta.acaoRecomendada ? String(alerta.acaoRecomendada) : undefined,
-                urlAcao: alerta.urlAcao ? String(alerta.urlAcao) : undefined,
-                tripulanteId: tripulanteDireto || undefined,
-                renovada: isResolvedRenewalAlert(alerta),
-              };
-            })
-        : [];
-
       if (isMountedRef.current && !controller.signal.aborted) {
         setState((prev) => ({
-          // Keep stale data if section failed; use fresh data otherwise
-          metrics: newSectionErrors.metrics ? prev.metrics : (metricsJson?.data ?? null),
-          compliance: newSectionErrors.compliance
-            ? prev.compliance
-            : (complianceJson?.data ?? null),
-          alertas: alertasNormalizados,
-          atividades: Array.isArray(atividadesJson?.data) ? atividadesJson.data : prev.atividades,
+          ...prev,
           frmsAlertas: frmsAlertasConsolidados,
           escalas: Array.isArray(escalasJson?.data) ? escalasJson.data.slice(0, 5) : prev.escalas,
           treinamentosPlanejados: treinamentosConsolidados
@@ -440,10 +457,7 @@ function useDashboardData() {
                 )
                 .slice(0, 6)
             : prev.sessoesSimulador,
-          isLoading: false,
           isRevalidating: false,
-          error: null,
-          sectionErrors: newSectionErrors,
           lastUpdated: new Date(),
         }));
       }
@@ -461,14 +475,14 @@ function useDashboardData() {
 
   React.useEffect(() => {
     isMountedRef.current = true;
-    void fetchData();
+    void fetchData('initial');
 
     const handleVisibilityChange = () => {
-      if (!document.hidden) void fetchData();
+      if (!document.hidden) void fetchData('visibility');
     };
-    const handleFocus = () => void fetchData();
+    const handleFocus = () => void fetchData('focus');
     // Revalida em background a cada 5 minutos sem bloquear UI
-    const pollInterval = setInterval(() => void fetchData(), 5 * 60 * 1000);
+    const pollInterval = setInterval(() => void fetchData('poll'), 5 * 60 * 1000);
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
@@ -482,7 +496,7 @@ function useDashboardData() {
     };
   }, [fetchData]);
 
-  return { ...state, refresh: fetchData };
+  return { ...state, refresh: () => fetchData('manual') };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
