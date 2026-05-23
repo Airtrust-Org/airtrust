@@ -150,3 +150,9 @@ node_modules
 .tmp-deploy*/
 dist/
 build/
+
+# Local AI/agent tooling
+.agents/
+.claude/skills/
+.windsurf/skills/
+skills-lock.json
