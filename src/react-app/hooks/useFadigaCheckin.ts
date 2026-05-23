@@ -21,21 +21,29 @@ export interface FadigaCheckinItem {
 }
 
 export interface CheckinFormData {
+  reference_date?: string;
   data_checkin?: string;
-  hora_dormiu: string;
-  hora_acordou: string;
-  qualidade_sono: number;
-  kss_score: number;
+  hora_dormiu?: string;
+  hora_acordou?: string;
+  wake_time?: string;
+  horas_sono_24h?: number;
+  horas_sono_48h?: number;
+  qualidade_sono?: number;
+  kss_score?: number;
+  subjective_fatigue_level?: number;
+  sleepiness_level?: number;
   sintomas?: Record<string, number | string>;
-  apto: number;
+  apto?: number;
+  fit_for_duty?: boolean;
   motivo_inaptidao?: string;
   meds_ult_12h?: number;
   alcool_ult_12h?: number;
   risco_autoavaliado?: number;
+  free_text_notes?: string;
   observacoes?: string;
   jornada_inicio_prevista?: string;
-  aceite_termos: true;
-  aceite_privacidade: true;
+  aceite_termos?: true;
+  aceite_privacidade?: true;
 }
 
 export interface FadigaHistoricoResponse {
