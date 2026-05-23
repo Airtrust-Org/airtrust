@@ -9,6 +9,10 @@ const formatTimeInput = (value: string): string => {
   if (digits.length <= 2) return digits;
   return `${digits.slice(0, 2)}:${digits.slice(2)}`;
 };
+
+const isValidTimeValue = (value: string): boolean => {
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+};
 import { FuncionarioCombobox } from '../../components/simuladores/FuncionarioCombobox';
 import { ModalAtribuirQualificacao } from '@/react-app/components/modals/ModalAtribuirQualificacao';
 
@@ -74,6 +78,11 @@ export default function NovoAgendamento() {
 
     if (!funcionario) {
       setError('Selecione um funcionário');
+      return;
+    }
+
+    if (!isValidTimeValue(formData.hora_inicio) || !isValidTimeValue(formData.hora_fim)) {
+      setError('Informe horários válidos no formato HH:mm (00:00 até 23:59).');
       return;
     }
 
