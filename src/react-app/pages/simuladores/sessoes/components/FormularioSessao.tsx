@@ -4,6 +4,12 @@ import { toast } from 'sonner';
 
 import { X, Save } from 'lucide-react';
 
+const formatTimeInput = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+};
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -133,10 +139,13 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Hora Início *</label>
               <input
-                type="time"
+                type="text"
                 required
                 value={formData.hora_inicio}
-                onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, hora_inicio: formatTimeInput(e.target.value) })}
+                placeholder="HH:MM"
+                maxLength={5}
+                inputMode="numeric"
                 className="w-full  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
               />
             </div>
@@ -145,10 +154,13 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Hora Fim *</label>
               <input
-                type="time"
+                type="text"
                 required
                 value={formData.hora_fim}
-                onChange={(e) => setFormData({ ...formData, hora_fim: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, hora_fim: formatTimeInput(e.target.value) })}
+                placeholder="HH:MM"
+                maxLength={5}
+                inputMode="numeric"
                 className="w-full  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
               />
             </div>
