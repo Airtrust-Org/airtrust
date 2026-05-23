@@ -156,3 +156,6 @@ build/
 .claude/skills/
 .windsurf/skills/
 skills-lock.json
+
+# Local legacy SQL staging copy (classified version lives in scripts/validation)
+scripts/validar_sk76_inicial_12x22.sql
