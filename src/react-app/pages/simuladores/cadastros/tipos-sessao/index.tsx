@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex, getAllColors } from '@/react-app/utils/colorPalette';
 
@@ -141,7 +141,28 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-gray-500">Carregando...</div>;
+    return (
+      <div className="space-y-4">
+        <div className="animate-pulse">
+          <div className="h-7 w-40 rounded bg-slate-200 mb-2" />
+          <div className="h-4 w-64 rounded bg-slate-100" />
+        </div>
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+          <div className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-3 rounded bg-slate-200 dark:bg-slate-700" />
+            ))}
+          </div>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="px-4 py-3.5 grid grid-cols-4 gap-4 border-b border-gray-100 dark:border-slate-800">
+              {[...Array(4)].map((_, j) => (
+                <div key={j} className="h-4 rounded bg-slate-100 dark:bg-slate-800" style={{ width: `${55 + Math.sin(i + j) * 20}%` }} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -149,8 +170,8 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Tipos de Sessão</h2>
-          <p className="text-sm text-gray-500 mt-1">Classificação de sessões de treinamento</p>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Tipos de Sessão</h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Classificação de sessões de treinamento</p>
         </div>
         <Button onClick={() => abrirModal()}>
           <Plus className="w-4 h-4 mr-2" />
@@ -159,33 +180,33 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
       </div>
 
       {/* Tabela */}
-      <div className="bg-white rounded-lg border overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
         <table className="w-full">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Código
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Nome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Descrição
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
             {tipos.map((tipo) => {
               const corTipo = tipo.cor || getColorByIndex(tipo.id);
               return (
-              <tr key={tipo.id} className="hover:bg-gray-50 transition">
-                <td className="px-4 py-3">
+              <tr key={tipo.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                <td className="px-4 py-3.5">
                   <div className="flex items-center gap-2">
                     <div
-                      className="w-3 h-3 rounded-full border border-gray-300"
+                      className="w-3 h-3 rounded-full border border-gray-300 dark:border-slate-600"
                       style={{ backgroundColor: corTipo }}
                     />
                     <span
@@ -196,21 +217,21 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 font-medium text-sm">{tipo.nome}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{tipo.descricao || '-'}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3.5 font-medium text-sm text-gray-900 dark:text-slate-100">{tipo.nome}</td>
+                <td className="px-4 py-3.5 text-sm text-gray-600 dark:text-slate-400">{tipo.descricao || '-'}</td>
+                <td className="px-4 py-3.5">
                   <div className="flex items-center justify-center gap-2">
                     <Button
                       variant="secondary"
                       onClick={() => abrirModal(tipo)}
-                      className="text-xs px-3 py-1"
+                      className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
                     >
                       Editar
                     </Button>
                     <Button
                       variant="ghost"
                       onClick={() => excluir(tipo.id)}
-                      className="text-red-600 hover:bg-red-50 px-2 py-1"
+                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 px-2 py-1.5 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -224,23 +245,27 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
       </div>
 
       {tipos.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          <p>Nenhum tipo de sessão cadastrado</p>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-slate-800 mb-4">
+            <Inbox className="w-8 h-8 text-gray-400 dark:text-slate-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">Nenhum tipo de sessão cadastrado</h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">Cadastre tipos de sessão para classificar os modelos de treinamento.</p>
         </div>
       )}
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                 {editando ? 'Editar' : 'Novo'} Tipo de Sessão
               </h3>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Código*</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
                 <Input
                   value={formData.codigo}
                   onChange={(e) =>
@@ -250,7 +275,7 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome*</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
                 <Input
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -258,9 +283,9 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
                 <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   rows={3}
@@ -268,15 +293,15 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cor da Tag</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Cor da Tag</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
                       value={formData.cor}
                       onChange={(e) => setFormData({ ...formData, cor: e.target.value })}
-                      className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                      className="w-12 h-10 border border-gray-300 dark:border-slate-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs text-gray-500">{formData.cor}</span>
+                    <span className="text-xs text-gray-500 dark:text-slate-400">{formData.cor}</span>
                   </div>
                 </div>
                 <div
@@ -288,7 +313,7 @@ export default function CrudTiposSessao({ embedded = false }: Props = {}) {
                 />
               </div>
             </div>
-            <div className="p-6 border-t flex justify-end gap-3">
+            <div className="p-6 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-3">
               <Button variant="secondary" onClick={fecharModal}>
                 Cancelar
               </Button>

@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
-import { Plus, Trash2, Upload } from 'lucide-react';
+import { Plus, Trash2, Upload, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface Manobra {
@@ -211,7 +211,28 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-gray-500">Carregando...</div>;
+    return (
+      <div className="space-y-4">
+        <div className="animate-pulse">
+          <div className="h-7 w-40 rounded bg-slate-200 mb-2" />
+          <div className="h-4 w-64 rounded bg-slate-100" />
+        </div>
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+          <div className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 grid grid-cols-7 gap-4">
+            {[...Array(7)].map((_, i) => (
+              <div key={i} className="h-3 rounded bg-slate-200 dark:bg-slate-700" />
+            ))}
+          </div>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="px-4 py-3.5 grid grid-cols-7 gap-4 border-b border-gray-100 dark:border-slate-800">
+              {[...Array(7)].map((_, j) => (
+                <div key={j} className="h-4 rounded bg-slate-100 dark:bg-slate-800" style={{ width: `${55 + Math.sin(i + j) * 20}%` }} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -219,8 +240,8 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Manobras</h2>
-          <p className="text-sm text-gray-500 mt-1">Cadastro de manobras e exercícios</p>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Manobras</h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Cadastro de manobras e exercícios</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary">
@@ -244,7 +265,7 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
           />
         </div>
         <select
-          className="px-3 py-2 border border-gray-300 rounded-md min-w-[180px]"
+          className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md min-w-[180px] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
           value={filtroModelo}
           onChange={(e) => setFiltroModelo(e.target.value)}
         >
@@ -253,7 +274,7 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
           <option value="SK76">SK76</option>
         </select>
         <select
-          className="px-3 py-2 border border-gray-300 rounded-md min-w-[180px]"
+          className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md min-w-[180px] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
           value={filtroCategoria}
           onChange={(e) => setFiltroCategoria(e.target.value)}
         >
@@ -267,60 +288,60 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
       </div>
 
       {/* Tabela */}
-      <div className="bg-white rounded-lg border overflow-x-auto overflow-y-auto max-h-[600px]">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Código
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Modelo
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Nome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Descrição
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Categoria
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Dificuldade
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
             {manobrasFiltradas.map((m) => (
-              <tr key={m.id} className="hover:bg-gray-50 transition">
-                <td className="px-4 py-3">
-                  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs font-mono rounded">
+              <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                <td className="px-4 py-3.5">
+                  <span className="inline-block px-2 py-1 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-mono rounded">
                     {m.codigo}
                   </span>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3.5">
                   <span
                     className={`inline-block px-2 py-1 text-xs font-medium rounded ${
                       m.tipo_aeronave === 'SK76'
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-sky-100 text-sky-700'
+                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400'
+                        : 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400'
                     }`}
                   >
                     {m.tipo_aeronave || '–'}
                   </span>
                 </td>
-                <td className="px-4 py-3 font-medium text-sm">{m.nome}</td>
-                <td className="px-4 py-3 text-sm text-gray-700 max-w-xl truncate">
+                <td className="px-4 py-3.5 font-medium text-sm text-gray-900 dark:text-slate-100">{m.nome}</td>
+                <td className="px-4 py-3.5 text-sm text-gray-700 dark:text-slate-400 max-w-xl truncate">
                   {m.descricao || '-'}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
+                <td className="px-4 py-3.5 text-sm text-gray-600 dark:text-slate-400">
                   {getNomeCategoria(m.categoria) || '-'}
                 </td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-3.5 text-center">
                   <span
                     className={`px-2 py-1 rounded-full text-xs font-medium ${getDificuldadeColor(
                       m.nivel_dificuldade,
@@ -329,19 +350,19 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
                     {m.nivel_dificuldade || '-'}
                   </span>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3.5">
                   <div className="flex items-center justify-center gap-2">
                     <Button
                       variant="secondary"
                       onClick={() => abrirModal(m)}
-                      className="text-xs px-3 py-1"
+                      className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
                     >
                       Editar
                     </Button>
                     <Button
                       variant="ghost"
                       onClick={() => excluir(m.id)}
-                      className="text-red-600 hover:bg-red-50 px-2 py-1"
+                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 px-2 py-1.5 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -354,22 +375,26 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
       </div>
 
       {manobrasFiltradas.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          <p>Nenhuma manobra encontrada</p>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-slate-800 mb-4">
+            <Inbox className="w-8 h-8 text-gray-400 dark:text-slate-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">Nenhuma manobra encontrada</h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">Cadastre manobras e exercícios para compor os modelos de sessão.</p>
         </div>
       )}
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold">{editando ? 'Editar' : 'Nova'} Manobra</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{editando ? 'Editar' : 'Nova'} Manobra</h3>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Código*</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
                   <Input
                     value={formData.codigo || ''}
                     onChange={(e) =>
@@ -378,11 +403,11 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Equipamento
                   </label>
                   <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={formData.tipo_aeronave || ''}
                     onChange={(e) => setFormData({ ...formData, tipo_aeronave: e.target.value })}
                   >
@@ -393,9 +418,9 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.categoria || ''}
                   onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
                 >
@@ -408,27 +433,27 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome*</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
                 <Input
                   value={formData.nome || ''}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
                 <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao || ''}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   rows={3}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                   Nível de Dificuldade
                 </label>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.nivel_dificuldade || 'BASICO'}
                   onChange={(e) =>
                     setFormData({
@@ -443,7 +468,7 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
                 </select>
               </div>
             </div>
-            <div className="p-6 border-t flex justify-end gap-3">
+            <div className="p-6 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-3">
               <Button variant="secondary" onClick={fecharModal}>
                 Cancelar
               </Button>

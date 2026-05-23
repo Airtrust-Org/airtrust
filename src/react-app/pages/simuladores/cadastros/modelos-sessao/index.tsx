@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
-import { Plus, Trash2, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, X, ChevronUp, ChevronDown, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex } from '@/react-app/utils/colorPalette';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
@@ -493,15 +493,36 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
     });
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-gray-500">Carregando...</div>;
+    return (
+      <div className="space-y-4">
+        <div className="animate-pulse">
+          <div className="h-7 w-48 rounded bg-slate-200 mb-2" />
+          <div className="h-4 w-64 rounded bg-slate-100" />
+        </div>
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+          <div className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 grid grid-cols-8 gap-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-3 rounded bg-slate-200 dark:bg-slate-700" />
+            ))}
+          </div>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="px-4 py-3.5 grid grid-cols-8 gap-4 border-b border-gray-100 dark:border-slate-800">
+              {[...Array(8)].map((_, j) => (
+                <div key={j} className="h-4 rounded bg-slate-100 dark:bg-slate-800" style={{ width: `${55 + Math.sin(i + j) * 20}%` }} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Modelos de Sessão</h2>
-          <p className="text-sm text-gray-500 mt-1">Configure modelos com suas manobras e ordem</p>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Modelos de Sessão</h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Configure modelos com suas manobras e ordem</p>
         </div>
         <Button onClick={() => abrirModal()}>
           <Plus className="w-4 h-4 mr-2" />
@@ -510,14 +531,14 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
       </div>
 
       {/* Filtros e Ordenação */}
-      <div className="bg-white rounded-lg border p-4 space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Dispositivo</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Dispositivo</label>
             <select
               value={filtroTipoDispositivo || ''}
               onChange={(e) => setFiltroTipoDispositivo((e.target.value as TipoDispositivo) || null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
             >
               <option value="">Todos</option>
               <option value="SIMULADOR">Simulador</option>
@@ -526,11 +547,11 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Tipo</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Filtrar por Tipo</label>
             <select
               value={filtroTipoSessao || ''}
               onChange={(e) => setFiltroTipoSessao(e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
             >
               <option value="">Todos os tipos</option>
               {tiposSessao.map((t) => (
@@ -542,13 +563,13 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
               Filtrar por Equipamento
             </label>
             <select
               value={filtroModeloAeronave || ''}
               onChange={(e) => setFiltroModeloAeronave(e.target.value || null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
             >
               <option value="">Todos os equipamentos</option>
               {[...new Set(modelos.map((m) => m.modelo_aeronave).filter(Boolean))].map((modelo) => (
@@ -560,11 +581,11 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ordenar por</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Ordenar por</label>
             <select
               value={ordenacao}
               onChange={(e) => setOrdenacao(e.target.value as 'nome' | 'tipo' | 'aeronave')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
             >
               <option value="nome">Nome do Modelo</option>
               <option value="tipo">Tipo de Sessão</option>
@@ -587,75 +608,75 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
             </Button>
           </div>
         </div>
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-gray-600 dark:text-slate-400">
           Exibindo <span className="font-semibold">{modelosFiltrados.length}</span> de{' '}
           <span className="font-semibold">{modelos.length}</span> modelos
         </div>
       </div>
 
       {/* Lista de Modelos */}
-      <div className="bg-white rounded-lg border overflow-x-auto overflow-y-auto max-h-[600px]">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Código
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Nome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase min-w-[110px]">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase min-w-[110px]">
                 Dispositivo
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Tipo
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Modelo
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Duração
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Manobras
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Ações
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
             {modelosFiltrados.map((modelo) => {
               const tipoInfo = tiposSessao.find((t) => t.id === modelo.tipo_sessao_id);
               return (
-                <tr key={modelo.id} className="hover:bg-gray-50 transition">
-                  <td className="px-4 py-3">
-                    <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs font-mono rounded">
+                <tr key={modelo.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <td className="px-4 py-3.5">
+                    <span className="inline-block px-2 py-1 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-mono rounded">
                       {modelo.codigo}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3.5">
                     <div>
-                      <p className="font-medium text-sm">{modelo.nome}</p>
+                      <p className="font-medium text-sm text-gray-900 dark:text-slate-100">{modelo.nome}</p>
                       {modelo.descricao && (
-                        <p className="text-xs text-gray-500 mt-0.5 truncate max-w-md">
+                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 truncate max-w-md">
                           {modelo.descricao}
                         </p>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3.5">
                     {(modelo.tipo || 'SIMULADOR') === 'AERONAVE' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-400">
                         ✈️ Voo
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400">
                         🖥️ Simulador
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3.5">
                     {tipoInfo ? (
                       <span
                         className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white"
@@ -664,33 +685,33 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                         {modelo.tipo_sessao_nome || '-'}
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-600">-</span>
+                      <span className="text-xs text-gray-600 dark:text-slate-400">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-gray-600">{modelo.modelo_aeronave || '-'}</span>
+                  <td className="px-4 py-3.5">
+                    <span className="text-xs text-gray-600 dark:text-slate-400">{modelo.modelo_aeronave || '-'}</span>
                   </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="text-sm">{modelo.duracao_estimada || 120} min</span>
+                  <td className="px-4 py-3.5 text-center">
+                    <span className="text-sm text-gray-900 dark:text-slate-100">{modelo.duracao_estimada || 120} min</span>
                   </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="inline-block px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded">
+                  <td className="px-4 py-3.5 text-center">
+                    <span className="inline-block px-2 py-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold rounded">
                       {modelo.total_manobras || 0}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3.5">
                     <div className="flex items-center justify-center gap-2">
                       <Button
                         variant="secondary"
                         onClick={() => abrirModal(modelo)}
-                        className="text-xs px-3 py-1"
+                        className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
                       >
                         Editar
                       </Button>
                       <Button
                         variant="ghost"
                         onClick={() => excluir(modelo.id)}
-                        className="text-red-600 hover:bg-red-50 px-2 py-1"
+                        className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 px-2 py-1.5 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -704,32 +725,40 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
       </div>
 
       {modelosFiltrados.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          <p>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-slate-800 mb-4">
+            <Inbox className="w-8 h-8 text-gray-400 dark:text-slate-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">
             {modelos.length === 0
               ? 'Nenhum modelo cadastrado'
               : 'Nenhum modelo corresponde aos filtros'}
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">
+            {modelos.length === 0
+              ? 'Crie modelos de sessão para padronizar os treinamentos.'
+              : 'Ajuste os filtros para encontrar modelos de sessão específicos.'}
           </p>
         </div>
       )}
 
       {/* Modal Principal */}
       {modalAberto && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b sticky top-0 bg-white">
-              <h3 className="text-lg font-semibold">{modoEdicao ? 'Editar' : 'Novo'} Modelo</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setModalAberto(false)}>
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{modoEdicao ? 'Editar' : 'Novo'} Modelo</h3>
             </div>
 
             <div className="p-6 space-y-4">
               {carregandoDetalhesModelo && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                <div className="rounded-lg border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 px-4 py-3 text-sm text-blue-800 dark:text-blue-300">
                   Carregando checks FAP e manobras salvas do modelo...
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Código*</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
                   <Input
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value.toUpperCase())}
@@ -737,8 +766,8 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Duração (min)*
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    Duração (min) <span className="text-red-500">*</span>
                   </label>
                   <Input
                     type="number"
@@ -749,14 +778,14 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome*</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
                 <Input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={200} />
               </div>
 
               {/* Tipo de dispositivo: Simulador ou Aeronave */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Dispositivo*
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  Dispositivo <span className="text-red-500">*</span>
                 </label>
                 <div className="flex gap-3">
                   {(['SIMULADOR', 'AERONAVE'] as TipoDispositivo[]).map((opt) => (
@@ -767,9 +796,9 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                       className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition-all ${
                         tipoDispositivo === opt
                           ? opt === 'AERONAVE'
-                            ? 'border-sky-500 bg-sky-50 text-sky-700'
-                            : 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-gray-300 hover:border-gray-400 text-gray-600'
+                            ? 'border-sky-500 bg-sky-50 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300'
+                            : 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
+                          : 'border-gray-300 dark:border-slate-600 hover:border-gray-400 dark:hover:border-slate-500 text-gray-600 dark:text-slate-400'
                       }`}
                     >
                       {opt === 'SIMULADOR' ? '🖥️ Simulador' : '✈️ Aeronave (Voo Real)'}
@@ -780,11 +809,11 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tipo de Sessão*
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    Tipo de Sessão <span className="text-red-500">*</span>
                   </label>
                   <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={tipoSessaoId || ''}
                     onChange={(e) => setTipoSessaoId(Number(e.target.value))}
                   >
@@ -798,11 +827,11 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     Equipamento
                   </label>
                   <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                     value={tipoAeronave || ''}
                     onChange={(e) => setTipoAeronave(e.target.value || null)}
                   >
@@ -817,9 +846,9 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
                 <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
                   rows={3}
@@ -828,7 +857,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
               </div>
 
               {/* Checkbox Gera Qualificação */}
-              <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-lg">
                 <input
                   type="checkbox"
                   id="geraQualificacao"
@@ -837,8 +866,8 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                   className="w-5 h-5 text-blue-600 bg-white border-gray-300 rounded focus:ring-primary/30"
                 />
                 <label htmlFor="geraQualificacao" className="flex-1 cursor-pointer">
-                  <span className="font-medium text-gray-900">Gera Qualificação</span>
-                  <p className="text-xs text-gray-600 mt-0.5">
+                  <span className="font-medium text-gray-900 dark:text-slate-100">Gera Qualificação</span>
+                  <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">
                     Ao finalizar esta sessão, o botão "Gerar Qualificação" será exibido na ficha de
                     avaliação
                   </p>
@@ -847,13 +876,13 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
 
               {/* Qualificação e FAPs (só aparece quando Gera Qualificação está ativo) */}
               {geraQualificacao && (
-                <div className="space-y-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="space-y-4 p-4 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-lg">
                   <div>
-                    <label className="block text-sm font-semibold text-green-900 mb-1">
+                    <label className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-1">
                       Qualificação Principal Gerada
                     </label>
                     <select
-                      className="w-full px-3 py-2 border border-green-300 rounded-md text-sm bg-white"
+                      className="w-full px-3 py-2 border border-green-300 dark:border-green-500/30 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                       value={qualificacaoTipoId || ''}
                       onChange={(e) =>
                         setQualificacaoTipoId(e.target.value ? Number(e.target.value) : null)
@@ -867,7 +896,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-green-700 mt-1">
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-1">
                       Esta qualificação será gerada automaticamente ao clicar em "Gerar
                       Qualificação"
                     </p>
@@ -875,10 +904,10 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
 
                   {filterCompatibleChecks(tiposCheckFAP, tipoAeronave).length > 0 && (
                     <div>
-                      <label className="block text-sm font-semibold text-green-900 mb-2">
+                      <label className="block text-sm font-semibold text-green-900 dark:text-green-300 mb-2">
                         Checks FAP Padrão desta Sessão
                       </label>
-                      <p className="text-xs text-green-700 mb-2">
+                      <p className="text-xs text-green-700 dark:text-green-400 mb-2">
                         Estes checks FAP serão pré-selecionados ao criar uma sessão com este modelo.
                         As FAPs aprovadas também geram qualificações automáticas.
                       </p>
@@ -886,7 +915,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                         {filterCompatibleChecks(tiposCheckFAP, tipoAeronave).map((check) => (
                           <label
                             key={check.id}
-                            className="flex items-center gap-2 p-2 hover:bg-green-100 rounded cursor-pointer"
+                            className="flex items-center gap-2 p-2 hover:bg-green-100 dark:hover:bg-green-500/20 rounded cursor-pointer"
                           >
                             <input
                               type="checkbox"
@@ -905,10 +934,10 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                               className="w-3.5 h-3.5 text-green-600 border-green-300 rounded"
                             />
                             <div>
-                              <span className="text-xs font-mono bg-green-200 text-green-800 px-1.5 py-0.5 rounded">
+                              <span className="text-xs font-mono bg-green-200 dark:bg-green-500/30 text-green-800 dark:text-green-300 px-1.5 py-0.5 rounded">
                                 {check.codigo}
                               </span>
-                              <span className="text-sm text-green-900 ml-1.5">{check.nome}</span>
+                              <span className="text-sm text-green-900 dark:text-green-300 ml-1.5">{check.nome}</span>
                             </div>
                           </label>
                         ))}
@@ -918,9 +947,9 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                 </div>
               )}
 
-              <div className="border-t pt-4">
+              <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
                 <div className="flex justify-between items-center mb-3">
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
                     Manobras ({manobrasSelecionadas.length})
                   </label>
                   <Button variant="secondary" onClick={() => setModalManobras(true)}>
@@ -934,17 +963,17 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                     {manobrasSelecionadas.map((m, idx) => (
                       <div
                         key={m.manobra_id}
-                        className="flex items-center gap-2 bg-gray-50 p-2 rounded border"
+                        className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800 p-2 rounded border border-gray-200 dark:border-slate-700"
                       >
-                        <span className="text-xs font-mono text-gray-500 w-6">{m.ordem}</span>
-                        <span className="text-xs font-mono bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">
+                        <span className="text-xs font-mono text-gray-500 dark:text-slate-400 w-6">{m.ordem}</span>
+                        <span className="text-xs font-mono bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded shrink-0">
                           {m.manobra_codigo}
                         </span>
-                        <span className="text-sm flex-1 truncate">
+                        <span className="text-sm flex-1 truncate text-gray-900 dark:text-slate-100">
                           {m.manobra_nome || m.manobra_descricao}
                         </span>
                         {/* Seletor A / B / AB */}
-                        <div className="flex rounded overflow-hidden border border-gray-300 shrink-0 text-xs font-bold">
+                        <div className="flex rounded overflow-hidden border border-gray-300 dark:border-slate-600 shrink-0 text-xs font-bold">
                           {(['A', 'B', 'AB'] as Tripulante[]).map((opt) => (
                             <button
                               key={opt}
@@ -960,7 +989,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                                     : opt === 'B'
                                       ? 'bg-orange-500 text-white'
                                       : 'bg-purple-600 text-white'
-                                  : 'bg-white text-gray-500 hover:bg-gray-100'
+                                  : 'bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700'
                               }`}
                             >
                               {opt}
@@ -971,20 +1000,20 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                           <button
                             onClick={() => moverManobra(idx, 'up')}
                             disabled={idx === 0}
-                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-30"
+                            className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded disabled:opacity-30"
                           >
                             <ChevronUp className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => moverManobra(idx, 'down')}
                             disabled={idx === manobrasSelecionadas.length - 1}
-                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-30"
+                            className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded disabled:opacity-30"
                           >
                             <ChevronDown className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => removerManobra(m.manobra_id)}
-                            className="p-1 hover:bg-red-100 text-red-600 rounded"
+                            className="p-1 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 rounded"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -993,14 +1022,14 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 text-center py-4">
+                  <p className="text-sm text-gray-500 dark:text-slate-400 text-center py-4">
                     Nenhuma manobra adicionada
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="p-6 border-t flex justify-end gap-2">
+            <div className="p-6 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setModalAberto(false)}>
                 Cancelar
               </Button>
@@ -1012,10 +1041,10 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
 
       {/* Modal Manobras */}
       {modalManobras && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold">Adicionar Manobras</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-fade-in" onClick={() => setModalManobras(false)}>
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Adicionar Manobras</h3>
             </div>
 
             <div className="p-6 space-y-4 flex-1 overflow-y-auto">
@@ -1033,23 +1062,23 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                       key={m.id}
                       onClick={() => !adicionada && adicionarManobra(m)}
                       disabled={adicionada}
-                      className={`w-full text-left p-3 rounded border ${
+                      className={`w-full text-left p-3 rounded border transition-colors ${
                         adicionada
-                          ? 'bg-gray-100 border-gray-300 opacity-50 cursor-not-allowed'
-                          : 'bg-white hover:border-blue-400 hover:bg-blue-50'
+                          ? 'bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-slate-700 opacity-50 cursor-not-allowed'
+                          : 'bg-white dark:bg-slate-800 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 border-gray-200 dark:border-slate-700'
                       }`}
                     >
-                      <span className="font-mono text-xs bg-gray-200 px-2 py-0.5 rounded">
+                      <span className="font-mono text-xs bg-gray-200 dark:bg-slate-700 px-2 py-0.5 rounded text-gray-800 dark:text-slate-300">
                         {m.codigo}
                       </span>
-                      <p className="text-sm mt-1">{m.nome || m.descricao}</p>
+                      <p className="text-sm mt-1 text-gray-900 dark:text-slate-100">{m.nome || m.descricao}</p>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="p-6 border-t">
+            <div className="p-6 border-t border-gray-200 dark:border-slate-700">
               <Button onClick={() => setModalManobras(false)} className="w-full">
                 Fechar
               </Button>

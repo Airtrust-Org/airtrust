@@ -3,7 +3,7 @@
  * Os cadastros abrem DENTRO da aba, não como páginas separadas
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import {
   Plane,
@@ -11,10 +11,56 @@ import {
   ClipboardCheck,
   FileText,
   BookOpen,
-  ChevronLeft,
   ArrowUpRight,
+  ArrowLeft,
 } from 'lucide-react';
 import { SimuladoresCard } from '../components/SimuladoresLayout';
+
+function useCountUp(target: number, duration = 600, start = true) {
+  const [value, setValue] = useState(0);
+  const rafRef = useRef<number>(0);
+  const startTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!start || target === 0) {
+      setValue(target);
+      return;
+    }
+    startTimeRef.current = performance.now();
+    const animate = (now: number) => {
+      const elapsed = now - startTimeRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(eased * target));
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animate);
+      }
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, duration, start]);
+
+  return value;
+}
+
+function SkeletonCard() {
+  return (
+    <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="h-11 w-11 rounded-2xl bg-slate-200" />
+        <div className="h-4 w-4 rounded bg-slate-200" />
+      </div>
+      <div className="mt-4 space-y-2">
+        <div className="h-5 w-28 rounded bg-slate-200" />
+        <div className="h-4 w-48 rounded bg-slate-100" />
+      </div>
+      <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-4">
+        <div className="h-8 w-16 rounded bg-slate-200" />
+        <div className="h-4 w-24 rounded bg-slate-100" />
+      </div>
+    </div>
+  );
+}
 
 // Import direto dos componentes de cadastro (sem lazy loading para evitar erros de fetch)
 import SimuladoresPage from '../cadastros/simuladores/index';
@@ -35,6 +81,7 @@ interface GestaoStats {
 
 export default function TabGestaoWrapper() {
   const [loading, setLoading] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
   const [subView, setSubView] = useState<SubView>('menu');
   const [stats, setStats] = useState<GestaoStats>({
     simuladores: 0,
@@ -44,9 +91,23 @@ export default function TabGestaoWrapper() {
     modelosSessao: 0,
   });
 
+  const countSim = useCountUp(stats.simuladores, 500, dataReady);
+  const countMan = useCountUp(stats.manobras, 500, dataReady);
+  const countCat = useCountUp(stats.categorias, 500, dataReady);
+  const countTip = useCountUp(stats.tiposSessao, 500, dataReady);
+  const countMod = useCountUp(stats.modelosSessao, 500, dataReady);
+  const countMap: Record<string, number> = {
+    simuladores: countSim,
+    manobras: countMan,
+    categorias: countCat,
+    tiposSessao: countTip,
+    modelosSessao: countMod,
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
+      setDataReady(false);
       const _gt = getAccessToken();
       const _gh = _gt ? { Authorization: `Bearer ${_gt}` } : {};
       const noStore = { headers: _gh, cache: 'no-store' as RequestCache };
@@ -73,6 +134,7 @@ export default function TabGestaoWrapper() {
         tiposSessao: tiposData.success ? tiposData.data?.length || 0 : 0,
         modelosSessao: modelosData.success ? modelosData.data?.length || 0 : 0,
       });
+      setDataReady(true);
     } catch (error) {
       console.error('Erro ao carregar dados de gestao:', error);
     } finally {
@@ -143,16 +205,16 @@ export default function TabGestaoWrapper() {
   // Se está em uma sub-view, renderiza o componente correspondente
   if (subView !== 'menu') {
     return (
-      <div className="space-y-4">
+      <div className="animate-fade-in">
         {/* Botão Voltar */}
         <button
           onClick={() => {
             setSubView('menu');
-            fetchData(); // Recarrega stats ao voltar
+            fetchData();
           }}
-          className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors"
+          className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:border-slate-600 mb-6"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4" />
           Voltar para Gestão
         </button>
 
@@ -182,6 +244,27 @@ export default function TabGestaoWrapper() {
           </p>
         </div>
 
+        {loading && (
+          <div className="grid gap-4 p-6 xl:grid-cols-2">
+            <div className="space-y-4">
+              <div className="h-4 w-40 rounded bg-slate-200 animate-pulse" />
+              <div className="grid gap-4">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="h-4 w-40 rounded bg-slate-200 animate-pulse" />
+              <div className="grid gap-4">
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && (
         <div className="grid gap-4 p-6 xl:grid-cols-2">
           <section className="space-y-4">
             <div>
@@ -217,7 +300,7 @@ export default function TabGestaoWrapper() {
                       </div>
                       <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-4">
                         <div>
-                          <span className="text-2xl font-bold text-slate-900">{card.valor}</span>
+                          <span className="text-2xl font-bold text-slate-900 tabular-nums">{countMap[card.id]}</span>
                           <span className="ml-2 text-xs font-medium text-slate-500">
                             {card.label}
                           </span>
@@ -264,7 +347,7 @@ export default function TabGestaoWrapper() {
                       </div>
                       <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-4">
                         <div>
-                          <span className="text-2xl font-bold text-slate-900">{card.valor}</span>
+                          <span className="text-2xl font-bold text-slate-900 tabular-nums">{countMap[card.id]}</span>
                           <span className="ml-2 text-xs font-medium text-slate-500">
                             {card.label}
                           </span>
@@ -277,6 +360,7 @@ export default function TabGestaoWrapper() {
             </div>
           </section>
         </div>
+        )}
       </SimuladoresCard>
     </div>
   );
