@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
-import { Plus, Trash2, X, ChevronUp, ChevronDown, Inbox } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, X, ChevronUp, ChevronDown, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex } from '@/react-app/utils/colorPalette';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
@@ -78,7 +78,7 @@ interface ModelosSessaoPageProps {
   embedded?: boolean;
 }
 
-export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPageProps) {
+export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosSessaoPageProps) {
   const [modelos, setModelos] = useState<ModeloSessao[]>([]);
   const [tiposSessao, setTiposSessao] = useState<TipoSessao[]>([]);
   const [modelosAeronave, setModelosAeronave] = useState<ModeloAeronave[]>([]);
@@ -521,6 +521,12 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
+          {embedded && onBack && (
+            <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1">
+              <ArrowLeft className="w-3 h-3" />
+              Gestão
+            </button>
+          )}
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Modelos de Sessão</h2>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Configure modelos com suas manobras e ordem</p>
         </div>
@@ -542,7 +548,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
             >
               <option value="">Todos</option>
               <option value="SIMULADOR">Simulador</option>
-              <option value="AERONAVE">Voo</option>
+              <option value="AERONAVE">Aeronave</option>
             </select>
           </div>
 
@@ -625,7 +631,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Nome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase min-w-[110px]">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase min-w-[120px]">
                 Dispositivo
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
@@ -651,7 +657,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
               return (
                 <tr key={modelo.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
                   <td className="px-4 py-3.5">
-                    <span className="inline-block px-2 py-1 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-mono rounded">
+                    <span className="inline-flex items-center whitespace-nowrap px-2 py-1 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-mono rounded">
                       {modelo.codigo}
                     </span>
                   </td>
@@ -667,12 +673,12 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                   </td>
                   <td className="px-4 py-3.5">
                     {(modelo.tipo || 'SIMULADOR') === 'AERONAVE' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-400">
-                        ✈️ Voo
+                      <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-medium bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-400">
+                        Aeronave
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400">
-                        🖥️ Simulador
+                      <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400">
+                        Simulador
                       </span>
                     )}
                   </td>
@@ -695,7 +701,7 @@ export default function ModelosSessaoPage({ embedded = false }: ModelosSessaoPag
                     <span className="text-sm text-gray-900 dark:text-slate-100">{modelo.duracao_estimada || 120} min</span>
                   </td>
                   <td className="px-4 py-3.5 text-center">
-                    <span className="inline-block px-2 py-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold rounded">
+                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold rounded">
                       {modelo.total_manobras || 0}
                     </span>
                   </td>

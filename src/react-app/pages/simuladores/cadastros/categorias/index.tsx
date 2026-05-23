@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
-import { Plus, Trash2, Inbox } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface Categoria {
@@ -22,7 +22,7 @@ interface Props {
   embedded?: boolean;
 }
 
-export default function CrudCategorias({ embedded = false }: Props = {}) {
+export default function CrudCategorias({ embedded = false, onBack }: Props = {}) {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -161,6 +161,12 @@ export default function CrudCategorias({ embedded = false }: Props = {}) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
+          {embedded && onBack && (
+            <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1">
+              <ArrowLeft className="w-3 h-3" />
+              Gestão
+            </button>
+          )}
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Categorias de Manobras</h2>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Classificação de manobras e exercícios</p>
         </div>

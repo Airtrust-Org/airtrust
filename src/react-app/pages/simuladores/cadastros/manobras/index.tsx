@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
-import { Plus, Trash2, Upload, Inbox } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Upload, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface Manobra {
@@ -33,7 +33,7 @@ interface Props {
   embedded?: boolean;
 }
 
-export default function CrudManobras({ embedded = false }: Props = {}) {
+export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
   const [manobras, setManobras] = useState<Manobra[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -240,6 +240,12 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
+          {embedded && onBack && (
+            <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1">
+              <ArrowLeft className="w-3 h-3" />
+              Gestão
+            </button>
+          )}
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Manobras</h2>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Cadastro de manobras e exercícios</p>
         </div>
@@ -256,35 +262,62 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-4 flex-wrap">
-        <div className="flex-1 min-w-[200px]">
-          <Input
-            placeholder="Buscar por código ou nome..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Buscar</label>
+            <Input
+              placeholder="Código ou nome..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Equipamento</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
+              value={filtroModelo}
+              onChange={(e) => setFiltroModelo(e.target.value)}
+            >
+              <option value="">Todos os modelos</option>
+              <option value="AW139">AW139</option>
+              <option value="SK76">SK76</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Categoria</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
+              value={filtroCategoria}
+              onChange={(e) => setFiltroCategoria(e.target.value)}
+            >
+              <option value="">Todas as categorias</option>
+              {categorias.map((cat) => (
+                <option key={cat.id} value={cat.codigo}>
+                  {cat.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setFiltroModelo('');
+                setFiltroCategoria('');
+                setBusca('');
+              }}
+              className="w-full"
+            >
+              Limpar Filtros
+            </Button>
+          </div>
         </div>
-        <select
-          className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md min-w-[180px] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
-          value={filtroModelo}
-          onChange={(e) => setFiltroModelo(e.target.value)}
-        >
-          <option value="">Todos os modelos</option>
-          <option value="AW139">AW139</option>
-          <option value="SK76">SK76</option>
-        </select>
-        <select
-          className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md min-w-[180px] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
-          value={filtroCategoria}
-          onChange={(e) => setFiltroCategoria(e.target.value)}
-        >
-          <option value="">Todas as categorias</option>
-          {categorias.map((cat) => (
-            <option key={cat.id} value={cat.codigo}>
-              {cat.nome}
-            </option>
-          ))}
-        </select>
+        <div className="text-sm text-gray-600 dark:text-slate-400">
+          Exibindo <span className="font-semibold">{manobrasFiltradas.length}</span> de{' '}
+          <span className="font-semibold">{manobras.length}</span> manobras
+        </div>
       </div>
 
       {/* Tabela */}
@@ -319,13 +352,13 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
             {manobrasFiltradas.map((m) => (
               <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
                 <td className="px-4 py-3.5">
-                  <span className="inline-block px-2 py-1 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-mono rounded">
+                  <span className="inline-flex items-center whitespace-nowrap px-2 py-1 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-mono rounded">
                     {m.codigo}
                   </span>
                 </td>
                 <td className="px-4 py-3.5">
                   <span
-                    className={`inline-block px-2 py-1 text-xs font-medium rounded ${
+                    className={`inline-flex items-center whitespace-nowrap px-2 py-1 text-xs font-medium rounded ${
                       m.tipo_aeronave === 'SK76'
                         ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400'
                         : 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400'
@@ -343,7 +376,7 @@ export default function CrudManobras({ embedded = false }: Props = {}) {
                 </td>
                 <td className="px-4 py-3.5 text-center">
                   <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${getDificuldadeColor(
+                    className={`inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-medium ${getDificuldadeColor(
                       m.nivel_dificuldade,
                     )}`}
                   >
