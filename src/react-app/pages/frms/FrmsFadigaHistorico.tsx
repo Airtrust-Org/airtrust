@@ -140,7 +140,7 @@ export default function FrmsFadigaHistorico() {
                     <th className="px-2 py-2">KSS</th>
                     <th className="px-2 py-2">Sono</th>
                     <th className="px-2 py-2">Score</th>
-                    <th className="px-2 py-2">Nível</th>
+                    <th className="px-2 py-2">Nível de alerta informado</th>
                     <th className="px-2 py-2">Status</th>
                     <th className="px-2 py-2">FRAT</th>
                   </tr>

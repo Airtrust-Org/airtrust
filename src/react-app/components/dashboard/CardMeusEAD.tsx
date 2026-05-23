@@ -128,7 +128,7 @@ function LinhaMatricula({
           : 'border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200'
       }`}
     >
-      <div className="px-4 py-3">
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3">
         <div className="flex items-start gap-3">
           {/* ícone de status */}
           <StatusIcon status={matricula.status} />
@@ -175,7 +175,7 @@ function LinhaMatricula({
         {/* barra de progresso */}
         {matricula.status !== 'NAO_INICIADO' && (
           <div className="mt-1.5 flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden max-w-[220px]">
+            <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden max-w-[160px] sm:max-w-[220px]">
               <div
                 className={`h-full rounded-full transition-all ${
                   matricula.status === 'CONCLUIDO' ? 'bg-emerald-500' : 'bg-blue-500'
@@ -233,16 +233,17 @@ export function CardMeusEAD() {
   return (
     <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
       {/* cabeçalho */}
-      <div className="px-4 py-4 sm:px-5 sm:py-5 border-b border-slate-100 flex items-start justify-between gap-3">
-        <div>
-          <div className="mt-2 inline-flex items-center gap-2">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
-              <BookOpen className="w-5 h-5" />
-            </span>
-            <h2 className="text-lg font-semibold text-slate-900">Meus Treinamentos EAD</h2>
+      <div className="px-4 py-4 sm:px-5 sm:py-5 border-b border-slate-100">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-2">
+              <span className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
+                <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
+              </span>
+              <h2 className="text-base sm:text-lg font-semibold text-slate-900">Meus Treinamentos EAD</h2>
+            </div>
+            <p className="mt-1 text-xs sm:text-sm text-slate-500">Seus cursos, progresso e certificados.</p>
           </div>
-          <p className="mt-1 text-sm text-slate-500">Seus cursos, progresso e certificados.</p>
-        </div>
         {lista.length > 0 && (
           <button
             onClick={() => navigate('/lms')}
@@ -253,13 +254,14 @@ export function CardMeusEAD() {
           </button>
         )}
       </div>
+      </div>
 
       {/* corpo */}
       <div className="p-4 sm:p-5">
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 rounded-xl bg-slate-100 animate-pulse" />
+              <div key={i} className="h-12 sm:h-14 rounded-xl bg-slate-100 animate-pulse" />
             ))}
           </div>
         ) : error ? (
@@ -267,7 +269,7 @@ export function CardMeusEAD() {
             Erro ao carregar treinamentos.
           </div>
         ) : lista.length === 0 ? (
-          <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-8 text-center">
+          <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-6 sm:py-8 text-center">
             <Award className="w-8 h-8 text-slate-300 mx-auto mb-2" />
             <p className="text-sm font-medium text-slate-600">Nenhum treinamento EAD encontrado.</p>
             <p className="text-xs text-slate-400 mt-1">
