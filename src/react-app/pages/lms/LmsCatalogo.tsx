@@ -668,10 +668,10 @@ function CourseDrawer({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px]" onClick={safeClose}>
+    <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px] animate-fade-in" onClick={safeClose}>
       <div className="flex min-h-full w-full overflow-y-auto overscroll-y-contain p-3 sm:p-6">
         <div
-          className="relative mx-auto flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:my-auto sm:max-h-[calc(100dvh-3rem)]"
+          className="relative mx-auto flex min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:my-auto sm:max-h-[calc(100dvh-3rem)] animate-scale-in"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">

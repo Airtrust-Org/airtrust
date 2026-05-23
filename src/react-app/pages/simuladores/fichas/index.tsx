@@ -24,6 +24,7 @@ import {
   Eye,
   FileDown,
   Filter,
+  Loader2,
   PenTool,
   Printer,
   Search,
@@ -774,20 +775,20 @@ export function FichasAvaliacaoContent() {
     return (
       <button
         onClick={() => handleSort(column)}
-        className={`flex items-center gap-1 text-xs font-medium text-gray-600 uppercase tracking-wider hover:text-gray-900 transition-colors ${className}`}
+        className={`group flex items-center gap-1 text-xs font-medium text-gray-600 uppercase tracking-wider hover:text-gray-900 transition-colors ${className}`}
       >
         {label}
         <span className="flex flex-col">
           <ChevronUp
             size={12}
-            className={`-mb-1 ${
-              isActive && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-300'
+            className={`-mb-1 transition-colors duration-200 ${
+              isActive && sortDirection === 'asc' ? 'text-blue-600 scale-110' : 'text-gray-300 group-hover:text-gray-400'
             }`}
           />
           <ChevronDown
             size={12}
-            className={`${
-              isActive && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-300'
+            className={`transition-colors duration-200 ${
+              isActive && sortDirection === 'desc' ? 'text-blue-600 scale-110' : 'text-gray-300 group-hover:text-gray-400'
             }`}
           />
         </span>
@@ -861,10 +862,14 @@ export function FichasAvaliacaoContent() {
           <button
             onClick={() => handleDeletar(ficha)}
             disabled={deletandoId === ficha.id}
-            className={`${compact ? 'h-10 w-10 rounded-lg' : 'rounded-md p-1.5'} text-red-600 transition-all hover:bg-red-600 hover:text-white disabled:opacity-50`}
+            className={`${compact ? 'h-10 w-10 rounded-lg' : 'rounded-md p-1.5'} text-red-600 transition-all hover:bg-red-600 hover:text-white disabled:opacity-50 press-scale`}
             title="Excluir"
           >
-            <Trash2 size={16} />
+            {deletandoId === ficha.id ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Trash2 size={16} />
+            )}
           </button>
         )}
       </>
@@ -873,7 +878,7 @@ export function FichasAvaliacaoContent() {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-4 animate-fade-in-up">
         {/* Busca e Filtros */}
         {!showAlunoSimplificado && (
           <SimuladoresCard className="p-4">
@@ -910,10 +915,10 @@ export function FichasAvaliacaoContent() {
                         filtroStatus === 'AVALIACAO_PENDENTE' ? '' : 'AVALIACAO_PENDENTE',
                       )
                     }
-                    className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 press-scale ${
                       filtroStatus === 'AVALIACAO_PENDENTE'
-                        ? 'border-amber-500 bg-amber-100 text-amber-800 ring-1 ring-amber-300'
-                        : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                        ? 'border-amber-500 bg-amber-100 text-amber-800 ring-1 ring-amber-300 shadow-sm'
+                        : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300'
                     }`}
                   >
                     <TrendingUp className="w-3 h-3 shrink-0" />
@@ -925,10 +930,10 @@ export function FichasAvaliacaoContent() {
                         filtroStatus === 'AGUARDANDO_ASSINATURAS' ? '' : 'AGUARDANDO_ASSINATURAS',
                       )
                     }
-                    className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 press-scale ${
                       filtroStatus === 'AGUARDANDO_ASSINATURAS'
-                        ? 'border-purple-500 bg-purple-100 text-purple-800 ring-1 ring-purple-300'
-                        : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
+                        ? 'border-purple-500 bg-purple-100 text-purple-800 ring-1 ring-purple-300 shadow-sm'
+                        : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'
                     }`}
                   >
                     <User className="w-3 h-3 shrink-0" />
@@ -938,10 +943,10 @@ export function FichasAvaliacaoContent() {
                     onClick={() =>
                       setFiltroStatus(filtroStatus === 'CONCLUIDAS' ? '' : 'CONCLUIDAS')
                     }
-                    className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 press-scale ${
                       filtroStatus === 'CONCLUIDAS'
-                        ? 'border-emerald-500 bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
-                        : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        ? 'border-emerald-500 bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 shadow-sm'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300'
                     }`}
                   >
                     <CheckCircle className="w-3 h-3 shrink-0" />
@@ -1023,14 +1028,73 @@ export function FichasAvaliacaoContent() {
 
         {/* Lista de Fichas - Tabela */}
         {loading ? (
-          <SimuladoresCard className="p-16 text-center">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <ClipboardList className="w-8 h-8 text-gray-400" />
+          <SimuladoresCard className="overflow-hidden border-slate-200">
+            {/* Skeleton Table Header */}
+            <div className="hidden lg:block">
+              <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 grid grid-cols-6 gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="skeleton h-4 rounded" style={{ width: `${60 + Math.random() * 40}%` }} />
+                ))}
+              </div>
+              {/* Skeleton Rows */}
+              <div className="divide-y divide-gray-100">
+                {[...Array(5)].map((_, rowIdx) => (
+                  <div key={rowIdx} className="px-4 py-3.5 grid grid-cols-6 gap-4 items-center">
+                    <div className="skeleton h-6 rounded-full w-24" />
+                    <div>
+                      <div className="skeleton h-4 rounded w-32 mb-1.5" />
+                      <div className="skeleton h-3 rounded w-20" />
+                    </div>
+                    <div>
+                      <div className="skeleton h-4 rounded w-28 mb-1.5" />
+                      <div className="skeleton h-3 rounded w-16" />
+                    </div>
+                    <div className="skeleton h-4 rounded w-24" />
+                    <div>
+                      <div className="skeleton h-4 rounded w-16 mb-1.5" />
+                      <div className="skeleton h-3 rounded w-20" />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <div className="skeleton h-8 rounded-lg w-28" />
+                      <div className="skeleton h-8 rounded-lg w-8" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Carregando fichas</h3>
-            <p className="text-gray-500 text-sm max-w-sm mx-auto">
-              Aguarde enquanto buscamos as fichas disponíveis.
-            </p>
+            {/* Skeleton Cards (mobile) */}
+            <div className="lg:hidden divide-y divide-slate-200">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="px-5 py-4 space-y-3">
+                  <div className="flex justify-between">
+                    <div>
+                      <div className="skeleton h-5 rounded w-36 mb-2" />
+                      <div className="skeleton h-3 rounded w-24" />
+                    </div>
+                    <div className="skeleton h-6 rounded-full w-20" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="skeleton h-3 rounded w-12 mb-2" />
+                      <div className="skeleton h-4 rounded w-28 mb-1.5" />
+                      <div className="skeleton h-3 rounded w-16" />
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="skeleton h-3 rounded w-20 mb-2" />
+                      <div className="flex gap-2 mb-2">
+                        <div className="skeleton h-6 rounded-full w-20" />
+                        <div className="skeleton h-6 rounded-full w-14" />
+                      </div>
+                      <div className="skeleton h-3 rounded w-28" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="skeleton h-10 rounded-lg flex-1" />
+                    <div className="skeleton h-10 rounded-lg w-10" />
+                  </div>
+                </div>
+              ))}
+            </div>
           </SimuladoresCard>
         ) : fichasFiltradas.length === 0 ? (
           <SimuladoresCard className="p-16 text-center">
@@ -1057,7 +1121,7 @@ export function FichasAvaliacaoContent() {
               </p>
             </div>
 
-            <div className="divide-y divide-slate-200 lg:hidden">
+            <div className="divide-y divide-slate-200 lg:hidden stagger-list">
               {fichasFiltradas.map((ficha) => {
                 const statusInfo = getStatusInfo(ficha.status);
                 const dataFormatada = formatarData(ficha.data_hora);
@@ -1145,18 +1209,18 @@ export function FichasAvaliacaoContent() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 stagger-list">
                   {fichasFiltradas.map((ficha) => {
                     const statusInfo = getStatusInfo(ficha.status);
                     const dataFormatada = formatarData(ficha.data_hora);
                     const horaFormatada = formatarHora(ficha.data_hora);
                     const isFichaEspecial =
                       ficha.tipo_sessao === 'TRE-INST' || ficha.tipo_sessao === 'CRED-EXA';
-                    const rowClassName = 'hover:bg-gray-50';
-                    const stickyCellClassName = 'sticky left-0 z-10 bg-white';
+                    const rowClassName = 'hover:bg-gray-50/80 transition-colors duration-150';
+                    const stickyCellClassName = 'sticky left-0 z-10 bg-white group-hover:bg-gray-50/80 transition-colors duration-150';
 
                     return (
-                      <tr key={ficha.id} className={`${rowClassName} transition-colors`}>
+                      <tr key={ficha.id} className={`${rowClassName} group`}>
                         {/* Status */}
                         <td className={`px-4 py-3 ${stickyCellClassName}`}>
                           <div className="flex flex-col items-start gap-2">
@@ -1264,8 +1328,8 @@ export function FichasAvaliacaoContent() {
         />
 
         {modalFichaModeloAberto && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/50 p-4">
-            <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+          <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/50 p-4 animate-fade-in-up">
+            <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] animate-slide-up">
               {/* Header */}
               <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5 shrink-0">
                 <div>
@@ -1366,14 +1430,14 @@ export function FichasAvaliacaoContent() {
 
               {/* Progress */}
               {gerandoFichaModelo && gerandoProgresso > 0 && (
-                <div className="px-6 pb-2 shrink-0">
-                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                <div className="px-6 pb-2 shrink-0 animate-fade-in-up">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
                     <span>Gerando PDFs...</span>
-                    <span>{gerandoProgresso}%</span>
+                    <span className="tabular-nums font-medium text-slate-700">{gerandoProgresso}%</span>
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-slate-200">
+                  <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
                     <div
-                      className="h-1.5 rounded-full bg-blue-600 transition-all"
+                      className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 transition-[width] duration-500 ease-out"
                       style={{ width: `${gerandoProgresso}%` }}
                     />
                   </div>

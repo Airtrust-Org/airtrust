@@ -131,11 +131,11 @@ export default function LmsCursoDetalhe() {
       <AppLayout>
         <LmsPageShell>
           <div className="space-y-5 animate-pulse">
-            <div className="h-10 w-80 rounded-2xl bg-slate-100" />
-            <div className="h-[320px] rounded-2xl bg-slate-100" />
+            <div className="h-10 w-80 rounded-2xl bg-slate-100 dark:bg-slate-800" />
+            <div className="h-[320px] rounded-2xl bg-slate-100 dark:bg-slate-800" />
             <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="h-64 rounded-2xl bg-slate-100" />
-              <div className="h-64 rounded-2xl bg-slate-100" />
+              <div className="h-64 rounded-2xl bg-slate-100 dark:bg-slate-800" />
+              <div className="h-64 rounded-2xl bg-slate-100 dark:bg-slate-800" />
             </div>
           </div>
         </LmsPageShell>
@@ -200,9 +200,9 @@ export default function LmsCursoDetalhe() {
           }
         />
 
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="grid gap-0 xl:grid-cols-[1.05fr_0.95fr]">
-            <div className="border-b border-slate-200 p-4 xl:border-b-0 xl:border-r">
+            <div className="border-b border-slate-200 p-4 xl:border-b-0 xl:border-r dark:border-slate-700">
               <LmsCourseArtwork curso={curso} progress={matricula?.progresso_pct} />
             </div>
 
@@ -216,10 +216,10 @@ export default function LmsCursoDetalhe() {
                 ) : null}
               </div>
 
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
                 {curso.titulo}
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500 dark:text-slate-400">
                 {curso.descricao ||
                   'Treinamento corporativo estruturado para consumo em LMS, com acompanhamento de progresso e status por perfil.'}
               </p>
@@ -251,27 +251,27 @@ export default function LmsCursoDetalhe() {
               </div>
 
               {matricula ? (
-                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">Seu progresso</p>
-                      <p className="text-sm text-slate-500">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Seu progresso</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         {matricula.status === 'CONCLUIDO'
                           ? 'Treinamento concluído e disponível para revisão.'
                           : 'O progresso será retomado do ponto salvo.'}
                       </p>
                     </div>
-                    <p className="text-2xl font-semibold text-slate-950">
+                    <p className="text-2xl font-semibold text-slate-950 dark:text-slate-100">
                       {matricula.progresso_pct}%
                     </p>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-200">
+                  <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700">
                     <div
                       className="h-full rounded-full bg-slate-950"
                       style={{ width: `${matricula.progresso_pct}%` }}
                     />
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
                     {matricula.score_final != null ? (
                       <span>Nota final {matricula.score_final}%</span>
                     ) : null}
@@ -309,7 +309,7 @@ export default function LmsCursoDetalhe() {
               </div>
 
               {!hasContent ? (
-                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                   Este curso ainda não possui um pacote válido para execução. Faça o upload do
                   conteúdo antes de disponibilizar o player.
                 </div>
@@ -327,12 +327,12 @@ export default function LmsCursoDetalhe() {
               {learningGoals.map((goal) => (
                 <div
                   key={goal}
-                  className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                  className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800"
                 >
-                  <div className="mt-0.5 rounded-full bg-slate-900 p-1 text-white">
+                  <div className="mt-0.5 rounded-full bg-slate-900 p-1 text-white dark:bg-slate-700">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                   </div>
-                  <p className="text-sm leading-6 text-slate-600">{goal}</p>
+                  <p className="text-sm leading-6 text-slate-600 dark:text-slate-400">{goal}</p>
                 </div>
               ))}
             </div>
@@ -347,16 +347,16 @@ export default function LmsCursoDetalhe() {
             }
           >
             <div className="space-y-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-sm font-semibold text-slate-900">Disponibilidade</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Disponibilidade</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {curso.publicado
                     ? 'Publicado no catálogo atual.'
                     : 'Ainda em rascunho; visível apenas para gestão.'}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-sm font-semibold text-slate-900">Formato</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Formato</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {curso.tipo_conteudo === 'scorm'
                     ? 'Executado no player SCORM protegido, com persistência de progresso.'
@@ -365,14 +365,14 @@ export default function LmsCursoDetalhe() {
                       : 'Conteúdo em formato de vídeo ou mídia linear.'}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-sm font-semibold text-slate-900">Carga horária</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Carga horária</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {formatMinutes(curso.carga_horaria_minutos)}
                 </p>
                 {curso.carga_horaria_inicial_horas != null ||
                 curso.carga_horaria_recorrente_horas != null ? (
-                  <p className="mt-2 text-xs text-slate-400">
+                  <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
                     {curso.carga_horaria_inicial_horas != null
                       ? `Inicial ${curso.carga_horaria_inicial_horas}h`
                       : null}
@@ -394,11 +394,11 @@ export default function LmsCursoDetalhe() {
             title="Conteúdo programático"
             description="Metadados pedagógicos espelhados do tipo EAD para manter curso e qualificação alinhados."
           >
-            <div className="whitespace-pre-line text-sm leading-7 text-slate-600">
+            <div className="whitespace-pre-line text-sm leading-7 text-slate-600 dark:text-slate-400">
               {curso.conteudo_programatico}
             </div>
             {curso.observacoes ? (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
                 <p className="font-semibold text-slate-900">Observações</p>
                 <p className="mt-2 whitespace-pre-line">{curso.observacoes}</p>
               </div>

@@ -323,7 +323,7 @@ export default function LmsAdminCursos() {
           }
         />
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <LmsModuleTabs canManage />
 
           <div className="p-5 sm:p-6">
@@ -359,24 +359,24 @@ export default function LmsAdminCursos() {
                 title="Operação de cursos"
                 description="Use esta grade para localizar cursos críticos, agir sobre publicação e abrir o fluxo correto de edição, matrículas ou preview."
               >
-                <div className="mb-3 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                <div className="mb-3 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center dark:border-slate-700 dark:bg-slate-800">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
                         Sincronização EAD
                       </p>
                       {lastSyncSummary ? (
-                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                           {lastSyncSummary.created} novo(s) · {lastSyncSummary.updated}{' '}
                           atualizado(s)
                         </span>
                       ) : (
-                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                           Sob demanda
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                       {lastSyncSummary
                         ? `Última execução em ${new Date(lastSyncSummary.at).toLocaleString('pt-BR')}.`
                         : 'Espelha novos tipos EAD e ajustes pedagógicos para os cursos LMS.'}
@@ -392,24 +392,24 @@ export default function LmsAdminCursos() {
                   </Button>
                 </div>
 
-                <div className="mb-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                <div className="mb-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center dark:border-amber-500/30 dark:bg-amber-500/10">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-400">
                         Legado EdApp
                       </p>
                       {legacySummary ? (
                         <>
-                          <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                          <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                             {legacySummary.total_importado} importado(s)
                           </span>
-                          <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                          <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                             {legacySummary.pendentes_importacao} pendente(s)
                           </span>
                         </>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-slate-700">
+                    <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
                       {lastLegacyImportSummary
                         ? `Última importação em ${new Date(lastLegacyImportSummary.at).toLocaleString('pt-BR')} · ${lastLegacyImportSummary.inseridos} novo(s), ${lastLegacyImportSummary.atualizados} atualizado(s) em ${lastLegacyImportSummary.lotes} lote(s).`
                         : legacySummary
@@ -417,19 +417,19 @@ export default function LmsAdminCursos() {
                           : 'Importe o legado do EdApp para preservar conclusões históricas dentro do LMS interno.'}
                     </p>
                     {lastLegacyImportSummary?.ignorados_sem_funcionario ? (
-                      <p className="mt-1 text-xs text-amber-700">
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                         {lastLegacyImportSummary.ignorados_sem_funcionario} evento(s) ainda sem
                         vínculo de funcionário.
                       </p>
                     ) : null}
                     {lastLegacyImportSummary && lastLegacyImportSummary.pendentes_restantes > 0 ? (
-                      <p className="mt-1 text-xs text-amber-700">
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                         {lastLegacyImportSummary.pendentes_restantes} evento(s) seguem na fila de
                         importação.
                       </p>
                     ) : null}
                     {lastLegacyImportSummary?.erros ? (
-                      <p className="mt-1 text-xs text-rose-700">
+                      <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
                         {lastLegacyImportSummary.erros} evento(s) falharam nesta execução.
                       </p>
                     ) : null}
@@ -452,7 +452,7 @@ export default function LmsAdminCursos() {
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder="Buscar por curso, categoria ou qualificação"
-                      className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary"
+                      className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     />
                   </label>
 
@@ -468,7 +468,7 @@ export default function LmsAdminCursos() {
                           | 'missing-content',
                       )
                     }
-                    className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary"
+                    className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   >
                     <option value="all">Todos os estados</option>
                     <option value="published">Publicado</option>
@@ -480,7 +480,7 @@ export default function LmsAdminCursos() {
                   <select
                     value={typeFilter}
                     onChange={(event) => setTypeFilter(event.target.value as 'all' | TipoConteudo)}
-                    className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary"
+                    className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   >
                     <option value="all">Todos os tipos</option>
                     <option value="scorm">SCORM</option>
@@ -491,9 +491,22 @@ export default function LmsAdminCursos() {
                   </select>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
                   {isLoading ? (
-                    <div className="p-8 text-sm text-slate-500">Carregando cursos...</div>
+                    <div className="overflow-hidden">
+                      <div className="bg-slate-50 px-4 py-3 grid grid-cols-6 gap-4 border-b border-slate-100 dark:bg-slate-800 dark:border-slate-700">
+                        {[...Array(6)].map((_, i) => (
+                          <div key={i} className="h-3 rounded bg-slate-200 animate-pulse dark:bg-slate-700" />
+                        ))}
+                      </div>
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="px-4 py-4 grid grid-cols-6 gap-4 border-b border-slate-50 dark:border-slate-800">
+                          {[...Array(6)].map((_, j) => (
+                            <div key={j} className="h-4 rounded bg-slate-100 animate-pulse dark:bg-slate-700" style={{ width: `${55 + Math.sin(i + j) * 20}%` }} />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   ) : visibleCourses.length === 0 ? (
                     <LmsEmptyState
                       icon={<BookOpen className="h-8 w-8" />}
@@ -503,7 +516,7 @@ export default function LmsAdminCursos() {
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-sm">
-                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                           <tr>
                             <th className="px-4 py-3">Curso</th>
                             <th className="px-4 py-3">Qualificação</th>
@@ -513,7 +526,7 @@ export default function LmsAdminCursos() {
                             <th className="px-4 py-3 text-right">Ações</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {visibleCourses.map((curso) => {
                             const taxa = completionRate(curso);
                             const statusMeta = getMatriculaStatusMeta(
@@ -523,23 +536,23 @@ export default function LmsAdminCursos() {
                             const critical = impactsCompliance(curso);
 
                             return (
-                              <tr key={curso.id} className="hover:bg-slate-50/80">
+                              <tr key={curso.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
                                 <td className="px-4 py-3 align-top">
                                   <div className="min-w-[260px]">
                                     <div className="flex items-start gap-2">
-                                      <p className="font-semibold text-slate-900">{curso.titulo}</p>
+                                      <p className="font-semibold text-slate-900 dark:text-slate-100">{curso.titulo}</p>
                                       {critical ? (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                                           <BadgeCheck className="h-3 w-3" />
                                           Crítico
                                         </span>
                                       ) : null}
                                     </div>
-                                    <p className="mt-1 text-xs text-slate-500">
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                       {curso.categoria ?? 'Sem categoria'} ·{' '}
                                       {formatMinutes(curso.carga_horaria_minutos)}
                                     </p>
-                                    <p className="mt-2 line-clamp-1 text-xs leading-5 text-slate-500">
+                                    <p className="mt-2 line-clamp-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
                                       {curso.descricao ||
                                         'Curso sem descrição operacional resumida.'}
                                     </p>
@@ -549,28 +562,28 @@ export default function LmsAdminCursos() {
                                   {curso.qualificacao_tipo_nome ? (
                                     <div className="space-y-1">
                                       {critical ? (
-                                        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                                        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                                           Gera qualificação
                                         </span>
                                       ) : null}
-                                      <p className="text-xs font-medium text-slate-700">
+                                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
                                         {curso.qualificacao_tipo_nome}
                                       </p>
                                       {curso.qualificacao_tipo_codigo ? (
-                                        <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">
+                                        <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
                                           Código {curso.qualificacao_tipo_codigo}
                                         </span>
                                       ) : null}
                                     </div>
                                   ) : (
-                                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-500">
+                                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
                                       Informativo
                                     </span>
                                   )}
                                 </td>
                                 <td className="px-4 py-3 align-top">
                                   <div className="flex min-w-[148px] flex-wrap gap-1.5">
-                                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+                                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                                       {contentTypeLabel(curso.tipo_conteudo)}
                                     </span>
                                     <span
@@ -586,14 +599,14 @@ export default function LmsAdminCursos() {
                                 </td>
                                 <td className="px-4 py-3 align-top">
                                   <div className="min-w-[150px] space-y-2">
-                                    <p className="text-sm font-semibold text-slate-900">
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                                       {curso.total_matriculas ?? 0} matrícula(s)
                                     </p>
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
                                       {curso.total_concluidos ?? 0} concluído(s)
                                     </p>
                                     <div className="flex items-center gap-2">
-                                      <div className="h-1.5 flex-1 rounded-full bg-slate-100">
+                                      <div className="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-700">
                                         <div
                                           className={`h-1.5 rounded-full ${
                                             taxa >= 80
@@ -605,7 +618,7 @@ export default function LmsAdminCursos() {
                                           style={{ width: `${taxa}%` }}
                                         />
                                       </div>
-                                      <span className="text-xs font-semibold text-slate-500">
+                                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                                         {taxa}%
                                       </span>
                                     </div>
@@ -617,7 +630,7 @@ export default function LmsAdminCursos() {
                                   >
                                     {statusMeta.label}
                                   </span>
-                                  <p className="mt-2 whitespace-nowrap text-xs text-slate-500">
+                                  <p className="mt-2 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
                                     Atualizado em{' '}
                                     {new Date(curso.updated_at).toLocaleDateString('pt-BR')}
                                   </p>

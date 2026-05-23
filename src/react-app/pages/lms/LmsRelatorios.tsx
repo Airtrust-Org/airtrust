@@ -102,14 +102,14 @@ export default function LmsRelatorios() {
                 onClick={() =>
                   tab === 'conformidade' ? exportConformidadeCsv() : exportExpiracoesCsv()
                 }
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 <Download className="h-3.5 w-3.5" />
                 Exportar CSV
               </button>
               <button
                 onClick={() => navigate('/lms/dashboard')}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 <BarChart3 className="h-3.5 w-3.5" />
                 Voltar ao painel
@@ -117,7 +117,7 @@ export default function LmsRelatorios() {
             </>
           }
         />
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <LmsModuleTabs canManage={canManage} />
           <div className="space-y-5 p-5 sm:p-6">
             <div className="flex flex-wrap gap-2">
@@ -142,13 +142,13 @@ export default function LmsRelatorios() {
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm w-fit">
+            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm w-fit dark:border-slate-700 dark:bg-slate-800">
               <button
                 onClick={() => setTab('conformidade')}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                   tab === 'conformidade'
                     ? 'bg-primary/10 text-primary'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
                 }`}
               >
                 Conformidade por Função
@@ -158,7 +158,7 @@ export default function LmsRelatorios() {
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                   tab === 'expiracoes'
                     ? 'bg-primary/10 text-primary'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
                 }`}
               >
                 Prazos Vencendo
@@ -167,13 +167,13 @@ export default function LmsRelatorios() {
 
             {/* Conformidade table */}
             {tab === 'conformidade' && (
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4">
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4 dark:border-slate-800">
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-900">
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                       Conformidade por Função
                     </h2>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                       Vermelho indica exposição imediata, amarelo atenção e verde aderência
                       saudável.
                     </p>
@@ -181,7 +181,7 @@ export default function LmsRelatorios() {
                   <button
                     onClick={exportConformidadeCsv}
                     disabled={!conformidade || conformidade.length === 0}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Exportar CSV
@@ -190,17 +190,17 @@ export default function LmsRelatorios() {
 
                 {loadingConformidade ? (
                   <div className="flex justify-center p-10">
-                    <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-300 dark:text-slate-600" />
                   </div>
                 ) : !conformidade || conformidade.length === 0 ? (
                   <div className="flex flex-col items-center gap-3 p-10 text-center">
-                    <BarChart3 className="h-10 w-10 text-slate-300" />
-                    <p className="text-sm text-slate-500">Sem dados de conformidade disponíveis.</p>
+                    <BarChart3 className="h-10 w-10 text-slate-300 dark:text-slate-600" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Sem dados de conformidade disponíveis.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+                      <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
                         <tr>
                           <th className="px-6 py-3 text-left">Função</th>
                           <th className="px-4 py-3 text-right">Funcionários</th>
@@ -212,28 +212,28 @@ export default function LmsRelatorios() {
                           <th className="px-6 py-3 text-right">Ação</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {conformidade.map((row) => (
-                          <tr key={row.funcao} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4 font-medium text-slate-900">{row.funcao}</td>
-                            <td className="px-4 py-4 text-right text-slate-600">
+                          <tr key={row.funcao} className="hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/50">
+                            <td className="px-6 py-4 font-medium text-slate-900 dark:text-slate-100">{row.funcao}</td>
+                            <td className="px-4 py-4 text-right text-slate-600 dark:text-slate-400">
                               {row.total_funcionarios}
                             </td>
-                            <td className="px-4 py-4 text-right text-slate-600">
+                            <td className="px-4 py-4 text-right text-slate-600 dark:text-slate-400">
                               {row.matriculados}
                             </td>
-                            <td className="px-4 py-4 text-right text-emerald-700 font-medium">
+                            <td className="px-4 py-4 text-right text-emerald-700 font-medium dark:text-emerald-400">
                               {row.concluidos}
                             </td>
-                            <td className="px-4 py-4 text-right text-amber-700">
+                            <td className="px-4 py-4 text-right text-amber-700 dark:text-amber-400">
                               {row.em_andamento}
                             </td>
-                            <td className="px-4 py-4 text-right text-slate-500">
+                            <td className="px-4 py-4 text-right text-slate-500 dark:text-slate-400">
                               {row.nao_iniciados}
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
-                                <div className="w-24 bg-slate-200 rounded-full h-1.5 flex-shrink-0">
+                                <div className="w-24 bg-slate-200 rounded-full h-1.5 flex-shrink-0 dark:bg-slate-700">
                                   <div
                                     className={`h-1.5 rounded-full ${getConformidadeColor(row.taxa_conclusao_pct)}`}
                                     style={{ width: `${Math.min(row.taxa_conclusao_pct, 100)}%` }}
@@ -252,7 +252,7 @@ export default function LmsRelatorios() {
                                 onClick={() =>
                                   navigate(`/funcionarios?funcao=${encodeURIComponent(row.funcao)}`)
                                 }
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               >
                                 <Users className="h-3.5 w-3.5" />
                                 Ver tripulantes
@@ -269,14 +269,14 @@ export default function LmsRelatorios() {
 
             {/* Expirações table */}
             {tab === 'expiracoes' && (
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4">
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4 dark:border-slate-800">
                   <div className="flex items-center gap-3">
-                    <h2 className="text-sm font-semibold text-slate-900">Prazos Vencendo</h2>
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Prazos Vencendo</h2>
                     <select
                       value={dias}
                       onChange={(e) => setDias(Number(e.target.value))}
-                      className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                      className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
                     >
                       {DIAS_OPTIONS.map((d) => (
                         <option key={d} value={d}>
@@ -288,7 +288,7 @@ export default function LmsRelatorios() {
                   <button
                     onClick={exportExpiracoesCsv}
                     disabled={!expiracoes || expiracoes.length === 0}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Exportar CSV
@@ -297,19 +297,19 @@ export default function LmsRelatorios() {
 
                 {loadingExpiracoes ? (
                   <div className="flex justify-center p-10">
-                    <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-300 dark:text-slate-600" />
                   </div>
                 ) : !expiracoes || expiracoes.length === 0 ? (
                   <div className="flex flex-col items-center gap-3 p-10 text-center">
-                    <CheckCircle2 className="h-10 w-10 text-emerald-300" />
-                    <p className="text-sm text-slate-500">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-300 dark:text-emerald-700" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
                       Nenhuma matrícula expirando nos próximos {dias} dias.
                     </p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+                      <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
                         <tr>
                           <th className="px-6 py-3 text-left">Funcionário</th>
                           <th className="px-4 py-3 text-left">Função</th>
@@ -321,43 +321,43 @@ export default function LmsRelatorios() {
                           <th className="px-6 py-3 text-right">Ações</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {expiracoes.map((row) => (
                           <tr
                             key={row.matricula_id}
-                            className={`hover:bg-slate-50 transition-colors ${
-                              row.dias_restantes < 0 ? 'bg-rose-50/40' : ''
+                            className={`hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/50 ${
+                              row.dias_restantes < 0 ? 'bg-rose-50/40 dark:bg-rose-500/5' : ''
                             }`}
                           >
-                            <td className="px-6 py-3 font-medium text-slate-900">
+                            <td className="px-6 py-3 font-medium text-slate-900 dark:text-slate-100">
                               <FuncionarioLink
                                 funcionarioId={row.funcionario_id}
                                 nome={row.funcionario_nome}
                                 className="hover:text-primary hover:underline"
                               />
                             </td>
-                            <td className="px-4 py-3 text-slate-600">{row.funcao ?? '—'}</td>
-                            <td className="px-4 py-3 text-slate-600">{row.base ?? '—'}</td>
-                            <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{row.funcao ?? '—'}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{row.base ?? '—'}</td>
+                            <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate dark:text-slate-300">
                               {row.curso_titulo}
                             </td>
                             <td className="px-4 py-3">
                               <span
                                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                                   row.status === 'EM_ANDAMENTO'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-slate-100 text-slate-700'
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300'
+                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
                                 }`}
                               >
                                 {row.status === 'EM_ANDAMENTO' ? 'Em andamento' : 'Não iniciado'}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right text-slate-600">
+                            <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">
                               {formatDate(row.data_expiracao)}
                             </td>
                             <td className="px-4 py-3 text-right">
                               <span
-                                className={`font-medium ${row.dias_restantes < 0 ? 'text-rose-700' : row.dias_restantes <= 7 ? 'text-amber-700' : 'text-slate-600'}`}
+                                className={`font-medium ${row.dias_restantes < 0 ? 'text-rose-700 dark:text-rose-400' : row.dias_restantes <= 7 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-slate-400'}`}
                               >
                                 {row.dias_restantes < 0
                                   ? `${Math.abs(row.dias_restantes)}d atrasado`
@@ -373,7 +373,7 @@ export default function LmsRelatorios() {
                                       `/funcionarios/${row.funcionario_id}/ficha?tab=treinamentos`,
                                     )
                                   }
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                                 >
                                   <FileText className="h-3.5 w-3.5" />
                                   Ficha 360
@@ -381,7 +381,7 @@ export default function LmsRelatorios() {
                                 <button
                                   type="button"
                                   onClick={() => navigate(`/lms/cursos/${row.curso_id}`)}
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                                 >
                                   <ExternalLink className="h-3.5 w-3.5" />
                                   Abrir curso
