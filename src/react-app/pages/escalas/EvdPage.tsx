@@ -4,7 +4,7 @@
  * Atribuição diária de tripulação por aeronave. Estrutura por prefixo/matrícula,
  * não por voo/trecho. Visualização em tabela por aeronave com publicação versionada.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plane,
@@ -627,14 +627,36 @@ export default function EvdPage() {
   } = useApi<EvdPublicacaoResumo[]>(`/api/evd/publicacoes?data=${data}`);
   const frmsReferenceDate = getFrmsReferenceDate(data);
   const frmsUsingPreviousDayContext = frmsReferenceDate !== data;
+  const [frmsFetchReady, setFrmsFetchReady] = useState(false);
+  useEffect(() => {
+    // Defer FRMS fetch a little to prioritize EVD core data on first paint.
+    setFrmsFetchReady(false);
+    const timer = window.setTimeout(() => setFrmsFetchReady(true), 200);
+    return () => window.clearTimeout(timer);
+  }, [frmsReferenceDate]);
   const publicacoes = publicacoesRaw || [];
   const ultimaPublicacao = publicacoes[0] || null;
-  const { data: frmsDailyRaw, error: frmsDailyError } = useApi<{ items?: FrmsDailyFatigueItem[] }>(
+  const {
+    data: frmsDailyRaw,
+    error: frmsDailyError,
+    loading: loadingFrmsDaily,
+  } = useApi<{ items?: FrmsDailyFatigueItem[] }>(
     `/api/frms/daily-fatigue?date=${frmsReferenceDate}&scope=team`,
+    {
+      enabled: frmsFetchReady,
+      staleTime: 60_000,
+    },
   );
-  const { data: frmsAlertsRaw, error: frmsAlertsError } = useApi<{
+  const {
+    data: frmsAlertsRaw,
+    error: frmsAlertsError,
+    loading: loadingFrmsAlerts,
+  } = useApi<{
     items?: FrmsDailyFatigueAlertItem[];
-  }>(`/api/frms/daily-fatigue/alerts?date=${frmsReferenceDate}`);
+  }>(`/api/frms/daily-fatigue/alerts?date=${frmsReferenceDate}`, {
+    enabled: frmsFetchReady,
+    staleTime: 60_000,
+  });
   const {
     data: aeronavesRaw,
     loading: loadingAeronaves,
@@ -664,6 +686,7 @@ export default function EvdPage() {
 
   const frmsDailyItems = frmsDailyRaw?.items || [];
   const frmsAlertItems = frmsAlertsRaw?.items || [];
+  const frmsLoading = !frmsFetchReady || loadingFrmsDaily || loadingFrmsAlerts;
   const frmsDailyUnavailable = Boolean(frmsDailyError);
   const frmsAlertsUnavailable = Boolean(frmsAlertsError) && !frmsDailyError;
   const frmsUnavailable = frmsDailyUnavailable;
@@ -1445,6 +1468,11 @@ export default function EvdPage() {
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             FRMS indisponível na referência {formatDateBR(frmsReferenceDate)}. A escala segue
             visível, mas o status resumido de fadiga pode ficar incompleto.
+          </div>
+        )}
+        {frmsLoading && !frmsDailyUnavailable && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Carregando status FRMS para {formatDateBR(frmsReferenceDate)}...
           </div>
         )}
         {frmsAlertsUnavailable && (
