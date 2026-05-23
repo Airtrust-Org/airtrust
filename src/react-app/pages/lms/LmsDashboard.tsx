@@ -103,7 +103,7 @@ export default function LmsDashboard() {
             )
           }
         />
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <LmsModuleTabs canManage={isManager} />
 
           {/* Content area */}
@@ -163,7 +163,7 @@ export default function LmsDashboard() {
             ) : null}
 
             {isManager && hasStatsError ? (
-              <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
                 Não foi possível carregar a visão geral do LMS.
                 {statsError instanceof Error ? ` ${statsError.message}` : ''}
               </div>
@@ -172,7 +172,7 @@ export default function LmsDashboard() {
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />
+                  <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
                 ))}
               </div>
             ) : isManager && hasStatsError ? (
@@ -184,13 +184,13 @@ export default function LmsDashboard() {
             ) : isManager ? (
               /* Manager: risk alerts + recent completions + top courses */
               <div className="space-y-5">
-                <div className="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
-                  <BookOpen className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-700" />
+                <div className="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-500/30 dark:bg-sky-500/10">
+                  <BookOpen className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-700 dark:text-sky-400" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-sky-900">
+                    <p className="text-sm font-semibold text-sky-900 dark:text-sky-200">
                       Legado EdApp disponível somente para histórico
                     </p>
-                    <p className="mt-0.5 text-xs text-sky-800">
+                    <p className="mt-0.5 text-xs text-sky-800 dark:text-sky-300">
                       A integração ativa com EdApp está descontinuada. Os registros anteriores foram
                       preservados para auditoria e compliance.
                     </p>
@@ -198,7 +198,7 @@ export default function LmsDashboard() {
                   <button
                     type="button"
                     onClick={() => navigate('/lms/legado-edapp')}
-                    className="flex-shrink-0 text-xs font-medium text-sky-700 underline hover:text-sky-900"
+                    className="flex-shrink-0 text-xs font-medium text-sky-700 underline hover:text-sky-900 dark:text-sky-400 dark:hover:text-sky-200"
                   >
                     Abrir histórico
                   </button>
@@ -206,14 +206,14 @@ export default function LmsDashboard() {
 
                 {/* Alert banner if there are stalled enrollments */}
                 {(stats?.atrasadas?.length ?? 0) > 0 && (
-                  <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                  <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-amber-800">
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
                         {stats!.atrasadas.length} matrícula
                         {stats!.atrasadas.length > 1 ? 's' : ''} sem progresso há mais de 14 dias
                       </p>
-                      <p className="mt-0.5 text-xs text-amber-700">
+                      <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
                         {stats!.atrasadas
                           .slice(0, 3)
                           .map((a) => a.funcionario_nome)
@@ -226,7 +226,7 @@ export default function LmsDashboard() {
                     <button
                       type="button"
                       onClick={() => navigate('/lms/relatorios')}
-                      className="flex-shrink-0 text-xs font-medium text-amber-700 underline hover:text-amber-900"
+                      className="flex-shrink-0 text-xs font-medium text-amber-700 underline hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
                     >
                       Ver relatório
                     </button>
@@ -236,7 +236,7 @@ export default function LmsDashboard() {
                 <div className="grid gap-5 lg:grid-cols-2">
                   {/* Recent completions */}
                   <div>
-                    <h2 className="mb-3 text-sm font-semibold text-slate-700">
+                    <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
                       Conclusões recentes
                     </h2>
                     {stats?.recent_completions?.length ? (
@@ -245,7 +245,7 @@ export default function LmsDashboard() {
                           <button
                             type="button"
                             key={item.id}
-                            className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left"
+                            className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700/70"
                             onClick={() =>
                               navigate(
                                 `/funcionarios/${item.funcionario_id}/ficha?tab=treinamentos`,
@@ -256,12 +256,12 @@ export default function LmsDashboard() {
                               <FuncionarioLink
                                 funcionarioId={item.funcionario_id}
                                 nome={item.funcionario_nome}
-                                className="text-sm font-medium text-slate-900 hover:text-primary hover:underline"
+                                className="text-sm font-medium text-slate-900 hover:text-primary hover:underline dark:text-slate-100"
                                 stopPropagation
                               />
-                              <p className="text-xs text-slate-500">{item.curso_titulo}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">{item.curso_titulo}</p>
                             </div>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
                               {new Date(item.data_conclusao).toLocaleDateString('pt-BR')}
                             </span>
                           </button>
@@ -274,16 +274,16 @@ export default function LmsDashboard() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center">
-                        <Users className="h-8 w-8 text-slate-300" />
-                        <p className="text-sm text-slate-400">Sem conclusões recentes.</p>
+                      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center dark:border-slate-700">
+                        <Users className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                        <p className="text-sm text-slate-400 dark:text-slate-500">Sem conclusões recentes.</p>
                       </div>
                     )}
                   </div>
 
                   {/* Top courses */}
                   <div>
-                    <h2 className="mb-3 text-sm font-semibold text-slate-700">
+                    <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
                       Cursos em destaque
                     </h2>
                     {highlightedCourses.length ? (
@@ -292,27 +292,27 @@ export default function LmsDashboard() {
                           <button
                             type="button"
                             key={curso.id}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left"
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700/70"
                             onClick={() => navigate(`/lms/cursos/${curso.id}`)}
                           >
                             <div className="mb-1.5 flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-medium text-slate-900">
+                              <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {curso.titulo}
                               </p>
                               {curso.source === 'performance' ? (
-                                <span className="flex-shrink-0 text-xs text-slate-400">
+                                <span className="flex-shrink-0 text-xs text-slate-400 dark:text-slate-500">
                                   {curso.total_matriculas} matriculado
                                   {curso.total_matriculas !== 1 ? 's' : ''}
                                 </span>
                               ) : (
-                                <span className="flex-shrink-0 text-xs text-slate-400">
+                                <span className="flex-shrink-0 text-xs text-slate-400 dark:text-slate-500">
                                   {curso.categoria ?? 'Catálogo'}
                                 </span>
                               )}
                             </div>
                             {curso.source === 'performance' ? (
                               <div className="flex items-center gap-2">
-                                <div className="h-1.5 flex-1 rounded-full bg-slate-200">
+                                <div className="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-700">
                                   <div
                                     className={`h-1.5 rounded-full ${curso.taxa_conclusao_pct >= 80 ? 'bg-emerald-500' : curso.taxa_conclusao_pct >= 40 ? 'bg-amber-500' : 'bg-rose-400'}`}
                                     style={{
@@ -321,13 +321,13 @@ export default function LmsDashboard() {
                                   />
                                 </div>
                                 <span
-                                  className={`flex-shrink-0 text-xs font-semibold ${curso.taxa_conclusao_pct >= 80 ? 'text-emerald-700' : curso.taxa_conclusao_pct >= 40 ? 'text-amber-700' : 'text-rose-600'}`}
+                                  className={`flex-shrink-0 text-xs font-semibold ${curso.taxa_conclusao_pct >= 80 ? 'text-emerald-700 dark:text-emerald-400' : curso.taxa_conclusao_pct >= 40 ? 'text-amber-700 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}`}
                                 >
                                   {curso.taxa_conclusao_pct}%
                                 </span>
                               </div>
                             ) : (
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 <span>{formatMinutes(curso.carga_horaria_minutos)}</span>
                                 <span>•</span>
                                 <span>{curso.total_matriculas} matrícula(s)</span>
@@ -343,9 +343,9 @@ export default function LmsDashboard() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center">
-                        <BookOpen className="h-8 w-8 text-slate-300" />
-                        <p className="text-sm text-slate-400">Nenhum curso publicado ainda.</p>
+                      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center dark:border-slate-700">
+                        <BookOpen className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                        <p className="text-sm text-slate-400 dark:text-slate-500">Nenhum curso publicado ainda.</p>
                         <Button variant="primary" onClick={() => navigate('/lms/cursos')}>
                           <Plus className="h-4 w-4" />
                           Criar primeiro curso
@@ -358,11 +358,11 @@ export default function LmsDashboard() {
             ) : currentTraining.length ? (
               /* Learner: active enrollments */
               <div>
-                <h2 className="mb-3 text-sm font-semibold text-slate-700">
+                <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Continue de onde parou
                 </h2>
                 {atrasadas.length > 0 && (
-                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                     {atrasadas.length} treinamento{atrasadas.length > 1 ? 's' : ''} sem progresso há
                     mais de 14 dias. Retome agora.
                   </div>
@@ -383,7 +383,7 @@ export default function LmsDashboard() {
                                 : `/lms/player/${item.id}`,
                         )
                       }
-                      className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
+                      className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800/70"
                     >
                       <div className="flex-shrink-0">
                         <LmsCourseArtwork
@@ -398,21 +398,21 @@ export default function LmsDashboard() {
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex flex-wrap items-center gap-2">
                           <LmsStatPill status={getMatriculaStatusMeta(item.status)} />
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
                             {formatMinutes(item.carga_horaria_minutos)}
                           </span>
                         </div>
-                        <p className="truncate text-sm font-semibold text-slate-900">
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
                           {item.titulo ?? `Curso #${item.curso_id}`}
                         </p>
-                        <div className="mt-1.5 h-1.5 w-32 rounded-full bg-slate-200">
+                        <div className="mt-1.5 h-1.5 w-32 rounded-full bg-slate-200 dark:bg-slate-700">
                           <div
                             className="h-full rounded-full bg-primary"
                             style={{ width: `${item.progresso_pct}%` }}
                           />
                         </div>
                       </div>
-                      <ArrowRight className="h-4 w-4 flex-shrink-0 text-slate-400" />
+                      <ArrowRight className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
                     </button>
                   ))}
                 </div>

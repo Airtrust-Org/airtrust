@@ -131,7 +131,7 @@ export default function LmsHistoricoEdApp() {
               <button
                 onClick={exportCsv}
                 disabled={rows.length === 0}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 <Download className="h-3.5 w-3.5" />
                 Exportar CSV
@@ -147,7 +147,7 @@ export default function LmsHistoricoEdApp() {
           }
         />
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <LmsModuleTabs canManage={canManage} />
 
           <div className="space-y-5 p-5 sm:p-6">
@@ -198,9 +198,9 @@ export default function LmsHistoricoEdApp() {
             )}
 
             {/* Aviso compliance */}
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
-              <p className="text-xs text-amber-800">
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+              <p className="text-xs text-amber-800 dark:text-amber-300">
                 Esta tela é <strong>somente histórica</strong>. A integração ativa com EdApp foi
                 descontinuada e os registros preservados aqui são imutáveis para evidência de
                 treinamento. Use a aba <strong>Relatórios</strong> para análises operacionais atuais
@@ -217,7 +217,7 @@ export default function LmsHistoricoEdApp() {
                   value={q}
                   onChange={(e) => handleSearch(e.target.value)}
                   placeholder="Buscar por funcionário ou curso..."
-                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
                 {q && (
                   <button
@@ -232,7 +232,7 @@ export default function LmsHistoricoEdApp() {
               <select
                 value={statusFilter}
                 onChange={(e) => handleStatus(e.target.value)}
-                className="rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm text-slate-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm text-slate-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
               >
                 <option value="">Todos os status</option>
                 <option value="CONCLUIDO">Concluído</option>
@@ -241,21 +241,21 @@ export default function LmsHistoricoEdApp() {
                 <option value="PENDENTE_VINCULO">Pendente Vínculo</option>
               </select>
 
-              <p className="ml-auto text-xs text-slate-500">
+              <p className="ml-auto text-xs text-slate-500 dark:text-slate-400">
                 {total.toLocaleString('pt-BR')} registro{total !== 1 ? 's' : ''}
               </p>
             </div>
 
             {/* Tabela */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900">
               {isLoading ? (
                 <div className="flex justify-center p-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
+                  <Loader2 className="h-8 w-8 animate-spin text-slate-300 dark:text-slate-600" />
                 </div>
               ) : rows.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 p-12 text-center">
-                  <BookOpen className="h-10 w-10 text-slate-300" />
-                  <p className="text-sm text-slate-500">
+                  <BookOpen className="h-10 w-10 text-slate-300 dark:text-slate-600" />
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     {q || statusFilter
                       ? 'Nenhum registro encontrado para os filtros aplicados.'
                       : 'Nenhum histórico EdApp importado ainda.'}
@@ -264,7 +264,7 @@ export default function LmsHistoricoEdApp() {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+                    <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
                       <tr>
                         <th className="px-6 py-3 text-left">Funcionário</th>
                         <th className="px-4 py-3 text-left">Curso EdApp</th>
@@ -276,9 +276,9 @@ export default function LmsHistoricoEdApp() {
                         <th className="px-4 py-3 text-left">Vínculo</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {rows.map((row: LmsHistoricoEdApp) => (
-                        <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={row.id} className="hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/50">
                           <td className="px-6 py-3">
                             {row.funcionario_id ? (
                               <button
@@ -287,32 +287,32 @@ export default function LmsHistoricoEdApp() {
                                 }
                                 className="text-left group"
                               >
-                                <p className="font-medium text-slate-900 group-hover:text-primary transition-colors">
+                                <p className="font-medium text-slate-900 group-hover:text-primary transition-colors dark:text-slate-100">
                                   {row.funcionario_nome ?? '—'}
                                 </p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
                                   {row.funcionario_matricula ?? ''}
                                   {row.funcionario_funcao ? ` · ${row.funcionario_funcao}` : ''}
                                 </p>
                               </button>
                             ) : (
                               <div>
-                                <p className="font-medium text-rose-700">
+                                <p className="font-medium text-rose-700 dark:text-rose-300">
                                   {row.funcionario_nome ?? '—'}
                                 </p>
-                                <p className="text-xs text-rose-400">Não vinculado</p>
+                                <p className="text-xs text-rose-400 dark:text-rose-500">Não vinculado</p>
                               </div>
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <p className="font-medium text-slate-800 leading-snug">
+                            <p className="font-medium text-slate-800 leading-snug dark:text-slate-200">
                               {row.curso_titulo ?? '—'}
                             </p>
                             {row.curso_categoria && (
                               <p className="text-xs text-slate-400">{row.curso_categoria}</p>
                             )}
                             {row.edapp_course_id && (
-                              <p className="text-xs text-slate-400 font-mono">
+                              <p className="text-xs text-slate-400 font-mono dark:text-slate-500">
                                 ID: {row.edapp_course_id}
                               </p>
                             )}
@@ -323,10 +323,10 @@ export default function LmsHistoricoEdApp() {
                           <td className="px-4 py-3 text-right">
                             {row.progresso_pct != null ? (
                               <div className="flex flex-col items-end gap-1">
-                                <span className="text-xs font-semibold text-slate-700">
+                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                                   {row.progresso_pct}%
                                 </span>
-                                <div className="w-16 bg-slate-200 rounded-full h-1">
+                                <div className="w-16 bg-slate-200 rounded-full h-1 dark:bg-slate-700">
                                   <div
                                     className="h-1 rounded-full bg-primary"
                                     style={{ width: `${Math.min(row.progresso_pct, 100)}%` }}
@@ -382,21 +382,21 @@ export default function LmsHistoricoEdApp() {
             {/* Paginação */}
             {pages > 1 && (
               <div className="flex items-center justify-between">
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Página {page} de {pages}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     Anterior
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(pages, p + 1))}
                     disabled={page >= pages}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     Próxima
                   </button>
