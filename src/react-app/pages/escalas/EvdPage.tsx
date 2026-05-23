@@ -899,6 +899,9 @@ export default function EvdPage() {
       }
       setSnapshotDetail(json.data);
       setSnapshotOpen(true);
+      setTimeout(() => {
+        document.getElementById('evd-snapshot-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
       return json.data;
     } finally {
       setSnapshotLoading(false);
@@ -1282,7 +1285,30 @@ export default function EvdPage() {
               <span className="text-xs text-slate-500">{resumoAeronavesDoDia.length} ativas</span>
             </div>
             {loadingAeronaves ? (
-              <p className="text-sm text-slate-500">Carregando aeronaves ativas...</p>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="animate-pulse rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-2">
+                        <div className="h-5 w-20 bg-slate-200 rounded" />
+                        <div className="h-3 w-28 bg-slate-100 rounded" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="h-4 w-16 bg-slate-200 rounded-full" />
+                        <div className="h-4 w-12 bg-slate-100 rounded-full" />
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="h-12 bg-slate-100 rounded" />
+                      <div className="h-12 bg-slate-100 rounded" />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <div className="h-4 w-24 bg-slate-100 rounded-full" />
+                      <div className="h-7 w-32 bg-slate-200 rounded-lg" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : resumoAeronavesDoDia.length === 0 ? (
               <div className="space-y-1">
                 <p className="text-sm text-amber-700">
@@ -1308,12 +1334,12 @@ export default function EvdPage() {
                     <article
                       key={`${aeronave.id}-${prefixo}`}
                       className={[
-                        'rounded-xl border p-3',
+                        'rounded-xl border p-3 cursor-pointer transition-shadow hover:shadow-md',
                         alocacao
                           ? hasFrmsAlert
-                            ? 'border-amber-200 bg-amber-50/40'
-                            : 'border-emerald-200 bg-emerald-50/30'
-                          : 'border-slate-200 bg-white',
+                            ? 'border-amber-200 bg-amber-50/40 hover:shadow-amber-100/50'
+                            : 'border-emerald-200 bg-emerald-50/30 hover:shadow-emerald-100/50'
+                          : 'border-slate-200 bg-white hover:border-slate-300',
                       ].join(' ')}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -1371,9 +1397,9 @@ export default function EvdPage() {
                           <button
                             type="button"
                             onClick={() => openDesignationPanel(prefixo)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-100"
+                            className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100 transition-colors"
                           >
-                            <Plus className="h-3 w-3" />
+                            <Plus className="h-3.5 w-3.5" />
                             Designar tripulação
                           </button>
                         ) : (
@@ -1384,9 +1410,9 @@ export default function EvdPage() {
                                 .getElementById('evd-escala-dia')
                                 ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                             }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 transition-colors"
                           >
-                            <Eye className="h-3 w-3" />
+                            <Eye className="h-3.5 w-3.5" />
                             Ver na escala
                           </button>
                         )}
@@ -1454,22 +1480,24 @@ export default function EvdPage() {
                 </div>
               )
             ) : (
-              <EvdCreateForm
-                data={data}
-                selectedAircraftPrefix={selectedAircraftForForm}
-                aeronavesAtivas={aeronavesAtivas}
-                assignedAircraftPrefixes={assignedAircraftPrefixes}
-                onClose={() => setShowForm(false)}
-                onCreated={async (createdPrefix) => {
-                  await refreshEvdData();
-                  setShowForm(false);
-                  setSelectedAircraftForForm(createdPrefix || '');
-                }}
-                frmsByTripulante={frmsByTripulante}
-                frmsUnavailable={frmsUnavailable}
-                frmsReferenceDate={frmsReferenceDate}
-                escalaId={escalaAtiva?.id ?? null}
-              />
+              <div className="animate-slide-down">
+                <EvdCreateForm
+                  data={data}
+                  selectedAircraftPrefix={selectedAircraftForForm}
+                  aeronavesAtivas={aeronavesAtivas}
+                  assignedAircraftPrefixes={assignedAircraftPrefixes}
+                  onClose={() => setShowForm(false)}
+                  onCreated={async (createdPrefix) => {
+                    await refreshEvdData();
+                    setShowForm(false);
+                    setSelectedAircraftForForm(createdPrefix || '');
+                  }}
+                  frmsByTripulante={frmsByTripulante}
+                  frmsUnavailable={frmsUnavailable}
+                  frmsReferenceDate={frmsReferenceDate}
+                  escalaId={escalaAtiva?.id ?? null}
+                />
+              </div>
             )}
           </aside>
         </section>
@@ -1507,7 +1535,20 @@ export default function EvdPage() {
           </div>
 
           {loadingPublicacoes ? (
-            <p className="text-sm text-slate-500">Carregando revisões...</p>
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-8 bg-slate-200 rounded" />
+                      <div className="h-3 w-14 bg-slate-200 rounded" />
+                      <div className="h-3 w-24 bg-slate-200 rounded" />
+                    </div>
+                    <div className="h-3 w-48 bg-slate-100 rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : publicacoes.length === 0 ? (
             <p className="text-sm text-slate-500">Nenhuma publicação diária registrada para esta data.</p>
           ) : (
@@ -1555,7 +1596,7 @@ export default function EvdPage() {
         </div>
 
         {snapshotOpen && snapshotDetail && (
-          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm">
+          <div id="evd-snapshot-panel" className="animate-fade-in rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -1686,12 +1727,27 @@ export default function EvdPage() {
             </span>
           </div>
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+            <div className="animate-pulse p-4">
+              <div className="h-7 w-full bg-slate-100 rounded mb-3" />
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4 py-3 border-b border-slate-100">
+                  <div className="h-4 w-12 bg-slate-200 rounded" />
+                  <div className="h-4 w-16 bg-slate-200 rounded" />
+                  <div className="h-4 w-12 bg-slate-200 rounded" />
+                  <div className="h-4 w-28 bg-slate-100 rounded" />
+                  <div className="h-4 w-8 bg-slate-200 rounded" />
+                  <div className="h-4 w-8 bg-slate-200 rounded" />
+                  <div className="h-4 w-28 bg-slate-100 rounded" />
+                  <div className="h-4 w-8 bg-slate-200 rounded" />
+                  <div className="h-4 w-8 bg-slate-200 rounded" />
+                  <div className="h-4 w-14 bg-slate-100 rounded" />
+                  <div className="h-4 w-16 bg-slate-200 rounded ml-auto" />
+                </div>
+              ))}
             </div>
           ) : voos.length === 0 ? (
             <div className="py-16 text-center text-slate-400 dark:text-slate-500">
-              <Plane className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <Plane className="h-12 w-12 mx-auto mb-3 opacity-30 animate-pulse" />
               <p className="text-sm font-medium">Nenhuma aeronave escalada para {formatDateBR(data)}</p>
               <button
                 onClick={() => {
@@ -1750,7 +1806,7 @@ export default function EvdPage() {
                         className={[
                           'align-top transition-colors',
                           hasFrmsAlert
-                            ? 'bg-amber-50/40 dark:bg-amber-500/5'
+                            ? 'bg-amber-50/40 hover:bg-amber-100/60 dark:bg-amber-500/5 dark:hover:bg-amber-500/10'
                             : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
                         ].join(' ')}
                       >
@@ -1841,16 +1897,16 @@ export default function EvdPage() {
                                 <button
                                   onClick={() => handlePublish(voo)}
                                   disabled={publicarMutation.isPending}
-                                  className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                                  className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
                                 >
-                                  <Send className="h-3 w-3" /> Publicar
+                                  <Send className="h-3.5 w-3.5" /> Publicar
                                 </button>
                                 <button
                                   onClick={() => deleteMutation.mutate(voo.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 transition hover:bg-red-100"
+                                  className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
                                 >
-                                  <Trash2 className="h-3 w-3" /> Excluir
+                                  <Trash2 className="h-3.5 w-3.5" /> Excluir
                                 </button>
                               </>
                             )}
