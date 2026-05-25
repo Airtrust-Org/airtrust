@@ -206,6 +206,15 @@ function baseState(): MockState {
         qual_categoria: 'TREINAMENTO DE VOO',
         qual_validade: 12,
       },
+      79: {
+        id: 79,
+        gera_qualificacao: 1,
+        qualificacao_tipo_id: null,
+        duracao_estimada: 120,
+        qual_codigo: null,
+        qual_categoria: 'TREINAMENTO DE VOO',
+        qual_validade: 12,
+      },
     },
     historico: [],
   };
@@ -243,7 +252,7 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
       sessaoId: 66,
       modeloId: 78,
       tipoSessao: 'PER',
-      data: '2026-05-23',
+      data: '2099-05-23',
       participantes,
       empresaId: 6,
     });
@@ -258,7 +267,7 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
       sessaoId: 66,
       modeloId: 78,
       tipoSessao: 'PER',
-      data: '2026-05-23',
+      data: '2099-05-23',
       participantes,
       empresaId: 6,
     });
@@ -279,7 +288,7 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
       qualificacao_id: 91,
       qualificacao_codigo: 'R',
       categoria: 'TREINAMENTO DE VOO',
-      data_conclusao: '2026-05-23',
+      data_conclusao: '2099-05-23',
       validade_meses: 12,
       status: 'CANCELADA',
       renovada: 0,
@@ -297,7 +306,7 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
       qualificacao_id: 91,
       qualificacao_codigo: 'R',
       categoria: 'TREINAMENTO DE VOO',
-      data_conclusao: '2026-05-23',
+      data_conclusao: '2099-05-23',
       validade_meses: 12,
       status: 'CANCELADA',
       renovada: 0,
@@ -317,7 +326,7 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
       sessaoId: 66,
       modeloId: 78,
       tipoSessao: 'PER',
-      data: '2026-05-23',
+      data: '2099-05-23',
       participantes,
       empresaId: 6,
     });
@@ -332,5 +341,86 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
     const ativas = state.historico.filter((h) => h.deleted_at === null && h.status === 'PLANEJADA');
     expect(ativas).toHaveLength(2);
     expect(ativas.map((h) => h.funcionario_id).sort((a, b) => a - b)).toEqual([19, 32]);
+  });
+
+  it('não gera quando o modelo não possui qualificação mapeada', async () => {
+    const state = baseState();
+    state.participantes.push({ sessao_id: 90, funcionario_id: 19, deleted_at: null });
+    const db = createMockDb(state);
+    const participantes = await listarParticipantesDaSessaoParaQualificacao(db, 90);
+
+    const result = await criarQualificacoesPlanejadas(db, {
+      sessaoId: 90,
+      modeloId: 79,
+      tipoSessao: 'PER',
+      data: '2026-05-29',
+      participantes,
+      empresaId: 6,
+    });
+
+    expect(result.criadas).toBe(0);
+    expect(result.puladas).toBe(0);
+    expect(result.conflitosUniques).toBe(0);
+    expect(state.historico.filter((h) => h.deleted_at === null)).toHaveLength(0);
+  });
+
+  it('sessão com data passada não gera PLANEJADA', async () => {
+    const state = baseState();
+    state.participantes.push({ sessao_id: 92, funcionario_id: 19, deleted_at: null });
+    const db = createMockDb(state);
+    const participantes = await listarParticipantesDaSessaoParaQualificacao(db, 92);
+
+    const result = await criarQualificacoesPlanejadas(db, {
+      sessaoId: 92,
+      modeloId: 78,
+      tipoSessao: 'PER',
+      data: '2020-01-01',
+      participantes,
+      empresaId: 6,
+    });
+
+    expect(result.criadas).toBe(0);
+    expect(result.bloqueadasDataPassada).toBe(1);
+    expect(state.historico.filter((h) => h.deleted_at === null && h.status === 'PLANEJADA')).toHaveLength(0);
+  });
+
+  it('não duplica quando já existe legado CONCLUIDA com mesma chave UNIQUE', async () => {
+    const state = baseState();
+    state.participantes.push({ sessao_id: 91, funcionario_id: 19, deleted_at: null });
+    state.historico.push({
+      id: 7001,
+      funcionario_id: 19,
+      qualificacao_id: 91,
+      qualificacao_codigo: 'R',
+      categoria: 'TREINAMENTO DE VOO',
+      data_conclusao: '2026-05-30',
+      validade_meses: 12,
+      status: 'CONCLUIDA',
+      renovada: 0,
+      carga_horaria: 120,
+      tipo_treinamento: 'RECORRENTE',
+      empresa_id: 6,
+      sessao_id: null,
+      deleted_at: null,
+      created_at: 'old',
+      updated_at: 'old',
+    });
+
+    const db = createMockDb(state);
+    const participantes = await listarParticipantesDaSessaoParaQualificacao(db, 91);
+
+    const result = await criarQualificacoesPlanejadas(db, {
+      sessaoId: 91,
+      modeloId: 78,
+      tipoSessao: 'PER',
+      data: '2026-05-30',
+      participantes,
+      empresaId: 6,
+    });
+
+    expect(result.criadas).toBe(0);
+    expect(result.puladas).toBe(0);
+    expect(result.conflitosUniques).toBe(1);
+    expect(state.historico.filter((h) => h.deleted_at === null && h.status === 'PLANEJADA')).toHaveLength(0);
   });
 });
