@@ -497,7 +497,7 @@ export async function criarQualificacoesPlanejadas(
     participantes: Array<{ funcionario_id: number }>;
     empresaId: number;
   },
-): Promise<{ criadas: number; puladas: number; conflitosUniques: number }> {
+): Promise<{ criadas: number; puladas: number; conflitosUniques: number; bloqueadasDataPassada: number }> {
   const modelo = await db
     .prepare(
       `SELECT ms.gera_qualificacao, ms.qualificacao_tipo_id, ms.duracao_estimada,
@@ -519,7 +519,7 @@ export async function criarQualificacoesPlanejadas(
     }>();
 
   if (!modelo || !modelo.gera_qualificacao || !modelo.qualificacao_tipo_id || !modelo.qual_codigo) {
-    return { criadas: 0, puladas: 0, conflitosUniques: 0 };
+    return { criadas: 0, puladas: 0, conflitosUniques: 0, bloqueadasDataPassada: 0 };
   }
 
   // Mapear tipo_sessao → tipo_treinamento (CHECK constraint: INICIAL, RECORRENTE, SEMESTRAL, UPGRADE, ESPECIFICO)
@@ -534,8 +534,17 @@ export async function criarQualificacoesPlanejadas(
   let criadas = 0;
   let puladas = 0;
   let conflitosUniques = 0;
+  let bloqueadasDataPassada = 0;
+  const hojeIso = new Date().toISOString().slice(0, 10);
+  const dataSessao = String(params.data || '').slice(0, 10);
 
   for (const part of params.participantes) {
+    // Regra de negócio: PLANEJADA é apenas para data futura/hoje.
+    if (dataSessao && dataSessao < hojeIso) {
+      bloqueadasDataPassada++;
+      continue;
+    }
+
     // Check 1: already has a planejada linked to this session
     const existing = await db
       .prepare(
@@ -618,5 +627,5 @@ export async function criarQualificacoesPlanejadas(
     criadas = stmts.length;
   }
 
-  return { criadas, puladas, conflitosUniques };
+  return { criadas, puladas, conflitosUniques, bloqueadasDataPassada };
 }
