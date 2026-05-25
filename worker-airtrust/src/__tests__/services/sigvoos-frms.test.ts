@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSigvoosMonthlyPreview,
   buildSigvoosMonthlyWindows,
+  clearExistingFiraDataForEmpresa,
   extractSigvoosAccessToken,
   findTripulanteByCanacOrName,
   getArrayPayload,
   groupSigvoosRecordsByDay,
   normalizeSigvoosRecord,
+  requireClearExistingEmpresaId,
+  shouldClearExistingSigvoosData,
   shouldStopSigvoosPaging,
 } from '../../services/sigvoos-frms';
 
@@ -62,6 +65,52 @@ function createSigvoosDbStub({
 }
 
 describe('sigvoos-frms service', () => {
+  it('does not request cleanup when clearExisting is omitted or false', () => {
+    expect(shouldClearExistingSigvoosData()).toBe(false);
+    expect(shouldClearExistingSigvoosData(false)).toBe(false);
+    expect(shouldClearExistingSigvoosData(true)).toBe(true);
+  });
+
+  it('blocks cleanup when tenant scope is missing', () => {
+    expect(() => requireClearExistingEmpresaId(undefined)).toThrow(
+      'SIGVOOS_CLEAR_EXISTING_REQUIRES_EMPRESA_ID',
+    );
+    expect(() => requireClearExistingEmpresaId(null)).toThrow(
+      'SIGVOOS_CLEAR_EXISTING_REQUIRES_EMPRESA_ID',
+    );
+    expect(() => requireClearExistingEmpresaId(0)).toThrow(
+      'SIGVOOS_CLEAR_EXISTING_REQUIRES_EMPRESA_ID',
+    );
+    expect(requireClearExistingEmpresaId(7)).toBe(7);
+  });
+
+  it('scopes clearExisting cleanup to one tenant only', async () => {
+    const statements: Array<{ sql: string; args: unknown[] }> = [];
+    const dbStub = {
+      prepare: (sql: string) => ({
+        bind: (...args: unknown[]) => {
+          statements.push({ sql, args });
+          return { sql, args };
+        },
+      }),
+      batch: async () => [],
+    } as any;
+
+    await clearExistingFiraDataForEmpresa(dbStub, 42);
+
+    expect(statements).toHaveLength(6);
+    const sqlText = statements.map((stmt) => stmt.sql).join('\n');
+    expect(sqlText).toContain("AND empresa_id = ?");
+    expect(sqlText).toContain('f.empresa_id = ?');
+    expect(sqlText).toContain('h.empresa_id = ?');
+
+    const empresaBindings = statements.flatMap((stmt) =>
+      stmt.args.filter((arg): arg is number => typeof arg === 'number'),
+    );
+    expect(empresaBindings).toContain(42);
+    expect(empresaBindings.every((value) => value === 42)).toBe(true);
+  });
+
   it('normalizes and groups raw SIGVOOS legs by tripulante and day', () => {
     const first = normalizeSigvoosRecord({
       tripulante_nome: 'JOAO SILVA',

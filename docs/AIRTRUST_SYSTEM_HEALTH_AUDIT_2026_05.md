@@ -1,0 +1,413 @@
+# AIRTRUST — System Health Audit (2026-05)
+
+Data da auditoria: 2026-05-25  
+Repositório: `/Users/filipedaumas/SAAS/Airtrust`  
+Escopo: Auditoria read-only (sem patch funcional)
+
+## 1. Sumário executivo
+
+Esta fase foi executada como auditoria técnica **read-only**, sem deploy, sem push, sem migration e sem escrita em banco.
+
+Principais conclusões:
+
+- Há **riscos P0 de integridade multi-tenant** em fluxos de manutenção/importação que podem afetar dados de mais de uma empresa.
+- Há **rotas legadas de correção massiva** expostas em runtime que merecem isolamento operacional mais forte.
+- Build e testes principais passam, mas há inconsistência de tipagem no worker tsconfig dedicado.
+- O repositório contém acúmulo técnico relevante (migrations duplicadas, artefatos gerados rastreados, rotas/páginas legadas), exigindo saneamento faseado.
+
+Resumo de severidade desta auditoria:
+
+- P0: 3
+- P1: 5
+- P2: 10
+- P3: 4
+
+## 2. Estado do repositório
+
+Estado coletado no início/fim da auditoria:
+
+- Branch: `main`
+- HEAD local: `438f9f13f8a5bfb1d8744ac4f7592fd66019d35f`
+- `origin/main`: `438f9f13f8a5bfb1d8744ac4f7592fd66019d35f`
+- Divergência (`origin/main...HEAD`): `0 ahead / 0 behind`
+
+Árvore local já estava suja antes da auditoria (22 arquivos modificados + untracked prévios). Esta auditoria preservou esse estado e adicionou apenas:
+
+- `scripts/validation/audit-endpoint-matrix.mjs` (script read-only auxiliar)
+- `docs/AIRTRUST_SYSTEM_HEALTH_AUDIT_2026_05.md` (este relatório)
+
+Achados de inventário:
+
+- Arquivos rastreados: `4686`
+- Arquivos `.sql`: `689`
+- Migrações/arquivos em `worker-airtrust/migrations`: alto volume, com prefixos duplicados
+- Diretórios grandes: `worker-airtrust/`, `Arquivos - EAD/`, `scripts/`, `_arquivos_nao_usados/`, `docs/`
+- Artefatos gerados rastreados detectados: `playwright-report/*`, `.wrangler-dry/index.js.map`, `worker-airtrust/.tmp-worker-bundle/*`
+
+## 3. Resultado de build/testes
+
+Comandos executados:
+
+- `npx tsc --noEmit` ✅
+- `npm run build` ✅
+- `npm run test:worker` ✅ (409 testes)
+- `npm run lint` ✅
+- `npx tsc -p worker-airtrust/tsconfig.json --noEmit` ❌
+
+Falha de tipagem do worker:
+
+- `worker-airtrust/src/routes/simuladores-shared.ts:522`
+- Retorno ausente de `bloqueadasDataPassada` no objeto retornado.
+
+## 4. Mapa de rotas e APIs
+
+Foi criado script de inventário read-only:
+
+- `scripts/validation/audit-endpoint-matrix.mjs`
+
+Resumo do inventário automático:
+
+- Backend: 535 paths únicos detectados
+- Frontend: 60 paths `/api/*` únicos detectados
+- Calls frontend sem endpoint backend correspondente (8)
+
+### Matriz priorizada (backend x frontend x status)
+
+| Endpoint | Método | Consumidor frontend | Auth/role | Status |
+|---|---|---|---|---|
+| `/api/system/info` | GET | `src/react-app/pages/Sistema.tsx:47` | n/a | **Frontend chama endpoint inexistente** |
+| `/api/simuladores/equipamentos` | GET/POST/PUT/DELETE | `src/react-app/pages/simuladores/cadastros/equipamentos/index.tsx:52,70,71,118` | global auth | **Divergente** (`/api/simuladores` é o namespace atual) |
+| `/api/qualificacoes-list` | GET | `src/client/hooks/useQualificacoes.ts:76,92` | n/a | **Sem backend aparente (hook legado)** |
+| `/api/qualificacoes/importar-json` | POST | `src/react-app/components/common/ImportarUniversal.tsx:42-45` | n/a | **Sem backend aparente** |
+| `/api/auditoria-logs/stats` | GET | `src/react-app/hooks/useAuditoria.ts:79` | n/a | **Sem backend aparente** |
+| `/api/templates-airtrust-brazilian-dates/certificacoes/csv` | GET | `src/react-app/components/shared/ImportarCertificacoes.tsx` | n/a | **Sem backend aparente** |
+| `/api/templates-airtrust-brazilian-dates/certificacoes/xlsx` | GET | `src/react-app/components/shared/ImportarCertificacoes.tsx` | n/a | **Sem backend aparente** |
+| `/api/qualificacoes-historico/deduplicate` | POST | sem consumidor frontend | auth global (sem role dedicado) | **Ativo, mutação sensível, sem isolamento por empresa** |
+
+Observação: inventário automático foi complementado com validação manual nos fluxos críticos para reduzir falso positivo de sub-routers aninhados.
+
+## 5. Auditoria dos fluxos críticos
+
+### A) Simuladores / sessões / qualificações planejadas
+
+- Estrutura de rotas modular e com testes relevantes (`simuladores-planejadas-edit-session.test.ts`).
+- Gap de tipagem em `simuladores-shared.ts` (worker tsc dedicado falha).
+- Há telas/arquivos legados em frontend simuladores com endpoints divergentes (ex.: `/api/simuladores/equipamentos`).
+
+Risco principal: inconsistência entre frontend legado e rotas atuais + dívida de tipagem.
+
+### B) FRMS / fadiga
+
+- FRMS possui cobertura de endpoints extensa e middleware global de auth+tenant em `/api/*`.
+- Risco crítico em sincronização SIGVOOS/FRMS com limpeza global por padrão (detalhado em P0-01).
+- Risco funcional de RBAC por normalização de role divergente (detalhado em P1-01).
+
+### C) EVD / Escala Diária
+
+- Fluxo de publicação diária (`POST /api/evd/publicacoes`) executa validações operacionais robustas.
+- `PUT /api/evd/:id` permite atualização direta de campos críticos sem reaplicar o mesmo conjunto de validações operacionais de criação/publicação.
+
+Risco principal: edição posterior pode introduzir estado operacional inválido sem bloqueio.
+
+### D) SIGVOOS / integrações
+
+- Endpoint de manutenção tem proteção adicional por secret e host local.
+- Fluxo principal de sync usa `clearExisting` default `true`; limpeza é global e sem filtro por `empresa_id`.
+
+Risco principal: perda/contaminação de dados FRMS entre empresas.
+
+### E) Auth / usuários / tenant
+
+- Há middleware global em `/api/*` com exceções públicas explícitas (`worker-airtrust/src/index.ts:243-275`).
+- Arquitetura de auth usa duas camadas RBAC (`middleware/auth.ts` e `middleware/rbac.ts`) com semântica diferente.
+- `requireRole` de `auth.ts` faz comparação literal e não harmoniza com role normalizada PT-BR.
+
+Risco principal: falhas de autorização por inconsistência de implementação.
+
+## 6. Banco / schema / migrations
+
+Sem executar migrations; apenas leitura de arquivos.
+
+Achados:
+
+- Migrations com alto acúmulo e numeração duplicada (ex.: `0092` aparece 9 vezes; múltiplos `0062`, `0063`, `0068`, etc.).
+- Arquivo `.bkp` dentro da pasta de migrations (`0020_simuladores_final.sql.bkp`).
+- Exemplo de constraints/índices relevantes detectados:
+  - `ux_funcionarios_cpf` e `ux_qualificacoes_tipos_codigo` em `0116_add_unique_constraints.sql`
+  - `UNIQUE (curso_id, funcionario_id, empresa_id)` em `0336_lms_matriculas.sql`
+- Forte presença de padrão soft-delete (`deleted_at`) em múltiplos domínios.
+
+Risco principal: histórico de migração difícil de auditar linearmente e suscetível a conflitos operacionais.
+
+## 7. Segurança / permissões
+
+Achados principais:
+
+- Endpoint de deduplicação com mutação massiva sem filtro por tenant (P0).
+- Fluxo SIGVOOS->FRMS com limpeza global de dados multi-tenant por padrão (P0).
+- Material sensível/versionado: dumps SQL e arquivos `.env.*` rastreados (risco operacional/LGPD).
+
+Arquivos candidatos sensíveis rastreados incluem:
+
+- `.env.local.production`, `.env.production`, `src/.env.production`, `.env.test`
+- `scripts/legacy/d1-prod-20260315-193839.sql`
+- `scripts/seed-local.sql`
+
+## 8. UI/UX funcional
+
+Achados relevantes:
+
+- Menu contém item `/sistema` (`src/react-app/components/OptimizedMainSidebar.tsx:95`) sem rota evidente no `App.tsx`.
+- Página `Sistema` usa `/api/system/info` inexistente (`src/react-app/pages/Sistema.tsx:47`).
+- Tela de equipamentos simuladores usa namespace legado `/api/simuladores/equipamentos` (`src/react-app/pages/simuladores/cadastros/equipamentos/index.tsx:52`).
+- `src/components/qualificacoes/NovaQualificacaoModal.tsx` usa host hardcoded externo e não tem consumidor aparente.
+
+Risco UX: usuário pode navegar/acionar telas que aparentam salvar, mas estão desacopladas do backend atual.
+
+## 9. Observabilidade e operação
+
+Pontos positivos:
+
+- `GET /api/health`, `GET /api/version`, `GET /api/docs` disponíveis.
+- Logging presente em pontos de integração críticos.
+
+Pontos de atenção:
+
+- Trechos com fallback silencioso para sucesso podem mascarar falhas operacionais (ex.: `/api/sessoes` retorna `success: true` com lista vazia em erro, `worker-airtrust/src/index.ts:1070-1079`).
+- Excesso de rotas legadas dificulta rastreio rápido de fluxo ativo vs legado.
+
+## 10. Performance e manutenção
+
+Sinais de dívida técnica:
+
+- Diretório de migrations muito grande e com duplicidades de versão.
+- Artefatos gerados rastreados em Git.
+- Dependências desatualizadas em volume alto (`npm outdated --depth=0`).
+- Sobreposição de camadas de API/frontend (hooks e serviços legados coexistindo).
+
+## 11. Obsoletos / duplicados / limpeza (classificação)
+
+| Categoria | Caminho (exemplo) | Evidência | Risco de remover | Recomendação |
+|---|---|---|---|---|
+| Essencial | `worker-airtrust/src/index.ts` | Entrypoint de rotas | Alto | Não mexer sem plano |
+| Provavelmente essencial | `worker-airtrust/src/routes/frms.ts` | Fluxo FRMS ativo | Alto | Mudança apenas via patch dedicado |
+| Duplicado aparente | `worker-airtrust/migrations/0092_*` | múltiplos chunks com mesmo prefixo | Médio | Revisão manual de linearização |
+| Obsoleto aparente | `src/client/hooks/useQualificacoes.ts` | export quebrado + endpoint ausente | Baixo/Médio | Isolar e remover em fase de limpeza |
+| Gerado/cache/build | `playwright-report/*`, `.wrangler-dry/*`, `.tmp-worker-bundle/*` | artefatos de execução | Baixo | parar de rastrear + limpeza controlada |
+| Local/dev-only | dumps em `scripts/legacy/*.sql` | dados sensíveis e volume | Alto | mover para storage seguro fora do repo |
+| Precisa investigação humana | `src/react-app/pages/simuladores/cadastros/equipamentos/index.tsx` | `@ts-nocheck` + endpoints legados | Médio | confirmar uso real antes de alterar |
+| Candidato a archive | `src/components/qualificacoes/NovaQualificacaoModal.tsx` | sem consumidores + host hardcoded | Baixo | validar ausência de uso e arquivar/remover |
+
+Comandos sugeridos (não executados):
+
+- `git ls-files | rg 'playwright-report|\.wrangler-dry|\.tmp-worker-bundle'`
+- `git ls-files | rg 'scripts/legacy/.*\.sql|seed-local\.sql'`
+- `rg -n 'NovaQualificacaoModal|useQualificacoes' src`
+
+## 12. Bugs potenciais priorizados (P0–P3)
+
+### P0-01 — Sync SIGVOOS pode limpar dados FRMS de múltiplas empresas
+
+- Evidência:
+  - `worker-airtrust/src/services/sigvoos-frms.ts:2456` (`input.clearExisting ?? true`)
+  - `worker-airtrust/src/services/sigvoos-frms.ts:1974-2026` (`clearExistingFiraData` sem filtro por `empresa_id`)
+- Impacto: perda/corrupção multi-tenant de dados de jornada/alerta/importação
+- Probabilidade: alta (default atual)
+- Verificação: inspeção estática do fluxo `/api/integracoes/sigvoos/sincronizar-frms`
+- Proposta: default `clearExisting=false` + limpeza estritamente por tenant/escopo de importação
+- Risco da correção: médio (precisa preservar idempotência do reprocessamento)
+- Teste recomendado: integração multi-tenant com dois `empresa_id` e assert de isolamento
+
+### P0-02 — Endpoint deduplicate faz soft-delete global sem isolamento por empresa
+
+- Evidência:
+  - mount em `worker-airtrust/src/index.ts:1094`
+  - mutação em `worker-airtrust/src/routes/deduplicate.ts:20-104` sem `empresa_id` em filtros
+- Impacto: exclusão lógica indevida de histórico de outras empresas
+- Probabilidade: média/alta (rota ativa)
+- Verificação: inspeção estática das queries
+- Proposta: restringir por role admin + filtro obrigatório por tenant + dry-run obrigatório
+- Risco da correção: baixo/médio
+- Teste recomendado: teste de contrato com duas empresas e dedup limitado por tenant
+
+### P0-03 — Dados sensíveis e dumps SQL rastreados no repositório
+
+- Evidência:
+  - `scripts/legacy/d1-prod-20260315-193839.sql`
+  - `scripts/seed-local.sql`
+  - arquivos `.env.*` rastreados
+- Impacto: risco LGPD/segurança e vazamento operacional
+- Probabilidade: média
+- Verificação: inventário `git ls-files`
+- Proposta: política de segregação de dados sensíveis fora do Git + rotação de segredos
+- Risco da correção: baixo (operacional)
+- Teste recomendado: pipeline de guard para bloquear arquivos sensíveis
+
+### P1-01 — Inconsistência RBAC: `auth.requireRole` vs roles normalizadas
+
+- Evidência:
+  - normalização para `GESTOR` em `worker-airtrust/src/middleware/auth.ts:31-50`
+  - comparação literal em `worker-airtrust/src/middleware/auth.ts:429-449`
+  - uso `requireRole('manager')` em `worker-airtrust/src/routes/frms-fadiga-checkin.ts:1417,1480,1524`
+- Impacto: bloqueio indevido de usuários gestores
+- Probabilidade: média
+- Proposta: unificar checagem com `middleware/rbac.ts` ou normalização compatível
+- Teste recomendado: matriz de perfis `ADMIN/GESTOR/USUARIO` por endpoint FRMS
+
+### P1-02 — Edição EVD pode burlar validações operacionais
+
+- Evidência:
+  - `PUT /api/evd/:id` em `worker-airtrust/src/routes/escalas-evd.ts:1546-1621`
+  - validações robustas concentradas em criação/publicação (`:1210-1335`)
+- Impacto: inconsistência operacional em escala diária
+- Probabilidade: média
+- Proposta: reaplicar validações críticas no PUT ou bloquear alteração de campos sensíveis após publicação
+- Teste recomendado: cenário de edição com tripulante duplicado/repouso insuficiente
+
+### P1-03 — Worker tsconfig dedicado falha em tipagem
+
+- Evidência:
+  - retorno incompleto em `worker-airtrust/src/routes/simuladores-shared.ts:522`
+- Impacto: regressão de qualidade e risco de drift semântico
+- Probabilidade: alta (reprodutível)
+- Proposta: alinhar retorno com contrato tipado
+- Teste recomendado: `npx tsc -p worker-airtrust/tsconfig.json --noEmit` no CI
+
+### P1-04 — Navegação/tela de sistema inconsistente
+
+- Evidência:
+  - menu `/sistema` em `src/react-app/components/OptimizedMainSidebar.tsx:95`
+  - chamada `/api/system/info` em `src/react-app/pages/Sistema.tsx:47` (endpoint inexistente)
+- Impacto: funcionalidade quebrada/percepção de instabilidade
+- Probabilidade: alta
+- Proposta: alinhar rota frontend + endpoint real (`/api/version` + `/api/health`)
+- Teste recomendado: smoke de navegação e health card
+
+### P1-05 — Tela de equipamentos usa contrato de API legado
+
+- Evidência:
+  - `src/react-app/pages/simuladores/cadastros/equipamentos/index.tsx:52,70,71,118`
+  - backend atual expõe equipamentos no namespace `/api/simuladores` (`worker-airtrust/src/routes/simuladores-equipamentos.ts`)
+- Impacto: CRUD potencialmente quebrado
+- Probabilidade: média
+- Proposta: migrar calls para contrato atual
+- Teste recomendado: CRUD E2E da tela
+
+### P2-01 — Hook legado de qualificações referencia endpoint não existente
+
+- Evidência: `src/client/hooks/useQualificacoes.ts:3,76,92`
+- Impacto: confusão e manutenção difícil
+- Proposta: descontinuar ou corrigir para hooks atuais em `src/react-app/hooks/*`
+
+### P2-02 — Componente de qualificações com host hardcoded e sem consumidor
+
+- Evidência: `src/components/qualificacoes/NovaQualificacaoModal.tsx:96,101,164`
+- Impacto: risco de uso acidental fora de ambiente
+- Proposta: remover/arquivar após validação de não uso
+
+### P2-03 — Migrations com numeração duplicada e arquivos backup internos
+
+- Evidência: duplicidades (`0092`, `0062`, `0063`, etc.) e `.bkp` em pasta de migrations
+- Impacto: auditoria/replay de schema mais frágil
+- Proposta: plano de consolidação documental antes de qualquer cleanup
+
+### P2-04 — Artefatos gerados versionados
+
+- Evidência: `playwright-report/*`, `.wrangler-dry/*`, `worker-airtrust/.tmp-worker-bundle/*`
+- Impacto: ruído no Git e aumento de risco operacional
+- Proposta: limpeza segura faseada + enforce em CI
+
+### P2-05 — Cobertura de testes insuficiente em EVD
+
+- Evidência: ausência de testes `evd` em `worker-airtrust/src/__tests__/routes`
+- Impacto: risco de regressão em fluxo operacional crítico
+- Proposta: suíte mínima de criação/edição/publicação EVD
+
+### P2-06 — Fallback de sucesso em erro de sessão pode ocultar falha
+
+- Evidência: `worker-airtrust/src/index.ts:1070-1079`
+- Impacto: diagnóstico mais difícil
+- Proposta: retornar código/flag de degradação explícito
+
+### P2-07 a P2-10
+
+- Endpoints de importação/templates legados sem backend aparente (`/api/qualificacoes/importar-json`, `/api/templates-airtrust-brazilian-dates/*`)
+- Hook de auditoria em namespace legado (`/api/auditoria-logs/*`)
+- Acoplamento de telas antigas sem rota ativa
+- Sobreposição de módulos com semântica próxima (aumenta custo de mudança)
+
+### P3 (otimização/baixa prioridade)
+
+- Dependências desatualizadas em grande volume (`npm outdated --depth=0`)
+- Comentários/trechos deprecated/legacy espalhados
+- Heterogeneidade de padrões de API client no frontend
+- Acúmulo documental histórico sem índice único de referência
+
+## 13. Recomendações por fase
+
+### Fase A — Correções P0/P1 críticas (sem “big bang”)
+
+1. Isolar deduplicate e sync SIGVOOS com hard-guard de tenant + role + dry-run.
+2. Corrigir inconsciência de RBAC em `auth.requireRole`.
+3. Endereçar divergências de endpoint nas telas críticas (`Sistema`, `Equipamentos`).
+4. Corrigir erro de tipagem no worker dedicado.
+
+### Fase B — Testes de regressão
+
+1. Testes multi-tenant para deduplicate e sync SIGVOOS.
+2. Testes EVD (create/update/publicação + justificativa).
+3. Testes RBAC por perfil (admin/gestor/usuário).
+
+### Fase C — Limpeza segura
+
+1. Classificar e retirar artefatos gerados do controle de versão.
+2. Tratar hooks/componentes legados sem consumidor.
+3. Planejar consolidação documental/migrations duplicadas (sem reescrever histórico às cegas).
+
+### Fase D — Performance e manutenção
+
+1. Plano de atualização de dependências por blocos (sem major jump em lote).
+2. Padronização progressiva de API client/frontend.
+3. Fortalecer observabilidade em fluxos com fallback silencioso.
+
+## 14. Próximos prompts sugeridos
+
+1. `Gerar patch mínimo para P0-01 (SIGVOOS clearExisting por tenant) com testes.`
+2. `Gerar patch mínimo para P0-02 (deduplicate com tenant + role + dry-run).`
+3. `Gerar testes EVD para PUT/publicação cobrindo regras operacionais.`
+4. `Gerar patch de unificação RBAC entre middleware/auth.ts e middleware/rbac.ts.`
+5. `Gerar plano de limpeza segura para artefatos versionados (sem remover nada automaticamente).`
+
+## Follow-up H2 — P0-01 SIGVOOS/FRMS tenant guard
+
+- Status antes:
+  - `syncSigvoosForFrms` aplicava `clearExisting` com default efetivo `true`.
+  - `clearExistingFiraData` executava soft-delete sem escopo de `empresa_id`, com risco multi-tenant.
+- Patch aplicado:
+  - `clearExisting` agora é opt-in explícito (`true` apenas quando informado).
+  - limpeza passou a exigir `empresa_id` válido (`SIGVOOS_CLEAR_EXISTING_REQUIRES_EMPRESA_ID` em modo fail-closed).
+  - limpeza foi restrita por tenant em `frms_jornada`, `frms_alerta`, `frms_fatorizacao_jornada`, `horas_voo_lancamentos`, `frms_jornada_pendente` e escopo condicionado em `frms_importacao_fira`.
+  - logs de execução passaram a registrar o escopo de tenant quando houver limpeza.
+- Testes adicionados:
+  - `shouldClearExistingSigvoosData`: garante default sem limpeza.
+  - `requireClearExistingEmpresaId`: bloqueia limpeza sem tenant explícito.
+  - `clearExistingFiraDataForEmpresa`: valida SQL/binds com escopo por empresa.
+- Validações:
+  - `npx tsc --noEmit`: ok.
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: falha pré-existente em `worker-airtrust/src/routes/simuladores-shared.ts:522` (fora de escopo deste patch).
+  - `npm run build`: ok.
+  - `npm run test:worker`: ok (inclui testes novos do guard).
+- Pendências:
+  - corrigir o erro dedicado de tipagem em `simuladores-shared.ts:522` na fase A2.
+
+---
+
+## Apêndice — Comandos principais executados (read-only)
+
+- Estado Git: `git status`, `git branch`, `git rev-parse`, `git diff`, `git rev-list`
+- Inventário: `find`, `du`, `git ls-files`, `rg`
+- Validação: `npx tsc --noEmit`, `npm run build`, `npm run test:worker`, `npm run lint`, `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+- Rotas/chamadas: buscas com `rg` em `worker-airtrust/src` e `src/react-app`
+- Auxiliar: `node scripts/validation/audit-endpoint-matrix.mjs`
+
+Sem execução de migration, sem execução de comando de escrita remota, sem deploy.

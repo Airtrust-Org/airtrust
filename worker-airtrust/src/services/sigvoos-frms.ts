@@ -1971,7 +1971,22 @@ export function shouldStopSigvoosPaging(
   return false;
 }
 
-async function clearExistingFiraData(db: D1Database): Promise<void> {
+export function shouldClearExistingSigvoosData(clearExisting?: boolean): boolean {
+  return clearExisting === true;
+}
+
+export function requireClearExistingEmpresaId(empresaId?: number | null): number {
+  const normalized = normalizeEmpresaId(empresaId);
+  if (normalized === null) {
+    throw new Error('SIGVOOS_CLEAR_EXISTING_REQUIRES_EMPRESA_ID');
+  }
+  return normalized;
+}
+
+export async function clearExistingFiraDataForEmpresa(
+  db: D1Database,
+  empresaId: number,
+): Promise<void> {
   const timestamp = now();
   await db.batch([
     db
@@ -1979,50 +1994,78 @@ async function clearExistingFiraData(db: D1Database): Promise<void> {
         `UPDATE frms_alerta
           SET deleted_at = ?, updated_at = ?
         WHERE jornada_id IN (
-          SELECT id FROM frms_jornada WHERE origem IN ('FIRA', 'APUS', 'SIGVOOS') AND deleted_at IS NULL
+          SELECT id
+            FROM frms_jornada
+           WHERE origem IN ('FIRA', 'APUS', 'SIGVOOS')
+             AND deleted_at IS NULL
+             AND empresa_id = ?
         )
           AND deleted_at IS NULL`,
       )
-      .bind(timestamp, timestamp),
+      .bind(timestamp, timestamp, empresaId),
     db
       .prepare(
         `UPDATE frms_fatorizacao_jornada
           SET deleted_at = ?, updated_at = ?
         WHERE jornada_id IN (
-          SELECT id FROM frms_jornada WHERE origem IN ('FIRA', 'APUS', 'SIGVOOS') AND deleted_at IS NULL
+          SELECT id
+            FROM frms_jornada
+           WHERE origem IN ('FIRA', 'APUS', 'SIGVOOS')
+             AND deleted_at IS NULL
+             AND empresa_id = ?
         )
           AND deleted_at IS NULL`,
       )
-      .bind(timestamp, timestamp),
+      .bind(timestamp, timestamp, empresaId),
     db
       .prepare(
         `UPDATE frms_jornada
           SET deleted_at = ?, updated_at = ?
-        WHERE origem IN ('FIRA', 'APUS', 'SIGVOOS') AND deleted_at IS NULL`,
+        WHERE origem IN ('FIRA', 'APUS', 'SIGVOOS')
+          AND deleted_at IS NULL
+          AND empresa_id = ?`,
       )
-      .bind(timestamp, timestamp),
+      .bind(timestamp, timestamp, empresaId),
     db
       .prepare(
         `UPDATE frms_importacao_fira
           SET deleted_at = ?, updated_at = ?
-        WHERE deleted_at IS NULL`,
+        WHERE deleted_at IS NULL
+          AND (
+            EXISTS (
+              SELECT 1
+                FROM funcionarios f
+               WHERE f.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
+                 AND f.deleted_at IS NULL
+                 AND f.empresa_id = ?
+            )
+            OR EXISTS (
+              SELECT 1
+                FROM horas_voo_lancamentos h
+               WHERE h.deleted_at IS NULL
+                 AND h.fira_importacao_id = CAST(frms_importacao_fira.id AS INTEGER)
+                 AND h.empresa_id = ?
+            )
+          )`,
       )
-      .bind(timestamp, timestamp),
+      .bind(timestamp, timestamp, empresaId, empresaId),
     db
       .prepare(
         `UPDATE horas_voo_lancamentos
           SET deleted_at = ?, updated_at = ?
         WHERE deleted_at IS NULL
+          AND empresa_id = ?
           AND (origem_registro IN ('FIRA', 'APUS', 'SIGVOOS') OR fira_importacao_id IS NOT NULL)`,
       )
-      .bind(timestamp, timestamp),
+      .bind(timestamp, timestamp, empresaId),
     db
       .prepare(
         `UPDATE frms_jornada_pendente
           SET deleted_at = ?, updated_at = ?
-        WHERE deleted_at IS NULL`,
+        WHERE deleted_at IS NULL
+          AND empresa_id = ?`,
       )
-      .bind(timestamp, timestamp),
+      .bind(timestamp, timestamp, empresaId),
   ]);
 }
 
@@ -2370,6 +2413,10 @@ export async function syncSigvoosForFrms(
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
   await reconcileStaleSigvoosEventos(db, resolvedEmpresaId);
   const parsedInput = SyncSchema.parse(rawInput);
+  const clearExistingRequested = shouldClearExistingSigvoosData(parsedInput.clearExisting);
+  const clearExistingEmpresaId = clearExistingRequested
+    ? requireClearExistingEmpresaId(empresaId)
+    : null;
   const existingConfig = await getSigvoosConfig(db, resolvedEmpresaId, undefined, runtimeEnv);
   const { from, to } = resolveSyncRange(existingConfig, parsedInput);
   const input = {
@@ -2453,8 +2500,11 @@ export async function syncSigvoosForFrms(
 
     const groupedByDay = groupSigvoosRecordsByDay(normalized);
 
-    if (input.clearExisting ?? true) {
-      await clearExistingFiraData(db);
+    if (clearExistingRequested) {
+      await clearExistingFiraDataForEmpresa(db, clearExistingEmpresaId!);
+      console.info('[sigvoos] clearExisting executado com escopo de tenant', {
+        empresaId: clearExistingEmpresaId,
+      });
     }
 
     const tripulanteGroups = new Map<string, SigvoosGroupedDay[]>();
@@ -2585,7 +2635,7 @@ export async function syncSigvoosForFrms(
 
     const summary: SigvoosSyncSummary = {
       periodo: { from: input.from, to: input.to },
-      resetExecutado: input.clearExisting ?? true,
+      resetExecutado: clearExistingRequested,
       totalRegistrosBrutos: rawRecords.length,
       totalRegistrosNormalizados: normalized.length,
       totalDiasAgrupados: groupedByDay.length,
