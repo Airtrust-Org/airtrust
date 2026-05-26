@@ -93,3 +93,31 @@ Observacoes:
   - `scripts/legacy/d1-prod-20260315-193839.sql` (19.1 MB)
   - `scripts/legacy/backup_pre_multitenant_20251207_142032.sql` (4.9 MB)
 - Validacoes: `audit-sensitive-files.sh`, `npx tsc --noEmit`, `npx tsc -p worker-airtrust/tsconfig.json --noEmit`, `npm run build` — todas ok.
+
+## 8) H6-C — First sensitive-file batch removed from Git index
+
+- Data: 2026-05-25
+- Acao: `git rm --cached` em 10 arquivos do primeiro lote (3 dumps SQL + 7 token/secret files)
+- Confirmacao: todos os 10 arquivos permanecem localmente
+- Guardrail apos H6-C:
+  - `SECRET_ENV`: 0
+  - `PROD_DUMP_OR_BACKUP`: 90 (antes: 92)
+  - `LOCAL_SEED`: 16 (antes: 17)
+  - `TEST_FIXTURE`: 2
+  - `MIGRATION`: 355
+  - `UNKNOWN_REVIEW_REQUIRED`: 224 (antes: 231)
+  - bloqueantes restantes: 330 (antes: 340)
+- Caminhos removidos do index:
+  - `scripts/seed-local.sql` (19.6 MB)
+  - `scripts/legacy/d1-prod-20260315-193839.sql` (19.1 MB)
+  - `scripts/legacy/backup_pre_multitenant_20251207_142032.sql` (4.9 MB)
+  - `docs/maintenance-secret-production/secret-list-after.txt`
+  - `docs/maintenance-secret-production/secret-list-before.txt`
+  - `docs/maintenance-secret-staging/secret-list-after.txt`
+  - `docs/maintenance-secret-staging/secret-list-before.txt`
+  - `docs/maintenance-secret-staging/secret-put-output.txt`
+  - `docs/frontend-staging-smoke/token-extracted.txt`
+  - `docs/staging-frontend-smoke/token-extracted.txt`
+- Pendencia:
+  - 220 REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes
+  - 85 MANUAL_REVIEW_REQUIRED pendentes de revisao humana
