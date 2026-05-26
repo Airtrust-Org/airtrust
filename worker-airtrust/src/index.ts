@@ -992,42 +992,14 @@ app.route('/api/sgso/next', sgsoNextGenExtraRoutes);
  * GET /api/templates - Lista todos os templates disponíveis
  */
 app.get('/api/templates', auth(), async (c) => {
-  try {
-    const db = c.env.DB;
-    const limitRaw = c.req.query('limit') || '100';
-    const limit = Math.min(Math.max(parseInt(limitRaw, 10) || 100, 1), 200);
-
-    // Simplificado: apenas retornar estrutura básica se tabela não existir
-    const result = await db
-      .prepare(
-        `SELECT 
-          'TEMPLATE-001' as id,
-          'Template Exemplo' as nome,
-          'Template de exemplo para testes' as descricao,
-          'PADRAO' as tipo,
-          datetime('now') as created_at,
-          datetime('now') as updated_at
-        LIMIT ?`,
-      )
-      .bind(limit)
-      .all();
-
-    return c.json({
-      success: true,
-      data: result.results || [],
-      total: result.results?.length || 0,
-      message: 'Endpoint de templates ativo (dados de exemplo)',
-    });
-  } catch (e) {
-    console.error('[TEMPLATES] Erro ao listar:', e);
-    // Retornar sucesso com array vazio ao invés de erro
-    return c.json({
-      success: true,
-      data: [],
-      total: 0,
-      message: 'Tabela templates não encontrada (retornando vazio)',
-    });
-  }
+  return c.json(
+    {
+      success: false,
+      error: 'TEMPLATES_ENDPOINT_UNAVAILABLE',
+      message: 'Endpoint legado indisponível; utilize endpoints específicos de templates por módulo',
+    },
+    503,
+  );
 });
 
 /**

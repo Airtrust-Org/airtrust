@@ -766,25 +766,14 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
       },
     });
   } catch (error) {
-    // Fail-open para não derrubar a Ficha 360 por divergências pontuais de schema/dados.
-    // O erro permanece logado para diagnóstico posterior.
-    console.error('[matriz-treinamento] /requisitos/:funcionario_id fail-open', error);
+    console.error('[matriz-treinamento] /requisitos/:funcionario_id failed', error);
     return c.json(
       {
-        success: true,
-        data: [],
-        meta: {
-          funcao_id: null,
-          funcao_nome: null,
-          funcionario_nome: null,
-          total: 0,
-          em_dia: 0,
-          vencido: 0,
-          em_falta: 0,
-          fallback: true,
-        },
+        success: false,
+        error: 'MATRIZ_TREINAMENTO_FAILED',
+        message: 'Erro interno ao carregar requisitos da matriz de treinamento',
       },
-      200,
+      500,
     );
   }
 });
