@@ -736,6 +736,29 @@ Comandos sugeridos (não executados):
 - Pendências:
   - `ImportarUniversal` (tipo `qualificacoes`) e `ImportarCertificacoes` permanecem fora do fluxo ativo de qualificações e continuam bloqueados até alinhamento dedicado de contrato/UX.
 
+## Follow-up H16 — Qualificações import universal cleanup
+
+- Uso encontrado:
+  - `ImportarUniversal`: sem consumidor ativo no runtime (apenas export em `components/common/index.ts`).
+  - `ImportarCertificacoes`: sem consumidor ativo no runtime.
+- Ação em `ImportarUniversal`:
+  - removida referência residual ao endpoint legado `/api/qualificacoes/importar-json`.
+  - mantido bloqueio explícito para `tipo='qualificacoes'` com mensagem orientando uso da tela dedicada.
+- Ação em `ImportarCertificacoes`:
+  - removidas referências residuais ao endpoint legado `/api/qualificacoes/importar-json`.
+  - removidas chamadas de template legado `/api/templates-airtrust-brazilian-dates/certificacoes/*`.
+  - mantido estado desabilitado do modal legado com mensagem clara de indisponibilidade até alinhamento de contrato.
+- Endpoints legados restantes (no escopo H16):
+  - removidos dos componentes alvo.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run lint`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - definir, em fase funcional dedicada, se `ImportarUniversal` e `ImportarCertificacoes` serão removidos por completo ou alinhados ao fluxo consolidado com consumidores reais.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)

@@ -10,7 +10,7 @@ interface ImportarUniversalProps {
 }
 
 const IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG =
-  'Importação de qualificações via ImportarUniversal está desabilitada: endpoint legado removido (/api/qualificacoes/importar-json).';
+  'Importação de qualificações via ImportarUniversal está desabilitada neste componente legado. Use a tela dedicada de importação de qualificações.';
 
 export const ImportarUniversal: React.FC<ImportarUniversalProps> = ({
   tipo,
@@ -48,9 +48,7 @@ export const ImportarUniversal: React.FC<ImportarUniversalProps> = ({
       const formData = new FormData();
       formData.append('file', file);
       
-      const url = tipo === 'qualificacoes' 
-        ? '/api/qualificacoes/importar-json' 
-        : `/api/${tipo}/importar`;
+      const url = `/api/${tipo}/importar`;
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${getAccessToken()}` },
