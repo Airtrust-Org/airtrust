@@ -720,3 +720,48 @@ git ls-files '*.sql' | while read f; do test -f "$f" && printf "%s\t%s\n" "$(wc 
 ```
 
 Nenhum comando de escrita, remocao, ou leitura de conteudo sensivel foi executado.
+
+## 9-C. H6-E — Batch 3 removed from Git index
+
+- Data: 2026-05-25
+- Acao: `git rm --cached` em 14 arquivos classificados como `REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE`.
+
+### Caminhos removidos do index (14 arquivos)
+
+1. `_arquivos_nao_usados/backup_pre_0068_20251121_232824.sql`
+2. `_arquivos_nao_usados/backup_pre_0068_20251121_232849.sql`
+3. `_arquivos_nao_usados/backup_pre_0068_20251121_232909.sql`
+4. `_arquivos_nao_usados/backup_pre_0068_20251121_232923.sql`
+5. `_arquivos_nao_usados/backup_pre_0068_20251121_233018.sql`
+6. `_arquivos_nao_usados/backup_pre_triggers_20251128_111653.sql`
+7. `_arquivos_nao_usados/backup-airtrust-sistema-quase-ok-20251105-230824.sql`
+8. `_arquivos_nao_usados/backup-airtrust-sistema-quase-ok-20251105-230831.sql`
+9. `_arquivos_nao_usados/backup-airtrust-v2.2-20251102-130307.sql`
+10. `_arquivos_nao_usados/backup-airtrust-v2.2-20251102-130416.sql`
+11. `_arquivos_nao_usados/migrations/data-export/clean_import.sql`
+12. `_arquivos_nao_usados/migrations/data-export/final_import.sql`
+13. `_arquivos_nao_usados/migrations/data-export/import_prod_data.sql`
+14. `_arquivos_nao_usados/migrations/data-export/prod_clean.sql`
+
+### Confirmacao de preservacao local
+
+Todos os 14 arquivos seguem presentes localmente apos a remocao do index (`git rm --cached`).
+
+### Guardrail antes/depois
+
+| Categoria | Antes (H6-D) | Depois (H6-E) | Delta |
+|---|---|---|---|
+| SECRET_ENV | 0 | 0 | 0 |
+| PROD_DUMP_OR_BACKUP | 74 | 62 | -12 |
+| LOCAL_SEED | 12 | 12 | 0 |
+| TEST_FIXTURE | 2 | 2 | 0 |
+| MIGRATION | 355 | 355 | 0 |
+| UNKNOWN_REVIEW_REQUIRED | 224 | 222 | -2 |
+| **Bloqueantes** | **310** | **296** | **-14** |
+
+### Pendencias restantes
+
+- `REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE`: 186
+- `MANUAL_REVIEW_REQUIRED`: 85
+- `KEEP_VERSIONED_LIKELY_VALID`: 19
+- `DO_NOT_TOUCH`: 6

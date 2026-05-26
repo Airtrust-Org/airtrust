@@ -862,3 +862,21 @@ Comandos sugeridos (não executados):
 - Auxiliar: `node scripts/validation/audit-endpoint-matrix.mjs`
 
 Sem execução de migration, sem execução de comando de escrita remota, sem deploy.
+
+## Follow-up H6-E — Sensitive files batch 3 from Git index only
+
+- Escopo: remocao conservadora de index (`git rm --cached`) em 14 arquivos classificados como `REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE`, sem apagar arquivos locais.
+- Caminhos removidos: lote composto por backups/exports SQL em `_arquivos_nao_usados/` (incluindo `data-export/clean_import.sql`, `final_import.sql`, `import_prod_data.sql`, `prod_clean.sql` e backups timestamped relacionados).
+- Preservacao local: validada arquivo a arquivo apos `git rm --cached`.
+- Guardrail antes/depois:
+  - bloqueantes totais: `310 -> 296` (`-14`)
+  - `PROD_DUMP_OR_BACKUP`: `74 -> 62`
+  - `UNKNOWN_REVIEW_REQUIRED`: `224 -> 222`
+  - demais categorias sem alteracao.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+  - `npx tsc --noEmit`
+  - `npm run build`
+- Pendencias:
+  - continuar remocao em lotes pequenos apenas para high confidence;
+  - manter `MANUAL_REVIEW_REQUIRED` para revisao humana.
