@@ -706,6 +706,36 @@ Comandos sugeridos (não executados):
 - Pendências:
   - alinhar em fase dedicada um fluxo de importação de qualificações para contrato consolidado de `/api/importacao`/`/api/importacao-v2`, com UX e payloads validados ponta a ponta.
 
+## Follow-up H15 — Qualificações import via importacao-v2
+
+- Contrato identificado:
+  - rota montada em `app.route('/api/importacao', importacaoRoutes)`; endpoints "v2" expostos sob esse prefixo.
+  - validação: `POST /api/importacao/validar-json/:entidade`.
+  - execução: `POST /api/importacao/executar-json/:entidade`.
+  - entidade usada para qualificações (histórico): `historico` (aceita também `qualificacoes_historico`).
+  - payload JSON: `{ rows: [{ funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento? }], mode }`.
+  - resposta de validação (histórico): `success`, `total`, `validos`, `erros`, `dados_validos`, `lista_erros`.
+  - resposta de execução: `success`, `totalRows`, `inserted`, `updated`, `skipped`, `errors`, `message`.
+- Ação tomada:
+  - `ImportarQualificacoes` reativado para fluxo consolidado (sem endpoint legado):
+    - parse do XLSX em `rows` com mapeamento de colunas legadas (`cpf`→`funcionario_cpf`, `codigo`→`qualificacao_codigo`);
+    - validação via `POST /api/importacao/validar-json/historico`;
+    - execução via `POST /api/importacao/executar-json/historico`;
+    - modo mapeado: `preencher_vazios`→`INSERT`, `atualizar_inteligente`→`MESCLAR_INTELIGENTE`, `substituir_tudo`→`SOBRESCREVER`;
+    - tratamento de erro padronizado a partir de `lista_erros/errors`.
+  - endpoint legado `/api/qualificacoes/importar-json` não foi recriado e não é mais usado no fluxo ativo.
+- Endpoints finais:
+  - `/api/importacao/validar-json/historico`
+  - `/api/importacao/executar-json/historico`
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run lint`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - `ImportarUniversal` (tipo `qualificacoes`) e `ImportarCertificacoes` permanecem fora do fluxo ativo de qualificações e continuam bloqueados até alinhamento dedicado de contrato/UX.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
