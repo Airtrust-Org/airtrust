@@ -1,13 +1,16 @@
 import React from 'react';
 import { toast } from 'sonner';
 
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { getAccessToken } from '@/react-app/config/api';
 import { Upload, Download } from 'lucide-react';
 
 interface ImportarUniversalProps {
   tipo: 'funcionarios' | 'treinamentos' | 'certificacoes' | 'simuladores' | 'manobras' | 'qualificacoes';
   onImportSuccess: () => void;
 }
+
+const IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG =
+  'Importação de qualificações via ImportarUniversal está desabilitada: endpoint legado removido (/api/qualificacoes/importar-json).';
 
 export const ImportarUniversal: React.FC<ImportarUniversalProps> = ({
   tipo,
@@ -25,6 +28,12 @@ export const ImportarUniversal: React.FC<ImportarUniversalProps> = ({
   }[tipo];
   
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (tipo === 'qualificacoes') {
+      toast.warning(IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG);
+      e.target.value = '';
+      return;
+    }
+
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -64,6 +73,11 @@ export const ImportarUniversal: React.FC<ImportarUniversalProps> = ({
   };
   
   const downloadTemplate = () => {
+    if (tipo === 'qualificacoes') {
+      toast.warning(IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG);
+      return;
+    }
+
     window.location.href = `/api/${tipo}/template`;
   };
   

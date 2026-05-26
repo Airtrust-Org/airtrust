@@ -8,7 +8,6 @@
 
 // Modern hooks (from src/react-app/hooks)
 export { useFuncionarios } from '../react-app/hooks/useFuncionarios';
-export { useQualificacoes } from '../react-app/hooks/useQualificacoes';
 export { useApi } from '../react-app/hooks/useApi';
 export { useToast } from '../react-app/hooks/useToast';
 export { useAuth } from '../react-app/hooks/useAuth';

@@ -52,6 +52,10 @@ interface ImportarCertificacoesProps {
   onSuccess: () => void;
 }
 
+const IMPORTACAO_CERTIFICACOES_BLOQUEADA_MSG =
+  'Importação de certificações via este modal está temporariamente desabilitada: endpoint legado removido (/api/qualificacoes/importar-json).';
+const IMPORTACAO_CERTIFICACOES_DISPONIVEL = false;
+
 const EXPECTED_FORMAT = {
   headers: [
     'funcionario_matricula',
@@ -233,6 +237,11 @@ export default function ImportarCertificacoes({
   );
 
   const processImport = useCallback(async () => {
+    if (!IMPORTACAO_CERTIFICACOES_DISPONIVEL) {
+      toast.warning(IMPORTACAO_CERTIFICACOES_BLOQUEADA_MSG);
+      return;
+    }
+
     console.log('🔥 [IMPORT] processImport chamada!', {
       previewData: !!previewData,
       validationErrors: validationErrors.length,
