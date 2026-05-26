@@ -19,6 +19,8 @@ type QueryArgs = {
   agendamentos: unknown[][];
   instrutores: unknown[][];
   sessoes: unknown[][];
+  sessoesSummary: unknown[][];
+  sessoesRawQueries: string[];
 };
 
 function createPaginationDb() {
@@ -26,24 +28,52 @@ function createPaginationDb() {
     agendamentos: [],
     instrutores: [],
     sessoes: [],
+    sessoesSummary: [],
+    sessoesRawQueries: [],
   };
 
   const db = {
     prepare: vi.fn((query: string) => {
-      if (query.includes('FROM simulador_agendamentos sa') && query.includes('fichas_json')) {
+      if (query.includes('FROM simulador_agendamentos sa') && query.includes('sa.uuid')) {
+        binds.sessoesRawQueries.push(query);
+
+        if (query.includes('json_group_array')) {
+          return {
+            bind: (...args: unknown[]) => {
+              binds.sessoes.push(args);
+              return {
+                all: async () => ({
+                  results: [
+                    {
+                      id: 10,
+                      data: '2026-05-26',
+                      horario_inicio: '08:00',
+                      horario_fim: '10:00',
+                      participantes_json: '[]',
+                      fichas_json: '[]',
+                    },
+                  ],
+                }),
+              };
+            },
+          };
+        }
+
         return {
           bind: (...args: unknown[]) => {
-            binds.sessoes.push(args);
+            binds.sessoesSummary.push(args);
             return {
               all: async () => ({
                 results: [
                   {
-                    id: 10,
+                    id: 11,
+                    uuid: 'summary-uuid',
                     data: '2026-05-26',
                     horario_inicio: '08:00',
                     horario_fim: '10:00',
-                    participantes_json: '[]',
-                    fichas_json: '[]',
+                    simulador_nome: 'SIM A',
+                    instrutor_nome: 'Instrutor A',
+                    status: 'AGENDADO',
                   },
                 ],
               }),
@@ -193,5 +223,34 @@ describe('simuladores pagination caps', () => {
       offset: 5,
     });
     expect(binds.sessoes.at(-1)?.slice(-2)).toEqual([200, 5]);
+  });
+
+  it('sessoes view=summary evita agregações JSON e mantém contrato de resposta', async () => {
+    const { db, binds } = createPaginationDb();
+
+    const response = await simuladoresSessoesRoutes.fetch(
+      new Request('http://localhost/sessoes?view=summary&limit=50&offset=2', { method: 'GET' }),
+      { DB: db, __mockRole: 'admin' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      success: boolean;
+      data: Array<{ participantes?: unknown[]; fichas?: unknown[] }>;
+      pagination: { limit: number; offset: number };
+    };
+
+    expect(payload.success).toBe(true);
+    expect(payload.pagination).toMatchObject({ limit: 50, offset: 2 });
+    expect(Array.isArray(payload.data)).toBe(true);
+    expect(Array.isArray(payload.data[0]?.participantes)).toBe(true);
+    expect(Array.isArray(payload.data[0]?.fichas)).toBe(true);
+    expect(payload.data[0]?.participantes).toEqual([]);
+    expect(payload.data[0]?.fichas).toEqual([]);
+
+    expect(binds.sessoesSummary.at(-1)?.slice(-2)).toEqual([50, 2]);
+    const usedQuery = binds.sessoesRawQueries.at(-1) || '';
+    expect(usedQuery.includes('json_group_array')).toBe(false);
   });
 });

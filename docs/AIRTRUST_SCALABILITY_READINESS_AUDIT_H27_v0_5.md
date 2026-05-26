@@ -302,3 +302,23 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - `npm run test:worker`
 - Pendências:
   - seguir para H30-B (query pesada de sessões) com observabilidade de erro já padronizada.
+
+## Follow-up H30-B — Simuladores sessões query hardening
+- Estratégia aplicada: modo opcional `view=summary` em `GET /api/simuladores/sessoes`.
+- Comportamento default: preservado (payload completo com agregações `participantes` e `fichas`).
+- Modo summary:
+  - não usa `json_group_array`;
+  - mantém os mesmos filtros de data/tipo/tenant/perfil/paginação;
+  - mantém contrato de envelope `{ success, data, pagination }`;
+  - retorna `participantes` e `fichas` vazios para evitar quebra em consumidores que esperam arrays.
+- Testes adicionados/ajustados:
+  - [simuladores-sessoes-pagination.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-pagination.test.ts)
+  - cobertura do default preservado e validação de que `view=summary` não executa query com `json_group_array`.
+- Validações executadas:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+  - `npx tsc --noEmit`
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:worker`
+- Pendência H30-C:
+  - eventual otimização estrutural da query detalhada (`json_group_array` + múltiplos JOINs) com benchmark e rollout controlado.
