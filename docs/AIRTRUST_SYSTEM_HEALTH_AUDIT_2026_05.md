@@ -778,6 +778,30 @@ Comandos sugeridos (não executados):
 - Pendências:
   - definir, em fase funcional dedicada, se `ImportarUniversal` e `ImportarCertificacoes` serão removidos por completo ou alinhados ao fluxo consolidado com consumidores reais.
 
+## Follow-up H17 — P2-06 sessoes error fallback
+
+- Risco antes:
+  - `GET /api/sessoes` mascarava falha backend retornando `success: true` com `data: []`, podendo simular ausência de sessões quando havia erro real.
+- Patch aplicado:
+  - ajustado `catch` de `GET /api/sessoes` em `worker-airtrust/src/index.ts` para retornar erro HTTP 500 com payload explícito:
+    - `success: false`
+    - `error: SESSOES_LIST_FAILED`
+    - `message: Erro interno ao listar sessões`
+  - removido fallback de falso sucesso com lista vazia.
+- Teste adicionado:
+  - `worker-airtrust/src/__tests__/routes/sessoes-list.test.ts`
+  - cobre:
+    - sucesso normal (`200`, `success: true`, lista real);
+    - falha de backend (`500`, `success: false`, sem mascarar `data: []`).
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run lint`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - nenhuma dentro do escopo desta correção.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
