@@ -64,12 +64,53 @@ Executado com sucesso:
 - `npm run lint`
 - `npm run test:worker` (441 testes passando)
 
-## 8. Pendências
-1. H28-B: tenant scope explícito em importação (router + serviços + auto-create).
+## 8. H28-B — Importação tenant scope
+### Escopo aplicado
+- `worker-airtrust/src/routes/importacao.ts`
+- `worker-airtrust/src/services/importacao/QualificacaoHistoricoImportacao.ts`
+- testes de rota/serviço para isolamento tenant
+
+### Pontos corrigidos
+- Router de importação passou a exigir `empresaId` válido em todos os fluxos relevantes, com fail-closed:
+  - resposta `403` com `TENANT_CONTEXT_REQUIRED` quando tenant inválido/ausente.
+- `empresaId` agora é propagado explicitamente para o serviço de histórico nas operações de validar/importar/listar.
+- Fluxo batch de histórico (`/batch-historico-v3` e `/executar-json/:entidade` no caminho de histórico) passou a incluir escopo tenant.
+
+### Listagens/execuções protegidas
+- `GET /historico/list` agora chama listagem com tenant explícito e filtra `h.empresa_id = ?`.
+- JOINs da listagem foram amarrados por tenant (`f.empresa_id = h.empresa_id`, `q.empresa_id = h.empresa_id`).
+- `enriquecer-historico` agora opera apenas no tenant autenticado e atualiza por `id + empresa_id`.
+
+### Auto-create/import antes vs depois
+- Antes:
+  - auto-create e inserts de histórico sem `empresa_id` explícito;
+  - queries de validação/lista sem filtro tenant consistente.
+- Depois:
+  - auto-create de `funcionarios`/`qualificacoes_tipos` inclui `empresa_id`;
+  - insert de `qualificacoes_historico` inclui `empresa_id`;
+  - validações e buscas de existência usam `empresa_id`;
+  - linha de histórico com CPF não resolvido no tenant falha em vez de inserir silenciosamente.
+
+### Testes adicionados
+- Novo: `worker-airtrust/src/__tests__/routes/importacao-tenant-scope.test.ts`
+  - listagem limitada ao tenant;
+  - fail-closed sem tenant;
+  - erro interno explícito sem sucesso silencioso.
+- Novo: `worker-airtrust/src/__tests__/services/qualificacao-historico-importacao-tenant.test.ts`
+  - verifica auto-create/insert com `empresa_id`;
+  - fail-closed do serviço sem tenant.
+
+## 9. Validações executadas após H28-B
+Executado com sucesso:
+- `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+- `npx tsc --noEmit`
+- `npm run build`
+- `npm run lint`
+- `npm run test:worker` (446 testes passando)
+
+## 10. Pendências
+1. Não houve necessidade de migration nesta fase; se existir ambiente legado sem `empresa_id` nessas tabelas, tratar em fase dedicada de schema.
 2. H29: hardening de rotas fail-open remanescentes.
 
-## 9. Próxima fase recomendada
-**H28-B — Importação tenant scope** (Codex alto), com:
-- mapeamento completo de `empresa_id` em validação/execução/importação-v2;
-- regra fail-closed sem tenant;
-- testes multi-tenant cobrindo auto-create e histórico.
+## 11. Próxima fase recomendada
+**H29 — Fail-open hardening** (Codex alto/médio-alto), priorizando contratos de erro explícitos nas rotas ainda permissivas.

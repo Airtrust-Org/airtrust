@@ -47,13 +47,25 @@ export interface ImportResult {
 // ===== SERVICE =====
 
 export class QualificacaoHistoricoImportacaoService {
-  constructor(private db: D1Database) {}
+  constructor(
+    private db: D1Database,
+    private empresaId?: number,
+  ) {}
+
+  private resolveEmpresaId(empresaIdOverride?: number): number {
+    const empresaId = Number(empresaIdOverride ?? this.empresaId);
+    if (!Number.isFinite(empresaId) || empresaId <= 0) {
+      throw new Error('TENANT_CONTEXT_REQUIRED');
+    }
+    return empresaId;
+  }
 
   /**
    * Valida batch completo sem inserir (COM FK CHECKS OTIMIZADOS!)
    * NOTA: Não valida existência de CPF/Código pois serão criados automaticamente se necessário
    */
-  async validate(rows: Record<string, unknown>[]): Promise<ValidationError[]> {
+  async validate(rows: Record<string, unknown>[], empresaIdOverride?: number): Promise<ValidationError[]> {
+    const empresaId = this.resolveEmpresaId(empresaIdOverride);
     const errors: ValidationError[] = [];
 
     // OTIMIZAÇÃO: Fetch único de todos os funcionários e qualificações válidos
@@ -82,9 +94,9 @@ export class QualificacaoHistoricoImportacaoService {
 
         const validCPFsResult = await this.db
           .prepare(
-            `SELECT cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND deleted_at IS NULL`,
+            `SELECT cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
-          .bind(...batch)
+          .bind(...batch, empresaId)
           .all<{ cpf: string }>();
 
         // Adicionar ao Set usando CPF normalizado como chave
@@ -105,9 +117,9 @@ export class QualificacaoHistoricoImportacaoService {
 
         const validCodigosResult = await this.db
           .prepare(
-            `SELECT UPPER(codigo) as codigo FROM qualificacoes_tipos WHERE UPPER(codigo) IN (${placeholders}) AND deleted_at IS NULL`,
+            `SELECT UPPER(codigo) as codigo FROM qualificacoes_tipos WHERE UPPER(codigo) IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
-          .bind(...codigosUpper)
+          .bind(...codigosUpper, empresaId)
           .all<{ codigo: string }>();
 
         (validCodigosResult.results || []).forEach((q) => validCodigos.add(q.codigo.toUpperCase()));
@@ -139,7 +151,9 @@ export class QualificacaoHistoricoImportacaoService {
   async import(
     rows: Record<string, unknown>[],
     mode: 'INSERT' | 'UPSERT' = 'INSERT',
+    empresaIdOverride?: number,
   ): Promise<ImportResult> {
+    const empresaId = this.resolveEmpresaId(empresaIdOverride);
     const result: ImportResult = {
       success: false,
       totalRows: rows.length,
@@ -150,7 +164,7 @@ export class QualificacaoHistoricoImportacaoService {
     };
 
     // 1. CRÍTICO: Validar todos antes de inserir (especialmente FKs)
-    const validationErrors = await this.validate(rows);
+    const validationErrors = await this.validate(rows, empresaId);
     if (validationErrors.length > 0) {
       result.errors = validationErrors;
       return result;
@@ -184,9 +198,9 @@ export class QualificacaoHistoricoImportacaoService {
 
         const existing = await this.db
           .prepare(
-            `SELECT cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND deleted_at IS NULL`,
+            `SELECT cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
-          .bind(...batch) // batch já está normalizado (só dígitos)
+          .bind(...batch, empresaId) // batch já está normalizado (só dígitos)
           .all<{ cpf: string }>();
 
         (existing.results || []).forEach((f) => {
@@ -212,9 +226,9 @@ export class QualificacaoHistoricoImportacaoService {
 
         const existing = await this.db
           .prepare(
-            `SELECT UPPER(codigo) as codigo FROM qualificacoes_tipos WHERE UPPER(codigo) IN (${placeholders}) AND deleted_at IS NULL`,
+            `SELECT UPPER(codigo) as codigo FROM qualificacoes_tipos WHERE UPPER(codigo) IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
-          .bind(...codigosUpper)
+          .bind(...codigosUpper, empresaId)
           .all<{ codigo: string }>();
 
         (existing.results || []).forEach((q) => existingCodigos.add(q.codigo.toUpperCase()));
@@ -232,18 +246,18 @@ export class QualificacaoHistoricoImportacaoService {
       for (let i = 0; i < cpfsToCreate.length; i += FUNC_BATCH) {
         const batch = cpfsToCreate.slice(i, i + FUNC_BATCH);
         const placeholders = batch
-          .map(() => '(?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
+          .map(() => '(?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
           .join(',');
         const values: unknown[] = [];
         batch.forEach((cpf) => {
           const matriculaAuto = `AUTO-${cpf.substring(0, 6)}`;
-          values.push(matriculaAuto, `Funcionário ${cpf}`, cpf, `auto.${cpf}@temp.com`, 'ATIVO');
+          values.push(matriculaAuto, `Funcionário ${cpf}`, cpf, `auto.${cpf}@temp.com`, 'ATIVO', empresaId);
         });
 
         try {
           await this.db
             .prepare(
-              `INSERT INTO funcionarios (matricula, nome, cpf, email, status, created_at, updated_at)
+              `INSERT INTO funcionarios (matricula, nome, cpf, email, status, empresa_id, created_at, updated_at)
                VALUES ${placeholders}`,
             )
             .bind(...values)
@@ -267,17 +281,17 @@ export class QualificacaoHistoricoImportacaoService {
       for (let i = 0; i < codigosToCreate.length; i += TIPO_BATCH) {
         const batch = codigosToCreate.slice(i, i + TIPO_BATCH);
         const placeholders = batch
-          .map(() => '(?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
+          .map(() => '(?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
           .join(',');
         const values: unknown[] = [];
         batch.forEach((codigo) => {
-          values.push(codigo, `Qualificação ${codigo}`, 'OUTROS', null, 0);
+          values.push(codigo, `Qualificação ${codigo}`, 'OUTROS', null, 0, empresaId);
         });
 
         try {
           await this.db
             .prepare(
-              `INSERT INTO qualificacoes_tipos (codigo, nome, categoria, validade, vencimento_fim_mes, created_at, updated_at)
+              `INSERT INTO qualificacoes_tipos (codigo, nome, categoria, validade, vencimento_fim_mes, empresa_id, created_at, updated_at)
                VALUES ${placeholders}`,
             )
             .bind(...values)
@@ -293,6 +307,26 @@ export class QualificacaoHistoricoImportacaoService {
 
     // ===== FIM DA BATCH CREATION =====
 
+    // Revalidar CPFs existentes no tenant após auto-create para evitar inserção cross-tenant
+    const tenantCPFs = new Set<string>();
+    if (allCPFs.length > 0) {
+      const CPF_BATCH = 100;
+      for (let i = 0; i < allCPFs.length; i += CPF_BATCH) {
+        const batch = allCPFs.slice(i, i + CPF_BATCH);
+        const placeholders = batch.map(() => '?').join(',');
+        const existentes = await this.db
+          .prepare(
+            `SELECT cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
+          )
+          .bind(...batch, empresaId)
+          .all<{ cpf: string }>();
+        (existentes.results || []).forEach((item) => {
+          const normalized = normalizeCPF(item.cpf);
+          if (normalized) tenantCPFs.add(normalized);
+        });
+      }
+    }
+
     // Buscar TODOS os tipos de qualificação em BATCHES para não exceder 999 variáveis
     const tiposMap = new Map<string, { id: number; validade: number | null; vencimento_fim_mes: number }>();
     if (allCodigos.length > 0) {
@@ -307,10 +341,10 @@ export class QualificacaoHistoricoImportacaoService {
             `
             SELECT id, UPPER(codigo) as codigo, validade, vencimento_fim_mes 
             FROM qualificacoes_tipos 
-            WHERE UPPER(codigo) IN (${placeholders}) AND deleted_at IS NULL
+            WHERE UPPER(codigo) IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL
           `,
           )
-          .bind(...codigosUpper)
+          .bind(...codigosUpper, empresaId)
           .all<{
             id: number;
             codigo: string;
@@ -364,10 +398,10 @@ export class QualificacaoHistoricoImportacaoService {
             `
             SELECT id, funcionario_cpf, UPPER(qualificacao_codigo) as qualificacao_codigo, data_conclusao
             FROM qualificacoes_historico 
-            WHERE (${conditions}) AND deleted_at IS NULL
+            WHERE (${conditions}) AND empresa_id = ? AND deleted_at IS NULL
           `,
           )
-          .bind(...bindings)
+          .bind(...bindings, empresaId)
           .all<{
             id: number;
             funcionario_cpf: string;
@@ -411,6 +445,15 @@ export class QualificacaoHistoricoImportacaoService {
           line: i + 2,
           field: 'geral',
           message: 'CPF ou código inválido',
+        });
+        continue;
+      }
+
+      if (!tenantCPFs.has(cpf)) {
+        result.errors.push({
+          line: i + 2,
+          field: 'funcionario_cpf',
+          message: `Funcionário CPF ${cpf} não encontrado para a empresa ${empresaId}`,
         });
         continue;
       }
@@ -464,10 +507,10 @@ export class QualificacaoHistoricoImportacaoService {
         `🔍 [QualificacaoHistoricoImportacao] Tentando inserir batch de ${batch.length} rows (total: ${toInsert.length})`,
       );
 
-      const placeholders = batch.map(() => '(?, ?, ?, ?, ?)').join(',');
+      const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
       const values: unknown[] = [];
       batch.forEach((r) => {
-        values.push(r.cpf, r.codigo, r.qualificacaoId, r.data_conclusao, r.data_vencimento);
+        values.push(r.cpf, r.codigo, r.qualificacaoId, r.data_conclusao, r.data_vencimento, empresaId);
       });
 
       console.log(
@@ -483,7 +526,8 @@ export class QualificacaoHistoricoImportacaoService {
               qualificacao_codigo,
               qualificacao_id,
               data_conclusao,
-              data_vencimento
+              data_vencimento,
+              empresa_id
             ) VALUES ${placeholders}
           `,
           )
@@ -513,7 +557,7 @@ export class QualificacaoHistoricoImportacaoService {
         UPDATE qualificacoes_historico
         SET data_vencimento = CASE id ${caseParts} END,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id IN (${idsPlaceholders})
+        WHERE id IN (${idsPlaceholders}) AND empresa_id = ?
       `;
 
       const bindings: unknown[] = [];
@@ -521,6 +565,7 @@ export class QualificacaoHistoricoImportacaoService {
         bindings.push(r.existingId!, r.data_vencimento);
       });
       batch.forEach((r) => bindings.push(r.existingId!));
+      bindings.push(empresaId);
 
       try {
         await this.db
@@ -559,7 +604,8 @@ export class QualificacaoHistoricoImportacaoService {
     qualificacao_codigo?: string;
     limit?: number;
     offset?: number;
-  }): Promise<Array<Record<string, unknown>>> {
+  }, empresaIdOverride?: number): Promise<Array<Record<string, unknown>>> {
+    const empresaId = this.resolveEmpresaId(empresaIdOverride);
     let sql = `
       SELECT 
         h.id,
@@ -598,12 +644,13 @@ export class QualificacaoHistoricoImportacaoService {
           ELSE 'LOW'
         END as urgencia
       FROM qualificacoes_historico h
-      INNER JOIN funcionarios f ON h.funcionario_cpf = f.cpf AND f.deleted_at IS NULL
-      INNER JOIN qualificacoes_tipos q ON UPPER(h.qualificacao_codigo) = UPPER(q.codigo) AND q.deleted_at IS NULL
+      INNER JOIN funcionarios f ON h.funcionario_cpf = f.cpf AND f.empresa_id = h.empresa_id AND f.deleted_at IS NULL
+      INNER JOIN qualificacoes_tipos q ON UPPER(h.qualificacao_codigo) = UPPER(q.codigo) AND q.empresa_id = h.empresa_id AND q.deleted_at IS NULL
       WHERE h.deleted_at IS NULL
+        AND h.empresa_id = ?
     `;
 
-    const bindings: unknown[] = [];
+    const bindings: unknown[] = [empresaId];
 
     if (filters?.funcionario_cpf) {
       sql += ' AND h.funcionario_cpf = ?';
