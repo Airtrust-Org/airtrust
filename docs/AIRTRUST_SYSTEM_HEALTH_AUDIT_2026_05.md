@@ -614,6 +614,30 @@ Comandos sugeridos (não executados):
 - Pendências:
   - `@ts-nocheck` mantido neste arquivo para evitar refatoração ampla fora do escopo do patch de contrato.
 
+## Follow-up H11 — H6-B Sensitive file classification
+
+- Data: 2026-05-25
+- Ferramenta/modelo: DeepSeek (inteligencia media)
+- Escopo: classificacao read-only de 340 arquivos bloqueantes restantes do guardrail.
+- Metodo: apenas metadados (caminhos, nomes, extensoes, tamanhos). Nenhum conteudo lido ou impresso.
+- Resultado:
+  - 340 arquivos classificados em 4 categorias de acao.
+  - 230 candidatos a `git rm --cached` com alta confianca.
+  - 85 precisam de revisao humana.
+  - 19 mantidos como provaveis validos.
+  - 6 marcados como "nao mexer".
+- Primeiro lote H6-C: 10 arquivos (3 dumps grandes + 7 token/secret files), todos high confidence.
+- Relatorio detalhado: `docs/AIRTRUST_SENSITIVE_FILES_CLASSIFICATION_H6B_v0_4.md`
+- Guardrail atualizado em: `docs/AIRTRUST_SENSITIVE_FILES_GUARDRAIL_v0_4.md`
+- Validações:
+  - `bash scripts/validation/audit-sensitive-files.sh`: fail esperado (340 bloqueantes)
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok
+  - `npx tsc --noEmit`: ok
+  - `npm run build`: ok
+- Pendências:
+  - aguardar aprovacao para H6-C (remocao controlada do index, lote 1).
+  - revisao humana dos 85 arquivos `MANUAL_REVIEW_REQUIRED`.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
