@@ -322,3 +322,20 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - `npm run test:worker`
 - Pendência H30-C:
   - eventual otimização estrutural da query detalhada (`json_group_array` + múltiplos JOINs) com benchmark e rollout controlado.
+
+## Follow-up H30-C — Sessões benchmark/instrumentation
+- Estratégia aplicada:
+  - benchmark **read-only** antes de qualquer otimização estrutural da query detalhada;
+  - sem alteração de contrato default, sem frontend, sem writes.
+- Script criado:
+  - [benchmark-simuladores-sessoes.sh](/Users/filipedaumas/SAAS/Airtrust/scripts/validation/benchmark-simuladores-sessoes.sh)
+- O que mede:
+  - `default` vs `view=summary`;
+  - `http_code`, `time_total`, `size_download`, `success`, `pagination`, `data_count`, `auth_required`.
+- Resultado desta fase:
+  - produção sem credenciais retornou `401` para ambos os modos (`AUTH_REQUIRED`);
+  - benchmark funcional com `success=true` ficou limitado por ausência de token/credenciais no ambiente.
+- Decisão:
+  - manter default como está;
+  - manter `view=summary` como caminho de menor custo para telas leves;
+  - abrir H30-D apenas com benchmark autenticado reproduzível justificando otimização estrutural.
