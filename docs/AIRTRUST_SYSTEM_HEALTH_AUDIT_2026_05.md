@@ -638,6 +638,25 @@ Comandos sugeridos (não executados):
   - aguardar aprovacao para H6-C (remocao controlada do index, lote 1).
   - revisao humana dos 85 arquivos `MANUAL_REVIEW_REQUIRED`.
 
+## Follow-up H12 — H6-C First sensitive batch removed from index
+
+- Data: 2026-05-25
+- Acao: `git rm --cached` de 10 arquivos (3 dumps SQL + 7 token/secret files).
+- Preservacao local: confirmada para os 10 arquivos.
+- Guardrail antes/depois:
+  - Bloqueantes: 340 → 330 (-10)
+  - PROD_DUMP_OR_BACKUP: 92 → 90
+  - LOCAL_SEED: 17 → 16
+  - UNKNOWN_REVIEW_REQUIRED: 231 → 224
+- Validações:
+  - `bash scripts/validation/audit-sensitive-files.sh`: fail esperado (330 bloqueantes)
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok
+  - `npx tsc --noEmit`: ok
+  - `npm run build`: ok
+- Pendências:
+  - 220 REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes.
+  - Possivel H6-D (lote 2) ou voltar para bugs funcionais.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)

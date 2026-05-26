@@ -574,17 +574,60 @@ Maximo 10 arquivos. Somente `REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE`. Sem migrat
 - **Codigo funcional**: qualquer arquivo `.ts`, `.tsx`, `.js` fora do escopo.
 - **EVD, FRMS, SIGVOOS, RBAC, deduplicate, simuladores, UI**: nenhum arquivo destas areas foi alterado.
 
-## 9. Proxima fase recomendada
+## 9. H6-C — Batch 1 removed from Git index
 
-**H6-C — Remocao controlada do index (lote 1)**
+- Data: 2026-05-25
+- Commit: `xxxxx` (a ser preenchido)
+- Acao: `git rm --cached` nos 10 arquivos do primeiro lote H6-C.
 
-- Escopo: 10 arquivos do primeiro lote (secao 7)
-- Acao: `git rm --cached` apenas, sem apagar local
-- Ferramenta/modelo recomendado: DeepSeek medio (tarefa simples e bem delimitada)
-- Pre-requisito: aprovacao do usuario
-- Apos H6-C: reavaliar contagem do guardrail e decidir entre:
-  - H6-D (lote 2, ~20-30 arquivos, ainda high confidence)
-  - Ou voltar para Codex medio-alto em bugs funcionais (P1-03, P2, etc.)
+### Caminhos removidos do index (10 arquivos)
+
+| # | Caminho | Categoria | Tamanho |
+|---|---|---|---|
+| 1 | `scripts/seed-local.sql` | LOCAL_SEED | 19.6 MB |
+| 2 | `scripts/legacy/d1-prod-20260315-193839.sql` | PROD_DUMP | 19.1 MB |
+| 3 | `scripts/legacy/backup_pre_multitenant_20251207_142032.sql` | PROD_DUMP | 4.9 MB |
+| 4 | `docs/maintenance-secret-production/secret-list-after.txt` | UNKNOWN_REVIEW | 819 B |
+| 5 | `docs/maintenance-secret-production/secret-list-before.txt` | UNKNOWN_REVIEW | 819 B |
+| 6 | `docs/maintenance-secret-staging/secret-list-after.txt` | UNKNOWN_REVIEW | 213 B |
+| 7 | `docs/maintenance-secret-staging/secret-list-before.txt` | UNKNOWN_REVIEW | 144 B |
+| 8 | `docs/maintenance-secret-staging/secret-put-output.txt` | UNKNOWN_REVIEW | 299 B |
+| 9 | `docs/frontend-staging-smoke/token-extracted.txt` | UNKNOWN_REVIEW | 20 B |
+| 10 | `docs/staging-frontend-smoke/token-extracted.txt` | UNKNOWN_REVIEW | 20 B |
+
+### Confirmacao de preservacao local
+
+Todos os 10 arquivos permanecem presentes no filesystem local apos `git rm --cached`.
+
+### Guardrail antes/depois
+
+| Categoria | Antes (H6-B) | Depois (H6-C) | Delta |
+|---|---|---|---|
+| SECRET_ENV | 0 | 0 | 0 |
+| PROD_DUMP_OR_BACKUP | 92 | 90 | -2 |
+| LOCAL_SEED | 17 | 16 | -1 |
+| TEST_FIXTURE | 2 | 2 | 0 |
+| MIGRATION | 355 | 355 | 0 |
+| UNKNOWN_REVIEW_REQUIRED | 231 | 224 | -7 |
+| **Bloqueantes** | **340** | **330** | **-10** |
+
+### Pendencias restantes
+
+- REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes: 220 (eram 230)
+- MANUAL_REVIEW_REQUIRED: 85
+- KEEP_VERSIONED_LIKELY_VALID: 19
+- DO_NOT_TOUCH: 6
+
+### Proximos lotes sugeridos
+
+- **H6-D (lote 2)**: ~20-30 arquivos high confidence adicionais (backups menores, exports, seeds restantes)
+- **H6-E (lote 3)**: migrations desabilitadas/arquivadas em `_arquivos_nao_usados/migrations/`
+- **H6-F (lote 4)**: SQLs soltos na raiz do `worker-airtrust/`
+
+## 10. Proxima fase recomendada
+
+- **H6-D** com DeepSeek medio: lote 2 (~20-30 arquivos high confidence)
+- Ou Codex medio-alto em bug funcional (P1-03 worker tsc fix, P2 pendente)
 
 ---
 
