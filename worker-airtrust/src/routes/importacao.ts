@@ -27,9 +27,30 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', auth());
 
+function resolveEmpresaIdOrThrow(c: Context): number {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawEmpresaId = (c as any).get('empresaId');
+  const empresaId = Number(rawEmpresaId);
+  if (!Number.isFinite(empresaId) || empresaId <= 0) {
+    throw new Error('TENANT_CONTEXT_REQUIRED');
+  }
+  return empresaId;
+}
+
+function tenantContextResponse(c: Context) {
+  return c.json(
+    {
+      success: false,
+      error: 'TENANT_CONTEXT_REQUIRED',
+      message: 'Contexto de empresa inválido para importação',
+    },
+    403,
+  );
+}
+
 // ===== HELPER: Get Service =====
 
-function getImportService(entidade: string, db: D1Database) {
+function getImportService(entidade: string, db: D1Database, empresaId?: number) {
   switch (entidade) {
     case 'funcionarios':
       return new FuncionarioImportacaoService(db);
@@ -38,7 +59,7 @@ function getImportService(entidade: string, db: D1Database) {
       return new QualificacaoTipoImportacaoService(db);
     case 'qualificacoes_historico':
     case 'historico':
-      return new QualificacaoHistoricoImportacaoService(db);
+      return new QualificacaoHistoricoImportacaoService(db, empresaId);
     case 'categorias':
       return new CategoriaImportacaoService(db);
     default:
@@ -86,6 +107,7 @@ async function executarImportacaoHistoricoEmLotes(
   c: Context,
   rows: HistoricoRow[],
   modo: string,
+  empresaId: number,
   debugLogs: string[] = [],
 ) {
   console.log(
@@ -147,13 +169,39 @@ async function executarImportacaoHistoricoEmLotes(
             `SELECT id, UPPER(TRIM(codigo)) AS codigo
              FROM qualificacoes_tipos
              WHERE UPPER(TRIM(codigo)) IN (${codigoPlaceholders})
+               AND empresa_id = ?
                AND deleted_at IS NULL`,
           )
-          .bind(...codigos)
+          .bind(...codigos, empresaId)
           .all<{ id: number; codigo: string }>();
 
         for (const tipo of tipos.results || []) {
           tipoMap.set(tipo.codigo, tipo.id);
+        }
+      }
+
+      const cpfsLote = Array.from(
+        new Set(
+          batch
+            .map((row) => String(row.funcionario_cpf || '').trim())
+            .filter(Boolean),
+        ),
+      );
+      const cpfMap = new Set<string>();
+      if (cpfsLote.length > 0) {
+        const cpfPlaceholders = cpfsLote.map(() => '?').join(', ');
+        const funcionarios = await db
+          .prepare(
+            `SELECT cpf
+             FROM funcionarios
+             WHERE cpf IN (${cpfPlaceholders})
+               AND empresa_id = ?
+               AND deleted_at IS NULL`,
+          )
+          .bind(...cpfsLote, empresaId)
+          .all<{ cpf: string }>();
+        for (const funcionario of funcionarios.results || []) {
+          cpfMap.add(String(funcionario.cpf).trim());
         }
       }
 
@@ -162,11 +210,26 @@ async function executarImportacaoHistoricoEmLotes(
         const normalizedCodigo = String(row.qualificacao_codigo || '')
           .trim()
           .toUpperCase();
+        const funcionarioCpf = String(row.funcionario_cpf || '').trim();
         const qualificacaoId = tipoMap.get(normalizedCodigo);
 
         if (!qualificacaoId) {
           const linha = start + index + 2;
           const errorMsg = `Qualificação não encontrada para o código ${row.qualificacao_codigo}`;
+          totalFailed += 1;
+          erros.push({
+            linha,
+            cpf: row.funcionario_cpf,
+            codigo: row.qualificacao_codigo,
+            erro: errorMsg,
+          });
+          debugLogs.push(`🔥 Lote ${batchIndex + 1}: linha ${linha} ignorada - ${errorMsg}`);
+          return;
+        }
+
+        if (!cpfMap.has(funcionarioCpf)) {
+          const linha = start + index + 2;
+          const errorMsg = `Funcionário CPF ${funcionarioCpf} não encontrado para a empresa ${empresaId}`;
           totalFailed += 1;
           erros.push({
             linha,
@@ -185,7 +248,7 @@ async function executarImportacaoHistoricoEmLotes(
         continue;
       }
 
-      const placeholders = validRows.map(() => '(?, ?, ?, ?, ?)').join(', ');
+      const placeholders = validRows.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
       const values: (string | number)[] = [];
 
       validRows.forEach((row) => {
@@ -195,6 +258,7 @@ async function executarImportacaoHistoricoEmLotes(
           row.qualificacao_id,
           row.data_conclusao,
           row.data_vencimento,
+          empresaId,
         );
       });
 
@@ -208,7 +272,7 @@ async function executarImportacaoHistoricoEmLotes(
         .prepare(
           `
           INSERT INTO qualificacoes_historico 
-          (funcionario_cpf, qualificacao_codigo, qualificacao_id, data_conclusao, data_vencimento)
+          (funcionario_cpf, qualificacao_codigo, qualificacao_id, data_conclusao, data_vencimento, empresa_id)
           VALUES ${placeholders}
         `,
         )
@@ -270,8 +334,14 @@ app.get('/template/:entidade', async (c: Context) => {
   const entidade = c.req.param('entidade') ?? '';
   const format = c.req.query('format') || 'csv';
   const db = c.env.DB;
+  let empresaId = 0;
+  try {
+    empresaId = resolveEmpresaIdOrThrow(c);
+  } catch {
+    return tenantContextResponse(c);
+  }
 
-  const service = getImportService(entidade, db);
+  const service = getImportService(entidade, db, empresaId);
 
   if (!service) {
     return c.json({ success: false, error: `Entidade inválida: ${entidade}` }, 400);
@@ -324,13 +394,14 @@ app.post('/validar/:entidade', async (c: Context) => {
   try {
     const entidade = c.req.param('entidade') ?? '';
     const db = c.env.DB;
+    const empresaId = resolveEmpresaIdOrThrow(c);
 
     logger.info('Request de validação recebida', {
       entidade,
       method: 'POST /validar',
     });
 
-    const service = getImportService(entidade, db);
+    const service = getImportService(entidade, db, empresaId);
 
     if (!service) {
       logger.warn('Entidade inválida solicitada', { entidade });
@@ -377,7 +448,7 @@ app.post('/validar/:entidade', async (c: Context) => {
 
     // Validar
     const timer = logger.startTimer('Validação completa');
-    const errors = await service.validate(remappedRows);
+    const errors = await service.validate(remappedRows, empresaId);
     timer();
 
     logger.info('Validação concluída', {
@@ -394,6 +465,9 @@ app.post('/validar/:entidade', async (c: Context) => {
     });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+    if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
+      return tenantContextResponse(c);
+    }
     logger.fatal('Erro ao validar importação', error as Error);
     return c.json(
       {
@@ -417,13 +491,14 @@ app.post('/executar/:entidade', async (c: Context) => {
   try {
     const entidade = c.req.param('entidade') ?? '';
     const db = c.env.DB;
+    const empresaId = resolveEmpresaIdOrThrow(c);
 
     logger.info('Request de execução recebida', {
       entidade,
       method: 'POST /executar',
     });
 
-    const service = getImportService(entidade, db);
+    const service = getImportService(entidade, db, empresaId);
 
     if (!service) {
       logger.warn('Entidade inválida solicitada', { entidade });
@@ -474,6 +549,7 @@ app.post('/executar/:entidade', async (c: Context) => {
     const result = await service.import(
       remappedRows,
       mode as ('INSERT' | 'UPDATE' | 'UPSERT') & ('INSERT' | 'UPSERT'),
+      empresaId,
     );
     timer();
 
@@ -504,6 +580,9 @@ app.post('/executar/:entidade', async (c: Context) => {
         : `Importação falhou com ${result.errors.length} erros`,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
+      return tenantContextResponse(c);
+    }
     logger.fatal('Erro ao executar importação', error as Error);
     return c.json(
       {
@@ -527,10 +606,11 @@ app.post('/validar-json/:entidade', async (c: Context) => {
   try {
     const entidade = c.req.param('entidade') ?? '';
     const db = c.env.DB;
+    const empresaId = resolveEmpresaIdOrThrow(c);
 
     console.log(`[VALIDACAO] Iniciando: entidade=${entidade}`);
 
-    const service = getImportService(entidade, db);
+    const service = getImportService(entidade, db, empresaId);
     if (!service) {
       return c.json({ success: false, error: `Entidade inválida: ${entidade}` }, 400);
     }
@@ -607,9 +687,9 @@ app.post('/validar-json/:entidade', async (c: Context) => {
 
         const funcionariosResult = await db
           .prepare(
-            `SELECT cpf, nome FROM funcionarios WHERE cpf IN (${allPlaceholders}) AND deleted_at IS NULL`,
+            `SELECT cpf, nome FROM funcionarios WHERE cpf IN (${allPlaceholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
-          .bind(...todosCPFs)
+          .bind(...todosCPFs, empresaId)
           .all();
 
         const funcionarios = (funcionariosResult.results || []) as FuncionarioRow[];
@@ -636,9 +716,9 @@ app.post('/validar-json/:entidade', async (c: Context) => {
           .prepare(
             `SELECT codigo, nome, validade, vencimento_fim_mes 
              FROM qualificacoes_tipos 
-             WHERE codigo IN (${placeholders}) AND deleted_at IS NULL`,
+             WHERE codigo IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
-          .bind(...codigosUnicos)
+          .bind(...codigosUnicos, empresaId)
           .all();
 
         const tipos = (tiposResult.results || []) as TipoQualificacaoRow[];
@@ -782,7 +862,7 @@ app.post('/validar-json/:entidade', async (c: Context) => {
     });
 
     // Validar
-    const errors = await service.validate(remappedRows);
+    const errors = await service.validate(remappedRows, empresaId);
     console.log(`[importacao-refactored] Validação JSON completa: ${errors.length} erros`);
 
     // DEBUG: Print dos erros encontrados
@@ -802,6 +882,9 @@ app.post('/validar-json/:entidade', async (c: Context) => {
     });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+    if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
+      return tenantContextResponse(c);
+    }
     const errorStack = error instanceof Error ? error.stack : '';
     console.error('[VALIDACAO] Erro crítico:', errorMsg);
     console.error('[VALIDACAO] Stack:', errorStack);
@@ -828,6 +911,7 @@ app.post('/batch-historico-v3', async (c: Context) => {
   const debugLogs: string[] = ['✅ ENDPOINT /batch-historico-v3 ALCANÇADO'];
 
   try {
+    const empresaId = resolveEmpresaIdOrThrow(c);
     const body = await c.req.json<{ rows: ImportacaoJsonRow[]; mode?: string }>();
     const { rows, mode = 'INSERT' } = body;
 
@@ -916,8 +1000,11 @@ app.post('/batch-historico-v3', async (c: Context) => {
     );
 
     // Passar debugLogs para a função
-    return executarImportacaoHistoricoEmLotes(c, batchRows, mode, debugLogs);
+    return executarImportacaoHistoricoEmLotes(c, batchRows, mode, empresaId, debugLogs);
   } catch (error) {
+    if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
+      return tenantContextResponse(c);
+    }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     const errorStack = error instanceof Error ? error.stack : '';
     debugLogs.push(`❌ ERRO CRÍTICO: ${errorMsg}`);
@@ -937,8 +1024,9 @@ app.post('/executar-json/:entidade', async (c: Context) => {
   try {
     const entidade = c.req.param('entidade') ?? '';
     const db = c.env.DB;
+    const empresaId = resolveEmpresaIdOrThrow(c);
 
-    const service = getImportService(entidade, db);
+    const service = getImportService(entidade, db, empresaId);
     if (!service) {
       return c.json({ success: false, error: `Entidade inválida: ${entidade}` }, 400);
     }
@@ -1057,11 +1145,11 @@ app.post('/executar-json/:entidade', async (c: Context) => {
       console.log('[EXECUTAR IMPORTACAO] Preparando batch de', batchRows.length, 'registros');
       console.log('[EXECUTAR IMPORTACAO] Primeira batchRow:', batchRows[0]);
       debugLogs.push(`🔵 Chamando executarImportacaoHistoricoEmLotes com ${batchRows.length} rows`);
-      return executarImportacaoHistoricoEmLotes(c, batchRows, mode, debugLogs);
+      return executarImportacaoHistoricoEmLotes(c, batchRows, mode, empresaId, debugLogs);
     }
 
     // Importar
-    const result = await service.import(processedRows, backendMode);
+    const result = await service.import(processedRows, backendMode, empresaId);
 
     console.log(`[EXECUTAR IMPORTACAO] Importação JSON concluída:`, {
       success: result.success,
@@ -1084,6 +1172,9 @@ app.post('/executar-json/:entidade', async (c: Context) => {
     });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+    if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
+      return tenantContextResponse(c);
+    }
     const errorStack = error instanceof Error ? error.stack : '';
     console.error('[EXECUTAR IMPORTACAO] Erro crítico:', errorMsg);
     console.error('[EXECUTAR IMPORTACAO] Stack:', errorStack);
@@ -1107,7 +1198,8 @@ app.post('/executar-json/:entidade', async (c: Context) => {
 app.get('/historico/list', async (c: Context) => {
   try {
     const db = c.env.DB;
-    const service = new QualificacaoHistoricoImportacaoService(db);
+    const empresaId = resolveEmpresaIdOrThrow(c);
+    const service = new QualificacaoHistoricoImportacaoService(db, empresaId);
 
     const filters = {
       funcionario_cpf: c.req.query('funcionario_cpf'),
@@ -1116,7 +1208,7 @@ app.get('/historico/list', async (c: Context) => {
       offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : 0,
     };
 
-    const rows = await service.list(filters);
+    const rows = await service.list(filters, empresaId);
 
     return c.json({
       success: true,
@@ -1124,6 +1216,9 @@ app.get('/historico/list', async (c: Context) => {
       data: rows,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
+      return tenantContextResponse(c);
+    }
     console.error('Erro ao listar histórico:', error);
     return c.json(
       {
@@ -1142,6 +1237,7 @@ app.get('/historico/list', async (c: Context) => {
 app.post('/enriquecer-historico', async (c: Context) => {
   try {
     const db = c.env.DB as D1Database;
+    const empresaId = resolveEmpresaIdOrThrow(c);
     console.log('[ENRIQUECER HISTORICO] Iniciando enriquecimento...');
 
     // Buscar query params
@@ -1150,8 +1246,8 @@ app.post('/enriquecer-historico', async (c: Context) => {
 
     // 1. Buscar registros
     const whereClause = recalcularTodos
-      ? 'WHERE qh.deleted_at IS NULL'
-      : 'WHERE qh.deleted_at IS NULL AND (qh.funcionario_id IS NULL OR qh.qualificacao_id IS NULL)';
+      ? 'WHERE qh.deleted_at IS NULL AND qh.empresa_id = ?'
+      : 'WHERE qh.deleted_at IS NULL AND qh.empresa_id = ? AND (qh.funcionario_id IS NULL OR qh.qualificacao_id IS NULL)';
 
     const { results: registros } = await db
       .prepare(
@@ -1166,6 +1262,7 @@ app.post('/enriquecer-historico', async (c: Context) => {
         LIMIT 1000
       `,
       )
+      .bind(empresaId)
       .all();
 
     if (!registros || registros.length === 0) {
@@ -1193,8 +1290,8 @@ app.post('/enriquecer-historico', async (c: Context) => {
 
         // Buscar funcionario_id
         const { results: funcResults } = await db
-          .prepare('SELECT id FROM funcionarios WHERE cpf = ? AND deleted_at IS NULL')
-          .bind(cpfNormalizado)
+          .prepare('SELECT id FROM funcionarios WHERE cpf = ? AND empresa_id = ? AND deleted_at IS NULL')
+          .bind(cpfNormalizado, empresaId)
           .all();
 
         const funcionarioId = funcResults?.[0]?.id || null;
@@ -1202,9 +1299,9 @@ app.post('/enriquecer-historico', async (c: Context) => {
         // Buscar qualificacao_id e validade
         const { results: qualResults } = await db
           .prepare(
-            'SELECT id, validade, vencimento_fim_mes FROM qualificacoes_tipos WHERE UPPER(TRIM(codigo)) = UPPER(TRIM(?)) AND deleted_at IS NULL',
+            'SELECT id, validade, vencimento_fim_mes FROM qualificacoes_tipos WHERE UPPER(TRIM(codigo)) = UPPER(TRIM(?)) AND empresa_id = ? AND deleted_at IS NULL',
           )
-          .bind(reg.qualificacao_codigo)
+          .bind(reg.qualificacao_codigo, empresaId)
           .all();
 
         const qualificacaoId = qualResults?.[0]?.id || null;
@@ -1245,10 +1342,10 @@ app.post('/enriquecer-historico', async (c: Context) => {
               `
               UPDATE qualificacoes_historico 
               SET ${updates.join(', ')}
-              WHERE id = ?
+              WHERE id = ? AND empresa_id = ?
             `,
             )
-            .bind(...params)
+            .bind(...params, empresaId)
             .run();
 
           atualizados++;
@@ -1270,6 +1367,9 @@ app.post('/enriquecer-historico', async (c: Context) => {
       message: `${atualizados} registros enriquecidos com sucesso`,
     });
   } catch (err) {
+    if (err instanceof Error && err.message === 'TENANT_CONTEXT_REQUIRED') {
+      return tenantContextResponse(c);
+    }
     console.error('[ENRIQUECER HISTORICO] Erro:', err);
     return c.json(
       {

@@ -230,4 +230,8 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
 - Tratado nesta fase:
   - contrato explícito de auth + tenant em `assistente`;
   - isolamento por `empresa_id` no `/api/sessoes` simplificado, com fail-closed.
-- Importação mantida para subfase dedicada **H28-B** por risco estrutural maior (auto-create e escopo tenant no serviço).
+- Subfase **H28-B** concluída:
+  - `importacao` passou a exigir `empresaId` válido e propagar tenant no serviço;
+  - listagem/importação de histórico protegidas com `empresa_id`;
+  - auto-create e inserts do fluxo de histórico com `empresa_id`;
+  - testes multi-tenant adicionados para rota e serviço.
