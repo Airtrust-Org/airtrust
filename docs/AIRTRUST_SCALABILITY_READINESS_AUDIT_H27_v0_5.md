@@ -279,3 +279,26 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - `npm run test:worker` (453 testes passando)
 - Pendência H30-B:
   - otimização estrutural da query pesada de `/api/simuladores/sessoes` (`json_group_array` + múltiplos JOINs) sem reescrita ampla nesta fase.
+
+## Follow-up H31 — Observabilidade/requestId
+- Problema anterior:
+  - `error-handler` não reaproveitava `c.get('requestId')` e gerava um novo UUID em erros internos de produção;
+  - logs de erro não incluíam `requestId`, dificultando correlação ponta a ponta.
+- Patch aplicado:
+  - `error-handler` passou a resolver `requestId` nesta ordem: contexto (`c.get('requestId')`) -> header de entrada (`X-Request-ID`) -> novo UUID somente como fallback;
+  - `X-Request-ID` é explicitamente devolvido no response de erro;
+  - payloads de erro (`ApiError`, `AppError` e erro interno) incluem `requestId` consistente;
+  - logs `[ERROR]` passaram a incluir o mesmo `requestId`.
+- Comportamento final:
+  - mesmo `requestId` no header de resposta, payload de erro e log de backend;
+  - nenhum stack trace exposto em payload público de produção.
+- Testes adicionados:
+  - [error-handler-request-id.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/error-handler-request-id.test.ts)
+- Validações executadas:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+  - `npx tsc --noEmit`
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:worker`
+- Pendências:
+  - seguir para H30-B (query pesada de sessões) com observabilidade de erro já padronizada.

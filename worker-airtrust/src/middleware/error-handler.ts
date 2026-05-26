@@ -7,6 +7,23 @@
 
 import type { ErrorHandler } from 'hono';
 
+function resolveRequestId(c: {
+  get: (key: string) => unknown;
+  req: { header: (name: string) => string | undefined };
+}): string {
+  const contextRequestId = c.get('requestId');
+  if (typeof contextRequestId === 'string' && contextRequestId.trim().length > 0) {
+    return contextRequestId;
+  }
+
+  const headerRequestId = c.req.header('X-Request-ID');
+  if (typeof headerRequestId === 'string' && headerRequestId.trim().length > 0) {
+    return headerRequestId;
+  }
+
+  return crypto.randomUUID();
+}
+
 /**
  * Classe de erro customizada para API
  * Permite definir status code e mensagem específica
@@ -28,7 +45,11 @@ export class ApiError extends Error {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const errorHandler: ErrorHandler<any> = (err, c) => {
+  const requestId = resolveRequestId(c);
+  c.header('X-Request-ID', requestId);
+
   console.error('[ERROR]', {
+    requestId,
     error: err.message,
     stack: err.stack,
     path: c.req.path,
@@ -42,6 +63,7 @@ export const errorHandler: ErrorHandler<any> = (err, c) => {
         success: false,
         error: err.message,
         code: err.code,
+        requestId,
       },
       err.statusCode as 400 | 401 | 403 | 404 | 500,
     );
@@ -56,6 +78,7 @@ export const errorHandler: ErrorHandler<any> = (err, c) => {
         success: false,
         error: appErr.message,
         code: appErr.code,
+        requestId,
       },
       appErr.status as 400 | 401 | 403 | 404 | 500,
     );
@@ -74,6 +97,7 @@ export const errorHandler: ErrorHandler<any> = (err, c) => {
         stack: err.stack,
         path: c.req.path,
         method: c.req.method,
+        requestId,
       },
       500,
     );
@@ -85,7 +109,7 @@ export const errorHandler: ErrorHandler<any> = (err, c) => {
       success: false,
       error: 'Erro interno do servidor',
       code: 'INTERNAL_ERROR',
-      requestId: crypto.randomUUID(),
+      requestId,
     },
     500,
   );
