@@ -146,3 +146,17 @@ Observacoes:
 - Pendencia:
   - 200 REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes
   - 85 MANUAL_REVIEW_REQUIRED pendentes de revisao humana
+
+## 10) H6-E — Third sensitive-file batch removed from Git index
+
+- Data: 2026-05-25
+- Acao: `git rm --cached` em 14 arquivos de alta confianca (`REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE`), todos em `_arquivos_nao_usados/`.
+- Confirmacao: todos os 14 arquivos permanecem no filesystem local.
+- Guardrail apos H6-E:
+  - `SECRET_ENV`: 0
+  - `PROD_DUMP_OR_BACKUP`: 62 (antes: 74)
+  - `LOCAL_SEED`: 12
+  - `TEST_FIXTURE`: 2
+  - `MIGRATION`: 355
+  - `UNKNOWN_REVIEW_REQUIRED`: 222 (antes: 224)
+  - bloqueantes restantes: 296 (antes: 310)
