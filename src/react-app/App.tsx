@@ -104,6 +104,7 @@ const ConfiguracoesCadastros = lazyWithRetry(
   'ConfiguracoesCadastros',
 );
 const Configuracoes = lazyWithRetry(() => import('./pages/Configuracoes'), 'Configuracoes');
+const SistemaPage = lazyWithRetry(() => import('./pages/Sistema'), 'SistemaPage');
 const ConfiguracoesCadastrosGerais = lazyWithRetry(
   () => import('./pages/Configuracoes/CadastrosPage'),
   'ConfiguracoesCadastrosGerais',
@@ -584,6 +585,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <Configuracoes />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/sistema"
+                      element={
+                        <ProtectedRoute>
+                          <SistemaPage />
                         </ProtectedRoute>
                       }
                     />
