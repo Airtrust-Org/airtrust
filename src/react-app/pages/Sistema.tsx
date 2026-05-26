@@ -1,41 +1,35 @@
+import { useMemo } from 'react';
 import { useApi } from '@/react-app/hooks/useApi';
-import Card, { CardHeader, CardContent } from '@/react-app/components/Card';
 import Badge from '@/react-app/components/Badge';
 import PageHeader from '@/react-app/components/PageHeader';
 import StatCard from '@/react-app/components/StatCard';
 import ContentCard from '@/react-app/components/ContentCard';
-import {
-  Shield,
-  Activity,
-  Database,
-  Server,
-  CheckCircle,
-  AlertTriangle,
-  XCircle,
-  Clock,
-  HardDrive,
-} from 'lucide-react';
+import { Shield, Activity, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 
-interface SystemHealth {
+type HealthCheckItem = {
   status: string;
-  checks: Array<{
-    check?: string;
-    module?: string;
-    table?: string;
-    status: string;
-    details?: string;
-    error?: string;
-  }>;
-  timestamp: string;
-  environment: string;
+  latency?: number;
+  error?: string;
+};
+
+interface SystemHealthResponse {
+  success: boolean;
+  status: string;
+  checks: Record<string, HealthCheckItem>;
+  stats: {
+    timestamp: string;
+    environment: string;
+    version: string;
+    region: string;
+  };
+  latency: number;
 }
 
-interface SystemInfo {
-  system: string;
+interface SystemVersionInfo {
   version: string;
   environment: string;
-  timestamp: string;
-  database_stats: Record<string, number | string>;
+  builtAt: string | null;
+  deploymentId: string;
 }
 
 export default function Sistema() {
@@ -43,16 +37,32 @@ export default function Sistema() {
     data: health,
     loading: healthLoading,
     error: healthError,
-  } = useApi<SystemHealth>('/api/system/health');
-  const { data: systemInfo, loading: infoLoading } = useApi<SystemInfo>('/api/system/info');
+  } = useApi<SystemHealthResponse>('/api/health');
+
+  const {
+    data: version,
+    loading: versionLoading,
+    error: versionError,
+  } = useApi<SystemVersionInfo>('/api/version');
+
+  const checksList = useMemo(
+    () =>
+      Object.entries(health?.checks || {}).map(([name, check]) => ({
+        name,
+        ...check,
+      })),
+    [health?.checks],
+  );
 
   const getStatusIcon = (status: string) => {
     switch (status.toUpperCase()) {
       case 'OK':
       case 'HEALTHY':
         return CheckCircle;
+      case 'ERROR':
       case 'FAIL':
       case 'DEGRADED':
+      case 'UNHEALTHY':
         return XCircle;
       case 'SLOW':
       case 'WARNING':
@@ -67,8 +77,10 @@ export default function Sistema() {
       case 'OK':
       case 'HEALTHY':
         return 'success';
+      case 'ERROR':
       case 'FAIL':
       case 'DEGRADED':
+      case 'UNHEALTHY':
         return 'danger';
       case 'SLOW':
       case 'WARNING':
@@ -82,21 +94,26 @@ export default function Sistema() {
     <div>
       <PageHeader title="Sistema" subtitle="Monitoramento e status da infraestrutura AirTrust" />
 
-      {/* Sistema Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Status Geral"
-          value={healthLoading ? '...' : health?.status || 'UNKNOWN'}
+          value={healthLoading ? '...' : health?.status?.toUpperCase() || 'UNKNOWN'}
           color="blue"
         />
         <StatCard
           label="Ambiente"
-          value={infoLoading ? '...' : systemInfo?.environment?.toUpperCase() || 'DEV'}
+          value={
+            healthLoading
+              ? '...'
+              : health?.stats?.environment?.toUpperCase() ||
+                version?.environment?.toUpperCase() ||
+                'UNKNOWN'
+          }
           color="green"
         />
         <StatCard
           label="Versão"
-          value={infoLoading ? '...' : systemInfo?.version || '1.0.0'}
+          value={versionLoading ? '...' : version?.version || health?.stats?.version || '0.0.0-dev'}
           color="purple"
         />
         <StatCard
@@ -104,22 +121,21 @@ export default function Sistema() {
           value={
             healthLoading
               ? '...'
-              : health
-              ? new Date(health.timestamp).toLocaleTimeString('pt-BR', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })
-              : '--:--'
+              : health?.stats?.timestamp
+                ? new Date(health.stats.timestamp).toLocaleTimeString('pt-BR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : '--:--'
           }
           color="yellow"
         />
       </div>
 
-      {/* Health Checks */}
       <ContentCard>
         {healthLoading ? (
           <div className="space-y-3">
-            {[...Array(5)].map((_, i) => (
+            {[...Array(4)].map((_, i) => (
               <div
                 key={i}
                 className="animate-pulse flex items-center justify-between p-3 bg-neutral-50 rounded-lg"
@@ -132,32 +148,24 @@ export default function Sistema() {
         ) : healthError ? (
           <div className="text-center py-8">
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <p className="text-red-600">Erro ao carregar status: {healthError}</p>
+            <p className="text-red-600">Erro ao carregar /api/health: {healthError}</p>
           </div>
-        ) : health ? (
+        ) : checksList.length > 0 ? (
           <div className="space-y-3">
-            {health.checks.map((check, index) => {
+            {checksList.map((check, index) => {
               const StatusIcon = getStatusIcon(check.status);
               return (
                 <div
-                  key={index}
+                  key={`${check.name}-${index}`}
                   className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg hover:bg-neutral-100 transition-colors"
                 >
                   <div className="flex items-center space-x-3">
-                    <StatusIcon
-                      className={`w-5 h-5 ${
-                        check.status === 'OK'
-                          ? 'text-green-600'
-                          : check.status === 'FAIL'
-                          ? 'text-red-600'
-                          : 'text-yellow-600'
-                      }`}
-                    />
+                    <StatusIcon className="w-5 h-5 text-neutral-700" />
                     <div>
-                      <p className="font-medium text-neutral-900">
-                        {check.check || check.table || check.module || 'Verificação'}
-                      </p>
-                      {check.details && <p className="text-sm text-neutral-600">{check.details}</p>}
+                      <p className="font-medium text-neutral-900 capitalize">{check.name}</p>
+                      {typeof check.latency === 'number' && (
+                        <p className="text-sm text-neutral-600">Latência: {check.latency}ms</p>
+                      )}
                       {check.error && <p className="text-sm text-red-600">{check.error}</p>}
                     </div>
                   </div>
@@ -171,78 +179,44 @@ export default function Sistema() {
         )}
       </ContentCard>
 
-      {/* Database Statistics */}
       <ContentCard>
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold text-neutral-900 flex items-center">
-            <Database className="w-5 h-5 mr-2 text-primary" />
-            Estatísticas do Banco de Dados
-          </h3>
-        </div>
-        {infoLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="animate-pulse p-4 bg-neutral-50 rounded-lg">
-                <div className="h-4 bg-neutral-200 rounded mb-2"></div>
-                <div className="h-8 bg-neutral-200 rounded"></div>
-              </div>
-            ))}
-          </div>
-        ) : systemInfo?.database_stats ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Object.entries(systemInfo.database_stats).map(([table, count]) => (
-              <div
-                key={table}
-                className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200/50"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <HardDrive className="w-5 h-5 text-primary" />
-                  <Badge variant="info" size="sm">
-                    {typeof count === 'number' ? count : count.toString()}
-                  </Badge>
-                </div>
-                <h4 className="font-medium text-neutral-900 capitalize">
-                  {table.replace(/_/g, ' ')}
-                </h4>
-                <p className="text-sm text-neutral-600">registros</p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-neutral-500 text-center py-8">Estatísticas não disponíveis</p>
-        )}
-      </ContentCard>
+        <h3 className="text-lg font-semibold text-neutral-900 flex items-center mb-6">
+          <Shield className="w-5 h-5 mr-2 text-purple-600" />
+          Informações do Sistema
+        </h3>
 
-      {/* System Information */}
-      {systemInfo && (
-        <ContentCard>
-          <h3 className="text-lg font-semibold text-neutral-900 flex items-center mb-6">
-            <Shield className="w-5 h-5 mr-2 text-purple-600" />
-            Informações do Sistema
-          </h3>
+        {versionLoading ? (
+          <p className="text-neutral-500">Carregando /api/version...</p>
+        ) : versionError ? (
+          <p className="text-red-600">Erro ao carregar /api/version: {versionError}</p>
+        ) : version ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="font-medium text-neutral-600">Sistema:</span>
-                <span className="text-neutral-900">{systemInfo.system}</span>
+                <span className="text-neutral-900">AirTrust Worker</span>
               </div>
               <div className="flex justify-between">
                 <span className="font-medium text-neutral-600">Versão:</span>
-                <span className="text-neutral-900">{systemInfo.version}</span>
+                <span className="text-neutral-900">{version.version}</span>
               </div>
               <div className="flex justify-between">
                 <span className="font-medium text-neutral-600">Ambiente:</span>
-                <Badge variant={systemInfo.environment === 'production' ? 'danger' : 'info'}>
-                  {systemInfo.environment}
+                <Badge variant={version.environment === 'production' ? 'danger' : 'info'}>
+                  {version.environment}
                 </Badge>
               </div>
             </div>
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="font-medium text-neutral-600">Última Atualização:</span>
+                <span className="font-medium text-neutral-600">Build:</span>
                 <span className="text-neutral-900 text-sm">
-                  {new Date(systemInfo.timestamp).toLocaleString()}
+                  {version.builtAt ? new Date(version.builtAt).toLocaleString('pt-BR') : 'N/A'}
                 </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-neutral-600">Deployment ID:</span>
+                <span className="text-neutral-900 text-sm">{version.deploymentId || 'unknown'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="font-medium text-neutral-600">Status de Saúde:</span>
@@ -252,8 +226,10 @@ export default function Sistema() {
               </div>
             </div>
           </div>
-        </ContentCard>
-      )}
+        ) : (
+          <p className="text-neutral-500">Informações de versão indisponíveis.</p>
+        )}
+      </ContentCard>
     </div>
   );
 }

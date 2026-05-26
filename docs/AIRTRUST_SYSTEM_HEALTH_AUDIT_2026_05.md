@@ -561,6 +561,31 @@ Comandos sugeridos (não executados):
 - Pendências:
   - criar suíte mais ampla de regressão EVD (cenários de publicação diária com múltiplos voos e justificativas FRMS estruturadas).
 
+## Follow-up H9 — P1-04 Sistema page endpoint alignment
+
+- Risco antes:
+  - tela `Sistema` consumia `/api/system/info`, endpoint inexistente;
+  - menu apontava para `/sistema`, mas a rota não estava registrada no frontend.
+- Patch aplicado:
+  - `src/react-app/pages/Sistema.tsx` alinhado para consumir endpoints reais:
+    - `/api/health` para status/checks do backend;
+    - `/api/version` para versão/build/deployment.
+  - removida dependência de payload inexistente de `system/info` e ajustado parsing ao contrato real dos endpoints atuais.
+  - rota frontend `/sistema` registrada em `App.tsx`, mantendo item de menu existente sem mudanças de navegação ampla.
+- Endpoint inexistente removido:
+  - chamadas a `/api/system/info` eliminadas da página.
+- Endpoints reais usados:
+  - `/api/health`
+  - `/api/version`
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run test:worker`: ok.
+  - `npm run lint`: ok.
+- Pendências:
+  - opcional: harmonizar também links legados do menu (`/backup`, `/aeronaves`) com rotas efetivamente registradas, em fase separada.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
