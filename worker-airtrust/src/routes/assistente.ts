@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
+import { auth } from '../middleware/auth';
 import {
   getAtividadesRecentes,
   getComplianceScore,
@@ -9,6 +10,7 @@ import {
 } from '../services/dashboardService';
 
 const app = new Hono<{ Bindings: Env }>();
+app.use('*', auth());
 
 type PapelFicha = 'ALUNO' | 'INSTRUTOR';
 
@@ -714,29 +716,53 @@ app.post('/home-perfil/chat', async (c) => {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userId = String((c as any).get('userId') || '');
+  const rawUserId = (c as any).get('userId');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const empresaId = String((c as any).get('empresaId') || '');
+  const rawEmpresaId = (c as any).get('empresaId');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const userRole = String((c as any).get('userRole') || '');
 
+  const userId = Number(rawUserId);
+  if (!Number.isFinite(userId) || userId <= 0) {
+    return c.json(
+      {
+        success: false,
+        error: 'AUTH_REQUIRED',
+        message: 'Usuário não autenticado para acessar o assistente',
+      },
+      401,
+    );
+  }
+
+  const empresaId = Number(rawEmpresaId);
+  if (!Number.isFinite(empresaId) || empresaId <= 0) {
+    return c.json(
+      {
+        success: false,
+        error: 'TENANT_CONTEXT_REQUIRED',
+        message: 'Contexto de empresa inválido para acessar o assistente',
+      },
+      403,
+    );
+  }
+
   const roleNormalizado = normalizarRole(userRole);
-  const funcionario = await getFuncionarioContext(c.env.DB, userId, empresaId);
+  const funcionario = await getFuncionarioContext(c.env.DB, String(userId), String(empresaId));
   const [metrics, compliance, alertas, atividades, resumoFichas, consultaQualificacoes] =
     await Promise.all([
-      getDashboardMetrics(c.env.DB, Number(empresaId)),
-      getComplianceScore(c.env.DB, Number(empresaId)),
-      getDashboardAlerts(c.env.DB, Number(empresaId)),
-      getAtividadesRecentes(c.env.DB, Number(empresaId)),
+      getDashboardMetrics(c.env.DB, empresaId),
+      getComplianceScore(c.env.DB, empresaId),
+      getDashboardAlerts(c.env.DB, empresaId),
+      getAtividadesRecentes(c.env.DB, empresaId),
       funcionario
-        ? carregarResumoFichas(c.env.DB, empresaId, funcionario.funcionarioId)
+        ? carregarResumoFichas(c.env.DB, String(empresaId), funcionario.funcionarioId)
         : Promise.resolve({
             pendentesAluno: 0,
             pendentesInstrutor: 0,
             pendentes: [],
             concluidasRecentes: [],
           }),
-      consultarQualificacoesRelacionadas(c.env.DB, empresaId, parsed.data.message, funcionario),
+      consultarQualificacoesRelacionadas(c.env.DB, String(empresaId), parsed.data.message, funcionario),
     ]);
 
   const context: HomeAssistantContext = {
