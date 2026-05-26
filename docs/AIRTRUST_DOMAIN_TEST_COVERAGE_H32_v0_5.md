@@ -33,8 +33,38 @@ Cenários cobertos:
 
 ## 5. Lacunas restantes
 - outras rotas administrativas/migração ainda sem cobertura dedicada;
-- domínio SGSO auditorias/NC segue como candidato de alto valor;
 - benchmark autenticado de `/api/simuladores/sessoes` continua pendente para decidir H30-D.
 
 ## 6. Próximo domínio recomendado
 - **SGSO auditorias/NC guard + negativos de escrita** (auth/role/erro explícito/tenant), em fase H32-B.
+
+## 7. H32-B — SGSO auditorias/NC guards
+Domínio escolhido:
+- SGSO auditorias e não conformidades (`sgso-auditorias-ncs`).
+
+Rotas cobertas:
+- `POST /sgso/auditorias`
+- `GET /sgso/auditorias`
+- `POST /sgso/nao-conformidades`
+
+Arquivo de teste:
+- [sgso-auditorias-ncs-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/sgso-auditorias-ncs-guards.test.ts)
+
+Cenários adicionados:
+1. sem autenticação em escrita retorna `401`;
+2. tenant ausente falha fechado com erro explícito (sem sucesso silencioso);
+3. criação de auditoria válida preserva contrato `201` e propaga `empresa_id` no bind;
+4. listagem de auditorias filtra por `empresa_id` do tenant;
+5. payload inválido em NC retorna `400`;
+6. falha de DB em criação de NC retorna `500` com `success:false` (sem fail-open).
+
+Riscos cobertos:
+- auth obrigatório em escrita SGSO auditável;
+- isolamento de tenant por bind de `empresa_id` em listagem/criação;
+- garantia de erro explícito em falha interna.
+
+Lacunas restantes:
+- não há `requireRole(...)` explícito nas escritas de `sgso-auditorias-ncs`; política de role depende de contrato global atual e merece validação funcional dedicada (H32-C/H29-B).
+
+Próximo domínio recomendado:
+- SGSO Next Gen (relatos/ações CAPA) com foco em guards de escrita e isolamento tenant.
