@@ -53,3 +53,25 @@ Observacoes:
   - lista caminhos classificados;
   - retorna `exit 1` quando houver categorias bloqueantes;
   - mantem allowlist explicita para `MIGRATION` e `TEST_FIXTURE`.
+
+## 6) H6-A — Tracked env files removed from index
+
+- Caminhos removidos do index (sem apagar local):
+  - `.env.local.production`
+  - `.env.production`
+  - `.env.test`
+  - `src/.env.production`
+- Confirmacao de preservacao local:
+  - todos os caminhos acima permaneceram presentes no filesystem local apos `git rm --cached`.
+- Sigilo:
+  - nenhum conteudo de segredo foi exibido; apenas caminhos e status.
+- Guardrail apos H6-A:
+  - `SECRET_ENV`: 0 (antes: 4)
+  - `PROD_DUMP_OR_BACKUP`: 92
+  - `LOCAL_SEED`: 17
+  - `TEST_FIXTURE`: 2
+  - `MIGRATION`: 355
+  - `UNKNOWN_REVIEW_REQUIRED`: 231
+  - bloqueantes restantes: 340
+- Pendencia:
+  - dumps/seeds/unknown continuam para fase separada de classificacao e remocao controlada.

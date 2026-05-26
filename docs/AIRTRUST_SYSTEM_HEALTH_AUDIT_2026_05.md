@@ -461,6 +461,30 @@ Comandos sugeridos (não executados):
   - rotação de segredos se necessário;
   - eventual estratégia de limpeza de histórico somente com autorização explícita.
 
+## Follow-up H6-A — tracked env files untracked from index
+
+- Escopo:
+  - remoção do index apenas de arquivos `.env*` sensíveis rastreados;
+  - sem remoção local de arquivos;
+  - sem alteração em dumps SQL.
+- Caminhos removidos do index:
+  - `.env.local.production`
+  - `.env.production`
+  - `.env.test`
+  - `src/.env.production`
+- Verificações:
+  - presença local dos 4 caminhos confirmada após `git rm --cached`;
+  - nenhum conteúdo de segredo exibido em logs/relatório.
+- Guardrail após H6-A:
+  - `SECRET_ENV`: 0 (antes: 4)
+  - bloqueantes totais: 340 (antes: 344)
+  - `PROD_DUMP_OR_BACKUP`, `LOCAL_SEED` e `UNKNOWN_REVIEW_REQUIRED` permanecem fora de escopo desta fase.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run test:worker`: ok.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
