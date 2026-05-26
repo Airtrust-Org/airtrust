@@ -524,6 +524,43 @@ Comandos sugeridos (não executados):
 - Pendências:
   - `middleware/auth.ts` ainda contém export legado de `requireRole`; pode ser tratado em hardening futuro para evitar regressão por import acidental.
 
+## Follow-up H8 — P1-02 EVD PUT operational validation guard
+
+- Risco antes:
+  - `PUT /api/evd/:id` atualizava campos operacionais críticos sem reaplicar validações de conflito/disponibilidade.
+  - `repouso_minimo_ok` não era recalculado no PUT, permitindo estado inconsistente após edição.
+  - EVD já publicada podia sofrer alteração crítica sem novo bloqueio operacional equivalente ao fluxo de publicação.
+- Patch aplicado:
+  - criação de schema dedicado de update (`evdUpdateSchema`) para validar payload do PUT.
+  - PUT agora monta estado final candidato (merge `existing + payload`) antes de persistir.
+  - reaplicação de validações críticas no PUT quando houver mudança operacional:
+    - `PIC != SIC`;
+    - conflito de tripulação/horário (`hasCrewConflict`);
+    - bloqueios operacionais (via `collectOperationalWarningsAndBlocks`).
+  - recalcula `repouso_anterior_minutos` e `repouso_minimo_ok` no PUT quando há mudança relevante.
+  - em EVD `PUBLICADA`, alteração crítica que resulte em repouso inválido agora é bloqueada.
+  - em EVD `PUBLICADA`, quando revisão operacional exige justificativa, PUT bloqueia sem justificativa estruturada/observação mínima.
+- Validações reaplicadas no PUT:
+  - conflito operacional de tripulante em janela de horário;
+  - hard blocks operacionais de disponibilidade/habilitação;
+  - integridade de composição PIC/SIC;
+  - consistência de repouso mínimo após edição.
+- Testes adicionados:
+  - `worker-airtrust/src/__tests__/routes/escalas-evd-put.test.ts`
+  - cenários:
+    - PUT válido continua funcionando;
+    - PUT com conflito operacional é bloqueado (`409`);
+    - PUT em EVD publicada com repouso inválido é bloqueado (`400`);
+    - PUT com PIC/SIC duplicado é bloqueado (`400`);
+    - assert de binding por tenant (`empresa_id`) no SELECT/UPDATE.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - criar suíte mais ampla de regressão EVD (cenários de publicação diária com múltiplos voos e justificativas FRMS estruturadas).
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
