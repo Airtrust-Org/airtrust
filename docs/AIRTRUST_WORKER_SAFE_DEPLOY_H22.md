@@ -93,3 +93,10 @@ Resultado:
 3. Executar `npm run deploy:worker:safe`.
 4. Executar smoke read-only padrão.
 5. Registrar resultado operacional em documento de fase.
+
+## 10. Promovido a runbook oficial em H23
+- O fluxo de safe deploy deste documento foi promovido para runbook oficial em H23.
+- Referência oficial: `docs/AIRTRUST_DEPLOY_RUNBOOK_v0_4.md`.
+- Diferença operacional:
+  - Safe deploy (rotina normal): `npm run deploy:worker:safe` (sem migration, com version stamping).
+  - Deploy com migration: `npm run deploy:worker` e `npm run deploy:worker:only` (somente com autorização explícita e fase de migration).
