@@ -160,3 +160,32 @@ Racional:
 - nenhuma migration criada/aplicada;
 - nenhum acesso write em banco;
 - nenhum deploy executado.
+
+## Follow-up H34-A — System/public routes extraction
+- Data: 2026-05-26.
+- Extração aplicada (quick win, patch pequeno e reversível):
+  - handlers movidos de `worker-airtrust/src/index.ts` para [system.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/system.ts):
+    - `GET /api/health`
+    - `GET /api/version`
+    - `GET /api/status`
+    - `GET /api/system/health`
+    - `GET /api/sistema/health`
+  - montagem no index preservada via `registerSystemRoutes(app)`.
+- Contrato preservado:
+  - paths/status codes/payloads mantidos;
+  - aliases 307 para `/api/health` mantidos;
+  - sem mudança em middlewares globais (auth/tenant/RBAC), version header stamping, ou regras de negócio.
+- Testes:
+  - novo teste [system-routes.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/system-routes.test.ts) cobrindo contrato/status/path das rotas extraídas.
+- Validações executadas pós-extração:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+  - `npx tsc --noEmit`
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:worker`
+- Fora do escopo nesta extração:
+  - `POST /api/telemetry/client-error`;
+  - rotas legadas de compatibilidade (`/api/templates`, `/api/historico`);
+  - qualquer rota de negócio crítica (importação, EVD, FRMS, SIGVOOS, simuladores complexos).
+- Próxima extração segura recomendada:
+  - separar bloco de rotas `/api/public/*` (`locale`/`translate`) para módulo dedicado, sem alterar contrato e sem tocar domínios críticos.
