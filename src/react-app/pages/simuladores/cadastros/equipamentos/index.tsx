@@ -2,19 +2,19 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
-import { API_BASE_URL } from '@/react-app/config/api';
+import { apiFetch } from '@/react-app/lib/apiFetch';
 import { Plus, Settings, Edit, Trash2, Eye, Filter, Search } from 'lucide-react';
-import Button from '../../components/Button';
-import Card from '../../components/Card';
-import { BaseModal as Modal } from '../../components/modals/BaseModal';
-import EquipamentoForm from '../../components/simuladores/EquipamentoForm';
+import Button from '@/react-app/components/Button';
+import Card from '@/react-app/components/Card';
+import { BaseModal as Modal } from '@/react-app/components/modals/BaseModal';
+import EquipamentoForm from '@/react-app/components/simuladores/EquipamentoForm';
 
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 
 interface Simulador {
   id: number;
   nome: string;
-  codigo_identificacao: string;
+  codigo_identificacao?: string;
   tipo_simulador: string;
   aeronave_base: string;
   empresa_local?: string;
@@ -24,6 +24,54 @@ interface Simulador {
   configuracao_tecnica?: any;
   created_at: string;
   updated_at?: string;
+}
+
+interface SimuladorApi {
+  id: number;
+  nome: string;
+  tipo: string;
+  modelo?: string | null;
+  fabricante?: string | null;
+  localizacao?: string | null;
+  status?: string | null;
+  observacoes?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+function mapApiToSimulador(item: SimuladorApi): Simulador {
+  return {
+    id: item.id,
+    nome: item.nome,
+    codigo_identificacao: item.modelo || '',
+    tipo_simulador: item.tipo || '',
+    aeronave_base: item.localizacao || '',
+    empresa_local: item.localizacao || '',
+    fabricante: item.fabricante || undefined,
+    modelo: item.modelo || undefined,
+    status: item.status || 'ATIVO',
+    configuracao_tecnica: item.observacoes || undefined,
+    created_at: item.created_at,
+    updated_at: item.updated_at || undefined,
+  };
+}
+
+function mapSimuladorToApiPayload(dados: Record<string, any>) {
+  const localizacao = dados.empresa_local || dados.aeronave_base || '';
+  const observacoes =
+    dados.configuracao_tecnica && typeof dados.configuracao_tecnica !== 'string'
+      ? JSON.stringify(dados.configuracao_tecnica)
+      : dados.configuracao_tecnica || null;
+
+  return {
+    nome: dados.nome,
+    tipo: dados.tipo_simulador,
+    modelo: dados.modelo || dados.codigo_identificacao || null,
+    fabricante: dados.fabricante || null,
+    localizacao: localizacao || null,
+    status: dados.status || 'ATIVO',
+    observacoes,
+  };
 }
 
 const Equipamentos: React.FC = () => {
@@ -49,16 +97,20 @@ const Equipamentos: React.FC = () => {
   const carregarSimuladores = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/simuladores/equipamentos`);
+      const response = await apiFetch('/api/simuladores');
       const data = await response.json();
 
-      if (data.success) {
-        setSimuladores(data.data);
+      if (response.ok && data.success) {
+        const lista: SimuladorApi[] = Array.isArray(data.data) ? data.data : [];
+        setSimuladores(lista.map(mapApiToSimulador));
       } else {
-        console.error('Erro ao carregar simuladores:', data.error);
+        throw new Error(data.error || 'Falha ao carregar simuladores');
       }
     } catch (error) {
       console.error('Erro ao carregar simuladores:', error);
+      toast.error(
+        `Erro ao carregar simuladores: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+      );
     } finally {
       setLoading(false);
     }
@@ -67,25 +119,27 @@ const Equipamentos: React.FC = () => {
   const handleSalvarEquipamento = async (dados: any) => {
     try {
       const url = equipamentoEditando
-        ? `/api/simuladores/equipamentos/${equipamentoEditando.id}`
-        : '/api/simuladores/equipamentos';
+        ? `/api/simuladores/${equipamentoEditando.id}`
+        : '/api/simuladores';
 
       const method = equipamentoEditando ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const payload = mapSimuladorToApiPayload(dados);
+      const response = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
 
-      if (result.success) {
+      if (response.ok && result.success) {
         await carregarSimuladores();
         setShowForm(false);
         setEquipamentoEditando(null);
+        toast.success(`Simulador ${equipamentoEditando ? 'atualizado' : 'criado'} com sucesso`);
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || 'Falha ao salvar simulador');
       }
     } catch (error) {
       console.error('Erro ao salvar simulador:', error);
@@ -115,16 +169,17 @@ const Equipamentos: React.FC = () => {
     }
 
     try {
-      const response = await apiFetch(`/api/simuladores/equipamentos/${equipamento.id}`, {
+      const response = await apiFetch(`/api/simuladores/${equipamento.id}`, {
         method: 'DELETE',
       });
 
       const result = await response.json();
 
-      if (result.success) {
+      if (response.ok && result.success) {
         await carregarSimuladores();
+        toast.success('Simulador excluído com sucesso');
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || 'Falha ao excluir simulador');
       }
     } catch (error) {
       console.error('Erro ao excluir simulador:', error);
@@ -140,7 +195,7 @@ const Equipamentos: React.FC = () => {
     const matchBusca =
       !filtros.busca ||
       sim.nome.toLowerCase().includes(filtros.busca.toLowerCase()) ||
-      sim.codigo_identificacao.toLowerCase().includes(filtros.busca.toLowerCase());
+      (sim.codigo_identificacao || '').toLowerCase().includes(filtros.busca.toLowerCase());
 
     const matchTipo = !filtros.tipo_simulador || sim.tipo_simulador === filtros.tipo_simulador;
     const matchStatus = !filtros.status || sim.status === filtros.status;

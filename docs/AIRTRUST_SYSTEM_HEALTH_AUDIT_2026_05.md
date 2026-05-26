@@ -586,6 +586,34 @@ Comandos sugeridos (não executados):
 - Pendências:
   - opcional: harmonizar também links legados do menu (`/backup`, `/aeronaves`) com rotas efetivamente registradas, em fase separada.
 
+## Follow-up H10 — P1-05 Simuladores Equipamentos API contract alignment
+
+- Risco antes:
+  - tela de equipamentos usava contrato legado (`/api/simuladores/equipamentos`) e payload divergente dos campos canônicos de `simuladores`.
+  - risco de CRUD quebrado por endpoint inexistente e parsing incompatível.
+- Endpoints antigos:
+  - `GET /api/simuladores/equipamentos`
+  - `POST /api/simuladores/equipamentos`
+  - `PUT /api/simuladores/equipamentos/:id`
+  - `DELETE /api/simuladores/equipamentos/:id`
+- Endpoints finais alinhados:
+  - `GET /api/simuladores`
+  - `POST /api/simuladores`
+  - `PUT /api/simuladores/:id`
+  - `DELETE /api/simuladores/:id`
+- Patch aplicado:
+  - `src/react-app/pages/simuladores/cadastros/equipamentos/index.tsx` ajustado para consumir contrato real do backend.
+  - adicionado mapeamento legado -> canônico no envio (`tipo_simulador -> tipo`, `empresa_local/aeronave_base -> localizacao`, `configuracao_tecnica -> observacoes`) e canônico -> legado na leitura.
+  - padronizadas chamadas para `apiFetch` e mensagens de erro/sucesso mais explícitas na tela.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run test:worker`: ok.
+  - `npm run lint`: ok.
+- Pendências:
+  - `@ts-nocheck` mantido neste arquivo para evitar refatoração ampla fora do escopo do patch de contrato.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
