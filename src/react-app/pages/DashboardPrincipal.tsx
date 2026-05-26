@@ -90,6 +90,11 @@ export default function DashboardPrincipal() {
   const escalas = escalasQ.data ?? [];
   const treinamentosPlanejados = treinamentosQ.data ?? [];
   const sessoesSimulador = sessoesQ.data ?? [];
+  const hasFrmsError = frmsAlertasQ.isError && !frmsAlertasQ.data;
+  const hasEscalasError = escalasQ.isError && !escalasQ.data;
+  const hasTreinamentosError = treinamentosQ.isError && !treinamentosQ.data;
+  const hasSessoesError = sessoesQ.isError && !sessoesQ.data;
+  const hasAtividadesError = atividadesQ.isError && !atividadesQ.data;
 
   const lastUpdated = metricsQ.dataUpdatedAt ? new Date(metricsQ.dataUpdatedAt) : null;
 
@@ -334,7 +339,14 @@ export default function DashboardPrincipal() {
 
           {/* FRMS Donut */}
           <div className="h-full lg:col-span-4">
-            <FrmsRiskDonut frmsAlertas={frmsAlertas} />
+            {hasFrmsError ? (
+              <WidgetError
+                message={frmsAlertasQ.error?.message ?? 'Dados FRMS indisponíveis'}
+                onRetry={() => frmsAlertasQ.refetch()}
+              />
+            ) : (
+              <FrmsRiskDonut frmsAlertas={frmsAlertas} />
+            )}
           </div>
 
           {/* KPI Cards (vertical on desktop) */}
@@ -416,9 +428,21 @@ export default function DashboardPrincipal() {
           </div>
 
           <div className="space-y-4 lg:col-span-4">
-            <PlannedTrainingsCard treinamentos={treinamentosPlanejados} />
+            {hasTreinamentosError ? (
+              <WidgetError
+                message={treinamentosQ.error?.message ?? 'Treinamentos indisponíveis'}
+                onRetry={() => treinamentosQ.refetch()}
+              />
+            ) : (
+              <PlannedTrainingsCard treinamentos={treinamentosPlanejados} />
+            )}
 
-            {sessoesSimulador.length > 0 && (
+            {hasSessoesError ? (
+              <WidgetError
+                message={sessoesQ.error?.message ?? 'Próximas sessões indisponíveis'}
+                onRetry={() => sessoesQ.refetch()}
+              />
+            ) : sessoesSimulador.length > 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-700">
                   <div className="flex items-center gap-2">
@@ -452,12 +476,26 @@ export default function DashboardPrincipal() {
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className="space-y-4 lg:col-span-3">
-            <EscalasSummary escalas={escalas} />
-            <ActivityCard atividades={atividades} />
+            {hasEscalasError ? (
+              <WidgetError
+                message={escalasQ.error?.message ?? 'Escalas indisponíveis'}
+                onRetry={() => escalasQ.refetch()}
+              />
+            ) : (
+              <EscalasSummary escalas={escalas} />
+            )}
+            {hasAtividadesError ? (
+              <WidgetError
+                message={atividadesQ.error?.message ?? 'Atividade recente indisponível'}
+                onRetry={() => atividadesQ.refetch()}
+              />
+            ) : (
+              <ActivityCard atividades={atividades} />
+            )}
           </div>
         </div>
 

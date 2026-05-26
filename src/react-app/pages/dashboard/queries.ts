@@ -15,9 +15,39 @@ import type {
 } from './types';
 
 const API_BASE = API_BASE_URL;
+const STALE_STANDARD_MS = 2 * 60 * 1000;
+const STALE_CRITICAL_MS = 60 * 1000;
 
 function getHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' };
+}
+
+type ApiEnvelope<T> = {
+  success?: boolean;
+  data?: T;
+  error?: string;
+  total?: number;
+};
+
+function buildApiError(json: ApiEnvelope<unknown> | null, fallbackMessage: string): Error {
+  const message = String(json?.error || fallbackMessage).trim();
+  return new Error(message || fallbackMessage);
+}
+
+async function readJsonOrThrow<T>(res: Response, fallbackMessage: string): Promise<ApiEnvelope<T>> {
+  const json = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
+  if (!res.ok) {
+    throw buildApiError(json, fallbackMessage);
+  }
+  if (!json?.success) {
+    throw buildApiError(json, fallbackMessage);
+  }
+  return json;
+}
+
+function normalizeIsoDate(value: unknown): string {
+  const raw = String(value || '').trim();
+  return raw ? raw.slice(0, 10) : '';
 }
 
 // ─── Query Key Factory ──────────────────────────────────────────────────────
@@ -41,11 +71,11 @@ export function useMetricsQuery() {
     queryKey: dashboardKeys.metrics(),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/metrics`, { headers: getHeaders() });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error ?? 'Falha ao buscar métricas');
+      const json = await readJsonOrThrow<DashboardMetrics>(res, 'Falha ao buscar métricas');
       return json.data as DashboardMetrics;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_STANDARD_MS,
+    refetchInterval: 3 * 60 * 1000,
   });
 }
 
@@ -54,11 +84,11 @@ export function useComplianceQuery() {
     queryKey: dashboardKeys.compliance(),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/compliance-score`, { headers: getHeaders() });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error ?? 'Falha ao buscar compliance');
+      const json = await readJsonOrThrow<ComplianceData>(res, 'Falha ao buscar compliance');
       return json.data as ComplianceData;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_STANDARD_MS,
+    refetchInterval: 3 * 60 * 1000,
   });
 }
 
@@ -67,8 +97,10 @@ export function useAlertasQuery() {
     queryKey: dashboardKeys.alertas(),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/alertas-criticos`, { headers: getHeaders() });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error ?? 'Falha ao buscar alertas');
+      const json = await readJsonOrThrow<Array<Record<string, unknown>>>(
+        res,
+        'Falha ao buscar alertas',
+      );
       const raw = json.data as Array<Record<string, unknown>>;
       return raw
         .filter((alerta) => !isResolvedRenewalAlert(alerta))
@@ -94,7 +126,8 @@ export function useAlertasQuery() {
           };
         });
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_STANDARD_MS,
+    refetchInterval: 3 * 60 * 1000,
   });
 }
 
@@ -103,11 +136,14 @@ export function useAtividadesQuery() {
     queryKey: dashboardKeys.atividades(),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/atividades-recentes`, { headers: getHeaders() });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error ?? 'Falha ao buscar atividades');
+      const json = await readJsonOrThrow<AtividadeRecente[]>(
+        res,
+        'Falha ao buscar atividades recentes',
+      );
       return json.data as AtividadeRecente[];
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_STANDARD_MS,
+    refetchInterval: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
 }
@@ -121,31 +157,34 @@ export function useFrmsAlertasQuery() {
     queryKey: dashboardKeys.frmsAlertas(mesInicio),
     queryFn: async () => {
       const pageLimit = 200;
-      // Fetch first page
-      const res = await fetchWithAuth(
-        `${API_BASE}/frms/alertas?resolvido=false&limit=${pageLimit}&page=1&dataInicio=${mesInicio}`,
+      const firstRes = await fetchWithAuth(
+        `${API_BASE}/frms/alertas?resolvido=false&limit=${pageLimit}&page=1&data_inicio=${mesInicio}`,
         { headers: getHeaders() },
       );
-      const json = await res.json();
-      let alertas: FrmsAlertaRaw[] = Array.isArray(json.data) ? json.data : [];
+      const firstJson = await readJsonOrThrow<FrmsAlertaRaw[]>(
+        firstRes,
+        'Falha ao buscar alertas FRMS',
+      );
+      let alertas: FrmsAlertaRaw[] = Array.isArray(firstJson.data) ? firstJson.data : [];
 
-      // Fetch remaining pages if needed
-      const total = Number(json.total ?? alertas.length ?? 0);
+      // Buscar páginas remanescentes sem mascarar erro
+      const total = Number(firstJson.total ?? alertas.length ?? 0);
       const totalPages = Math.max(1, Math.ceil(total / pageLimit));
       if (totalPages > 1) {
-        const extraResponses = await Promise.all(
-          Array.from({ length: totalPages - 1 }, (_, idx) => idx + 2).map((page) =>
-            fetchWithAuth(
-              `${API_BASE}/frms/alertas?resolvido=false&limit=${pageLimit}&page=${page}&dataInicio=${mesInicio}`,
+        const extraPages = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, idx) => idx + 2).map(async (page) => {
+            const pageRes = await fetchWithAuth(
+              `${API_BASE}/frms/alertas?resolvido=false&limit=${pageLimit}&page=${page}&data_inicio=${mesInicio}`,
               { headers: getHeaders() },
-            )
-              .then((r) => (r.ok ? r.json() : null))
-              .catch(() => null),
-          ),
+            );
+            const pageJson = await readJsonOrThrow<FrmsAlertaRaw[]>(
+              pageRes,
+              'Falha ao buscar alertas FRMS',
+            );
+            return Array.isArray(pageJson.data) ? pageJson.data : [];
+          }),
         );
-        const extras = extraResponses.flatMap((j) =>
-          Array.isArray(j?.data) ? (j.data as FrmsAlertaRaw[]) : [],
-        );
+        const extras = extraPages.flat();
         const byId = new Map<string, FrmsAlertaRaw>();
         for (const alerta of [...alertas, ...extras]) {
           byId.set(String(alerta.id), alerta);
@@ -155,11 +194,12 @@ export function useFrmsAlertasQuery() {
 
       // Filter to current month
       return alertas.filter((f) => {
-        const dataMes = String(f.data_jornada ?? '').slice(0, 7);
+        const dataMes = normalizeIsoDate(f.data_jornada).slice(0, 7);
         return dataMes === mesAtual;
       });
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_CRITICAL_MS,
+    refetchInterval: 2 * 60 * 1000,
     enabled: true,
   });
 }
@@ -168,11 +208,15 @@ export function useEscalasQuery(enabled: boolean) {
   return useQuery({
     queryKey: dashboardKeys.escalas(),
     queryFn: async () => {
-      const res = await fetchWithAuth(`${API_BASE}/escalas?limit=5`, { headers: getHeaders() });
-      const json = await res.json();
+      const hoje = new Date();
+      const mes = hoje.getMonth() + 1;
+      const ano = hoje.getFullYear();
+      const res = await fetchWithAuth(`${API_BASE}/escalas?mes=${mes}&ano=${ano}`, { headers: getHeaders() });
+      const json = await readJsonOrThrow<EscalaItem[]>(res, 'Falha ao buscar escalas');
       return (Array.isArray(json.data) ? json.data.slice(0, 5) : []) as EscalaItem[];
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_STANDARD_MS,
+    refetchInterval: 5 * 60 * 1000,
     enabled,
     placeholderData: (prev) => prev,
   });
@@ -182,18 +226,47 @@ export function useTreinamentosQuery(enabled: boolean) {
   return useQuery({
     queryKey: dashboardKeys.treinamentos(),
     queryFn: async () => {
-      const [treinRes, solRes] = await Promise.all([
-        fetchWithAuth(`${API_BASE}/qualificacoes/historico?status=PLANEJADA&limit=50`, { headers: getHeaders() }).catch(() => null),
-        fetchWithAuth(`${API_BASE}/treinamentos/solicitacoes?status=AGENDADA`, { headers: getHeaders() }).catch(() => null),
+      const hojeIso = new Date().toISOString().slice(0, 10);
+      const [treinResult, solResult] = await Promise.allSettled([
+        fetchWithAuth(`${API_BASE}/qualificacoes/historico?status=PLANEJADA&limit=50`, {
+          headers: getHeaders(),
+        }),
+        fetchWithAuth(`${API_BASE}/treinamentos/solicitacoes?status=AGENDADA`, {
+          headers: getHeaders(),
+        }),
       ]);
 
-      const treinJson = treinRes?.ok ? await treinRes.json() : null;
-      const solJson = solRes?.ok ? await solRes.json() : null;
+      const treinRes = treinResult.status === 'fulfilled' ? treinResult.value : null;
+      const solRes = solResult.status === 'fulfilled' ? solResult.value : null;
 
-      const treinRaw = Array.isArray(treinJson?.data?.items)
-        ? (treinJson.data.items as Record<string, unknown>[])
-        : Array.isArray(treinJson?.data)
-          ? (treinJson.data as Record<string, unknown>[])
+      const treinJson =
+        treinRes !== null
+          ? await readJsonOrThrow<{ items?: Record<string, unknown>[] } | Record<string, unknown>[]>(
+              treinRes,
+              'Falha ao buscar treinamentos planejados',
+            )
+          : null;
+      const solJson =
+        solRes !== null
+          ? await readJsonOrThrow<SolicitacaoTreinamentoItem[]>(
+              solRes,
+              'Falha ao buscar solicitações de treinamento',
+            )
+          : null;
+
+      if (!treinJson && !solJson) {
+        throw new Error('Falha ao carregar treinamentos planejados');
+      }
+
+      const treinData = treinJson?.data;
+      const treinDataObj =
+        treinData && typeof treinData === 'object' && !Array.isArray(treinData)
+          ? (treinData as { items?: Record<string, unknown>[] })
+          : null;
+      const treinRaw = Array.isArray(treinDataObj?.items)
+        ? treinDataObj.items
+        : Array.isArray(treinData)
+          ? (treinData as Record<string, unknown>[])
           : [];
 
       const diretos: TreinamentoPlanejadoItem[] = treinRaw.map((item) => ({
@@ -224,37 +297,63 @@ export function useTreinamentosQuery(enabled: boolean) {
 
       const consolidated = diretos.length > 0 ? diretos : fallback;
       return consolidated
+        .filter((item) => normalizeIsoDate(item.data_prevista) >= hojeIso)
         .slice()
-        .sort((a, b) => String(a.data_prevista || '').localeCompare(String(b.data_prevista || '')))
+        .sort((a, b) =>
+          normalizeIsoDate(a.data_prevista).localeCompare(normalizeIsoDate(b.data_prevista)),
+        )
         .slice(0, 8);
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_STANDARD_MS,
+    refetchInterval: 5 * 60 * 1000,
     enabled,
     placeholderData: (prev) => prev,
   });
 }
 
 export function useSessoesSimuladorQuery(enabled: boolean) {
-  const todayIso = new Date().toISOString().split('T')[0];
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   return useQuery({
     queryKey: dashboardKeys.sessoes(todayIso),
     queryFn: async () => {
       const res = await fetchWithAuth(
-        `${API_BASE}/simuladores/sessoes?status=AGENDADO&dataInicio=${todayIso}&limit=20`,
+        `${API_BASE}/simuladores/sessoes?view=summary&status=AGENDADO,PENDENTE,CONFIRMADO&data_inicio=${todayIso}&order=asc&limit=24`,
         { headers: getHeaders() },
       );
-      const json = await res.json();
-      const raw = Array.isArray(json.data) ? (json.data as SessaoSimulador[]) : [];
-      return raw
+      const json = await readJsonOrThrow<Array<Record<string, unknown>>>(
+        res,
+        'Falha ao buscar próximas sessões',
+      );
+      const raw = Array.isArray(json.data) ? json.data : [];
+      const normalized: SessaoSimulador[] = raw.map((s) => ({
+        id: String(s.id ?? ''),
+        data: normalizeIsoDate(s.data),
+        hora_inicio: String(s.hora_inicio ?? s.horario_inicio ?? '').trim() || null,
+        hora_fim: String(s.hora_fim ?? s.horario_fim ?? '').trim() || null,
+        tipo_sessao: String(s.tipo_sessao ?? '').trim() || null,
+        tema_sessao: String(s.tema_sessao ?? '').trim() || null,
+        status: String(s.status ?? '').trim() || null,
+        simulador_nome: String(s.simulador_nome ?? '').trim() || null,
+        simulador_modelo: String(s.simulador_modelo ?? '').trim() || null,
+        instrutor_nome: String(s.instrutor_nome ?? '').trim() || null,
+        participantes: [],
+      }));
+      return normalized
         .filter((s) => {
-          const dataStr = String(s.data || '').split('T')[0];
-          return dataStr >= todayIso;
+          const dataStr = normalizeIsoDate(s.data);
+          const status = String(s.status ?? '').toUpperCase();
+          return dataStr >= todayIso && ['AGENDADO', 'PENDENTE', 'CONFIRMADO'].includes(status);
         })
-        .sort((a, b) => new Date(String(a.data || '')).getTime() - new Date(String(b.data || '')).getTime())
+        .sort((a, b) => {
+          const aDate = new Date(`${normalizeIsoDate(a.data)}T${String(a.hora_inicio ?? '00:00')}:00`);
+          const bDate = new Date(`${normalizeIsoDate(b.data)}T${String(b.hora_inicio ?? '00:00')}:00`);
+          return aDate.getTime() - bDate.getTime();
+        })
         .slice(0, 6);
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_CRITICAL_MS,
+    refetchInterval: 2 * 60 * 1000,
     enabled,
     placeholderData: (prev) => prev,
   });
