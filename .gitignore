@@ -34,6 +34,12 @@ db.backup
 backups/
 .r2-cache/
 
+# ========== SENSITIVE CREDENTIAL FILES ==========
+*.pem
+*.p12
+*.pfx
+*.key
+
 # ========== ENVIRONMENT VARIABLES ==========
 .env
 .env.*
@@ -159,3 +165,10 @@ skills-lock.json
 
 # Local legacy SQL staging copy (classified version lives in scripts/validation)
 scripts/validar_sk76_inicial_12x22.sql
+
+# ========== SENSITIVE SQL DUMPS / BACKUPS ==========
+# Scoped to avoid hiding official migrations in worker-airtrust/migrations/
+scripts/**/*dump*.sql
+scripts/**/*backup*.sql
+scripts/**/*prod*.sql
+scripts/legacy/*.sql

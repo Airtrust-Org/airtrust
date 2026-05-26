@@ -433,6 +433,34 @@ Comandos sugeridos (não executados):
 - Pendências:
   - avançar para P0-03 (sensíveis/dumps) em modo auditoria + guardrail, sem remoção automática.
 
+## Follow-up H5 — P0-03 sensitive files guardrail
+
+- Status antes:
+  - presença de `.env*` rastreados e dumps SQL legados no repositório;
+  - ausência de guardrail dedicado para bloquear novos sensíveis rastreados.
+- Patch aplicado:
+  - script read-only `scripts/validation/audit-sensitive-files.sh` para inventário/classificação por caminho;
+  - `exit 1` quando houver categorias bloqueantes (`SECRET_ENV`, `PROD_DUMP_OR_BACKUP`, `LOCAL_SEED`, `UNKNOWN_REVIEW_REQUIRED`);
+  - allowlist explícita para `MIGRATION` e `TEST_FIXTURE`;
+  - reforço preventivo em `.gitignore` para credenciais e dumps SQL locais/legados sem esconder `worker-airtrust/migrations/*`.
+- Resultado do inventário (sem leitura de conteúdo):
+  - `SECRET_ENV`: 4
+  - `PROD_DUMP_OR_BACKUP`: 92
+  - `LOCAL_SEED`: 17
+  - `TEST_FIXTURE`: 2
+  - `MIGRATION`: 355
+  - `UNKNOWN_REVIEW_REQUIRED`: 231
+  - total bloqueante: 344 (guardrail retorna fail até remediação controlada).
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - fase separada para `git rm --cached` autorizado de sensíveis/dumps;
+  - rotação de segredos se necessário;
+  - eventual estratégia de limpeza de histórico somente com autorização explícita.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)

@@ -1,0 +1,55 @@
+# AIRTRUST v0.4 — Sensitive Files Guardrail
+
+## 1) O que foi encontrado (inventario por caminho, sem leitura de conteudo)
+
+Levantamento executado com `scripts/validation/audit-sensitive-files.sh` em modo read-only.
+
+Resumo atual de candidatos rastreados:
+
+- `SECRET_ENV`: 4
+- `PROD_DUMP_OR_BACKUP`: 92
+- `LOCAL_SEED`: 17
+- `TEST_FIXTURE`: 2
+- `MIGRATION`: 355
+- `UNKNOWN_REVIEW_REQUIRED`: 231
+
+Observacoes:
+
+- Foram detectados arquivos `.env*` rastreados.
+- Foram detectados dumps/backups SQL grandes em caminhos legados.
+- Foram detectados muitos SQLs que exigem triagem entre migration legitima vs legado operacional.
+
+## 2) O que nao foi feito nesta fase
+
+- Nao houve remocao de arquivos.
+- Nao houve move/rename de arquivos.
+- Nao houve reescrita de historico Git.
+- Nao houve `git filter-repo`/BFG.
+- Nao houve deploy.
+- Nao houve migration.
+- Nao houve escrita em banco.
+- Nao houve exibicao de conteudo de segredo.
+
+## 3) Politica de guardrail
+
+- Segredos devem ficar fora do Git.
+- Dumps/backup de producao devem ficar fora do Git.
+- Seeds sanitizados so podem existir se documentados e claramente identificados.
+- Migrations oficiais podem continuar versionadas.
+- Arquivos sensiveis ja rastreados exigem fase separada para remocao controlada e governanca.
+
+## 4) Proxima fase recomendada (controlada)
+
+1. Backup seguro externo dos artefatos que precisarem ser preservados.
+2. Remocao controlada do index (`git rm --cached`) apenas dos caminhos autorizados.
+3. Rotacao de segredos caso qualquer `.env` rastreado contenha segredo real.
+4. Se necessario, limpeza de historico apenas em clone isolado, com plano aprovado e janela controlada.
+
+## 5) Guardrail implementado
+
+- Script: `scripts/validation/audit-sensitive-files.sh`
+- Objetivo: detectar candidatos sensiveis rastreados por caminho/categoria sem ler conteudo.
+- Comportamento:
+  - lista caminhos classificados;
+  - retorna `exit 1` quando houver categorias bloqueantes;
+  - mantem allowlist explicita para `MIGRATION` e `TEST_FIXTURE`.
