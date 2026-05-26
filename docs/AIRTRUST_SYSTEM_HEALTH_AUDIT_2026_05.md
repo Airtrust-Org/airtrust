@@ -657,7 +657,26 @@ Comandos sugeridos (não executados):
   - 220 REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes.
   - Possivel H6-D (lote 2) ou voltar para bugs funcionais.
 
-## Follow-up H13 — P2-01/P2-02 Qualificações legacy cleanup
+## Follow-up H13 — H6-D Second sensitive batch removed from index
+
+- Data: 2026-05-25
+- Acao: `git rm --cached` de 20 arquivos (16 dumps/exports + 4 seeds).
+- Preservacao local: confirmada para os 20 arquivos.
+- Guardrail antes/depois:
+  - Bloqueantes: 330 → 310 (-20)
+  - PROD_DUMP_OR_BACKUP: 90 → 74
+  - LOCAL_SEED: 16 → 12
+  - UNKNOWN_REVIEW_REQUIRED: 224 (inalterado)
+- Validações:
+  - `bash scripts/validation/audit-sensitive-files.sh`: fail esperado (310 bloqueantes)
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok
+  - `npx tsc --noEmit`: ok
+  - `npm run build`: ok
+- Pendências:
+  - 200 REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes.
+  - Sugestao: pausar limpeza de sensiveis e voltar para bugs funcionais.
+
+## Follow-up H14 — P2-01/P2-02 Qualificações legacy cleanup
 
 - Achados:
   - `src/client/hooks/useQualificacoes.ts` sem consumidor ativo no runtime; continha chamadas legadas para `/api/qualificacoes-list` e `/api/qualificacoes-list/:id` sem backend correspondente no worker atual.
