@@ -100,3 +100,34 @@ Lacunas restantes:
 
 Próximo domínio recomendado:
 - SGSO Next Gen (relatos/ações CAPA) ou simuladores fichas-edicoes, priorizando negativos de role/tenant.
+
+## 9. H32-D — SGSO Next Gen relatos/ações guards
+Domínio escolhido:
+- SGSO Next Gen (`relprev` workflow/listagem de relatos).
+
+Rotas cobertas:
+- `PATCH /sgso/relprev/submissoes/:id/workflow`
+- `GET /sgso/relprev/submissoes`
+
+Arquivo de teste:
+- [sgso-nextgen-relatos-acoes-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/sgso-nextgen-relatos-acoes-guards.test.ts)
+
+Cenários adicionados:
+1. sem autenticação em escrita de workflow retorna `401`;
+2. tenant ausente falha fechado com erro explícito (`500`, `success:false`, `code: SGSO_NEXT_ERROR`);
+3. listagem de submissões usa `empresa_id` do tenant no bind;
+4. update cross-tenant é bloqueado por escopo e retorna `404` (relato não encontrado para a empresa);
+5. workflow válido preserva contrato de sucesso e propaga `empresa_id` no update;
+6. falha de DB em listagem retorna erro explícito (`500`, `success:false`), sem sucesso silencioso.
+
+Riscos cobertos:
+- autenticação obrigatória em escrita de workflow de relatos;
+- isolamento tenant explícito em leitura e update de relatos;
+- garantia de erro explícito em falha interna (sem fail-open).
+
+Lacunas restantes:
+- cobertura de role específico em ações SGSO Next Gen extras (`FRAT/MoC`) pode entrar numa fase posterior dedicada;
+- benchmark autenticado de `/api/simuladores/sessoes` segue pendente para decidir H30-D.
+
+Próximo domínio recomendado:
+- consolidar bloco H32 e decidir entre novo domínio crítico (se houver lacuna real) ou pausa para frente de arquitetura/modularização com diagnóstico próprio.
