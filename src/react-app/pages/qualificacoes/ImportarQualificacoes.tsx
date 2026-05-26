@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
-import { API_BASE_URL } from '@/react-app/config/api';
+import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 // 🚀 LAZY LOADING: XLSX carregado dinamicamente apenas quando necessário (importar/preview/export)
 import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
@@ -9,20 +9,56 @@ interface ImportarQualificacoesProps {
   onImportSuccess?: () => void;
 }
 
-const IMPORTACAO_QUALIFICACOES_DISPONIVEL = false;
-const IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG =
-  'Importação de qualificações nesta tela está temporariamente desabilitada: endpoint legado removido (/api/qualificacoes/importar-json).';
+type ResultadoImportacao = {
+  total: number;
+  sucesso: number;
+  erros: Array<{ linha: number; campo?: string; erro: string }>;
+};
+
+type ModoImportacao = 'preencher_vazios' | 'atualizar_inteligente' | 'substituir_tudo';
+
+type ModoBackendImportacao = 'INSERT' | 'MESCLAR_INTELIGENTE' | 'SOBRESCREVER';
+
+function mapearModoBackend(modo: ModoImportacao): ModoBackendImportacao {
+  if (modo === 'preencher_vazios') return 'INSERT';
+  if (modo === 'substituir_tudo') return 'SOBRESCREVER';
+  return 'MESCLAR_INTELIGENTE';
+}
+
+function normalizarErrosImportacao(rawErros: unknown): Array<{ linha: number; campo?: string; erro: string }> {
+  if (!Array.isArray(rawErros)) return [];
+  return rawErros.map((item, index) => {
+    const entry = (item || {}) as Record<string, unknown>;
+    const linha =
+      Number(entry.linha || entry.line || entry.row || 0) || index + 2;
+    const campo =
+      typeof entry.campo === 'string'
+        ? entry.campo
+        : typeof entry.field === 'string'
+          ? entry.field
+          : undefined;
+    const erro =
+      typeof entry.erro === 'string'
+        ? entry.erro
+        : typeof entry.error === 'string'
+          ? entry.error
+          : typeof entry.message === 'string'
+            ? entry.message
+            : Array.isArray(entry.erros)
+              ? entry.erros.join('; ')
+              : 'Erro de validação';
+    return { linha, campo, erro };
+  });
+}
 
 export default function ImportarQualificacoes({ onImportSuccess }: ImportarQualificacoesProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [resultado, setResultado] = useState<any>(null);
+  const [resultado, setResultado] = useState<ResultadoImportacao | null>(null);
   const [preview, setPreview] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [historico, setHistorico] = useState<any[]>([]);
-  const [modo, setModo] = useState<
-    'preencher_vazios' | 'atualizar_inteligente' | 'substituir_tudo'
-  >('atualizar_inteligente');
+  const [modo, setModo] = useState<ModoImportacao>('atualizar_inteligente');
   const [validacao, setValidacao] = useState<{
     total: number;
     validos: number;
@@ -59,52 +95,27 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
     jsonData.forEach((row: any, index: number) => {
       const linha = index + 2; // +2 porque linha 1 é header, index começa em 0
 
-      // Validar campos obrigatórios: codigo e nome
-      const codigo = String(row.codigo || '')
+      // Validar campos obrigatórios do fluxo /importacao v2 (histórico)
+      const cpf = String(row.funcionario_cpf || row.cpf || '')
+        .trim();
+      const codigo = String(row.qualificacao_codigo || row.codigo || '')
         .trim()
         .toUpperCase();
-      const nome = String(row.nome || '').trim();
+      const dataConclusao = row.data_conclusao || row.data_emissao;
+
+      if (!cpf) {
+        erros.push({ linha, campo: 'funcionario_cpf', erro: 'CPF obrigatório' });
+        return;
+      }
 
       if (!codigo) {
-        erros.push({ linha, campo: 'codigo', erro: 'Código obrigatório' });
+        erros.push({ linha, campo: 'qualificacao_codigo', erro: 'Código obrigatório' });
         return;
       }
 
-      if (!nome) {
-        erros.push({ linha, campo: 'nome', erro: 'Nome obrigatório' });
+      if (!dataConclusao) {
+        erros.push({ linha, campo: 'data_conclusao', erro: 'Data de conclusão obrigatória' });
         return;
-      }
-
-      if (nome.length < 3) {
-        erros.push({ linha, campo: 'nome', erro: 'Nome deve ter no mínimo 3 caracteres' });
-        return;
-      }
-
-      // Validar tipos de dados
-      if (
-        row.validade !== null &&
-        row.validade !== undefined &&
-        String(row.validade).trim() !== ''
-      ) {
-        const validadeStr = String(row.validade).trim();
-        const validade = parseInt(validadeStr, 10);
-        if (isNaN(validade) || validade <= 0) {
-          erros.push({ linha, campo: 'validade', erro: 'Validade deve ser número inteiro > 0' });
-          return;
-        }
-      }
-
-      if (
-        row.carga_horaria !== null &&
-        row.carga_horaria !== undefined &&
-        String(row.carga_horaria).trim() !== ''
-      ) {
-        const chStr = String(row.carga_horaria).trim();
-        const ch = parseFloat(chStr);
-        if (isNaN(ch) || ch <= 0) {
-          erros.push({ linha, campo: 'carga_horaria', erro: 'Carga horária deve ser número > 0' });
-          return;
-        }
       }
     });
 
@@ -160,17 +171,13 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
   };
 
   const handleImport = async () => {
-    if (!IMPORTACAO_QUALIFICACOES_DISPONIVEL) {
-      toast.warning(IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG);
-      return;
-    }
-
     if (!file) {
       toast.warning('Selecione um arquivo');
       return;
     }
 
     setLoading(true);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -179,52 +186,95 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const rows = jsonData.map((row: any) => ({
+        funcionario_cpf: String(row.funcionario_cpf || row.cpf || '').trim(),
+        qualificacao_codigo: String(row.qualificacao_codigo || row.codigo || '')
+          .trim()
+          .toUpperCase(),
+        data_conclusao: row.data_conclusao || row.data_emissao || null,
+        data_vencimento: row.data_vencimento || null,
+      }));
 
       const API_URL = API_BASE_URL.replace('/api', '');
+      const token = getAccessToken();
+      if (!token) {
+        throw new Error('Sessão expirada. Faça login novamente para importar.');
+      }
+      const modoBackend = mapearModoBackend(modo);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+      timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
-      const response = await fetch(`${API_URL}/api/qualificacoes/importar-json`, {
+      const validarResponse = await fetch(`${API_URL}/api/importacao/validar-json/historico`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          dados: jsonData,
-          arquivo_nome: file.name,
-          modo, // Enviar modo selecionado
+          rows,
+          mode: modoBackend,
         }),
         signal: controller.signal,
       });
+      const validarData = await validarResponse.json();
+      if (!validarResponse.ok) {
+        const errorMsg = validarData.error || `Erro ${validarResponse.status}: ${validarResponse.statusText}`;
+        throw new Error(errorMsg);
+      }
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        const errorMsg = errorData.error || `Erro ${response.status}: ${response.statusText}`;
-        console.error('[IMPORT ERROR]', errorData);
-        toast.warning(`Erro ao importar: ${errorMsg}`);
-        setLoading(false);
+      const errosValidacao = normalizarErrosImportacao(validarData.lista_erros || validarData.errors);
+      if (errosValidacao.length > 0 || validarData.success === false) {
+        setResultado({
+          total: Number(validarData.total || validarData.totalRows || rows.length),
+          sucesso: Number(validarData.validos || 0),
+          erros: errosValidacao,
+        });
+        toast.warning(
+          `Validação bloqueou a importação: ${errosValidacao.length} inconsistência(s) encontrada(s).`,
+        );
         return;
       }
 
-      const data = await response.json();
+      const executarResponse = await fetch(`${API_URL}/api/importacao/executar-json/historico`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          rows: validarData.dados_validos || rows,
+          mode: modoBackend,
+        }),
+        signal: controller.signal,
+      });
+      const executarData = await executarResponse.json();
+      if (!executarResponse.ok) {
+        const errorMsg = executarData.error || `Erro ${executarResponse.status}: ${executarResponse.statusText}`;
+        throw new Error(errorMsg);
+      }
 
-      if (data.success) {
-        setResultado(data.resultados);
-        onImportSuccess?.();
-        carregarHistorico();
+      const errosExecucao = normalizarErrosImportacao(executarData.errors || executarData.lista_erros);
+      const sucesso = Number(executarData.inserted || 0) + Number(executarData.updated || 0);
 
-        if (data.resultados.erros.length === 0) {
-          setTimeout(() => {
-            setFile(null);
-            setResultado(null);
-            setPreview([]);
-            setShowPreview(false);
-          }, 10000);
-        }
+      setResultado({
+        total: Number(executarData.totalRows || rows.length),
+        sucesso,
+        erros: errosExecucao,
+      });
+      onImportSuccess?.();
+      carregarHistorico();
+
+      if (errosExecucao.length === 0 && executarData.success) {
+        toast.success(`Importação concluída: ${sucesso} registro(s) processado(s).`);
+        setTimeout(() => {
+          setFile(null);
+          setResultado(null);
+          setPreview([]);
+          setShowPreview(false);
+        }, 8000);
       } else {
-        toast.warning(`Erro: ${data.error || 'Erro desconhecido'}`);
-        console.error('[IMPORT ERROR]', data);
+        toast.warning(`Importação parcial: ${errosExecucao.length} inconsistência(s).`);
       }
     } catch (error) {
       let errorMsg = 'Erro ao importar planilha';
@@ -241,6 +291,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
       toast.warning(`Erro: ${errorMsg}`);
       console.error('[IMPORT EXCEPTION]', error);
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -326,13 +377,6 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
         </div>
 
         <div className="space-y-4">
-          {!IMPORTACAO_QUALIFICACOES_DISPONIVEL && (
-            <div className="p-4 rounded-lg border border-yellow-300 bg-yellow-50 text-yellow-900">
-              <p className="font-medium">Importação temporariamente desabilitada</p>
-              <p className="text-sm mt-1">{IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG}</p>
-            </div>
-          )}
-
           {/* Template */}
           <div className="flex items-center gap-4 p-4 bg-primary/10 rounded-lg border border-blue-200">
             <Download className="w-5 h-5 text-primary" />
@@ -545,9 +589,9 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
           {/* Botão Importar */}
           <button
             onClick={handleImport}
-            disabled={!file || loading || !IMPORTACAO_QUALIFICACOES_DISPONIVEL}
+            disabled={!file || loading}
             className={`w-full py-3 rounded-lg text-white font-semibold flex items-center justify-center gap-2 ${
-              loading || !file || !IMPORTACAO_QUALIFICACOES_DISPONIVEL
+              loading || !file
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-green-600 hover:bg-green-700'
             }`}
@@ -560,9 +604,7 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
             ) : (
               <>
                 <Upload className="w-5 h-5" />
-                {IMPORTACAO_QUALIFICACOES_DISPONIVEL
-                  ? 'Importar Qualificações'
-                  : 'Importação Indisponível'}
+                Importar Qualificações
               </>
             )}
           </button>
