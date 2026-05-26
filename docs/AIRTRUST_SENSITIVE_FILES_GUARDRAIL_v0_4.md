@@ -75,3 +75,21 @@ Observacoes:
   - bloqueantes restantes: 340
 - Pendencia:
   - dumps/seeds/unknown continuam para fase separada de classificacao e remocao controlada.
+
+## 7) H6-B — Classification of remaining blocking files
+
+- Data: 2026-05-25
+- Ferramenta/modelo: DeepSeek (inteligencia media)
+- Escopo: classificacao read-only dos 340 arquivos bloqueantes restantes (sem apagar, sem mover, sem ler conteudo)
+- Resultado da classificacao:
+  - `REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE`: 230 (67.6%)
+  - `KEEP_VERSIONED_LIKELY_VALID`: 19 (5.6%)
+  - `MANUAL_REVIEW_REQUIRED`: 85 (25.0%)
+  - `DO_NOT_TOUCH`: 6 (1.8%)
+- Relatorio completo: `docs/AIRTRUST_SENSITIVE_FILES_CLASSIFICATION_H6B_v0_4.md`
+- Primeiro lote H6-C recomendado: 10 arquivos (3 dumps grandes + 7 token/secret files)
+- Top 3 criticos por tamanho:
+  - `scripts/seed-local.sql` (19.6 MB)
+  - `scripts/legacy/d1-prod-20260315-193839.sql` (19.1 MB)
+  - `scripts/legacy/backup_pre_multitenant_20251207_142032.sql` (4.9 MB)
+- Validacoes: `audit-sensitive-files.sh`, `npx tsc --noEmit`, `npx tsc -p worker-airtrust/tsconfig.json --noEmit`, `npm run build` — todas ok.
