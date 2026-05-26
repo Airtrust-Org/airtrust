@@ -9,6 +9,10 @@ interface ImportarQualificacoesProps {
   onImportSuccess?: () => void;
 }
 
+const IMPORTACAO_QUALIFICACOES_DISPONIVEL = false;
+const IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG =
+  'Importação de qualificações nesta tela está temporariamente desabilitada: endpoint legado removido (/api/qualificacoes/importar-json).';
+
 export default function ImportarQualificacoes({ onImportSuccess }: ImportarQualificacoesProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -156,6 +160,11 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
   };
 
   const handleImport = async () => {
+    if (!IMPORTACAO_QUALIFICACOES_DISPONIVEL) {
+      toast.warning(IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG);
+      return;
+    }
+
     if (!file) {
       toast.warning('Selecione um arquivo');
       return;
@@ -317,6 +326,13 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
         </div>
 
         <div className="space-y-4">
+          {!IMPORTACAO_QUALIFICACOES_DISPONIVEL && (
+            <div className="p-4 rounded-lg border border-yellow-300 bg-yellow-50 text-yellow-900">
+              <p className="font-medium">Importação temporariamente desabilitada</p>
+              <p className="text-sm mt-1">{IMPORTACAO_QUALIFICACOES_BLOQUEADA_MSG}</p>
+            </div>
+          )}
+
           {/* Template */}
           <div className="flex items-center gap-4 p-4 bg-primary/10 rounded-lg border border-blue-200">
             <Download className="w-5 h-5 text-primary" />
@@ -529,9 +545,9 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
           {/* Botão Importar */}
           <button
             onClick={handleImport}
-            disabled={!file || loading}
+            disabled={!file || loading || !IMPORTACAO_QUALIFICACOES_DISPONIVEL}
             className={`w-full py-3 rounded-lg text-white font-semibold flex items-center justify-center gap-2 ${
-              loading || !file
+              loading || !file || !IMPORTACAO_QUALIFICACOES_DISPONIVEL
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-green-600 hover:bg-green-700'
             }`}
@@ -544,7 +560,9 @@ export default function ImportarQualificacoes({ onImportSuccess }: ImportarQuali
             ) : (
               <>
                 <Upload className="w-5 h-5" />
-                Importar Qualificações
+                {IMPORTACAO_QUALIFICACOES_DISPONIVEL
+                  ? 'Importar Qualificações'
+                  : 'Importação Indisponível'}
               </>
             )}
           </button>

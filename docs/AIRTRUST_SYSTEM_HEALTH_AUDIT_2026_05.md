@@ -679,6 +679,33 @@ Comandos sugeridos (não executados):
 - Pendências:
   - avaliar em fase separada os consumidores ativos de `/api/qualificacoes/importar-json` para alinhamento de contrato/backend.
 
+## Follow-up H14 — Qualificações import legacy endpoint cleanup
+
+- Achados:
+  - `src/hooks/index.ts` ainda exportava `useQualificacoes` para arquivo removido no H13 (`../react-app/hooks/useQualificacoes`).
+  - `/api/qualificacoes/importar-json` seguia referenciado em componentes frontend:
+    - `src/react-app/pages/qualificacoes/ImportarQualificacoes.tsx` (tela ativa via `/qualificacoes`)
+    - `src/react-app/components/common/ImportarUniversal.tsx` (genérico, sem consumidor ativo no runtime)
+    - `src/react-app/components/shared/ImportarCertificacoes.tsx` (sem consumidor ativo aparente)
+  - backend atual não expõe `/api/qualificacoes/importar-json`; fluxo consolidado atual está em `/api/importacao` e `/api/importacao-v2` com contrato diferente.
+- Ação tomada:
+  - removido export legado quebrado de `src/hooks/index.ts`.
+  - bloqueadas chamadas do endpoint legado com mensagem explícita no frontend (sem criar endpoint novo e sem alterar backend):
+    - `ImportarQualificacoes`: ação de importação desabilitada com aviso.
+    - `ImportarUniversal`: bloqueio para `tipo='qualificacoes'`.
+    - `ImportarCertificacoes`: bloqueio do fluxo legado com aviso.
+- Endpoints finais nesta fase:
+  - removida dependência ativa de `/api/qualificacoes/importar-json` para esses fluxos.
+  - nenhum endpoint novo criado; backend preservado.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run lint`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - alinhar em fase dedicada um fluxo de importação de qualificações para contrato consolidado de `/api/importacao`/`/api/importacao-v2`, com UX e payloads validados ponta a ponta.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
