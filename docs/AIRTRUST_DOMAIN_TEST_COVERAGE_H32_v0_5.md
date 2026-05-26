@@ -131,3 +131,16 @@ Lacunas restantes:
 
 Próximo domínio recomendado:
 - consolidar bloco H32 e decidir entre novo domínio crítico (se houver lacuna real) ou pausa para frente de arquitetura/modularização com diagnóstico próprio.
+
+## 10. Fechamento do bloco H32
+- Bloco H32 concluído com cobertura por domínio:
+  - H32-A: backup/admin-migrations;
+  - H32-B: SGSO auditorias/NC;
+  - H32-C: simuladores sessões/fichas;
+  - H32-D: SGSO Next Gen relatos/workflow.
+- Baseline final do bloco:
+  - `worker-airtrust` com `483` testes passando;
+  - sem alteração de runtime nas fases H32;
+  - fases executadas como tests-only + docs, sem necessidade de deploy neste fechamento.
+- Transição de fase:
+  - próximo passo recomendado é H33 (diagnóstico/plano de modularização segura), sem refactor de código nesta etapa.
