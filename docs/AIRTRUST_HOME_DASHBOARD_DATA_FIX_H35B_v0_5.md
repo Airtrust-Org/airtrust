@@ -117,3 +117,21 @@ Resultado: suite verde (`59 files / 495 tests`).
 
 - Alguns endpoints de apoio da Home ainda dependem de arquitetura distribuída (múltiplas fontes) e podem se beneficiar de endpoint consolidado em fase posterior.
 - Ajustes de refresh devem continuar monitorados para custo de consulta em produção.
+
+## Follow-up H35-C — Redesign visual/funcional sem aumento de carga
+
+H35-C ajustou a Home executiva para reduzir ruído visual e carga de API, mantendo os contratos confiáveis entregues em H35-B.
+
+Principais pontos de continuidade:
+
+- Removido polling por `refetchInterval` dos hooks da Home.
+- Política de atualização passou a ser:
+  - `staleTime` conservador por criticidade;
+  - `refetchOnWindowFocus: false`;
+  - `refetchOnReconnect: true`;
+  - botão manual `Atualizar dados` como mecanismo principal.
+- Reduzido número de hooks ativos na Home de 8 para 5.
+- Reduzido número base de chamadas iniciais (estimado) sem criação de novo endpoint.
+- Layout reorganizado em 5 blocos estratégicos com estados explícitos de erro.
+
+Relatório detalhado: `docs/AIRTRUST_HOME_DASHBOARD_REDESIGN_H35C_v0_5.md`.
