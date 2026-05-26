@@ -880,3 +880,15 @@ Sem execução de migration, sem execução de comando de escrita remota, sem de
 - Pendencias:
   - continuar remocao em lotes pequenos apenas para high confidence;
   - manter `MANUAL_REVIEW_REQUIRED` para revisao humana.
+
+## Closure H25 — System health audit closure
+
+- Fechamento consolidado da auditoria geral registrado em:
+  - `docs/AIRTRUST_SYSTEM_HEALTH_AUDIT_CLOSURE_H25_v0_4.md`
+- Estado no fechamento:
+  - `HEAD == origin/main` no commit `4494b31`.
+  - validações finais verdes (`worker tsc`, `tsc`, `build`, `lint`, `test:worker` com `436` testes).
+  - guardrail de sensíveis em `296` bloqueantes, com `SECRET_ENV = 0`.
+- Decisão:
+  - encerrar auditoria v0.4-H;
+  - continuar por prioridade (funcional/deploy) em fases curtas e controladas.
