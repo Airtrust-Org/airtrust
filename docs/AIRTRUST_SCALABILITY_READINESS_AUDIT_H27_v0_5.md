@@ -218,6 +218,16 @@ Prioridade alta (sem cobertura de rota dedicada equivalente):
 - Nenhuma fase inicia sem baseline verde (`tsc/build/lint/test`).
 - Alterações com potencial cross-tenant exigem teste de isolamento explícito.
 - Alterações de contrato de erro exigem teste de consumidor e smoke read-only.
+
+## Follow-up H33 — Architecture modularization plan
+- H33 executado em `2026-05-26` como fase **read-only** e documental.
+- Baseline confirmado: `main`, `HEAD == origin/main == 589f33e00c50d216b55f3fbb489b436aad3a8cc3`, divergência `0/0`.
+- Validações baseline H33: `tsc` worker/root, `build`, `lint` e `test:worker` verdes (`483` testes).
+- Entregável principal:
+  - [AIRTRUST_ARCHITECTURE_MODULARIZATION_PLAN_H33_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_ARCHITECTURE_MODULARIZATION_PLAN_H33_v0_5.md)
+- Direção recomendada:
+  - iniciar H34-A com quick wins de extração em `worker-airtrust/src/index.ts` sem alterar contratos;
+  - manter FRMS/EVD/importação/auth-tenant como áreas congeladas para refactor estrutural até cobertura adicional (H35).
 - Deploy sempre via runbook seguro (`deploy:worker:safe`) e sem migration, salvo fase autorizada.
 
 ## 12. Recomendação de próxima fase
