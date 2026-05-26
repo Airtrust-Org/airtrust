@@ -103,3 +103,20 @@ Mesmo sem deploy novo, foi executado smoke read-only para baseline de produção
 1. Abrir fase curta com **Codex alto** para corrigir blocker de `worker tsc` (escopo mínimo no `admin-usuarios.ts`).
 2. Em seguida, rerodar H19 (deploy controlado) com o mesmo gate.
 3. Após deploy consolidado, retomar trilha de limpeza (**H6-E** com DeepSeek médio) ou próximo bug funcional com Codex médio-alto.
+
+## Follow-up H20 — worker tsc blocker fixed
+
+- Erro anterior:
+  - `worker-airtrust/src/routes/admin-usuarios.ts:340`
+  - `TS2552: Cannot find name 'callerRole'.`
+- Patch aplicado:
+  - inclusão de `const callerRole = getCallerRole(c);` no handler `GET /api/admin/usuarios/:id`.
+  - correção estritamente de escopo/tipagem; sem alteração de regra de autorização.
+- Validações após patch:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok
+  - `npx tsc --noEmit`: ok
+  - `npm run build`: ok
+  - `npm run lint`: ok
+  - `npm run test:worker`: ok
+- Deploy:
+  - permanece pendente para H21 (reexecução do deploy/smoke consolidado).

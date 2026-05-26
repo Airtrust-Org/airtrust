@@ -300,6 +300,7 @@ adminUsuariosRoutes.get('/', async (c) => {
 // ---------------------------------------------------------------------------
 adminUsuariosRoutes.get('/:id', async (c) => {
   requireAdminOrGestor(getCallerRole(c), 'ver usuário');
+  const callerRole = getCallerRole(c);
   const { empresaId } = getTenantContext(c);
   const id = Number(c.req.param('id'));
   const db = c.env.DB;
