@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 
-import { API_BASE_URL } from '@/react-app/config/api';
 import {
   X,
   Upload,
@@ -53,7 +52,9 @@ interface ImportarCertificacoesProps {
 }
 
 const IMPORTACAO_CERTIFICACOES_BLOQUEADA_MSG =
-  'Importação de certificações via este modal está temporariamente desabilitada: endpoint legado removido (/api/qualificacoes/importar-json).';
+  'Importação de certificações via este modal legado está temporariamente desabilitada até alinhamento do contrato consolidado.';
+const TEMPLATE_CERTIFICACOES_BLOQUEADO_MSG =
+  'Template de certificações indisponível neste modal legado. Use o fluxo consolidado quando disponível.';
 const IMPORTACAO_CERTIFICACOES_DISPONIVEL = false;
 
 const EXPECTED_FORMAT = {
@@ -315,33 +316,11 @@ export default function ImportarCertificacoes({
         throw new Error('Nenhum dado válido encontrado no arquivo/texto CSV');
       }
 
-      const response = await fetch(`${API_BASE_URL}/qualificacoes/importar-json`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dados: fullDataFormatted, origem: 'importar-certificacoes-csv' }),
-      });
-
-      const responseText = await response.text();
-
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ [IMPORT CERT] JSON Parse Error:', parseError);
-        throw new Error(`Resposta inválida do servidor: ${responseText.substring(0, 100)}...`);
+      if (!IMPORTACAO_CERTIFICACOES_DISPONIVEL) {
+        throw new Error(IMPORTACAO_CERTIFICACOES_BLOQUEADA_MSG);
       }
 
-      setResult(responseData);
-      setStep('result');
-
-      if (
-        responseData.success &&
-        (responseData.importadas_com_sucesso > 0 || responseData.resultados?.sucesso > 0)
-      ) {
-        setTimeout(() => {
-          onSuccess();
-        }, 3000);
-      }
+      throw new Error('Fluxo legado de certificações sem contrato ativo nesta fase.');
     } catch (error) {
       console.error('❌ [IMPORT CERT] Erro na importação:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -450,9 +429,7 @@ export default function ImportarCertificacoes({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() =>
-                window.open('/api/templates-airtrust-brazilian-dates/certificacoes/csv', '_blank')
-              }
+              onClick={() => toast.warning(TEMPLATE_CERTIFICACOES_BLOQUEADO_MSG)}
             >
               <Download className="w-4 h-4 mr-2" />
               CSV (DD/MM/AAAA)
@@ -460,9 +437,7 @@ export default function ImportarCertificacoes({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() =>
-                window.open('/api/templates-airtrust-brazilian-dates/certificacoes/xlsx', '_blank')
-              }
+              onClick={() => toast.warning(TEMPLATE_CERTIFICACOES_BLOQUEADO_MSG)}
             >
               <Download className="w-4 h-4 mr-2" />
               Excel (DD/MM/AAAA)
