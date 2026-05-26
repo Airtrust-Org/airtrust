@@ -657,6 +657,28 @@ Comandos sugeridos (não executados):
   - 220 REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes.
   - Possivel H6-D (lote 2) ou voltar para bugs funcionais.
 
+## Follow-up H13 — P2-01/P2-02 Qualificações legacy cleanup
+
+- Achados:
+  - `src/client/hooks/useQualificacoes.ts` sem consumidor ativo no runtime; continha chamadas legadas para `/api/qualificacoes-list` e `/api/qualificacoes-list/:id` sem backend correspondente no worker atual.
+  - `src/components/qualificacoes/NovaQualificacaoModal.tsx` sem consumidor ativo; continha host hardcoded externo (`https://airtrust-api.airtrust.workers.dev`).
+  - endpoint `/api/qualificacoes/importar-json` ainda aparece em outros componentes ativos e ficou fora de escopo desta fase.
+- Ação tomada:
+  - remoção dos dois artefatos legados sem consumidores:
+    - `src/client/hooks/useQualificacoes.ts`
+    - `src/components/qualificacoes/NovaQualificacaoModal.tsx`
+  - nenhuma alteração de backend/rotas.
+- Justificativa:
+  - remoção de código morto reduz risco de uso acidental de contrato/host legado sem impacto funcional observado.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run lint`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - avaliar em fase separada os consumidores ativos de `/api/qualificacoes/importar-json` para alinhamento de contrato/backend.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
