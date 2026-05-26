@@ -38,6 +38,22 @@ const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de sessões requerem autenticação
 app.use('*', auth());
 
+function parseLimit(raw: string | undefined, defaultValue: number, maxValue: number): number {
+  const parsed = Number.parseInt(raw || '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultValue;
+  }
+  return Math.min(parsed, maxValue);
+}
+
+function parseOffset(raw: string | undefined): number {
+  const parsed = Number.parseInt(raw || '', 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
 function buildWhatsAppManualLink(telefone: string, mensagem?: string): string {
   const normalized = normalizeWhatsAppPhone(telefone);
   const baseUrl = `https://wa.me/${normalized.e164.replace(/\D/g, '')}`;
@@ -96,6 +112,8 @@ app.get('/agendamentos', async (c) => {
   try {
     const dataInicio = c.req.query('data_inicio');
     const dataFim = c.req.query('data_fim');
+    const limit = parseLimit(c.req.query('limit'), 100, 200);
+    const offset = parseOffset(c.req.query('offset'));
     const ctx = c as unknown as { get: (k: string) => unknown };
     const userId = String(ctx.get('userId') || '');
     const role = String(ctx.get('userRole') || '');
@@ -178,7 +196,8 @@ app.get('/agendamentos', async (c) => {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    query += ' GROUP BY sa.id ORDER BY sa.data, sa.hora_inicio';
+    query += ' GROUP BY sa.id ORDER BY sa.data, sa.hora_inicio LIMIT ? OFFSET ?';
+    params.push(limit, offset);
 
     const result = await c.env.DB.prepare(query)
       .bind(...params)
@@ -191,7 +210,16 @@ app.get('/agendamentos', async (c) => {
         typeof row.participantes === 'string' ? JSON.parse(row.participantes) : row.participantes,
     }));
 
-    return c.json({ success: true, data: processedResults });
+    return c.json({
+      success: true,
+      data: processedResults,
+      pagination: {
+        limit,
+        offset,
+        count: processedResults.length,
+        hasMore: processedResults.length === limit,
+      },
+    });
   } catch (e: any) {
     console.error('[AGENDAMENTOS] Erro:', e);
     return c.json({ success: false, error: e.message }, 500);
@@ -201,6 +229,9 @@ app.get('/agendamentos', async (c) => {
 // GET /api/simuladores/instrutores - Listar instrutores
 app.get('/instrutores', async (c) => {
   try {
+    const limit = parseLimit(c.req.query('limit'), 100, 200);
+    const offset = parseOffset(c.req.query('offset'));
+
     const result = await c.env.DB.prepare(
       `SELECT 
         id, 
@@ -211,10 +242,24 @@ app.get('/instrutores', async (c) => {
       WHERE deleted_at IS NULL 
         AND ativo = 1
         AND is_instrutor = 1
-      ORDER BY nome`,
-    ).all();
+      ORDER BY nome
+      LIMIT ?
+      OFFSET ?`,
+    )
+      .bind(limit, offset)
+      .all();
 
-    return c.json({ success: true, data: result.results || [] });
+    const rows = result.results || [];
+    return c.json({
+      success: true,
+      data: rows,
+      pagination: {
+        limit,
+        offset,
+        count: rows.length,
+        hasMore: rows.length === limit,
+      },
+    });
   } catch (e: any) {
     console.error('[INSTRUTORES] Erro:', e);
     return c.json({ success: false, error: e.message }, 500);
@@ -233,6 +278,10 @@ app.get('/sessoes', async (c) => {
     const userId = String(ctx.get('userId') || '');
     const role = String(ctx.get('userRole') || '');
     const empresaId = ctx.get('empresaId') as number | undefined;
+    const defaultLimit = !isFullAccessRole(role) ? 500 : 100;
+    const maxLimit = !isFullAccessRole(role) ? 500 : 200;
+    const limit = parseLimit(c.req.query('limit'), defaultLimit, maxLimit);
+    const offset = parseOffset(c.req.query('offset'));
 
     const tipoDispo = c.req.query('tipo_dispositivo'); // SIMULADOR | AERONAVE
 
@@ -343,8 +392,8 @@ app.get('/sessoes', async (c) => {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const limitClause = !isFullAccessRole(role) ? 500 : 100;
-    query += ` GROUP BY sa.id ORDER BY sa.data DESC, sa.hora_inicio DESC LIMIT ${limitClause}`;
+    query += ' GROUP BY sa.id ORDER BY sa.data DESC, sa.hora_inicio DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
 
     const sessoes = await c.env.DB.prepare(query)
       .bind(...params)
@@ -374,7 +423,16 @@ app.get('/sessoes', async (c) => {
       };
     });
 
-    return c.json({ success: true, data: sessoesCompletas });
+    return c.json({
+      success: true,
+      data: sessoesCompletas,
+      pagination: {
+        limit,
+        offset,
+        count: sessoesCompletas.length,
+        hasMore: sessoesCompletas.length === limit,
+      },
+    });
   } catch (e: any) {
     console.error('[SESSOES] Erro:', e);
     return c.json({ success: false, error: e.message }, 500);

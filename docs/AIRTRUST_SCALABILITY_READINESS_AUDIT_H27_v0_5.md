@@ -256,3 +256,26 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - `npm run test:worker`
 - Pendências:
   - seguir para H30 (paginação/performance) e revisar outros pontos P2 fora do escopo desta fase.
+
+## Follow-up H30 — Simuladores pagination/performance
+- Endpoints tratados:
+  - `GET /api/simuladores/agendamentos`
+  - `GET /api/simuladores/instrutores`
+  - `GET /api/simuladores/sessoes` (somente parametrização de limite/paginação)
+- Contrato aplicado (compatível):
+  - resposta preserva `success` + `data`;
+  - adicionado bloco `pagination` com `limit`, `offset`, `count`, `hasMore`.
+- Defaults e caps:
+  - agendamentos: default `limit=100`, cap `200`, `offset` default `0`.
+  - instrutores: default `limit=100`, cap `200`, `offset` default `0`.
+  - sessoes: default preservado por perfil (`100` full-access, `500` perfis restritos), cap `200` full-access e `500` restritos.
+- Testes adicionados:
+  - [simuladores-sessoes-pagination.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-pagination.test.ts)
+- Validações executadas:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+  - `npx tsc --noEmit`
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:worker` (453 testes passando)
+- Pendência H30-B:
+  - otimização estrutural da query pesada de `/api/simuladores/sessoes` (`json_group_array` + múltiplos JOINs) sem reescrita ampla nesta fase.
