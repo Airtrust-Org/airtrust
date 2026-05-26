@@ -92,6 +92,55 @@ const evdCreateSchema = z.object({
   observacoes: z.string().optional(),
 });
 
+const evdUpdateSchema = z
+  .object({
+    data: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    pic_id: z.number().int().nullable().optional(),
+    sic_id: z.number().int().nullable().optional(),
+    pic_funcao: z.string().nullable().optional(),
+    sic_funcao: z.string().nullable().optional(),
+    aeronave_prefixo: z.string().nullable().optional(),
+    aeronave_modelo: z.string().nullable().optional(),
+    hora_apresentacao: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable()
+      .optional(),
+    hora_decolagem_prevista: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable()
+      .optional(),
+    hora_pouso_previsto: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable()
+      .optional(),
+    hora_decolagem_real: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable()
+      .optional(),
+    hora_pouso_real: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable()
+      .optional(),
+    hora_corte_motor: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable()
+      .optional(),
+    origem: z.string().nullable().optional(),
+    destino: z.string().nullable().optional(),
+    tipo_missao: z.enum(['OFFSHORE', 'INSTRUCAO', 'CHECK', 'FERRY', 'OUTRO']).optional(),
+    observacoes: z.string().nullable().optional(),
+  })
+  .strict();
+
 const justificativaCreateSchema = z
   .object({
     funcionario_id: z.number().int().positive().nullable().optional(),
@@ -694,6 +743,23 @@ async function evdExistsForEmpresa(
     .bind(evdId, empresaId)
     .first<{ id: string }>();
   return Boolean(row?.id);
+}
+
+async function hasStructuredJustificativa(params: {
+  db: D1Database;
+  empresaId: number;
+  evdId: string;
+}): Promise<boolean> {
+  const justificativa = await params.db
+    .prepare(
+      `SELECT id
+         FROM escala_voo_diaria_justificativas
+        WHERE empresa_id = ? AND escala_voo_diaria_id = ? AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(params.empresaId, params.evdId)
+    .first<{ id: string }>();
+  return Boolean(justificativa?.id);
 }
 
 async function insertEvdJustificativa(params: {
@@ -1548,28 +1614,197 @@ evdRoutes.put('/:id', requireRole('admin', 'manager'), async (c) => {
   const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
   const body = await c.req.json();
+  const parsed = evdUpdateSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json(
+      { success: false, error: 'Dados inválidos', details: parsed.error.flatten() },
+      400,
+    );
+  }
+
+  const d = parsed.data;
 
   const existing = await db
     .prepare(
-      'SELECT id, status FROM escala_voo_diaria WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      `SELECT
+         id,
+         status,
+         data,
+         escala_id,
+         pic_id,
+         sic_id,
+         pic_funcao,
+         sic_funcao,
+         aeronave_prefixo,
+         aeronave_modelo,
+         hora_apresentacao,
+         hora_decolagem_prevista,
+         hora_pouso_previsto,
+         hora_decolagem_real,
+         hora_pouso_real,
+         hora_corte_motor,
+         origem,
+         destino,
+         tipo_missao,
+         observacoes
+       FROM escala_voo_diaria
+       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
     .bind(id, empresaId)
-    .first<{ id: string; status: string }>();
+    .first<{
+      id: string;
+      status: string;
+      data: string;
+      escala_id: string | null;
+      pic_id: number | null;
+      sic_id: number | null;
+      pic_funcao: string | null;
+      sic_funcao: string | null;
+      aeronave_prefixo: string | null;
+      aeronave_modelo: string | null;
+      hora_apresentacao: string | null;
+      hora_decolagem_prevista: string | null;
+      hora_pouso_previsto: string | null;
+      hora_decolagem_real: string | null;
+      hora_pouso_real: string | null;
+      hora_corte_motor: string | null;
+      origem: string | null;
+      destino: string | null;
+      tipo_missao: string | null;
+      observacoes: string | null;
+    }>();
 
   if (!existing) return c.json({ success: false, error: 'Voo não encontrado' }, 404);
 
-  const nextPicId =
-    'pic_id' in body ? (body.pic_id == null ? null : Number(body.pic_id)) : null;
-  const nextSicId =
-    'sic_id' in body ? (body.sic_id == null ? null : Number(body.sic_id)) : null;
+  const candidate = {
+    data: d.data ?? existing.data,
+    pic_id: d.pic_id !== undefined ? d.pic_id : existing.pic_id,
+    sic_id: d.sic_id !== undefined ? d.sic_id : existing.sic_id,
+    pic_funcao: d.pic_funcao !== undefined ? d.pic_funcao : existing.pic_funcao,
+    sic_funcao: d.sic_funcao !== undefined ? d.sic_funcao : existing.sic_funcao,
+    aeronave_prefixo:
+      d.aeronave_prefixo !== undefined ? d.aeronave_prefixo : existing.aeronave_prefixo,
+    aeronave_modelo: d.aeronave_modelo !== undefined ? d.aeronave_modelo : existing.aeronave_modelo,
+    hora_apresentacao:
+      d.hora_apresentacao !== undefined ? d.hora_apresentacao : existing.hora_apresentacao,
+    hora_decolagem_prevista:
+      d.hora_decolagem_prevista !== undefined
+        ? d.hora_decolagem_prevista
+        : existing.hora_decolagem_prevista,
+    hora_pouso_previsto:
+      d.hora_pouso_previsto !== undefined ? d.hora_pouso_previsto : existing.hora_pouso_previsto,
+    hora_decolagem_real:
+      d.hora_decolagem_real !== undefined ? d.hora_decolagem_real : existing.hora_decolagem_real,
+    hora_pouso_real: d.hora_pouso_real !== undefined ? d.hora_pouso_real : existing.hora_pouso_real,
+    hora_corte_motor:
+      d.hora_corte_motor !== undefined ? d.hora_corte_motor : existing.hora_corte_motor,
+    origem: d.origem !== undefined ? d.origem : existing.origem,
+    destino: d.destino !== undefined ? d.destino : existing.destino,
+    tipo_missao: d.tipo_missao !== undefined ? d.tipo_missao : existing.tipo_missao,
+    observacoes: d.observacoes !== undefined ? d.observacoes : existing.observacoes,
+  };
+
   if (
-    typeof nextPicId === 'number' &&
-    typeof nextSicId === 'number' &&
-    Number.isFinite(nextPicId) &&
-    Number.isFinite(nextSicId) &&
-    nextPicId === nextSicId
+    typeof candidate.pic_id === 'number' &&
+    typeof candidate.sic_id === 'number' &&
+    candidate.pic_id === candidate.sic_id
   ) {
     return c.json({ success: false, error: MSG_PIC_SIC_SAME }, 400);
+  }
+
+  const criticalFields = [
+    'data',
+    'pic_id',
+    'sic_id',
+    'pic_funcao',
+    'sic_funcao',
+    'aeronave_prefixo',
+    'aeronave_modelo',
+    'hora_apresentacao',
+    'hora_decolagem_prevista',
+    'hora_pouso_previsto',
+  ] as const;
+  const touchesCriticalField = criticalFields.some((field) =>
+    Object.prototype.hasOwnProperty.call(d, field),
+  );
+
+  let requiresOperationalJustification = false;
+  if (touchesCriticalField) {
+    const hasConflict = await hasCrewConflict({
+      db,
+      empresaId,
+      data: candidate.data,
+      picId: candidate.pic_id,
+      sicId: candidate.sic_id,
+      window: {
+        hora_apresentacao: candidate.hora_apresentacao,
+        hora_decolagem_prevista: candidate.hora_decolagem_prevista,
+        hora_pouso_previsto: candidate.hora_pouso_previsto,
+      },
+      excludeId: existing.id,
+    });
+    if (hasConflict) {
+      return c.json({ success: false, error: MSG_DUPLICATE_CREW }, 409);
+    }
+
+    const operationalChecks = await collectOperationalWarningsAndBlocks({
+      db,
+      empresaId,
+      data: candidate.data,
+      escalaId: existing.escala_id || null,
+      picId: candidate.pic_id,
+      sicId: candidate.sic_id,
+      aeronavePrefixo: candidate.aeronave_prefixo,
+      aeronaveModelo: candidate.aeronave_modelo,
+    });
+    if (operationalChecks.hardError) {
+      return c.json({ success: false, error: operationalChecks.hardError }, 400);
+    }
+    requiresOperationalJustification = operationalChecks.requiresOperationalJustification;
+  }
+
+  let repousoMinutos: number | null = null;
+  let repousoOk = 1;
+  if (
+    typeof candidate.pic_id === 'number' &&
+    candidate.hora_apresentacao &&
+    /^\d{2}:\d{2}$/.test(candidate.hora_apresentacao)
+  ) {
+    const repPic = await calcRepouso(
+      db,
+      empresaId,
+      candidate.pic_id,
+      candidate.data,
+      candidate.hora_apresentacao,
+    );
+    repousoMinutos = repPic.minutos;
+    repousoOk = repPic.ok ? 1 : 0;
+  }
+
+  if (String(existing.status || '').toUpperCase() === 'PUBLICADA') {
+    if (touchesCriticalField && repousoOk === 0) {
+      return c.json({ success: false, error: MSG_REST_INVALID }, 400);
+    }
+    if (touchesCriticalField && requiresOperationalJustification) {
+      const hasJustificativa = await hasStructuredJustificativa({
+        db,
+        empresaId,
+        evdId: existing.id,
+      });
+      const hasObservacao = String(candidate.observacoes || '').trim().length >= 10;
+      if (!hasJustificativa && !hasObservacao) {
+        return c.json(
+          {
+            success: false,
+            code: 'OPERATIONAL_ROLE_REVIEW_REQUIRED',
+            requires_justificativa: true,
+            error: MSG_PIC_ROLE_REVIEW,
+          },
+          400,
+        );
+      }
+    }
   }
 
   const fields: string[] = [];
@@ -1596,10 +1831,17 @@ evdRoutes.put('/:id', requireRole('admin', 'manager'), async (c) => {
   ];
 
   for (const key of allowed) {
-    if (key in body) {
+    if (Object.prototype.hasOwnProperty.call(d, key)) {
       fields.push(`${key} = ?`);
-      values.push(body[key] ?? null);
+      values.push(d[key as keyof typeof d] ?? null);
     }
+  }
+
+  if (touchesCriticalField || Object.prototype.hasOwnProperty.call(d, 'pic_id')) {
+    fields.push('repouso_anterior_minutos = ?');
+    values.push(repousoMinutos);
+    fields.push('repouso_minimo_ok = ?');
+    values.push(repousoOk);
   }
 
   if (fields.length === 0) {
