@@ -400,6 +400,39 @@ Comandos sugeridos (não executados):
 - Pendências:
   - corrigir o erro dedicado de tipagem em `simuladores-shared.ts:522` na fase A2.
 
+## Follow-up H4 — P0-02 deduplicate tenant/dry-run guard
+
+- Status antes:
+  - rota de deduplicate sem proteção de auth/role no próprio módulo;
+  - execução de mutação por padrão no `POST /api/qualificacoes-historico/deduplicate`;
+  - consultas e soft-delete sem escopo obrigatório de `empresa_id`.
+- Patch aplicado:
+  - `auth() + requireRole('admin')` aplicado no router de deduplicate (fail-closed para não-admin).
+  - deduplicate agora opera em `dry_run` por padrão.
+  - modo `apply` só com confirmação explícita (`apply=true` ou `dryRun=false`).
+  - `empresa_id` autenticado tornou-se obrigatório para qualquer execução (incluindo apply), com erro `EMPRESA_ID_REQUIRED` quando ausente/inválido.
+  - todas as queries críticas (grupos, registros e soft-delete) receberam filtro `empresa_id`.
+  - resposta agora é auditável com `mode`, `empresa_id`, totais e grupos/IDs candidatos.
+- Regras de segurança efetivas:
+  - sem role suficiente: `403`;
+  - sem tenant confiável: `400`;
+  - sem apply explícito: sem escrita;
+  - apply não toca dados de outros tenants.
+- Testes adicionados:
+  - `worker-airtrust/src/__tests__/routes/deduplicate.test.ts` cobrindo:
+    - dry-run default sem writes;
+    - apply com tenant A sem tocar tenant B;
+    - apply sem tenant válido retorna erro;
+    - usuário sem role admin retorna `403`;
+    - verificação de presença de filtro tenant nos SQLs críticos.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - avançar para P0-03 (sensíveis/dumps) em modo auditoria + guardrail, sem remoção automática.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
