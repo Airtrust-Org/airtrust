@@ -620,9 +620,74 @@ Todos os 10 arquivos permanecem presentes no filesystem local apos `git rm --cac
 
 ### Proximos lotes sugeridos
 
-- **H6-D (lote 2)**: ~20-30 arquivos high confidence adicionais (backups menores, exports, seeds restantes)
 - **H6-E (lote 3)**: migrations desabilitadas/arquivadas em `_arquivos_nao_usados/migrations/`
 - **H6-F (lote 4)**: SQLs soltos na raiz do `worker-airtrust/`
+
+## 9-B. H6-D — Batch 2 removed from Git index
+
+- Data: 2026-05-25
+- Commit: `xxxxx` (a ser preenchido)
+
+### Caminhos removidos do index (20 arquivos)
+
+**Prod SQL backups (5 arquivos, 1.76 MB cada):**
+1. `_arquivos_nao_usados/sql_backups/prod_backup_20251122_000821.sql`
+2. `_arquivos_nao_usados/sql_backups/prod_backup_20251122_001009.sql`
+3. `_arquivos_nao_usados/sql_backups/prod_backup_20251122_001037.sql`
+4. `_arquivos_nao_usados/sql_backups/prod_backup_20251122_001120.sql`
+5. `_arquivos_nao_usados/sql_backups/prod_backup_20251122_001148.sql`
+
+**Prod data exports (4 arquivos):**
+6. `_arquivos_nao_usados/migrations/data-export/prod_full_backup.sql`
+7. `_arquivos_nao_usados/migrations/data-export/prod_fresh_full.sql`
+8. `_arquivos_nao_usados/migrations/data-export/prod_data_only.sql`
+9. `_arquivos_nao_usados/migrations/data-export/prod_data_clean.sql`
+
+**Prod exports (2 arquivos):**
+10. `_arquivos_nao_usados/exports/qualificacoes_historico_production_load.sql`
+11. `_arquivos_nao_usados/exports/qualificacoes_historico_production_load_notx.sql`
+
+**Timestamped prod backups (2 arquivos):**
+12. `_arquivos_nao_usados/backup-prod-20251120-112111.sql`
+13. `_arquivos_nao_usados/backup-prod-20251120-112105.sql`
+
+**Schema dumps (2 arquivos):**
+14. `docs/schema-producao-completo.sql`
+15. `docs/staging-schema-sync/production-schema-only.sql`
+
+**Prod export script (1 arquivo):**
+16. `scripts/d1-prod-export.sql`
+
+**Seeds restantes (4 arquivos):**
+17. `scripts/seed-sgso-demo-full.sql`
+18. `scripts/seed-12-sessoes-aw139-COMPLETO.sql`
+19. `scripts/seed-data-complete.sql`
+20. `scripts/seed-dev-full-20251119.sql`
+
+### Confirmacao de preservacao local
+
+Todos os 20 arquivos permanecem presentes no filesystem local apos `git rm --cached`.
+
+### Guardrail antes/depois
+
+| Categoria | Antes (H6-C) | Depois (H6-D) | Delta |
+|---|---|---|---|
+| SECRET_ENV | 0 | 0 | 0 |
+| PROD_DUMP_OR_BACKUP | 90 | 74 | -16 |
+| LOCAL_SEED | 16 | 12 | -4 |
+| TEST_FIXTURE | 2 | 2 | 0 |
+| MIGRATION | 355 | 355 | 0 |
+| UNKNOWN_REVIEW_REQUIRED | 224 | 224 | 0 |
+| **Bloqueantes** | **330** | **310** | **-20** |
+
+### Pendencias restantes
+
+- REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes: 200 (eram 220)
+- MANUAL_REVIEW_REQUIRED: 85
+- KEEP_VERSIONED_LIKELY_VALID: 19
+- DO_NOT_TOUCH: 6
+
+### Proximos lotes sugeridos
 
 ## 10. Proxima fase recomendada
 

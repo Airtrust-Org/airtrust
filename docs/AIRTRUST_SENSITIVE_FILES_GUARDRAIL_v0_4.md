@@ -121,3 +121,28 @@ Observacoes:
 - Pendencia:
   - 220 REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes
   - 85 MANUAL_REVIEW_REQUIRED pendentes de revisao humana
+
+## 9) H6-D — Second sensitive-file batch removed from Git index
+
+- Data: 2026-05-25
+- Acao: `git rm --cached` em 20 arquivos (16 dumps/exports + 4 seeds)
+- Confirmacao: todos os 20 arquivos permanecem localmente
+- Guardrail apos H6-D:
+  - `SECRET_ENV`: 0
+  - `PROD_DUMP_OR_BACKUP`: 74 (antes: 90)
+  - `LOCAL_SEED`: 12 (antes: 16)
+  - `TEST_FIXTURE`: 2
+  - `MIGRATION`: 355
+  - `UNKNOWN_REVIEW_REQUIRED`: 224
+  - bloqueantes restantes: 310 (antes: 330)
+- Lotes removidos:
+  - 5 prod SQL backups (~8.8 MB combinados)
+  - 4 prod data exports
+  - 2 prod exports (qualificacoes_historico)
+  - 2 timestamped prod backups
+  - 2 schema dumps (docs/)
+  - 1 prod export script
+  - 4 seeds restantes
+- Pendencia:
+  - 200 REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE restantes
+  - 85 MANUAL_REVIEW_REQUIRED pendentes de revisao humana
