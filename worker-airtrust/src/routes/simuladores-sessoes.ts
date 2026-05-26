@@ -274,6 +274,8 @@ app.get('/sessoes', async (c) => {
   try {
     const dataInicio = c.req.query('data_inicio');
     const dataFim = c.req.query('data_fim');
+    const viewMode = c.req.query('view');
+    const isSummaryView = viewMode === 'summary';
     const ctx = c as unknown as { get: (k: string) => unknown };
     const userId = String(ctx.get('userId') || '');
     const role = String(ctx.get('userRole') || '');
@@ -285,9 +287,44 @@ app.get('/sessoes', async (c) => {
 
     const tipoDispo = c.req.query('tipo_dispositivo'); // SIMULADOR | AERONAVE
 
-    // QUERY OTIMIZADA: JSON_GROUP_ARRAY para evitar N+1
-    // LEFT JOIN em simuladores para suportar sessões de AERONAVE (simulador_id pode ser NULL)
-    let query = `
+    // Modo default mantém payload completo (participantes + fichas) para compatibilidade.
+    // Modo summary evita agregações JSON pesadas para leitura mais leve.
+    let query = isSummaryView
+      ? `
+      SELECT
+        sa.id,
+        sa.uuid,
+        sa.simulador_id,
+        sa.template_id,
+        s.nome as simulador_nome,
+        s.modelo as simulador_modelo,
+        s.tipo as simulador_tipo,
+        COALESCE(sa.tipo_dispositivo, 'SIMULADOR') as tipo_dispositivo,
+        sa.aeronave_id,
+        ae.prefixo as aeronave_prefixo,
+        ae.modelo as aeronave_modelo,
+        sa.data,
+        sa.hora_inicio as horario_inicio,
+        sa.hora_fim as horario_fim,
+        sa.duracao_minutos,
+        sa.instrutor_id,
+        fi.nome as instrutor_nome,
+        sa.examinador_id,
+        fe.nome as examinador_nome,
+        sa.tipo_sessao,
+        sa.nome as tema_sessao,
+        sa.status,
+        sa.observacoes,
+        sa.created_at,
+        sa.updated_at
+      FROM simulador_agendamentos sa
+      LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
+      LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
+      INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
+      LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
+      WHERE sa.deleted_at IS NULL
+    `
+      : `
       SELECT
         sa.id,
         sa.uuid,
@@ -392,36 +429,43 @@ app.get('/sessoes', async (c) => {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    query += ' GROUP BY sa.id ORDER BY sa.data DESC, sa.hora_inicio DESC LIMIT ? OFFSET ?';
+    query += isSummaryView
+      ? ' ORDER BY sa.data DESC, sa.hora_inicio DESC LIMIT ? OFFSET ?'
+      : ' GROUP BY sa.id ORDER BY sa.data DESC, sa.hora_inicio DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
     const sessoes = await c.env.DB.prepare(query)
       .bind(...params)
       .all();
 
-    // PARSEAR JSON strings para arrays
-    const sessoesCompletas = (sessoes.results || []).map((sessao: any) => {
-      const participantes = sessao.participantes_json
-        ? typeof sessao.participantes_json === 'string'
-          ? JSON.parse(sessao.participantes_json)
-          : sessao.participantes_json
-        : [];
+    const sessoesCompletas = isSummaryView
+      ? (sessoes.results || []).map((sessao: any) => ({
+          ...sessao,
+          participantes: [],
+          fichas: [],
+        }))
+      : (sessoes.results || []).map((sessao: any) => {
+          const participantes = sessao.participantes_json
+            ? typeof sessao.participantes_json === 'string'
+              ? JSON.parse(sessao.participantes_json)
+              : sessao.participantes_json
+            : [];
 
-      const fichas = sessao.fichas_json
-        ? typeof sessao.fichas_json === 'string'
-          ? JSON.parse(sessao.fichas_json)
-          : sessao.fichas_json
-        : [];
+          const fichas = sessao.fichas_json
+            ? typeof sessao.fichas_json === 'string'
+              ? JSON.parse(sessao.fichas_json)
+              : sessao.fichas_json
+            : [];
 
-      // Remover campos JSON temporários
-      const { participantes_json, fichas_json, ...sessaoLimpa } = sessao;
+          // Remover campos JSON temporários
+          const { participantes_json, fichas_json, ...sessaoLimpa } = sessao;
 
-      return {
-        ...sessaoLimpa,
-        participantes,
-        fichas,
-      };
-    });
+          return {
+            ...sessaoLimpa,
+            participantes,
+            fichas,
+          };
+        });
 
     return c.json({
       success: true,
