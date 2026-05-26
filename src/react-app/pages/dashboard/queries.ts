@@ -15,8 +15,9 @@ import type {
 } from './types';
 
 const API_BASE = API_BASE_URL;
-const STALE_STANDARD_MS = 2 * 60 * 1000;
-const STALE_CRITICAL_MS = 60 * 1000;
+const STALE_CRITICAL_MS = 3 * 60 * 1000;
+const STALE_STANDARD_MS = 8 * 60 * 1000;
+const STALE_RELAXED_MS = 12 * 60 * 1000;
 
 function getHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' };
@@ -50,6 +51,11 @@ function normalizeIsoDate(value: unknown): string {
   return raw ? raw.slice(0, 10) : '';
 }
 
+const BASE_QUERY_BEHAVIOR = {
+  refetchOnWindowFocus: false as const,
+  refetchOnReconnect: true as const,
+};
+
 // ─── Query Key Factory ──────────────────────────────────────────────────────
 
 export const dashboardKeys = {
@@ -68,6 +74,7 @@ export const dashboardKeys = {
 
 export function useMetricsQuery() {
   return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.metrics(),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/metrics`, { headers: getHeaders() });
@@ -75,12 +82,12 @@ export function useMetricsQuery() {
       return json.data as DashboardMetrics;
     },
     staleTime: STALE_STANDARD_MS,
-    refetchInterval: 3 * 60 * 1000,
   });
 }
 
 export function useComplianceQuery() {
   return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.compliance(),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/compliance-score`, { headers: getHeaders() });
@@ -88,12 +95,12 @@ export function useComplianceQuery() {
       return json.data as ComplianceData;
     },
     staleTime: STALE_STANDARD_MS,
-    refetchInterval: 3 * 60 * 1000,
   });
 }
 
 export function useAlertasQuery() {
   return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.alertas(),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/alertas-criticos`, { headers: getHeaders() });
@@ -127,12 +134,12 @@ export function useAlertasQuery() {
         });
     },
     staleTime: STALE_STANDARD_MS,
-    refetchInterval: 3 * 60 * 1000,
   });
 }
 
 export function useAtividadesQuery() {
   return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.atividades(),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/atividades-recentes`, { headers: getHeaders() });
@@ -142,8 +149,7 @@ export function useAtividadesQuery() {
       );
       return json.data as AtividadeRecente[];
     },
-    staleTime: STALE_STANDARD_MS,
-    refetchInterval: 5 * 60 * 1000,
+    staleTime: STALE_RELAXED_MS,
     placeholderData: (prev) => prev,
   });
 }
@@ -154,6 +160,7 @@ export function useFrmsAlertasQuery() {
   const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
 
   return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.frmsAlertas(mesInicio),
     queryFn: async () => {
       const pageLimit = 200;
@@ -199,13 +206,13 @@ export function useFrmsAlertasQuery() {
       });
     },
     staleTime: STALE_CRITICAL_MS,
-    refetchInterval: 2 * 60 * 1000,
     enabled: true,
   });
 }
 
 export function useEscalasQuery(enabled: boolean) {
   return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.escalas(),
     queryFn: async () => {
       const hoje = new Date();
@@ -215,8 +222,7 @@ export function useEscalasQuery(enabled: boolean) {
       const json = await readJsonOrThrow<EscalaItem[]>(res, 'Falha ao buscar escalas');
       return (Array.isArray(json.data) ? json.data.slice(0, 5) : []) as EscalaItem[];
     },
-    staleTime: STALE_STANDARD_MS,
-    refetchInterval: 5 * 60 * 1000,
+    staleTime: STALE_RELAXED_MS,
     enabled,
     placeholderData: (prev) => prev,
   });
@@ -224,6 +230,7 @@ export function useEscalasQuery(enabled: boolean) {
 
 export function useTreinamentosQuery(enabled: boolean) {
   return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.treinamentos(),
     queryFn: async () => {
       const hojeIso = new Date().toISOString().slice(0, 10);
@@ -304,8 +311,7 @@ export function useTreinamentosQuery(enabled: boolean) {
         )
         .slice(0, 8);
     },
-    staleTime: STALE_STANDARD_MS,
-    refetchInterval: 5 * 60 * 1000,
+    staleTime: STALE_RELAXED_MS,
     enabled,
     placeholderData: (prev) => prev,
   });
@@ -315,6 +321,7 @@ export function useSessoesSimuladorQuery(enabled: boolean) {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.sessoes(todayIso),
     queryFn: async () => {
       const res = await fetchWithAuth(
@@ -353,7 +360,6 @@ export function useSessoesSimuladorQuery(enabled: boolean) {
         .slice(0, 6);
     },
     staleTime: STALE_CRITICAL_MS,
-    refetchInterval: 2 * 60 * 1000,
     enabled,
     placeholderData: (prev) => prev,
   });
