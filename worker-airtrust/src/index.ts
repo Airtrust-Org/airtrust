@@ -1037,6 +1037,20 @@ app.get('/api/templates', auth(), async (c) => {
 app.get('/api/sessoes', auth(), async (c) => {
   try {
     const db = c.env.DB;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawEmpresaId = (c as any).get('empresaId');
+    const empresaId = Number(rawEmpresaId);
+    if (!Number.isFinite(empresaId) || empresaId <= 0) {
+      return c.json(
+        {
+          success: false,
+          error: 'TENANT_CONTEXT_REQUIRED',
+          message: 'Contexto de empresa inválido para listar sessões',
+        },
+        403,
+      );
+    }
+
     const limitRaw = c.req.query('limit') || '50';
     const limit = Math.min(Math.max(parseInt(limitRaw, 10) || 50, 1), 200);
     const offsetRaw = c.req.query('offset') || '0';
@@ -1045,20 +1059,22 @@ app.get('/api/sessoes', auth(), async (c) => {
     // Tentar query simples sem JOIN
     const result = await db
       .prepare(
-        `SELECT id, funcionario_id, modelo_aeronave_id, data_sessao, tipo, 
-                status, observacoes, created_at, updated_at
-         FROM sessoes
-         WHERE deleted_at IS NULL 
-         ORDER BY data_sessao DESC, created_at DESC
-         LIMIT ? OFFSET ?`,
-      )
-      .bind(limit, offset)
-      .all();
+	        `SELECT id, funcionario_id, modelo_aeronave_id, data_sessao, tipo, 
+	                status, observacoes, created_at, updated_at
+	         FROM sessoes
+	         WHERE deleted_at IS NULL
+	           AND empresa_id = ?
+	         ORDER BY data_sessao DESC, created_at DESC
+	         LIMIT ? OFFSET ?`,
+	      )
+	      .bind(empresaId, limit, offset)
+	      .all();
 
-    // Contar total
-    const countResult = await db
-      .prepare('SELECT COUNT(*) as total FROM sessoes WHERE deleted_at IS NULL')
-      .first<{ total: number }>();
+	    // Contar total
+	    const countResult = await db
+	      .prepare('SELECT COUNT(*) as total FROM sessoes WHERE deleted_at IS NULL AND empresa_id = ?')
+	      .bind(empresaId)
+	      .first<{ total: number }>();
 
     return c.json({
       success: true,
