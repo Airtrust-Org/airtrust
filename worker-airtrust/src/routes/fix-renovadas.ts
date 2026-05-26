@@ -8,7 +8,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { AppError } from '../utils/errors';
-import { auth, requireRole } from '../middleware/auth';
+import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { createLogger, toError } from '../utils/logger';
 
 const app = new Hono<{ Bindings: Env }>();

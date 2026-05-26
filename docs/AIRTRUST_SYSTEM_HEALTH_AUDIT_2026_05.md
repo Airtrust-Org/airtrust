@@ -485,6 +485,45 @@ Comandos sugeridos (não executados):
   - `npm run build`: ok.
   - `npm run test:worker`: ok.
 
+## Follow-up H7 — P1-01 RBAC role normalization
+
+- Risco antes:
+  - coexistência de dois caminhos de RBAC:
+    - `requireRole` em `middleware/auth.ts` com comparação literal;
+    - `requireRole` em `middleware/rbac.ts` com normalização PT/EN.
+  - rotas FRMS e mounts administrativos ainda importavam `requireRole` do `auth.ts`, criando risco de bloqueio indevido para aliases (`GESTOR`/`manager`, `ADMINISTRADOR`/`admin`).
+- Patch aplicado:
+  - roteamento de autorização consolidado para `middleware/rbac.ts` (normalizado) nos pontos críticos:
+    - `worker-airtrust/src/index.ts`
+    - `worker-airtrust/src/routes/frms.ts`
+    - `worker-airtrust/src/routes/frms-fira.ts`
+    - `worker-airtrust/src/routes/frms-fadiga-checkin.ts`
+    - `worker-airtrust/src/routes/frms-relatorios-config.ts`
+    - `worker-airtrust/src/routes/fix-renovadas.ts`
+    - `worker-airtrust/src/routes/compliance-recalculate.ts`
+  - `auth()` permaneceu inalterado; a mudança foi apenas no middleware de comparação de role.
+- Matriz de aliases efetiva (H7):
+  - `ADMIN`/`admin`/`administrador` → `admin`
+  - `GESTOR`/`manager` → `manager`
+  - `USUARIO`/`user`/`aluno` → `user`
+  - role ausente/desconhecida → bloqueado (fail-closed)
+- Testes adicionados:
+  - `worker-airtrust/src/__tests__/rbac-middleware-normalization.test.ts`
+  - cobertura de:
+    - `GESTOR` aceito em `requireRole('manager')`;
+    - `manager` aceito em `requireRole('manager')`;
+    - `USUARIO` bloqueado em `requireRole('manager')`;
+    - `GESTOR` bloqueado em `requireRole('admin')`;
+    - `ADMIN`/`admin` aceitos em `requireRole('admin')`;
+    - role ausente/desconhecida bloqueada.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - `middleware/auth.ts` ainda contém export legado de `requireRole`; pode ser tratado em hardening futuro para evitar regressão por import acidental.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)

@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
-import { auth, requireRole } from '../middleware/auth';
+import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria } from '../utils/auditoria';
 import {

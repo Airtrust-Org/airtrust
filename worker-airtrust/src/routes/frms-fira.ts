@@ -6,7 +6,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
-import { auth, requireRole } from '../middleware/auth';
+import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { rateLimiter } from '../middleware/rate-limit';
 import { carregarLimites, reprocessarTripulanteCompleto } from '../lib/frms/db-service';
 import {
