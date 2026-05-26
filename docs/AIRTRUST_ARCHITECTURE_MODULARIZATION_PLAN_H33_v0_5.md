@@ -189,3 +189,29 @@ Racional:
   - qualquer rota de negócio crítica (importação, EVD, FRMS, SIGVOOS, simuladores complexos).
 - Próxima extração segura recomendada:
   - separar bloco de rotas `/api/public/*` (`locale`/`translate`) para módulo dedicado, sem alterar contrato e sem tocar domínios críticos.
+
+## Follow-up H34-B — Public routes extraction
+- Data: 2026-05-26.
+- Extração aplicada (quick win, patch pequeno e reversível):
+  - handlers movidos de `worker-airtrust/src/index.ts` para [public-routes.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/routes/public-routes.ts):
+    - `GET /api/public/locale`
+    - `POST /api/public/translate`
+  - montagem no index preservada via `registerPublicRoutes(app)`.
+- Contrato preservado:
+  - paths/status codes/payloads/headers mantidos;
+  - comportamento de erro/fallback de tradução mantido;
+  - sem mudança em auth/tenant/RBAC ou regras de domínio.
+- Testes:
+  - novo teste [public-routes.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/public-routes.test.ts) cobrindo contrato dos endpoints públicos, erro `400`, fallback e erro de provider.
+- Validações executadas pós-extração:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+  - `npx tsc --noEmit`
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:worker`
+- Fora do escopo nesta extração:
+  - rotas legadas (`/api/templates`, `/api/historico`);
+  - telemetria (`POST /api/telemetry/client-error`);
+  - qualquer rota de negócio crítica.
+- Recomendação após H34-B:
+  - executar H34-C de deploy/smoke controlado (runtime já alterado por H34-A e H34-B), sem acumular novas mudanças de runtime antes desse smoke.
