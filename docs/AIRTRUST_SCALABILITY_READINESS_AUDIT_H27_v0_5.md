@@ -339,3 +339,17 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - manter default como está;
   - manter `view=summary` como caminho de menor custo para telas leves;
   - abrir H30-D apenas com benchmark autenticado reproduzível justificando otimização estrutural.
+
+## Follow-up H32 — Domain test coverage
+- Domínio priorizado:
+  - backup/admin-migrations guard tests (tests-only).
+- Novos testes adicionados:
+  - [backup-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/backup-guards.test.ts)
+  - [admin-apply-migration-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/admin-apply-migration-guards.test.ts)
+- Riscos cobertos:
+  - autenticação obrigatória em rotas sensíveis;
+  - fail-closed de RBAC em backup;
+  - validação de payload e erro explícito em fluxo de migração manual.
+- Resultado:
+  - fase concluída sem alteração de runtime;
+  - cobertura de regressão ampliada em superfície operacional crítica.
