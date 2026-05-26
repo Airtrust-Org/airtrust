@@ -80,3 +80,8 @@ Resultado:
 1. Criar `deploy:worker:safe` (somente `wrangler deploy`, sem migration) com injeção de `APP_VERSION`/`APP_BUILD_TIME`.
 2. Revalidar `api/version` após novo deploy safe para confirmar metadados reais.
 3. Seguir para item funcional menor da auditoria ou H6-E, conforme prioridade operacional.
+
+## 9. Follow-up H22
+- Follow-up executado em H22: criação do comando `deploy:worker:safe` com version stamping sem migration.
+- Evidências e execução operacional registradas em:
+  - `docs/AIRTRUST_WORKER_SAFE_DEPLOY_H22.md`
