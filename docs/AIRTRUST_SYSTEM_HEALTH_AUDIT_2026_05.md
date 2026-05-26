@@ -802,6 +802,29 @@ Comandos sugeridos (não executados):
 - Pendências:
   - nenhuma dentro do escopo desta correção.
 
+## Follow-up H18 — P2-05 EVD regression coverage
+
+- Lacunas antes:
+  - cobertura concentrada em `PUT /api/evd/:id`, sem regressões dedicadas para `POST /api/evd/publicacoes`, `POST /api/evd/:id/publicar`, `POST /api/evd` e listagem por tenant.
+- Testes adicionados:
+  - `worker-airtrust/src/__tests__/routes/escalas-evd-regression.test.ts`
+- Cenários cobertos:
+  - bloqueio de `POST /api/evd/publicacoes` quando há conflito crítico de tripulação;
+  - publicação diária válida preservando `empresa_id` nos binds e payload de resposta;
+  - rejeição de criação em `POST /api/evd` com conflito de tripulação (`409`);
+  - exigência de justificativa estruturada em `POST /api/evd/:id/publicar` quando `require_justificativa=true`;
+  - listagem `GET /api/evd?data=...` com filtro por tenant preservado no bind.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run lint`: ok.
+  - `npm run test:worker`: ok.
+- Alteração de runtime:
+  - não houve (fase tests-only + documentação).
+- Pendências:
+  - ampliar cobertura para cenários FRMS integrados quando houver contrato estável e fixture dedicada, sem acoplamento a dados de produção.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)
