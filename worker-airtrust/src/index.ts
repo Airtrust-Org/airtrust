@@ -1069,15 +1069,14 @@ app.get('/api/sessoes', auth(), async (c) => {
     });
   } catch (e) {
     console.error('[SESSOES] Erro ao listar:', e);
-    // Retornar sucesso com array vazio ao invés de erro
-    return c.json({
-      success: true,
-      data: [],
-      total: 0,
-      limit: parseInt(c.req.query('limit') || '50'),
-      offset: parseInt(c.req.query('offset') || '0'),
-      message: 'Tabela sessoes não encontrada ou vazia (retornando vazio)',
-    });
+    return c.json(
+      {
+        success: false,
+        error: 'SESSOES_LIST_FAILED',
+        message: 'Erro interno ao listar sessões',
+      },
+      500,
+    );
   }
 });
 

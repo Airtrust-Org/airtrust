@@ -626,7 +626,7 @@ Todos os 10 arquivos permanecem presentes no filesystem local apos `git rm --cac
 ## 9-B. H6-D — Batch 2 removed from Git index
 
 - Data: 2026-05-25
-- Commit: `xxxxx` (a ser preenchido)
+- Commit: `99290b0`
 
 ### Caminhos removidos do index (20 arquivos)
 
