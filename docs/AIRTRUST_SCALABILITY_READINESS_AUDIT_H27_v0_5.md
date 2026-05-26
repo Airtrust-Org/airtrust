@@ -344,17 +344,21 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
 - Domínio priorizado:
   - H32-A: backup/admin-migrations guard tests (tests-only).
   - H32-B: SGSO auditorias/NC guards (tests-only).
+  - H32-C: simuladores sessões/fichas guards (tests-only).
 - Novos testes adicionados:
   - [backup-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/backup-guards.test.ts)
   - [admin-apply-migration-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/admin-apply-migration-guards.test.ts)
   - [sgso-auditorias-ncs-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/sgso-auditorias-ncs-guards.test.ts)
+  - [simuladores-sessoes-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-guards.test.ts)
 - Riscos cobertos:
   - autenticação obrigatória em rotas sensíveis;
   - fail-closed de RBAC em backup;
   - validação de payload e erro explícito em fluxo de migração manual;
-  - guard e isolamento tenant para escritas/listagens SGSO auditorias/NC.
+  - guard e isolamento tenant para escritas/listagens SGSO auditorias/NC;
+  - negativos de escrita em simuladores (auth/role/erro explícito) e fail-closed de tenant em fichas.
 - Resultado:
   - fase concluída sem alteração de runtime;
   - cobertura de regressão ampliada em superfície operacional crítica.
 - Pendências de cobertura:
-  - SGSO Next Gen (relatos/ações) e validação mais forte de política de role em SGSO auditorias/NC.
+  - SGSO Next Gen (relatos/ações) e validação mais forte de política de role em SGSO auditorias/NC;
+  - isolamento cross-tenant explícito em update de sessões simuladores via harness acoplado ao tenant middleware global.

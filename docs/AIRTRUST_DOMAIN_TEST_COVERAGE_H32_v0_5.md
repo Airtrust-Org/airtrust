@@ -64,7 +64,39 @@ Riscos cobertos:
 - garantia de erro explícito em falha interna.
 
 Lacunas restantes:
-- não há `requireRole(...)` explícito nas escritas de `sgso-auditorias-ncs`; política de role depende de contrato global atual e merece validação funcional dedicada (H32-C/H29-B).
+- não há `requireRole(...)` explícito nas escritas de `sgso-auditorias-ncs`; política de role depende de contrato global atual e merece validação funcional dedicada (H32-D/H29-B).
 
 Próximo domínio recomendado:
-- SGSO Next Gen (relatos/ações CAPA) com foco em guards de escrita e isolamento tenant.
+- simuladores sessões/fichas (update/delete) com foco em guards de escrita e isolamento tenant.
+
+## 8. H32-C — Simuladores sessões/fichas guards
+Domínio escolhido:
+- simuladores (`simuladores-sessoes` e `simuladores-fichas`), com foco em escrita de sessão e guard de tenant em fichas.
+
+Rotas cobertas:
+- `PUT /sessoes/:id`
+- `DELETE /sessoes/:id`
+- `GET /fichas` (negativo de tenant ausente)
+
+Arquivo de teste:
+- [simuladores-sessoes-guards.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/simuladores-sessoes-guards.test.ts)
+
+Cenários adicionados:
+1. sem autenticação em `PUT /sessoes/:id` retorna `401`;
+2. role insuficiente em `DELETE /sessoes/:id` retorna `403` (fail-closed);
+3. `PUT /sessoes/:id` com horário inválido retorna `400` explícito;
+4. falha de DB em `PUT /sessoes/:id` retorna `500` com `success:false`;
+5. `/fichas` sem tenant válido falha fechado com erro explícito (`500`, sem sucesso silencioso).
+
+Riscos cobertos:
+- auth obrigatório em escrita de sessão;
+- bloqueio de delete para role sem permissão;
+- contrato de erro explícito em falha interna de update;
+- validação de fail-closed quando contexto tenant está ausente em fluxo de fichas.
+
+Lacunas restantes:
+- teste de isolamento cross-tenant para `PUT /sessoes/:id` (empresa A não editar sessão da B) depende de harness mais fiel ao tenant middleware global;
+- cobertura adicional de fluxos de fichas (`PUT/DELETE`) pode entrar em H32-D.
+
+Próximo domínio recomendado:
+- SGSO Next Gen (relatos/ações CAPA) ou simuladores fichas-edicoes, priorizando negativos de role/tenant.
