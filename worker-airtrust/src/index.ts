@@ -33,11 +33,12 @@ import { createApiNotFoundHandler } from './runtime/not-found-handler';
 // Middlewares
 import { cors } from './middleware/cors';
 import { errorHandler } from './middleware/error-handler';
-import { auth, requireRole } from './middleware/auth';
+import { auth } from './middleware/auth';
 import { cacheControl } from './middleware/cache';
 import { noCacheMiddleware } from './middleware/no-cache';
 import { requestIdMiddleware } from './middleware/requestId';
 import { rateLimiter, rateLimitPresets } from './middleware/rate-limit';
+import { requireRole } from './middleware/rbac';
 import { tenantMiddleware } from './middleware/tenant';
 import { domainEventProcessorMiddleware } from './middleware/domainEventProcessor';
 

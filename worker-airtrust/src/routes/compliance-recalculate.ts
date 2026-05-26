@@ -6,7 +6,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Context } from 'hono';
-import { auth, requireRole } from '../middleware/auth';
+import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import type { AppEnv } from '../types';
 import { createLogger, toError } from '../utils/logger';
 
