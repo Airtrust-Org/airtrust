@@ -825,6 +825,32 @@ Comandos sugeridos (não executados):
 - Pendências:
   - ampliar cobertura para cenários FRMS integrados quando houver contrato estável e fixture dedicada, sem acoplamento a dados de produção.
 
+## Follow-up H24 — Frontend/backend API contract sweep
+
+- Achados do sweep (focado e read-only):
+  - `scripts/validation/audit-endpoint-matrix.mjs` reportou dois candidatos:
+    - `/api/auditoria-logs/stats` em `src/react-app/hooks/useAuditoria.ts`.
+    - `/api/endpoint` em `src/react-app/utils/api-cache.ts`.
+  - Verificação de uso real:
+    - `useAuditoria.ts` não possui consumidores no frontend ativo.
+    - `/api/endpoint` era apenas string de exemplo em comentário.
+- Itens corrigidos (2 correções de baixo risco):
+  - removido artefato sem consumidor com contrato quebrado:
+    - `src/react-app/hooks/useAuditoria.ts` (endpoints legados inexistentes).
+  - ajustado comentário de exemplo para evitar falso positivo de contrato:
+    - `src/react-app/utils/api-cache.ts` (`/api/endpoint` -> `/api/health`).
+- Itens não corrigidos nesta fase:
+  - nenhum endpoint ativo adicional quebrado foi confirmado no sweep focado.
+  - demais referências de `legacy` encontradas eram semânticas/documentais, não chamadas quebradas em runtime.
+- Validações:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`: ok.
+  - `npx tsc --noEmit`: ok.
+  - `npm run build`: ok.
+  - `npm run lint`: ok.
+  - `npm run test:worker`: ok.
+- Pendências:
+  - manter varredura pontual em próximas fases funcionais, sem ampliar escopo para auditoria total.
+
 ---
 
 ## Apêndice — Comandos principais executados (read-only)

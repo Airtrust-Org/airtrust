@@ -110,7 +110,7 @@ export const apiCache = new APICache();
  * Hook para fetch com cache automático
  * Exemplo:
  * const data = await cachedFetch(
- *   `/api/endpoint`,
+ *   `/api/health`,
  *   5 * 60 * 1000  // 5 minutos de cache
  * );
  */
