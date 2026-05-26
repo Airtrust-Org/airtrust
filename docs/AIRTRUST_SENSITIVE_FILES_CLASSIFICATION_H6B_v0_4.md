@@ -577,7 +577,7 @@ Maximo 10 arquivos. Somente `REMOVE_INDEX_CANDIDATE_HIGH_CONFIDENCE`. Sem migrat
 ## 9. H6-C — Batch 1 removed from Git index
 
 - Data: 2026-05-25
-- Commit: `xxxxx` (a ser preenchido)
+- Commit: `3156275`
 - Acao: `git rm --cached` nos 10 arquivos do primeiro lote H6-C.
 
 ### Caminhos removidos do index (10 arquivos)
