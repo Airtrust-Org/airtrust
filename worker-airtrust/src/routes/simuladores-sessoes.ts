@@ -274,6 +274,9 @@ app.get('/sessoes', async (c) => {
   try {
     const dataInicio = c.req.query('data_inicio');
     const dataFim = c.req.query('data_fim');
+    const statusParam = c.req.query('status');
+    const orderParam = String(c.req.query('order') || '').toLowerCase();
+    const orderDirection = orderParam === 'asc' ? 'ASC' : 'DESC';
     const viewMode = c.req.query('view');
     const isSummaryView = viewMode === 'summary';
     const ctx = c as unknown as { get: (k: string) => unknown };
@@ -400,6 +403,14 @@ app.get('/sessoes', async (c) => {
       query += ' AND sa.data <= ?';
       params.push(dataFim);
     }
+    const normalizedStatusList = String(statusParam || '')
+      .split(',')
+      .map((status) => status.trim().toUpperCase())
+      .filter((status) => /^[A-Z_]+$/.test(status));
+    if (normalizedStatusList.length > 0) {
+      query += ` AND UPPER(COALESCE(sa.status, '')) IN (${normalizedStatusList.map(() => '?').join(',')})`;
+      params.push(...normalizedStatusList);
+    }
     if (tipoDispo && (tipoDispo === 'SIMULADOR' || tipoDispo === 'AERONAVE')) {
       query += " AND COALESCE(sa.tipo_dispositivo, 'SIMULADOR') = ?";
       params.push(tipoDispo);
@@ -430,8 +441,8 @@ app.get('/sessoes', async (c) => {
     // ─────────────────────────────────────────────────────────────────────────
 
     query += isSummaryView
-      ? ' ORDER BY sa.data DESC, sa.hora_inicio DESC LIMIT ? OFFSET ?'
-      : ' GROUP BY sa.id ORDER BY sa.data DESC, sa.hora_inicio DESC LIMIT ? OFFSET ?';
+      ? ` ORDER BY sa.data ${orderDirection}, sa.hora_inicio ${orderDirection} LIMIT ? OFFSET ?`
+      : ` GROUP BY sa.id ORDER BY sa.data ${orderDirection}, sa.hora_inicio ${orderDirection} LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
     const sessoes = await c.env.DB.prepare(query)

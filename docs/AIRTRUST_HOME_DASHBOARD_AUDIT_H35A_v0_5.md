@@ -308,3 +308,22 @@ Executar H35-B em duas ondas obrigatórias:
 2. **Redesign funcional/visual** sobre dados confiáveis.
 
 Sem corrigir primeiro os contratos e tenant scope, qualquer redesign continuará com risco de painel bonito porém enganoso.
+
+## Follow-up H35-B — Data contracts and reliability fixes
+
+Implementado em H35-B (commit de código da fase):
+
+- Correção de contratos frontend/backend para Home:
+  - `data_inicio` padronizado nos hooks FRMS e sessões.
+- Correção de confiabilidade em `/api/simuladores/sessoes`:
+  - suporte efetivo a `status`;
+  - ordenação controlada via `order=asc|desc` (default preservado);
+  - consumo da Home em `view=summary` para payload leve.
+- Hardening multi-tenant no `dashboardService`:
+  - inclusão de `empresa_id` em queries de métricas/compliance de simuladores.
+- Remoção de sucesso silencioso em atividades recentes:
+  - erro agora propaga para resposta explícita (`success=false`) na rota.
+- Home com estados explícitos de indisponibilidade por card crítico (sem número falso).
+- Testes adicionados/atualizados para cobrir os patches backend.
+
+Relatório detalhado da fase: `docs/AIRTRUST_HOME_DASHBOARD_DATA_FIX_H35B_v0_5.md`.

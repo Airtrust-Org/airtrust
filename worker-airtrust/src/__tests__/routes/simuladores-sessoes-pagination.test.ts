@@ -253,4 +253,28 @@ describe('simuladores pagination caps', () => {
     const usedQuery = binds.sessoesRawQueries.at(-1) || '';
     expect(usedQuery.includes('json_group_array')).toBe(false);
   });
+
+  it('sessoes aceita filtro de status com order asc para lista de próximos', async () => {
+    const { db, binds } = createPaginationDb();
+
+    const response = await simuladoresSessoesRoutes.fetch(
+      new Request(
+        'http://localhost/sessoes?view=summary&status=agendado,pendente&order=asc&data_inicio=2026-05-01&limit=10&offset=0',
+        { method: 'GET' },
+      ),
+      { DB: db, __mockRole: 'admin' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      pagination: { limit: 10, offset: 0 },
+    });
+
+    const usedQuery = binds.sessoesRawQueries.at(-1) || '';
+    expect(usedQuery.includes("UPPER(COALESCE(sa.status, '')) IN (?,?)")).toBe(true);
+    expect(usedQuery.includes('ORDER BY sa.data ASC, sa.hora_inicio ASC')).toBe(true);
+    expect(binds.sessoesSummary.at(-1)).toEqual(['2026-05-01', 'AGENDADO', 'PENDENTE', 1, 10, 0]);
+  });
 });

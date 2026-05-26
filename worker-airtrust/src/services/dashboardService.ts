@@ -126,8 +126,10 @@ export async function getDashboardMetrics(
              ) as taxa_conclusao
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
+           AND empresa_id = ?
            AND strftime('%Y-%m', data) = strftime('%Y-%m', date('now', '-1 month'))`,
         )
+        .bind(empresaId)
         .first<{ taxa_conclusao: number }>(),
 
       // Demanda Futura
@@ -139,9 +141,11 @@ export async function getDashboardMetrics(
              COUNT(CASE WHEN data BETWEEN date('now', '+61 days') AND date('now', '+90 days') THEN 1 END) as dias_61_90
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
+           AND empresa_id = ?
            AND status IN ('AGENDADO', 'PENDENTE')
            AND data >= date('now')`,
         )
+        .bind(empresaId)
         .first<{ proximos_30: number; dias_31_60: number; dias_61_90: number }>(),
 
       db
@@ -182,8 +186,10 @@ export async function getDashboardMetrics(
              ) as taxa
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
+           AND empresa_id = ?
            AND strftime('%Y-%m', data) = strftime('%Y-%m', date('now', '-2 months'))`,
         )
+        .bind(empresaId)
         .first<{ taxa: number }>();
       const taxaAtual = taxaConclusao?.taxa_conclusao || 0;
       const taxaPrev = taxaAnterior?.taxa || 0;
@@ -428,14 +434,17 @@ export async function getComplianceScore(
              COALESCE(
                (SELECT COUNT(*) FROM simulador_agendamentos
                 WHERE deleted_at IS NULL
+                AND empresa_id = ?
                 AND status = 'CONCLUIDO'
                 AND data >= date('now', '-3 months')) * 100.0 /
                NULLIF((SELECT COUNT(*) FROM simulador_agendamentos
                        WHERE deleted_at IS NULL
+                       AND empresa_id = ?
                        AND data >= date('now', '-3 months')), 0),
                100
              ) as percentual_sessoes_concluidas`,
         )
+        .bind(empresaId, empresaId)
         .first<{ percentual_sessoes_concluidas: number }>(),
 
       // % de qualificações válidas do mês anterior (para calcular tendência)
@@ -745,7 +754,7 @@ export async function getAtividadesRecentes(
     return atividades.slice(0, 20);
   } catch (error) {
     console.error('[DASHBOARD] Erro ao buscar atividades recentes:', error);
-    return [];
+    throw error;
   }
 }
 
