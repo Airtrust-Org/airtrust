@@ -235,3 +235,24 @@ Motivo: há riscos P0/P1 de escopo e autenticação que impactam segurança e co
   - listagem/importação de histórico protegidas com `empresa_id`;
   - auto-create e inserts do fluxo de histórico com `empresa_id`;
   - testes multi-tenant adicionados para rota e serviço.
+
+## Follow-up H29 — Fail-open hardening
+- Endpoints tratados:
+  - `GET /api/matriz-treinamento/requisitos/:funcionario_id`
+  - `GET /api/templates`
+- Comportamento anterior:
+  - matriz retornava `success: true` com `data: []` em erro interno;
+  - `/api/templates` retornava sucesso com payload de exemplo/fallback silencioso.
+- Comportamento final:
+  - matriz retorna `500` com `success: false`, `error: MATRIZ_TREINAMENTO_FAILED` e mensagem estável;
+  - `/api/templates` retorna `503` com `success: false`, `error: TEMPLATES_ENDPOINT_UNAVAILABLE`.
+- Testes adicionados:
+  - [fail-open-hardening.test.ts](/Users/filipedaumas/SAAS/Airtrust/worker-airtrust/src/__tests__/routes/fail-open-hardening.test.ts)
+- Validações executadas:
+  - `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
+  - `npx tsc --noEmit`
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:worker`
+- Pendências:
+  - seguir para H30 (paginação/performance) e revisar outros pontos P2 fora do escopo desta fase.
