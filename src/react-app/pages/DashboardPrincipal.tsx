@@ -8,6 +8,9 @@ import {
   ShieldAlert,
   ShieldCheck,
   Zap,
+  Activity,
+  Users,
+  Gauge,
 } from 'lucide-react';
 import AppLayout from '../components/AppLayout';
 import { WidgetError } from '../components/UI/widget-states';
@@ -24,6 +27,11 @@ import {
 function firstWords(value: string | null | undefined): string {
   if (!value) return '-';
   return value.length > 64 ? `${value.slice(0, 64)}...` : value;
+}
+
+function isQualificationAlert(alerta: { tipo?: string; diasRestantes?: number }): boolean {
+  if (String(alerta.tipo || '').toLowerCase() !== 'qualificacao_vencendo') return false;
+  return Number.isFinite(Number(alerta.diasRestantes));
 }
 
 export default function DashboardPrincipal() {
@@ -102,7 +110,13 @@ export default function DashboardPrincipal() {
   const frmsCriticos = frmsAlertas.filter(
     (item) => item.nivel === 'CRITICO' || item.nivel === 'VIOLACAO',
   );
-  const qualificacoesVencidas = alertas.filter((item) => item.diasRestantes <= 0).length;
+  const qualificacoesAlertas = alertas.filter((item) => isQualificationAlert(item));
+  const qualificacoesVencidas =
+    metrics?.qualificacoesVencidas ??
+    qualificacoesAlertas.filter((item) => Number(item.diasRestantes) <= 0).length;
+  const qualificacoesVencendo =
+    metrics?.qualificacoesAVencer ??
+    qualificacoesAlertas.filter((item) => Number(item.diasRestantes) > 0).length;
   const pendenciasCriticas = qualificacoesVencidas + frmsCriticos.length;
 
   const handleRefresh = () => {
@@ -118,9 +132,11 @@ export default function DashboardPrincipal() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-screen-2xl space-y-5 px-4 py-6 md:px-6">
-        <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-5 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:to-slate-900">
+        <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-5 shadow-[0_18px_45px_-28px_rgba(15,23,42,0.55)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800">
+          <div className="pointer-events-none absolute -top-20 -right-16 h-44 w-44 rounded-full bg-blue-500/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-24 -left-8 h-44 w-44 rounded-full bg-emerald-500/10 blur-2xl" />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
+            <div className="relative">
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                 Saude operacional hoje
               </p>
@@ -146,7 +162,7 @@ export default function DashboardPrincipal() {
                 {operationStatus?.label || 'Sem status'}
               </span>
               <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700 dark:bg-red-500/10 dark:text-red-300">
-                Pendencias criticas: {pendenciasCriticas}
+                Pendencias criticas (FRMS + vencidas): {pendenciasCriticas}
               </span>
               <button
                 onClick={handleRefresh}
@@ -160,7 +176,10 @@ export default function DashboardPrincipal() {
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+              <div className="mb-1 inline-flex rounded-lg bg-slate-100 p-1.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <Users className="h-3.5 w-3.5" />
+              </div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Tripulantes ativos
               </p>
@@ -168,7 +187,10 @@ export default function DashboardPrincipal() {
                 {metrics?.tripulantesAtivos ?? 0}
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+              <div className="mb-1 inline-flex rounded-lg bg-emerald-100 p-1.5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <Gauge className="h-3.5 w-3.5" />
+              </div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Em conformidade
               </p>
@@ -176,7 +198,10 @@ export default function DashboardPrincipal() {
                 {complianceScore}%
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+              <div className="mb-1 inline-flex rounded-lg bg-amber-100 p-1.5 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                <Activity className="h-3.5 w-3.5" />
+              </div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Alertas FRMS pendentes
               </p>
@@ -188,7 +213,7 @@ export default function DashboardPrincipal() {
         </section>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
@@ -269,7 +294,7 @@ export default function DashboardPrincipal() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-slate-500 dark:text-slate-400" />
@@ -315,7 +340,7 @@ export default function DashboardPrincipal() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="h-4 w-4 text-slate-500 dark:text-slate-400" />
@@ -344,13 +369,13 @@ export default function DashboardPrincipal() {
                   <div className="rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-2 dark:border-amber-500/20 dark:bg-amber-500/10">
                     <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Vencendo</p>
                     <p className="mt-1 text-2xl font-black text-amber-700 dark:text-amber-300">
-                      {metrics?.qualificacoesAVencer ?? 0}
+                      {qualificacoesVencendo}
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  {alertas.slice(0, 3).map((alerta) => (
+                  {qualificacoesAlertas.slice(0, 3).map((alerta) => (
                     <div key={alerta.id} className="rounded-xl border border-slate-100 px-3 py-2 dark:border-slate-700">
                       <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">
                         {alerta.criticidade}
@@ -358,17 +383,20 @@ export default function DashboardPrincipal() {
                       <p className="text-sm text-slate-700 dark:text-slate-300">{firstWords(alerta.mensagem)}</p>
                     </div>
                   ))}
-                  {alertas.length === 0 ? (
+                  {qualificacoesAlertas.length === 0 ? (
                     <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                       Sem pendencias de qualificacao no momento.
                     </p>
                   ) : null}
                 </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Fonte: metricas de qualificacoes + alertas de qualificacao (sem misturar LMS).
+                </p>
               </div>
             )}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 text-slate-500 dark:text-slate-400" />

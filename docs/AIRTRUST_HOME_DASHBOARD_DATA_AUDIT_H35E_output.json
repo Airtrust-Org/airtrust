@@ -1,0 +1,260 @@
+{
+  "metadata": {
+    "generatedAt": "2026-05-27T01:43:18.717Z",
+    "apiOrigin": "https://api.airtrust.online",
+    "note": "Auditoria read-only via API; sem writes, sem migration, sem importação."
+  },
+  "homeCurrentSourceMap": {
+    "metricsEndpoint": "/api/dashboard/metrics",
+    "alertasEndpoint": "/api/dashboard/alertas-criticos",
+    "legacyVencidasRule": "count(alertas where diasRestantes<=0, com fallback diasRestantes ausente => 0)",
+    "correctedVencidasRule": "metrics.qualificacoesVencidas",
+    "correctedVencendoRule": "metrics.qualificacoesAVencer"
+  },
+  "counters": {
+    "dashboard_metrics": {
+      "qualificacoesVencidas": 2,
+      "qualificacoesAVencer": 8
+    },
+    "dashboard_alertas": {
+      "total": 16,
+      "qualificacoes": 10,
+      "lms": 6,
+      "legacyHomeVencidas": 8
+    },
+    "canonical_historico": {
+      "vencidasRows": 2,
+      "vencendoRows": 9,
+      "statsVencidas": 2,
+      "statsVencendo": 9
+    }
+  },
+  "diagnosis": {
+    "legacyRuleIsWrong": true,
+    "rootCause": "A Home contava alertas LMS (tipo lms_curso_pendente) como vencidas quando diasRestantes vinha nulo."
+  },
+  "legacyWrongEntries": [
+    {
+      "id": 100000,
+      "tipo": "lms_curso_pendente",
+      "diasRestantes": null,
+      "mensagem": "Curso obrigatório \"Conhecimentos Gerais da Aeronave\" — não matriculado",
+      "motivo": "Não é alerta de qualificação; entrou como vencida por fallback de diasRestantes=0"
+    },
+    {
+      "id": 100001,
+      "tipo": "lms_curso_pendente",
+      "diasRestantes": null,
+      "mensagem": "Curso obrigatório \"Conhecimentos Gerais da Aeronave\" — não matriculado",
+      "motivo": "Não é alerta de qualificação; entrou como vencida por fallback de diasRestantes=0"
+    },
+    {
+      "id": 100002,
+      "tipo": "lms_curso_pendente",
+      "diasRestantes": null,
+      "mensagem": "Curso obrigatório \"Conhecimentos Gerais da Aeronave\" — não matriculado",
+      "motivo": "Não é alerta de qualificação; entrou como vencida por fallback de diasRestantes=0"
+    },
+    {
+      "id": 100003,
+      "tipo": "lms_curso_pendente",
+      "diasRestantes": null,
+      "mensagem": "Curso obrigatório \"Conhecimentos Gerais da Aeronave\" — não matriculado",
+      "motivo": "Não é alerta de qualificação; entrou como vencida por fallback de diasRestantes=0"
+    },
+    {
+      "id": 100004,
+      "tipo": "lms_curso_pendente",
+      "diasRestantes": null,
+      "mensagem": "Curso obrigatório \"Conhecimentos Gerais da Aeronave\" — não matriculado",
+      "motivo": "Não é alerta de qualificação; entrou como vencida por fallback de diasRestantes=0"
+    },
+    {
+      "id": 100005,
+      "tipo": "lms_curso_pendente",
+      "diasRestantes": null,
+      "mensagem": "Curso obrigatório \"Conhecimentos Gerais da Aeronave\" — não matriculado",
+      "motivo": "Não é alerta de qualificação; entrou como vencida por fallback de diasRestantes=0"
+    }
+  ],
+  "canonicalVencidasRecords": [
+    {
+      "id": 4495,
+      "funcionario": "Antonio Luiz Simões Ramos",
+      "funcionarioId": 3,
+      "qualificacao": "OPC - FAP 05.02 - SK76",
+      "qualificacaoId": 115,
+      "status": "VENCIDA",
+      "qualificacaoStatus": "CONCLUIDA",
+      "dataVencimento": "2025-12-31",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "SIM"
+    },
+    {
+      "id": 4476,
+      "funcionario": "Antonio Luiz Simões Ramos",
+      "funcionarioId": 3,
+      "qualificacao": "CRM — Gerenciamento de Recursos da Tripulação",
+      "qualificacaoId": 24,
+      "status": "VENCIDA",
+      "qualificacaoStatus": "CONCLUIDA",
+      "dataVencimento": "2026-03-14",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "SIM"
+    }
+  ],
+  "canonicalVencendoRecordsSample": [
+    {
+      "id": 4150,
+      "funcionario": "Antonio Luiz Simões Ramos",
+      "funcionarioId": 3,
+      "qualificacao": "CHT IFR SK76 (Extrato Anac)",
+      "qualificacaoId": 58,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "CONCLUIDA",
+      "dataVencimento": "2026-05-31",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    },
+    {
+      "id": 4149,
+      "funcionario": "Antonio Luiz Simões Ramos",
+      "funcionarioId": 3,
+      "qualificacao": "CHT Tipo SK76 (Extrato Anac)",
+      "qualificacaoId": 110,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "CONCLUIDA",
+      "dataVencimento": "2026-05-31",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    },
+    {
+      "id": 3513,
+      "funcionario": "Antonio Luiz Simões Ramos",
+      "funcionarioId": 3,
+      "qualificacao": "FAP 05.2 - Habilitacao de Tipo Helicoptero - SK76",
+      "qualificacaoId": 76,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "-",
+      "dataVencimento": "2026-05-31",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    },
+    {
+      "id": 3849,
+      "funcionario": "Max Monteiro Magioli",
+      "funcionarioId": 19,
+      "qualificacao": "Certificado Médico Aeronáutico",
+      "qualificacaoId": 1,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "-",
+      "dataVencimento": "2026-06-08",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    },
+    {
+      "id": 3195,
+      "funcionario": "Carlos José Salgueiro Cirne De Castro",
+      "funcionarioId": 6,
+      "qualificacao": "Conhecimentos Gerais da Aeronave",
+      "qualificacaoId": 19,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "-",
+      "dataVencimento": "2026-06-13",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    },
+    {
+      "id": 3440,
+      "funcionario": "Gabriel Ferreira Barreto",
+      "funcionarioId": 38,
+      "qualificacao": "Operações sobre Grandes Extensões de Água (inclui T-HUET)",
+      "qualificacaoId": 28,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "-",
+      "dataVencimento": "2026-06-19",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    },
+    {
+      "id": 3261,
+      "funcionario": "Wilson Maciel Martins Nery",
+      "funcionarioId": 33,
+      "qualificacao": "Certificado Médico Aeronáutico",
+      "qualificacaoId": 1,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "-",
+      "dataVencimento": "2026-06-22",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    },
+    {
+      "id": 3260,
+      "funcionario": "Vitor De Almeida Costa",
+      "funcionarioId": 32,
+      "qualificacao": "Certificado Médico Aeronáutico",
+      "qualificacaoId": 1,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "-",
+      "dataVencimento": "2026-06-24",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    },
+    {
+      "id": 3567,
+      "funcionario": "Antonio Luiz Simões Ramos",
+      "funcionarioId": 3,
+      "qualificacao": "FAP 06 - Habilitacao de Voo por Instrumentos - SK76",
+      "qualificacaoId": 78,
+      "status": "VENCENDO_30",
+      "qualificacaoStatus": "-",
+      "dataVencimento": "2026-06-26",
+      "diasVencido": null,
+      "ativoFuncionario": "ATIVO (já filtrado pela rota de histórico)",
+      "softDeleted": "NAO (já filtrado pela rota de histórico)",
+      "cancelada": "NAO",
+      "planejada": "NAO",
+      "entraNaHomeCorreta": "NAO"
+    }
+  ]
+}
