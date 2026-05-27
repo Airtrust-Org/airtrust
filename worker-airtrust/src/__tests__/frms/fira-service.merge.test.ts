@@ -19,7 +19,12 @@ type StubImportacao = {
   total_dias_importados: number;
 };
 
-function createDbStub(importacao: StubImportacao, jornadaExistente: Record<string, unknown>) {
+function createDbStub(params: {
+  importacao: StubImportacao;
+  rowsById?: Array<Record<string, unknown>>;
+  rowsByDate?: Array<Record<string, unknown>>;
+}) {
+  const { importacao, rowsById = [], rowsByDate = [] } = params;
   return {
     prepare: (sql: string) => ({
       bind: (..._args: unknown[]) => ({
@@ -28,8 +33,11 @@ function createDbStub(importacao: StubImportacao, jornadaExistente: Record<strin
           return null;
         },
         all: async () => {
+          if (sql.includes('FROM frms_jornada') && sql.includes('tripulante_id = ?') && sql.includes('data IN')) {
+            return { results: rowsByDate };
+          }
           if (sql.includes('FROM frms_jornada') && sql.includes('WHERE id IN')) {
-            return { results: [jornadaExistente] };
+            return { results: rowsById };
           }
           return { results: [] };
         },
@@ -100,8 +108,8 @@ describe('confirmarImportacaoFira duplicate merge', () => {
       ],
     };
 
-    const db = createDbStub(
-      {
+    const db = createDbStub({
+      importacao: {
         id: 'imp-1',
         tripulante_id: '20',
         canac: '123456',
@@ -111,16 +119,31 @@ describe('confirmarImportacaoFira duplicate merge', () => {
         status: 'REVISAO',
         total_dias_importados: 0,
       },
-      {
-        id: 'jornada-manual-vazia',
-        origem: 'MANUAL',
-        empresa_id: 6,
-        hora_apresentacao: null,
-        hora_termino: null,
-        horas_voo_minutos: null,
-        duracao_jornada_minutos: null,
-      },
-    );
+      rowsById: [
+        {
+          id: 'jornada-manual-vazia',
+          data: '2026-05-25',
+          origem: 'MANUAL',
+          empresa_id: 6,
+          hora_apresentacao: null,
+          hora_termino: null,
+          horas_voo_minutos: null,
+          duracao_jornada_minutos: null,
+        },
+      ],
+      rowsByDate: [
+        {
+          id: 'jornada-manual-vazia',
+          data: '2026-05-25',
+          origem: 'MANUAL',
+          empresa_id: 6,
+          hora_apresentacao: null,
+          hora_termino: null,
+          horas_voo_minutos: null,
+          duracao_jornada_minutos: null,
+        },
+      ],
+    });
 
     const result = await confirmarImportacaoFira(
       db,
@@ -137,5 +160,101 @@ describe('confirmarImportacaoFira duplicate merge', () => {
     expect(result.importados).toBe(0);
     expect(result.ignorados).toBe(0);
     expect(result.erros).toBe(0);
+  });
+
+  it('does not cross dates when preview points to a duplicate id from another day', async () => {
+    const preview = {
+      importacao_id: 'imp-2',
+      tripulante_encontrado: true,
+      tripulante_id: '19',
+      tripulante_nome_fira: 'Max',
+      tripulante_nome_sistema: 'Max',
+      canac: '654321',
+      ano: 2026,
+      mes: 5,
+      mes_nome: 'maio',
+      total_dias: 1,
+      totais_fira: { jornada: '05:00', voo: '03:00' },
+      totais_calculados: { jornada_min: 300, voo_min: 180 },
+      divergencia_totais: false,
+      avisos: [],
+      erros: [],
+      linhas: [
+        {
+          dia: 25,
+          data: '2026-05-25',
+          status_fira: 'SIGVOOS',
+          status_frms: 'ES',
+          hora_apresentacao: '08:00',
+          hora_termino: '13:00',
+          duracao_jornada_min: 300,
+          horas_voo_min: 180,
+          local_base: 'SBJR',
+          situacao: 'DUPLICATA',
+          jornada_existente_id: 'jornada-dia-26',
+          marcado: true,
+        },
+      ],
+    };
+
+    const db = createDbStub({
+      importacao: {
+        id: 'imp-2',
+        tripulante_id: '19',
+        canac: '654321',
+        ano: 2026,
+        mes: 5,
+        preview_json: JSON.stringify(preview),
+        status: 'REVISAO',
+        total_dias_importados: 0,
+      },
+      rowsById: [
+        {
+          id: 'jornada-dia-26',
+          data: '2026-05-26',
+          origem: 'MANUAL',
+          empresa_id: 6,
+          hora_apresentacao: null,
+          hora_termino: null,
+          horas_voo_minutos: null,
+          duracao_jornada_minutos: null,
+        },
+      ],
+      rowsByDate: [
+        {
+          id: 'jornada-dia-25',
+          data: '2026-05-25',
+          origem: 'MANUAL',
+          empresa_id: 6,
+          hora_apresentacao: null,
+          hora_termino: null,
+          horas_voo_minutos: null,
+          duracao_jornada_minutos: null,
+        },
+        {
+          id: 'jornada-dia-26',
+          data: '2026-05-26',
+          origem: 'MANUAL',
+          empresa_id: 6,
+          hora_apresentacao: null,
+          hora_termino: null,
+          horas_voo_minutos: null,
+          duracao_jornada_minutos: null,
+        },
+      ],
+    });
+
+    await confirmarImportacaoFira(
+      db,
+      'imp-2',
+      { dias_selecionados: [{ dia: 25, forcar_substituicao: true }] },
+      '30',
+      {} as any,
+      6,
+    );
+
+    expect(atualizarJornada).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(atualizarJornada).mock.calls[0]?.[1]).toBe('jornada-dia-25');
+    expect(salvarJornada).not.toHaveBeenCalled();
   });
 });
