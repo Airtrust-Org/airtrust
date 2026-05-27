@@ -6,7 +6,7 @@
  */
 
 import type { LimitesMap } from './types';
-import { salvarJornada } from './db-service';
+import { atualizarJornada, salvarJornada } from './db-service';
 import {
   parseFira,
   mapFiraSituacaoToFrmsStatus,
@@ -82,6 +82,61 @@ function now(): string {
 
 function cloneArrayBuffer(buffer: ArrayBuffer): ArrayBuffer {
   return Uint8Array.from(new Uint8Array(buffer)).buffer;
+}
+
+interface JornadaExistenteParaMerge {
+  id: string;
+  origem: string | null;
+  empresa_id: number | null;
+  hora_apresentacao: string | null;
+  hora_termino: string | null;
+  horas_voo_minutos: number | null;
+  duracao_jornada_minutos: number | null;
+}
+
+function linhaTemDadosOperacionais(linha: FiraLinhPreview): boolean {
+  return Boolean(
+    linha.hora_apresentacao ||
+      linha.hora_termino ||
+      (linha.horas_voo_min || 0) > 0 ||
+      (linha.duracao_jornada_min || 0) > 0,
+  );
+}
+
+function jornadaExistenteOperacionalmenteVazia(jornada: JornadaExistenteParaMerge): boolean {
+  return !Boolean(
+    jornada.hora_apresentacao ||
+      jornada.hora_termino ||
+      (jornada.horas_voo_minutos || 0) > 0 ||
+      (jornada.duracao_jornada_minutos || 0) > 0,
+  );
+}
+
+function shouldMergeIntoExistingManualJornada(params: {
+  linha: FiraLinhPreview;
+  jornada: JornadaExistenteParaMerge | null;
+  empresaId?: number;
+}): boolean {
+  const { linha, jornada, empresaId } = params;
+  if (!jornada) return false;
+
+  if (!linhaTemDadosOperacionais(linha)) return false;
+
+  const origem = String(jornada.origem || '').trim().toUpperCase();
+  if (origem && origem !== 'MANUAL') return false;
+
+  if (!jornadaExistenteOperacionalmenteVazia(jornada)) return false;
+
+  if (
+    empresaId !== undefined &&
+    empresaId !== null &&
+    jornada.empresa_id !== null &&
+    jornada.empresa_id !== empresaId
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 // Nota: mapSituacaoFira → removida, usa mapFiraSituacaoToFrmsStatus de fira-parser
@@ -716,9 +771,62 @@ export async function confirmarImportacaoFira(
       linha.jornada_existente_id || jornadasExistentesPorData.get(linha.data) || null,
   }));
 
-  const substituicoes = linhasPreparadas.filter(
-    ({ forcarSubstituicao, jornadaExistenteId }) =>
-      forcarSubstituicao && Boolean(jornadaExistenteId),
+  const jornadaExistenteIds = [
+    ...new Set(linhasPreparadas.map((item) => item.jornadaExistenteId).filter(Boolean)),
+  ] as string[];
+
+  const jornadasExistentesMap = new Map<string, JornadaExistenteParaMerge>();
+  if (jornadaExistenteIds.length > 0) {
+    const placeholders = jornadaExistenteIds.map(() => '?').join(', ');
+    const rows = await db
+      .prepare(
+        `SELECT id,
+                origem,
+                empresa_id,
+                hora_apresentacao,
+                hora_termino,
+                horas_voo_minutos,
+                duracao_jornada_minutos
+           FROM frms_jornada
+          WHERE id IN (${placeholders})
+            AND deleted_at IS NULL`,
+      )
+      .bind(...jornadaExistenteIds)
+      .all<JornadaExistenteParaMerge>();
+
+    for (const row of rows.results || []) {
+      jornadasExistentesMap.set(String(row.id), row);
+    }
+  }
+
+  const linhasPreparadasComMerge = linhasPreparadas.map((item) => {
+    const jornadaExistente = item.jornadaExistenteId
+      ? jornadasExistentesMap.get(String(item.jornadaExistenteId)) || null
+      : null;
+    const hasTenantConflict =
+      empresaId !== undefined &&
+      empresaId !== null &&
+      jornadaExistente?.empresa_id !== null &&
+      jornadaExistente?.empresa_id !== undefined &&
+      jornadaExistente.empresa_id !== empresaId;
+    const shouldMerge = item.forcarSubstituicao
+      ? shouldMergeIntoExistingManualJornada({
+          linha: item.linha,
+          jornada: jornadaExistente,
+          empresaId,
+        })
+      : false;
+
+    return {
+      ...item,
+      hasTenantConflict,
+      shouldMerge,
+    };
+  });
+
+  const substituicoes = linhasPreparadasComMerge.filter(
+    ({ forcarSubstituicao, jornadaExistenteId, shouldMerge, hasTenantConflict }) =>
+      forcarSubstituicao && Boolean(jornadaExistenteId) && !shouldMerge && !hasTenantConflict,
   );
 
   if (substituicoes.length > 0) {
@@ -765,15 +873,51 @@ export async function confirmarImportacaoFira(
     );
   }
 
-  for (const { linha, forcarSubstituicao, jornadaExistenteId } of linhasPreparadas) {
+  for (const {
+    linha,
+    forcarSubstituicao,
+    jornadaExistenteId,
+    shouldMerge,
+    hasTenantConflict,
+  } of linhasPreparadasComMerge) {
     try {
+      if (hasTenantConflict) {
+        erros++;
+        errosDetalhes.push(
+          `Dia ${linha.dia} (${linha.data}): conflito de empresa na jornada duplicada existente`,
+        );
+        continue;
+      }
+
       if (jornadaExistenteId && !forcarSubstituicao) {
         ignorados++;
         continue;
       }
 
+      if (jornadaExistenteId && shouldMerge) {
+        const result = await atualizarJornada(
+          db,
+          jornadaExistenteId,
+          {
+            status: linha.status_frms,
+            hora_apresentacao: linha.hora_apresentacao,
+            hora_termino: linha.hora_termino,
+            horas_voo_minutos: linha.horas_voo_min || null,
+            observacao: null,
+            origem: 'SIGVOOS',
+            local_base: linha.local_base ?? null,
+            empresa_id: empresaId ?? null,
+          },
+          limites,
+        );
+        alertasGerados += result.alertas.length;
+        substituidos++;
+        continue;
+      }
+
       const jornadaInput = {
         tripulante_id: importacao.tripulante_id!,
+        empresa_id: empresaId ?? null,
         data: linha.data,
         status: linha.status_frms,
         hora_apresentacao: linha.hora_apresentacao,

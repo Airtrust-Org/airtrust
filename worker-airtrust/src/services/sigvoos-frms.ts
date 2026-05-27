@@ -2303,9 +2303,75 @@ async function relabelImportedJornadasAsSigvoos(
   }
 }
 
+interface JornadaDuplicataCandidate {
+  id: string | number;
+  origem: string | null;
+  empresa_id: number | null;
+  hora_apresentacao: string | null;
+  hora_termino: string | null;
+  horas_voo_minutos: number | null;
+  duracao_jornada_minutos: number | null;
+}
+
+function hasOperationalDataInPreviewLine(line: FiraLinhPreview): boolean {
+  return Boolean(
+    line.hora_apresentacao ||
+      line.hora_termino ||
+      (line.horas_voo_min || 0) > 0 ||
+      (line.duracao_jornada_min || 0) > 0,
+  );
+}
+
+export function isJornadaOperacionalmenteVazia(
+  jornada: Pick<
+    JornadaDuplicataCandidate,
+    'hora_apresentacao' | 'hora_termino' | 'horas_voo_minutos' | 'duracao_jornada_minutos'
+  >,
+): boolean {
+  return !Boolean(
+    jornada.hora_apresentacao ||
+      jornada.hora_termino ||
+      (jornada.horas_voo_minutos || 0) > 0 ||
+      (jornada.duracao_jornada_minutos || 0) > 0,
+  );
+}
+
+export function shouldMergeDuplicataIntoManualEmpty(params: {
+  existing: JornadaDuplicataCandidate;
+  incomingLine: FiraLinhPreview;
+  empresaId?: number | null;
+}): boolean {
+  const { existing, incomingLine, empresaId } = params;
+
+  if (!hasOperationalDataInPreviewLine(incomingLine)) {
+    return false;
+  }
+
+  const origem = String(existing.origem || '').trim().toUpperCase();
+  if (origem && origem !== 'MANUAL') {
+    return false;
+  }
+
+  if (!isJornadaOperacionalmenteVazia(existing)) {
+    return false;
+  }
+
+  if (
+    empresaId !== undefined &&
+    empresaId !== null &&
+    existing.empresa_id !== null &&
+    existing.empresa_id !== empresaId
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 async function buildSelectedDaysForSigvoosImport(
   db: D1Database,
   previewLines: FiraLinhPreview[],
+  empresaId?: number | null,
 ): Promise<{
   selectedDays: Array<{ dia: number; forcar_substituicao: boolean }>;
   relabelDates: string[];
@@ -2315,14 +2381,26 @@ async function buildSelectedDaysForSigvoosImport(
   ];
 
   const shouldReplaceByJornadaId = new Map<string, boolean>();
+  const existingByJornadaId = new Map<string, JornadaDuplicataCandidate>();
   if (duplicateIds.length > 0) {
     const placeholders = duplicateIds.map(() => '?').join(', ');
     const rows = await db
-      .prepare(`SELECT id, origem FROM frms_jornada WHERE id IN (${placeholders})`)
+      .prepare(
+        `SELECT id,
+                origem,
+                empresa_id,
+                hora_apresentacao,
+                hora_termino,
+                horas_voo_minutos,
+                duracao_jornada_minutos
+           FROM frms_jornada
+          WHERE id IN (${placeholders})`,
+      )
       .bind(...duplicateIds)
-      .all<{ id: string | number; origem: string | null }>();
+      .all<JornadaDuplicataCandidate>();
 
     for (const row of rows.results || []) {
+      existingByJornadaId.set(String(row.id), row);
       const origem = String(row.origem || '').toUpperCase();
       const canReplace = origem === 'FIRA' || origem === 'SIGVOOS';
       shouldReplaceByJornadaId.set(String(row.id), canReplace);
@@ -2332,7 +2410,17 @@ async function buildSelectedDaysForSigvoosImport(
   const relabelDates: string[] = [];
   const selectedDays = previewLines.map((line) => {
     const existingId = line.jornada_existente_id ? String(line.jornada_existente_id) : null;
-    const shouldReplace = existingId ? shouldReplaceByJornadaId.get(existingId) === true : false;
+    const existing = existingId ? existingByJornadaId.get(existingId) : undefined;
+    const shouldMergeManualIncomplete =
+      existing && existingId
+        ? shouldMergeDuplicataIntoManualEmpty({
+            existing,
+            incomingLine: line,
+            empresaId,
+          })
+        : false;
+    const shouldReplaceFromOrigin = existingId ? shouldReplaceByJornadaId.get(existingId) === true : false;
+    const shouldReplace = shouldReplaceFromOrigin || shouldMergeManualIncomplete;
 
     if (shouldReplace) {
       relabelDates.push(line.data);
@@ -2580,6 +2668,7 @@ export async function syncSigvoosForFrms(
         const { selectedDays, relabelDates } = await buildSelectedDaysForSigvoosImport(
           db,
           monthly.preview.linhas,
+          resolvedEmpresaId ?? null,
         );
 
         const result = await confirmarImportacaoFira(
@@ -2771,6 +2860,7 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       const { selectedDays, relabelDates } = await buildSelectedDaysForSigvoosImport(
         db,
         updatedPreview.linhas,
+        empresaId ?? null,
       );
 
       const confirmResult = await confirmarImportacaoFira(
