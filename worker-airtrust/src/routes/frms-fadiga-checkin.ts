@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { AppEnv, Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
@@ -19,13 +19,10 @@ import {
   type CheckinCreateInput,
 } from './frms-fadiga-checkin.schema';
 
-const router = new Hono<{ Bindings: Env; Variables: { userId?: string; userRole?: string } }>();
+const router = new Hono<AppEnv>();
 router.use('*', auth());
 
-type FrmsContext = Context<{
-  Bindings: Env;
-  Variables: { userId?: string; userRole?: string };
-}>;
+type FrmsContext = Context<AppEnv>;
 
 type FadigaConfigRow = {
   threshold_amarelo: number;
@@ -145,22 +142,28 @@ async function getConfig(db: D1Database, empresaId: number): Promise<FadigaConfi
 }
 
 async function resolveFuncionarioId(c: FrmsContext): Promise<number | null> {
+  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+  const funcionarioIdFromContext = Number(c.get('funcionarioId') || 0);
   const userId = Number(c.get('userId') || 0);
+  if (funcionarioIdFromContext > 0) {
+    const fromContext = await c.env.DB
+      .prepare(
+        `SELECT id
+           FROM funcionarios
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+            AND COALESCE(ativo, 1) = 1
+            AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
+          LIMIT 1`,
+      )
+      .bind(funcionarioIdFromContext, empresaId)
+      .first<{ id: number }>();
+
+    if (fromContext?.id) return fromContext.id;
+  }
+
   if (!userId) return null;
-
-  const asFuncionario = await c.env.DB.prepare(
-    `SELECT id
-       FROM funcionarios
-      WHERE id = ?
-        AND deleted_at IS NULL
-        AND COALESCE(ativo, 1) = 1
-        AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-      LIMIT 1`,
-  )
-    .bind(userId)
-    .first<{ id: number }>();
-
-  if (asFuncionario?.id) return asFuncionario.id;
 
   const asUsuario = await c.env.DB.prepare(
     `SELECT f.id
@@ -168,15 +171,32 @@ async function resolveFuncionarioId(c: FrmsContext): Promise<number | null> {
        JOIN funcionarios f ON f.id = u.funcionario_id
       WHERE u.id = ?
         AND (u.deleted_at IS NULL OR u.deleted_at = 0)
+        AND f.empresa_id = ?
         AND f.deleted_at IS NULL
         AND COALESCE(f.ativo, 1) = 1
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
       LIMIT 1`,
   )
-    .bind(userId)
+    .bind(userId, empresaId)
     .first<{ id: number }>();
 
-  return asUsuario?.id ?? null;
+  if (asUsuario?.id) return asUsuario.id;
+
+  // Compatibilidade legada: alguns tokens antigos usam sub como id do funcionário.
+  const asFuncionario = await c.env.DB.prepare(
+    `SELECT id
+       FROM funcionarios
+      WHERE id = ?
+        AND empresa_id = ?
+        AND deleted_at IS NULL
+        AND COALESCE(ativo, 1) = 1
+        AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
+      LIMIT 1`,
+  )
+    .bind(userId, empresaId)
+    .first<{ id: number }>();
+
+  return asFuncionario?.id ?? null;
 }
 
 async function registrarAcaoAdmin(
@@ -1334,19 +1354,55 @@ router.get('/fadiga-checkin/historico', async (c) => {
     const dataInicio = c.req.query('data_inicio') || todayIso().slice(0, 8) + '01';
     const dataFim = c.req.query('data_fim') || todayIso();
 
-    const requestedFuncionario = c.req.query('funcionario_id');
+    const requestedFuncionario = (c.req.query('funcionario_id') || '').trim();
+    const search = (c.req.query('search') || c.req.query('q') || '').trim().slice(0, 120);
     const canSeeAll = isManagerPlus(c);
-    const targetFuncionarioId =
-      canSeeAll && requestedFuncionario ? Number(requestedFuncionario) : funcionarioId;
+    const whereClauses = [
+      'ch.empresa_id = ?',
+      'ch.deleted_at IS NULL',
+      'ch.data_checkin BETWEEN ? AND ?',
+    ];
+    const whereValues: Array<string | number> = [empresaId, dataInicio, dataFim];
+
+    if (!canSeeAll) {
+      whereClauses.push('ch.funcionario_id = ?');
+      whereValues.push(funcionarioId);
+    } else {
+      if (requestedFuncionario) {
+        const requestedFuncionarioId = Number(requestedFuncionario);
+        if (!Number.isInteger(requestedFuncionarioId) || requestedFuncionarioId <= 0) {
+          return c.json({ success: false, error: 'funcionario_id inválido' }, 400);
+        }
+        whereClauses.push('ch.funcionario_id = ?');
+        whereValues.push(requestedFuncionarioId);
+      }
+
+      if (search) {
+        const searchLower = `%${search.toLowerCase()}%`;
+        const searchAsFuncionarioId = Number(search);
+        if (Number.isInteger(searchAsFuncionarioId) && searchAsFuncionarioId > 0) {
+          whereClauses.push('(ch.funcionario_id = ? OR LOWER(f.nome) LIKE ?)');
+          whereValues.push(searchAsFuncionarioId, searchLower);
+        } else {
+          whereClauses.push('LOWER(f.nome) LIKE ?');
+          whereValues.push(searchLower);
+        }
+      }
+    }
+
+    const whereSql = whereClauses.join('\n           AND ');
 
     const total = await c.env.DB.prepare(
       `SELECT COUNT(*) AS total
-         FROM frms_fadiga_checkin
-         WHERE empresa_id = ? AND deleted_at IS NULL
-           AND funcionario_id = ?
-           AND data_checkin BETWEEN ? AND ?`,
+         FROM frms_fadiga_checkin ch
+         JOIN funcionarios f
+           ON f.id = ch.funcionario_id
+          AND f.deleted_at IS NULL
+          AND COALESCE(f.ativo, 1) = 1
+          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+         WHERE ${whereSql}`,
     )
-      .bind(empresaId, targetFuncionarioId, dataInicio, dataFim)
+      .bind(...whereValues)
       .first<{ total: number }>();
 
     const rows = await c.env.DB.prepare(
@@ -1357,14 +1413,11 @@ router.get('/fadiga-checkin/historico', async (c) => {
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         WHERE ch.empresa_id = ?
-           AND ch.deleted_at IS NULL
-           AND ch.funcionario_id = ?
-           AND ch.data_checkin BETWEEN ? AND ?
+         WHERE ${whereSql}
          ORDER BY ch.data_checkin DESC, ch.created_at DESC
          LIMIT ? OFFSET ?`,
     )
-      .bind(empresaId, targetFuncionarioId, dataInicio, dataFim, limit, offset)
+      .bind(...whereValues, limit, offset)
       .all<Record<string, unknown>>();
 
     const resumo = await c.env.DB.prepare(
@@ -1377,13 +1430,15 @@ router.get('/fadiga-checkin/historico', async (c) => {
            SUM(CASE WHEN nivel_fadiga = 'AMARELO' THEN 1 ELSE 0 END) AS amarelo,
            SUM(CASE WHEN nivel_fadiga = 'LARANJA' THEN 1 ELSE 0 END) AS laranja,
            SUM(CASE WHEN nivel_fadiga = 'VERMELHO' THEN 1 ELSE 0 END) AS vermelho
-         FROM frms_fadiga_checkin
-         WHERE empresa_id = ?
-           AND deleted_at IS NULL
-           AND funcionario_id = ?
-           AND data_checkin BETWEEN ? AND ?`,
+         FROM frms_fadiga_checkin ch
+         JOIN funcionarios f
+           ON f.id = ch.funcionario_id
+          AND f.deleted_at IS NULL
+          AND COALESCE(f.ativo, 1) = 1
+          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+         WHERE ${whereSql}`,
     )
-      .bind(empresaId, targetFuncionarioId, dataInicio, dataFim)
+      .bind(...whereValues)
       .first<Record<string, number>>();
 
     return c.json({

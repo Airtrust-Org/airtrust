@@ -29,8 +29,9 @@ export default function FrmsFadigaHistorico() {
       limit: '200',
     };
     if (funcionarioId.trim()) base.funcionario_id = funcionarioId.trim();
+    if (searchTerm.trim()) base.search = searchTerm.trim();
     return base;
-  }, [fim, funcionarioId, inicio]);
+  }, [fim, funcionarioId, inicio, searchTerm]);
 
   const { data, loading, refetch } = useFrmsFadigaHistorico(filtros);
   const baseRows = Array.isArray(data)
@@ -41,13 +42,7 @@ export default function FrmsFadigaHistorico() {
         ? ((((data as { data?: { data?: unknown } }).data?.data as unknown[]) || []) as unknown[])
         : [];
 
-  const rows = baseRows.filter((item) => {
-    const row = item as Record<string, unknown>;
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase();
-    const nome = String(row.funcionario_nome || '').toLowerCase();
-    return nome.includes(q) || String(row.funcionario_id || '').includes(q);
-  });
+  const rows = baseRows;
 
   return (
     <AppLayout>
