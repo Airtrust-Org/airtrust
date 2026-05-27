@@ -134,6 +134,7 @@ export default function FrmsFadigaHistorico() {
                     <th className="px-2 py-2">Tripulante</th>
                     <th className="px-2 py-2">KSS</th>
                     <th className="px-2 py-2">Sono</th>
+                    <th className="px-2 py-2">Qualidade do sono</th>
                     <th className="px-2 py-2">Score</th>
                     <th className="px-2 py-2">Nível de alerta informado</th>
                     <th className="px-2 py-2">Status</th>
@@ -154,7 +155,10 @@ export default function FrmsFadigaHistorico() {
                       </td>
                       <td className="px-2 py-2">{row.kss_score}</td>
                       <td className="px-2 py-2">
-                        {row.horas_sono}h / {row.qualidade_sono}
+                        {row.horas_sono}h
+                      </td>
+                      <td className="px-2 py-2">
+                        {row.qualidade_sono}/5
                       </td>
                       <td className="px-2 py-2 font-semibold">{row.score_fadiga}</td>
                       <td className="px-2 py-2">{row.nivel_fadiga}</td>
