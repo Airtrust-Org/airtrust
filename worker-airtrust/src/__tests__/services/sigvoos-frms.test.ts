@@ -9,7 +9,9 @@ import {
   groupSigvoosRecordsByDay,
   normalizeSigvoosRecord,
   requireClearExistingEmpresaId,
+  shouldMergeDuplicataIntoManualEmpty,
   shouldClearExistingSigvoosData,
+  isJornadaOperacionalmenteVazia,
   shouldStopSigvoosPaging,
 } from '../../services/sigvoos-frms';
 
@@ -409,5 +411,109 @@ describe('sigvoos-frms service', () => {
       tempoNoturnoMin: 40,
       tempoIfrMin: 75,
     });
+  });
+
+  it('marks manual journey with null operational fields as empty', () => {
+    expect(
+      isJornadaOperacionalmenteVazia({
+        hora_apresentacao: null,
+        hora_termino: null,
+        horas_voo_minutos: null,
+        duracao_jornada_minutos: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('requests merge when duplicate points to manual empty journey and incoming has real data', () => {
+    const shouldMerge = shouldMergeDuplicataIntoManualEmpty({
+      existing: {
+        id: 'journey-1',
+        origem: 'MANUAL',
+        empresa_id: 6,
+        hora_apresentacao: null,
+        hora_termino: null,
+        horas_voo_minutos: null,
+        duracao_jornada_minutos: null,
+      },
+      incomingLine: {
+        dia: 25,
+        data: '2026-05-25',
+        status_fira: 'SIGVOOS',
+        status_frms: 'ES',
+        hora_apresentacao: '07:00',
+        hora_termino: '13:00',
+        duracao_jornada_min: 360,
+        horas_voo_min: 210,
+        local_base: 'SBJR',
+        situacao: 'DUPLICATA',
+        jornada_existente_id: 'journey-1',
+        marcado: true,
+      },
+      empresaId: 6,
+    });
+
+    expect(shouldMerge).toBe(true);
+  });
+
+  it('does not merge duplicate when existing journey already has operational data', () => {
+    const shouldMerge = shouldMergeDuplicataIntoManualEmpty({
+      existing: {
+        id: 'journey-2',
+        origem: 'MANUAL',
+        empresa_id: 6,
+        hora_apresentacao: '07:00',
+        hora_termino: null,
+        horas_voo_minutos: null,
+        duracao_jornada_minutos: null,
+      },
+      incomingLine: {
+        dia: 26,
+        data: '2026-05-26',
+        status_fira: 'SIGVOOS',
+        status_frms: 'ES',
+        hora_apresentacao: '07:00',
+        hora_termino: '13:00',
+        duracao_jornada_min: 360,
+        horas_voo_min: 210,
+        local_base: 'SBJR',
+        situacao: 'DUPLICATA',
+        jornada_existente_id: 'journey-2',
+        marcado: true,
+      },
+      empresaId: 6,
+    });
+
+    expect(shouldMerge).toBe(false);
+  });
+
+  it('does not merge duplicate when tenant conflicts', () => {
+    const shouldMerge = shouldMergeDuplicataIntoManualEmpty({
+      existing: {
+        id: 'journey-3',
+        origem: 'MANUAL',
+        empresa_id: 9,
+        hora_apresentacao: null,
+        hora_termino: null,
+        horas_voo_minutos: null,
+        duracao_jornada_minutos: null,
+      },
+      incomingLine: {
+        dia: 27,
+        data: '2026-05-27',
+        status_fira: 'SIGVOOS',
+        status_frms: 'ES',
+        hora_apresentacao: '07:00',
+        hora_termino: '13:00',
+        duracao_jornada_min: 360,
+        horas_voo_min: 210,
+        local_base: 'SBJR',
+        situacao: 'DUPLICATA',
+        jornada_existente_id: 'journey-3',
+        marcado: true,
+      },
+      empresaId: 6,
+    });
+
+    expect(shouldMerge).toBe(false);
   });
 });

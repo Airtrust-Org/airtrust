@@ -72,6 +72,7 @@ export function calcularPeriodoEmbarcadoPorFaixa(
 
 export interface SalvarJornadaInput {
   tripulante_id: string;
+  empresa_id?: number | null;
   data: string;
   status: string;
   hora_apresentacao?: string | null;
@@ -568,7 +569,7 @@ export async function salvarJornada(
   await db
     .prepare(
       `INSERT INTO frms_jornada (
-        id, tripulante_id, data, status,
+        id, tripulante_id, empresa_id, data, status,
         hora_apresentacao, hora_termino, duracao_jornada_minutos,
         horas_voo_minutos, hora_primeiro_acionamento, hora_primeira_decolagem,
         hora_ultimo_pouso, hora_corte_motor, hora_dormiu,
@@ -576,11 +577,12 @@ export async function salvarJornada(
         observacao, registrado_por, origem, local_base,
         tipo_base, tripulacao_aumentada, classe_cabine, aclimatado,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       id,
       input.tripulante_id,
+      input.empresa_id ?? null,
       input.data,
       input.status,
       input.hora_apresentacao ?? null,
@@ -703,7 +705,8 @@ export async function atualizarJornada(
         hora_primeiro_acionamento = ?, hora_primeira_decolagem = ?,
         hora_ultimo_pouso = ?, hora_corte_motor = ?, hora_dormiu = ?,
         repouso_plataforma_inicio = ?, repouso_plataforma_fim = ?,
-        repouso_plataforma_valido = ?, observacao = ?,
+        repouso_plataforma_valido = ?, observacao = ?, origem = ?, local_base = ?,
+        empresa_id = COALESCE(empresa_id, ?),
         tipo_base = ?, tripulacao_aumentada = ?, classe_cabine = ?, aclimatado = ?,
         updated_at = ?
        WHERE id = ? AND deleted_at IS NULL`,
@@ -723,6 +726,9 @@ export async function atualizarJornada(
       merged.repouso_plataforma_fim ?? null,
       merged.repouso_plataforma_valido ?? 0,
       merged.observacao ?? null,
+      merged.origem ?? 'MANUAL',
+      merged.local_base ?? null,
+      input.empresa_id ?? null,
       merged.tipo_base ?? 'HOME',
       merged.tripulacao_aumentada ?? 0,
       merged.classe_cabine ?? null,

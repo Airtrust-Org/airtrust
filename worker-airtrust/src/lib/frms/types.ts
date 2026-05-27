@@ -55,6 +55,7 @@ export type StatusCiclo = (typeof STATUS_CICLO)[number];
 export interface FrmsJornada {
   id: string;
   tripulante_id: number;
+  empresa_id?: number | null;
   data: string; // YYYY-MM-DD
   status: FrmsStatus;
   hora_apresentacao: string | null;
