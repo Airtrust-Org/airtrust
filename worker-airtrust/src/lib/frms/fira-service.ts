@@ -86,6 +86,7 @@ function cloneArrayBuffer(buffer: ArrayBuffer): ArrayBuffer {
 
 interface JornadaExistenteParaMerge {
   id: string;
+  data: string;
   origem: string | null;
   empresa_id: number | null;
   hora_apresentacao: string | null;
@@ -771,16 +772,50 @@ export async function confirmarImportacaoFira(
       linha.jornada_existente_id || jornadasExistentesPorData.get(linha.data) || null,
   }));
 
+  const datasLinhasPreparadas = [
+    ...new Set(linhasPreparadas.map((item) => item.linha.data).filter(Boolean)),
+  ] as string[];
   const jornadaExistenteIds = [
     ...new Set(linhasPreparadas.map((item) => item.jornadaExistenteId).filter(Boolean)),
   ] as string[];
 
   const jornadasExistentesMap = new Map<string, JornadaExistenteParaMerge>();
+  const jornadasExistentesPorDataComDetalhe = new Map<string, JornadaExistenteParaMerge[]>();
+
+  if (datasLinhasPreparadas.length > 0) {
+    const placeholders = datasLinhasPreparadas.map(() => '?').join(', ');
+    const rowsByDate = await db
+      .prepare(
+        `SELECT id,
+                data,
+                origem,
+                empresa_id,
+                hora_apresentacao,
+                hora_termino,
+                horas_voo_minutos,
+                duracao_jornada_minutos
+           FROM frms_jornada
+          WHERE tripulante_id = ?
+            AND data IN (${placeholders})
+            AND deleted_at IS NULL`,
+      )
+      .bind(importacao.tripulante_id, ...datasLinhasPreparadas)
+      .all<JornadaExistenteParaMerge>();
+
+    for (const row of rowsByDate.results || []) {
+      const list = jornadasExistentesPorDataComDetalhe.get(row.data) || [];
+      list.push(row);
+      jornadasExistentesPorDataComDetalhe.set(row.data, list);
+      jornadasExistentesMap.set(String(row.id), row);
+    }
+  }
+
   if (jornadaExistenteIds.length > 0) {
     const placeholders = jornadaExistenteIds.map(() => '?').join(', ');
     const rows = await db
       .prepare(
         `SELECT id,
+                data,
                 origem,
                 empresa_id,
                 hora_apresentacao,
@@ -800,9 +835,16 @@ export async function confirmarImportacaoFira(
   }
 
   const linhasPreparadasComMerge = linhasPreparadas.map((item) => {
-    const jornadaExistente = item.jornadaExistenteId
+    const jornadaExistenteOriginal = item.jornadaExistenteId
       ? jornadasExistentesMap.get(String(item.jornadaExistenteId)) || null
       : null;
+    const hasDateMismatch =
+      Boolean(jornadaExistenteOriginal) && jornadaExistenteOriginal?.data !== item.linha.data;
+    const jornadaExistente =
+      hasDateMismatch
+        ? (jornadasExistentesPorDataComDetalhe.get(item.linha.data)?.[0] ?? null)
+        : jornadaExistenteOriginal;
+    const jornadaExistenteId = jornadaExistente?.id ?? null;
     const hasTenantConflict =
       empresaId !== undefined &&
       empresaId !== null &&
@@ -819,6 +861,8 @@ export async function confirmarImportacaoFira(
 
     return {
       ...item,
+      jornadaExistenteId,
+      hasDateMismatch,
       hasTenantConflict,
       shouldMerge,
     };
@@ -878,9 +922,16 @@ export async function confirmarImportacaoFira(
     forcarSubstituicao,
     jornadaExistenteId,
     shouldMerge,
+    hasDateMismatch,
     hasTenantConflict,
   } of linhasPreparadasComMerge) {
     try {
+      if (hasDateMismatch) {
+        errosDetalhes.push(
+          `Dia ${linha.dia} (${linha.data}): jornada duplicada apontada para outra data, usando jornada do mesmo dia`,
+        );
+      }
+
       if (hasTenantConflict) {
         erros++;
         errosDetalhes.push(
