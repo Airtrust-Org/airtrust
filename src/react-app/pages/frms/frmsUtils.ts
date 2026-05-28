@@ -2,7 +2,7 @@
 export type ConfigLimites = Partial<Record<string, number>> | null;
 
 // ============================================================
-// PAINEL A — Efetividade Cognitiva (Modelo SAFTE-FAST / ICAO Doc 9966)
+// PAINEL A — Índice estimado de efetividade (proxy local inspirado em modelos biomatemáticos)
 // ============================================================
 
 export function getEffectivenessColor(pct: number, config: ConfigLimites): string {
@@ -40,7 +40,7 @@ export function getEffectivenessLabel(pct: number, config: ConfigLimites): strin
   const amarelo = config?.EFFECTIV_AMARELO_MAX ?? 77;
   const vermelho = config?.EFFECTIV_VERMELHO_MAX ?? 65;
   if (pct >= verde) return 'Desempenho Pleno';
-  if (pct <= vermelho) return 'Fadiga Severa';
+  if (pct <= vermelho) return 'Efetividade severamente degradada';
   if (pct <= amarelo) return 'Início de Degradação';
   return 'Atenção';
 }
@@ -241,7 +241,7 @@ export function buildHeatmapLegend(
       { label: `≥ ${verde}% (Pleno)`, color: 'bg-teal-600' },
       { label: `${amarelo + 1}–${verde - 1}% (Atenção)`, color: 'bg-orange-400' },
       { label: `${vermelho + 1}–${amarelo}% (Degradação)`, color: 'bg-amber-400' },
-      { label: `≤ ${vermelho}% (Fadiga Severa)`, color: 'bg-rose-600' },
+      { label: `≤ ${vermelho}% (Degradação severa)`, color: 'bg-rose-600' },
       { label: 'Sem dado', color: 'bg-white border border-slate-300' },
     ];
   }

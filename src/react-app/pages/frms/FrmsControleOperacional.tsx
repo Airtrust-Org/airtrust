@@ -32,7 +32,7 @@ const ALERT_LABELS: Record<FrmsOperationalSnapshotAlertCode, string> = {
   SONO_ESTIMADO: 'Sono estimado',
   SONO_INSUFICIENTE: 'Sono insuficiente',
   KSS_ALTO: 'KSS alto',
-  EFETIVIDADE_BAIXA: 'Efetividade baixa',
+  EFETIVIDADE_BAIXA: 'Índice de efetividade baixo',
   JORNADA_SEM_FATORIZACAO: 'Sem fatorização',
   ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem jornada FRMS',
   JORNADA_FRMS_SEM_ESCALA: 'Jornada FRMS sem escala',
@@ -289,7 +289,7 @@ export default function FrmsControleOperacional() {
                     <th className="px-3 py-3 text-left">Sono</th>
                     <th className="px-3 py-3 text-left">Qualidade</th>
                     <th className="px-3 py-3 text-left">KSS</th>
-                    <th className="px-3 py-3 text-left">Efetividade</th>
+                    <th className="px-3 py-3 text-left">Índice de efetividade</th>
                     <th className="px-3 py-3 text-left">Status</th>
                     <th className="px-3 py-3 text-left">Alertas</th>
                     <th className="px-3 py-3 text-left">Fonte dos dados</th>

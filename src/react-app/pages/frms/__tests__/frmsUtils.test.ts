@@ -151,7 +151,7 @@ describe('getEffectivenessColor', () => {
     expect(getEffectivenessColor(66, cfg)).toBe('text-amber-700');
   });
 
-  it('65% → text-rose-700 (Fadiga Severa, boundary)', () => {
+  it('65% → text-rose-700 (Degradação severa, boundary)', () => {
     expect(getEffectivenessColor(65, cfg)).toBe('text-rose-700');
   });
 
@@ -175,7 +175,7 @@ describe('getEffectivenessHex', () => {
     expect(getEffectivenessHex(77, cfg)).toBe('#D97706');
   });
 
-  it('65% → #BE123C (rose, Fadiga Severa, boundary)', () => {
+  it('65% → #BE123C (rose, Degradação severa, boundary)', () => {
     expect(getEffectivenessHex(65, cfg)).toBe('#BE123C');
   });
 });
@@ -196,12 +196,12 @@ describe('getEffectivenessLabel', () => {
     expect(getEffectivenessLabel(77, cfg)).toBe('Início de Degradação');
   });
 
-  it('65% → Fadiga Severa (boundary)', () => {
-    expect(getEffectivenessLabel(65, cfg)).toBe('Fadiga Severa');
+  it('65% → Efetividade severamente degradada (boundary)', () => {
+    expect(getEffectivenessLabel(65, cfg)).toBe('Efetividade severamente degradada');
   });
 
-  it('0% → Fadiga Severa', () => {
-    expect(getEffectivenessLabel(0, cfg)).toBe('Fadiga Severa');
+  it('0% → Efetividade severamente degradada', () => {
+    expect(getEffectivenessLabel(0, cfg)).toBe('Efetividade severamente degradada');
   });
 });
 
@@ -234,8 +234,8 @@ describe('frmsUtils — limites customizados', () => {
     expect(getEffectivenessColor(95, custom)).toBe('text-teal-700');
   });
 
-  it('getEffectivenessLabel: 60% → Fadiga Severa com VERMELHO=60 (boundary)', () => {
-    expect(getEffectivenessLabel(60, custom)).toBe('Fadiga Severa');
+  it('getEffectivenessLabel: 60% → Efetividade severamente degradada com VERMELHO=60 (boundary)', () => {
+    expect(getEffectivenessLabel(60, custom)).toBe('Efetividade severamente degradada');
   });
 
   it('getEffectivenessLabel: 61% → Início de Degradação com VERMELHO=60', () => {

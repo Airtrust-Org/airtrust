@@ -1,8 +1,8 @@
 /**
- * FrmsEffectivenessTimeline — Curva de Efetividade Temporal (SAFTE-FAST)
+ * FrmsEffectivenessTimeline — Curva temporal do índice estimado de efetividade
  *
  * Exibe a curva de effectiveness ao longo do tempo para o tripulante selecionado.
- * Padrão ICAO Doc 9966 / SAFTE-FAST.
+ * Proxy local inspirado em referências ICAO e modelos biomatemáticos.
  */
 import { useState, useMemo, useEffect } from 'react';
 import {
@@ -295,7 +295,7 @@ export default function FrmsEffectivenessTimeline({
                 fill: '#D97706',
               }}
             />
-            {/* Linha de referência: Fadiga Severa */}
+            {/* Linha de referência: degradação severa */}
             <ReferenceLine
               y={vermelho}
               stroke="#DC2626"

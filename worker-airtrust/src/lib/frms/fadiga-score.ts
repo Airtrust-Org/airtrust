@@ -1,11 +1,11 @@
 export interface FadigaScoreInput {
   kss_score: number;
   horas_sono: number | null;
-  qualidade_sono: number;
+  qualidade_sono: number | null;
   sintomas_json: Record<string, number> | null;
   apto: number;
-  meds_ult_12h: number;
-  alcool_ult_12h: number;
+  meds_ult_12h: number | boolean | null;
+  alcool_ult_12h: number | boolean | null;
 }
 
 export interface FadigaScoreConfig {
@@ -81,7 +81,8 @@ function normalizeSonoDuracao(horasSono: number | null): number {
   return 1;
 }
 
-function normalizeQualidadeSono(qualidadeSono: number): number {
+function normalizeQualidadeSono(qualidadeSono: number | null): number {
+  if (qualidadeSono === null || Number.isNaN(qualidadeSono)) return 0;
   if (qualidadeSono >= 5) return 0;
   if (qualidadeSono === 4) return 0.2;
   if (qualidadeSono === 3) return 0.45;
@@ -113,8 +114,11 @@ export function calcularScoreFadiga(
       sintomasNorm * config.peso_sintomas) *
     100;
 
-  const bonusMeds = input.meds_ult_12h ? 8 : 0;
-  const bonusAlcool = input.alcool_ult_12h ? 15 : 0;
+  // Penalidades operacionais provisórias: não são valores cientificamente calibrados.
+  // Funcionam como proxy conservador de triagem e devem ser calibradas futuramente
+  // com dados reais e revisão científica.
+  const bonusMeds = input.meds_ult_12h === true || input.meds_ult_12h === 1 ? 8 : 0;
+  const bonusAlcool = input.alcool_ult_12h === true || input.alcool_ult_12h === 1 ? 15 : 0;
   let score = base + bonusMeds + bonusAlcool;
 
   if (input.apto === 0) {

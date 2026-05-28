@@ -447,12 +447,12 @@ export default function FrmsFichaTripulante() {
 
         {/* Effectiveness Panel (Painel A) + Compliance Cards (Painel B) */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {/* Painel A — Score de Efetividade */}
+          {/* Painel A — índice estimado de efetividade */}
           {acumulo?.effectiveness ? (
             <div className="md:col-span-1">
               {latestJornada?.processado_com_bug === 0 && (
                 <div className="mb-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-                  Dados recalculados com a fórmula corrigida de effectiveness FRMS.
+                  Dados recalculados com o índice estimado de efetividade FRMS.
                 </div>
               )}
               <FrmsEffectivenessPanel

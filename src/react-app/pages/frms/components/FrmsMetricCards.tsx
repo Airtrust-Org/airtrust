@@ -245,11 +245,11 @@ export default function FrmsMetricCards({
         <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)] xl:items-start">
           <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 dark:border-slate-700 dark:bg-slate-950/85">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Leitura biomatemática
+              Leitura estimada
             </p>
-            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">Efetividade Cognitiva</h2>
+            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">Índice de efetividade</h2>
             <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Mostra a degradação de performance sem misturar a lógica regulatória do compliance.
+              Proxy local de degradação operacional separado da lógica regulatória do compliance.
             </p>
             <span className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
               {effectivenessSemDados > 0

@@ -79,7 +79,63 @@ const FADIGA_OPCOES: { nivel: number; label: string; sublabel: string; risco?: '
 ];
 
 const FADIGA_TO_SUBJECTIVE: Record<number, number> = { 1: 1, 2: 3, 3: 5, 4: 8, 5: 10 };
-const FADIGA_TO_KSS: Record<number, number>        = { 1: 2, 2: 4, 3: 5, 4: 7, 5: 9 };
+
+const KSS_OPCOES = [
+  { value: 1, label: '1', hint: 'Extremamente alerta' },
+  { value: 2, label: '2', hint: 'Muito alerta' },
+  { value: 3, label: '3', hint: 'Alerta' },
+  { value: 4, label: '4', hint: 'Mais alerta que sonolento' },
+  { value: 5, label: '5', hint: 'Nem alerta nem sonolento' },
+  { value: 6, label: '6', hint: 'Alguns sinais de sonolência' },
+  { value: 7, label: '7', hint: 'Sonolento, sem esforço para ficar acordado' },
+  { value: 8, label: '8', hint: 'Sonolento, com esforço para ficar acordado' },
+  { value: 9, label: '9', hint: 'Muito sonolento' },
+];
+
+const QUALIDADE_SONO_OPCOES = [
+  { value: 1, label: '1', hint: 'Muito ruim' },
+  { value: 2, label: '2', hint: 'Ruim' },
+  { value: 3, label: '3', hint: 'Regular' },
+  { value: 4, label: '4', hint: 'Boa' },
+  { value: 5, label: '5', hint: 'Muito boa' },
+];
+
+type SintomaKey = 'sonolencia_diurna' | 'fadiga_fisica' | 'dificuldade_concentracao';
+type OptionalBinaryResponse = boolean | null;
+
+const SINTOMAS_OPCOES: { key: SintomaKey; label: string }[] = [
+  { key: 'sonolencia_diurna', label: 'Sonolência' },
+  { key: 'fadiga_fisica', label: 'Cansaço físico' },
+  { key: 'dificuldade_concentracao', label: 'Concentração reduzida' },
+];
+
+export function optionalBinaryResponseToPayload(value: OptionalBinaryResponse): boolean | null {
+  return value;
+}
+
+export function isFadigaCheckinSubmitReady(input: {
+  sonoOpcao: SonoOpcao | null;
+  wakeTime: string;
+  qualidadeSono: number | null;
+  kssScore: number | null;
+  fadigaNivel: number | null;
+  fitForDuty: boolean | null;
+  aceiteTermos: boolean;
+  aceitePrivacidade: boolean;
+  observacao: string;
+}): boolean {
+  return (
+    input.sonoOpcao !== null &&
+    input.wakeTime !== '' &&
+    input.qualidadeSono !== null &&
+    input.kssScore !== null &&
+    input.fadigaNivel !== null &&
+    input.fitForDuty !== null &&
+    input.aceiteTermos &&
+    input.aceitePrivacidade &&
+    !(input.fitForDuty === false && !input.observacao.trim())
+  );
+}
 
 // ── risco local estimado ──────────────────────────────────────────────────────
 
@@ -243,7 +299,16 @@ export default function FrmsCheckinFadiga() {
   const [sonoOpcao,         setSonoOpcao]         = useState<SonoOpcao | null>(null);
   const [sono48Opcao,       setSono48Opcao]       = useState<Sono48Opcao | null>(null);
   const [wakeTime,          setWakeTime]           = useState('');
+  const [qualidadeSono,     setQualidadeSono]      = useState<number | null>(null);
+  const [kssScore,          setKssScore]           = useState<number | null>(null);
   const [fadigaNivel,       setFadigaNivel]        = useState<number | null>(null);
+  const [medsUlt12h,        setMedsUlt12h]         = useState<OptionalBinaryResponse>(null);
+  const [alcoolUlt12h,      setAlcoolUlt12h]       = useState<OptionalBinaryResponse>(null);
+  const [sintomas,          setSintomas]           = useState<Record<SintomaKey, boolean>>({
+    sonolencia_diurna: false,
+    fadiga_fisica: false,
+    dificuldade_concentracao: false,
+  });
   const [fitForDuty,        setFitForDuty]         = useState<boolean | null>(null);
   const [observacao,        setObservacao]         = useState('');
   const [aceiteTermos,      setAceiteTermos]       = useState(false);
@@ -268,14 +333,17 @@ export default function FrmsCheckinFadiga() {
   const nivelLocal =
     riscoLocal >= 80 ? 'VERMELHO' : riscoLocal >= 60 ? 'LARANJA' : riscoLocal >= 40 ? 'AMARELO' : 'VERDE';
 
-  const canSubmit =
-    sonoOpcao   !== null &&
-    wakeTime    !== '' &&
-    fadigaNivel !== null &&
-    fitForDuty  !== null &&
-    aceiteTermos &&
-    aceitePrivacidade &&
-    !(fitForDuty === false && !observacao.trim());
+  const canSubmit = isFadigaCheckinSubmitReady({
+    sonoOpcao,
+    wakeTime,
+    qualidadeSono,
+    kssScore,
+    fadigaNivel,
+    fitForDuty,
+    aceiteTermos,
+    aceitePrivacidade,
+    observacao,
+  });
 
   const submit = async () => {
     if (!canSubmit) {
@@ -288,7 +356,13 @@ export default function FrmsCheckinFadiga() {
     }
 
     const subjectiveFatigueLevel = FADIGA_TO_SUBJECTIVE[fadigaNivel!];
-    const kssScore               = FADIGA_TO_KSS[fadigaNivel!];
+    const sintomasPayload = Object.entries(sintomas).reduce<Record<string, number>>(
+      (acc, [key, checked]) => {
+        if (checked) acc[key] = 2;
+        return acc;
+      },
+      {},
+    );
 
     try {
       const result = await submitMutation.mutateAsync({
@@ -298,9 +372,11 @@ export default function FrmsCheckinFadiga() {
         wake_time:      wakeTime,
         horas_sono_24h: sonoHoras!,
         horas_sono_48h: sonoHoras48 ?? undefined,
+        qualidade_sono: qualidadeSono!,
         subjective_fatigue_level: subjectiveFatigueLevel,
         sleepiness_level:         subjectiveFatigueLevel,
-        kss_score:                kssScore,
+        kss_score:                kssScore!,
+        sintomas: Object.keys(sintomasPayload).length > 0 ? sintomasPayload : undefined,
         fit_for_duty:             fitForDuty!,
         motivo_inaptidao:
           fitForDuty === false ? observacao.trim() : undefined,
@@ -308,8 +384,8 @@ export default function FrmsCheckinFadiga() {
           fitForDuty !== false && showObservacao && observacao.trim()
             ? observacao.trim()
             : undefined,
-        meds_ult_12h:       0,
-        alcool_ult_12h:     0,
+        meds_ult_12h:       optionalBinaryResponseToPayload(medsUlt12h),
+        alcool_ult_12h:     optionalBinaryResponseToPayload(alcoolUlt12h),
         aceite_termos:      true,
         aceite_privacidade: true,
       });
@@ -521,10 +597,74 @@ export default function FrmsCheckinFadiga() {
                   />
                 </FormCard>
 
-                {/* 4 — Alerta 1–5 */}
+                {/* 4 — Qualidade do sono */}
                 <FormCard
-                  label="Como está seu nível de alerta agora?"
-                  hint="Escolha a opção que melhor representa sua atenção e disposição neste momento"
+                  label="Qual foi a qualidade do seu sono?"
+                  hint="Escala 1–5 usada diretamente no score diário"
+                >
+                  <div className="grid grid-cols-5 gap-2">
+                    {QUALIDADE_SONO_OPCOES.map((op) => {
+                      const selected = qualidadeSono === op.value;
+                      return (
+                        <button
+                          key={op.value}
+                          type="button"
+                          onClick={() => setQualidadeSono(op.value)}
+                          className={`rounded-xl border px-3 py-2 text-center transition-all duration-150 active:scale-95 ${
+                            selected
+                              ? 'border-blue-400 bg-blue-100 text-blue-700 shadow-sm'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                          title={op.hint}
+                        >
+                          <span className="block text-sm font-semibold">{op.label}</span>
+                          <span className="block text-[10px] leading-tight text-slate-500">{op.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </FormCard>
+
+                {/* 5 — KSS real 1–9 */}
+                <FormCard
+                  label="Karolinska Sleepiness Scale (KSS)"
+                  hint="Escala real 1–9 de sonolência no momento do check-in"
+                >
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-9">
+                    {KSS_OPCOES.map((op) => {
+                      const selected = kssScore === op.value;
+                      return (
+                        <button
+                          key={op.value}
+                          type="button"
+                          onClick={() => setKssScore(op.value)}
+                          className={`rounded-xl border px-2 py-2 text-center transition-all duration-150 active:scale-95 ${
+                            selected
+                              ? op.value >= 8
+                                ? 'border-red-400 bg-red-100 text-red-700 shadow-sm'
+                                : op.value >= 7
+                                  ? 'border-amber-400 bg-amber-100 text-amber-700 shadow-sm'
+                                  : 'border-blue-400 bg-blue-100 text-blue-700 shadow-sm'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                          title={op.hint}
+                        >
+                          <span className="block text-sm font-semibold">{op.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {kssScore && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      {KSS_OPCOES.find((op) => op.value === kssScore)?.hint}
+                    </p>
+                  )}
+                </FormCard>
+
+                {/* 6 — Alerta 1–5 */}
+                <FormCard
+                  label="Como está seu nível subjetivo de fadiga agora?"
+                  hint="Escala operacional simples; não substitui a KSS 1–9"
                 >
                   <div className="space-y-2">
                     {FADIGA_OPCOES.map((op) => {
@@ -564,7 +704,89 @@ export default function FrmsCheckinFadiga() {
                   </div>
                 </FormCard>
 
-                {/* 5 — Condição segura */}
+                {/* 7 — Fatores recentes */}
+                <FormCard label="Houve algum fator relevante nas últimas 12h?">
+                  <p className="mb-3 text-xs text-slate-500">
+                    Resposta opcional. Se preferir não informar, o sistema tratará como dado ausente, não como resposta negativa.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-slate-500">Medicação com efeito sonolento</p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <button
+                          type="button"
+                          onClick={() => setMedsUlt12h(true)}
+                          className={`rounded-xl border px-2 py-2 text-sm font-semibold ${medsUlt12h === true ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMedsUlt12h(false)}
+                          className={`rounded-xl border px-2 py-2 text-sm font-semibold ${medsUlt12h === false ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                        >
+                          Não
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMedsUlt12h(null)}
+                          className={`rounded-xl border px-2 py-2 text-xs font-semibold sm:text-sm ${medsUlt12h === null ? 'border-slate-400 bg-slate-100 text-slate-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                        >
+                          Prefiro não informar
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-slate-500">Álcool nas últimas 12h</p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <button
+                          type="button"
+                          onClick={() => setAlcoolUlt12h(true)}
+                          className={`rounded-xl border px-2 py-2 text-sm font-semibold ${alcoolUlt12h === true ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAlcoolUlt12h(false)}
+                          className={`rounded-xl border px-2 py-2 text-sm font-semibold ${alcoolUlt12h === false ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                        >
+                          Não
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAlcoolUlt12h(null)}
+                          className={`rounded-xl border px-2 py-2 text-xs font-semibold sm:text-sm ${alcoolUlt12h === null ? 'border-slate-400 bg-slate-100 text-slate-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                        >
+                          Prefiro não informar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-medium text-slate-500">Sintomas atuais</p>
+                    <div className="flex flex-wrap gap-2">
+                      {SINTOMAS_OPCOES.map((op) => (
+                        <label
+                          key={op.key}
+                          className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={sintomas[op.key]}
+                            onChange={(e) =>
+                              setSintomas((prev) => ({ ...prev, [op.key]: e.target.checked }))
+                            }
+                            className="h-4 w-4 accent-blue-600"
+                          />
+                          {op.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </FormCard>
+
+                {/* 8 — Condição segura */}
                 <FormCard label="Você se sente em condições seguras para cumprir a escala de hoje?">
                   <div className="grid grid-cols-2 gap-3">
                     <button

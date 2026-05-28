@@ -164,7 +164,7 @@ export async function recalcularPipeline(
     diaDoCiclo: periodoEmbarcado?.dia ?? null,
   });
 
-  // 4b. Calcular Effectiveness (SAFTE-FAST)
+  // 4b. Calcular índice estimado de effectiveness (proxy local)
   const effectResult = calcEffectiveness(fatResult, limites, {
     hora_apresentacao: jornada.hora_apresentacao,
     hora_primeira_decolagem: jornada.hora_primeira_decolagem,

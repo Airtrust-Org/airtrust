@@ -44,14 +44,14 @@ type NormalizedCheckinInput = {
   horaAcordou: string;
   horasSono24h: number;
   horasSono48h: number | null;
-  qualidadeSono: number;
+  qualidadeSono: number | null;
   kssScore: number;
   subjectiveFatigueLevel: number | null;
   sleepinessLevel: number | null;
   apto: 0 | 1;
   motivoInaptidao: string | null;
-  medsUlt12h: 0 | 1;
-  alcoolUlt12h: 0 | 1;
+  medsUlt12h: 0 | 1 | null;
+  alcoolUlt12h: 0 | 1 | null;
   riscoAutoavaliado: number | null;
   jornadaInicioPrevista: string | null;
   observacoes: string | null;
@@ -62,6 +62,12 @@ type NormalizedCheckinInput = {
 
 function nowSql(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
+}
+
+function normalizeOptionalBinary(value: boolean | number | null | undefined): 0 | 1 | null {
+  if (value === true || value === 1) return 1;
+  if (value === false || value === 0) return 0;
+  return null;
 }
 
 function todayIso(): string {
@@ -302,14 +308,15 @@ function normalizeCheckinInput(input: CheckinCreateInput): NormalizedCheckinInpu
     horasSono24h,
     horasSono48h:
       typeof input.horas_sono_48h === 'number' ? clamp(input.horas_sono_48h, 0, 48) : null,
-    qualidadeSono: clamp(input.qualidade_sono ?? 3, 1, 5),
+    qualidadeSono:
+      typeof input.qualidade_sono === 'number' ? clamp(input.qualidade_sono, 1, 5) : null,
     kssScore,
     subjectiveFatigueLevel,
     sleepinessLevel,
     apto: aptoNormalizado,
     motivoInaptidao: input.motivo_inaptidao ?? null,
-    medsUlt12h: input.meds_ult_12h === 1 ? 1 : 0,
-    alcoolUlt12h: input.alcool_ult_12h === 1 ? 1 : 0,
+    medsUlt12h: normalizeOptionalBinary(input.meds_ult_12h),
+    alcoolUlt12h: normalizeOptionalBinary(input.alcool_ult_12h),
     riscoAutoavaliado,
     jornadaInicioPrevista: input.jornada_inicio_prevista ?? null,
     observacoes,
@@ -1040,6 +1047,10 @@ router.post('/fadiga-checkin', async (c) => {
     const checkinId = existing?.id || crypto.randomUUID();
     const horaCheckin = now.slice(11, 16);
     const sintomasJson = input.sintomas ? JSON.stringify(input.sintomas) : null;
+    // As colunas legadas são NOT NULL DEFAULT 0; null é mantido no cálculo e na resposta,
+    // mas persistido como 0 até existir source flag/migration para "não informado".
+    const medsUlt12hDb = input.medsUlt12h ?? 0;
+    const alcoolUlt12hDb = input.alcoolUlt12h ?? 0;
 
     if (existing?.id) {
       await c.env.DB.prepare(
@@ -1080,7 +1091,7 @@ router.post('/fadiga-checkin', async (c) => {
           horaCheckin,
           input.kssScore,
           input.horasSono24h,
-          input.qualidadeSono,
+          input.qualidadeSono ?? 3,
           sintomasJson,
           input.observacoes,
           scoreBase.score_fadiga,
@@ -1093,8 +1104,8 @@ router.post('/fadiga-checkin', async (c) => {
           input.jornadaInicioPrevista,
           null,
           null,
-          input.medsUlt12h,
-          input.alcoolUlt12h,
+          medsUlt12hDb,
+          alcoolUlt12hDb,
           input.riscoAutoavaliado,
           input.horasSono48h,
           wakeTime,
@@ -1131,7 +1142,7 @@ router.post('/fadiga-checkin', async (c) => {
           horaCheckin,
           input.kssScore,
           input.horasSono24h,
-          input.qualidadeSono,
+          input.qualidadeSono ?? 3,
           sintomasJson,
           input.observacoes,
           scoreBase.score_fadiga,
@@ -1145,8 +1156,8 @@ router.post('/fadiga-checkin', async (c) => {
           input.jornadaInicioPrevista,
           null,
           null,
-          input.medsUlt12h,
-          input.alcoolUlt12h,
+          medsUlt12hDb,
+          alcoolUlt12hDb,
           input.riscoAutoavaliado,
           input.horasSono48h,
           wakeTime,
@@ -1172,6 +1183,7 @@ router.post('/fadiga-checkin', async (c) => {
       dataCheckin,
       input.horasSono24h,
       empresaId,
+      input.horaAcordou,
     );
 
     const eventType = existing?.id ? 'CHECKIN_ATUALIZADO' : 'CHECKIN_CRIADO';
@@ -1295,7 +1307,7 @@ router.post('/fadiga-checkin', async (c) => {
           horas_sono: input.horasSono24h,
           horas_sono_48h: input.horasSono48h,
           wake_time: wakeTime,
-          qualidade_sono: input.qualidadeSono,
+          qualidade_sono: input.qualidadeSono ?? 3,
           sintomas_json: input.sintomas,
           observacoes: input.observacoes,
           score_fadiga: scoreBase.score_fadiga,
