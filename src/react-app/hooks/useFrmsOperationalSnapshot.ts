@@ -15,6 +15,33 @@ export type FrmsOperationalSnapshotAlertCode =
 
 export type FrmsOperationalSnapshotStatus = 'OK' | 'ATENCAO' | 'CRITICO' | 'INCOMPLETO';
 
+export type FrmsFortnightDataSource = 'REAL' | 'DERIVADO' | 'ESTIMADO' | 'AUSENTE' | 'INCOMPLETO';
+export type FrmsFortnightStatus = 'OK' | 'ATENCAO' | 'CRITICO' | 'INCOMPLETO';
+
+export interface FrmsFortnightIndicator {
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  dia_periodo: number | null;
+  total_dias_periodo: number | null;
+  dias_consecutivos_com_jornada: number | null;
+  dias_com_checkin_pendente: number | null;
+  dias_com_dado_estimado: number | null;
+  duty_time_periodo_min: number | null;
+  duty_time_168h_min: number | null;
+  horas_voo_periodo_min: number | null;
+  horas_voo_168h_min: number | null;
+  jornadas_periodo: number | null;
+  apresentacoes_antes_0600: number | null;
+  apresentacoes_antes_0700: number | null;
+  menor_descanso_entre_jornadas_min: number | null;
+  setores_periodo: number | null;
+  sit_periods_estimados: number | null;
+  fonte_periodo: FrmsFortnightDataSource;
+  status_quinzena: FrmsFortnightStatus;
+  alertas_quinzena: string[];
+  limitation_notes: string[];
+}
+
 export interface FrmsOperationalSnapshotItem {
   empresa_id: number;
   data_operacional: string;
@@ -52,6 +79,7 @@ export interface FrmsOperationalSnapshotItem {
   jornada_data_source: 'REAL' | 'MANUAL' | 'ESTIMADO' | 'AUSENTE' | 'INCONSISTENTE';
   jornada_origem: string | null;
   snapshot_status: FrmsOperationalSnapshotStatus;
+  fortnight_indicator: FrmsFortnightIndicator | null;
 
   alertas: FrmsOperationalSnapshotAlertCode[];
 }
@@ -66,6 +94,9 @@ export interface FrmsOperationalSnapshotSummary {
   dados_estimados: number;
   inconsistencias: number;
   sem_fatorizacao: number;
+  quinzena_incompleta: number;
+  quinzena_atencao: number;
+  quinzena_critica: number;
 }
 
 export interface FrmsOperationalSnapshotFilters {
@@ -104,6 +135,9 @@ const EMPTY_SUMMARY: FrmsOperationalSnapshotSummary = {
   dados_estimados: 0,
   inconsistencias: 0,
   sem_fatorizacao: 0,
+  quinzena_incompleta: 0,
+  quinzena_atencao: 0,
+  quinzena_critica: 0,
 };
 
 function buildSnapshotUrl(filters: FrmsOperationalSnapshotFilters): string {
@@ -151,7 +185,10 @@ export function useFrmsOperationalSnapshot(
       }
 
       setData(Array.isArray(payload.data) ? payload.data : []);
-      setSummary(payload.summary || EMPTY_SUMMARY);
+      setSummary({
+        ...EMPTY_SUMMARY,
+        ...(payload.summary || {}),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar snapshot operacional';
       if (

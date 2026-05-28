@@ -1,4 +1,8 @@
 import type { Origem } from './types';
+import {
+  buildFrmsFortnightIndicatorMap,
+  type FrmsFortnightIndicator,
+} from './fortnight-indicator';
 
 export type FrmsOperationalSnapshotAlertCode =
   | 'CHECKIN_PENDENTE'
@@ -51,6 +55,7 @@ export interface FrmsOperationalSnapshotItem {
   jornada_data_source: 'REAL' | 'MANUAL' | 'ESTIMADO' | 'AUSENTE' | 'INCONSISTENTE';
   jornada_origem: Origem | null;
   snapshot_status: FrmsOperationalSnapshotStatus;
+  fortnight_indicator: FrmsFortnightIndicator | null;
 
   alertas: FrmsOperationalSnapshotAlertCode[];
 }
@@ -65,6 +70,9 @@ export interface FrmsOperationalSnapshotSummary {
   dados_estimados: number;
   inconsistencias: number;
   sem_fatorizacao: number;
+  quinzena_incompleta: number;
+  quinzena_atencao: number;
+  quinzena_critica: number;
 }
 
 export interface FrmsOperationalSnapshotResult {
@@ -132,6 +140,8 @@ interface EffectivenessSnapshotRow {
   funcionario_id: number;
   effectiveness_pct: number | null;
   effectiveness_nivel: string | null;
+  dia_periodo_embarcado?: number | null;
+  total_dias_periodo?: number | null;
 }
 
 interface FuncionarioSnapshotRow {
@@ -210,6 +220,15 @@ function buildSummary(items: FrmsOperationalSnapshotItem[]): FrmsOperationalSnap
     ).length,
     inconsistencias: items.filter((item) => item.alertas.includes('DADO_INCONSISTENTE')).length,
     sem_fatorizacao: items.filter((item) => item.alertas.includes('JORNADA_SEM_FATORIZACAO')).length,
+    quinzena_incompleta: items.filter(
+      (item) => item.fortnight_indicator?.status_quinzena === 'INCOMPLETO',
+    ).length,
+    quinzena_atencao: items.filter(
+      (item) => item.fortnight_indicator?.status_quinzena === 'ATENCAO',
+    ).length,
+    quinzena_critica: items.filter(
+      (item) => item.fortnight_indicator?.status_quinzena === 'CRITICO',
+    ).length,
   };
 }
 
@@ -536,6 +555,7 @@ export function buildFrmsOperationalSnapshot(
       jornada_data_source: jornadaDataSource,
       jornada_origem: jornadaOrigem,
       snapshot_status: snapshotStatus,
+      fortnight_indicator: null,
 
       alertas: alertasUnicos,
     });
@@ -720,6 +740,8 @@ export async function listFrmsOperationalSnapshot(
              CAST(j.tripulante_id AS INTEGER) AS funcionario_id,
              fj.effectiveness_pct,
              fj.effectiveness_nivel,
+             fj.dia_periodo_embarcado,
+             fj.total_dias_periodo,
              ROW_NUMBER() OVER (
                PARTITION BY j.data, j.tripulante_id
                ORDER BY fj.created_at DESC, fj.id DESC
@@ -734,7 +756,13 @@ export async function listFrmsOperationalSnapshot(
              AND j.data >= ?
              AND j.data <= ?
          )
-         SELECT data_operacional, funcionario_id, effectiveness_pct, effectiveness_nivel
+         SELECT
+           data_operacional,
+           funcionario_id,
+           effectiveness_pct,
+           effectiveness_nivel,
+           dia_periodo_embarcado,
+           total_dias_periodo
          FROM ranked
          WHERE rn = 1`,
       )
@@ -774,7 +802,7 @@ export async function listFrmsOperationalSnapshot(
     funcionarios = result.results || [];
   }
 
-  return buildFrmsOperationalSnapshot({
+  const snapshot = buildFrmsOperationalSnapshot({
     empresaId: params.empresaId,
     rows: {
       escalas: escalasResult.results || [],
@@ -785,4 +813,55 @@ export async function listFrmsOperationalSnapshot(
     },
     filters: params.filters,
   });
+
+  const effectivenessByKey = new Map<string, EffectivenessSnapshotRow>();
+  for (const row of effectivenessResult.results || []) {
+    const key = `${row.data_operacional}::${Number(row.funcionario_id)}`;
+    effectivenessByKey.set(key, row);
+  }
+
+  const fortnightIndicatorMap = buildFrmsFortnightIndicatorMap({
+    items: snapshot.items.map((item) => {
+      const effectivenessRow = effectivenessByKey.get(
+        `${item.data_operacional}::${Number(item.funcionario_id)}`,
+      );
+      return {
+        data_operacional: item.data_operacional,
+        funcionario_id: item.funcionario_id,
+        snapshot_status: item.snapshot_status,
+        checkin_status: item.checkin_status,
+        sleep_data_source: item.sleep_data_source,
+        wake_data_source: item.wake_data_source,
+        jornada_data_source: item.jornada_data_source,
+        hora_apresentacao: item.hora_apresentacao,
+        hora_termino: item.hora_termino,
+        duracao_jornada_minutos: item.duracao_jornada_minutos,
+        horas_voo_minutos: item.horas_voo_minutos,
+        teve_jornada: item.teve_jornada,
+        dia_periodo_embarcado:
+          effectivenessRow?.dia_periodo_embarcado != null
+            ? Number(effectivenessRow.dia_periodo_embarcado)
+            : null,
+        total_dias_periodo:
+          effectivenessRow?.total_dias_periodo != null
+            ? Number(effectivenessRow.total_dias_periodo)
+            : null,
+      };
+    }),
+    windowStart: params.dataInicio,
+    windowEnd: params.dataFim,
+  });
+
+  const itemsWithFortnight = snapshot.items.map((item) => {
+    const key = `${item.data_operacional}::${item.funcionario_id}`;
+    return {
+      ...item,
+      fortnight_indicator: fortnightIndicatorMap.get(key) ?? null,
+    };
+  });
+
+  return {
+    items: itemsWithFortnight,
+    summary: buildSummary(itemsWithFortnight),
+  };
 }
