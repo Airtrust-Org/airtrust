@@ -97,6 +97,7 @@ import { assetsRouter } from './routes/assets';
 // FRMS (Flight & Rest Management System)
 import frmsRoutes from './routes/frms';
 import frmsFadigaCheckinRoutes from './routes/frms-fadiga-checkin';
+import frmsOperationalSnapshotRoutes from './routes/frms-operational-snapshot';
 // SGSO — Sistema de Gerenciamento de Segurança Operacional
 import sgsoRoutes from './routes/sgso';
 import sgsoNextGenRoutes from './routes/sgso-next-gen';
@@ -691,6 +692,8 @@ app.route('/api/frms', frmsRoutes);
 app.route('/api/frms', frmsFadigaAcumuladaRoutes);
 // FRMS — Check-in diário de fadiga + bridge FRAT
 app.route('/api/frms', frmsFadigaCheckinRoutes);
+// FRMS — Snapshot operacional diário (read-only)
+app.route('/api/frms', frmsOperationalSnapshotRoutes);
 
 // Caderneta de Horas de Voo
 app.route('/api/horas-voo', horasVooRoutes);
