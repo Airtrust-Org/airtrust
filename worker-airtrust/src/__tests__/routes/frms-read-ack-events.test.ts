@@ -32,10 +32,17 @@ interface StoredEvent {
   created_at: string;
 }
 
-function snapshotItem(funcionarioId = 10) {
+function snapshotItem(
+  funcionarioId = 10,
+  overrides?: Partial<{
+    data_operacional: string;
+    snapshot_status: 'OK' | 'ATENCAO' | 'CRITICO' | 'INCOMPLETO';
+    alertas: string[];
+  }>,
+) {
   return {
     empresa_id: 1,
-    data_operacional: '2026-05-28',
+    data_operacional: overrides?.data_operacional || '2026-05-28',
     funcionario_id: funcionarioId,
     tripulante_id: funcionarioId,
     nome: 'Max Monteiro',
@@ -65,9 +72,10 @@ function snapshotItem(funcionarioId = 10) {
     wake_data_source: 'ESTIMADO',
     jornada_data_source: 'INCONSISTENTE',
     jornada_origem: null,
-    snapshot_status: 'CRITICO',
+    snapshot_status: overrides?.snapshot_status || 'CRITICO',
     fortnight_indicator: { status_quinzena: 'INCOMPLETO' },
-    alertas: ['CHECKIN_PENDENTE', 'JORNADA_SEM_FATORIZACAO', 'DADO_INCONSISTENTE'],
+    alertas:
+      overrides?.alertas || ['CHECKIN_PENDENTE', 'JORNADA_SEM_FATORIZACAO', 'DADO_INCONSISTENTE'],
   };
 }
 
@@ -113,8 +121,27 @@ function createDb() {
               string,
               string,
             ];
-            const funcionarioId = query.includes('funcionario_id') ? Number(args[4]) : undefined;
-            const status = query.includes("$.status") ? String(args[funcionarioId ? 5 : 4]) : undefined;
+            let cursor = 4;
+            let funcionarioId: number | undefined;
+            let status: string | undefined;
+            let eventType: string | undefined;
+            let severity: string | undefined;
+
+            if (query.includes('funcionario_id')) {
+              funcionarioId = Number(args[cursor]);
+              cursor += 1;
+            }
+            if (query.includes("$.status")) {
+              status = String(args[cursor]);
+              cursor += 1;
+            }
+            if (query.includes("$.event_type")) {
+              eventType = String(args[cursor]);
+              cursor += 1;
+            }
+            if (query.includes("$.severity")) {
+              severity = String(args[cursor]);
+            }
 
             return {
               results: events.filter((event) => {
@@ -125,6 +152,8 @@ function createDb() {
                 }
                 if (funcionarioId && payload.funcionario_id !== funcionarioId) return false;
                 if (status && payload.status !== status) return false;
+                if (eventType && payload.event_type !== eventType) return false;
+                if (severity && payload.severity !== severity) return false;
                 return true;
               }),
             };
@@ -204,6 +233,140 @@ describe('FRMS D1 read/ack events', () => {
     expect(firstPayload.summary.inserted).toBe(4);
     expect(secondPayload.summary.inserted).toBe(0);
     expect(JSON.stringify(events)).not.toContain('apto_para_voo');
+  });
+
+  it('filtra por status PENDING, ACKED, ALL e STALE com summary de lifecycle', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    listSnapshotMock.mockResolvedValue({
+      items: [
+        snapshotItem(10, { data_operacional: today }),
+        snapshotItem(11, { data_operacional: tenDaysAgo }),
+      ],
+      summary: {},
+    });
+    const app = createApp();
+    const { db, events } = createDb();
+
+    await app.request(
+      '/frms/read-ack/events/generate',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-empresa-id': '1' },
+        body: JSON.stringify({ data_inicio: tenDaysAgo, data_fim: today }),
+      },
+      { DB: db } as unknown as Env,
+    );
+
+    const eventToAck = events.find(
+      (event) =>
+        event.tipo === 'FRMS_READ_ACK_EVENT' &&
+        event.id.includes('_CHECKIN_PENDENTE') &&
+        event.id.includes('_10_'),
+    );
+    expect(eventToAck?.id).toBeTruthy();
+
+    await app.request(
+      `/frms/read-ack/events/${encodeURIComponent(eventToAck!.id)}/ack`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-empresa-id': '1',
+          'x-user-id': '99',
+          'x-user-email': 'coord@airtrust.test',
+        },
+        body: JSON.stringify({ ack_note: 'Ciente' }),
+      },
+      { DB: db } as unknown as Env,
+    );
+
+    const pendingResp = await app.request(
+      `/frms/read-ack/events?data_inicio=${tenDaysAgo}&data_fim=${today}&status=PENDING`,
+      { method: 'GET', headers: { 'x-empresa-id': '1' } },
+      { DB: db } as unknown as Env,
+    );
+    const pendingPayload = (await pendingResp.json()) as { data: Array<{ lifecycle_status: string }> };
+    expect(pendingResp.status).toBe(200);
+    expect(pendingPayload.data.every((event) => event.lifecycle_status === 'PENDING')).toBe(true);
+
+    const ackedResp = await app.request(
+      `/frms/read-ack/events?data_inicio=${tenDaysAgo}&data_fim=${today}&status=ACKED`,
+      { method: 'GET', headers: { 'x-empresa-id': '1' } },
+      { DB: db } as unknown as Env,
+    );
+    const ackedPayload = (await ackedResp.json()) as { data: Array<{ lifecycle_status: string }> };
+    expect(ackedResp.status).toBe(200);
+    expect(ackedPayload.data.every((event) => event.lifecycle_status === 'ACKED')).toBe(true);
+
+    const staleResp = await app.request(
+      `/frms/read-ack/events?data_inicio=${tenDaysAgo}&data_fim=${today}&status=STALE`,
+      { method: 'GET', headers: { 'x-empresa-id': '1' } },
+      { DB: db } as unknown as Env,
+    );
+    const stalePayload = (await staleResp.json()) as {
+      data: Array<{ lifecycle_status: string }>;
+      summary: { stale: number };
+    };
+    expect(staleResp.status).toBe(200);
+    expect(stalePayload.data.every((event) => event.lifecycle_status === 'STALE')).toBe(true);
+    expect(stalePayload.summary.stale).toBeGreaterThan(0);
+
+    const allResp = await app.request(
+      `/frms/read-ack/events?data_inicio=${tenDaysAgo}&data_fim=${today}&status=ALL`,
+      { method: 'GET', headers: { 'x-empresa-id': '1' } },
+      { DB: db } as unknown as Env,
+    );
+    const allPayload = (await allResp.json()) as {
+      summary: { total: number; pending: number; acked: number; stale: number };
+    };
+    expect(allResp.status).toBe(200);
+    expect(allPayload.summary.total).toBeGreaterThan(0);
+    expect(allPayload.summary.pending + allPayload.summary.acked + allPayload.summary.stale).toBe(
+      allPayload.summary.total,
+    );
+  });
+
+  it('filtra por event_type e severity', async () => {
+    listSnapshotMock.mockResolvedValue({
+      items: [
+        snapshotItem(10, { snapshot_status: 'CRITICO' }),
+        snapshotItem(11, { snapshot_status: 'ATENCAO', alertas: ['CHECKIN_PENDENTE'] }),
+      ],
+      summary: {},
+    });
+    const app = createApp();
+    const { db } = createDb();
+
+    await app.request(
+      '/frms/read-ack/events/generate',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-empresa-id': '1' },
+        body: JSON.stringify({ data_inicio: '2026-05-28', data_fim: '2026-05-28' }),
+      },
+      { DB: db } as unknown as Env,
+    );
+
+    const byType = await app.request(
+      '/frms/read-ack/events?data_inicio=2026-05-28&data_fim=2026-05-28&status=ALL&event_type=CHECKIN_PENDENTE',
+      { method: 'GET', headers: { 'x-empresa-id': '1' } },
+      { DB: db } as unknown as Env,
+    );
+    const byTypePayload = (await byType.json()) as { data: Array<{ event_type: string }> };
+    expect(byType.status).toBe(200);
+    expect(byTypePayload.data.length).toBeGreaterThan(0);
+    expect(byTypePayload.data.every((event) => event.event_type === 'CHECKIN_PENDENTE')).toBe(true);
+
+    const bySeverity = await app.request(
+      '/frms/read-ack/events?data_inicio=2026-05-28&data_fim=2026-05-28&status=ALL&severity=CRITICO',
+      { method: 'GET', headers: { 'x-empresa-id': '1' } },
+      { DB: db } as unknown as Env,
+    );
+    const bySeverityPayload = (await bySeverity.json()) as { data: Array<{ severity: string }> };
+    expect(bySeverity.status).toBe(200);
+    expect(bySeverityPayload.data.length).toBeGreaterThan(0);
+    expect(bySeverityPayload.data.every((event) => event.severity === 'CRITICO')).toBe(true);
   });
 
   it('registra ciencia com usuario e trilha de auditoria sem chamar SGSO ou escala', async () => {
