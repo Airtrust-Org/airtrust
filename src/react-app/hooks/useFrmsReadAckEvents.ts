@@ -3,6 +3,8 @@ import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import type { FrmsOperationalSnapshotFilters } from './useFrmsOperationalSnapshot';
 
 export type FrmsReadAckEventStatus = 'PENDING' | 'ACKED';
+export type FrmsReadAckLifecycleStatus = FrmsReadAckEventStatus | 'STALE' | 'ARCHIVED_VIEW_ONLY';
+export type FrmsReadAckQueryStatus = 'PENDING' | 'ACKED' | 'ALL' | 'STALE';
 
 export interface FrmsReadAckEvent {
   id: string;
@@ -13,6 +15,7 @@ export interface FrmsReadAckEvent {
   event_type: string;
   severity: 'INFO' | 'ATENCAO' | 'CRITICO' | 'INCOMPLETO';
   status: FrmsReadAckEventStatus;
+  lifecycle_status?: FrmsReadAckLifecycleStatus;
   source: 'OPERATIONAL_SNAPSHOT';
   snapshot_status: string;
   snapshot_alertas: string[];
@@ -31,11 +34,21 @@ export interface FrmsReadAckEvent {
 
 export interface FrmsReadAckSummary {
   total: number;
+  displayed?: number;
   pending: number;
   acked: number;
+  stale?: number;
+  by_type?: Record<string, number>;
+  by_severity?: Record<string, number>;
   derived_from_snapshot?: number;
   inserted?: number;
   existing?: number;
+}
+
+export interface FrmsReadAckLifecycleFilters {
+  status?: FrmsReadAckQueryStatus;
+  event_type?: string;
+  severity?: string;
 }
 
 interface ReadAckApiResponse {
@@ -55,19 +68,30 @@ const EMPTY_SUMMARY: FrmsReadAckSummary = {
   total: 0,
   pending: 0,
   acked: 0,
+  stale: 0,
+  displayed: 0,
 };
 
-function buildEventsUrl(filters: FrmsOperationalSnapshotFilters): string {
+function buildEventsUrl(
+  filters: FrmsOperationalSnapshotFilters,
+  lifecycle: FrmsReadAckLifecycleFilters,
+): string {
   const params = new URLSearchParams({
     data_inicio: filters.data_inicio,
     data_fim: filters.data_fim,
+    status: lifecycle.status || 'ALL',
   });
 
   if (filters.funcionario_id?.trim()) params.set('funcionario_id', filters.funcionario_id.trim());
+  if (lifecycle.event_type?.trim()) params.set('event_type', lifecycle.event_type.trim());
+  if (lifecycle.severity?.trim()) params.set('severity', lifecycle.severity.trim());
   return `${API_BASE_URL}/frms/read-ack/events?${params.toString()}`;
 }
 
-export function useFrmsReadAckEvents(filters: FrmsOperationalSnapshotFilters) {
+export function useFrmsReadAckEvents(
+  filters: FrmsOperationalSnapshotFilters,
+  lifecycleFilters: FrmsReadAckLifecycleFilters = {},
+) {
   const [events, setEvents] = useState<FrmsReadAckEvent[]>([]);
   const [summary, setSummary] = useState<FrmsReadAckSummary>(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(false);
@@ -101,7 +125,9 @@ export function useFrmsReadAckEvents(filters: FrmsOperationalSnapshotFilters) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetchWithAuth(buildEventsUrl(filters), { method: 'GET' });
+      const response = await fetchWithAuth(buildEventsUrl(filters, lifecycleFilters), {
+        method: 'GET',
+      });
       const payload = (await response.json()) as ReadAckApiResponse;
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || `Erro ao carregar eventos D1 (HTTP ${response.status})`);
@@ -115,7 +141,14 @@ export function useFrmsReadAckEvents(filters: FrmsOperationalSnapshotFilters) {
     } finally {
       setLoading(false);
     }
-  }, [filters.data_fim, filters.data_inicio, filters.funcionario_id]);
+  }, [
+    filters.data_fim,
+    filters.data_inicio,
+    filters.funcionario_id,
+    lifecycleFilters.event_type,
+    lifecycleFilters.severity,
+    lifecycleFilters.status,
+  ]);
 
   const generateEvents = useCallback(async () => {
     setMutating(true);

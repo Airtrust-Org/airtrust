@@ -70,11 +70,18 @@ describe('useFrmsReadAckEvents', () => {
         aeronave: 'AW139',
         status: 'CRITICO',
         include_inconsistencies: true,
+      }, {
+        status: 'STALE',
+        event_type: 'CHECKIN_PENDENTE',
+        severity: 'CRITICO',
       }),
     );
 
     await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(1));
     expect(String(fetchWithAuthMock.mock.calls[0][0])).toContain('/frms/read-ack/events?');
+    expect(String(fetchWithAuthMock.mock.calls[0][0])).toContain('status=STALE');
+    expect(String(fetchWithAuthMock.mock.calls[0][0])).toContain('event_type=CHECKIN_PENDENTE');
+    expect(String(fetchWithAuthMock.mock.calls[0][0])).toContain('severity=CRITICO');
 
     await act(async () => {
       await result.current.generateEvents();

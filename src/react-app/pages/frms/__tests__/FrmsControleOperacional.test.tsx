@@ -62,6 +62,7 @@ function baseReadAckHookState() {
       total: 0,
       pending: 0,
       acked: 0,
+      stale: 0,
     },
     loading: false,
     mutating: false,
@@ -192,6 +193,7 @@ describe('FrmsControleOperacional', () => {
             event_type: 'CHECKIN_PENDENTE',
             severity: 'ATENCAO',
             status: 'PENDING',
+            lifecycle_status: 'PENDING',
             source: 'OPERATIONAL_SNAPSHOT',
             snapshot_status: 'ATENCAO',
             snapshot_alertas: ['CHECKIN_PENDENTE'],
@@ -216,11 +218,28 @@ describe('FrmsControleOperacional', () => {
     render(<FrmsControleOperacional />);
 
     expect(screen.getByText('Ciência operacional FRMS')).toBeInTheDocument();
-    expect(screen.getByText('Check-in pendente')).toBeInTheDocument();
+    expect(screen.getByText('Pendentes 1')).toBeInTheDocument();
+    expect(screen.getByText('Stale 0')).toBeInTheDocument();
+    expect(screen.getByText('Cientes 0')).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes('Ciencia nao e mitigacao')),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Check-in pendente').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByText('Registrar ciência'));
     expect(acknowledgeEvent).toHaveBeenCalledWith(
       'frms_read_ack_1_2026-05-28_10_CHECKIN_PENDENTE',
     );
+  });
+
+  it('renderiza filtros de lifecycle D2', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(buildHookState());
+    useFrmsReadAckEventsMock.mockReturnValue(buildReadAckHookState());
+
+    render(<FrmsControleOperacional />);
+
+    expect(screen.getAllByLabelText('Status').length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Tipo de evento')).toBeInTheDocument();
+    expect(screen.getByLabelText('Severidade')).toBeInTheDocument();
   });
 
   it('exibe erro de carregamento', () => {

@@ -12,7 +12,8 @@ Data: 2026-05-28
 | C3-E | Concluida | Lacuna de setores, trechos e sit periods documentada sem helper. |
 | C3-FINAL | Atual | Revisao de linguagem IA/resumo, labels residuais e prontidao para D. |
 | D0 | Concluida | Semantica decisoria legada neutralizada antes de D1. |
-| D1 | Implementada localmente | Read/ack operacional sem mitigacao, usando eventos derivados do snapshot. |
+| D1 | Concluida e publicada | Read/ack operacional sem mitigacao, usando eventos derivados do snapshot. |
+| D2 | Em implementacao | Governanca de lifecycle de eventos D1 (filtros/status/summary), sem mitigacao. |
 
 ## 2) O que foi corrigido ou consolidado
 
@@ -29,6 +30,7 @@ Data: 2026-05-28
 - Linguagem do resumo FRMS revisada para reduzir termos como diagnostico, modelo validado, recomendacao forte e decisao automatica.
 - Semantica decisoria legada neutralizada na D0.
 - Fluxo D1 de eventos read/ack implementado sem mitigation, sem score novo e sem threshold novo.
+- Lifecycle D2 definido com filtros de status, tipo e severidade, incluindo status derivado `STALE` sem escrita adicional.
 
 ## 3) O que o sistema pode afirmar hoje
 

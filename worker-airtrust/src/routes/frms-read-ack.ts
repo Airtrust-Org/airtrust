@@ -12,9 +12,15 @@ import {
   buildFrmsReadAckEventsFromSnapshot,
   FRMS_READ_ACK_ACK_KIND,
   FRMS_READ_ACK_EVENT_KIND,
+  FRMS_READ_ACK_QUERY_STATUSES,
+  lifecycleStatusOfReadAckEvent,
   parseFrmsReadAckEventPayload,
   sanitizeAckNote,
   type FrmsReadAckEvent,
+  type FrmsReadAckEventSeverity,
+  type FrmsReadAckEventType,
+  type FrmsReadAckLifecycleStatus,
+  type FrmsReadAckQueryStatus,
   type FrmsReadAckEventStatus,
 } from '../lib/frms/read-ack-events';
 
@@ -39,12 +45,20 @@ const querySchema = z
       .string()
       .optional()
       .transform((value) => {
-        if (!value) return undefined;
+        if (!value) return 'ALL';
         const normalized = value.trim().toUpperCase();
-        return normalized === 'PENDING' || normalized === 'ACKED'
-          ? (normalized as FrmsReadAckEventStatus)
-          : undefined;
+        return FRMS_READ_ACK_QUERY_STATUSES.includes(normalized as FrmsReadAckQueryStatus)
+          ? (normalized as FrmsReadAckQueryStatus)
+          : 'ALL';
       }),
+    event_type: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim().toUpperCase() || undefined),
+    severity: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim().toUpperCase() || undefined),
   })
   .refine((data) => data.data_fim >= data.data_inicio, {
     message: 'data_fim deve ser >= data_inicio',
@@ -165,6 +179,8 @@ async function listEvents(
     dataFim: string;
     funcionarioId?: number;
     status?: FrmsReadAckEventStatus;
+    eventType?: FrmsReadAckEventType;
+    severity?: FrmsReadAckEventSeverity;
   },
 ): Promise<FrmsReadAckEvent[]> {
   const conditions = [
@@ -190,6 +206,16 @@ async function listEvents(
     binds.push(params.status);
   }
 
+  if (params.eventType) {
+    conditions.push("json_extract(payload_json, '$.event_type') = ?");
+    binds.push(params.eventType);
+  }
+
+  if (params.severity) {
+    conditions.push("json_extract(payload_json, '$.severity') = ?");
+    binds.push(params.severity);
+  }
+
   const rows = await db
     .prepare(
       `SELECT id, payload_json, created_at
@@ -207,12 +233,83 @@ async function listEvents(
     .filter((event): event is FrmsReadAckEvent => event !== null);
 }
 
+function normalizeEventType(value?: string): FrmsReadAckEventType | undefined {
+  if (!value) return undefined;
+  const valid: FrmsReadAckEventType[] = [
+    'CHECKIN_PENDENTE',
+    'CHECKIN_CRITICO',
+    'DADO_ESTIMADO',
+    'DADO_INCONSISTENTE',
+    'JORNADA_SEM_FATORIZACAO',
+    'EFETIVIDADE_BAIXA',
+    'QUINZENA_INCOMPLETA',
+    'OUTRO_CONTEXTUAL',
+  ];
+  return valid.includes(value as FrmsReadAckEventType) ? (value as FrmsReadAckEventType) : undefined;
+}
+
+function normalizeSeverity(value?: string): FrmsReadAckEventSeverity | undefined {
+  if (!value) return undefined;
+  const valid: FrmsReadAckEventSeverity[] = ['INFO', 'ATENCAO', 'CRITICO', 'INCOMPLETO'];
+  return valid.includes(value as FrmsReadAckEventSeverity)
+    ? (value as FrmsReadAckEventSeverity)
+    : undefined;
+}
+
+function withLifecycleStatus(events: FrmsReadAckEvent[]): FrmsReadAckEvent[] {
+  const now = new Date();
+  return events.map((event) => ({
+    ...event,
+    lifecycle_status: lifecycleStatusOfReadAckEvent(event, now),
+  }));
+}
+
+function filterByLifecycleStatus(
+  events: FrmsReadAckEvent[],
+  status: FrmsReadAckQueryStatus,
+): FrmsReadAckEvent[] {
+  if (status === 'ALL') return events;
+  if (status === 'PENDING') {
+    return events.filter((event) => event.lifecycle_status === 'PENDING');
+  }
+  if (status === 'ACKED') {
+    return events.filter((event) => event.lifecycle_status === 'ACKED');
+  }
+  return events.filter((event) => event.lifecycle_status === 'STALE');
+}
+
+function buildSummary(events: FrmsReadAckEvent[], displayedCount: number) {
+  const summary = {
+    total: events.length,
+    displayed: displayedCount,
+    pending: 0,
+    acked: 0,
+    stale: 0,
+    by_type: {} as Record<string, number>,
+    by_severity: {} as Record<string, number>,
+  };
+
+  for (const event of events) {
+    const lifecycleStatus = event.lifecycle_status as FrmsReadAckLifecycleStatus | undefined;
+    if (lifecycleStatus === 'ACKED') summary.acked += 1;
+    else if (lifecycleStatus === 'STALE') summary.stale += 1;
+    else summary.pending += 1;
+
+    summary.by_type[event.event_type] = (summary.by_type[event.event_type] || 0) + 1;
+    summary.by_severity[event.severity] = (summary.by_severity[event.severity] || 0) + 1;
+  }
+
+  return summary;
+}
+
 router.get('/read-ack/events', async (c) => {
   const parsed = querySchema.safeParse({
     data_inicio: c.req.query('data_inicio'),
     data_fim: c.req.query('data_fim'),
     funcionario_id: c.req.query('funcionario_id'),
     status: c.req.query('status'),
+    event_type: c.req.query('event_type'),
+    severity: c.req.query('severity'),
   });
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.flatten(), code: 'VALIDATION_ERROR' }, 400);
@@ -226,22 +323,32 @@ router.get('/read-ack/events', async (c) => {
   );
   if (scopedFuncionarioId instanceof Response) return scopedFuncionarioId;
 
+  const eventType = normalizeEventType(parsed.data.event_type);
+  const severity = normalizeSeverity(parsed.data.severity);
+
+  const rawStatusForQuery =
+    parsed.data.status === 'ACKED' || parsed.data.status === 'PENDING'
+      ? (parsed.data.status as FrmsReadAckEventStatus)
+      : undefined;
+
   const events = await listEvents(c.env.DB, {
     empresaId,
     dataInicio: parsed.data.data_inicio,
     dataFim: parsed.data.data_fim,
     funcionarioId: scopedFuncionarioId,
-    status: parsed.data.status,
+    status: rawStatusForQuery,
+    eventType,
+    severity,
   });
+
+  const withLifecycle = withLifecycleStatus(events);
+  const filtered = filterByLifecycleStatus(withLifecycle, parsed.data.status);
+  const summary = buildSummary(withLifecycle, filtered.length);
 
   return c.json({
     success: true,
-    data: events,
-    summary: {
-      total: events.length,
-      pending: events.filter((event) => event.status === 'PENDING').length,
-      acked: events.filter((event) => event.status === 'ACKED').length,
-    },
+    data: filtered,
+    summary,
   });
 });
 

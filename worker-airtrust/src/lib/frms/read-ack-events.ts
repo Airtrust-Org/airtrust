@@ -16,6 +16,8 @@ export type FrmsReadAckEventType =
 
 export type FrmsReadAckEventSeverity = 'INFO' | 'ATENCAO' | 'CRITICO' | 'INCOMPLETO';
 export type FrmsReadAckEventStatus = 'PENDING' | 'ACKED';
+export type FrmsReadAckLifecycleStatus = FrmsReadAckEventStatus | 'STALE' | 'ARCHIVED_VIEW_ONLY';
+export type FrmsReadAckQueryStatus = 'PENDING' | 'ACKED' | 'ALL' | 'STALE';
 
 export interface FrmsReadAckEventPayload {
   schema_version: 1;
@@ -45,6 +47,7 @@ export interface FrmsReadAckEventPayload {
 export interface FrmsReadAckEvent extends FrmsReadAckEventPayload {
   id: string;
   stored_created_at: string;
+  lifecycle_status?: FrmsReadAckLifecycleStatus;
 }
 
 export const FRMS_READ_ACK_EVENT_KIND = 'FRMS_READ_ACK_EVENT';
@@ -55,6 +58,36 @@ export const FRMS_READ_ACK_LIMITATIONS = [
   'Nao e decisao automatica de aptidao, escala ou substituicao.',
   'Derivado do snapshot operacional FRMS e sujeito as fontes REAL/ESTIMADO/AUSENTE/INCONSISTENTE.',
 ];
+
+export const FRMS_READ_ACK_STALE_DAYS = 7;
+
+export const FRMS_READ_ACK_QUERY_STATUSES: readonly FrmsReadAckQueryStatus[] = [
+  'PENDING',
+  'ACKED',
+  'ALL',
+  'STALE',
+];
+
+export function isReadAckEventStale(
+  event: Pick<FrmsReadAckEvent, 'status' | 'data_operacional'>,
+  now = new Date(),
+  staleDays = FRMS_READ_ACK_STALE_DAYS,
+): boolean {
+  if (event.status !== 'PENDING') return false;
+  const dayStart = new Date(`${event.data_operacional}T00:00:00Z`);
+  if (Number.isNaN(dayStart.getTime())) return false;
+  const msThreshold = staleDays * 24 * 60 * 60 * 1000;
+  return now.getTime() - dayStart.getTime() > msThreshold;
+}
+
+export function lifecycleStatusOfReadAckEvent(
+  event: Pick<FrmsReadAckEvent, 'status' | 'data_operacional'>,
+  now = new Date(),
+  staleDays = FRMS_READ_ACK_STALE_DAYS,
+): FrmsReadAckLifecycleStatus {
+  if (event.status === 'ACKED') return 'ACKED';
+  return isReadAckEventStale(event, now, staleDays) ? 'STALE' : 'PENDING';
+}
 
 function slugPart(value: string): string {
   return value.replace(/[^A-Z0-9_:-]/gi, '_');

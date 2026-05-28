@@ -134,3 +134,14 @@ Opus continua obrigatorio antes de:
 - automatizar mitigacao;
 - classificar tripulante como apto/inapto;
 - conectar read/ack a qualquer consequencia operacional automatica.
+
+## 11) Evolucao D2
+
+A D2 adiciona governanca de lifecycle sem mudar a natureza do fluxo:
+
+- filtros `PENDING`, `ACKED`, `STALE`, `ALL`;
+- `STALE` derivado em runtime (sem escrita nova);
+- summary por tipo e severidade;
+- separacao visual entre pendentes e cientes.
+
+Referencia: `docs/FRMS_D2_READ_ACK_LIFECYCLE.md`.

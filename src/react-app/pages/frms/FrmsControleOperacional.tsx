@@ -2,7 +2,11 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
-import { useFrmsReadAckEvents, type FrmsReadAckEvent } from '@/react-app/hooks/useFrmsReadAckEvents';
+import {
+  useFrmsReadAckEvents,
+  type FrmsReadAckEvent,
+  type FrmsReadAckQueryStatus,
+} from '@/react-app/hooks/useFrmsReadAckEvents';
 import {
   type FrmsOperationalSnapshotAlertCode,
   type FrmsOperationalSnapshotFilters,
@@ -50,6 +54,32 @@ const READ_ACK_EVENT_LABELS: Record<string, string> = {
   QUINZENA_INCOMPLETA: 'Quinzena incompleta',
   OUTRO_CONTEXTUAL: 'Contexto operacional',
 };
+
+const READ_ACK_STATUS_OPTIONS: Array<{ value: FrmsReadAckQueryStatus; label: string }> = [
+  { value: 'PENDING', label: 'Pendentes' },
+  { value: 'ACKED', label: 'Cientes' },
+  { value: 'STALE', label: 'Antigos (stale)' },
+  { value: 'ALL', label: 'Todos' },
+];
+
+const READ_ACK_EVENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Todos os tipos' },
+  { value: 'CHECKIN_PENDENTE', label: 'Check-in pendente' },
+  { value: 'CHECKIN_CRITICO', label: 'Check-in critico' },
+  { value: 'DADO_ESTIMADO', label: 'Dado estimado' },
+  { value: 'DADO_INCONSISTENTE', label: 'Dado inconsistente' },
+  { value: 'JORNADA_SEM_FATORIZACAO', label: 'Jornada sem fatorizacao' },
+  { value: 'EFETIVIDADE_BAIXA', label: 'Indice de efetividade baixo' },
+  { value: 'OUTRO_CONTEXTUAL', label: 'Contexto operacional' },
+];
+
+const READ_ACK_SEVERITY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Todas as severidades' },
+  { value: 'INFO', label: 'INFO' },
+  { value: 'ATENCAO', label: 'ATENCAO' },
+  { value: 'CRITICO', label: 'CRITICO' },
+  { value: 'INCOMPLETO', label: 'INCOMPLETO' },
+];
 
 const SOURCE_BADGE_STYLES: Record<string, string> = {
   REAL: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -154,10 +184,28 @@ export default function FrmsControleOperacional() {
   });
 
   const [appliedFilters, setAppliedFilters] = useState<FrmsOperationalSnapshotFilters>(draft);
+  const [readAckStatus, setReadAckStatus] = useState<FrmsReadAckQueryStatus>('PENDING');
+  const [readAckEventType, setReadAckEventType] = useState('');
+  const [readAckSeverity, setReadAckSeverity] = useState('');
 
   const { data, summary, loading, error, unauthorized, refetch } =
     useFrmsOperationalSnapshot(appliedFilters);
-  const readAck = useFrmsReadAckEvents(appliedFilters);
+  const readAck = useFrmsReadAckEvents(appliedFilters, {
+    status: readAckStatus,
+    event_type: readAckEventType || undefined,
+    severity: readAckSeverity || undefined,
+  });
+
+  const groupedReadAckEvents = useMemo(() => {
+    const pending = readAck.events.filter((event) => event.lifecycle_status === 'PENDING');
+    const stale = readAck.events.filter((event) => event.lifecycle_status === 'STALE');
+    const acked = readAck.events.filter(
+      (event) =>
+        event.lifecycle_status === 'ACKED' ||
+        (!event.lifecycle_status && event.status === 'ACKED'),
+    );
+    return { pending, stale, acked };
+  }, [readAck.events]);
 
   const hasEstimatedData = useMemo(
     () =>
@@ -310,12 +358,15 @@ export default function FrmsControleOperacional() {
             <div>
               <h2 className="text-base font-semibold text-slate-900">Ciência operacional FRMS</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Eventos D1 derivados do snapshot. Registro de ciência, sem mitigação ou decisão automática.
+                Eventos D1 derivados do snapshot. Ciencia nao e mitigacao nem decisao automatica.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                 Pendentes {readAck.summary.pending}
+              </span>
+              <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                Stale {readAck.summary.stale || 0}
               </span>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                 Cientes {readAck.summary.acked}
@@ -327,6 +378,51 @@ export default function FrmsControleOperacional() {
                 Gerar eventos
               </Button>
             </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <label className="text-sm text-slate-700">
+              Status
+              <select
+                value={readAckStatus}
+                onChange={(e) => setReadAckStatus(e.target.value as FrmsReadAckQueryStatus)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                {READ_ACK_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-slate-700">
+              Tipo de evento
+              <select
+                value={readAckEventType}
+                onChange={(e) => setReadAckEventType(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                {READ_ACK_EVENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-slate-700">
+              Severidade
+              <select
+                value={readAckSeverity}
+                onChange={(e) => setReadAckSeverity(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                {READ_ACK_SEVERITY_OPTIONS.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {readAck.error && (
@@ -343,34 +439,34 @@ export default function FrmsControleOperacional() {
                 Nenhum evento D1 persistido para os filtros atuais.
               </div>
             ) : (
-              readAck.events.slice(0, 8).map((event) => (
-                <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
-                      >
-                        {event.severity}
-                      </span>
-                      <span className="text-sm font-semibold text-slate-900">
-                        {formatReadAckEventLabel(event)}
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Fonte: {event.source}; status snapshot {event.snapshot_status}; fontes sono/despertar/jornada:{' '}
-                      {event.sleep_data_source}/{event.wake_data_source}/{event.jornada_data_source}.
-                    </p>
+              <>
+                {groupedReadAckEvents.pending.length > 0 && (
+                  <div className="bg-amber-50/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    Pendentes
                   </div>
-                  <div className="flex items-center gap-2">
-                    {event.status === 'ACKED' ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Ciente
-                      </span>
-                    ) : (
+                )}
+                {groupedReadAckEvents.pending.map((event) => (
+                  <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
+                        >
+                          {event.severity}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-900">
+                          {formatReadAckEventLabel(event)}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Fonte: {event.source}; status snapshot {event.snapshot_status}; fontes sono/despertar/jornada:{' '}
+                        {event.sleep_data_source}/{event.wake_data_source}/{event.jornada_data_source}.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
                       <Button
                         size="sm"
                         variant="secondary"
@@ -379,10 +475,79 @@ export default function FrmsControleOperacional() {
                       >
                         Registrar ciência
                       </Button>
-                    )}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+
+                {groupedReadAckEvents.stale.length > 0 && (
+                  <div className="bg-violet-50/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-violet-700">
+                    Stale (fora da janela operacional)
+                  </div>
+                )}
+                {groupedReadAckEvents.stale.map((event) => (
+                  <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
+                        >
+                          {event.severity}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-900">
+                          {formatReadAckEventLabel(event)}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Evento antigo, mantido para trilha historica de ciencia. Fonte: {event.source}.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void readAck.acknowledgeEvent(event.id)}
+                        loading={readAck.mutating}
+                      >
+                        Registrar ciência
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                {groupedReadAckEvents.acked.length > 0 && (
+                  <div className="bg-emerald-50/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                    Cientes
+                  </div>
+                )}
+                {groupedReadAckEvents.acked.map((event) => (
+                  <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
+                        >
+                          {event.severity}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-900">
+                          {formatReadAckEventLabel(event)}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Ciente
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </div>
         </section>
