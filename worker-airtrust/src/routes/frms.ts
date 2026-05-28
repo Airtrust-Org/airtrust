@@ -799,7 +799,7 @@ async function buildFrmsDayExplanation(
   const explicacaoTecnica = [
     pct == null
       ? 'O modelo não retornou score suficiente para interpretar o dia.'
-      : `Score biomatemático na apresentação: ${pct.toFixed(1)}% (${faixa}).`,
+      : `Índice estimado de efetividade na apresentação: ${pct.toFixed(1)}% (${faixa}).`,
     fatorPrincipal
       ? `${fatorPrincipal.titulo} foi o maior impacto individual, com ${fatorPrincipal.impacto_pct.toFixed(1)} pontos percentuais sobre a efetividade.`
       : 'Nenhum fator isolado dominou o resultado; o score veio da combinação dos componentes.',
