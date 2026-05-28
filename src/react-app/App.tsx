@@ -182,6 +182,10 @@ const FrmsFadigaHistorico = lazyWithRetry(
   () => import('./pages/frms/FrmsFadigaHistorico'),
   'FrmsFadigaHistorico',
 );
+const FrmsControleOperacional = lazyWithRetry(
+  () => import('./pages/frms/FrmsControleOperacional'),
+  'FrmsControleOperacional',
+);
 const HorasVooPage = lazyWithRetry(() => import('./pages/HorasVooPage'), 'HorasVooPage');
 const SolicitacoesTreinamentoPage = lazyWithRetry(
   () => import('./pages/SolicitacoesTreinamentoPage'),
@@ -804,6 +808,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <FrmsFadigaHistorico />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/frms/controle-operacional"
+                      element={
+                        <ProtectedRoute>
+                          <FrmsControleOperacional />
                         </ProtectedRoute>
                       }
                     />
