@@ -635,6 +635,15 @@ function DashboardContent() {
                 </Button>
                 <Button
                   variant="secondary"
+                  onClick={() => navigate('/frms/controle-operacional')}
+                  className="hidden sm:inline-flex gap-2.5 px-4"
+                  title="Controle operacional"
+                >
+                  <Activity className="h-4 w-4 shrink-0" />
+                  <span>Controle Operacional</span>
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={() => navigate('/frms/fadiga-historico')}
                   className="hidden sm:inline-flex gap-2.5 px-4"
                   title="Histórico de check-ins"

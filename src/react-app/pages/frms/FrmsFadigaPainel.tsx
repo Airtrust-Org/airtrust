@@ -71,6 +71,9 @@ export default function FrmsFadigaPainel() {
           subtitle="Visão do gestor de risco diário, tendência e priorização operacional"
           actions={
             <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => navigate('/frms/controle-operacional')}>
+                Controle Operacional
+              </Button>
               <Button variant="secondary" onClick={() => navigate('/frms/checkin')}>
                 Fadiga Diária
               </Button>
