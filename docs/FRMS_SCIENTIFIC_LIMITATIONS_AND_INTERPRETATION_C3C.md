@@ -145,6 +145,7 @@
 ## 15. Roadmap recomendado
 
 - C3-D: indicador acumulado de quinzena offshore.
+- Documento C3-D: `docs/FRMS_OFFSHORE_FORTNIGHT_INDICATOR_C3D.md`.
 - C3-E: setores/trechos/sit periods no risco acumulado.
 - C3-F: revisao de IA/resumo com limites de recomendacao.
 - C3-G: source flags por campo (com migration dedicada).

@@ -91,6 +91,18 @@ function formatTripulante(item: FrmsOperationalSnapshotItem): string {
   return item.nome_guerra || item.nome || `#${item.funcionario_id}`;
 }
 
+function formatMinutesAsHours(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `${(value / 60).toFixed(1)}h`;
+}
+
+function toneByFortnightStatus(status: string | null | undefined): string {
+  if (status === 'CRITICO') return 'bg-red-50 text-red-700 border-red-200';
+  if (status === 'ATENCAO') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (status === 'INCOMPLETO') return 'bg-violet-50 text-violet-700 border-violet-200';
+  return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+}
+
 function SnapshotMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -264,6 +276,9 @@ export default function FrmsControleOperacional() {
           <SnapshotMetric label="Dados estimados" value={summary.dados_estimados} />
           <SnapshotMetric label="Inconsistências" value={summary.inconsistencias} />
           <SnapshotMetric label="Sem fatorização" value={summary.sem_fatorizacao} />
+          <SnapshotMetric label="Quinzena incompleta" value={summary.quinzena_incompleta} />
+          <SnapshotMetric label="Quinzena atenção" value={summary.quinzena_atencao} />
+          <SnapshotMetric label="Quinzena crítica" value={summary.quinzena_critica} />
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-0 shadow-sm">
@@ -290,6 +305,7 @@ export default function FrmsControleOperacional() {
                     <th className="px-3 py-3 text-left">Qualidade</th>
                     <th className="px-3 py-3 text-left">KSS</th>
                     <th className="px-3 py-3 text-left">Índice de efetividade</th>
+                    <th className="px-3 py-3 text-left">Quinzena</th>
                     <th className="px-3 py-3 text-left">Status</th>
                     <th className="px-3 py-3 text-left">Alertas</th>
                     <th className="px-3 py-3 text-left">Fonte dos dados</th>
@@ -329,6 +345,32 @@ export default function FrmsControleOperacional() {
                         <div className="text-slate-700">{formatPercentage(item.effectiveness_pct)}</div>
                         {item.fatorizacao_status === 'AUSENTE' && item.teve_jornada && (
                           <div className="text-xs text-rose-700">Sem fatorização</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {item.fortnight_indicator ? (
+                          <div className="space-y-1">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByFortnightStatus(item.fortnight_indicator.status_quinzena)}`}
+                            >
+                              {item.fortnight_indicator.status_quinzena === 'ATENCAO'
+                                ? 'ATENÇÃO'
+                                : item.fortnight_indicator.status_quinzena}
+                            </span>
+                            <div className="text-xs text-slate-700">
+                              Dia {item.fortnight_indicator.dia_periodo ?? '—'}/
+                              {item.fortnight_indicator.total_dias_periodo ?? '—'}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              Jornadas: {item.fortnight_indicator.jornadas_periodo ?? '—'} · Duty:{' '}
+                              {formatMinutesAsHours(item.fortnight_indicator.duty_time_periodo_min)}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <SourceBadge value={item.fortnight_indicator.fonte_periodo} />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
                         )}
                       </td>
                       <td className="px-3 py-3">
