@@ -1,4 +1,6 @@
 import { calcularFatorRepouso, horasSonoParaMinutos } from './fadiga-score';
+import { carregarLimites } from './db-service-config';
+import { resolverFrmsConfig } from './frms-config';
 
 export interface SyncResult {
   sincronizado: boolean;
@@ -35,6 +37,7 @@ export async function sincronizarCheckinComFrms(
   dataCheckin: string,
   horasSono: number,
   empresaId: number,
+  wakeTimeReal?: string | null,
 ): Promise<SyncResult> {
   const jornada = await db
     .prepare(
@@ -127,8 +130,11 @@ export async function sincronizarCheckinComFrms(
     );
   }
 
+  const limites = await carregarLimites(db);
+  const cfgSono = resolverFrmsConfig(limites);
   const startMinutes = parseTimeToMinutes(jornada.hora_apresentacao ?? '00:00') ?? 0;
-  const wakeMinutes = startMinutes - 60;
+  const wakeMinutes =
+    parseTimeToMinutes(wakeTimeReal || '') ?? startMinutes - cfgSono.minutosAntesApresentacao;
   const sleepStartMinutes = wakeMinutes - duracaoSonoMin;
 
   await db
@@ -162,6 +168,11 @@ export async function sincronizarCheckinComFrms(
     effectiveness_anterior: effectivenessAnterior,
     effectiveness_nova: effectivenessNova,
     duracao_sono_min: duracaoSonoMin,
+    wake_time_source: wakeTimeReal ? 'CREW_REPORTED' : 'FALLBACK_APRESENTACAO_MINUS_CONFIG',
+    wake_time_fallback_minutos_antes_apresentacao: wakeTimeReal
+      ? null
+      : cfgSono.minutosAntesApresentacao,
+    wake_time_usado: minutesToTime(wakeMinutes),
   };
 
   const existingSyncEvent = await db

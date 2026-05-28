@@ -1808,7 +1808,7 @@ frmsRoutes.get(
 
 /**
  * GET /api/frms/tripulante/:id/jornadas
- * Retorna jornadas com effectiveness_pct para a curva temporal SAFTE-FAST
+ * Retorna jornadas com effectiveness_pct para a curva temporal do proxy local
  * Query: ?dias=30 (default 30, max 365)
  */
 frmsRoutes.get(

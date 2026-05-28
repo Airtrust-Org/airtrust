@@ -2,7 +2,7 @@
  * FrmsComponentesChart — Decomposição de Fatores de Fadiga (Radar)
  *
  * Exibe a contribuição de cada fator no score de efetividade.
- * Perfil de fadiga no estilo SAFTE-FAST.
+ * Perfil de fatores FRMS do proxy local.
  */
 import {
   RadarChart,

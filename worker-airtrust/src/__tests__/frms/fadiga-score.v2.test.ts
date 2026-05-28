@@ -111,6 +111,134 @@ describe('calcularScoreFadiga (modelo VERDE/AMARELO/LARANJA/VERMELHO)', () => {
 
     expect(comAlcool.score_fadiga - base.score_fadiga).toBe(15);
   });
+
+  it('não aplica penalidade quando medicação e álcool são null ou false', () => {
+    const base = calcularScoreFadiga(
+      {
+        kss_score: 5,
+        horas_sono: 6,
+        qualidade_sono: 3,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    const comNull = calcularScoreFadiga(
+      {
+        kss_score: 5,
+        horas_sono: 6,
+        qualidade_sono: 3,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: null,
+        alcool_ult_12h: null,
+      },
+      cfg,
+    );
+
+    const comFalse = calcularScoreFadiga(
+      {
+        kss_score: 5,
+        horas_sono: 6,
+        qualidade_sono: 3,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: false,
+        alcool_ult_12h: false,
+      },
+      cfg,
+    );
+
+    expect(comNull.componentes.bonus_meds).toBe(0);
+    expect(comNull.componentes.bonus_alcool).toBe(0);
+    expect(comNull.score_fadiga).toBe(base.score_fadiga);
+    expect(comFalse.componentes.bonus_meds).toBe(0);
+    expect(comFalse.componentes.bonus_alcool).toBe(0);
+    expect(comFalse.score_fadiga).toBe(base.score_fadiga);
+  });
+
+  it('aplica penalidade quando medicação e álcool são true', () => {
+    const out = calcularScoreFadiga(
+      {
+        kss_score: 5,
+        horas_sono: 6,
+        qualidade_sono: 3,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: true,
+        alcool_ult_12h: true,
+      },
+      cfg,
+    );
+
+    expect(out.componentes.bonus_meds).toBe(8);
+    expect(out.componentes.bonus_alcool).toBe(15);
+  });
+
+  it('qualidade_sono ausente não penaliza como qualidade regular default', () => {
+    const semQualidade = calcularScoreFadiga(
+      {
+        kss_score: 4,
+        horas_sono: 7,
+        qualidade_sono: null,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    const qualidadeRegular = calcularScoreFadiga(
+      {
+        kss_score: 4,
+        horas_sono: 7,
+        qualidade_sono: 3,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    expect(semQualidade.score_fadiga).toBeLessThan(qualidadeRegular.score_fadiga);
+  });
+
+  it('medicação sonolenta e sintomas informados aumentam o score', () => {
+    const base = calcularScoreFadiga(
+      {
+        kss_score: 4,
+        horas_sono: 7,
+        qualidade_sono: 4,
+        sintomas_json: null,
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    const comFatores = calcularScoreFadiga(
+      {
+        kss_score: 4,
+        horas_sono: 7,
+        qualidade_sono: 4,
+        sintomas_json: { sonolencia_diurna: 2, dificuldade_concentracao: 2 },
+        apto: 1,
+        meds_ult_12h: 1,
+        alcool_ult_12h: 0,
+      },
+      cfg,
+    );
+
+    expect(comFatores.componentes.bonus_meds).toBe(8);
+    expect(comFatores.componentes.sintomas_norm).toBeGreaterThan(0);
+    expect(comFatores.score_fadiga).toBeGreaterThan(base.score_fadiga);
+  });
 });
 
 describe('calcularHorasSono', () => {

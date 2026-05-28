@@ -36,8 +36,8 @@ export interface CheckinFormData {
   apto?: number;
   fit_for_duty?: boolean;
   motivo_inaptidao?: string;
-  meds_ult_12h?: number;
-  alcool_ult_12h?: number;
+  meds_ult_12h?: boolean | number | null;
+  alcool_ult_12h?: boolean | number | null;
   risco_autoavaliado?: number;
   free_text_notes?: string;
   observacoes?: string;

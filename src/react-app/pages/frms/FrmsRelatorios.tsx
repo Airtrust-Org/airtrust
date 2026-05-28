@@ -35,7 +35,7 @@ const TIPOS: { key: TipoRelatorio; label: string; desc: string; icon: typeof Bar
   },
   {
     key: 'mapa-fadiga',
-    label: 'Mapa de Fadiga',
+    label: 'Mapa FRMS',
     desc: 'Mapa de calor da fadiga dos últimos 90 dias para toda a frota',
     icon: BarChart3,
   },

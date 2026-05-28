@@ -420,15 +420,16 @@ function round4(n: number): number {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// EFFECTIVENESS (SAFTE-FAST / modelo biomatemático + sono offshore)
+// EFFECTIVENESS (proxy local inspirado em modelos biomatemáticos + sono offshore)
 // ────────────────────────────────────────────────────────────────────
 
 /**
  * Converte a fatorização da jornada em um score de Effectiveness (0–100%).
  *
- * Modelo calibrado para operação offshore com hotel:
- * - Fonte: ICAO Doc 9966, FAA AC 120-103A, SAFTE-FAST
- * - Pressupostos: despertar 90min antes apres., dormir 60min após lib., hotel 92%
+ * Modelo heurístico local para operação offshore:
+ * - Referências conceituais: ICAO Doc 9966, FAA AC 120-103A e literatura biomatemática.
+ * - Não é implementação validada de SAFTE-FAST proprietária.
+ * - Pressupostos: despertar configurável antes da apresentação e sono padrão quando ausente.
  */
 export function calcEffectiveness(
   fatorizacao: FatorizacaoResult,
@@ -721,7 +722,7 @@ export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingRe
   hvDia = calcHvRolling24h(dataReferencia, jornadasHistorico);
 
   const limite7min = limites.HV_7_DIAS_HORAS * 60;
-  const limite28min = limites.HV_MES_HORAS * 60; // janela 28d usa mesmo limite mensal (90h) — pct mostra aproximação ao limite, não ao limite RBAC 117 de 93h
+  const limite28min = limites.HV_28_DIAS_HORAS * 60;
   const limiteMesMin = limites.HV_MES_HORAS * 60; // Lei 13.475/2017: 90h/mês calendário
   const limite365min = limites.HV_365_DIAS_HORAS * 60;
   const limiteDiaMin = limites.HV_DIARIA_HORAS * 60;

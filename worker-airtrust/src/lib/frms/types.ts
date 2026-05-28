@@ -260,7 +260,7 @@ export interface LimitesMap {
   VISUAL_ATENCAO_PCT: number;
   VISUAL_CRITICO_PCT: number;
 
-  // ── Thresholds Científicos de Effectiveness (SAFTE-FAST — migration 0263) ──
+  // ── Thresholds visuais do índice estimado de effectiveness (proxy local) ──
   EFFECTIV_VERDE_MIN: number;
   EFFECTIV_AMARELO_MAX: number;
   EFFECTIV_VERMELHO_MAX: number;
@@ -356,7 +356,7 @@ export const LIMITES_DEFAULT: LimitesMap = {
   VISUAL_ATENCAO_PCT: 85,
   VISUAL_CRITICO_PCT: 95,
 
-  // Thresholds Científicos de Effectiveness (SAFTE-FAST)
+  // Thresholds visuais do índice estimado de effectiveness (proxy local)
   EFFECTIV_VERDE_MIN: 90,
   EFFECTIV_AMARELO_MAX: 77,
   EFFECTIV_VERMELHO_MAX: 65,
@@ -375,7 +375,7 @@ export const LIMITES_DEFAULT: LimitesMap = {
   HORAS_SONO_PADRAO: 8,
 };
 
-// ─── Effectiveness Result (SAFTE-FAST) ─────────────────────────────
+// ─── Effectiveness Result (proxy local) ────────────────────────────
 
 export type EffectivenessNivel = 'verde' | 'amarelo' | 'atencao' | 'vermelho';
 

@@ -43,7 +43,7 @@ describe('FrmsMetricCards', () => {
   it('displays labels on each card', () => {
     renderCards();
     expect(screen.getByText('Compliance Regulatório')).toBeDefined();
-    expect(screen.getByText('Efetividade Cognitiva')).toBeDefined();
+    expect(screen.getByText('Índice de efetividade')).toBeDefined();
     expect(screen.getByText('Normal')).toBeDefined();
     expect(screen.getAllByText('Atenção')).toHaveLength(2);
     expect(screen.getByText('Crítico')).toBeDefined();

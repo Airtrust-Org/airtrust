@@ -2,7 +2,7 @@
  * FrmsJornadaEffectivenessCard — Cards de Efetividade por Jornada
  *
  * Exibe indicadores de efetividade por jornada individual
- * no estilo Leon Crew Panel / SAFTE-FAST.
+ * no estilo Leon Crew Panel, usando proxy local de efetividade.
  */
 import type { FrmsEffectivenessJornadaRow } from '@/react-app/hooks/useFrms';
 import { getEffectivenessHex, getEffectivenessLabel } from '../frmsUtils';

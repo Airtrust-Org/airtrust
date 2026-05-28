@@ -11,6 +11,7 @@ import {
   calcDuracaoMinutos,
   calcDuracaoJornada,
   calcFatorizacao,
+  calcEffectiveness,
   calcAcumuloRolling,
   calcAcumuloMensal,
   calcFatorCicloEmbarcado,
@@ -173,6 +174,52 @@ describe('calcFatorizacao', () => {
   });
 });
 
+describe('calcEffectiveness wake fallback', () => {
+  it('usa MINUTOS_ANTES_APRESENTACAO para derivar hora de despertar', () => {
+    const jornada: FrmsJornada = {
+      id: 'effectiveness-fallback',
+      tripulante_id: 1,
+      data: '2026-03-15',
+      status: 'ES',
+      hora_apresentacao: '07:00',
+      hora_termino: '18:00',
+      horas_voo_minutos: 180,
+      duracao_jornada_minutos: 660,
+      hora_primeiro_acionamento: null,
+      hora_primeira_decolagem: null,
+      hora_ultimo_pouso: null,
+      hora_corte_motor: null,
+      repouso_plataforma_inicio: null,
+      repouso_plataforma_fim: null,
+      repouso_plataforma_valido: 0,
+      observacao: null,
+      registrado_por: 'test',
+      origem: 'MANUAL',
+      created_at: '',
+      updated_at: '',
+      deleted_at: null,
+      tipo_base: 'HOME',
+      tripulacao_aumentada: 0,
+      classe_cabine: null,
+      aclimatado: 1,
+      local_base: null,
+    };
+    const fatorizacao = calcFatorizacao({
+      jornada,
+      repousoAnteriorMin: 720,
+      limites: { ...limites, MINUTOS_ANTES_APRESENTACAO: 75 },
+      diasDoMes: 31,
+      diaDoCiclo: 1,
+    });
+
+    const result = calcEffectiveness(fatorizacao, { ...limites, MINUTOS_ANTES_APRESENTACAO: 75 }, {
+      hora_apresentacao: '07:00',
+    });
+
+    expect(result.hora_despertar).toBe('05:45');
+  });
+});
+
 // ────────────────────────────────────────────────────────────────────
 // calcAcumuloRolling
 // ────────────────────────────────────────────────────────────────────
@@ -296,8 +343,8 @@ describe('calcAcumuloRolling', () => {
     expect(result.hv_mes_calendario_min).toBe(3100);
     // Os percentuais DEVEM ser diferentes (isso é o bug P1 — se usasse hvMes em vez de hv28 seriam iguais)
     expect(result.pct_limite_28d).not.toBe(result.pct_limite_mes_calendario);
-    // pct_limite_28d deve basear-se em hv_28_dias_min (usa HV_MES_HORAS como limite)
-    const limite28min = (limites.HV_MES_HORAS as number) * 60;
+    // pct_limite_28d deve basear-se em hv_28_dias_min e no limite HV_28_DIAS_HORAS.
+    const limite28min = (limites.HV_28_DIAS_HORAS as number) * 60;
     const expectedPct28d = Math.round((2800 / limite28min) * 10000) / 100;
     expect(result.pct_limite_28d).toBeCloseTo(expectedPct28d, 0);
   });

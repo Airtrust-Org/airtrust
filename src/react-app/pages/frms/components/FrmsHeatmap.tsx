@@ -1,11 +1,11 @@
 /**
- * FrmsHeatmap — Heatmap de fadiga (CSS Grid, performático)
+ * FrmsHeatmap — Heatmap FRMS (CSS Grid, performático)
  *
  * Eixo Y: tripulantes (ordenados por severidade DESC)
  * Eixo X: dias do período selecionado
- * Células coloridas por nível de fadiga
+ * Células coloridas por compliance HV/jornada ou índice estimado de efetividade
  *
- * Dual-tab: [Compliance Regulatório] | [Efetividade SAFTE-FAST]
+ * Dual-tab: [Compliance Regulatório] | [Índice estimado de efetividade]
  */
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -294,7 +294,7 @@ export default function FrmsHeatmap({
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900" data-testid="frms-heatmap">
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-[0.16em] text-slate-600 dark:text-slate-200">
-          Mapa de Fadiga
+          Mapa FRMS
         </h3>
         <div className="flex h-40 flex-col items-center justify-center text-slate-400 dark:text-slate-500">
           <BarChart3 className="w-12 h-12 mb-2" />
@@ -327,11 +327,11 @@ export default function FrmsHeatmap({
             </span>
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-800 dark:text-slate-100">
-                Mapa de Fadiga
+                Mapa FRMS
               </h3>
               <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
                 {isMonthMode ? monthLabel(filters.mesReferencia) : `Últimos ${periodoNumDias} dias`}{' '}
-                · {heatmapData.length} tripulantes ordenados por severidade · compliance pela pior
+                · {heatmapData.length} tripulantes ordenados por severidade · compliance HV/jornada pela pior
                 janela (dia/7d/28d)
               </p>
             </div>
@@ -347,7 +347,7 @@ export default function FrmsHeatmap({
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100'
             }`}
           >
-            Compliance
+            Compliance HV/jornada
           </button>
           <button
             onClick={() => setActiveTab('effectiveness')}
@@ -357,7 +357,7 @@ export default function FrmsHeatmap({
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100'
             }`}
           >
-            Efetividade
+            Índice de efetividade
           </button>
         </div>
       </div>
@@ -528,7 +528,7 @@ export default function FrmsHeatmap({
                 ) : (
                   <>
                     <p>
-                      Fadiga (pior janela):{' '}
+                      Compliance HV/jornada (pior janela):{' '}
                       <span
                         className="font-semibold"
                         style={{ color: getComplianceHex(tooltip.pct, config) }}

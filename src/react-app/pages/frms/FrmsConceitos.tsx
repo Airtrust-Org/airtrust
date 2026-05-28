@@ -4,7 +4,7 @@
  * Explica de forma didática:
  *   - O que é FRMS
  *   - Como o Compliance Regulatório (%) é calculado
- *   - Como a Efetividade Cognitiva (%) é calculada
+ *   - Como o índice estimado de efetividade (%) é calculado
  *   - O que significam os alertas e thresholds
  */
 import { useNavigate } from 'react-router-dom';
@@ -346,13 +346,13 @@ export default function FrmsConceitos() {
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100">
               <Brain className="h-4 w-4 text-emerald-700" />
             </div>
-            <h2 className="text-lg font-bold text-slate-900">Painel A — Efetividade Cognitiva</h2>
+            <h2 className="text-lg font-bold text-slate-900">Painel A — Índice estimado de efetividade</h2>
           </div>
 
           <p className="text-sm text-slate-600 mb-2">
-            Baseado em modelo inspirado no <strong>SAFTE-FAST</strong> (Sleep, Activity, Fatigue and
-            Task Effectiveness), o sistema calcula um conjunto de <em>fatores de penalidade</em>{' '}
-            para cada jornada. Cada fator representa uma fonte de fadiga fisiológica ou operacional.
+            Baseado em proxy local inspirado em modelos biomatemáticos de fadiga, o sistema calcula
+            um conjunto de <em>fatores de penalidade</em> para cada jornada. Cada fator representa
+            uma fonte operacional associada a risco de fadiga, sem afirmar validação SAFTE-FAST.
           </p>
 
           <Formula>
@@ -517,7 +517,7 @@ export default function FrmsConceitos() {
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100">
               <BarChart3 className="h-4 w-4 text-indigo-600" />
             </div>
-            <h2 className="text-lg font-bold text-slate-900">Como ler o Mapa de Fadiga</h2>
+            <h2 className="text-lg font-bold text-slate-900">Como ler o Mapa FRMS</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-sm text-slate-600">
             <div>
@@ -647,8 +647,8 @@ export default function FrmsConceitos() {
               Systems Manual (2nd Ed.)
             </li>
             <li>
-              • <strong className="text-slate-200">SAFTE-FAST</strong> — Sleep, Activity, Fatigue
-              and Task Effectiveness Model (USAF Research Laboratory)
+              • <strong className="text-slate-200">Modelos biomatemáticos</strong> — referência
+              conceitual para degradação de efetividade, sem implementação proprietária validada
             </li>
             <li>
               • <strong className="text-slate-200">RBAC 117</strong> — Gerenciamento de Fadiga para
