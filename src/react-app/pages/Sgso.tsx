@@ -447,10 +447,10 @@ export default function Sgso() {
     const criticos = relatos.filter(
       (item) => item.tipo === 'ACIDENTE' || item.tipo === 'INCIDENTE',
     ).length;
-    const fadiga = relatos.filter(
+    const frmsContexto = relatos.filter(
       (item) => item.efetividade_cognitiva !== null && item.efetividade_cognitiva < 70,
     ).length;
-    return { total, abertos, criticos, fadiga };
+    return { total, abertos, criticos, frmsContexto };
   }, [relatos]);
 
   const relatosFiltrados = useMemo(() => {
@@ -707,9 +707,11 @@ export default function Sgso() {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
-                  <p className="text-xs uppercase tracking-wide text-orange-700">Fadiga &lt; 70%</p>
+                  <p className="text-xs uppercase tracking-wide text-orange-700">
+                    FRMS contexto &lt; 70%
+                  </p>
                   <p className="mt-1 text-2xl font-semibold text-orange-900">
-                    {relatosResumo.fadiga}
+                    {relatosResumo.frmsContexto}
                   </p>
                 </div>
               </div>
@@ -860,7 +862,7 @@ export default function Sgso() {
                                 {r.efetividade_cognitiva !== null &&
                                   r.efetividade_cognitiva < 70 && (
                                     <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
-                                      ⚠ Fadiga {r.efetividade_cognitiva.toFixed(0)}%
+                                      FRMS contexto {r.efetividade_cognitiva.toFixed(0)}%
                                     </span>
                                   )}
                               </div>
@@ -975,7 +977,7 @@ export default function Sgso() {
                     <div
                       className={`border rounded-xl p-4 ${(kpiSpi.resumo.efetividade_media ?? 100) < 65 ? 'bg-red-50 border-red-200' : (kpiSpi.resumo.efetividade_media ?? 100) < 75 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
                     >
-                      <p className="text-xs text-slate-500">Efetividade Cognitiva</p>
+                      <p className="text-xs text-slate-500">Índice FRMS estimado</p>
                       <p
                         className={`text-2xl font-bold mt-1 ${(kpiSpi.resumo.efetividade_media ?? 100) < 65 ? 'text-red-700' : 'text-slate-900'}`}
                       >

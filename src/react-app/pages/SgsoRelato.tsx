@@ -663,11 +663,11 @@ export default function SgsoRelato() {
               className={`border rounded-xl p-5 ${relato.efetividade_cognitiva < 70 ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-200'}`}
             >
               <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                Contexto de Fadiga (FRMS)
+                Contexto FRMS informativo
               </h3>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <p className="text-xs text-slate-500">Efetividade Cognitiva</p>
+                  <p className="text-xs text-slate-500">Índice FRMS estimado</p>
                   <p
                     className={`text-xl font-bold ${relato.efetividade_cognitiva < 65 ? 'text-red-700' : relato.efetividade_cognitiva < 80 ? 'text-amber-700' : 'text-green-700'}`}
                   >
@@ -675,7 +675,7 @@ export default function SgsoRelato() {
                   </p>
                   {relato.efetividade_cognitiva < 70 && (
                     <p className="text-xs text-orange-600 font-medium mt-0.5">
-                      ⚠ Abaixo do limiar (70%)
+                      Faixa informativa abaixo de 70%; não altera probabilidade automaticamente.
                     </p>
                   )}
                 </div>
@@ -728,7 +728,9 @@ export default function SgsoRelato() {
                       <p className="text-xs text-slate-500">Probabilidade</p>
                       <p className="text-2xl font-bold text-slate-800">{av.probabilidade}</p>
                       {av.elevado_por_fadiga === 1 && (
-                        <p className="text-xs text-orange-600 mt-0.5">↑ Elevado por fadiga</p>
+                        <p className="text-xs text-orange-600 mt-0.5">
+                          Ajuste legado por contexto FRMS
+                        </p>
                       )}
                     </div>
                     <div>
@@ -889,9 +891,9 @@ export default function SgsoRelato() {
               {relato.efetividade_cognitiva !== null && relato.efetividade_cognitiva < 70 && (
                 <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                   <p className="text-xs text-orange-700">
-                    ⚠ <strong>FRMS:</strong> Efetividade cognitiva do piloto era{' '}
-                    {relato.efetividade_cognitiva.toFixed(1)}% (&lt;70%). A probabilidade será
-                    automaticamente elevada em 1 nível conforme política de segurança.
+                    <strong>FRMS:</strong> índice estimado registrado em{' '}
+                    {relato.efetividade_cognitiva.toFixed(1)}% (&lt;70%). Este dado é contexto
+                    informativo; a probabilidade SGSO deve ser definida pelo avaliador.
                   </p>
                 </div>
               )}
@@ -934,7 +936,8 @@ export default function SgsoRelato() {
                           )}
                           {f.efetividade_cognitiva_capturada !== null && (
                             <p className="text-xs text-orange-600 mt-0.5">
-                              Efetividade cognitiva: {f.efetividade_cognitiva_capturada.toFixed(1)}%
+                              Índice FRMS estimado:{' '}
+                              {f.efetividade_cognitiva_capturada.toFixed(1)}%
                             </p>
                           )}
                         </div>

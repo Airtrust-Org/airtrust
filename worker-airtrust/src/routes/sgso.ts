@@ -71,13 +71,6 @@ function calcularNivelRisco(probabilidade: string, severidade: number): string {
   return 'BAIXO';
 }
 
-/** Eleva probabilidade em 1 nível por regra SGSO legada baseada no índice FRMS estimado. */
-function elevarProbabilidade(prob: string): string {
-  const ordem = ['E', 'D', 'C', 'B', 'A'];
-  const idx = ordem.indexOf(prob);
-  return idx < ordem.length - 1 ? ordem[idx + 1] : prob;
-}
-
 /** Gera número de protocolo sequencial: REL-AAAA-NNNN */
 async function gerarProtocolo(db: D1Database, empresaId: number): Promise<string> {
   const ano = new Date().getFullYear();
@@ -630,19 +623,18 @@ sgso.post('/relatos/:id/avaliacao-risco', async (c) => {
       );
     }
 
-    // Regra SGSO legada: ajuste automático baseado em índice FRMS estimado.
-    let probFinal = d.probabilidade;
-    let elevadoPorFadiga = 0;
-    let justificativaElevacao: string | null = null;
+    // D0: FRMS entra como contexto informativo. Nao altera probabilidade SGSO.
+    const probFinal = d.probabilidade;
     const efetividade = relato.efetividade_cognitiva;
-    if (efetividade !== null && efetividade < 70) {
-      const probAnterior = probFinal;
-      probFinal = elevarProbabilidade(probFinal) as 'A' | 'B' | 'C' | 'D' | 'E';
-      if (probFinal !== probAnterior) {
-        elevadoPorFadiga = 1;
-        justificativaElevacao = `Probabilidade ajustada automaticamente de ${probAnterior} para ${probFinal} por regra SGSO legada baseada no índice FRMS estimado (${efetividade.toFixed(1)}%) abaixo de 70%.`;
-      }
-    }
+    const frmsContextIndicator =
+      efetividade === null
+        ? null
+        : {
+            effectiveness_pct: Number(efetividade.toFixed(1)),
+            source: 'sgso_relatos.efetividade_cognitiva',
+            interpretation:
+              'Indicador FRMS estimado usado apenas como contexto informativo; nao altera probabilidade SGSO automaticamente.',
+          };
 
     const nivelRisco = calcularNivelRisco(probFinal, d.severidade);
     const ts = now();
@@ -687,9 +679,9 @@ sgso.post('/relatos/:id/avaliacao-risco', async (c) => {
         probFinal,
         d.severidade,
         nivelRiscoFinal,
-        elevadoPorFadiga ? d.probabilidade : null,
-        elevadoPorFadiga,
-        justificativaElevacao,
+        null,
+        0,
+        null,
         d.justificativa ?? null,
         uid,
         ts,
@@ -720,6 +712,7 @@ sgso.post('/relatos/:id/avaliacao-risco', async (c) => {
             probabilidade_final: probFinal,
             severidade: d.severidade,
             nivel_risco: nivelRiscoFinal,
+            frms_context_indicator: frmsContextIndicator,
           }),
           ts,
           ts,
@@ -734,8 +727,9 @@ sgso.post('/relatos/:id/avaliacao-risco', async (c) => {
           id: result.meta.last_row_id,
           nivel_risco: nivelRiscoFinal,
           probabilidade: probFinal,
-          elevado_por_fadiga: elevadoPorFadiga === 1,
-          justificativa_elevacao: justificativaElevacao,
+          elevado_por_fadiga: false,
+          justificativa_elevacao: null,
+          frms_context_indicator: frmsContextIndicator,
           perfil_id: perfil?.id ?? null,
           exige_aprovacao: (celula?.exige_aprovacao ?? 0) === 1,
         },
