@@ -11,6 +11,8 @@ Data: 2026-05-28
 | C3-D | Concluida | Indicador descritivo/read-only de quinzena offshore publicado. |
 | C3-E | Concluida | Lacuna de setores, trechos e sit periods documentada sem helper. |
 | C3-FINAL | Atual | Revisao de linguagem IA/resumo, labels residuais e prontidao para D. |
+| D0 | Concluida | Semantica decisoria legada neutralizada antes de D1. |
+| D1 | Implementada localmente | Read/ack operacional sem mitigacao, usando eventos derivados do snapshot. |
 
 ## 2) O que foi corrigido ou consolidado
 
@@ -25,6 +27,8 @@ Data: 2026-05-28
 - Indicador de quinzena offshore implementado como descritivo/read-only.
 - Lacuna de setores, trechos e sit periods documentada na C3-E.
 - Linguagem do resumo FRMS revisada para reduzir termos como diagnostico, modelo validado, recomendacao forte e decisao automatica.
+- Semantica decisoria legada neutralizada na D0.
+- Fluxo D1 de eventos read/ack implementado sem mitigation, sem score novo e sem threshold novo.
 
 ## 3) O que o sistema pode afirmar hoje
 
@@ -35,6 +39,7 @@ Data: 2026-05-28
 - O sistema apresenta compliance de horas de voo e jornada como indicador regulatorio.
 - O sistema apresenta indicador descritivo de quinzena offshore, sem score de risco proprio.
 - O sistema documenta que setores, trechos e sit periods ainda nao possuem fonte segmentada robusta ponta-a-ponta.
+- O sistema pode registrar ciencia operacional de eventos derivados do snapshot, sem registrar mitigacao.
 
 ## 4) O que o sistema nao pode afirmar hoje
 
@@ -68,7 +73,7 @@ Data: 2026-05-28
 
 Fase D completa ainda esta bloqueada para qualquer criterio automatico novo, mitigacao persistente ou uso de quinzena/setores como gatilho.
 
-Fase D1 pode avancar apenas como read/ack de eventos derivados do snapshot existente, com estas restricoes:
+Fase D1 fica limitada a read/ack de eventos derivados do snapshot existente, com estas restricoes:
 
 - Sem nova formula de risco.
 - Sem novo threshold cientifico.

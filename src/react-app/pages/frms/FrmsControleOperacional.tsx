@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, RefreshCw, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
+import { useFrmsReadAckEvents, type FrmsReadAckEvent } from '@/react-app/hooks/useFrmsReadAckEvents';
 import {
   type FrmsOperationalSnapshotAlertCode,
   type FrmsOperationalSnapshotFilters,
@@ -37,6 +38,17 @@ const ALERT_LABELS: Record<FrmsOperationalSnapshotAlertCode, string> = {
   ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem jornada FRMS',
   JORNADA_FRMS_SEM_ESCALA: 'Jornada FRMS sem escala',
   DADO_INCONSISTENTE: 'Dado inconsistente',
+};
+
+const READ_ACK_EVENT_LABELS: Record<string, string> = {
+  CHECKIN_PENDENTE: 'Check-in pendente',
+  CHECKIN_CRITICO: 'Check-in critico',
+  DADO_ESTIMADO: 'Dado estimado',
+  DADO_INCONSISTENTE: 'Dado inconsistente',
+  JORNADA_SEM_FATORIZACAO: 'Jornada sem fatorizacao',
+  EFETIVIDADE_BAIXA: 'Indice de efetividade baixo',
+  QUINZENA_INCOMPLETA: 'Quinzena incompleta',
+  OUTRO_CONTEXTUAL: 'Contexto operacional',
 };
 
 const SOURCE_BADGE_STYLES: Record<string, string> = {
@@ -117,6 +129,17 @@ function SourceBadge({ value }: { value: string }) {
   return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${style}`}>{value}</span>;
 }
 
+function toneByReadAckSeverity(severity: FrmsReadAckEvent['severity']): string {
+  if (severity === 'CRITICO') return 'bg-red-50 text-red-700 border-red-200';
+  if (severity === 'ATENCAO') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (severity === 'INCOMPLETO') return 'bg-violet-50 text-violet-700 border-violet-200';
+  return 'bg-slate-100 text-slate-700 border-slate-200';
+}
+
+function formatReadAckEventLabel(event: FrmsReadAckEvent): string {
+  return READ_ACK_EVENT_LABELS[event.event_type] || event.event_type;
+}
+
 export default function FrmsControleOperacional() {
   const today = useMemo(() => getTodayLocalIsoDate(), []);
 
@@ -134,6 +157,7 @@ export default function FrmsControleOperacional() {
 
   const { data, summary, loading, error, unauthorized, refetch } =
     useFrmsOperationalSnapshot(appliedFilters);
+  const readAck = useFrmsReadAckEvents(appliedFilters);
 
   const hasEstimatedData = useMemo(
     () =>
@@ -279,6 +303,88 @@ export default function FrmsControleOperacional() {
           <SnapshotMetric label="Quinzena incompleta" value={summary.quinzena_incompleta} />
           <SnapshotMetric label="Quinzena atenção" value={summary.quinzena_atencao} />
           <SnapshotMetric label="Quinzena crítica" value={summary.quinzena_critica} />
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Ciência operacional FRMS</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Eventos D1 derivados do snapshot. Registro de ciência, sem mitigação ou decisão automática.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                Pendentes {readAck.summary.pending}
+              </span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Cientes {readAck.summary.acked}
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => void readAck.refetch()} disabled={readAck.loading}>
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button size="sm" onClick={() => void readAck.generateEvents()} loading={readAck.mutating}>
+                Gerar eventos
+              </Button>
+            </div>
+          </div>
+
+          {readAck.error && (
+            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {readAck.error}
+            </div>
+          )}
+
+          <div className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200">
+            {readAck.loading ? (
+              <div className="p-4 text-sm text-slate-500">Carregando eventos D1...</div>
+            ) : readAck.events.length === 0 ? (
+              <div className="p-4 text-sm text-slate-500">
+                Nenhum evento D1 persistido para os filtros atuais.
+              </div>
+            ) : (
+              readAck.events.slice(0, 8).map((event) => (
+                <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
+                      >
+                        {event.severity}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-900">
+                        {formatReadAckEventLabel(event)}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Fonte: {event.source}; status snapshot {event.snapshot_status}; fontes sono/despertar/jornada:{' '}
+                      {event.sleep_data_source}/{event.wake_data_source}/{event.jornada_data_source}.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {event.status === 'ACKED' ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Ciente
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void readAck.acknowledgeEvent(event.id)}
+                        loading={readAck.mutating}
+                      >
+                        Registrar ciência
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-0 shadow-sm">

@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import FrmsControleOperacional from '../FrmsControleOperacional';
 
 const useFrmsOperationalSnapshotMock = vi.fn();
+const useFrmsReadAckEventsMock = vi.fn();
 
 vi.mock('@/react-app/components/AppLayout', () => ({
   default: ({ children }: { children: any }) => <div>{children}</div>,
@@ -12,9 +13,20 @@ vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
   useFrmsOperationalSnapshot: (filters: unknown) => useFrmsOperationalSnapshotMock(filters),
 }));
 
+vi.mock('@/react-app/hooks/useFrmsReadAckEvents', () => ({
+  useFrmsReadAckEvents: (filters: unknown) => useFrmsReadAckEventsMock(filters),
+}));
+
 function buildHookState(overrides?: Partial<ReturnType<typeof baseHookState>>) {
   return {
     ...baseHookState(),
+    ...overrides,
+  };
+}
+
+function buildReadAckHookState(overrides?: Partial<ReturnType<typeof baseReadAckHookState>>) {
+  return {
+    ...baseReadAckHookState(),
     ...overrides,
   };
 }
@@ -43,9 +55,28 @@ function baseHookState() {
   };
 }
 
+function baseReadAckHookState() {
+  return {
+    events: [],
+    summary: {
+      total: 0,
+      pending: 0,
+      acked: 0,
+    },
+    loading: false,
+    mutating: false,
+    error: null,
+    refetch: vi.fn(),
+    generateEvents: vi.fn(),
+    acknowledgeEvent: vi.fn(),
+  };
+}
+
 describe('FrmsControleOperacional', () => {
   beforeEach(() => {
     useFrmsOperationalSnapshotMock.mockReset();
+    useFrmsReadAckEventsMock.mockReset();
+    useFrmsReadAckEventsMock.mockReturnValue(buildReadAckHookState());
   });
 
   it('renderiza KPIs e linha com alerta sem quebrar campos nulos', () => {
@@ -144,6 +175,52 @@ describe('FrmsControleOperacional', () => {
     render(<FrmsControleOperacional />);
 
     expect(screen.getByText('Nenhum dado para os filtros informados.')).toBeInTheDocument();
+  });
+
+  it('renderiza eventos D1 e permite registrar ciencia mockada', () => {
+    const acknowledgeEvent = vi.fn();
+    useFrmsOperationalSnapshotMock.mockReturnValue(buildHookState());
+    useFrmsReadAckEventsMock.mockReturnValue(
+      buildReadAckHookState({
+        events: [
+          {
+            id: 'frms_read_ack_1_2026-05-28_10_CHECKIN_PENDENTE',
+            empresa_id: 1,
+            data_operacional: '2026-05-28',
+            funcionario_id: 10,
+            funcionario_nome: 'Max',
+            event_type: 'CHECKIN_PENDENTE',
+            severity: 'ATENCAO',
+            status: 'PENDING',
+            source: 'OPERATIONAL_SNAPSHOT',
+            snapshot_status: 'ATENCAO',
+            snapshot_alertas: ['CHECKIN_PENDENTE'],
+            checkin_status: 'PENDENTE',
+            sleep_data_source: 'AUSENTE',
+            wake_data_source: 'AUSENTE',
+            jornada_data_source: 'REAL',
+            fortnight_status: null,
+            created_at: '2026-05-28T19:00:00Z',
+            acknowledged_at: null,
+            acknowledged_by: null,
+            acknowledged_by_name: null,
+            ack_note: null,
+            limitations: ['Evento operacional de leitura e ciencia; nao representa mitigacao.'],
+          },
+        ],
+        summary: { total: 1, pending: 1, acked: 0 },
+        acknowledgeEvent,
+      }),
+    );
+
+    render(<FrmsControleOperacional />);
+
+    expect(screen.getByText('Ciência operacional FRMS')).toBeInTheDocument();
+    expect(screen.getByText('Check-in pendente')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Registrar ciência'));
+    expect(acknowledgeEvent).toHaveBeenCalledWith(
+      'frms_read_ack_1_2026-05-28_10_CHECKIN_PENDENTE',
+    );
   });
 
   it('exibe erro de carregamento', () => {
