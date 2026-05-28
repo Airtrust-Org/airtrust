@@ -5,7 +5,7 @@
  *   - O que é FRMS
  *   - Como o Compliance Regulatório (%) é calculado
  *   - Como o índice estimado de efetividade (%) é calculado
- *   - O que significam os alertas e thresholds
+ *   - O que significam as faixas e thresholds configurados
  */
 import { useNavigate } from 'react-router-dom';
 import {
@@ -141,11 +141,13 @@ export default function FrmsConceitos() {
             <Activity className="h-3.5 w-3.5" />
             FRMS — Fatigue Risk Management System
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-3">Como o FRMS calcula fadiga</h1>
+          <h1 className="text-2xl font-bold text-slate-900 mb-3">
+            Como o FRMS organiza indicadores
+          </h1>
           <p className="text-base text-slate-500 max-w-2xl mx-auto">
-            O AirTrust monitora duas dimensões de fadiga em tempo real: o{' '}
+            O AirTrust monitora duas dimensões operacionais em tempo real: o{' '}
             <strong>cumprimento regulatório</strong> das jornadas e a{' '}
-            <strong>efetividade cognitiva</strong> estimada do tripulante.
+            <strong>efetividade estimada</strong> do tripulante.
           </p>
         </div>
 
@@ -169,13 +171,13 @@ export default function FrmsConceitos() {
             />
             <StepCard
               step="3"
-              title="Cálculo biomatemático"
-              description="A jornada recebe penalidades operacionais e circadianas, como horário de apresentação, repouso anterior, janela noturna e progressão embarcada."
+              title="Índice operacional estimado"
+              description="A jornada recebe penalidades operacionais e circadianas configuradas, como horário de apresentação, repouso anterior, janela noturna e progressão embarcada."
             />
             <StepCard
               step="4"
-              title="Classificação final"
-              description="O resultado é convertido em percentuais, enquadrado em faixas de severidade e exibido no heatmap, nos cards, nas fichas e nos alertas."
+              title="Faixa de leitura"
+              description="O resultado é convertido em percentuais, enquadrado em faixas de triagem e exibido no heatmap, nos cards e nas fichas."
             />
           </div>
         </Section>
@@ -199,8 +201,8 @@ export default function FrmsConceitos() {
               <span className="font-bold text-emerald-800">Painel A — Efetividade</span>
             </div>
             <p className="text-sm text-emerald-700">
-              Estima a <strong>capacidade cognitiva residual</strong> do tripulante após os fatores
-              de fadiga da jornada. Escala de 0% a 100%.
+              Estima um <strong>índice operacional de efetividade</strong> após os fatores da
+              jornada. Escala de 0% a 100%.
             </p>
             <p className="mt-2 text-xs text-emerald-700 font-medium">Quanto MAIOR, melhor.</p>
           </div>
@@ -350,9 +352,9 @@ export default function FrmsConceitos() {
           </div>
 
           <p className="text-sm text-slate-600 mb-2">
-            Baseado em proxy local inspirado em modelos biomatemáticos de fadiga, o sistema calcula
-            um conjunto de <em>fatores de penalidade</em> para cada jornada. Cada fator representa
-            uma fonte operacional associada a risco de fadiga, sem afirmar validação SAFTE-FAST.
+            Baseado em proxy local inspirado em referências biomatemáticas, o sistema calcula um
+            conjunto de <em>fatores de penalidade</em> para cada jornada. Cada fator representa uma
+            fonte operacional de atenção, sem afirmar validação SAFTE-FAST.
           </p>
 
           <Formula>
@@ -385,12 +387,14 @@ export default function FrmsConceitos() {
               </ul>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">O que ajuda no diagnóstico</p>
+              <p className="text-sm font-semibold text-slate-900">
+                O que ajuda na leitura operacional
+              </p>
               <ul className="mt-2 space-y-1 text-sm text-slate-600">
                 <li>Indicadores auxiliares de horas de voo</li>
                 <li>Fatores percentuais de leitura operacional</li>
                 <li>Detalhamento dos componentes na ficha do tripulante</li>
-                <li>Classificação de severidade por faixa</li>
+                <li>Faixa de triagem por percentual</li>
               </ul>
             </div>
           </div>
@@ -414,7 +418,7 @@ export default function FrmsConceitos() {
           </div>
 
           <p className="text-sm text-slate-600 mb-4">
-            Para diagnóstico, o sistema também grava indicadores como{' '}
+            Para explicação operacional, o sistema também grava indicadores como{' '}
             <strong>fator_basica_pct</strong> e fatores de HV. Eles ajudam a explicar a jornada, mas{' '}
             <strong>não entram</strong>
             diretamente na soma final da effectiveness.
@@ -440,19 +444,19 @@ export default function FrmsConceitos() {
             <FatorRow
               icon={RefreshCw}
               name="Repouso Anterior"
-              desc="Repouso insuficiente antes da jornada reduz a effectiveness. Quando há horários completos, o modelo ajusta esse fator pela estimativa de sono efetivo."
+              desc="Repouso insuficiente antes da jornada reduz a effectiveness. Quando há horários completos, o cálculo ajusta esse fator pela estimativa de sono efetivo."
               example="Repouso 8h → penalidade relevante"
             />
             <FatorRow
               icon={Moon}
               name="Operação Noturna — Decolagem"
-              desc="Decolagens na janela noturna operacional configurada ativam penalidade adicional. Esta janela operacional e diferente da WOCL fisiologica de despertar."
+              desc="Decolagens na janela noturna operacional configurada ativam penalidade adicional. Esta janela operacional é diferente da WOCL fisiológica de despertar."
               example="Decolagem 23h30 → fator noturno"
             />
             <FatorRow
               icon={Moon}
               name="Operação Noturna — Pouso"
-              desc="Pousos na mesma janela noturna operacional somam nova penalidade. A WOCL fisiologica (02h-06h) e aplicada no modelo de despertar/sono, separadamente."
+              desc="Pousos na mesma janela noturna operacional somam nova penalidade. A WOCL fisiológica (02h-06h) é aplicada no cálculo de despertar/sono, separadamente."
               example="Pouso 00h45 → fator noturno pouso"
             />
             <FatorRow
@@ -477,7 +481,7 @@ export default function FrmsConceitos() {
 
           {/* Alertas effectiveness */}
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-5 mb-3">
-            Níveis de efetividade cognitiva
+            Níveis do índice estimado de efetividade
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <NivelBadge
@@ -485,28 +489,28 @@ export default function FrmsConceitos() {
               bg="bg-emerald-50 border border-emerald-200"
               text="text-emerald-800"
               range="≥ 90%"
-              desc="Plenas condições cognitivas operacionais"
+              desc="Margem operacional estimada preservada"
             />
             <NivelBadge
               label="Moderada"
               bg="bg-sky-50 border border-sky-200"
               text="text-sky-800"
               range="77–90%"
-              desc="Leve degradação, monitorar padrão"
+              desc="Leve redução estimada, monitorar padrão"
             />
             <NivelBadge
               label="Degradada"
               bg="bg-amber-50 border border-amber-200"
               text="text-amber-800"
               range="65–77%"
-              desc="Redução mensurável de performance cognitiva"
+              desc="Redução estimada do índice operacional"
             />
             <NivelBadge
               label="Baixa"
               bg="bg-red-50 border border-red-200"
               text="text-red-800"
               range="< 65%"
-              desc="Fadiga severa — avaliar restrição operacional"
+              desc="Faixa baixa de triagem — verificar dados e contexto"
             />
           </div>
         </Section>
@@ -597,13 +601,12 @@ export default function FrmsConceitos() {
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-100">
               <AlertTriangle className="h-4 w-4 text-orange-600" />
             </div>
-            <h2 className="text-lg font-bold text-slate-900">Alertas e Notificações</h2>
+            <h2 className="text-lg font-bold text-slate-900">Faixas, notificações e histórico</h2>
           </div>
           <p className="text-sm text-slate-600 mb-4">
-            O sistema gera alertas automaticamente ao final de cada processamento de jornada. Os
-            alertas são persistidos em{' '}
-            <code className="bg-slate-100 px-1 rounded text-xs">frms_alerta</code> e podem ser
-            consultados no painel de alertas.
+            O sistema pode registrar eventos de acompanhamento ao final de cada processamento de
+            jornada. Esses registros apoiam triagem e histórico operacional, mas não equivalem a
+            decisão automática sobre o tripulante.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-sm">
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
@@ -615,19 +618,20 @@ export default function FrmsConceitos() {
             <div className="rounded-xl bg-orange-50 border border-orange-200 p-4">
               <p className="font-bold text-orange-800 mb-1">ATENÇÃO</p>
               <p className="text-xs text-orange-700">
-                Compliance entre 90–94%. Requer revisão ativa do planejamento de escala.
+                Compliance entre 90–94%. Requer conferência ativa do planejamento de escala.
               </p>
             </div>
             <div className="rounded-xl bg-orange-50 border border-orange-200 p-4">
               <p className="font-bold text-orange-800 mb-1">CRÍTICO</p>
               <p className="text-xs text-orange-700">
-                Compliance entre 95–100%. Zona crítica, ainda sem violação formal.
+                Compliance entre 95–100%. Zona crítica de compliance, ainda sem violação formal.
               </p>
             </div>
             <div className="rounded-xl bg-red-50 border border-red-200 p-4">
               <p className="font-bold text-red-800 mb-1">VIOLAÇÃO</p>
               <p className="text-xs text-red-700">
-                Compliance a partir de 101%. Limite regulatório excedido, com ação imediata.
+                Compliance a partir de 101%. Limite regulatório excedido, exigindo análise
+                operacional conforme procedimento da empresa.
               </p>
             </div>
           </div>

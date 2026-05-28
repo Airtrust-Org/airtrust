@@ -356,7 +356,7 @@ export default function FrmsDayExplanationPanel({
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                 <Clock3 className="h-3.5 w-3.5" />
-                Tempo Crítico
+                Tempo em Faixa de Atenção
               </div>
               <p className="mt-2 text-base font-semibold text-slate-900">
                 {formatMinutesCompact(data.jornada.tempo_abaixo_limiar_min)}
@@ -417,7 +417,7 @@ export default function FrmsDayExplanationPanel({
               className="inline-flex items-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black"
             >
               <FileText className="h-3.5 w-3.5" />
-              📄 Gerar justificativa
+              📄 Registrar justificativa
             </button>
           </div>
 
@@ -497,7 +497,7 @@ export default function FrmsDayExplanationPanel({
           <div className="flex items-center gap-2 text-slate-800">
             <Bot className="h-4 w-4" />
             <h5 className="text-sm font-semibold uppercase tracking-[0.16em]">
-              Explicação pela IA
+              Explicação estruturada
             </h5>
           </div>
           <div
@@ -510,12 +510,12 @@ export default function FrmsDayExplanationPanel({
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h5 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-800">
-            Fatores do Modelo
+            Fatores do índice
           </h5>
           {data.diagnostico.faixa === 'verde' ? (
             <p className="mt-2 text-xs text-slate-500">
-              Os impactos abaixo mostram contribuição de cada componente, mas não significam risco
-              operacional isolado quando o score final está em faixa verde.
+              Os impactos abaixo mostram contribuição de cada componente, mas não significam uma
+              conclusão operacional isolada quando o índice final está em faixa verde.
             </p>
           ) : null}
           <div className="mt-3 space-y-2.5">
@@ -539,12 +539,12 @@ export default function FrmsDayExplanationPanel({
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h5 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-800">
-            Recomendações Operacionais
+            Orientações de verificação
           </h5>
           <div className="mt-3 space-y-2.5">
             {data.diagnostico.recomendacoes.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                Sem recomendação adicional para este dia além do monitoramento normal.
+                Sem orientação adicional para este dia além do acompanhamento normal.
               </div>
             ) : (
               data.diagnostico.recomendacoes.map((recommendation) => (
@@ -687,7 +687,7 @@ export default function FrmsDayExplanationPanel({
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
                   <option>Manteve operação normalmente</option>
-                  <option>Aplicou mitigação (briefing reforçado)</option>
+                  <option>Registrou briefing reforçado</option>
                   <option>Substituiu o tripulante</option>
                   <option>Adiou / cancelou voo</option>
                   <option>Outro (especificar)</option>

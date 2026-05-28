@@ -462,7 +462,7 @@ sgsoKpi.get('/kpi/spi', async (c) => {
       },
       {
         codigo: 'COGNITIVO_ABAIXO_70_28D',
-        nome: 'Relatos com efetividade cognitiva < 70%',
+        nome: 'Relatos com índice FRMS estimado < 70%',
         valor_atual: relatosCognitivosBaixos28d?.total ?? 0,
         unidade: 'quantidade/28d',
         status:
@@ -510,7 +510,7 @@ sgsoKpi.get('/kpi/spi', async (c) => {
       ),
       calcTrend(
         'COGNITIVO_ABAIXO_70_28D',
-        'Relatos com efetividade cognitiva < 70% (28d)',
+        'Relatos com índice FRMS estimado < 70% (28d)',
         relatosCognitivosBaixos28d?.total ?? 0,
         relatosCognitivosBaixos28dAnterior?.total ?? 0,
         false,

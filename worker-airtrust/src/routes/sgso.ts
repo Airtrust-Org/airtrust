@@ -71,7 +71,7 @@ function calcularNivelRisco(probabilidade: string, severidade: number): string {
   return 'BAIXO';
 }
 
-/** Eleva probabilidade em 1 nível se fadiga abaixo de 70% */
+/** Eleva probabilidade em 1 nível por regra SGSO legada baseada no índice FRMS estimado. */
 function elevarProbabilidade(prob: string): string {
   const ordem = ['E', 'D', 'C', 'B', 'A'];
   const idx = ordem.indexOf(prob);
@@ -630,7 +630,7 @@ sgso.post('/relatos/:id/avaliacao-risco', async (c) => {
       );
     }
 
-    // Verificar elevação automática por fadiga
+    // Regra SGSO legada: ajuste automático baseado em índice FRMS estimado.
     let probFinal = d.probabilidade;
     let elevadoPorFadiga = 0;
     let justificativaElevacao: string | null = null;
@@ -640,7 +640,7 @@ sgso.post('/relatos/:id/avaliacao-risco', async (c) => {
       probFinal = elevarProbabilidade(probFinal) as 'A' | 'B' | 'C' | 'D' | 'E';
       if (probFinal !== probAnterior) {
         elevadoPorFadiga = 1;
-        justificativaElevacao = `Probabilidade elevada automaticamente de ${probAnterior} para ${probFinal} devido à efetividade cognitiva do piloto (${efetividade.toFixed(1)}%) estar abaixo de 70% conforme política FRMS.`;
+        justificativaElevacao = `Probabilidade ajustada automaticamente de ${probAnterior} para ${probFinal} por regra SGSO legada baseada no índice FRMS estimado (${efetividade.toFixed(1)}%) abaixo de 70%.`;
       }
     }
 
