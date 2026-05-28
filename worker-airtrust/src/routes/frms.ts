@@ -1150,6 +1150,8 @@ frmsRoutes.get(
     // Unificado com getFrmsOperationalState: critico = alertas CRITICO/VIOLACAO não resolvidos
     const frmsState = await getFrmsOperationalState(c.env.DB, funcionarioId);
     const nivel = frmsState.frms_status;
+    const statusTriagemOperacional =
+      nivel === 'critico' ? 'revisao_operacional' : nivel === 'atencao' ? 'acompanhar' : 'sem_achado';
 
     return c.json({
       success: true,
@@ -1159,6 +1161,14 @@ frmsRoutes.get(
         horasUltimos28d,
         scoreFadiga,
         nivel,
+        status_triagem_operacional: statusTriagemOperacional,
+        fit_for_duty_indicator: null,
+        interpretation_warning:
+          'Endpoint legado de triagem FRMS. O campo apto_para_voo e mantido apenas por compatibilidade e nao deve ser usado como decisao automatica de aptidao.',
+        legacy_fields: {
+          apto_para_voo:
+            'Campo legado derivado de alertas/estado FRMS. Use status_triagem_operacional para leitura informativa.',
+        },
         apto_para_voo: nivel !== 'critico',
       },
     });

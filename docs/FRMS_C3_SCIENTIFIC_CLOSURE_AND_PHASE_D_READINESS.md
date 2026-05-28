@@ -53,8 +53,8 @@ Data: 2026-05-28
 - Criterios de alerta persistente ainda precisam de revisao metodologica antes de virar gatilho formal.
 - Source flags por campo ainda sao necessarios quando uma regra depender da diferenca entre "nao informado", "nao aplicavel" e "resposta negativa".
 - Regra clara de ciencia, leitura, reconhecimento e trilha de auditoria ainda precisa ser fechada antes de qualquer mitigacao.
-- A rota SGSO ainda contem regra legada que ajusta probabilidade automaticamente quando o indice FRMS estimado fica abaixo de 70%. Essa regra nao foi removida nesta fase para evitar mudanca comportamental fora do escopo, mas deve ser revisada antes de qualquer expansao da Fase D.
-- A rota legada `/api/frms/score-atual/:funcionarioid` ainda expoe `apto_para_voo` derivado de estado FRMS. Essa semantica deve ser revisada antes de usar o endpoint em qualquer fluxo decisorio novo.
+- A rota SGSO legada que ajustava probabilidade automaticamente quando o indice FRMS estimado ficava abaixo de 70% foi neutralizada na D0; o indice permanece apenas como contexto informativo.
+- A rota legada `/api/frms/score-atual/:funcionarioid` ainda expoe `apto_para_voo` por compatibilidade, mas a D0 adicionou warning explicito e `status_triagem_operacional` para leitura informativa.
 
 ### Nao bloqueia D1 read/ack, desde que nao vire gatilho
 
@@ -77,7 +77,7 @@ Fase D1 pode avancar apenas como read/ack de eventos derivados do snapshot exist
 - Sem mitigacao automatica.
 - Sem decisao de retirada, substituicao ou aptidao automatica.
 - Com linguagem de indicador operacional e triagem.
-- Com revisao explicita das regras legadas SGSO/FRMS antes de conectar esses fluxos a qualquer alerta novo.
+- Sem reutilizar campos legados SGSO/FRMS como decisao automatica.
 
 ## 7) Quando usar Opus
 
