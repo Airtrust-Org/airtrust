@@ -570,8 +570,8 @@ function buildExplanationFactor(
     processo_s: {
       titulo: 'Ciclo embarcado',
       penaliza:
-        'o acúmulo de dias embarcado já está degradando a reserva fisiológica do tripulante',
-      favorece: 'o ciclo embarcado ainda não pressionou o modelo de forma relevante',
+        'o acúmulo de dias embarcado reduziu a margem operacional estimada do tripulante',
+      favorece: 'o ciclo embarcado ainda não pressionou o índice de forma relevante',
     },
     processo_c: {
       titulo: 'Janela circadiana',
@@ -580,8 +580,8 @@ function buildExplanationFactor(
     },
     repouso: {
       titulo: 'Repouso e sono',
-      penaliza: 'o descanso anterior não sustentou a recuperação esperada pelo modelo',
-      favorece: 'o descanso anterior ajudou a sustentar a efetividade',
+      penaliza: 'o descanso anterior informado reduziu a margem estimada de recuperação',
+      favorece: 'o descanso anterior informado ajudou a sustentar o índice estimado',
     },
     hv: {
       titulo: 'Acúmulo de horas de voo',
@@ -631,11 +631,11 @@ function buildFrmsRecommendations(
     recommendations.push({
       codigo: 'replanejar-dia-critico',
       prioridade: 'alta',
-      titulo: 'Reavaliar o dia operacional',
+      titulo: 'Verificar o dia operacional',
       descricao:
         tempoAbaixo > 0
-          ? `Há cerca de ${formatHoursAndMinutes(tempoAbaixo)} abaixo do limiar aceitável. Vale revisar escala, reserva ou mitigação específica para os trechos críticos.`
-          : 'A efetividade ficou em faixa vermelha. Vale revisar a composição da jornada e a exposição do tripulante neste dia.',
+          ? `Há cerca de ${formatHoursAndMinutes(tempoAbaixo)} abaixo do limiar configurado. A coordenação deve conferir a jornada, os dados de origem e a composição operacional do dia.`
+          : 'O índice estimado ficou em faixa vermelha. A coordenação deve conferir a composição da jornada e os dados disponíveis antes de qualquer ação.',
     });
   }
 
@@ -643,11 +643,11 @@ function buildFrmsRecommendations(
     recommendations.push({
       codigo: 'proteger-sono',
       prioridade: isCriticalBand ? 'alta' : isAttentionBand ? 'media' : 'baixa',
-      titulo: 'Proteger janela de sono antes da apresentação',
+      titulo: 'Verificar janela de sono antes da apresentação',
       descricao:
         isCriticalBand || isAttentionBand
-          ? `O modelo estimou apenas ${formatHoursAndMinutes(sono)} de sono efetivo. A ação mais útil é proteger uma janela real de descanso antes do próximo acionamento.`
-          : `Mesmo com score do dia preservado, o sono estimado foi de ${formatHoursAndMinutes(sono)}. Vale manter monitoramento preventivo para os próximos acionamentos.`,
+          ? `O sistema registrou ${formatHoursAndMinutes(sono)} de sono efetivo estimado. A coordenação deve conferir se a informação é real, estimada ou incompleta.`
+          : `Mesmo com índice do dia preservado, o sono estimado foi de ${formatHoursAndMinutes(sono)}. Vale manter acompanhamento operacional dos próximos acionamentos.`,
     });
   }
 
@@ -655,9 +655,9 @@ function buildFrmsRecommendations(
     recommendations.push({
       codigo: 'mitigar-circadiano',
       prioridade: 'media',
-      titulo: 'Mitigar a janela circadiana desfavorável',
+      titulo: 'Verificar janela operacional desfavorável',
       descricao:
-        'O horário da apresentação entrou em faixa biológica ruim. Se houver flexibilidade, deslocar briefing, saída ou troca de tripulação tende a ajudar.',
+        'O horário da apresentação entrou em faixa operacional desfavorável. Se houver flexibilidade, a coordenação pode analisar alternativas sem tratar este indicador como decisão automática.',
     });
   }
 
@@ -665,9 +665,9 @@ function buildFrmsRecommendations(
     recommendations.push({
       codigo: 'descomprimir-acumulo-hv',
       prioridade: 'media',
-      titulo: 'Reduzir pressão de horas de voo acumuladas',
+      titulo: 'Verificar acúmulo de horas de voo',
       descricao:
-        'O histórico recente de voo já está pesando no modelo. Distribuir trechos ou aliviar exposição nos próximos dias pode recuperar margem.',
+        'O histórico recente de voo pressionou o índice estimado. Este dado deve orientar conferência operacional, não uma ação automática isolada.',
     });
   }
 
@@ -680,7 +680,7 @@ function buildFrmsRecommendations(
       codigo: 'acompanhar-ciclo-embarcado',
       prioridade: 'baixa',
       titulo: 'Acompanhar desgaste do período embarcado',
-      descricao: `O tripulante está no dia ${diaEmbarcado} de ${totalEmbarcado} do período embarcado. O risco tende a se acumular, então vale monitorar a tendência e não só o ponto do dia.`,
+      descricao: `O tripulante está no dia ${diaEmbarcado} de ${totalEmbarcado} do período embarcado. A leitura deve considerar a tendência operacional e não só o ponto do dia.`,
     });
   }
 
@@ -789,35 +789,35 @@ async function buildFrmsDayExplanation(
 
   const resumoExecutivo =
     pct == null
-      ? 'Sem cálculo confiável de efetividade para este dia.'
+      ? 'Sem índice estimado confiável de efetividade para este dia.'
       : faixa === 'vermelho'
-        ? `A efetividade caiu para ${pct.toFixed(1)}%, em faixa vermelha. O principal vetor de queda foi ${fatorPrincipal?.titulo.toLowerCase() ?? 'a combinação dos fatores do dia'}.`
+        ? `O índice estimado de efetividade ficou em ${pct.toFixed(1)}%, em faixa vermelha para triagem. O principal componente observado foi ${fatorPrincipal?.titulo.toLowerCase() ?? 'a combinação dos fatores do dia'}.`
         : faixa === 'amarelo'
-          ? `A efetividade ficou em ${pct.toFixed(1)}%, em faixa de atenção. O dia exige leitura cuidadosa dos fatores que mais penalizaram o modelo.`
-          : `A efetividade ficou em ${pct.toFixed(1)}%, fora da faixa crítica. Ainda assim, os fatores do dia mostram onde a margem operacional foi consumida.`;
+          ? `O índice estimado de efetividade ficou em ${pct.toFixed(1)}%, em faixa de atenção para triagem. A coordenação deve conferir os fatores que mais influenciaram a leitura.`
+          : `O índice estimado de efetividade ficou em ${pct.toFixed(1)}%, fora das faixas de atenção configuradas. Ainda assim, os fatores do dia mostram onde a margem operacional foi consumida.`;
 
   const explicacaoTecnica = [
     pct == null
-      ? 'O modelo não retornou score suficiente para interpretar o dia.'
+      ? 'O índice estimado não retornou base suficiente para interpretar o dia.'
       : `Índice estimado de efetividade na apresentação: ${pct.toFixed(1)}% (${faixa}).`,
     fatorPrincipal
       ? `${fatorPrincipal.titulo} foi o maior impacto individual, com ${fatorPrincipal.impacto_pct.toFixed(1)} pontos percentuais sobre a efetividade.`
-      : 'Nenhum fator isolado dominou o resultado; o score veio da combinação dos componentes.',
+      : 'Nenhum fator isolado dominou o resultado; o índice veio da combinação dos componentes.',
     tempoAbaixo && tempoAbaixo > 0
-      ? `O backend calculou cerca de ${formatHoursAndMinutes(tempoAbaixo)} abaixo do limiar amarelo do modelo.`
-      : 'Não houve tempo material abaixo do limiar amarelo do modelo.',
+      ? `O backend calculou cerca de ${formatHoursAndMinutes(tempoAbaixo)} abaixo do limiar amarelo configurado.`
+      : 'Não houve tempo material abaixo do limiar amarelo configurado.',
   ].join(' ');
 
   const explicacaoDidatica = [
     pct == null
-      ? 'Sem score confiável, então o sistema não consegue explicar este dia com segurança.'
-      : `O sistema entendeu que ${row.tripulante_nome} chegou ao dia com ${pct.toFixed(1)}% de efetividade estimada.`,
+      ? 'Sem índice confiável, então o sistema não consegue explicar este dia com segurança.'
+      : `O sistema estimou que ${row.tripulante_nome} chegou ao dia com ${pct.toFixed(1)}% no índice de efetividade.`,
     fatorPrincipal
       ? `O que mais puxou o resultado para baixo foi ${fatorPrincipal.titulo.toLowerCase()}, porque ${fatorPrincipal.resumo.replace(/^Impacto [^:]+:\s*/i, '').replace(/\.$/, '')}.`
-      : 'Não houve um único culpado; foi a soma de pequenas penalizações ao longo do modelo.',
+      : 'Não houve um único componente dominante; foi a soma de pequenas penalizações ao longo do índice.',
     sono != null
-      ? `O modelo também considerou ${formatHoursAndMinutes(sono)} de sono efetivo antes da jornada.`
-      : 'O modelo não recebeu uma estimativa confiável de sono efetivo.',
+      ? `O cálculo também considerou ${formatHoursAndMinutes(sono)} de sono efetivo antes da jornada.`
+      : 'O cálculo não recebeu uma estimativa confiável de sono efetivo.',
   ].join(' ');
 
   const deterministicPayload: Omit<FrmsDayExplanationPayload, 'copiloto'> = {
@@ -869,7 +869,8 @@ async function buildFrmsDayExplanation(
 
   const systemPrompt =
     'Você é o copiloto FRMS da AirTrust. Responda em português do Brasil, usando SOMENTE os dados fornecidos. ' +
-    'Explique o dia de forma didática para um operador, sem inventar causas, sem extrapolar para outras empresas e sem contradizer o diagnóstico determinístico. ' +
+    'Explique o dia de forma didática para um operador, sem inventar causas, sem extrapolar para outras empresas e sem contradizer a leitura determinística. ' +
+    'Use linguagem de indicador operacional e triagem; não chame o resultado de diagnóstico de fadiga fisiológica e não recomende retirada automática de escala. ' +
     'Seja objetivo: escreva exatamente 2 parágrafos curtos. ' +
     'Use no máximo 1 termo em **negrito** quando realmente ajudar, sem listas, sem títulos e sem markdown pesado.';
 
@@ -885,7 +886,7 @@ async function buildFrmsDayExplanation(
             { role: 'system', content: systemPrompt },
             {
               role: 'user',
-              content: `Explique este dia de fadiga com base apenas neste JSON:\n${JSON.stringify(deterministicPayload)}`,
+              content: `Explique este dia operacional com base apenas neste JSON:\n${JSON.stringify(deterministicPayload)}`,
             },
           ],
           max_tokens: 320,
