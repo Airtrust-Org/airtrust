@@ -561,7 +561,7 @@ export default function FrmsCheckinFadiga() {
                         return (
                           <label
                             key={op.key}
-                            className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition-all cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                            className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                               selected
                                 ? op.risco === 'critico'
                                   ? 'border-red-400 bg-red-100 text-red-700'
