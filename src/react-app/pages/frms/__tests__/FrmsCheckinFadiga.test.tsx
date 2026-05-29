@@ -271,6 +271,34 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByLabelText('KSS 5: Nem alerta nem sonolento')).toHaveAttribute('name', 'kss');
   });
 
+  it('renderiza radios em cards estruturados (block/flex + w-full)', () => {
+    render(<FrmsCheckinFadiga />);
+
+    const qualidadeInput = screen.getByLabelText('Qualidade 4 - Boa');
+    const qualidadeLabel = qualidadeInput.closest('label');
+    expect(qualidadeLabel).toBeTruthy();
+    expect(qualidadeLabel).toHaveClass('block');
+    expect(qualidadeLabel).toHaveClass('w-full');
+
+    const kssInput = screen.getByLabelText('KSS 8: Sonolento, com esforco para ficar acordado');
+    const kssLabel = kssInput.closest('label');
+    expect(kssLabel).toBeTruthy();
+    expect(kssLabel).toHaveClass('block');
+    expect(kssLabel).toHaveClass('w-full');
+
+    const medsLabel = document.getElementById('meds-ult-12h-sim');
+    expect(medsLabel).toBeTruthy();
+    expect(medsLabel).toHaveClass('flex');
+    expect(medsLabel).toHaveClass('w-full');
+  });
+
+  it('mantem radios nativos sem atributos aria custom de role radio', () => {
+    const { container } = render(<FrmsCheckinFadiga />);
+    expect(container.querySelector('[role="radio"]')).toBeNull();
+    expect(container.querySelector('[aria-checked]')).toBeNull();
+    expect(container.querySelector('[aria-pressed]')).toBeNull();
+  });
+
   it('exibe borda vermelha e aria-invalid em horario invalido', () => {
     render(<FrmsCheckinFadiga />);
 
