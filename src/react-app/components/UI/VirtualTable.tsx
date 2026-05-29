@@ -244,7 +244,7 @@ export function VirtualTable<T extends { id?: string | number }>({
               onFocus={() => setFocusedRowIndex(virtualRow.index)}
               className={cn(
                 'flex items-center border-b border-slate-200 hover:bg-slate-50 transition-colors',
-                'focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary',
+                'focus-visible:outline-none focus:ring-2 focus:ring-inset focus:ring-primary',
                 onRowClick && 'cursor-pointer',
                 isEven && 'bg-white',
                 !isEven && 'bg-slate-50/50',

@@ -107,7 +107,7 @@ const DateInput: React.FC<DateInputProps> = ({
 
   const baseClasses = `
     block w-full px-3 py-2 border rounded-md shadow-sm 
-    focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-transparent
+    focus-visible:outline-none focus:ring-2 focus:ring-primary/30 focus:border-transparent
     disabled:opacity-50 disabled:bg-gray-100
     ${isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}
     ${className}

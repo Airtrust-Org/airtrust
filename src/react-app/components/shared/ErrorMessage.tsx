@@ -45,7 +45,7 @@ export const ErrorMessage: React.FC<ErrorMessageProps> = ({
             <div className="-mx-1.5 -my-1.5">
               <button
                 type="button"
-                className={`inline-flex rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2 ${iconColors[variant]} hover:bg-red-100`}
+                className={`inline-flex rounded-md p-1.5 focus-visible:outline-none focus:ring-2 focus:ring-offset-2 ${iconColors[variant]} hover:bg-red-100`}
                 onClick={onClose}
               >
                 <span className="sr-only">Dispensar</span>
