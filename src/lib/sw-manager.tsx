@@ -10,6 +10,7 @@
 
 import { useEffect } from 'react';
 import { toast } from 'sonner';
+import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
 
 interface ServiceWorkerUpdateEvent {
   type: 'AIRTRUST_UPDATE_AVAILABLE';
@@ -180,24 +181,11 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
  */
 export function skipWaitingAndReload(): void {
   if (navigator.serviceWorker.controller) {
-    // Enviar mensagem para SW pular espera
     navigator.serviceWorker.controller.postMessage({
       type: 'SKIP_WAITING',
     });
-
-    // Aguardar controlador mudar (novo SW assume controle)
-    let reloadCount = 0;
-    const reloadCheckInterval = setInterval(() => {
-      reloadCount++;
-      if (!navigator.serviceWorker.controller || reloadCount > 30) {
-        clearInterval(reloadCheckInterval);
-        window.location.reload();
-      }
-    }, 100);
-  } else {
-    // Sem SW ativo, reload direto
-    window.location.reload();
   }
+  void hardRefreshApp();
 }
 
 /**
