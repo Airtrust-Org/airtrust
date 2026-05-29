@@ -8,8 +8,8 @@ Simplificar o check-in diario de fadiga para tripulantes (mobile-first), removen
 | Campo UI | Payload | Uso backend |
 | --- | --- | --- |
 | Horas de sono nas ultimas 24h | `horas_sono_24h` | Compoe score (`horas_sono`) e sincronizacao FRMS (`duracao_sono_efetiva_min`) |
-| Hora em que acordou | `wake_time` + `hora_acordou` | Persistencia (`wake_time`), status diario e sincronizacao FRMS |
-| Qualidade do sono (1-5) | `qualidade_sono` | Componente de score |
+| Hora em que acordou (mascara continua) | `wake_time` + `hora_acordou` | Persistencia (`wake_time`), status diario e sincronizacao FRMS |
+| Qualidade do sono (1-5 com descritores) | `qualidade_sono` | Componente de score |
 | Sonolencia agora (KSS 1-9) | `kss_score` | Componente de score, snapshot (`KSS_ALTO`), analytics |
 | Aptidao operacional (Sim/Nao/Preciso falar) | `fit_for_duty` | Persistencia (`fit_for_duty`/`apto`) e risco diario (`computed_risk_level`) |
 | Observacao | `motivo_inaptidao` (quando nao apto) ou `free_text_notes` (quando apto) | Persistencia em `observacoes` e auditoria operacional |
@@ -43,6 +43,33 @@ A KSS foi mantida como escala 1-9, mas com linguagem operacional simples:
 ## 6) Pendencias
 - Nao houve alteracao de rota/contrato para diferenciar persistencia de `null` vs `0` em `meds_ult_12h`/`alcool_ult_12h` no banco legado (NOT NULL default). O frontend continua enviando `null` no payload; backend normaliza para compatibilidade legada.
 - Se no futuro for necessario auditar "nao informado" no armazenamento bruto, sera necessaria mudanca de schema/migration dedicada (fora deste escopo).
+
+## 6.1) Polimento UX adicional (qualidade + horario)
+- Qualidade do sono passou a mostrar numero + titulo em todas as opcoes (`1 - Muito ruim` ate `5 - Muito boa`), com descricao curta visivel em telas maiores e resumo da opcao selecionada.
+- Hora em que acordou passou para entrada numerica continua com mascara automatica:
+  - `1230` -> `12:30`
+  - `0730` -> `07:30`
+  - `730` -> `07:30`
+- Validacao de horario mantida em faixa `00:00` a `23:59`, com mensagem simples em caso invalido: "Informe um horario valido, ex.: 06:30."
+- Nenhum ajuste de payload, score, threshold ou schema foi necessario para esse polimento.
+
+## 6.2) Polimento de acessibilidade (fieldset/legend + radios nativos + pendencias)
+- Opcoes de sono, qualidade do sono, KSS, aptidao e medicacao/alcool agrupadas com `<fieldset>` + `<legend>`.
+- Grupos implementados com `input type="radio"` nativo e `name` por grupo:
+  - `sono-24h`
+  - `qualidade-sono`
+  - `kss`
+  - `fit-for-duty`
+  - `meds-ult-12h`
+  - `alcool-ult-12h`
+- Labels clicaveis com estado visual de foco (`focus-within`) para navegacao por teclado.
+- `aria-describedby` para ajuda e erro no campo de horario.
+- `aria-invalid` dinamico no input de horario (borda vermelha + mensagem).
+- `role="alert"` mantido para mensagens de erro/atencao textual.
+- Alvos de toque ampliados: checkboxes com `h-5 w-5` + `py-2` no label (area >= 44px).
+- Descricoes da qualidade do sono visiveis tambem em mobile.
+- Indicador de pendencias no topo (`role="status"` + `aria-live="polite"`), com contagem e itens faltantes em tempo real.
+- Nenhum campo novo e nenhuma mudanca de payload, score, threshold ou schema.
 
 ## 7) Confirmacoes de escopo tecnico
 - Sem mudanca de score cientifico (`calcularScoreFadiga`).
