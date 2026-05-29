@@ -10,7 +10,7 @@ import {
 } from '../lib/frms/operational-snapshot';
 import {
   buildFrmsReadAckEventsFromSnapshot,
-  FRMS_READ_ACK_ACK_KIND,
+  buildFrmsReadAckEventHash,
   FRMS_READ_ACK_EVENT_KIND,
   FRMS_READ_ACK_QUERY_STATUSES,
   lifecycleStatusOfReadAckEvent,
@@ -22,6 +22,7 @@ import {
   type FrmsReadAckLifecycleStatus,
   type FrmsReadAckQueryStatus,
   type FrmsReadAckEventStatus,
+  type FrmsReadAckStorageSource,
 } from '../lib/frms/read-ack-events';
 
 type FrmsReadAckContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
@@ -171,7 +172,184 @@ function userDisplayName(c: FrmsReadAckContext): string {
   return String(c.get('userEmail') || `Usuario ${c.get('userId') || '0'}`);
 }
 
-async function listEvents(
+interface DedicatedReadAckEventRow {
+  id: string;
+  empresa_id: number;
+  data_operacional: string;
+  funcionario_id: number;
+  event_type: FrmsReadAckEventType;
+  severity: FrmsReadAckEventSeverity;
+  source: 'OPERATIONAL_SNAPSHOT';
+  lifecycle_status: FrmsReadAckEventStatus;
+  snapshot_status: FrmsReadAckEvent['snapshot_status'] | null;
+  snapshot_alertas_json: string | null;
+  data_sources_json: string | null;
+  limitations_json: string | null;
+  snapshot_payload_json: string | null;
+  created_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: number | null;
+  ack_note: string | null;
+}
+
+interface LegacyReadAckEventRow {
+  id: string;
+  payload_json: string | null;
+  created_at: string;
+}
+
+function parseJsonObject(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseJsonStringArray(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function dedicatedRowToEvent(row: DedicatedReadAckEventRow): FrmsReadAckEvent | null {
+  const fromPayload = parseFrmsReadAckEventPayload(
+    row.id,
+    row.snapshot_payload_json,
+    row.created_at,
+  );
+  if (fromPayload) {
+    return {
+      ...fromPayload,
+      status: row.lifecycle_status,
+      acknowledged_at: row.acknowledged_at,
+      acknowledged_by: row.acknowledged_by,
+      ack_note: row.ack_note,
+      storage_source: 'FRMS_READ_ACK_EVENTS',
+    };
+  }
+
+  const dataSources = parseJsonObject(row.data_sources_json);
+  return {
+    id: row.id,
+    schema_version: 1,
+    empresa_id: row.empresa_id,
+    data_operacional: row.data_operacional,
+    funcionario_id: row.funcionario_id,
+    funcionario_nome: null,
+    event_type: row.event_type,
+    severity: row.severity,
+    status: row.lifecycle_status,
+    source: row.source,
+    snapshot_status: row.snapshot_status || 'INCOMPLETO',
+    snapshot_alertas: parseJsonStringArray(row.snapshot_alertas_json) as FrmsReadAckEvent['snapshot_alertas'],
+    checkin_status: String(dataSources.checkin_status || 'AUSENTE') as FrmsReadAckEvent['checkin_status'],
+    sleep_data_source: String(dataSources.sleep_data_source || 'AUSENTE') as FrmsReadAckEvent['sleep_data_source'],
+    wake_data_source: String(dataSources.wake_data_source || 'AUSENTE') as FrmsReadAckEvent['wake_data_source'],
+    jornada_data_source: String(dataSources.jornada_data_source || 'AUSENTE') as FrmsReadAckEvent['jornada_data_source'],
+    fortnight_status: typeof dataSources.fortnight_status === 'string' ? dataSources.fortnight_status : null,
+    created_at: row.created_at,
+    stored_created_at: row.created_at,
+    acknowledged_at: row.acknowledged_at,
+    acknowledged_by: row.acknowledged_by,
+    acknowledged_by_name: null,
+    ack_note: row.ack_note,
+    limitations: parseJsonStringArray(row.limitations_json),
+    storage_source: 'FRMS_READ_ACK_EVENTS',
+  };
+}
+
+function legacyRowToEvent(row: LegacyReadAckEventRow): FrmsReadAckEvent | null {
+  const event = parseFrmsReadAckEventPayload(row.id, row.payload_json, row.created_at);
+  return event
+    ? {
+        ...event,
+        storage_source: 'LEGACY_FRMS_FADIGA_EVENTO',
+      }
+    : null;
+}
+
+function dataSourcesJson(event: FrmsReadAckEvent): string {
+  return JSON.stringify({
+    checkin_status: event.checkin_status,
+    sleep_data_source: event.sleep_data_source,
+    wake_data_source: event.wake_data_source,
+    jornada_data_source: event.jornada_data_source,
+    fortnight_status: event.fortnight_status,
+  });
+}
+
+async function listDedicatedEvents(
+  db: D1Database,
+  params: {
+    empresaId: number;
+    dataInicio: string;
+    dataFim: string;
+    funcionarioId?: number;
+    status?: FrmsReadAckEventStatus;
+    eventType?: FrmsReadAckEventType;
+    severity?: FrmsReadAckEventSeverity;
+  },
+): Promise<FrmsReadAckEvent[]> {
+  const conditions = [
+    'empresa_id = ?',
+    'data_operacional >= ?',
+    'data_operacional <= ?',
+  ];
+  const binds: Array<string | number> = [
+    params.empresaId,
+    params.dataInicio,
+    params.dataFim,
+  ];
+
+  if (params.funcionarioId) {
+    conditions.push('funcionario_id = ?');
+    binds.push(params.funcionarioId);
+  }
+
+  if (params.status) {
+    conditions.push('lifecycle_status = ?');
+    binds.push(params.status);
+  }
+
+  if (params.eventType) {
+    conditions.push('event_type = ?');
+    binds.push(params.eventType);
+  }
+
+  if (params.severity) {
+    conditions.push('severity = ?');
+    binds.push(params.severity);
+  }
+
+  const rows = await db
+    .prepare(
+      `SELECT id, empresa_id, data_operacional, funcionario_id, event_type, severity, source,
+              lifecycle_status, snapshot_status, snapshot_alertas_json, data_sources_json,
+              limitations_json, snapshot_payload_json, created_at, acknowledged_at,
+              acknowledged_by, ack_note
+         FROM frms_read_ack_events
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY data_operacional DESC, created_at DESC
+        LIMIT 500`,
+    )
+    .bind(...binds)
+    .all<DedicatedReadAckEventRow>();
+
+  return (rows.results ?? [])
+    .map(dedicatedRowToEvent)
+    .filter((event): event is FrmsReadAckEvent => event !== null);
+}
+
+async function listLegacyEvents(
   db: D1Database,
   params: {
     empresaId: number;
@@ -226,11 +404,37 @@ async function listEvents(
         LIMIT 500`,
     )
     .bind(...binds)
-    .all<{ id: string; payload_json: string | null; created_at: string }>();
+    .all<LegacyReadAckEventRow>();
 
   return (rows.results ?? [])
-    .map((row) => parseFrmsReadAckEventPayload(row.id, row.payload_json, row.created_at))
+    .map(legacyRowToEvent)
     .filter((event): event is FrmsReadAckEvent => event !== null);
+}
+
+async function listEvents(
+  db: D1Database,
+  params: {
+    empresaId: number;
+    dataInicio: string;
+    dataFim: string;
+    funcionarioId?: number;
+    status?: FrmsReadAckEventStatus;
+    eventType?: FrmsReadAckEventType;
+    severity?: FrmsReadAckEventSeverity;
+  },
+): Promise<FrmsReadAckEvent[]> {
+  const dedicated = await listDedicatedEvents(db, params);
+  const dedicatedIds = new Set(dedicated.map((event) => event.id));
+  const legacy = (await listLegacyEvents(db, params)).filter((event) => !dedicatedIds.has(event.id));
+
+  return [...dedicated, ...legacy]
+    .sort((left, right) => {
+      if (left.data_operacional !== right.data_operacional) {
+        return right.data_operacional.localeCompare(left.data_operacional);
+      }
+      return right.stored_created_at.localeCompare(left.stored_created_at);
+    })
+    .slice(0, 500);
 }
 
 function normalizeEventType(value?: string): FrmsReadAckEventType | undefined {
@@ -390,14 +594,43 @@ router.post('/read-ack/events/generate', async (c) => {
   const generatedAt = new Date().toISOString();
   const events = buildFrmsReadAckEventsFromSnapshot(snapshot.items, generatedAt);
   let inserted = 0;
+  const createdBy = Number(c.get('userId') || 0) || null;
 
   for (const event of events) {
     const result = await c.env.DB.prepare(
-      `INSERT OR IGNORE INTO frms_fadiga_evento
-         (id, empresa_id, checkin_id, tipo, payload_json, created_at)
-       VALUES (?, ?, NULL, ?, ?, datetime('now'))`,
+      `INSERT OR IGNORE INTO frms_read_ack_events
+         (id, empresa_id, data_operacional, funcionario_id, event_type, severity, source,
+          lifecycle_status, snapshot_status, snapshot_alertas_json, data_sources_json,
+          limitations_json, snapshot_payload_json, event_hash, created_by, created_at, schema_version)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1
+        WHERE NOT EXISTS (
+          SELECT 1
+            FROM frms_fadiga_evento
+           WHERE id = ?
+             AND empresa_id = ?
+             AND tipo = ?
+        )`,
     )
-      .bind(event.id, empresaId, FRMS_READ_ACK_EVENT_KIND, JSON.stringify(event))
+      .bind(
+        event.id,
+        empresaId,
+        event.data_operacional,
+        event.funcionario_id,
+        event.event_type,
+        event.severity,
+        event.source,
+        event.status,
+        event.snapshot_status,
+        JSON.stringify(event.snapshot_alertas),
+        dataSourcesJson(event),
+        JSON.stringify(event.limitations),
+        JSON.stringify(event),
+        buildFrmsReadAckEventHash(event),
+        createdBy,
+        event.id,
+        empresaId,
+        FRMS_READ_ACK_EVENT_KIND,
+      )
       .run();
     inserted += Number(result.meta?.changes ?? 0);
   }
@@ -431,20 +664,43 @@ router.post('/read-ack/events/:id/ack', async (c) => {
   }
 
   const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env; Variables: Variables }>);
-  const row = await c.env.DB.prepare(
-    `SELECT id, payload_json, created_at
-       FROM frms_fadiga_evento
+  let storageSource: FrmsReadAckStorageSource | null = null;
+  const dedicatedRow = await c.env.DB.prepare(
+    `SELECT id, empresa_id, data_operacional, funcionario_id, event_type, severity, source,
+            lifecycle_status, snapshot_status, snapshot_alertas_json, data_sources_json,
+            limitations_json, snapshot_payload_json, created_at, acknowledged_at,
+            acknowledged_by, ack_note
+       FROM frms_read_ack_events
       WHERE id = ?
         AND empresa_id = ?
-        AND tipo = ?
       LIMIT 1`,
   )
-    .bind(id, empresaId, FRMS_READ_ACK_EVENT_KIND)
-    .first<{ id: string; payload_json: string | null; created_at: string }>();
+    .bind(id, empresaId)
+    .first<DedicatedReadAckEventRow>();
 
-  const event = row
-    ? parseFrmsReadAckEventPayload(row.id, row.payload_json, row.created_at)
-    : null;
+  let event = dedicatedRow ? dedicatedRowToEvent(dedicatedRow) : null;
+  if (event) {
+    storageSource = 'FRMS_READ_ACK_EVENTS';
+  }
+
+  let legacyRow: LegacyReadAckEventRow | null = null;
+  if (!event) {
+    legacyRow = await c.env.DB.prepare(
+      `SELECT id, payload_json, created_at
+         FROM frms_fadiga_evento
+        WHERE id = ?
+          AND empresa_id = ?
+          AND tipo = ?
+        LIMIT 1`,
+    )
+      .bind(id, empresaId, FRMS_READ_ACK_EVENT_KIND)
+      .first<LegacyReadAckEventRow>();
+    event = legacyRow ? legacyRowToEvent(legacyRow) : null;
+    if (event) {
+      storageSource = 'LEGACY_FRMS_FADIGA_EVENTO';
+    }
+  }
+
   if (!event) {
     return c.json({ success: false, error: 'Evento read/ack nao encontrado', code: 'NOT_FOUND' }, 404);
   }
@@ -461,39 +717,55 @@ router.post('/read-ack/events/:id/ack', async (c) => {
   const ackedEvent: FrmsReadAckEvent = {
     ...event,
     status: 'ACKED',
+    lifecycle_status: 'ACKED',
     acknowledged_at: acknowledgedAt,
     acknowledged_by: acknowledgedBy,
     acknowledged_by_name: userDisplayName(c),
     ack_note: sanitizeAckNote(parsed.data.ack_note),
   };
 
-  await c.env.DB.prepare(
-    `UPDATE frms_fadiga_evento
-        SET payload_json = ?
-      WHERE id = ?
-        AND empresa_id = ?
-        AND tipo = ?`,
-  )
-    .bind(JSON.stringify(ackedEvent), id, empresaId, FRMS_READ_ACK_EVENT_KIND)
-    .run();
+  if (storageSource === 'FRMS_READ_ACK_EVENTS') {
+    await c.env.DB.prepare(
+      `UPDATE frms_read_ack_events
+          SET lifecycle_status = 'ACKED',
+              acknowledged_at = ?,
+              acknowledged_by = ?,
+              ack_note = ?,
+              snapshot_payload_json = ?
+        WHERE id = ?
+          AND empresa_id = ?`,
+    )
+      .bind(acknowledgedAt, acknowledgedBy, ackedEvent.ack_note, JSON.stringify(ackedEvent), id, empresaId)
+      .run();
+  } else {
+    await c.env.DB.prepare(
+      `UPDATE frms_fadiga_evento
+          SET payload_json = ?
+        WHERE id = ?
+          AND empresa_id = ?
+          AND tipo = ?`,
+    )
+      .bind(JSON.stringify(ackedEvent), id, empresaId, FRMS_READ_ACK_EVENT_KIND)
+      .run();
+  }
 
   await c.env.DB.prepare(
-    `INSERT INTO frms_fadiga_evento
-       (id, empresa_id, checkin_id, tipo, payload_json, created_at)
-     VALUES (?, ?, NULL, ?, ?, datetime('now'))`,
+    `INSERT INTO frms_read_ack_event_audit
+       (id, empresa_id, event_id, action, actor_user_id, action_at, note,
+        payload_before_json, payload_after_json, schema_version)
+     VALUES (?, ?, ?, 'ACK', ?, ?, ?, ?, ?, 1)`,
   )
     .bind(
       crypto.randomUUID(),
       empresaId,
-      FRMS_READ_ACK_ACK_KIND,
-      JSON.stringify({
-        schema_version: 1,
-        event_id: id,
-        acknowledged_at: acknowledgedAt,
-        acknowledged_by: acknowledgedBy,
-        acknowledged_by_name: ackedEvent.acknowledged_by_name,
-        ack_note: ackedEvent.ack_note,
-      }),
+      id,
+      acknowledgedBy,
+      acknowledgedAt,
+      ackedEvent.ack_note,
+      storageSource === 'FRMS_READ_ACK_EVENTS'
+        ? dedicatedRow?.snapshot_payload_json ?? null
+        : legacyRow?.payload_json ?? null,
+      JSON.stringify(ackedEvent),
     )
     .run();
 

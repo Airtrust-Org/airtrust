@@ -24,12 +24,46 @@ vi.mock('../../lib/frms/operational-snapshot', () => ({
 
 import readAckRoutes from '../../routes/frms-read-ack';
 
-interface StoredEvent {
+interface LegacyEvent {
   id: string;
   empresa_id: number;
   tipo: string;
   payload_json: string;
   created_at: string;
+}
+
+interface DedicatedEvent {
+  id: string;
+  empresa_id: number;
+  data_operacional: string;
+  funcionario_id: number;
+  event_type: string;
+  severity: string;
+  source: string;
+  lifecycle_status: string;
+  snapshot_status: string | null;
+  snapshot_alertas_json: string | null;
+  data_sources_json: string | null;
+  limitations_json: string | null;
+  snapshot_payload_json: string | null;
+  event_hash: string | null;
+  created_by: number | null;
+  created_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: number | null;
+  ack_note: string | null;
+}
+
+interface AuditEvent {
+  id: string;
+  empresa_id: number;
+  event_id: string;
+  action: string;
+  actor_user_id: number | null;
+  action_at: string;
+  note: string | null;
+  payload_before_json: string | null;
+  payload_after_json: string | null;
 }
 
 function snapshotItem(
@@ -86,7 +120,9 @@ function createApp() {
 }
 
 function createDb() {
-  const events: StoredEvent[] = [];
+  const legacyEvents: LegacyEvent[] = [];
+  const dedicatedEvents: DedicatedEvent[] = [];
+  const auditEvents: AuditEvent[] = [];
   const queries: string[] = [];
 
   const db = {
@@ -101,10 +137,18 @@ function createDb() {
             if (query.includes('FROM usuarios u') && query.includes('JOIN funcionarios f')) {
               return { id: 11 };
             }
+            if (query.includes('FROM frms_read_ack_events') && query.includes('WHERE id = ?')) {
+              const [id, empresaId] = args;
+              return (
+                dedicatedEvents.find(
+                  (event) => event.id === id && event.empresa_id === empresaId,
+                ) ?? null
+              );
+            }
             if (query.includes('FROM frms_fadiga_evento') && query.includes('WHERE id = ?')) {
               const [id, empresaId, tipo] = args;
               return (
-                events.find(
+                legacyEvents.find(
                   (event) =>
                     event.id === id && event.empresa_id === empresaId && event.tipo === tipo,
                 ) ?? null
@@ -113,6 +157,44 @@ function createDb() {
             return null;
           },
           all: async () => {
+            if (query.includes('FROM frms_read_ack_events')) {
+              const [empresaId, dataInicio, dataFim] = args as [number, string, string];
+              let cursor = 3;
+              let funcionarioId: number | undefined;
+              let status: string | undefined;
+              let eventType: string | undefined;
+              let severity: string | undefined;
+
+              if (query.includes('funcionario_id = ?')) {
+                funcionarioId = Number(args[cursor]);
+                cursor += 1;
+              }
+              if (query.includes('lifecycle_status = ?')) {
+                status = String(args[cursor]);
+                cursor += 1;
+              }
+              if (query.includes('event_type = ?')) {
+                eventType = String(args[cursor]);
+                cursor += 1;
+              }
+              if (query.includes('severity = ?')) {
+                severity = String(args[cursor]);
+              }
+
+              return {
+                results: dedicatedEvents.filter((event) => {
+                  if (event.empresa_id !== empresaId) return false;
+                  if (event.data_operacional < dataInicio || event.data_operacional > dataFim) {
+                    return false;
+                  }
+                  if (funcionarioId && event.funcionario_id !== funcionarioId) return false;
+                  if (status && event.lifecycle_status !== status) return false;
+                  if (eventType && event.event_type !== eventType) return false;
+                  if (severity && event.severity !== severity) return false;
+                  return true;
+                }),
+              };
+            }
             if (!query.includes('FROM frms_fadiga_evento')) return { results: [] };
 
             const [empresaId, tipo, dataInicio, dataFim] = args as [
@@ -144,7 +226,7 @@ function createDb() {
             }
 
             return {
-              results: events.filter((event) => {
+              results: legacyEvents.filter((event) => {
                 if (event.empresa_id !== empresaId || event.tipo !== tipo) return false;
                 const payload = JSON.parse(event.payload_json);
                 if (payload.data_operacional < dataInicio || payload.data_operacional > dataFim) {
@@ -159,36 +241,144 @@ function createDb() {
             };
           },
           run: async () => {
-            if (query.includes('INSERT OR IGNORE INTO frms_fadiga_evento')) {
-              const [id, empresaId, tipo, payloadJson] = args as [string, number, string, string];
-              if (events.some((event) => event.id === id)) return { meta: { changes: 0 } };
-              events.push({
+            if (query.includes('INSERT OR IGNORE INTO frms_read_ack_events')) {
+              const [
+                id,
+                empresaId,
+                dataOperacional,
+                funcionarioId,
+                eventType,
+                severity,
+                source,
+                lifecycleStatus,
+                snapshotStatus,
+                snapshotAlertasJson,
+                dataSourcesJson,
+                limitationsJson,
+                snapshotPayloadJson,
+                eventHash,
+                createdBy,
+                legacyId,
+                legacyEmpresaId,
+                legacyTipo,
+              ] = args as [
+                string,
+                number,
+                string,
+                number,
+                string,
+                string,
+                string,
+                string,
+                string,
+                string,
+                string,
+                string,
+                string,
+                string,
+                number | null,
+                string,
+                number,
+                string,
+              ];
+              if (dedicatedEvents.some((event) => event.id === id)) {
+                return { meta: { changes: 0 } };
+              }
+              if (
+                legacyEvents.some(
+                  (event) =>
+                    event.id === legacyId &&
+                    event.empresa_id === legacyEmpresaId &&
+                    event.tipo === legacyTipo,
+                )
+              ) {
+                return { meta: { changes: 0 } };
+              }
+              dedicatedEvents.push({
                 id,
                 empresa_id: empresaId,
-                tipo,
-                payload_json: payloadJson,
+                data_operacional: dataOperacional,
+                funcionario_id: funcionarioId,
+                event_type: eventType,
+                severity,
+                source,
+                lifecycle_status: lifecycleStatus,
+                snapshot_status: snapshotStatus,
+                snapshot_alertas_json: snapshotAlertasJson,
+                data_sources_json: dataSourcesJson,
+                limitations_json: limitationsJson,
+                snapshot_payload_json: snapshotPayloadJson,
+                event_hash: eventHash,
+                created_by: createdBy,
                 created_at: '2026-05-28 19:00:00',
+                acknowledged_at: null,
+                acknowledged_by: null,
+                ack_note: null,
               });
               return { meta: { changes: 1 } };
             }
 
+            if (query.includes('UPDATE frms_read_ack_events')) {
+              const [acknowledgedAt, acknowledgedBy, ackNote, payloadJson, id, empresaId] = args as [
+                string,
+                number | null,
+                string | null,
+                string,
+                string,
+                number,
+              ];
+              const event = dedicatedEvents.find(
+                (item) => item.id === id && item.empresa_id === empresaId,
+              );
+              if (event) {
+                event.lifecycle_status = 'ACKED';
+                event.acknowledged_at = acknowledgedAt;
+                event.acknowledged_by = acknowledgedBy;
+                event.ack_note = ackNote;
+                event.snapshot_payload_json = payloadJson;
+              }
+              return { meta: { changes: event ? 1 : 0 } };
+            }
+
             if (query.includes('UPDATE frms_fadiga_evento')) {
               const [payloadJson, id, empresaId, tipo] = args as [string, string, number, string];
-              const event = events.find(
+              const event = legacyEvents.find(
                 (item) => item.id === id && item.empresa_id === empresaId && item.tipo === tipo,
               );
               if (event) event.payload_json = payloadJson;
               return { meta: { changes: event ? 1 : 0 } };
             }
 
-            if (query.includes('INSERT INTO frms_fadiga_evento')) {
-              const [id, empresaId, tipo, payloadJson] = args as [string, number, string, string];
-              events.push({
+            if (query.includes('INSERT INTO frms_read_ack_event_audit')) {
+              const [
+                id,
+                empresaId,
+                eventId,
+                actorUserId,
+                actionAt,
+                note,
+                payloadBeforeJson,
+                payloadAfterJson,
+              ] = args as [
+                string,
+                number,
+                string,
+                number | null,
+                string,
+                string | null,
+                string | null,
+                string | null,
+              ];
+              auditEvents.push({
                 id,
                 empresa_id: empresaId,
-                tipo,
-                payload_json: payloadJson,
-                created_at: '2026-05-28 19:01:00',
+                event_id: eventId,
+                action: 'ACK',
+                actor_user_id: actorUserId,
+                action_at: actionAt,
+                note,
+                payload_before_json: payloadBeforeJson,
+                payload_after_json: payloadAfterJson,
               });
               return { meta: { changes: 1 } };
             }
@@ -200,7 +390,7 @@ function createDb() {
     }),
   } as unknown as D1Database;
 
-  return { db, events, queries };
+  return { db, legacyEvents, dedicatedEvents, auditEvents, queries };
 }
 
 describe('FRMS D1 read/ack events', () => {
@@ -211,7 +401,7 @@ describe('FRMS D1 read/ack events', () => {
   it('gera eventos do snapshot de forma idempotente sem usar apto_para_voo', async () => {
     listSnapshotMock.mockResolvedValue({ items: [snapshotItem()], summary: {} });
     const app = createApp();
-    const { db, events } = createDb();
+    const { db, dedicatedEvents } = createDb();
 
     const request = {
       method: 'POST',
@@ -232,7 +422,8 @@ describe('FRMS D1 read/ack events', () => {
     const secondPayload = (await second.json()) as { summary: { inserted: number } };
     expect(firstPayload.summary.inserted).toBe(4);
     expect(secondPayload.summary.inserted).toBe(0);
-    expect(JSON.stringify(events)).not.toContain('apto_para_voo');
+    expect(dedicatedEvents).toHaveLength(4);
+    expect(JSON.stringify(dedicatedEvents)).not.toContain('apto_para_voo');
   });
 
   it('filtra por status PENDING, ACKED, ALL e STALE com summary de lifecycle', async () => {
@@ -246,7 +437,7 @@ describe('FRMS D1 read/ack events', () => {
       summary: {},
     });
     const app = createApp();
-    const { db, events } = createDb();
+    const { db, dedicatedEvents } = createDb();
 
     await app.request(
       '/frms/read-ack/events/generate',
@@ -258,9 +449,8 @@ describe('FRMS D1 read/ack events', () => {
       { DB: db } as unknown as Env,
     );
 
-    const eventToAck = events.find(
+    const eventToAck = dedicatedEvents.find(
       (event) =>
-        event.tipo === 'FRMS_READ_ACK_EVENT' &&
         event.id.includes('_CHECKIN_PENDENTE') &&
         event.id.includes('_10_'),
     );
@@ -372,7 +562,7 @@ describe('FRMS D1 read/ack events', () => {
   it('registra ciencia com usuario e trilha de auditoria sem chamar SGSO ou escala', async () => {
     listSnapshotMock.mockResolvedValue({ items: [snapshotItem()], summary: {} });
     const app = createApp();
-    const { db, events, queries } = createDb();
+    const { db, dedicatedEvents, auditEvents, queries } = createDb();
 
     await app.request(
       '/frms/read-ack/events/generate',
@@ -384,7 +574,7 @@ describe('FRMS D1 read/ack events', () => {
       { DB: db } as unknown as Env,
     );
 
-    const eventId = events.find((event) => event.tipo === 'FRMS_READ_ACK_EVENT')?.id ?? '';
+    const eventId = dedicatedEvents[0]?.id ?? '';
     const ack = await app.request(
       `/frms/read-ack/events/${encodeURIComponent(eventId)}/ack`,
       {
@@ -411,9 +601,73 @@ describe('FRMS D1 read/ack events', () => {
     expect(payload.data.status).toBe('ACKED');
     expect(payload.data.acknowledged_by).toBe(88);
     expect(payload.data.limitations.join(' ')).toContain('nao representa mitigacao');
-    expect(events.some((event) => event.tipo === 'FRMS_READ_ACK_ACK')).toBe(true);
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toMatchObject({ event_id: eventId, action: 'ACK', actor_user_id: 88 });
     expect(queries.join('\n').toLowerCase()).not.toContain('sgso');
     expect(queries.join('\n').toLowerCase()).not.toContain('escala_');
+  });
+
+  it('lista eventos dedicados e legados sem duplicidade visual', async () => {
+    listSnapshotMock.mockResolvedValue({ items: [snapshotItem(10)], summary: {} });
+    const app = createApp();
+    const { db, legacyEvents } = createDb();
+    const legacyPayload = {
+      schema_version: 1,
+      empresa_id: 1,
+      data_operacional: '2026-05-28',
+      funcionario_id: 99,
+      funcionario_nome: 'Legacy',
+      event_type: 'OUTRO_CONTEXTUAL',
+      severity: 'ATENCAO',
+      status: 'PENDING',
+      source: 'OPERATIONAL_SNAPSHOT',
+      snapshot_status: 'ATENCAO',
+      snapshot_alertas: [],
+      checkin_status: 'PENDENTE',
+      sleep_data_source: 'REAL',
+      wake_data_source: 'REAL',
+      jornada_data_source: 'REAL',
+      fortnight_status: null,
+      created_at: '2026-05-28T19:00:00.000Z',
+      acknowledged_at: null,
+      acknowledged_by: null,
+      acknowledged_by_name: null,
+      ack_note: null,
+      limitations: ['legado'],
+    };
+    legacyEvents.push({
+      id: 'legacy_frms_read_ack',
+      empresa_id: 1,
+      tipo: 'FRMS_READ_ACK_EVENT',
+      payload_json: JSON.stringify(legacyPayload),
+      created_at: '2026-05-28 18:00:00',
+    });
+
+    await app.request(
+      '/frms/read-ack/events/generate',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-empresa-id': '1' },
+        body: JSON.stringify({ data_inicio: '2026-05-28', data_fim: '2026-05-28' }),
+      },
+      { DB: db } as unknown as Env,
+    );
+
+    const response = await app.request(
+      '/frms/read-ack/events?data_inicio=2026-05-28&data_fim=2026-05-28&status=ALL',
+      { method: 'GET', headers: { 'x-empresa-id': '1' } },
+      { DB: db } as unknown as Env,
+    );
+    const payload = (await response.json()) as {
+      data: Array<{ id: string; storage_source: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload.data.some((event) => event.storage_source === 'FRMS_READ_ACK_EVENTS')).toBe(true);
+    expect(payload.data.some((event) => event.storage_source === 'LEGACY_FRMS_FADIGA_EVENTO')).toBe(
+      true,
+    );
+    expect(new Set(payload.data.map((event) => event.id)).size).toBe(payload.data.length);
   });
 
   it('mantem isolamento por empresa_id', async () => {

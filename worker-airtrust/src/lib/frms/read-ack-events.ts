@@ -18,6 +18,9 @@ export type FrmsReadAckEventSeverity = 'INFO' | 'ATENCAO' | 'CRITICO' | 'INCOMPL
 export type FrmsReadAckEventStatus = 'PENDING' | 'ACKED';
 export type FrmsReadAckLifecycleStatus = FrmsReadAckEventStatus | 'STALE' | 'ARCHIVED_VIEW_ONLY';
 export type FrmsReadAckQueryStatus = 'PENDING' | 'ACKED' | 'ALL' | 'STALE';
+export type FrmsReadAckStorageSource =
+  | 'FRMS_READ_ACK_EVENTS'
+  | 'LEGACY_FRMS_FADIGA_EVENTO';
 
 export interface FrmsReadAckEventPayload {
   schema_version: 1;
@@ -48,6 +51,7 @@ export interface FrmsReadAckEvent extends FrmsReadAckEventPayload {
   id: string;
   stored_created_at: string;
   lifecycle_status?: FrmsReadAckLifecycleStatus;
+  storage_source?: FrmsReadAckStorageSource;
 }
 
 export const FRMS_READ_ACK_EVENT_KIND = 'FRMS_READ_ACK_EVENT';
@@ -100,6 +104,10 @@ export function buildFrmsReadAckEventId(
   eventType: FrmsReadAckEventType,
 ): string {
   return `frms_read_ack_${empresaId}_${slugPart(dataOperacional)}_${funcionarioId}_${eventType}`;
+}
+
+export function buildFrmsReadAckEventHash(event: Pick<FrmsReadAckEvent, 'id'>): string {
+  return event.id;
 }
 
 function severityFromStatus(status: FrmsOperationalSnapshotStatus): FrmsReadAckEventSeverity {

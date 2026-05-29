@@ -151,3 +151,9 @@ Referencia: `docs/FRMS_D2_READ_ACK_LIFECYCLE.md`.
 A D3 formaliza politica de retencao, historico e proposta de schema dedicado para reduzir fragilidade de longo prazo do reuso em `frms_fadiga_evento`.
 
 Referencia: `docs/FRMS_D3_READ_ACK_RETENTION_AND_ARCHIVING.md`.
+
+## 13) Evolucao D3-B/D4
+
+A D3-B/D4 move novas gravacoes para `frms_read_ack_events` e registra auditoria em `frms_read_ack_event_audit`, mantendo leitura de eventos D1/D2 legados em `frms_fadiga_evento`.
+
+Referencia: `docs/FRMS_D3B_D4_READ_ACK_DEDICATED_STORAGE.md`.

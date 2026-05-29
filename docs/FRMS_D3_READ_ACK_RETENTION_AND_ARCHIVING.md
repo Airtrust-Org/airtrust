@@ -181,3 +181,9 @@ Opus continua obrigatorio antes de formula de risco, thresholds persistentes, au
 - D3 entregue como **documento + schema proposto**.
 - **Sem migration criada** nesta fase.
 - Recomendado abrir D3-B apenas para migration dedicada revisada, com plano de rollout e rollback antes de qualquer aplicacao.
+
+## 16) Evolucao D3-B/D4
+
+A D3-B/D4 materializa o desenho em migration local e runtime para tabela dedicada, mantendo leitura compativel do legado e sem backfill automatico inicial.
+
+Referencia: `docs/FRMS_D3B_D4_READ_ACK_DEDICATED_STORAGE.md`.

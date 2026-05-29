@@ -89,3 +89,9 @@ A Fase D completa continua bloqueada para:
 A D3 estabelece politica de retencao/arquivamento e recomenda migracao futura para schema dedicado de read/ack, sem aplicar migration nesta etapa.
 
 Referencia: `docs/FRMS_D3_READ_ACK_RETENTION_AND_ARCHIVING.md`.
+
+## 13) Evolucao D3-B/D4
+
+A D3-B/D4 cria migration local e runtime para `frms_read_ack_events`, preservando leitura legado e mantendo `STALE` derivado sem acao operacional.
+
+Referencia: `docs/FRMS_D3B_D4_READ_ACK_DEDICATED_STORAGE.md`.
