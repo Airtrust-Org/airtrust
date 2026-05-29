@@ -82,6 +82,25 @@ describe('FRMS read/ack legacy backfill mapping', () => {
     expect(JSON.parse(mapped.snapshot_payload_json).id).toBe(eventPayload.id);
   });
 
+  it('preserva campos numericos nulos sem converter para zero', () => {
+    const mapped = mapLegacyReadAckEventToDedicated(
+      legacyEvent({
+        payload_json: JSON.stringify({
+          ...eventPayload,
+          status: 'PENDING',
+          acknowledged_at: null,
+          acknowledged_by: null,
+          ack_note: null,
+        }),
+      }),
+    );
+    expect('reason' in mapped).toBe(false);
+    if ('reason' in mapped) return;
+    expect(mapped.acknowledged_at).toBeNull();
+    expect(mapped.acknowledged_by).toBeNull();
+    expect(mapped.ack_note).toBeNull();
+  });
+
   it('mapeia ACK legado para auditoria dedicada', () => {
     const payloads = new Map([[eventPayload.id, JSON.stringify(eventPayload)]]);
     const mapped = mapLegacyReadAckAckToAudit(legacyAck(), payloads);
@@ -141,6 +160,30 @@ describe('FRMS read/ack legacy backfill mapping', () => {
 });
 
 describe('FRMS read/ack backfill script safety gates', () => {
+  it('dry-run e o modo padrao e aceita limit opcional', () => {
+    const repoRoot = resolve(__dirname, '../../../..');
+    const result = spawnSync(
+      'node',
+      [
+        '--input-type=module',
+        '-e',
+        "import { parseArgs } from './scripts/backfill-frms-read-ack-dedicated-storage.mjs'; console.log(JSON.stringify(parseArgs(['--empresa-id','6','--data-inicio','2026-05-27','--data-fim','2026-05-27','--limit','10'])));",
+      ],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      apply: false,
+      empresaId: 6,
+      dataInicio: '2026-05-27',
+      dataFim: '2026-05-27',
+      limit: 10,
+    });
+  });
+
   it('apply exige empresa_id/data_inicio/data_fim antes de qualquer execucao', () => {
     const repoRoot = resolve(__dirname, '../../../..');
     const result = spawnSync('node', ['scripts/backfill-frms-read-ack-dedicated-storage.mjs', '--apply'], {
@@ -149,6 +192,24 @@ describe('FRMS read/ack backfill script safety gates', () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('--empresa-id inteiro positivo e obrigatorio');
+  });
+
+  it('SQL de insert preserva NULL para campos opcionais sem ator', () => {
+    const repoRoot = resolve(__dirname, '../../../..');
+    const result = spawnSync(
+      'node',
+      [
+        '--input-type=module',
+        '-e',
+        "import { eventInsertSql } from './scripts/backfill-frms-read-ack-dedicated-storage.mjs'; console.log(eventInsertSql({id:'e1',empresa_id:6,data_operacional:'2026-05-27',funcionario_id:35,event_type:'OUTRO_CONTEXTUAL',severity:'ATENCAO',source:'OPERATIONAL_SNAPSHOT',lifecycle_status:'PENDING',snapshot_status:'ATENCAO',snapshot_alertas_json:'[]',data_sources_json:'{}',limitations_json:'[]',snapshot_payload_json:'{}',event_hash:'e1',created_at:'2026-05-28T19:50:37.000Z',created_by:null,acknowledged_at:null,acknowledged_by:null,ack_note:null}));",
+      ],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(", NULL, NULL, NULL, NULL, 1);");
   });
 
   it('SQL gerado para backfill nao altera legado nem executa remocao', () => {

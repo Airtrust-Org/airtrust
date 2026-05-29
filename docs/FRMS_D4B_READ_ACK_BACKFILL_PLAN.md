@@ -72,6 +72,8 @@ node scripts/backfill-frms-read-ack-dedicated-storage.mjs \
 
 `--apply` sem `--empresa-id`, `--data-inicio` e `--data-fim` falha antes de executar consultas.
 
+`--limit N` pode ser usado como trava adicional para limitar a quantidade de eventos legados selecionados no recorte.
+
 ## 6) Dry-run
 
 Dry-run e o modo padrao. Ele executa somente SELECTs e registra:
@@ -94,7 +96,8 @@ node scripts/backfill-frms-read-ack-dedicated-storage.mjs \
   --apply \
   --empresa-id 6 \
   --data-inicio 2026-05-27 \
-  --data-fim 2026-05-27
+  --data-fim 2026-05-27 \
+  --limit 50
 ```
 
 A escrita e limitada ao recorte filtrado e usa:
@@ -145,3 +148,14 @@ A D4-B nao apaga, nao atualiza e nao altera `frms_fadiga_evento`.
 ## 13) Fase D completa
 
 A Fase D completa continua bloqueada para mitigacao, decisao automatica, alteracao de escala, SGSO automatico, thresholds e formulas de risco.
+
+## 14) Revalidacao D4-B em origin/main atual
+
+Em 2026-05-29, a worktree `chore/frms-read-ack-backfill-v2` auditou producao e encontrou o recorte inicial ja migrado:
+
+- legado preservado: `FRMS_READ_ACK_EVENT = 23`, `FRMS_READ_ACK_ACK = 1`;
+- dedicado: `2026-05-27` com 23 eventos, sendo 1 `ACKED` e 22 `PENDING`;
+- auditoria dedicada: ACK legado presente com ID deterministico `frms_read_ack_backfill_ack_75cad095-a84d-4501-b516-2d6fd844b803`;
+- dry-run idempotente do recorte deve retornar `events_to_insert = 0` e `audits_to_insert = 0`.
+
+Nao executar `--apply` nesse recorte se o dry-run retornar zero inserts, porque a fase ja esta materializada no storage dedicado.
