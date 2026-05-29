@@ -20,6 +20,7 @@ import { createLogger, toError } from '../utils/logger';
 import { hasUsuariosEmpresasTable, getUsuariosSchema } from '../utils/db-schema';
 import { logAudit } from '../utils/db'; // SECURITY: Import audit logging
 import { enviarEmailAlert } from '../cron/notificacoes';
+import { isAdminRole, normalizeAirtrustRole } from '../utils/role-resolution';
 
 // Tipar variáveis adicionadas ao contexto pelo middleware auth()
 type AuthVars = {
@@ -208,6 +209,48 @@ async function resolveEmpresaByEmailDomain(db: D1Database, userId: number): Prom
   return empresa.id;
 }
 
+function normalizeAuthRole(value: unknown): string {
+  const normalized = normalizeAirtrustRole(value);
+  if (normalized === 'COMPLIANCE') return 'GESTOR';
+  if (normalized === 'EDITOR') return 'USUARIO';
+  return normalized;
+}
+
+async function resolveAuthRoleForUser(
+  db: D1Database,
+  userId: number,
+  empresaId: number,
+  fallbackRole: string,
+): Promise<string> {
+  const fallback = normalizeAuthRole(fallbackRole);
+
+  if (!(await hasUsuariosEmpresasTable(db))) {
+    return fallback;
+  }
+
+  const roleFromEmpresa = await db
+    .prepare(
+      `
+        SELECT ue.role
+        FROM usuarios_empresas ue
+        INNER JOIN empresas e ON e.id = ue.empresa_id
+        WHERE ue.usuario_id = ?
+          AND ue.empresa_id = ?
+          AND e.deleted_at IS NULL
+          AND e.ativo = 1
+        LIMIT 1
+      `,
+    )
+    .bind(userId, empresaId)
+    .first<{ role: string | null }>();
+
+  if (!roleFromEmpresa?.role) {
+    return fallback;
+  }
+
+  return normalizeAuthRole(roleFromEmpresa.role);
+}
+
 async function issueAccessTokenForEmpresa(
   c: { env: Env },
   payload: { userId: number; email: string; role: string; nome: string; empresaId: number },
@@ -219,7 +262,7 @@ async function issueAccessTokenForEmpresa(
       sub: payload.userId,
       empresa_id: payload.empresaId,
       email: payload.email,
-      role: payload.role.toLowerCase(),
+      role: payload.role.toUpperCase(),
       nome: payload.nome,
     },
     jwtSecret,
@@ -726,6 +769,12 @@ authRoutes.post(
       const jwtSecret = c.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET não configurado no ambiente');
       const empresaId = await resolveUserEmpresaId(db, (user as NonNullable<DbUser>).id);
+      const resolvedRole = await resolveAuthRoleForUser(
+        db,
+        (user as NonNullable<DbUser>).id,
+        empresaId,
+        (user as NonNullable<DbUser>).perfil,
+      );
 
       // Carregar permissões individuais do usuário
       const permissoesRows = await db
@@ -750,7 +799,7 @@ authRoutes.post(
           sub: (user as NonNullable<DbUser>).id,
           empresa_id: empresaId,
           email: (user as NonNullable<DbUser>).email,
-          role: (user as NonNullable<DbUser>).perfil.toUpperCase(),
+          role: resolvedRole,
           nome: (user as NonNullable<DbUser>).nome,
           permissions: permissions.length > 0 ? permissions : undefined,
           funcionario_id: userFull?.funcionario_id ?? null,
@@ -787,7 +836,7 @@ authRoutes.post(
           user: {
             id: user.id,
             email: user.email,
-            role: (user as NonNullable<DbUser>).perfil.toUpperCase(),
+            role: resolvedRole,
             nome: user.nome,
             permissions,
             funcionario_id: userFull?.funcionario_id ?? null,
@@ -871,13 +920,19 @@ authRoutes.post(
       // Gerar novo access token
       const jwtSecret = c.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET não configurado no ambiente');
+      const userId = (tokenRecord as NonNullable<TokenRecord>).user_id;
       const empresaId = await resolveUserEmpresaId(
         db,
         (tokenRecord as NonNullable<TokenRecord>).user_id,
       );
+      const resolvedRole = await resolveAuthRoleForUser(
+        db,
+        userId,
+        empresaId,
+        tokenRecord.perfil,
+      );
 
       // Recarregar permissões individuais (overrides GRANT/DENY)
-      const userId = (tokenRecord as NonNullable<TokenRecord>).user_id;
       const permissoesRefresh = await db
         .prepare(
           `SELECT permissao, tipo FROM usuario_permissoes WHERE usuario_id = ? ORDER BY permissao`,
@@ -894,7 +949,7 @@ authRoutes.post(
           sub: userId,
           empresa_id: empresaId,
           email: tokenRecord.email,
-          role: tokenRecord.perfil.toUpperCase(),
+          role: resolvedRole,
           nome: tokenRecord.nome,
           permissions: permissionsRefresh,
           funcionario_id: (tokenRecord as NonNullable<TokenRecord>).funcionario_id ?? null,
@@ -1047,12 +1102,22 @@ authRoutes.get('/me', auth(), async (c) => {
       throw unauthorized('Usuário não encontrado', 'USER_NOT_FOUND');
     }
 
+    const empresaIdRaw = c.get('empresaId');
+    const empresaId =
+      typeof empresaIdRaw === 'string' ? Number(empresaIdRaw) : Number(empresaIdRaw || 0);
+    const resolvedRole = await resolveAuthRoleForUser(
+      db,
+      (user as NonNullable<MeRow>).id,
+      empresaId,
+      (user as NonNullable<MeRow>).perfil,
+    );
+
     return c.json({
       success: true,
       data: {
         id: (user as NonNullable<MeRow>).id,
         email: (user as NonNullable<MeRow>).email,
-        role: (user as NonNullable<MeRow>).perfil.toUpperCase(),
+        role: resolvedRole,
         nome: (user as NonNullable<MeRow>).nome,
       },
     });
@@ -1303,7 +1368,7 @@ authRoutes.post('/select-empresa', auth(), async (c) => {
   const { token: accessToken } = await issueAccessTokenForEmpresa(c, {
     userId,
     email: user.email,
-    role: user.perfil,
+    role: await resolveAuthRoleForUser(db, userId, targetEmpresaId, vinculo.role || user.perfil),
     nome: user.nome,
     empresaId: targetEmpresaId,
   });
@@ -1342,7 +1407,7 @@ authRoutes.post('/impersonate', auth(), async (c) => {
   try {
     // SECURITY: Normalize role to uppercase to prevent case-sensitivity bypass
     const callerRole = (c.get('userRole') as string | undefined)?.toUpperCase() ?? '';
-    if (callerRole !== 'ADMIN') {
+    if (!isAdminRole(callerRole)) {
       throw unauthorized('Apenas administradores podem usar impersonação', 'FORBIDDEN');
     }
 
@@ -1371,6 +1436,7 @@ authRoutes.post('/impersonate', auth(), async (c) => {
     }
 
     const empresaId = await resolveUserEmpresaId(db, target.id);
+    const resolvedRole = await resolveAuthRoleForUser(db, target.id, empresaId, target.perfil);
 
     const permissoesRows = await db
       .prepare(
@@ -1395,7 +1461,7 @@ authRoutes.post('/impersonate', auth(), async (c) => {
         sub: target.id,
         empresa_id: empresaId,
         email: target.email,
-        role: target.perfil.toUpperCase(),
+        role: resolvedRole,
         nome: target.nome,
         permissions: permissions.length > 0 ? permissions : undefined,
         funcionario_id: userFull?.funcionario_id ?? null,
@@ -1434,7 +1500,7 @@ authRoutes.post('/impersonate', auth(), async (c) => {
           id: target.id,
           email: target.email,
           nome: target.nome,
-          role: target.perfil.toUpperCase(),
+          role: resolvedRole,
           permissions,
           funcionario_id: userFull?.funcionario_id ?? null,
         },

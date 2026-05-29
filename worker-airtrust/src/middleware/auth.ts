@@ -14,6 +14,7 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env, Variables, JwtPayload } from '../types';
 import { extractBearerToken, verifyJWT } from '../utils/security';
 import { getUsuariosSchema, hasUsuariosEmpresasTable } from '../utils/db-schema';
+import { normalizeAirtrustRole } from '../utils/role-resolution';
 import { unauthorized } from './error-handler';
 
 const USUARIOS_TABLE_SQL =
@@ -26,6 +27,46 @@ function isDevAuthBypassEnabled(env: Env): boolean {
 async function hasTable(db: D1Database, sql: string): Promise<boolean> {
   const result = await db.prepare(sql).first<{ found: number }>();
   return Boolean(result?.found);
+}
+
+function normalizeRuntimeRole(role: unknown): string {
+  const normalized = normalizeAirtrustRole(role);
+  if (normalized === 'COMPLIANCE') return 'GESTOR';
+  if (normalized === 'EDITOR') return 'USUARIO';
+  return normalized;
+}
+
+async function resolveEffectiveUserRole(
+  db: D1Database,
+  userId: number | undefined,
+  empresaId: number | undefined,
+  fallbackRole: unknown,
+): Promise<string> {
+  const fallback = normalizeRuntimeRole(fallbackRole);
+  const uid = Number(userId || 0);
+  const eid = Number(empresaId || 0);
+
+  if (!Number.isFinite(uid) || uid <= 0) return fallback;
+  if (!Number.isFinite(eid) || eid <= 0) return fallback;
+  if (!(await hasUsuariosEmpresasTable(db))) return fallback;
+
+  const roleRow = await db
+    .prepare(
+      `
+      SELECT ue.role, u.perfil
+      FROM usuarios u
+      LEFT JOIN usuarios_empresas ue
+        ON ue.usuario_id = u.id
+       AND ue.empresa_id = ?
+      WHERE u.id = ?
+        AND u.deleted_at IS NULL
+      LIMIT 1
+    `,
+    )
+    .bind(eid, uid)
+    .first<{ role: string | null; perfil: string | null }>();
+
+  return normalizeRuntimeRole(roleRow?.role || roleRow?.perfil || fallback);
 }
 
 async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<number | null> {
@@ -256,6 +297,13 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       return unauthorized('Tipo de token inválido para esta rota', 'INVALID_TOKEN_TYPE');
     }
 
+    const effectiveRole = await resolveEffectiveUserRole(
+      c.env.DB,
+      payload.sub,
+      payload.empresa_id,
+      payload.role ?? '',
+    );
+
     // Verificar se o JTI está na blocklist (token invalidado via logout)
     if (payload.jti) {
       try {
@@ -275,7 +323,7 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     c.set('userId', payload.sub);
     c.set('empresaId', payload.empresa_id ?? 0);
     c.set('userEmail', payload.email);
-    c.set('userRole', payload.role ?? '');
+    c.set('userRole', effectiveRole);
     c.set('funcionarioId', payload.funcionario_id ?? null);
 
     await next();
@@ -318,6 +366,13 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
         try {
           const payload = await verifyJWT(token, c.env.JWT_SECRET);
           if (payload) {
+            const effectiveRole = await resolveEffectiveUserRole(
+              c.env.DB,
+              payload.sub,
+              payload.empresa_id,
+              payload.role ?? '',
+            );
+
             // Token opcional também deve respeitar blocklist para evitar sessão "fantasma"
             // após logout/revogação em rotas que aceitam autenticação opcional.
             if (payload.jti) {
@@ -339,7 +394,7 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
             c.set('userId', payload.sub);
             c.set('empresaId', payload.empresa_id ?? 0);
             c.set('userEmail', payload.email);
-            c.set('userRole', payload.role ?? '');
+            c.set('userRole', effectiveRole);
             c.set('funcionarioId', payload.funcionario_id ?? null);
           }
         } catch (e) {
