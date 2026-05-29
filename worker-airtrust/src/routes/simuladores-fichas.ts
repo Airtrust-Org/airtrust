@@ -24,6 +24,7 @@ import type { Env } from '../types';
 import { auth, optionalAuth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
+import { resolveFichaScope } from '../utils/ficha-role-scope';
 import { audit, requireAdminForDelete } from './simuladores-shared';
 import { syncHorasVooFromSimulador } from '../shared/handlers/horasVooFromSimulador.handler';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
@@ -63,7 +64,7 @@ async function getFuncionarioId(
 
 // ─── Helper: perfis com acesso total ───────────────────────────────────────
 function isFullAccess(role: string): boolean {
-  return ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'COMPLIANCE'].includes(role.toUpperCase());
+  return resolveFichaScope(role) === 'FULL_ACCESS';
 }
 
 function extractIsoDateOnly(value?: string | null): string | null {
@@ -230,15 +231,15 @@ app.get('/fichas', async (c) => {
       const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
       if (!funcId) return c.json({ success: true, data: [] }); // sem vínculo → sem fichas
 
-      const roleUpper = role.toUpperCase();
-      if (roleUpper === 'ALUNO' || roleUpper === 'USUARIO') {
+      const scope = resolveFichaScope(role);
+      if (scope === 'ALUNO_PENDING_SIGNATURE') {
         // Aluno: apenas fichas onde ele é o participante E aguardando assinatura dele
         q += ` AND f.colaborador_id_aluno = ?
           AND f.assinatura_aluno_timestamp IS NULL
           AND f.assinatura_instrutor_timestamp IS NULL
           AND f.status IN ('AGUARDANDO_ASSINATURA_ALUNO','AGUARDANDO_ASSINATURAS','AVALIADA')`;
         params.push(funcId);
-      } else if (roleUpper === 'INSTRUTOR') {
+      } else if (scope === 'INSTRUTOR_OR_ALUNO') {
         // Instrutor pode ser também aluno em outra sessão — vê ambos os casos
         q += ' AND (f.instrutor_id = ? OR f.colaborador_id_aluno = ?)';
         params.push(funcId, funcId);
@@ -401,11 +402,11 @@ app.get('/fichas/:id', async (c) => {
     // ── Verificar acesso por perfil ───────────────────────────────────────────
     if (!isFullAccess(role)) {
       const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
-      const roleUpper = role.toUpperCase();
+      const scope = resolveFichaScope(role);
       const authorized =
-        roleUpper === 'ALUNO' || roleUpper === 'USUARIO'
+        scope === 'ALUNO_PENDING_SIGNATURE'
           ? String(f.colaborador_id_aluno) === String(funcId)
-          : roleUpper === 'INSTRUTOR'
+          : scope === 'INSTRUTOR_OR_ALUNO'
             ? // Instrutor pode ser o instrutor OU o aluno da ficha
               String(f.instrutor_id) === String(funcId) ||
               String(f.colaborador_id_aluno) === String(funcId)
