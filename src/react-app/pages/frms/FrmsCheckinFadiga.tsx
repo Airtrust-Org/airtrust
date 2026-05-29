@@ -98,6 +98,8 @@ const QUALIDADE_SONO_OPCOES = [
 
 type OptionalBinaryResponse = boolean | null;
 type FitForDutyChoice = 'sim' | 'nao' | 'coord' | null;
+const HIDDEN_RADIO_INPUT_CLASS =
+  'absolute left-0 top-0 h-px w-px m-0 border-0 p-0 opacity-0 pointer-events-none';
 
 export function optionalBinaryResponseToPayload(value: OptionalBinaryResponse): boolean | null {
   return value;
@@ -301,7 +303,7 @@ function TriStateButtons({
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
       <label
         id={`${baseId}-nao`}
-        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+        className={`relative flex min-h-11 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
           value === false
             ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-200'
             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -313,13 +315,13 @@ function TriStateButtons({
           value="nao"
           checked={value === false}
           onChange={() => onChange(false)}
-          className="sr-only"
+          className={HIDDEN_RADIO_INPUT_CLASS}
         />
         Nao
       </label>
       <label
         id={`${baseId}-sim`}
-        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+        className={`relative flex min-h-11 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
           value === true
             ? 'border-amber-400 bg-amber-50 text-amber-700 ring-1 ring-amber-200'
             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -331,13 +333,13 @@ function TriStateButtons({
           value="sim"
           checked={value === true}
           onChange={() => onChange(true)}
-          className="sr-only"
+          className={HIDDEN_RADIO_INPUT_CLASS}
         />
         Sim
       </label>
       <label
         id={`${baseId}-prefiro-nao`}
-        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+        className={`relative flex min-h-11 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
           value === null
             ? 'border-slate-400 bg-slate-100 text-slate-700 ring-1 ring-slate-300'
             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -349,7 +351,7 @@ function TriStateButtons({
           value="prefiro-nao"
           checked={value === null}
           onChange={() => onChange(null)}
-          className="sr-only"
+          className={HIDDEN_RADIO_INPUT_CLASS}
         />
         Prefiro nao informar
       </label>
@@ -561,7 +563,7 @@ export default function FrmsCheckinFadiga() {
                         return (
                           <label
                             key={op.key}
-                            className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                            className={`relative flex min-h-11 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                               selected
                                 ? op.risco === 'critico'
                                   ? 'border-red-400 bg-red-100 text-red-700'
@@ -577,7 +579,7 @@ export default function FrmsCheckinFadiga() {
                               value={op.key}
                               checked={selected}
                               onChange={() => setSonoOpcao(op.key)}
-                              className="sr-only"
+                              className={HIDDEN_RADIO_INPUT_CLASS}
                             />
                             {op.label}
                           </label>
@@ -628,7 +630,7 @@ export default function FrmsCheckinFadiga() {
                           return (
                             <label
                               key={op.value}
-                              className={`w-full rounded-xl border px-3 py-2 text-left cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                              className={`relative block w-full min-h-11 rounded-xl border px-3 py-2 text-left cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                                 selected
                                   ? 'border-blue-500 bg-blue-50 text-blue-800 ring-1 ring-blue-200'
                                   : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -640,7 +642,7 @@ export default function FrmsCheckinFadiga() {
                                 value={op.value}
                                 checked={selected}
                                 onChange={() => setQualidadeSono(op.value)}
-                                className="sr-only"
+                                className={HIDDEN_RADIO_INPUT_CLASS}
                                 aria-label={`Qualidade ${op.value} - ${op.title}`}
                               />
                               <span className="block text-sm font-semibold">
@@ -672,7 +674,7 @@ export default function FrmsCheckinFadiga() {
                       return (
                         <label
                           key={op.value}
-                          className={`w-full rounded-xl border px-4 py-3 text-left cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                          className={`relative block w-full min-h-11 rounded-xl border px-4 py-3 text-left cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                             selected
                               ? op.value >= 8
                                 ? 'border-red-400 bg-red-50 ring-1 ring-red-200'
@@ -688,7 +690,7 @@ export default function FrmsCheckinFadiga() {
                             value={op.value}
                             checked={selected}
                             onChange={() => setKssScore(op.value)}
-                            className="sr-only"
+                            className={HIDDEN_RADIO_INPUT_CLASS}
                             aria-label={`KSS ${op.value}: ${op.hint}`}
                           />
                           <span className={`block text-sm font-semibold ${
@@ -713,7 +715,7 @@ export default function FrmsCheckinFadiga() {
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <label
                       id="fit-choice-sim"
-                      className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                      className={`relative flex min-h-12 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                         fitForDutyChoice === 'sim'
                           ? 'border-emerald-400 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
                           : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -725,13 +727,13 @@ export default function FrmsCheckinFadiga() {
                         value="sim"
                         checked={fitForDutyChoice === 'sim'}
                         onChange={() => setFitForDutyChoice('sim')}
-                        className="sr-only"
+                        className={HIDDEN_RADIO_INPUT_CLASS}
                       />
                       Sim
                     </label>
                     <label
                       id="fit-choice-nao"
-                      className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                      className={`relative flex min-h-12 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                         fitForDutyChoice === 'nao'
                           ? 'border-red-400 bg-red-50 text-red-700 ring-1 ring-red-200'
                           : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -743,13 +745,13 @@ export default function FrmsCheckinFadiga() {
                         value="nao"
                         checked={fitForDutyChoice === 'nao'}
                         onChange={() => setFitForDutyChoice('nao')}
-                        className="sr-only"
+                        className={HIDDEN_RADIO_INPUT_CLASS}
                       />
                       Nao
                     </label>
                     <label
                       id="fit-choice-coord"
-                      className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                      className={`relative flex min-h-12 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                         fitForDutyChoice === 'coord'
                           ? 'border-amber-400 bg-amber-50 text-amber-700 ring-1 ring-amber-200'
                           : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -761,7 +763,7 @@ export default function FrmsCheckinFadiga() {
                         value="coord"
                         checked={fitForDutyChoice === 'coord'}
                         onChange={() => setFitForDutyChoice('coord')}
-                        className="sr-only"
+                        className={HIDDEN_RADIO_INPUT_CLASS}
                       />
                       Preciso falar com a coordenacao
                     </label>
