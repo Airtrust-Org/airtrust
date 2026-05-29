@@ -69,11 +69,31 @@ const KSS_OPCOES = [
 ];
 
 const QUALIDADE_SONO_OPCOES = [
-  { value: 1, hint: 'Muito ruim' },
-  { value: 2, hint: 'Ruim' },
-  { value: 3, hint: 'Regular' },
-  { value: 4, hint: 'Boa' },
-  { value: 5, hint: 'Muito boa' },
+  {
+    value: 1,
+    title: 'Muito ruim',
+    description: 'Dormi muito mal; acordei varias vezes ou quase nao descansei.',
+  },
+  {
+    value: 2,
+    title: 'Ruim',
+    description: 'Dormi mal; descanso insuficiente.',
+  },
+  {
+    value: 3,
+    title: 'Regular',
+    description: 'Dormi razoavelmente; descanso mediano.',
+  },
+  {
+    value: 4,
+    title: 'Boa',
+    description: 'Dormi bem; acordei relativamente descansado.',
+  },
+  {
+    value: 5,
+    title: 'Muito boa',
+    description: 'Dormi muito bem; acordei descansado.',
+  },
 ];
 
 type OptionalBinaryResponse = boolean | null;
@@ -89,6 +109,26 @@ export function mapKssToSubjectiveFatigue(kssScore: number): number {
   if (kssScore >= 5) return 5;
   if (kssScore >= 3) return 3;
   return 1;
+}
+
+export function formatWakeTimeInput(rawValue: string): string {
+  const digits = rawValue.replace(/\D/g, '').slice(0, 4);
+  if (!digits) return '';
+  if (digits.length <= 2) return digits;
+
+  const normalized = digits.length === 3 ? `0${digits}` : digits;
+  const hour = normalized.slice(0, 2);
+  const minute = normalized.slice(2, 4);
+
+  return `${hour}:${minute}`;
+}
+
+export function isValidWakeTime(value: string): boolean {
+  if (!/^\d{2}:\d{2}$/.test(value)) return false;
+  const [hourText, minuteText] = value.split(':');
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
 }
 
 function fitChoiceToPayload(choice: FitForDutyChoice): boolean | null {
@@ -108,9 +148,10 @@ export function isFadigaCheckinSubmitReady(input: {
   observacao: string;
 }): boolean {
   const fitForDutyPayload = fitChoiceToPayload(input.fitForDutyChoice);
+  const wakeTimeValid = isValidWakeTime(input.wakeTime);
   return (
     input.sonoOpcao !== null &&
-    input.wakeTime !== '' &&
+    wakeTimeValid &&
     input.qualidadeSono !== null &&
     input.kssScore !== null &&
     fitForDutyPayload !== null &&
@@ -258,45 +299,60 @@ function TriStateButtons({
 }) {
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-      <button
+      <label
         id={`${baseId}-nao`}
-        type="button"
-        aria-pressed={value === false}
-        onClick={() => onChange(false)}
-        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${
+        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
           value === false
-            ? 'border-blue-400 bg-blue-50 text-blue-700'
+            ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-200'
             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
         }`}
       >
+        <input
+          type="radio"
+          name={baseId}
+          value="nao"
+          checked={value === false}
+          onChange={() => onChange(false)}
+          className="sr-only"
+        />
         Nao
-      </button>
-      <button
+      </label>
+      <label
         id={`${baseId}-sim`}
-        type="button"
-        aria-pressed={value === true}
-        onClick={() => onChange(true)}
-        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${
+        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
           value === true
-            ? 'border-amber-400 bg-amber-50 text-amber-700'
+            ? 'border-amber-400 bg-amber-50 text-amber-700 ring-1 ring-amber-200'
             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
         }`}
       >
+        <input
+          type="radio"
+          name={baseId}
+          value="sim"
+          checked={value === true}
+          onChange={() => onChange(true)}
+          className="sr-only"
+        />
         Sim
-      </button>
-      <button
+      </label>
+      <label
         id={`${baseId}-prefiro-nao`}
-        type="button"
-        aria-pressed={value === null}
-        onClick={() => onChange(null)}
-        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${
+        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
           value === null
-            ? 'border-slate-400 bg-slate-100 text-slate-700'
+            ? 'border-slate-400 bg-slate-100 text-slate-700 ring-1 ring-slate-300'
             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
         }`}
       >
+        <input
+          type="radio"
+          name={baseId}
+          value="prefiro-nao"
+          checked={value === null}
+          onChange={() => onChange(null)}
+          className="sr-only"
+        />
         Prefiro nao informar
-      </button>
+      </label>
     </div>
   );
 }
@@ -336,11 +392,28 @@ export default function FrmsCheckinFadiga() {
   });
 
   const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';
+  const wakeTimeHasValue = wakeTime.trim().length > 0;
+  const wakeTimeValid = isValidWakeTime(wakeTime);
+
+  const missingItems: string[] = [];
+  if (sonoOpcao === null) missingItems.push('Horas de sono nas ultimas 24h');
+  if (!wakeTimeValid) {
+    if (!wakeTimeHasValue) missingItems.push('Hora em que acordou');
+    else missingItems.push('Horario invalido - corrija a hora em que acordou');
+  }
+  if (qualidadeSono === null) missingItems.push('Qualidade do sono');
+  if (kssScore === null) missingItems.push('Nivel de sonolencia (KSS)');
+  if (fitForDutyChoice === null) missingItems.push('Condicao para iniciar a jornada');
+  if (isNeedsCoordinatorReview && !observacao.trim()) missingItems.push('Observacao obrigatoria para revisao');
+  if (!aceiteTermos) missingItems.push('Declaracao de veracidade');
+  if (!aceitePrivacidade) missingItems.push('Aceite da politica de privacidade');
 
   const submit = async () => {
     if (!canSubmit) {
       toast.error(
-        isNeedsCoordinatorReview && !observacao.trim()
+        !wakeTimeValid && wakeTimeHasValue
+          ? 'Informe um horario valido, ex.: 06:30.'
+          : isNeedsCoordinatorReview && !observacao.trim()
           ? 'Informe uma observacao para revisao da coordenacao'
           : 'Preencha os campos obrigatorios',
       );
@@ -451,21 +524,44 @@ export default function FrmsCheckinFadiga() {
               </div>
             )}
 
+            {!canSubmit && (
+              <div
+                className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3"
+                role="status"
+                aria-live="polite"
+                aria-label={`${missingItems.length} ${missingItems.length === 1 ? 'resposta pendente' : 'respostas pendentes'}`}
+              >
+                <p className="text-sm font-semibold text-amber-800">
+                  {missingItems.length} {missingItems.length === 1 ? 'resposta pendente' : 'respostas pendentes'}
+                </p>
+                <ul className="mt-1 space-y-0.5 text-xs text-amber-700">
+                  {missingItems.slice(0, 3).map((item, i) => (
+                    <li key={i} className="flex items-center gap-1.5">
+                      <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                {missingItems.length > 3 && (
+                  <p className="mt-1 text-xs text-amber-600">...e mais {missingItems.length - 3} itens.</p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-3">
               <FormCard label="Bloco 1 - Sono" hint="Informe seu descanso mais recente.">
                 <div className="space-y-4">
-                  <div>
-                    <p className="mb-2 text-sm font-medium text-slate-700">Horas de sono nas ultimas 24h</p>
+                  <fieldset>
+                    <legend className="mb-2 text-sm font-medium text-slate-700">
+                      Horas de sono nas ultimas 24h
+                    </legend>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                       {SONO_OPCOES.map((op) => {
                         const selected = sonoOpcao === op.key;
                         return (
-                          <button
+                          <label
                             key={op.key}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => setSonoOpcao(op.key)}
-                            className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+                            className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition-all cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                               selected
                                 ? op.risco === 'critico'
                                   ? 'border-red-400 bg-red-100 text-red-700'
@@ -475,12 +571,20 @@ export default function FrmsCheckinFadiga() {
                                 : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                             }`}
                           >
+                            <input
+                              type="radio"
+                              name="sono-24h"
+                              value={op.key}
+                              checked={selected}
+                              onChange={() => setSonoOpcao(op.key)}
+                              className="sr-only"
+                            />
                             {op.label}
-                          </button>
+                          </label>
                         );
                       })}
                     </div>
-                  </div>
+                  </fieldset>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
@@ -489,42 +593,67 @@ export default function FrmsCheckinFadiga() {
                       </label>
                       <input
                         id="wake-time"
-                        type="time"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={5}
+                        placeholder="Ex.: 0630"
+                        aria-invalid={wakeTimeHasValue && !wakeTimeValid}
+                        aria-describedby="wake-time-help wake-time-error"
                         value={wakeTime}
-                        onChange={(e) => setWakeTime(e.target.value)}
-                        className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => setWakeTime(formatWakeTimeInput(e.target.value))}
+                        className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-base font-semibold text-slate-800 focus:outline-none focus:ring-2 ${
+                          wakeTimeHasValue && !wakeTimeValid
+                            ? 'border-red-400 focus:ring-red-400'
+                            : 'border-slate-200 focus:ring-blue-500'
+                        }`}
                       />
-                    </div>
-
-                    <div>
-                      <p className="mb-2 text-sm font-medium text-slate-700">Qualidade do sono</p>
-                      <div className="grid grid-cols-5 gap-2">
-                        {QUALIDADE_SONO_OPCOES.map((op) => {
-                          const selected = qualidadeSono === op.value;
-                          return (
-                            <button
-                              key={op.value}
-                              type="button"
-                              aria-label={`Qualidade ${op.value}: ${op.hint}`}
-                              aria-pressed={selected}
-                              onClick={() => setQualidadeSono(op.value)}
-                              className={`min-h-11 rounded-xl border px-2 py-2 text-center text-sm font-semibold ${
-                                selected
-                                  ? 'border-blue-400 bg-blue-100 text-blue-700'
-                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                              }`}
-                            >
-                              {op.value}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {qualidadeSono != null && (
-                        <p className="mt-2 text-xs text-slate-500">
-                          {QUALIDADE_SONO_OPCOES.find((op) => op.value === qualidadeSono)?.hint}
+                      <p id="wake-time-help" className="mt-2 text-xs text-slate-500">
+                        Digite os numeros. Ex.: 0630 vira 06:30.
+                      </p>
+                      {wakeTimeHasValue && !wakeTimeValid && (
+                        <p id="wake-time-error" className="mt-1 text-xs text-red-700">
+                          Informe um horario valido, ex.: 06:30.
                         </p>
                       )}
                     </div>
+
+                    <fieldset>
+                      <legend className="mb-2 text-sm font-medium text-slate-700">
+                        Qualidade do sono
+                      </legend>
+                      <div className="space-y-2">
+                        {QUALIDADE_SONO_OPCOES.map((op) => {
+                          const selected = qualidadeSono === op.value;
+                          return (
+                            <label
+                              key={op.value}
+                              className={`w-full rounded-xl border px-3 py-2 text-left cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                                selected
+                                  ? 'border-blue-500 bg-blue-50 text-blue-800 ring-1 ring-blue-200'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="qualidade-sono"
+                                value={op.value}
+                                checked={selected}
+                                onChange={() => setQualidadeSono(op.value)}
+                                className="sr-only"
+                                aria-label={`Qualidade ${op.value} - ${op.title}`}
+                              />
+                              <span className="block text-sm font-semibold">
+                                {op.value} - {op.title}
+                              </span>
+                              <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                                {op.description}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                   </div>
                 </div>
               </FormCard>
@@ -533,80 +662,111 @@ export default function FrmsCheckinFadiga() {
                 label="Bloco 2 - Sonolencia agora"
                 hint="Quao sonolento ou alerta voce esta agora? Escolha a opcao que melhor descreve seu estado neste momento."
               >
-                <p className="mb-3 text-xs text-slate-500">Escala KSS (1-9).</p>
-                <div className="space-y-2">
-                  {KSS_OPCOES.map((op) => {
-                    const selected = kssScore === op.value;
-                    return (
-                      <button
-                        key={op.value}
-                        type="button"
-                        aria-pressed={selected}
-                        aria-label={`KSS ${op.value}: ${op.hint}`}
-                        onClick={() => setKssScore(op.value)}
-                        className={`w-full rounded-xl border px-4 py-3 text-left ${
-                          selected
-                            ? op.value >= 8
-                              ? 'border-red-400 bg-red-50'
-                              : op.value >= 7
-                                ? 'border-amber-400 bg-amber-50'
-                                : 'border-blue-400 bg-blue-50'
-                            : 'border-slate-200 bg-white hover:border-slate-300'
-                        }`}
-                      >
-                        <span className="block text-sm font-semibold text-slate-800">{op.value}</span>
-                        <span className="block text-xs text-slate-600">{op.hint}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <fieldset>
+                  <legend className="mb-3 text-xs font-medium text-slate-500">
+                    Escala KSS (1-9)
+                  </legend>
+                  <div className="space-y-2">
+                    {KSS_OPCOES.map((op) => {
+                      const selected = kssScore === op.value;
+                      return (
+                        <label
+                          key={op.value}
+                          className={`w-full rounded-xl border px-4 py-3 text-left cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                            selected
+                              ? op.value >= 8
+                                ? 'border-red-400 bg-red-50 ring-1 ring-red-200'
+                                : op.value >= 7
+                                  ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-200'
+                                  : 'border-blue-500 bg-blue-50 ring-1 ring-blue-200'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="kss"
+                            value={op.value}
+                            checked={selected}
+                            onChange={() => setKssScore(op.value)}
+                            className="sr-only"
+                            aria-label={`KSS ${op.value}: ${op.hint}`}
+                          />
+                          <span className={`block text-sm font-semibold ${
+                            selected
+                              ? op.value >= 8 ? 'text-red-800' : op.value >= 7 ? 'text-amber-800' : 'text-blue-800'
+                              : 'text-slate-800'
+                          }`}>
+                            {op.value} - {op.hint}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
               </FormCard>
 
               <FormCard label="Bloco 3 - Aptidao operacional">
-                <p className="mb-3 text-sm text-slate-700">
-                  Voce se sente em condicao segura para iniciar a jornada?
-                </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <button
-                    id="fit-choice-sim"
-                    type="button"
-                    aria-pressed={fitForDutyChoice === 'sim'}
-                    onClick={() => setFitForDutyChoice('sim')}
-                    className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold ${
-                      fitForDutyChoice === 'sim'
-                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    Sim
-                  </button>
-                  <button
-                    id="fit-choice-nao"
-                    type="button"
-                    aria-pressed={fitForDutyChoice === 'nao'}
-                    onClick={() => setFitForDutyChoice('nao')}
-                    className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold ${
-                      fitForDutyChoice === 'nao'
-                        ? 'border-red-400 bg-red-50 text-red-700'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    Nao
-                  </button>
-                  <button
-                    id="fit-choice-coord"
-                    type="button"
-                    aria-pressed={fitForDutyChoice === 'coord'}
-                    onClick={() => setFitForDutyChoice('coord')}
-                    className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold ${
-                      fitForDutyChoice === 'coord'
-                        ? 'border-amber-400 bg-amber-50 text-amber-700'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    Preciso falar com a coordenacao
-                  </button>
-                </div>
+                <fieldset>
+                  <legend className="mb-3 text-sm text-slate-700">
+                    Voce se sente em condicao segura para iniciar a jornada?
+                  </legend>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <label
+                      id="fit-choice-sim"
+                      className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                        fitForDutyChoice === 'sim'
+                          ? 'border-emerald-400 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="fit-for-duty"
+                        value="sim"
+                        checked={fitForDutyChoice === 'sim'}
+                        onChange={() => setFitForDutyChoice('sim')}
+                        className="sr-only"
+                      />
+                      Sim
+                    </label>
+                    <label
+                      id="fit-choice-nao"
+                      className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                        fitForDutyChoice === 'nao'
+                          ? 'border-red-400 bg-red-50 text-red-700 ring-1 ring-red-200'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="fit-for-duty"
+                        value="nao"
+                        checked={fitForDutyChoice === 'nao'}
+                        onChange={() => setFitForDutyChoice('nao')}
+                        className="sr-only"
+                      />
+                      Nao
+                    </label>
+                    <label
+                      id="fit-choice-coord"
+                      className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer select-none flex items-center justify-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                        fitForDutyChoice === 'coord'
+                          ? 'border-amber-400 bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="fit-for-duty"
+                        value="coord"
+                        checked={fitForDutyChoice === 'coord'}
+                        onChange={() => setFitForDutyChoice('coord')}
+                        className="sr-only"
+                      />
+                      Preciso falar com a coordenacao
+                    </label>
+                  </div>
+                </fieldset>
 
                 {isNeedsCoordinatorReview && (
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
@@ -641,45 +801,45 @@ export default function FrmsCheckinFadiga() {
 
               <FormCard label="Bloco 4 - Fatores relevantes" hint="Esses itens sao opcionais.">
                 <div className="space-y-4">
-                  <div>
-                    <label htmlFor="meds-ult-12h-nao" className="mb-2 block text-sm font-medium text-slate-700">
+                  <fieldset>
+                    <legend className="mb-2 text-sm font-medium text-slate-700">
                       Medicacao que pode causar sonolencia
-                    </label>
+                    </legend>
                     <TriStateButtons value={medsUlt12h} onChange={setMedsUlt12h} baseId="meds-ult-12h" />
-                  </div>
+                  </fieldset>
 
-                  <div>
-                    <label htmlFor="alcool-ult-12h-nao" className="mb-2 block text-sm font-medium text-slate-700">
+                  <fieldset>
+                    <legend className="mb-2 text-sm font-medium text-slate-700">
                       Alcool nas ultimas 12h
-                    </label>
+                    </legend>
                     <TriStateButtons value={alcoolUlt12h} onChange={setAlcoolUlt12h} baseId="alcool-ult-12h" />
-                  </div>
+                  </fieldset>
                 </div>
               </FormCard>
 
               <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Declaracao</p>
-                <label className="flex items-start gap-3">
+                <label className="flex cursor-pointer items-start gap-3 py-2" htmlFor="aceite-termos">
                   <input
                     id="aceite-termos"
                     type="checkbox"
                     checked={aceiteTermos}
                     onChange={(e) => setAceiteTermos(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600"
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-blue-600"
                   />
-                  <span className="text-sm text-slate-700">
+                  <span className="text-sm leading-relaxed text-slate-700">
                     As informacoes fornecidas sao veridicas e refletem meu estado atual.
                   </span>
                 </label>
-                <label className="flex items-start gap-3">
+                <label className="flex cursor-pointer items-start gap-3 py-2" htmlFor="aceite-privacidade">
                   <input
                     id="aceite-privacidade"
                     type="checkbox"
                     checked={aceitePrivacidade}
                     onChange={(e) => setAceitePrivacidade(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600"
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-blue-600"
                   />
-                  <span className="text-sm text-slate-700">
+                  <span className="text-sm leading-relaxed text-slate-700">
                     Aceito o uso dos dados no FRMS conforme a politica de privacidade da empresa.
                   </span>
                 </label>
@@ -696,15 +856,18 @@ export default function FrmsCheckinFadiga() {
               </Button>
 
               {!canSubmit && (
-                <p className="flex items-start gap-2 text-xs text-slate-500">
+                <p className="flex items-start gap-2 text-xs text-slate-500" role="alert">
                   <MessageCircleWarning className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Preencha os campos obrigatorios para liberar o envio.
+                  Confira os itens destacados acima para liberar o envio.
                 </p>
               )}
             </div>
 
             {isNeedsCoordinatorReview && !observacao.trim() && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div
+                className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+                role="alert"
+              >
                 Quando voce seleciona "Nao" ou "Preciso falar com a coordenacao", a observacao e obrigatoria.
               </div>
             )}

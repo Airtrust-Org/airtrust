@@ -16,7 +16,8 @@ O formulario de check-in diario foi simplificado para uso por tripulante em celu
 - blocos curtos para sono, sonolencia agora, aptidao operacional e fatores relevantes;
 - KSS apresentada com pergunta clara: "Quao sonolento ou alerta voce esta agora?";
 - descritores de KSS de 1 a 9 visiveis no proprio controle;
-- qualidade do sono mantida em linguagem simples;
+- qualidade do sono com numero + titulo claro (`1 - Muito ruim` ate `5 - Muito boa`) e descricao curta;
+- hora em que acordou com entrada numerica continua e mascara automatica (`0630` vira `06:30`);
 - aptidao operacional com opcoes "Sim", "Nao" e "Preciso falar com a coordenacao";
 - observacao obrigatoria quando o tripulante informa que nao esta em condicao segura ou precisa falar com a coordenacao;
 - medicacao e alcool como tri-state: "Nao", "Sim" e "Prefiro nao informar";
@@ -92,6 +93,8 @@ O Controle Operacional exibe o resultado consolidado via snapshot:
 - alertas operacionais;
 - efetividade e quinzena como indicadores descritivos;
 - eventos de ciencia operacional.
+
+No check-in, a validacao de hora continua exigindo formato final `HH:mm` e faixa `00:00` a `23:59`, sem mudanca de contrato.
 
 ## 7. Limitacoes preservadas
 
