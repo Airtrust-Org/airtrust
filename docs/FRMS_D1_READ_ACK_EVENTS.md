@@ -145,3 +145,9 @@ A D2 adiciona governanca de lifecycle sem mudar a natureza do fluxo:
 - separacao visual entre pendentes e cientes.
 
 Referencia: `docs/FRMS_D2_READ_ACK_LIFECYCLE.md`.
+
+## 12) Evolucao D3 (governanca de retencao)
+
+A D3 formaliza politica de retencao, historico e proposta de schema dedicado para reduzir fragilidade de longo prazo do reuso em `frms_fadiga_evento`.
+
+Referencia: `docs/FRMS_D3_READ_ACK_RETENTION_AND_ARCHIVING.md`.
