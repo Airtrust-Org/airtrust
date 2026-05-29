@@ -499,6 +499,7 @@ app.put('/sessoes/:id', async (c) => {
             diag.criadas = res.criadas;
             diag.puladas = res.puladas;
             diag.conflitosUniques = res.conflitosUniques;
+            diag.bloqueadasDataPassada = res.bloqueadasDataPassada;
           } catch (err: any) {
             diag.resultado = 'erro';
             diag.erro = err?.message || String(err);
