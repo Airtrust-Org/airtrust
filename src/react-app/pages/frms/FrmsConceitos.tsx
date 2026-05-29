@@ -224,6 +224,12 @@ export default function FrmsConceitos() {
             configurado para aquele período.
           </p>
 
+          <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+            Os índices FRMS são apoio operacional e não diagnóstico médico. KSS mede sonolência e
+            alerta atual. Compliance de jornada/HV não representa fadiga fisiológica por si só.
+            Efetividade é um índice estimado (proxy local).
+          </div>
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -261,7 +267,7 @@ export default function FrmsConceitos() {
             <p className="text-sm font-semibold text-blue-900">Exemplo didático</p>
             <div className="mt-2 space-y-1 text-sm text-blue-800">
               <p>Tripulante com 38h voadas em 7 dias, 82h no mês e 640h em 365 dias.</p>
-              <p>Se os limites forem 45h, 90h e 960h, os percentuais serão 84,4%, 91,1% e 66,7%.</p>
+              <p>Se os limites forem 45h, 90h e 930h, os percentuais serão 84,4%, 91,1% e 68,8%.</p>
               <p>
                 O FRMS guarda os três valores, mas classifica pelo pior: <strong>91,1%</strong>,
                 portanto a severidade entra em <strong>Atenção</strong>.
@@ -277,7 +283,7 @@ export default function FrmsConceitos() {
               {[
                 { label: 'HV 7 dias', value: '45 h', desc: 'Máx. horas em 7 dias corridos' },
                 { label: 'HV Mês', value: '90 h', desc: 'Máx. horas no mês calendário' },
-                { label: 'HV 365 dias', value: '960 h', desc: 'Máx. horas em 365 dias' },
+                { label: 'HV 365 dias', value: '930 h', desc: 'Máx. horas em 365 dias' },
                 { label: 'FDP máximo', value: '11 h', desc: 'Duração máxima de jornada' },
                 { label: 'Repouso mínimo', value: '12 h', desc: 'Repouso entre jornadas' },
               ].map((item) => (

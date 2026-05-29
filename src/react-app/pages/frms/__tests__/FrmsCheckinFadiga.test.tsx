@@ -11,6 +11,8 @@ import FrmsCheckinFadiga, {
 const mutateAsyncMock = vi.fn();
 const refetchMock = vi.fn();
 const navigateMock = vi.fn();
+const useFadigaHistoricoMock = vi.fn();
+const useFadigaPainelMock = vi.fn();
 
 vi.mock('react-router-dom', () => ({
   Link: ({ to, children }: { to: string; children: any }) => <a href={to}>{children}</a>,
@@ -37,8 +39,8 @@ vi.mock('@/react-app/hooks/usePermissions', () => ({
 vi.mock('@/react-app/hooks/useFadigaCheckin', () => ({
   useCheckinHoje: () => ({ data: null, refetch: refetchMock }),
   useSubmitCheckin: () => ({ mutateAsync: mutateAsyncMock, isPending: false }),
-  useFadigaHistorico: () => ({ data: { data: [] }, isLoading: false }),
-  useFadigaPainel: () => ({ data: [], isLoading: false }),
+  useFadigaHistorico: (...args: unknown[]) => useFadigaHistoricoMock(...args),
+  useFadigaPainel: (...args: unknown[]) => useFadigaPainelMock(...args),
 }));
 
 vi.mock('sonner', () => ({
@@ -126,8 +128,12 @@ describe('FrmsCheckinFadiga UI', () => {
     mutateAsyncMock.mockReset();
     refetchMock.mockReset();
     navigateMock.mockReset();
+    useFadigaHistoricoMock.mockReset();
+    useFadigaPainelMock.mockReset();
     mutateAsyncMock.mockResolvedValue({ data: { requires_frat_review: 0 } });
     refetchMock.mockResolvedValue(undefined);
+    useFadigaHistoricoMock.mockReturnValue({ data: { data: [] }, isLoading: false });
+    useFadigaPainelMock.mockReturnValue({ data: [], isLoading: false });
   });
 
   it('renderiza KSS com titulo claro e descritores', () => {
@@ -322,5 +328,31 @@ describe('FrmsCheckinFadiga UI', () => {
 
     expect(screen.getByText('Informe um horario valido, ex.: 06:30.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeDisabled();
+  });
+
+  it('renderiza status operacional com rotulos seguros na aba Historico', () => {
+    useFadigaHistoricoMock.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'chk-1',
+            data_checkin: '2026-05-29',
+            kss_score: 8,
+            horas_sono: 4.5,
+            score_fadiga: 82,
+            nivel_fadiga: 'VERMELHO',
+            status_operacional: 'INAPTO',
+          },
+        ],
+      },
+      isLoading: false,
+    });
+
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Historico' }));
+
+    expect(screen.getByText('Requer revisao operacional')).toBeInTheDocument();
+    expect(screen.queryByText(/^INAPTO$/)).not.toBeInTheDocument();
   });
 });

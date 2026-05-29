@@ -1665,7 +1665,7 @@ export default function ModalAdicionarTripulacao({
                             <span
                               className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selecionado ? 'bg-white/15 text-white' : tripulante.frms_status === 'critico' ? 'bg-red-50 text-red-700' : tripulante.frms_status === 'atencao' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}
                             >
-                              FRMS {tripulante.frms_score ?? '—'}
+                              Indicador FRMS legado {tripulante.frms_score ?? '—'}
                             </span>
                           )}
                         </div>

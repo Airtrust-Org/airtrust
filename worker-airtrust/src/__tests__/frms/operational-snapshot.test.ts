@@ -247,4 +247,34 @@ describe('frms operational snapshot builder', () => {
     expect(item?.alertas).toContain('JORNADA_SEM_FATORIZACAO');
     expect(item?.fatorizacao_status).toBe('AUSENTE');
   });
+
+  it('7) wake estimado respeita parâmetro configurável de minutos antes da apresentação', () => {
+    const input = createBaseInput();
+
+    input.rows.jornadas.push({
+      data_operacional: '2026-05-30',
+      funcionario_id: 10,
+      hora_apresentacao: '09:00',
+      hora_termino: '13:00',
+      horas_voo_minutos: 120,
+      duracao_jornada_minutos: 240,
+      origem: 'SIGVOOS',
+      has_operational_data: 1,
+      is_manual_empty: 0,
+    });
+
+    const defaultSnapshot = buildFrmsOperationalSnapshot(input);
+    const customSnapshot = buildFrmsOperationalSnapshot({
+      ...input,
+      wakeFallbackLeadMinutes: 75,
+    });
+
+    const defaultItem = getByKey(defaultSnapshot.items, '2026-05-30', 10);
+    const customItem = getByKey(customSnapshot.items, '2026-05-30', 10);
+
+    expect(defaultItem?.wake_data_source).toBe('ESTIMADO');
+    expect(defaultItem?.hora_acordar).toBe('07:30');
+    expect(customItem?.wake_data_source).toBe('ESTIMADO');
+    expect(customItem?.hora_acordar).toBe('07:45');
+  });
 });
