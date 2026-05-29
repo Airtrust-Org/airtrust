@@ -481,9 +481,11 @@ function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
     | 'Atenção'
     | 'Revisão operacional'
     | 'Sem check-in'
+    | 'Sem check-in · estimativa padrão'
     | 'Sem jornada'
     | 'Sem referência'
     | 'Indisponível';
+  isEstimated?: boolean;
 } {
   if (!signal) {
     return { short: '—', long: 'Sem referência' };
@@ -498,6 +500,9 @@ function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
     return { short: 'ATN', long: 'Atenção' };
   }
   if (signal.status === 'not_submitted') {
+    if (signal.dataSource === 'default_estimate') {
+      return { short: 'SC', long: 'Sem check-in · estimativa padrão', isEstimated: true };
+    }
     return { short: 'SC', long: 'Sem check-in' };
   }
   if (signal.requiresReview || signal.hasAlert) {
@@ -1729,7 +1734,7 @@ export default function EvdPage() {
             <div className="overflow-x-auto">
               <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
                 Fadiga (F): `OK` = FRMS OK, `ATN` = Atenção, `REV` = Revisão operacional, `SC`
-                = Sem check-in na data de referência FRMS, `IND` = FRMS indisponível.
+                = Sem check-in (sistema usa estimativa padrão se há jornada — badge mostra `Est.`), `IND` = FRMS indisponível.
               </div>
               <table className="min-w-full text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
@@ -1802,10 +1807,13 @@ export default function EvdPage() {
                         </td>
                         <td className="px-3 py-3.5">
                           <span
-                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(picFrms.short)}`}
+                            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(picFrms.short)}`}
                             title={picFrms.long}
                           >
                             {picFrms.short}
+                            {picFrms.isEstimated && (
+                              <span className="font-normal opacity-70">Est.</span>
+                            )}
                           </span>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
@@ -1827,10 +1835,13 @@ export default function EvdPage() {
                         </td>
                         <td className="px-3 py-3.5">
                           <span
-                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(sicFrms.short)}`}
+                            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(sicFrms.short)}`}
                             title={sicFrms.long}
                           >
                             {sicFrms.short}
+                            {sicFrms.isEstimated && (
+                              <span className="font-normal opacity-70">Est.</span>
+                            )}
                           </span>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
