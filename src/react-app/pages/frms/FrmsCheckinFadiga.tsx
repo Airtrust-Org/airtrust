@@ -46,6 +46,20 @@ function badgeNivel(nivel: string) {
   );
 }
 
+const STATUS_OPERACIONAL_LABEL: Record<string, string> = {
+  APTO: 'Prontidao normal',
+  APTO_COM_RESSALVA: 'Atencao - revisar com gestor',
+  INAPTO: 'Requer revisao operacional',
+  NAO_APTO: 'Requer revisao imediata',
+  RESTRITO: 'Requer revisao operacional',
+};
+
+function statusOperacionalLabel(value: unknown): string {
+  const key = String(value ?? '').trim().toUpperCase();
+  if (!key) return '-';
+  return STATUS_OPERACIONAL_LABEL[key] || key;
+}
+
 type SonoOpcao = 'menos4' | 'ate5' | 'ate6' | 'ate8' | 'mais8';
 
 const SONO_OPCOES: { key: SonoOpcao; label: string; horas: number; risco?: 'critico' | 'atencao' }[] = [
@@ -198,7 +212,7 @@ function HistoricoTab() {
                   <td className="py-2 text-slate-700">{Number(r.horas_sono ?? 0).toFixed(1)}</td>
                   <td className="py-2 font-semibold text-slate-800">{Math.round(Number(r.score_fadiga ?? 0))}</td>
                   <td className="py-2">{badgeNivel(r.nivel_fadiga)}</td>
-                  <td className="py-2 text-slate-600">{r.status_operacional}</td>
+                  <td className="py-2 text-slate-600">{statusOperacionalLabel(r.status_operacional)}</td>
                 </tr>
               ))}
             </tbody>
@@ -260,7 +274,9 @@ function PainelGestorTab() {
                     <td className="px-4 py-3 text-slate-700">{String(r.kss_score ?? '-')}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">{Math.round(Number(r.score_fadiga ?? 0))}</td>
                     <td className="px-4 py-3">{badgeNivel(String(r.nivel_fadiga ?? ''))}</td>
-                    <td className="px-4 py-3 text-slate-600">{String(r.status_operacional ?? '-')}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {statusOperacionalLabel(r.status_operacional)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

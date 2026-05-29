@@ -1,4 +1,6 @@
 import type { Origem } from './types';
+import { carregarLimites } from './db-service-config';
+import { resolverFrmsConfig } from './frms-config';
 import {
   buildFrmsFortnightIndicatorMap,
   type FrmsFortnightIndicator,
@@ -90,6 +92,7 @@ export interface FrmsOperationalSnapshotFilters {
 
 export interface BuildOperationalSnapshotInput {
   empresaId: number;
+  wakeFallbackLeadMinutes?: number;
   rows: {
     escalas: ScaleSnapshotRow[];
     jornadas: JornadaSnapshotRow[];
@@ -293,6 +296,9 @@ function includesAeronaveFilter(
 export function buildFrmsOperationalSnapshot(
   input: BuildOperationalSnapshotInput,
 ): FrmsOperationalSnapshotResult {
+  const wakeFallbackLeadMinutes = Number.isFinite(input.wakeFallbackLeadMinutes)
+    ? Number(input.wakeFallbackLeadMinutes)
+    : 90;
   const escalaMap = new Map<string, ScaleSnapshotRow>();
   const jornadaMap = new Map<string, JornadaSnapshotRow>();
   const checkinMap = new Map<string, CheckinSnapshotRow>();
@@ -440,7 +446,7 @@ export function buildFrmsOperationalSnapshot(
       wakeDataSource === 'REAL'
         ? normalizeText(checkin?.wake_time)
         : wakeDataSource === 'ESTIMADO'
-          ? computeWakeFromPresentation(horaApresentacao)
+          ? computeWakeFromPresentation(horaApresentacao, wakeFallbackLeadMinutes)
           : null;
 
     const effectivenessPctRaw = efetividade?.effectiveness_pct;
@@ -626,6 +632,9 @@ export async function listFrmsOperationalSnapshot(
   db: D1Database,
   params: ListFrmsOperationalSnapshotParams,
 ): Promise<FrmsOperationalSnapshotResult> {
+  const limites = await carregarLimites(db);
+  const frmsConfig = resolverFrmsConfig(limites);
+
   const [escalasResult, jornadasResult, checkinsResult, effectivenessResult] = await Promise.all([
     db
       .prepare(
@@ -804,6 +813,7 @@ export async function listFrmsOperationalSnapshot(
 
   const snapshot = buildFrmsOperationalSnapshot({
     empresaId: params.empresaId,
+    wakeFallbackLeadMinutes: frmsConfig.minutosAntesApresentacao,
     rows: {
       escalas: escalasResult.results || [],
       jornadas: jornadasResult.results || [],

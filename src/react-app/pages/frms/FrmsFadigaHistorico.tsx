@@ -6,6 +6,20 @@ import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
 import { useFrmsFadigaHistorico } from '@/react-app/hooks/useFrms';
 
+const STATUS_OPERACIONAL_LABEL: Record<string, string> = {
+  APTO: 'Prontidao normal',
+  APTO_COM_RESSALVA: 'Atencao - revisar com gestor',
+  INAPTO: 'Requer revisao operacional',
+  NAO_APTO: 'Requer revisao imediata',
+  RESTRITO: 'Requer revisao operacional',
+};
+
+function statusOperacionalLabel(value: unknown): string {
+  const key = String(value ?? '').trim().toUpperCase();
+  if (!key) return '-';
+  return STATUS_OPERACIONAL_LABEL[key] || key;
+}
+
 function getTodayLocalKey(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -162,7 +176,7 @@ export default function FrmsFadigaHistorico() {
                       </td>
                       <td className="px-2 py-2 font-semibold">{row.score_fadiga}</td>
                       <td className="px-2 py-2">{row.nivel_fadiga}</td>
-                      <td className="px-2 py-2">{row.status_operacional}</td>
+                      <td className="px-2 py-2">{statusOperacionalLabel(row.status_operacional)}</td>
                       <td className="px-2 py-2">
                         {row.associado_frat_avaliacao_id ? 'Vinculado' : 'Pendente'}
                       </td>

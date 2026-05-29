@@ -11,6 +11,7 @@ import {
   type FadigaScoreConfig,
   type FadigaScoreInput,
 } from '../lib/frms/fadiga-score';
+import { carregarLimites } from '../lib/frms/db-service-config';
 import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
 import {
@@ -364,6 +365,21 @@ function mapRiskToSeverity(level: DailyRiskLevel): 'ATENCAO' | 'CRITICO' | null 
   return null;
 }
 
+export function resolveContextoPilotoLimites(
+  limites?: Partial<{ HV_7_DIAS_HORAS: number; HV_28_DIAS_HORAS: number; HV_MES_HORAS: number }> | null,
+): {
+  limite7dHoras: number;
+  limite28dHoras: number;
+} {
+  const limite7 = Number(limites?.HV_7_DIAS_HORAS);
+  const limite28 = Number(limites?.HV_28_DIAS_HORAS ?? limites?.HV_MES_HORAS);
+
+  return {
+    limite7dHoras: Number.isFinite(limite7) && limite7 > 0 ? limite7 : 45,
+    limite28dHoras: Number.isFinite(limite28) && limite28 > 0 ? limite28 : 90,
+  };
+}
+
 async function computeContextoPiloto(
   db: D1Database,
   funcionarioId: number,
@@ -421,11 +437,14 @@ async function computeContextoPiloto(
     .bind(String(funcionarioId))
     .first<{ total: number }>();
 
+  const limitesConfigurados = await carregarLimites(db);
+  const limitesContexto = resolveContextoPilotoLimites(limitesConfigurados);
+
   return {
     acumulo_7d_horas: Number(((rolling?.hv_7_dias_min ?? 0) / 60).toFixed(1)),
     acumulo_28d_horas: Number(((rolling?.hv_28_dias_min ?? 0) / 60).toFixed(1)),
-    limite_7d_horas: 45,
-    limite_28d_horas: 90,
+    limite_7d_horas: limitesContexto.limite7dHoras,
+    limite_28d_horas: limitesContexto.limite28dHoras,
     effectiveness_hoje: effectiveness?.effectiveness_pct ?? null,
     media_kss_7d: media7d?.media_kss ?? null,
     media_sono_7d: media7d?.media_sono ?? null,

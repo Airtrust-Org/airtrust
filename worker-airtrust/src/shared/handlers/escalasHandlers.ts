@@ -122,7 +122,7 @@ registerHandler('escalas', 'FRMS_STATUS_CRITICO', async (db, _tipo, payload) => 
       String(payload.empresa_id),
       'FRMS_CRITICO',
       payload.funcionario_id,
-      `FRMS crítico (score: ${payload.frms_score ?? '?'}) — confirmação obrigatória para operar`,
+      `FRMS crítico (indicador legado: ${payload.frms_score ?? '?'}) — confirmação obrigatória para operar`,
     );
   }
 });

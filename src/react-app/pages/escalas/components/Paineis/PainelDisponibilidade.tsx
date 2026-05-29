@@ -145,7 +145,9 @@ export default function PainelDisponibilidade({
               <p className="text-xs font-medium text-gray-800 truncate">{item.nome}</p>
               <p className="text-[10px] text-amber-700 truncate">
                 {formatarStatus(item.status_operacional)}
-                {item.frms_score !== null ? ` • FRMS ${item.frms_score}` : ''}
+                {item.frms_score !== null
+                  ? ` • Indicador FRMS legado ${item.frms_score}`
+                  : ''}
               </p>
             </div>
           </div>

@@ -278,6 +278,13 @@ const FIELD_BOUNDS: Record<string, { min?: number; max?: number; step?: number }
   HORAS_SONO_PADRAO: { min: 4, max: 12, step: 0.1 },
 };
 
+export const PARAMETROS_DECORATIVOS = new Set([
+  'EFFECTIV_PERIODO_PCT',
+  'REPOUSO_MIN_PRE_APRESENTACAO',
+  'REPOUSO_MIN_POS_LIBERACAO',
+  'REPOUSO_QUALIDADE_HOTEL',
+]);
+
 // ── Component ────────────────────────────────────────
 
 type Tab = 'regulatorios' | 'fatorizacao' | 'notificacoes';
@@ -421,7 +428,14 @@ export default function FrmsConfiguracoes() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {group.keys.map((key) => (
           <div key={key} className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">{LABELS[key] || key}</label>
+            <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+              <span>{LABELS[key] || key}</span>
+              {PARAMETROS_DECORATIVOS.has(key) ? (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                  Reservado
+                </span>
+              ) : null}
+            </label>
             <input
               type="number"
               step={FIELD_BOUNDS[key]?.step ?? 'any'}
@@ -429,10 +443,17 @@ export default function FrmsConfiguracoes() {
               max={FIELD_BOUNDS[key]?.max}
               value={values[key] ?? ''}
               onChange={(e) => handleChange(key, e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/40 focus:border-transparent bg-white"
+              className={`w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary/40 focus:border-transparent bg-white ${
+                PARAMETROS_DECORATIVOS.has(key) ? 'border-amber-200' : 'border-gray-200'
+              }`}
             />
             {FIELD_HELPERS[key] ? (
               <p className="text-[11px] leading-relaxed text-gray-500">{FIELD_HELPERS[key]}</p>
+            ) : null}
+            {PARAMETROS_DECORATIVOS.has(key) ? (
+              <p className="text-[11px] leading-relaxed text-amber-700">
+                Sem efeito nesta versão: parâmetro mantido para compatibilidade e evolução futura.
+              </p>
             ) : null}
           </div>
         ))}

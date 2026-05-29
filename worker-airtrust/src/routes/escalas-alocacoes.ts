@@ -639,7 +639,7 @@ alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), a
         if (frmsState.frms_status === 'critico') {
           return c.json(
             formatarErroLote({
-              mensagem: `${funcionario.nome}: alertas FRMS críticos/violação não resolvidos (score ${frmsState.frms_score}). Resolva os alertas antes de alocar.`,
+              mensagem: `${funcionario.nome}: alertas FRMS críticos/violação não resolvidos (indicador legado ${frmsState.frms_score}). Resolva os alertas antes de alocar.`,
               codigo: 'FRMS_CRITICO',
               index,
               slotKey,
@@ -650,7 +650,7 @@ alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), a
         if (frmsState.frms_status === 'atencao') {
           alertas.push({
             tipo: 'FRMS_ATENCAO',
-            detalhe: `${funcionario.nome}: score FRMS em atenção (${frmsState.frms_score}). Considere a carga de trabalho.`,
+            detalhe: `${funcionario.nome}: indicador FRMS legado em atenção (${frmsState.frms_score}). Considere a carga de trabalho.`,
           });
         }
       } catch (error) {
@@ -1470,7 +1470,7 @@ alocacoes.post('/:id/alocacoes', auth(), requireRole('admin', 'manager'), async 
           {
             success: false,
             code: 'FRMS_CRITICO',
-            error: `Tripulante com alertas FRMS críticos/violação não resolvidos (score: ${frmsState.frms_score}). Resolva os alertas antes de alocar.`,
+            error: `Tripulante com alertas FRMS críticos/violação não resolvidos (indicador legado: ${frmsState.frms_score}). Resolva os alertas antes de alocar.`,
           },
           409,
         );
@@ -1478,7 +1478,7 @@ alocacoes.post('/:id/alocacoes', auth(), requireRole('admin', 'manager'), async 
       if (frmsState.frms_status === 'atencao') {
         alertas.push({
           tipo: 'FRMS_ATENCAO',
-          detalhe: `Score FRMS em atenção (${frmsState.frms_score}). Considere a carga de trabalho.`,
+          detalhe: `Indicador FRMS legado em atenção (${frmsState.frms_score}). Considere a carga de trabalho.`,
         });
       }
     } catch (e) {
