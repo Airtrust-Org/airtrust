@@ -297,13 +297,6 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       return unauthorized('Tipo de token inválido para esta rota', 'INVALID_TOKEN_TYPE');
     }
 
-    const effectiveRole = await resolveEffectiveUserRole(
-      c.env.DB,
-      payload.sub,
-      payload.empresa_id,
-      payload.role ?? '',
-    );
-
     // Verificar se o JTI está na blocklist (token invalidado via logout)
     if (payload.jti) {
       try {
@@ -373,13 +366,6 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
         try {
           const payload = await verifyJWT(token, c.env.JWT_SECRET);
           if (payload) {
-            const effectiveRole = await resolveEffectiveUserRole(
-              c.env.DB,
-              payload.sub,
-              payload.empresa_id,
-              payload.role ?? '',
-            );
-
             // Token opcional também deve respeitar blocklist para evitar sessão "fantasma"
             // após logout/revogação em rotas que aceitam autenticação opcional.
             if (payload.jti) {
