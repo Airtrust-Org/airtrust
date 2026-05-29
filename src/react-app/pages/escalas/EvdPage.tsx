@@ -5,7 +5,7 @@
  * não por voo/trecho. Visualização em tabela por aeronave com publicação versionada.
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plane,
   Plus,
@@ -15,6 +15,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Send,
   History,
   FileText,
@@ -520,6 +521,25 @@ function getFrmsBadgeTone(short: string): string {
   return 'border-slate-200 bg-slate-50 text-slate-600';
 }
 
+export function getFrmsVerboseLabel(signal: FrmsTripulanteSignal | null | undefined): string {
+  if (!signal) return 'Sem dado FRMS';
+  if (signal.status === 'no_duty') return 'Sem jornada FRMS';
+  if (signal.status === 'not_submitted') return 'Check-in pendente';
+  if (signal.status === 'critical' || signal.status === 'unfit_for_duty') return 'Revisar com gestor';
+  if (signal.requiresReview || signal.hasAlert) return 'Revisar com gestor';
+  if (signal.status === 'attention') return 'Atenção';
+  if (signal.dataSource === 'default_estimate') return 'Dado estimado';
+  if (signal.dataSource === 'crew_reported') return 'Check-in recebido';
+  return 'FRMS OK';
+}
+
+export function buildFrmsLink(data: string, funcionarioId?: number | string | null): string {
+  const params = new URLSearchParams({ data_inicio: data, data_fim: data });
+  const id = toNumericId(funcionarioId);
+  if (id) params.set('funcionario_id', String(id));
+  return `/frms/controle-operacional?${params.toString()}`;
+}
+
 function getQualificacaoBadgeTone(funcao: string | null | undefined): string {
   if (!funcao || funcao.toLowerCase().includes('a validar')) {
     return 'border-amber-200 bg-amber-50 text-amber-700';
@@ -763,10 +783,18 @@ export default function EvdPage() {
       const sicSignal = toNumericId(alocacao?.sic_id)
         ? frmsByTripulante.get(Number(alocacao?.sic_id))
         : null;
+      const hasFrmsAlert = isFrmsRelevant(picSignal) || isFrmsRelevant(sicSignal);
+      const picNumericId = toNumericId(alocacao?.pic_id);
+      const sicNumericId = toNumericId(alocacao?.sic_id);
       return {
         aeronave,
         alocacao,
-        hasFrmsAlert: isFrmsRelevant(picSignal) || isFrmsRelevant(sicSignal),
+        hasFrmsAlert,
+        frmsAlertedCrewId: hasFrmsAlert
+          ? isFrmsRelevant(picSignal)
+            ? picNumericId
+            : sicNumericId
+          : null,
       };
     });
   }, [aeronavesAtivas, frmsByTripulante, voos]);
@@ -1287,7 +1315,7 @@ export default function EvdPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                {resumoAeronavesDoDia.map(({ aeronave, alocacao, hasFrmsAlert }) => {
+                {resumoAeronavesDoDia.map(({ aeronave, alocacao, hasFrmsAlert, frmsAlertedCrewId }) => {
                   const metaAnv = getAircraftStatusMeta(aeronave.status);
                   const prefixo = normalizePrefixo(aeronave.prefixo) || 'SEM-PREFIXO';
                   const statusDesignacao = getDesignationStatusMeta({
@@ -1351,10 +1379,20 @@ export default function EvdPage() {
 
                       <div className="mt-3 flex items-center justify-between gap-2">
                         {hasFrmsAlert ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                            <AlertTriangle className="h-3 w-3" />
-                            Alerta FRMS
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                              <AlertTriangle className="h-3 w-3" />
+                              Alerta FRMS
+                            </span>
+                            <Link
+                              to={buildFrmsLink(frmsReferenceDate, frmsAlertedCrewId)}
+                              className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-blue-600 transition-colors"
+                              title="Ver no Controle Operacional FRMS"
+                            >
+                              <ExternalLink className="h-2.5 w-2.5" />
+                              Ver FRMS
+                            </Link>
+                          </div>
                         ) : (
                           <span className="text-[10px] text-slate-500">
                             {canDesignar ? 'Pendente de tripulação' : 'Tripulação definida'}
@@ -1733,8 +1771,8 @@ export default function EvdPage() {
           ) : (
             <div className="overflow-x-auto">
               <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
-                Fadiga (F): `OK` = FRMS OK, `ATN` = Atenção, `REV` = Revisão operacional, `SC`
-                = Sem check-in (sistema usa estimativa padrão se há jornada — badge mostra `Est.`), `IND` = FRMS indisponível.
+                Fadiga (F): <code>OK</code> = Check-in recebido / FRMS OK, <code>ATN</code> = Atenção, <code>REV</code> = Revisar com gestor, <code>SC</code> = Check-in pendente (<code>SC Est.</code> = sem check-in, estimativa padrão aplicada), <code>IND</code> = FRMS indisponível.{' '}
+                Clique no badge F para abrir o Controle Operacional FRMS filtrado pelo tripulante.
               </div>
               <table className="min-w-full text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
@@ -1806,15 +1844,17 @@ export default function EvdPage() {
                           )}
                         </td>
                         <td className="px-3 py-3.5">
-                          <span
-                            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(picFrms.short)}`}
-                            title={picFrms.long}
+                          <Link
+                            to={buildFrmsLink(frmsReferenceDate, voo.pic_id)}
+                            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(picFrms.short)}`}
+                            title={`${getFrmsVerboseLabel(picSignal)} — clique para ver no Controle FRMS`}
                           >
                             {picFrms.short}
                             {picFrms.isEstimated && (
                               <span className="font-normal opacity-70">Est.</span>
                             )}
-                          </span>
+                            <ExternalLink className="h-2 w-2 opacity-50" />
+                          </Link>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
                           <span
@@ -1834,15 +1874,17 @@ export default function EvdPage() {
                           </span>
                         </td>
                         <td className="px-3 py-3.5">
-                          <span
-                            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getFrmsBadgeTone(sicFrms.short)}`}
-                            title={sicFrms.long}
+                          <Link
+                            to={buildFrmsLink(frmsReferenceDate, voo.sic_id)}
+                            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(sicFrms.short)}`}
+                            title={`${getFrmsVerboseLabel(sicSignal)} — clique para ver no Controle FRMS`}
                           >
                             {sicFrms.short}
                             {sicFrms.isEstimated && (
                               <span className="font-normal opacity-70">Est.</span>
                             )}
-                          </span>
+                            <ExternalLink className="h-2 w-2 opacity-50" />
+                          </Link>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
                           <span

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -300,19 +301,29 @@ function isVisibleReadAckEvent(event: FrmsReadAckEvent, visibleIds: Set<number>)
 
 export default function FrmsControleOperacional() {
   const today = useMemo(() => getTodayLocalIsoDate(), []);
-  const initialFilters: ControlFilters = useMemo(
-    () => ({
-      data_inicio: today,
-      data_fim: today,
-      funcionario_id: '',
+  const [searchParams] = useSearchParams();
+
+  // Read QS on mount to support deep links from EVD (data_inicio, data_fim, funcionario_id, base, aeronave).
+  // searchParams intentionally excluded from deps — filters are initialized once on mount only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const initialFilters: ControlFilters = useMemo(() => {
+    function resolveQsDate(key: string): string {
+      const v = searchParams.get(key) || '';
+      return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+    }
+    const qsDataInicio = resolveQsDate('data_inicio') || resolveQsDate('data') || today;
+    const qsDataFim = resolveQsDate('data_fim') || resolveQsDate('data') || qsDataInicio;
+    return {
+      data_inicio: qsDataInicio,
+      data_fim: qsDataFim,
+      funcionario_id: searchParams.get('funcionario_id') || '',
+      base: searchParams.get('base') || '',
+      aeronave: searchParams.get('aeronave') || '',
       tripulante_query: '',
-      base: '',
-      aeronave: '',
       status: '',
       include_inconsistencies: true,
-    }),
-    [today],
-  );
+    };
+  }, [today]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [draft, setDraft] = useState<ControlFilters>(initialFilters);
   const [appliedFilters, setAppliedFilters] = useState<ControlFilters>(initialFilters);

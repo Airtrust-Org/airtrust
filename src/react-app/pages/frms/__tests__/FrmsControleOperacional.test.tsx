@@ -1,6 +1,15 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import FrmsControleOperacional from '../FrmsControleOperacional';
+
+function renderControle(initialEntries: string[] = ['/frms/controle-operacional']) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <FrmsControleOperacional />
+    </MemoryRouter>,
+  );
+}
 
 const useFrmsOperationalSnapshotMock = vi.fn();
 const useFrmsReadAckEventsMock = vi.fn();
@@ -237,7 +246,7 @@ describe('FrmsControleOperacional', () => {
   it('renderiza os seis KPIs operacionais e remove cards redundantes de quinzena', () => {
     mockSnapshotData();
 
-    render(<FrmsControleOperacional />);
+    renderControle();
 
     expect(screen.getByText('Controle operacional de fadiga')).toBeInTheDocument();
     expect(screen.getByText('Tripulantes monitorados')).toBeInTheDocument();
@@ -253,7 +262,7 @@ describe('FrmsControleOperacional', () => {
   it('mostra tabela hierarquizada com escala, excecoes, fontes e labels descritivos', () => {
     mockSnapshotData();
 
-    render(<FrmsControleOperacional />);
+    renderControle();
 
     expect(screen.getByText('Escala, fadiga e fontes')).toBeInTheDocument();
     expect(screen.getByText('2 escalados')).toBeInTheDocument();
@@ -272,7 +281,7 @@ describe('FrmsControleOperacional', () => {
   it('filtra por nome, base, aeronave/modelo e status no frontend', async () => {
     mockSnapshotData();
 
-    render(<FrmsControleOperacional />);
+    renderControle();
 
     fireEvent.change(screen.getByLabelText('Tripulante'), { target: { value: 'Ana' } });
     fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'SBJR' } });
@@ -291,7 +300,7 @@ describe('FrmsControleOperacional', () => {
   it('popula dropdowns com bases e aeronaves reais do snapshot', () => {
     mockSnapshotData();
 
-    render(<FrmsControleOperacional />);
+    renderControle();
 
     const baseSelect = screen.getByLabelText('Base');
     const aeronaveSelect = screen.getByLabelText('Aeronave/modelo');
@@ -306,7 +315,7 @@ describe('FrmsControleOperacional', () => {
   it('mantem funcionario_id como filtro tecnico escondido e enviado ao hook', async () => {
     mockSnapshotData();
 
-    render(<FrmsControleOperacional />);
+    renderControle();
 
     fireEvent.click(screen.getByText('Filtro tecnico'));
     fireEvent.change(screen.getByLabelText('Funcionario ID'), { target: { value: '20abc' } });
@@ -384,7 +393,7 @@ describe('FrmsControleOperacional', () => {
       }),
     );
 
-    render(<FrmsControleOperacional />);
+    renderControle();
 
     expect(screen.getByText('Ciencia operacional FRMS')).toBeInTheDocument();
     expect(screen.getByText('Pendentes 1')).toBeInTheDocument();
@@ -398,8 +407,59 @@ describe('FrmsControleOperacional', () => {
   it('exibe estado vazio e erro de carregamento', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(buildHookState({ error: 'Erro de API' }));
 
-    render(<FrmsControleOperacional />);
+    renderControle();
 
     expect(screen.getByText('Erro de API')).toBeInTheDocument();
+  });
+
+  describe('inicialização via query string (deep link do EVD)', () => {
+    it('inicializa data_inicio e data_fim a partir de ?data_inicio=...&data_fim=...', () => {
+      mockSnapshotData([]);
+
+      renderControle([
+        '/frms/controle-operacional?data_inicio=2026-05-27&data_fim=2026-05-27',
+      ]);
+
+      // verificar que o snapshot hook recebeu os filtros corretos da QS
+      expect(useFrmsOperationalSnapshotMock).toHaveBeenCalledWith(
+        expect.objectContaining({ data_inicio: '2026-05-27', data_fim: '2026-05-27' }),
+      );
+    });
+
+    it('inicializa data a partir do atalho ?data=...', () => {
+      mockSnapshotData([]);
+
+      renderControle(['/frms/controle-operacional?data=2026-05-20']);
+
+      expect(useFrmsOperationalSnapshotMock).toHaveBeenCalledWith(
+        expect.objectContaining({ data_inicio: '2026-05-20', data_fim: '2026-05-20' }),
+      );
+    });
+
+    it('inicializa funcionario_id a partir de ?funcionario_id=35', () => {
+      mockSnapshotData([]);
+
+      renderControle(['/frms/controle-operacional?data=2026-05-27&funcionario_id=35']);
+
+      expect(useFrmsOperationalSnapshotMock).toHaveBeenCalledWith(
+        expect.objectContaining({ funcionario_id: '35' }),
+      );
+    });
+
+    it('usa hoje como fallback quando data inválida na QS', () => {
+      mockSnapshotData([]);
+
+      renderControle(['/frms/controle-operacional?data=nao-e-data']);
+
+      // deve ter recebido um filtro com data no formato ISO, não 'nao-e-data'
+      expect(useFrmsOperationalSnapshotMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data_inicio: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        }),
+      );
+      // e não deve ter usado a string inválida
+      const call = useFrmsOperationalSnapshotMock.mock.calls[0]?.[0] as { data_inicio: string };
+      expect(call.data_inicio).not.toBe('nao-e-data');
+    });
   });
 });
