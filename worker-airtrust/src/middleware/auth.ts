@@ -38,13 +38,13 @@ function normalizeRuntimeRole(role: unknown): string {
 
 async function resolveEffectiveUserRole(
   db: D1Database,
-  userId: number | undefined,
-  empresaId: number | undefined,
+  userId: string | number | undefined,
+  empresaId: string | number | undefined,
   fallbackRole: unknown,
 ): Promise<string> {
   const fallback = normalizeRuntimeRole(fallbackRole);
-  const uid = Number(userId || 0);
-  const eid = Number(empresaId || 0);
+  const uid = typeof userId === 'string' ? Number(userId) : Number(userId || 0);
+  const eid = typeof empresaId === 'string' ? Number(empresaId) : Number(empresaId || 0);
 
   if (!Number.isFinite(uid) || uid <= 0) return fallback;
   if (!Number.isFinite(eid) || eid <= 0) return fallback;
@@ -320,6 +320,13 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       }
     }
 
+    const effectiveRole = await resolveEffectiveUserRole(
+      c.env.DB,
+      payload.sub,
+      payload.empresa_id,
+      payload.role ?? '',
+    );
+
     c.set('userId', payload.sub);
     c.set('empresaId', payload.empresa_id ?? 0);
     c.set('userEmail', payload.email);
@@ -390,6 +397,13 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
                 // Se a tabela não existir ainda (migration pendente), mantém comportamento tolerante.
               }
             }
+
+            const effectiveRole = await resolveEffectiveUserRole(
+              c.env.DB,
+              payload.sub,
+              payload.empresa_id,
+              payload.role ?? '',
+            );
 
             c.set('userId', payload.sub);
             c.set('empresaId', payload.empresa_id ?? 0);
