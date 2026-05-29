@@ -13,7 +13,8 @@ Data: 2026-05-28
 | C3-FINAL | Atual | Revisao de linguagem IA/resumo, labels residuais e prontidao para D. |
 | D0 | Concluida | Semantica decisoria legada neutralizada antes de D1. |
 | D1 | Concluida e publicada | Read/ack operacional sem mitigacao, usando eventos derivados do snapshot. |
-| D2 | Em implementacao | Governanca de lifecycle de eventos D1 (filtros/status/summary), sem mitigacao. |
+| D2 | Concluida e publicada | Governanca de lifecycle de eventos D1 (filtros/status/summary), sem mitigacao. |
+| D3 | Atual (governanca) | Politica de retencao/arquivamento e schema dedicado proposto para read/ack. |
 
 ## 2) O que foi corrigido ou consolidado
 
@@ -31,6 +32,7 @@ Data: 2026-05-28
 - Semantica decisoria legada neutralizada na D0.
 - Fluxo D1 de eventos read/ack implementado sem mitigation, sem score novo e sem threshold novo.
 - Lifecycle D2 definido com filtros de status, tipo e severidade, incluindo status derivado `STALE` sem escrita adicional.
+- D3 iniciou governanca de retencao/historico e desenho de schema dedicado, sem migration aplicada.
 
 ## 3) O que o sistema pode afirmar hoje
 
@@ -59,7 +61,7 @@ Data: 2026-05-28
 
 - Criterios de alerta persistente ainda precisam de revisao metodologica antes de virar gatilho formal.
 - Source flags por campo ainda sao necessarios quando uma regra depender da diferenca entre "nao informado", "nao aplicavel" e "resposta negativa".
-- Regra clara de ciencia, leitura, reconhecimento e trilha de auditoria ainda precisa ser fechada antes de qualquer mitigacao.
+- Regra clara de ciencia, leitura, reconhecimento e trilha de auditoria foi estruturada em D1/D2; pendente consolidar migracao para schema dedicado e politica de retencao operacional aprovada.
 - A rota SGSO legada que ajustava probabilidade automaticamente quando o indice FRMS estimado ficava abaixo de 70% foi neutralizada na D0; o indice permanece apenas como contexto informativo.
 - A rota legada `/api/frms/score-atual/:funcionarioid` ainda expoe `apto_para_voo` por compatibilidade, mas a D0 adicionou warning explicito e `status_triagem_operacional` para leitura informativa.
 
@@ -100,4 +102,4 @@ Opus deve entrar antes de:
 
 ## 8) Conclusao operacional
 
-A C3 fecha uma base cientificamente mais honesta para o FRMS: coleta melhor, nomenclatura menos exagerada, indicadores offshore descritivos e lacunas documentadas. O proximo passo seguro e D1 read/ack, limitado a registro e reconhecimento de eventos operacionais existentes, sem acao automatica e sem expandir semantica cientifica.
+A C3 fecha uma base cientificamente mais honesta para o FRMS: coleta melhor, nomenclatura menos exagerada, indicadores offshore descritivos e lacunas documentadas. D1/D2 consolidaram o read/ack operacional sem mitigacao. O proximo passo seguro apos D3 e uma fase D3-B para schema dedicado e rollout controlado, ainda sem automacao decisoria.

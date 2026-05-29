@@ -83,3 +83,9 @@ A Fase D completa continua bloqueada para:
 - thresholds persistentes novos;
 - gatilhos por quinzena/setores/sit periods;
 - qualquer decisao automatica de aptidao operacional.
+
+## 12) Evolucao D3
+
+A D3 estabelece politica de retencao/arquivamento e recomenda migracao futura para schema dedicado de read/ack, sem aplicar migration nesta etapa.
+
+Referencia: `docs/FRMS_D3_READ_ACK_RETENTION_AND_ARCHIVING.md`.
