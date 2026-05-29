@@ -1,19 +1,61 @@
-import { describe, expect, it } from 'vitest';
-import {
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import FrmsCheckinFadiga, {
   isFadigaCheckinSubmitReady,
+  mapKssToSubjectiveFatigue,
   optionalBinaryResponseToPayload,
 } from '../FrmsCheckinFadiga';
 
+const mutateAsyncMock = vi.fn();
+const refetchMock = vi.fn();
+const navigateMock = vi.fn();
+
+vi.mock('react-router-dom', () => ({
+  Link: ({ to, children }: { to: string; children: any }) => <a href={to}>{children}</a>,
+  useNavigate: () => navigateMock,
+}));
+
+vi.mock('@/react-app/components/AppLayout', () => ({
+  default: ({ children }: { children: any }) => <div>{children}</div>,
+}));
+
+vi.mock('@/react-app/components/PageHeader', () => ({
+  default: ({ title, subtitle }: { title: string; subtitle?: string }) => (
+    <header>
+      <h1>{title}</h1>
+      {subtitle ? <p>{subtitle}</p> : null}
+    </header>
+  ),
+}));
+
+vi.mock('@/react-app/hooks/usePermissions', () => ({
+  usePermissions: () => ({ isAdmin: false, isGestor: false }),
+}));
+
+vi.mock('@/react-app/hooks/useFadigaCheckin', () => ({
+  useCheckinHoje: () => ({ data: null, refetch: refetchMock }),
+  useSubmitCheckin: () => ({ mutateAsync: mutateAsyncMock, isPending: false }),
+  useFadigaHistorico: () => ({ data: { data: [] }, isLoading: false }),
+  useFadigaPainel: () => ({ data: [], isLoading: false }),
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
 describe('FrmsCheckinFadiga helpers', () => {
-  it('permite submissão quando medicação e álcool não foram informados', () => {
+  it('permite submissao com aptidao sim sem observacao', () => {
     expect(
       isFadigaCheckinSubmitReady({
         sonoOpcao: 'ate8',
         wakeTime: '05:30',
         qualidadeSono: 4,
         kssScore: 3,
-        fadigaNivel: 2,
-        fitForDuty: true,
+        fitForDutyChoice: 'sim',
         aceiteTermos: true,
         aceitePrivacidade: true,
         observacao: '',
@@ -21,9 +63,132 @@ describe('FrmsCheckinFadiga helpers', () => {
     ).toBe(true);
   });
 
-  it('preserva null no payload opcional, sem converter para false', () => {
+  it('exige observacao quando aptidao nao ou coordenacao', () => {
+    expect(
+      isFadigaCheckinSubmitReady({
+        sonoOpcao: 'ate8',
+        wakeTime: '05:30',
+        qualidadeSono: 4,
+        kssScore: 3,
+        fitForDutyChoice: 'nao',
+        aceiteTermos: true,
+        aceitePrivacidade: true,
+        observacao: '',
+      }),
+    ).toBe(false);
+
+    expect(
+      isFadigaCheckinSubmitReady({
+        sonoOpcao: 'ate8',
+        wakeTime: '05:30',
+        qualidadeSono: 4,
+        kssScore: 3,
+        fitForDutyChoice: 'coord',
+        aceiteTermos: true,
+        aceitePrivacidade: true,
+        observacao: 'Preciso revisar antes da jornada',
+      }),
+    ).toBe(true);
+  });
+
+  it('preserva null no payload opcional', () => {
     expect(optionalBinaryResponseToPayload(null)).toBeNull();
     expect(optionalBinaryResponseToPayload(true)).toBe(true);
     expect(optionalBinaryResponseToPayload(false)).toBe(false);
+  });
+
+  it('mapeia KSS para escala subjetiva legado-compativel', () => {
+    expect(mapKssToSubjectiveFatigue(1)).toBe(1);
+    expect(mapKssToSubjectiveFatigue(3)).toBe(3);
+    expect(mapKssToSubjectiveFatigue(5)).toBe(5);
+    expect(mapKssToSubjectiveFatigue(7)).toBe(8);
+    expect(mapKssToSubjectiveFatigue(9)).toBe(10);
+  });
+});
+
+describe('FrmsCheckinFadiga UI', () => {
+  beforeEach(() => {
+    mutateAsyncMock.mockReset();
+    refetchMock.mockReset();
+    navigateMock.mockReset();
+    mutateAsyncMock.mockResolvedValue({ data: { requires_frat_review: 0 } });
+    refetchMock.mockResolvedValue(undefined);
+  });
+
+  it('renderiza KSS com titulo claro e descritores', () => {
+    render(<FrmsCheckinFadiga />);
+
+    expect(screen.getByText('Bloco 2 - Sonolencia agora')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Quao sonolento ou alerta voce esta agora? Escolha a opcao que melhor descreve seu estado neste momento.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Escala KSS (1-9).')).toBeInTheDocument();
+    expect(screen.getByText('Extremamente alerta')).toBeInTheDocument();
+  });
+
+  it('remove sintomas redundantes da UI', () => {
+    render(<FrmsCheckinFadiga />);
+
+    expect(screen.queryByText('Sintomas atuais')).not.toBeInTheDocument();
+    expect(screen.queryByText('Concentracao reduzida')).not.toBeInTheDocument();
+  });
+
+  it('envia payload minimo valido e compativel com null em meds/alcool', async () => {
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('button', { name: '6-8h' }));
+    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '05:30' } });
+    fireEvent.click(screen.getByLabelText('Qualidade 4: Boa'));
+    fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
+    fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
+
+    fireEvent.click(document.getElementById('meds-ult-12h-sim') as HTMLElement);
+    fireEvent.click(document.getElementById('meds-ult-12h-prefiro-nao') as HTMLElement);
+    fireEvent.click(document.getElementById('alcool-ult-12h-sim') as HTMLElement);
+    fireEvent.click(document.getElementById('alcool-ult-12h-prefiro-nao') as HTMLElement);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diario' }));
+
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+
+    const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+
+    expect(payload.kss_score).toBe(3);
+    expect(payload.horas_sono_24h).toBe(7);
+    expect(payload.qualidade_sono).toBe(4);
+    expect(payload.fit_for_duty).toBe(true);
+    expect(payload.meds_ult_12h).toBeNull();
+    expect(payload.alcool_ult_12h).toBeNull();
+    expect(payload.subjective_fatigue_level).toBe(3);
+    expect(payload.sleepiness_level).toBe(3);
+    expect(payload).not.toHaveProperty('sintomas');
+    expect(payload).not.toHaveProperty('horas_sono_48h');
+    expect(payload.motivo_inaptidao).toBeUndefined();
+  });
+
+  it('mantem observacao obrigatoria para resposta nao apto', () => {
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('button', { name: '4-5h' }));
+    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '05:30' } });
+    fireEvent.click(screen.getByLabelText('Qualidade 3: Regular'));
+    fireEvent.click(screen.getByLabelText('KSS 6: Alguns sinais de sonolencia'));
+    fireEvent.click(document.getElementById('fit-choice-nao') as HTMLElement);
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
+
+    expect(screen.getByText(/observacao e obrigatoria/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Explique rapidamente (obrigatorio)'), {
+      target: { value: 'Nao dormi adequadamente e preciso revisar com a coordenacao.' },
+    });
+
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeEnabled();
   });
 });
