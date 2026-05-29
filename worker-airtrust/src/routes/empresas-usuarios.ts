@@ -19,6 +19,14 @@ import { generateRefreshToken } from '../utils/security';
 
 const app = new Hono<{ Bindings: Env }>();
 
+app.use('/*', async (c, next) => {
+  await next();
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
+  c.header('Vary', 'Authorization');
+});
+
 // ─────────────────────────────────────────────────────────────
 // Helpers (local to this module)
 // ─────────────────────────────────────────────────────────────
@@ -169,6 +177,41 @@ function pickHighestRole(...roles: Array<string | null | undefined>): string {
   );
 }
 
+async function syncUsuarioPerfilFromAcessos(db: Env['DB'], usuarioId: number): Promise<void> {
+  const roles = await db
+    .prepare(
+      `
+      SELECT role
+      FROM usuarios_empresas
+      WHERE usuario_id = ?
+      ORDER BY
+        CASE WHEN is_primary = 1 THEN 0 ELSE 1 END,
+        empresa_id ASC
+    `,
+    )
+    .bind(usuarioId)
+    .all<{ role: string }>();
+
+  const rolesAtivos = (roles.results || []).map((item) => item.role).filter(Boolean);
+  if (rolesAtivos.length === 0) return;
+
+  const highestRole = pickHighestRole(...rolesAtivos);
+  const perfil = perfilFromEmpresaRole(highestRole);
+
+  await db
+    .prepare(
+      `
+      UPDATE usuarios
+      SET perfil = ?,
+          updated_at = datetime('now')
+      WHERE id = ?
+        AND deleted_at IS NULL
+    `,
+    )
+    .bind(perfil, usuarioId)
+    .run();
+}
+
 // ============================================
 // POST /api/empresas/:id/usuarios/invite - Convidar/Adicionar usuário por Email
 // ============================================
@@ -314,6 +357,8 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
   if (vinculosCriados === 0) {
     return c.json({ success: false, error: 'Usuário já pertence às empresas selecionadas' }, 400);
   }
+
+  await syncUsuarioPerfilFromAcessos(db, user.id);
 
   // convites_usuarios existe via migration 0290
   const conviteToken = generateRefreshToken();
@@ -587,6 +632,8 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
     }
   }
 
+  await syncUsuarioPerfilFromAcessos(db, usuarioId);
+
   return c.json({
     success: true,
     message: 'Acessos do usuário atualizados com sucesso',
@@ -650,6 +697,8 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
     .bind(usuario_id, id, normalizedRole)
     .run();
 
+  await syncUsuarioPerfilFromAcessos(db, Number(usuario_id));
+
   return c.json(
     {
       success: true,
@@ -680,6 +729,8 @@ app.delete('/:id/usuarios/:usuarioId', requireTenantRole('admin'), async (c) => 
     )
     .bind(id, usuarioId)
     .run();
+
+  await syncUsuarioPerfilFromAcessos(db, usuarioId);
 
   return c.json({
     success: true,
