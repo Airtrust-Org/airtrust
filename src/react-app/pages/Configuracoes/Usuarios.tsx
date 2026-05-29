@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserPlus, Trash2, Mail, Shield, User, Pencil, LogIn } from 'lucide-react';
 import { API_BASE_URL, clearTokens, getAccessToken, setTokens } from '../../config/api';
 import { useToast } from '../../hooks/useToast';
@@ -84,6 +84,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
     MODULOS_DISPONIVEIS.map((m) => m.key),
   );
   const [savingEdit, setSavingEdit] = useState(false);
+  const latestLoadRequestRef = useRef(0);
 
   const getRoleLabel = (userRole: string) => {
     const normalizedRole = normalizeRoleForUi(userRole);
@@ -181,6 +182,7 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
   };
 
   const loadUsuarios = async () => {
+    const requestId = ++latestLoadRequestRef.current;
     try {
       setLoading(true);
       const token = getAccessToken();
@@ -189,17 +191,26 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
         return;
       }
 
-      const res = await fetch(`${API_BASE_URL}/empresas/${empresaSelecionadaId}/usuarios`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${API_BASE_URL}/empresas/${empresaSelecionadaId}/usuarios?t=${Date.now()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+        cache: 'no-store',
       });
       const data = await res.json();
+      if (requestId !== latestLoadRequestRef.current) return;
+
       if (data.success) {
         setUsuarios(data.data);
       }
     } catch (err) {
+      if (requestId !== latestLoadRequestRef.current) return;
       console.error('Erro ao carregar usuários:', err);
       showToast.error(t('settings.users.error.loadList'));
     } finally {
+      if (requestId !== latestLoadRequestRef.current) return;
       setLoading(false);
     }
   };
@@ -406,10 +417,15 @@ export function UsuariosConfig({ empresaId, empresasDisponiveis = [] }: Usuarios
       const data = await res.json();
 
       if (data.success) {
+        setUsuarios((prev) =>
+          prev.map((userItem) =>
+            userItem.id === editingUser.id ? { ...userItem, role: editRole } : userItem,
+          ),
+        );
         showToast.success(t('settings.users.success.accessUpdated'));
         setShowEditModal(false);
         setEditingUser(null);
-        loadUsuarios();
+        await loadUsuarios();
       } else {
         showToast.error(data.error || t('settings.users.error.updateAccess'));
       }
