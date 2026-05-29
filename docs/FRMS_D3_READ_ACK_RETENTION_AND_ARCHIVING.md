@@ -187,3 +187,11 @@ Opus continua obrigatorio antes de formula de risco, thresholds persistentes, au
 A D3-B/D4 materializa o desenho em migration local e runtime para tabela dedicada, mantendo leitura compativel do legado e sem backfill automatico inicial.
 
 Referencia: `docs/FRMS_D3B_D4_READ_ACK_DEDICATED_STORAGE.md`.
+
+## 17) Evolucao D4-B - Backfill legado para storage dedicado
+
+A D4-B executa o primeiro backfill controlado do legado D1/D2 para `frms_read_ack_events` e `frms_read_ack_event_audit`, mantendo `frms_fadiga_evento` intacta.
+
+O procedimento exige dry-run, filtros obrigatorios por empresa/data, idempotencia e validacao de leitura sem duplicidade.
+
+Referencia: `docs/FRMS_D4B_READ_ACK_BACKFILL_PLAN.md`.
