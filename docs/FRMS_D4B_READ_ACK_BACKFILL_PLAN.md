@@ -159,3 +159,42 @@ Em 2026-05-29, a worktree `chore/frms-read-ack-backfill-v2` auditou producao e e
 - dry-run idempotente do recorte deve retornar `events_to_insert = 0` e `audits_to_insert = 0`.
 
 Nao executar `--apply` nesse recorte se o dry-run retornar zero inserts, porque a fase ja esta materializada no storage dedicado.
+
+## 15) D4-C - Saneamento controlado de `acknowledged_by = 0`
+
+Em 2026-05-29, a D4-C consolidou o tooling endurecido da D4-B e auditou o placeholder `acknowledged_by = 0` criado por execucao anterior do backfill.
+
+Inventario read-only:
+
+- `acknowledged_by = 0`: 22 registros;
+- todos estavam com `lifecycle_status = PENDING`;
+- todos tinham `acknowledged_at IS NULL`;
+- nenhum registro `ACKED` tinha `acknowledged_by = 0`;
+- nenhum desses registros pendentes tinha auditoria `ACK` correspondente;
+- nao existe usuario `id = 0` em `usuarios`.
+
+Dry-run da correcao:
+
+- `would_update = 22` para `PENDING + acknowledged_by = 0 + acknowledged_at IS NULL`.
+
+Correcao aplicada:
+
+```sql
+UPDATE frms_read_ack_events
+SET acknowledged_by = NULL
+WHERE lifecycle_status = 'PENDING'
+  AND acknowledged_by = 0
+  AND acknowledged_at IS NULL;
+```
+
+Validacao pos-correcao:
+
+- `remaining_bad_pending = 0`;
+- nenhum `acknowledged_by = 0` remanescente;
+- `ACKED` com ator nulo: 0;
+- recorte `empresa_id = 6`, `data_operacional = 2026-05-27` permaneceu com 23 eventos, 1 `ACKED`, 22 `PENDING` e 23 IDs distintos;
+- recorte `2026-05-28` permaneceu com 2 eventos, 1 `ACKED`, 1 `PENDING`, e ator ACK valido `60`;
+- legado permaneceu intacto: `FRMS_READ_ACK_EVENT = 23`, `FRMS_READ_ACK_ACK = 1`;
+- auditoria dedicada permaneceu com 2 registros.
+
+A D4-C nao alterou eventos `ACKED`, auditoria dedicada, legado, escala, SGSO, mitigacao, check-in, formulas, thresholds ou `apto_para_voo`.
