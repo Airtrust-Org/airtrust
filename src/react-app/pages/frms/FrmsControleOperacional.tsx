@@ -1,5 +1,14 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardCheck,
+  Plane,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  UserRound,
+} from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
 import {
@@ -15,6 +24,12 @@ import {
   useFrmsOperationalSnapshot,
 } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 
+type ControlFilters = FrmsOperationalSnapshotFilters & {
+  tripulante_query?: string;
+};
+
+type OperationalBucket = 'escalado' | 'checkin_sem_escala' | 'jornada_sem_escala' | 'sem_atividade';
+
 function getTodayLocalIsoDate(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -24,21 +39,47 @@ function getTodayLocalIsoDate(): string {
 }
 
 const STATUS_OPTIONS: Array<{ value: FrmsOperationalSnapshotStatus | ''; label: string }> = [
-  { value: '', label: 'Todos os status' },
+  { value: '', label: 'Todos' },
+  { value: 'CRITICO', label: 'Critico' },
+  { value: 'INCOMPLETO', label: 'Incompleto' },
+  { value: 'ATENCAO', label: 'Atencao' },
   { value: 'OK', label: 'OK' },
-  { value: 'ATENCAO', label: 'ATENÇÃO' },
-  { value: 'CRITICO', label: 'CRÍTICO' },
-  { value: 'INCOMPLETO', label: 'INCOMPLETO' },
+];
+
+const READ_ACK_STATUS_OPTIONS: Array<{ value: FrmsReadAckQueryStatus; label: string }> = [
+  { value: 'PENDING', label: 'Pendentes' },
+  { value: 'ACKED', label: 'Cientes' },
+  { value: 'STALE', label: 'Antigos' },
+  { value: 'ALL', label: 'Todos' },
+];
+
+const READ_ACK_EVENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Todos os tipos' },
+  { value: 'CHECKIN_PENDENTE', label: 'Check-in pendente' },
+  { value: 'CHECKIN_CRITICO', label: 'Check-in critico' },
+  { value: 'DADO_ESTIMADO', label: 'Dado estimado' },
+  { value: 'DADO_INCONSISTENTE', label: 'Dado inconsistente' },
+  { value: 'JORNADA_SEM_FATORIZACAO', label: 'Jornada sem fatorizacao' },
+  { value: 'EFETIVIDADE_BAIXA', label: 'Indice de efetividade baixo' },
+  { value: 'OUTRO_CONTEXTUAL', label: 'Contexto operacional' },
+];
+
+const READ_ACK_SEVERITY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Todas' },
+  { value: 'INFO', label: 'Info' },
+  { value: 'ATENCAO', label: 'Atencao' },
+  { value: 'CRITICO', label: 'Critico' },
+  { value: 'INCOMPLETO', label: 'Incompleto' },
 ];
 
 const ALERT_LABELS: Record<FrmsOperationalSnapshotAlertCode, string> = {
   CHECKIN_PENDENTE: 'Check-in pendente',
-  CHECKIN_CRITICO: 'Check-in crítico',
+  CHECKIN_CRITICO: 'Check-in critico',
   SONO_ESTIMADO: 'Sono estimado',
   SONO_INSUFICIENTE: 'Sono insuficiente',
   KSS_ALTO: 'KSS alto',
-  EFETIVIDADE_BAIXA: 'Índice de efetividade baixo',
-  JORNADA_SEM_FATORIZACAO: 'Sem fatorização',
+  EFETIVIDADE_BAIXA: 'Indice de efetividade baixo',
+  JORNADA_SEM_FATORIZACAO: 'Sem fatorizacao',
   ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem jornada FRMS',
   JORNADA_FRMS_SEM_ESCALA: 'Jornada FRMS sem escala',
   DADO_INCONSISTENTE: 'Dado inconsistente',
@@ -55,231 +96,399 @@ const READ_ACK_EVENT_LABELS: Record<string, string> = {
   OUTRO_CONTEXTUAL: 'Contexto operacional',
 };
 
-const READ_ACK_STATUS_OPTIONS: Array<{ value: FrmsReadAckQueryStatus; label: string }> = [
-  { value: 'PENDING', label: 'Pendentes' },
-  { value: 'ACKED', label: 'Cientes' },
-  { value: 'STALE', label: 'Antigos (stale)' },
-  { value: 'ALL', label: 'Todos' },
-];
-
-const READ_ACK_EVENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Todos os tipos' },
-  { value: 'CHECKIN_PENDENTE', label: 'Check-in pendente' },
-  { value: 'CHECKIN_CRITICO', label: 'Check-in critico' },
-  { value: 'DADO_ESTIMADO', label: 'Dado estimado' },
-  { value: 'DADO_INCONSISTENTE', label: 'Dado inconsistente' },
-  { value: 'JORNADA_SEM_FATORIZACAO', label: 'Jornada sem fatorizacao' },
-  { value: 'EFETIVIDADE_BAIXA', label: 'Indice de efetividade baixo' },
-  { value: 'OUTRO_CONTEXTUAL', label: 'Contexto operacional' },
-];
-
-const READ_ACK_SEVERITY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Todas as severidades' },
-  { value: 'INFO', label: 'INFO' },
-  { value: 'ATENCAO', label: 'ATENCAO' },
-  { value: 'CRITICO', label: 'CRITICO' },
-  { value: 'INCOMPLETO', label: 'INCOMPLETO' },
-];
-
-const SOURCE_BADGE_STYLES: Record<string, string> = {
-  REAL: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  ESTIMADO: 'bg-amber-50 text-amber-700 border-amber-200',
-  AUSENTE: 'bg-slate-100 text-slate-700 border-slate-200',
-  INCONSISTENTE: 'bg-rose-50 text-rose-700 border-rose-200',
-  MANUAL: 'bg-sky-50 text-sky-700 border-sky-200',
+const SOURCE_LABELS: Record<string, string> = {
+  REAL: 'Real',
+  ESTIMADO: 'Estimado',
+  AUSENTE: 'Ausente',
+  INCONSISTENTE: 'Inconsistente',
+  MANUAL: 'Manual',
+  DERIVADO: 'Derivado',
+  INCOMPLETO: 'Incompleto',
 };
 
+function normalizeSearch(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function uniqueSorted(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))]
+    .sort((left, right) => left.localeCompare(right, 'pt-BR'));
+}
+
+function statusLabel(status: FrmsOperationalSnapshotStatus): string {
+  if (status === 'ATENCAO') return 'Atencao';
+  if (status === 'CRITICO') return 'Critico';
+  if (status === 'INCOMPLETO') return 'Incompleto';
+  return 'OK';
+}
+
+function sourceLabel(value: string): string {
+  return SOURCE_LABELS[value] || value;
+}
+
 function toneBySnapshotStatus(status: FrmsOperationalSnapshotStatus): string {
-  switch (status) {
-    case 'CRITICO':
-      return 'bg-red-50 text-red-700 border-red-200';
-    case 'ATENCAO':
-      return 'bg-amber-50 text-amber-700 border-amber-200';
-    case 'INCOMPLETO':
-      return 'bg-violet-50 text-violet-700 border-violet-200';
-    default:
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  }
+  if (status === 'CRITICO') return 'border-red-200 bg-red-50 text-red-700';
+  if (status === 'ATENCAO') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (status === 'INCOMPLETO') return 'border-violet-200 bg-violet-50 text-violet-700';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
 }
 
 function toneByCheckinStatus(status: string): string {
-  if (status === 'RECEBIDO') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (status === 'PENDENTE') return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (status === 'AUSENTE') return 'bg-rose-50 text-rose-700 border-rose-200';
-  return 'bg-slate-100 text-slate-700 border-slate-200';
+  if (status === 'RECEBIDO') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'PENDENTE') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (status === 'AUSENTE') return 'border-rose-200 bg-rose-50 text-rose-700';
+  return 'border-slate-200 bg-slate-100 text-slate-700';
+}
+
+function toneBySource(value: string): string {
+  if (value === 'REAL') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (value === 'ESTIMADO') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (value === 'INCONSISTENTE') return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (value === 'MANUAL') return 'border-sky-200 bg-sky-50 text-sky-700';
+  return 'border-slate-200 bg-slate-100 text-slate-700';
+}
+
+function toneByReadAckSeverity(severity: FrmsReadAckEvent['severity']): string {
+  if (severity === 'CRITICO') return 'border-red-200 bg-red-50 text-red-700';
+  if (severity === 'ATENCAO') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (severity === 'INCOMPLETO') return 'border-violet-200 bg-violet-50 text-violet-700';
+  return 'border-slate-200 bg-slate-100 text-slate-700';
 }
 
 function formatPercentage(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
+  if (value == null || !Number.isFinite(value)) return '-';
   return `${value.toFixed(1)}%`;
 }
 
 function formatSleep(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
+  if (value == null || !Number.isFinite(value)) return '-';
   return `${value.toFixed(1)}h`;
 }
 
-function formatQuality(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
+function formatNumber(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '-';
   return String(value);
-}
-
-function formatKss(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
-  return String(value);
-}
-
-function formatTripulante(item: FrmsOperationalSnapshotItem): string {
-  return item.nome_guerra || item.nome || `#${item.funcionario_id}`;
 }
 
 function formatMinutesAsHours(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
+  if (value == null || !Number.isFinite(value)) return '-';
   return `${(value / 60).toFixed(1)}h`;
 }
 
-function toneByFortnightStatus(status: string | null | undefined): string {
-  if (status === 'CRITICO') return 'bg-red-50 text-red-700 border-red-200';
-  if (status === 'ATENCAO') return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (status === 'INCOMPLETO') return 'bg-violet-50 text-violet-700 border-violet-200';
-  return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+function formatTripulante(item: FrmsOperationalSnapshotItem): string {
+  return item.nome_guerra || item.nome || `ID ${item.funcionario_id}`;
 }
 
-function SnapshotMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
-    </div>
-  );
+function operationalBucket(item: FrmsOperationalSnapshotItem): OperationalBucket {
+  if (item.escalado) return 'escalado';
+  if (item.checkin_status === 'RECEBIDO') return 'checkin_sem_escala';
+  if (item.teve_jornada) return 'jornada_sem_escala';
+  return 'sem_atividade';
+}
+
+function operationalBucketLabel(item: FrmsOperationalSnapshotItem): string {
+  const bucket = operationalBucket(item);
+  if (bucket === 'escalado') return item.escala_source === 'EVD' ? 'Escala diaria' : `Escala ${item.escala_source}`;
+  if (bucket === 'checkin_sem_escala') return 'Check-in sem escala';
+  if (bucket === 'jornada_sem_escala') return 'Jornada sem escala';
+  return 'Sem atividade';
+}
+
+function matchesTextFilter(item: FrmsOperationalSnapshotItem, query: string): boolean {
+  if (!query.trim()) return true;
+  const haystack = [
+    item.nome,
+    item.nome_guerra,
+    item.funcao,
+    item.aeronave,
+    item.base,
+    item.funcionario_id,
+  ]
+    .map(normalizeSearch)
+    .join(' ');
+  return haystack.includes(normalizeSearch(query));
+}
+
+function filterItems(items: FrmsOperationalSnapshotItem[], filters: ControlFilters): FrmsOperationalSnapshotItem[] {
+  const base = normalizeSearch(filters.base);
+  const aeronave = normalizeSearch(filters.aeronave);
+  const status = filters.status?.trim();
+  const funcionarioId = filters.funcionario_id?.trim();
+
+  return items.filter((item) => {
+    if (funcionarioId && String(item.funcionario_id) !== funcionarioId) return false;
+    if (base && normalizeSearch(item.base) !== base) return false;
+    if (aeronave && !normalizeSearch(item.aeronave).includes(aeronave)) return false;
+    if (status && item.snapshot_status !== status) return false;
+    if (!matchesTextFilter(item, filters.tripulante_query || '')) return false;
+    return true;
+  });
+}
+
+function buildOperationalSummary(items: FrmsOperationalSnapshotItem[], readAckEvents: FrmsReadAckEvent[]) {
+  return {
+    monitored: items.filter((item) => operationalBucket(item) !== 'sem_atividade').length,
+    pendingCheckins: items.filter((item) => item.checkin_status === 'PENDENTE' || item.checkin_status === 'AUSENTE').length,
+    alerts: items.filter((item) => item.snapshot_status === 'CRITICO' || item.snapshot_status === 'ATENCAO').length,
+    estimatedOrAbsent: items.filter(
+      (item) =>
+        item.sleep_data_source !== 'REAL' ||
+        item.wake_data_source !== 'REAL' ||
+        item.jornada_data_source === 'ESTIMADO' ||
+        item.jornada_data_source === 'AUSENTE',
+    ).length,
+    inconsistencies: items.filter(
+      (item) => item.snapshot_status === 'INCOMPLETO' || item.alertas.includes('DADO_INCONSISTENTE'),
+    ).length,
+    pendingAck: readAckEvents.filter((event) => event.lifecycle_status === 'PENDING' || event.status === 'PENDING').length,
+  };
 }
 
 function SourceBadge({ value }: { value: string }) {
-  const style = SOURCE_BADGE_STYLES[value] || 'bg-slate-100 text-slate-700 border-slate-200';
-  return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${style}`}>{value}</span>;
+  return (
+    <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneBySource(value)}`}>
+      {sourceLabel(value)}
+    </span>
+  );
 }
 
-function toneByReadAckSeverity(severity: FrmsReadAckEvent['severity']): string {
-  if (severity === 'CRITICO') return 'bg-red-50 text-red-700 border-red-200';
-  if (severity === 'ATENCAO') return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (severity === 'INCOMPLETO') return 'bg-violet-50 text-violet-700 border-violet-200';
-  return 'bg-slate-100 text-slate-700 border-slate-200';
+function StatusBadge({ status }: { status: FrmsOperationalSnapshotStatus }) {
+  return (
+    <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneBySnapshotStatus(status)}`}>
+      {statusLabel(status)}
+    </span>
+  );
+}
+
+function KpiTile({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: number;
+  tone?: 'neutral' | 'warning' | 'danger' | 'info';
+}) {
+  const toneClass =
+    tone === 'danger'
+      ? 'border-red-200 bg-red-50 text-red-900'
+      : tone === 'warning'
+        ? 'border-amber-200 bg-amber-50 text-amber-900'
+        : tone === 'info'
+          ? 'border-sky-200 bg-sky-50 text-sky-900'
+          : 'border-slate-200 bg-white text-slate-900';
+
+  return (
+    <div className={`rounded-lg border p-3 ${toneClass}`}>
+      <p className="text-xs font-medium text-slate-600">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+    </div>
+  );
 }
 
 function formatReadAckEventLabel(event: FrmsReadAckEvent): string {
   return READ_ACK_EVENT_LABELS[event.event_type] || event.event_type;
 }
 
+function isVisibleReadAckEvent(event: FrmsReadAckEvent, visibleIds: Set<number>): boolean {
+  return visibleIds.has(event.funcionario_id);
+}
+
 export default function FrmsControleOperacional() {
   const today = useMemo(() => getTodayLocalIsoDate(), []);
+  const initialFilters: ControlFilters = useMemo(
+    () => ({
+      data_inicio: today,
+      data_fim: today,
+      funcionario_id: '',
+      tripulante_query: '',
+      base: '',
+      aeronave: '',
+      status: '',
+      include_inconsistencies: true,
+    }),
+    [today],
+  );
 
-  const [draft, setDraft] = useState<FrmsOperationalSnapshotFilters>({
-    data_inicio: today,
-    data_fim: today,
-    funcionario_id: '',
-    base: '',
-    aeronave: '',
-    status: '',
-    include_inconsistencies: true,
-  });
-
-  const [appliedFilters, setAppliedFilters] = useState<FrmsOperationalSnapshotFilters>(draft);
+  const [draft, setDraft] = useState<ControlFilters>(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState<ControlFilters>(initialFilters);
   const [readAckStatus, setReadAckStatus] = useState<FrmsReadAckQueryStatus>('PENDING');
   const [readAckEventType, setReadAckEventType] = useState('');
   const [readAckSeverity, setReadAckSeverity] = useState('');
 
-  const { data, summary, loading, error, unauthorized, refetch } =
-    useFrmsOperationalSnapshot(appliedFilters);
+  const snapshotFilters = useMemo<FrmsOperationalSnapshotFilters>(
+    () => ({
+      data_inicio: appliedFilters.data_inicio,
+      data_fim: appliedFilters.data_fim,
+      funcionario_id: appliedFilters.funcionario_id,
+      include_inconsistencies: appliedFilters.include_inconsistencies,
+    }),
+    [
+      appliedFilters.data_fim,
+      appliedFilters.data_inicio,
+      appliedFilters.funcionario_id,
+      appliedFilters.include_inconsistencies,
+    ],
+  );
+
+  const { data, loading, error, unauthorized, refetch } = useFrmsOperationalSnapshot(snapshotFilters);
   const readAck = useFrmsReadAckEvents(appliedFilters, {
     status: readAckStatus,
     event_type: readAckEventType || undefined,
     severity: readAckSeverity || undefined,
   });
 
-  const groupedReadAckEvents = useMemo(() => {
-    const pending = readAck.events.filter((event) => event.lifecycle_status === 'PENDING');
-    const stale = readAck.events.filter((event) => event.lifecycle_status === 'STALE');
-    const acked = readAck.events.filter(
-      (event) =>
-        event.lifecycle_status === 'ACKED' ||
-        (!event.lifecycle_status && event.status === 'ACKED'),
-    );
-    return { pending, stale, acked };
-  }, [readAck.events]);
-
-  const hasEstimatedData = useMemo(
-    () =>
-      data.some(
-        (item) => item.sleep_data_source === 'ESTIMADO' || item.wake_data_source === 'ESTIMADO',
-      ),
+  const filterOptions = useMemo(
+    () => ({
+      bases: uniqueSorted(data.map((item) => item.base)),
+      aeronaves: uniqueSorted(data.map((item) => item.aeronave)),
+      tripulantes: data
+        .map((item) => ({
+          value: formatTripulante(item),
+          label: `${formatTripulante(item)} - ${item.funcao || 'Funcao nao informada'}`,
+        }))
+        .filter((item, index, arr) => arr.findIndex((other) => other.value === item.value) === index)
+        .sort((left, right) => left.value.localeCompare(right.value, 'pt-BR')),
+    }),
     [data],
+  );
+
+  const visibleItems = useMemo(() => filterItems(data, appliedFilters), [data, appliedFilters]);
+  const visibleIds = useMemo(() => new Set(visibleItems.map((item) => item.funcionario_id)), [visibleItems]);
+  const visibleReadAckEvents = useMemo(
+    () => readAck.events.filter((event) => isVisibleReadAckEvent(event, visibleIds)),
+    [readAck.events, visibleIds],
+  );
+  const operationalSummary = useMemo(
+    () => buildOperationalSummary(visibleItems, visibleReadAckEvents),
+    [visibleItems, visibleReadAckEvents],
+  );
+
+  const groupedRows = useMemo(
+    () => ({
+      escalados: visibleItems.filter((item) => operationalBucket(item) === 'escalado'),
+      excecoes: visibleItems.filter((item) => operationalBucket(item) !== 'escalado'),
+    }),
+    [visibleItems],
   );
 
   const handleApplyFilters = () => {
     setAppliedFilters({ ...draft });
   };
 
+  const handleClearFilters = () => {
+    setDraft(initialFilters);
+    setAppliedFilters(initialFilters);
+  };
+
   return (
     <AppLayout>
-      <div className="space-y-4">
-        <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h1 className="text-xl font-bold text-slate-900">Controle Operacional de Fadiga</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Visão consolidada de escala, check-in, jornada e fadiga para apoio à coordenação.
-          </p>
+      <main className="space-y-4">
+        <header className="border-b border-slate-200 pb-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FRMS operacional</p>
+              <h1 className="mt-1 text-2xl font-semibold text-slate-950">Controle operacional de fadiga</h1>
+              <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                Escala, check-in, fontes de dados e ciencia operacional em uma unica visao de coordenacao.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => void refetch()} disabled={loading} aria-label="Atualizar snapshot">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button onClick={handleApplyFilters}>Atualizar</Button>
+            </div>
+          </div>
         </header>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <label className="text-sm text-slate-700">
-              Data início
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <label className="text-sm font-medium text-slate-700">
+              Data inicio
               <input
                 type="date"
                 value={draft.data_inicio}
-                onChange={(e) => setDraft((prev) => ({ ...prev, data_inicio: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                onChange={(event) => setDraft((prev) => ({ ...prev, data_inicio: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
               />
             </label>
-            <label className="text-sm text-slate-700">
+            <label className="text-sm font-medium text-slate-700">
               Data fim
               <input
                 type="date"
                 value={draft.data_fim}
-                onChange={(e) => setDraft((prev) => ({ ...prev, data_fim: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                onChange={(event) => setDraft((prev) => ({ ...prev, data_fim: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
               />
             </label>
-            <label className="text-sm text-slate-700">
+            <label className="text-sm font-medium text-slate-700 xl:col-span-2">
+              Tripulante
+              <div className="relative mt-1">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  aria-label="Tripulante"
+                  list="frms-tripulantes"
+                  type="search"
+                  value={draft.tripulante_query || ''}
+                  placeholder="Nome, nome de guerra ou funcao"
+                  onChange={(event) => setDraft((prev) => ({ ...prev, tripulante_query: event.target.value }))}
+                  className="h-10 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-sm"
+                />
+              </div>
+              <datalist id="frms-tripulantes">
+                {filterOptions.tripulantes.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </datalist>
+            </label>
+            <label className="text-sm font-medium text-slate-700">
               Base
-              <input
-                type="text"
+              <select
                 value={draft.base || ''}
-                placeholder="Ex.: SBSP"
-                onChange={(e) => setDraft((prev) => ({ ...prev, base: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
+                onChange={(event) => setDraft((prev) => ({ ...prev, base: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+              >
+                <option value="">Todas</option>
+                {filterOptions.bases.map((base) => (
+                  <option key={base} value={base}>
+                    {base}
+                  </option>
+                ))}
+              </select>
             </label>
-            <label className="text-sm text-slate-700">
-              Aeronave
-              <input
-                type="text"
+            <label className="text-sm font-medium text-slate-700">
+              Aeronave/modelo
+              <select
                 value={draft.aeronave || ''}
-                placeholder="Ex.: AW139"
-                onChange={(e) => setDraft((prev) => ({ ...prev, aeronave: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
+                onChange={(event) => setDraft((prev) => ({ ...prev, aeronave: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+              >
+                <option value="">Todas</option>
+                {filterOptions.aeronaves.map((aeronave) => (
+                  <option key={aeronave} value={aeronave}>
+                    {aeronave}
+                  </option>
+                ))}
+              </select>
             </label>
-            <label className="text-sm text-slate-700">
+            <label className="text-sm font-medium text-slate-700">
               Status
               <select
                 value={draft.status || ''}
-                onChange={(e) =>
+                onChange={(event) =>
                   setDraft((prev) => ({
                     ...prev,
-                    status: e.target.value as FrmsOperationalSnapshotStatus | '',
+                    status: event.target.value as FrmsOperationalSnapshotStatus | '',
                   }))
                 }
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
               >
                 {STATUS_OPTIONS.map((option) => (
                   <option key={option.value || 'all'} value={option.value}>
@@ -288,88 +497,212 @@ export default function FrmsControleOperacional() {
                 ))}
               </select>
             </label>
-            <label className="text-sm text-slate-700">
-              Funcionário (ID)
-              <input
-                type="text"
-                value={draft.funcionario_id || ''}
-                placeholder="Ex.: 123"
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, funcionario_id: e.target.value.replace(/[^\d]/g, '') }))
-                }
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="mt-7 inline-flex items-center gap-2 text-sm text-slate-700">
+            <label className="flex items-center gap-2 pt-6 text-sm font-medium text-slate-700">
               <input
                 type="checkbox"
                 checked={Boolean(draft.include_inconsistencies)}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, include_inconsistencies: e.target.checked }))
+                onChange={(event) =>
+                  setDraft((prev) => ({ ...prev, include_inconsistencies: event.target.checked }))
                 }
+                className="h-4 w-4 accent-blue-600"
               />
-              Incluir inconsistências
+              Mostrar inconsistencias
             </label>
-            <div className="mt-6 flex items-center gap-2">
-              <Button onClick={handleApplyFilters}>Atualizar</Button>
-              <Button variant="secondary" onClick={() => void refetch()}>
-                <RefreshCw className="h-4 w-4" />
+            <details className="md:col-span-2 xl:col-span-2">
+              <summary className="cursor-pointer pt-2 text-sm font-medium text-slate-600">
+                Filtro tecnico
+              </summary>
+              <label className="mt-2 block text-sm font-medium text-slate-700">
+                Funcionario ID
+                <input
+                  type="text"
+                  value={draft.funcionario_id || ''}
+                  placeholder="ID numerico"
+                  onChange={(event) =>
+                    setDraft((prev) => ({ ...prev, funcionario_id: event.target.value.replace(/[^\d]/g, '') }))
+                  }
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                />
+              </label>
+            </details>
+            <div className="flex items-end gap-2">
+              <Button onClick={handleApplyFilters}>Aplicar filtros</Button>
+              <Button variant="secondary" onClick={handleClearFilters}>
+                Limpar
               </Button>
             </div>
           </div>
         </section>
 
-        {hasEstimatedData && (
-          <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <AlertTriangle className="h-4 w-4" />
-            Há dados estimados neste período (sono e/ou hora de acordar).
-          </div>
-        )}
-
         {unauthorized && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            Sem autorização para visualizar este snapshot. Faça login novamente ou valide seu perfil.
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            Sem autorizacao para visualizar este snapshot.
           </div>
         )}
 
         {error && !unauthorized && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
         )}
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <SnapshotMetric label="Tripulantes no snapshot" value={summary.total_tripulantes} />
-          <SnapshotMetric label="Escalados" value={summary.total_escalados} />
-          <SnapshotMetric label="Check-ins recebidos" value={summary.checkins_recebidos} />
-          <SnapshotMetric label="Check-ins pendentes" value={summary.checkins_pendentes} />
-          <SnapshotMetric label="Alertas críticos" value={summary.alertas_criticos} />
-          <SnapshotMetric label="Alertas de atenção" value={summary.alertas_atencao} />
-          <SnapshotMetric label="Dados estimados" value={summary.dados_estimados} />
-          <SnapshotMetric label="Inconsistências" value={summary.inconsistencias} />
-          <SnapshotMetric label="Sem fatorização" value={summary.sem_fatorizacao} />
-          <SnapshotMetric label="Quinzena incompleta" value={summary.quinzena_incompleta} />
-          <SnapshotMetric label="Quinzena atenção" value={summary.quinzena_atencao} />
-          <SnapshotMetric label="Quinzena crítica" value={summary.quinzena_critica} />
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <KpiTile label="Tripulantes monitorados" value={operationalSummary.monitored} />
+          <KpiTile label="Check-ins pendentes" value={operationalSummary.pendingCheckins} tone="warning" />
+          <KpiTile label="Alertas" value={operationalSummary.alerts} tone="danger" />
+          <KpiTile label="Dados estimados/ausentes" value={operationalSummary.estimatedOrAbsent} tone="warning" />
+          <KpiTile label="Inconsistencias" value={operationalSummary.inconsistencies} tone="danger" />
+          <KpiTile label="Ciencia pendente" value={operationalSummary.pendingAck} tone="info" />
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <section className="rounded-lg border border-slate-200 bg-white">
+          <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Ciência operacional FRMS</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Eventos D1 derivados do snapshot. Ciencia nao e mitigacao nem decisao automatica.
+              <h2 className="text-base font-semibold text-slate-950">Escala, fadiga e fontes</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Linhas escaladas aparecem primeiro; check-ins ou jornadas sem escala ficam como excecoes operacionais.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+              <span className="inline-flex items-center gap-1">
+                <Plane className="h-3.5 w-3.5" />
+                {groupedRows.escalados.length} escalados
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {groupedRows.excecoes.length} excecoes
+              </span>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="p-10 text-center text-sm text-slate-500">Carregando snapshot operacional...</div>
+          ) : visibleItems.length === 0 ? (
+            <div className="p-10 text-center text-sm text-slate-500">Nenhum dado para os filtros informados.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3 text-left">Tripulante</th>
+                    <th className="px-3 py-3 text-left">Funcao</th>
+                    <th className="px-3 py-3 text-left">Aeronave/base</th>
+                    <th className="px-3 py-3 text-left">Escala/jornada</th>
+                    <th className="px-3 py-3 text-left">Check-in</th>
+                    <th className="px-3 py-3 text-left">Sono/KSS</th>
+                    <th className="px-3 py-3 text-left">Efetividade/quinzena</th>
+                    <th className="px-3 py-3 text-left">Status</th>
+                    <th className="px-3 py-3 text-left">Alertas</th>
+                    <th className="px-3 py-3 text-left">Fonte</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleItems.map((item) => (
+                    <tr key={`${item.data_operacional}-${item.funcionario_id}`} className="border-t border-slate-200 align-top">
+                      <td className="px-3 py-3">
+                        <div className="flex items-start gap-2">
+                          <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                          <div>
+                            <div className="font-semibold text-slate-950">{formatTripulante(item)}</div>
+                            <div className="text-xs text-slate-500">{item.nome || `ID ${item.funcionario_id}`}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-slate-700">{item.funcao || '-'}</td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-800">{item.aeronave || '-'}</div>
+                        <div className="text-xs text-slate-500">{item.base || 'Base nao informada'}</div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-800">{operationalBucketLabel(item)}</div>
+                        <div className="text-xs text-slate-500">{item.data_operacional}</div>
+                        <div className="text-xs text-slate-500">
+                          {item.teve_jornada
+                            ? `${item.hora_apresentacao || '--:--'} - ${item.hora_termino || '--:--'}`
+                            : 'Sem jornada FRMS'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneByCheckinStatus(item.checkin_status)}`}>
+                          {item.checkin_status}
+                        </span>
+                        {item.checkin_horario && (
+                          <div className="mt-1 text-xs text-slate-500">Horario {item.checkin_horario}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-800">Sono {formatSleep(item.horas_sono)}</div>
+                        <div className="text-xs text-slate-500">KSS {formatNumber(item.kss_score)}</div>
+                        <div className="text-xs text-slate-500">Qualidade {formatNumber(item.qualidade_sono)}</div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-800">Efetividade {formatPercentage(item.effectiveness_pct)}</div>
+                        <div className="text-xs text-slate-500">
+                          {item.fortnight_indicator
+                            ? `Quinzena ${item.fortnight_indicator.status_quinzena} · duty ${formatMinutesAsHours(item.fortnight_indicator.duty_time_periodo_min)}`
+                            : 'Quinzena sem indicador'}
+                        </div>
+                        {item.fatorizacao_status === 'AUSENTE' && item.teve_jornada && (
+                          <div className="text-xs text-rose-700">Jornada sem fatorizacao</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <StatusBadge status={item.snapshot_status} />
+                        {item.snapshot_status === 'CRITICO' && (
+                          <div className="mt-1 flex items-center gap-1 text-xs text-red-700">
+                            <ShieldAlert className="h-3 w-3" />
+                            Requer avaliacao da coordenacao
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex max-w-xs flex-wrap gap-1">
+                          {item.alertas.length > 0 ? (
+                            item.alertas.map((alerta) => (
+                              <span
+                                key={`${item.funcionario_id}-${item.data_operacional}-${alerta}`}
+                                className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700"
+                              >
+                                {ALERT_LABELS[alerta] || alerta}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          <SourceBadge value={item.sleep_data_source} />
+                          <SourceBadge value={item.wake_data_source} />
+                          <SourceBadge value={item.jornada_data_source} />
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          Sono / despertar / jornada
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white">
+          <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-950">Ciencia operacional FRMS</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Registro de leitura operacional. Nao representa mitigacao, decisao automatica ou mudanca de escala.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                Pendentes {readAck.summary.pending}
+              <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                Pendentes {operationalSummary.pendingAck}
               </span>
-              <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
-                Stale {readAck.summary.stale || 0}
-              </span>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                Cientes {readAck.summary.acked}
+              <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                Cientes {visibleReadAckEvents.filter((event) => event.lifecycle_status === 'ACKED' || event.status === 'ACKED').length}
               </span>
               <Button size="sm" variant="secondary" onClick={() => void readAck.refetch()} disabled={readAck.loading}>
                 <RefreshCw className="h-4 w-4" />
@@ -380,13 +713,13 @@ export default function FrmsControleOperacional() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <label className="text-sm text-slate-700">
-              Status
+          <div className="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-3">
+            <label className="text-sm font-medium text-slate-700">
+              Status de ciencia
               <select
                 value={readAckStatus}
-                onChange={(e) => setReadAckStatus(e.target.value as FrmsReadAckQueryStatus)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                onChange={(event) => setReadAckStatus(event.target.value as FrmsReadAckQueryStatus)}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
               >
                 {READ_ACK_STATUS_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -395,12 +728,12 @@ export default function FrmsControleOperacional() {
                 ))}
               </select>
             </label>
-            <label className="text-sm text-slate-700">
+            <label className="text-sm font-medium text-slate-700">
               Tipo de evento
               <select
                 value={readAckEventType}
-                onChange={(e) => setReadAckEventType(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                onChange={(event) => setReadAckEventType(event.target.value)}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
               >
                 {READ_ACK_EVENT_TYPE_OPTIONS.map((option) => (
                   <option key={option.value || 'all'} value={option.value}>
@@ -409,12 +742,12 @@ export default function FrmsControleOperacional() {
                 ))}
               </select>
             </label>
-            <label className="text-sm text-slate-700">
+            <label className="text-sm font-medium text-slate-700">
               Severidade
               <select
                 value={readAckSeverity}
-                onChange={(e) => setReadAckSeverity(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                onChange={(event) => setReadAckSeverity(event.target.value)}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
               >
                 {READ_ACK_SEVERITY_OPTIONS.map((option) => (
                   <option key={option.value || 'all'} value={option.value}>
@@ -426,268 +759,55 @@ export default function FrmsControleOperacional() {
           </div>
 
           {readAck.error && (
-            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="m-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {readAck.error}
             </div>
           )}
 
-          <div className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200">
+          <div className="divide-y divide-slate-100">
             {readAck.loading ? (
-              <div className="p-4 text-sm text-slate-500">Carregando eventos D1...</div>
-            ) : readAck.events.length === 0 ? (
-              <div className="p-4 text-sm text-slate-500">
-                Nenhum evento D1 persistido para os filtros atuais.
-              </div>
+              <div className="p-4 text-sm text-slate-500">Carregando eventos...</div>
+            ) : visibleReadAckEvents.length === 0 ? (
+              <div className="p-4 text-sm text-slate-500">Nenhum evento de ciencia para os filtros atuais.</div>
             ) : (
-              <>
-                {groupedReadAckEvents.pending.length > 0 && (
-                  <div className="bg-amber-50/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                    Pendentes
-                  </div>
-                )}
-                {groupedReadAckEvents.pending.map((event) => (
-                  <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
-                        >
-                          {event.severity}
-                        </span>
-                        <span className="text-sm font-semibold text-slate-900">
-                          {formatReadAckEventLabel(event)}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Fonte: {event.source}; status snapshot {event.snapshot_status}; fontes sono/despertar/jornada:{' '}
-                        {event.sleep_data_source}/{event.wake_data_source}/{event.jornada_data_source}.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void readAck.acknowledgeEvent(event.id)}
-                        loading={readAck.mutating}
-                      >
-                        Registrar ciência
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-
-                {groupedReadAckEvents.stale.length > 0 && (
-                  <div className="bg-violet-50/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-violet-700">
-                    Stale (fora da janela operacional)
-                  </div>
-                )}
-                {groupedReadAckEvents.stale.map((event) => (
-                  <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
-                        >
-                          {event.severity}
-                        </span>
-                        <span className="text-sm font-semibold text-slate-900">
-                          {formatReadAckEventLabel(event)}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Evento antigo, mantido para trilha historica de ciencia. Fonte: {event.source}.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void readAck.acknowledgeEvent(event.id)}
-                        loading={readAck.mutating}
-                      >
-                        Registrar ciência
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-
-                {groupedReadAckEvents.acked.length > 0 && (
-                  <div className="bg-emerald-50/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                    Cientes
-                  </div>
-                )}
-                {groupedReadAckEvents.acked.map((event) => (
-                  <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
-                        >
-                          {event.severity}
-                        </span>
-                        <span className="text-sm font-semibold text-slate-900">
-                          {formatReadAckEventLabel(event)}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Ciente
+              visibleReadAckEvents.map((event) => (
+                <div key={event.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}>
+                        {event.severity}
+                      </span>
+                      <span className="font-semibold text-slate-900">{formatReadAckEventLabel(event)}</span>
+                      <span className="text-xs text-slate-500">
+                        {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
                       </span>
                     </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Fontes: {sourceLabel(event.sleep_data_source)} / {sourceLabel(event.wake_data_source)} / {sourceLabel(event.jornada_data_source)}.
+                    </p>
                   </div>
-                ))}
-              </>
+                  {event.status === 'ACKED' || event.lifecycle_status === 'ACKED' ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Ciente
+                    </span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void readAck.acknowledgeEvent(event.id)}
+                      loading={readAck.mutating}
+                    >
+                      <ClipboardCheck className="mr-1 h-4 w-4" />
+                      Registrar ciencia
+                    </Button>
+                  )}
+                </div>
+              ))
             )}
           </div>
         </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-0 shadow-sm">
-          {loading ? (
-            <div className="p-10 text-center text-sm text-slate-500">Carregando snapshot operacional...</div>
-          ) : data.length === 0 ? (
-            <div className="p-10 text-center text-sm text-slate-500">
-              Nenhum dado para os filtros informados.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-3 py-3 text-left">Data</th>
-                    <th className="px-3 py-3 text-left">Tripulante</th>
-                    <th className="px-3 py-3 text-left">Função</th>
-                    <th className="px-3 py-3 text-left">Base</th>
-                    <th className="px-3 py-3 text-left">Aeronave</th>
-                    <th className="px-3 py-3 text-left">Escalado</th>
-                    <th className="px-3 py-3 text-left">Jornada</th>
-                    <th className="px-3 py-3 text-left">Check-in</th>
-                    <th className="px-3 py-3 text-left">Sono</th>
-                    <th className="px-3 py-3 text-left">Qualidade</th>
-                    <th className="px-3 py-3 text-left">KSS</th>
-                    <th className="px-3 py-3 text-left">Índice de efetividade</th>
-                    <th className="px-3 py-3 text-left">Quinzena</th>
-                    <th className="px-3 py-3 text-left">Status</th>
-                    <th className="px-3 py-3 text-left">Alertas</th>
-                    <th className="px-3 py-3 text-left">Fonte dos dados</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.map((item) => (
-                    <tr key={`${item.data_operacional}-${item.funcionario_id}`} className="border-t border-slate-200 align-top">
-                      <td className="px-3 py-3 text-slate-700">{item.data_operacional}</td>
-                      <td className="px-3 py-3">
-                        <div className="font-medium text-slate-900">{formatTripulante(item)}</div>
-                        <div className="text-xs text-slate-500">ID {item.funcionario_id}</div>
-                      </td>
-                      <td className="px-3 py-3 text-slate-700">{item.funcao || '—'}</td>
-                      <td className="px-3 py-3 text-slate-700">{item.base || '—'}</td>
-                      <td className="px-3 py-3 text-slate-700">{item.aeronave || '—'}</td>
-                      <td className="px-3 py-3 text-slate-700">{item.escalado ? 'Sim' : 'Não'}</td>
-                      <td className="px-3 py-3 text-slate-700">
-                        {item.teve_jornada
-                          ? `${item.hora_apresentacao || '--:--'} → ${item.hora_termino || '--:--'}`
-                          : 'Sem jornada'}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByCheckinStatus(item.checkin_status)}`}>
-                          {item.checkin_status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="text-slate-700">{formatSleep(item.horas_sono)}</div>
-                        {item.sleep_data_source === 'ESTIMADO' && (
-                          <div className="text-xs text-amber-700">Sono estimado</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-slate-700">{formatQuality(item.qualidade_sono)}</td>
-                      <td className="px-3 py-3 text-slate-700">{formatKss(item.kss_score)}</td>
-                      <td className="px-3 py-3">
-                        <div className="text-slate-700">{formatPercentage(item.effectiveness_pct)}</div>
-                        {item.fatorizacao_status === 'AUSENTE' && item.teve_jornada && (
-                          <div className="text-xs text-rose-700">Sem fatorização</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        {item.fortnight_indicator ? (
-                          <div className="space-y-1">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneByFortnightStatus(item.fortnight_indicator.status_quinzena)}`}
-                            >
-                              {item.fortnight_indicator.status_quinzena === 'ATENCAO'
-                                ? 'ATENÇÃO'
-                                : item.fortnight_indicator.status_quinzena}
-                            </span>
-                            <div className="text-xs text-slate-700">
-                              Dia {item.fortnight_indicator.dia_periodo ?? '—'}/
-                              {item.fortnight_indicator.total_dias_periodo ?? '—'}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              Jornadas: {item.fortnight_indicator.jornadas_periodo ?? '—'} · Duty:{' '}
-                              {formatMinutesAsHours(item.fortnight_indicator.duty_time_periodo_min)}
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              <SourceBadge value={item.fortnight_indicator.fonte_periodo} />
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneBySnapshotStatus(item.snapshot_status)}`}>
-                          {item.snapshot_status === 'ATENCAO' ? 'ATENÇÃO' : item.snapshot_status}
-                        </span>
-                        {item.snapshot_status === 'CRITICO' && (
-                          <div className="mt-1 flex items-center gap-1 text-xs text-red-700">
-                            <ShieldAlert className="h-3 w-3" /> Requer avaliação da coordenação
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {item.alertas.length > 0 ? (
-                            item.alertas.map((alerta) => (
-                              <span
-                                key={`${item.funcionario_id}-${item.data_operacional}-${alerta}`}
-                                className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700"
-                              >
-                                {ALERT_LABELS[alerta] || alerta}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          <SourceBadge value={item.sleep_data_source} />
-                          <SourceBadge value={item.wake_data_source} />
-                          <SourceBadge value={item.jornada_data_source} />
-                        </div>
-                        {item.wake_data_source === 'ESTIMADO' && (
-                          <div className="mt-1 text-xs text-amber-700">Acordar estimado</div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
+      </main>
     </AppLayout>
   );
 }

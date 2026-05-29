@@ -116,8 +116,12 @@ describe('frms operational snapshot builder', () => {
     const item = getByKey(result.items, '2026-05-26', 10);
 
     expect(item).toBeTruthy();
+    expect(item?.escalado).toBe(true);
+    expect(item?.teve_jornada).toBe(false);
+    expect(item?.jornada_data_source).toBe('AUSENTE');
     expect(item?.checkin_status).toBe('PENDENTE');
     expect(item?.alertas).toContain('CHECKIN_PENDENTE');
+    expect(item?.alertas).toContain('ESCALADO_SEM_JORNADA_FRMS');
   });
 
   it('3) jornada FRMS sem escala gera alerta de divergência', () => {

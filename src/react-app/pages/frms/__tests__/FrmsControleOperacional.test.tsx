@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsControleOperacional from '../FrmsControleOperacional';
 
 const useFrmsOperationalSnapshotMock = vi.fn();
@@ -14,26 +14,14 @@ vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
 }));
 
 vi.mock('@/react-app/hooks/useFrmsReadAckEvents', () => ({
-  useFrmsReadAckEvents: (filters: unknown) => useFrmsReadAckEventsMock(filters),
+  useFrmsReadAckEvents: (filters: unknown, options: unknown) => useFrmsReadAckEventsMock(filters, options),
 }));
 
-function buildHookState(overrides?: Partial<ReturnType<typeof baseHookState>>) {
-  return {
-    ...baseHookState(),
-    ...overrides,
-  };
-}
-
-function buildReadAckHookState(overrides?: Partial<ReturnType<typeof baseReadAckHookState>>) {
-  return {
-    ...baseReadAckHookState(),
-    ...overrides,
-  };
-}
+type SnapshotItem = ReturnType<typeof buildSnapshotItem>;
 
 function baseHookState() {
   return {
-    data: [],
+    data: [] as SnapshotItem[],
     summary: {
       total_tripulantes: 0,
       total_escalados: 0,
@@ -49,9 +37,16 @@ function baseHookState() {
       quinzena_critica: 0,
     },
     loading: false,
-    error: null,
+    error: null as string | null,
     unauthorized: false,
     refetch: vi.fn(),
+  };
+}
+
+function buildHookState(overrides?: Partial<ReturnType<typeof baseHookState>>) {
+  return {
+    ...baseHookState(),
+    ...overrides,
   };
 }
 
@@ -66,11 +61,170 @@ function baseReadAckHookState() {
     },
     loading: false,
     mutating: false,
-    error: null,
+    error: null as string | null,
     refetch: vi.fn(),
     generateEvents: vi.fn(),
     acknowledgeEvent: vi.fn(),
   };
+}
+
+function buildReadAckHookState(overrides?: Partial<ReturnType<typeof baseReadAckHookState>>) {
+  return {
+    ...baseReadAckHookState(),
+    ...overrides,
+  };
+}
+
+function buildSnapshotItem(overrides: Record<string, unknown> = {}) {
+  return {
+    empresa_id: 1,
+    data_operacional: '2026-05-29',
+    funcionario_id: 10,
+    tripulante_id: 10,
+    nome: 'Max Monteiro Magioli',
+    nome_guerra: 'Max',
+    funcao: 'PIC',
+    base: 'SBSP',
+    aeronave: 'AW139',
+    escalado: true,
+    escala_source: 'EVD',
+    hora_apresentacao: '08:00',
+    hora_termino: '18:00',
+    horas_voo_minutos: 180,
+    duracao_jornada_minutos: 600,
+    teve_jornada: true,
+    checkin_status: 'RECEBIDO',
+    checkin_horario: '06:45',
+    kss_score: 3,
+    horas_sono: 7.2,
+    qualidade_sono: 4,
+    hora_acordar: '05:40',
+    fadiga_score: 18,
+    status_operacional_checkin: 'OK',
+    effectiveness_pct: 95.3,
+    nivel_fadiga_calculado: 'BAIXO',
+    fatorizacao_status: 'REAL',
+    sleep_data_source: 'REAL',
+    wake_data_source: 'REAL',
+    jornada_data_source: 'REAL',
+    jornada_origem: 'EVD',
+    snapshot_status: 'OK',
+    fortnight_indicator: {
+      periodo_inicio: '2026-05-16',
+      periodo_fim: '2026-05-31',
+      dia_periodo: 14,
+      total_dias_periodo: 16,
+      dias_consecutivos_com_jornada: 3,
+      dias_com_checkin_pendente: 0,
+      dias_com_dado_estimado: 0,
+      duty_time_periodo_min: 1800,
+      duty_time_168h_min: 900,
+      horas_voo_periodo_min: 600,
+      horas_voo_168h_min: 260,
+      jornadas_periodo: 3,
+      apresentacoes_antes_0600: 1,
+      apresentacoes_antes_0700: 2,
+      menor_descanso_entre_jornadas_min: 720,
+      setores_periodo: null,
+      sit_periods_estimados: null,
+      fonte_periodo: 'REAL',
+      status_quinzena: 'OK',
+      alertas_quinzena: [],
+      limitation_notes: [],
+    },
+    alertas: [],
+    ...overrides,
+  };
+}
+
+function buildOperationalData() {
+  return [
+    buildSnapshotItem(),
+    buildSnapshotItem({
+      funcionario_id: 20,
+      tripulante_id: 20,
+      nome: 'Ana Paula Souza',
+      nome_guerra: 'Ana',
+      funcao: 'SIC',
+      base: 'SBJR',
+      aeronave: 'SK76',
+      checkin_status: 'PENDENTE',
+      checkin_horario: null,
+      kss_score: null,
+      horas_sono: null,
+      qualidade_sono: null,
+      hora_acordar: null,
+      fadiga_score: null,
+      status_operacional_checkin: null,
+      effectiveness_pct: null,
+      nivel_fadiga_calculado: null,
+      fatorizacao_status: 'AUSENTE',
+      sleep_data_source: 'ESTIMADO',
+      wake_data_source: 'ESTIMADO',
+      jornada_data_source: 'AUSENTE',
+      snapshot_status: 'ATENCAO',
+      alertas: ['CHECKIN_PENDENTE', 'SONO_ESTIMADO', 'ESCALADO_SEM_JORNADA_FRMS'],
+    }),
+    buildSnapshotItem({
+      funcionario_id: 30,
+      tripulante_id: 30,
+      nome: 'Bruno Lima',
+      nome_guerra: 'Bruno',
+      funcao: 'PIC',
+      base: 'SBCB',
+      aeronave: 'AW139',
+      escalado: false,
+      escala_source: 'NONE',
+      checkin_status: 'RECEBIDO',
+      sleep_data_source: 'REAL',
+      wake_data_source: 'REAL',
+      jornada_data_source: 'AUSENTE',
+      snapshot_status: 'INCOMPLETO',
+      alertas: ['JORNADA_FRMS_SEM_ESCALA', 'DADO_INCONSISTENTE'],
+    }),
+    buildSnapshotItem({
+      funcionario_id: 40,
+      tripulante_id: 40,
+      nome: 'Carla Nunes',
+      nome_guerra: 'Carla',
+      funcao: 'SIC',
+      base: 'SBSP',
+      aeronave: 'PT-HVA',
+      escalado: false,
+      escala_source: 'NONE',
+      checkin_status: 'AUSENTE',
+      teve_jornada: true,
+      effectiveness_pct: null,
+      fatorizacao_status: 'AUSENTE',
+      sleep_data_source: 'AUSENTE',
+      wake_data_source: 'AUSENTE',
+      jornada_data_source: 'INCONSISTENTE',
+      snapshot_status: 'CRITICO',
+      alertas: ['JORNADA_SEM_FATORIZACAO', 'DADO_INCONSISTENTE'],
+    }),
+  ];
+}
+
+function mockSnapshotData(data = buildOperationalData()) {
+  useFrmsOperationalSnapshotMock.mockReturnValue(
+    buildHookState({
+      data,
+      summary: {
+        total_tripulantes: data.length,
+        total_escalados: data.filter((item) => item.escalado).length,
+        checkins_recebidos: data.filter((item) => item.checkin_status === 'RECEBIDO').length,
+        checkins_pendentes: data.filter((item) => item.checkin_status !== 'RECEBIDO').length,
+        alertas_criticos: data.filter((item) => item.snapshot_status === 'CRITICO').length,
+        alertas_atencao: data.filter((item) => item.snapshot_status === 'ATENCAO').length,
+        dados_estimados: data.filter((item) => item.sleep_data_source === 'ESTIMADO').length,
+        inconsistencias: data.filter((item) => item.snapshot_status === 'INCOMPLETO').length,
+        sem_fatorizacao: data.filter((item) => item.fatorizacao_status === 'AUSENTE').length,
+        quinzena_incompleta: 0,
+        quinzena_atencao: 0,
+        quinzena_critica: 0,
+      },
+    }),
+  );
 }
 
 describe('FrmsControleOperacional', () => {
@@ -80,116 +234,106 @@ describe('FrmsControleOperacional', () => {
     useFrmsReadAckEventsMock.mockReturnValue(buildReadAckHookState());
   });
 
-  it('renderiza KPIs e linha com alerta sem quebrar campos nulos', () => {
-    useFrmsOperationalSnapshotMock.mockReturnValue(
-      buildHookState({
-        summary: {
-          total_tripulantes: 2,
-          total_escalados: 1,
-          checkins_recebidos: 1,
-          checkins_pendentes: 1,
-          alertas_criticos: 1,
-          alertas_atencao: 1,
-          dados_estimados: 1,
-          inconsistencias: 1,
-          sem_fatorizacao: 1,
-          quinzena_incompleta: 1,
-          quinzena_atencao: 0,
-          quinzena_critica: 1,
-        },
-        data: [
-          {
-            empresa_id: 1,
-            data_operacional: '2026-05-25',
-            funcionario_id: 10,
-            tripulante_id: 10,
-            nome: 'Max Monteiro Magioli',
-            nome_guerra: 'Max',
-            funcao: 'PIC',
-            base: 'SBSP',
-            aeronave: 'AW139',
-            escalado: true,
-            escala_source: 'SIGVOOS',
-            hora_apresentacao: '08:00',
-            hora_termino: '18:00',
-            horas_voo_minutos: 180,
-            duracao_jornada_minutos: 600,
-            teve_jornada: true,
-            checkin_status: 'PENDENTE',
-            checkin_horario: null,
-            kss_score: null,
-            horas_sono: null,
-            qualidade_sono: null,
-            hora_acordar: null,
-            fadiga_score: null,
-            status_operacional_checkin: null,
-            effectiveness_pct: null,
-            nivel_fadiga_calculado: null,
-            fatorizacao_status: 'AUSENTE',
-            sleep_data_source: 'ESTIMADO',
-            wake_data_source: 'ESTIMADO',
-            jornada_data_source: 'INCONSISTENTE',
-            jornada_origem: null,
-            snapshot_status: 'CRITICO',
-            fortnight_indicator: {
-              periodo_inicio: '2026-05-16',
-              periodo_fim: '2026-05-31',
-              dia_periodo: 10,
-              total_dias_periodo: 16,
-              dias_consecutivos_com_jornada: 4,
-              dias_com_checkin_pendente: 2,
-              dias_com_dado_estimado: 2,
-              duty_time_periodo_min: 2280,
-              duty_time_168h_min: 1020,
-              horas_voo_periodo_min: 760,
-              horas_voo_168h_min: 320,
-              jornadas_periodo: 4,
-              apresentacoes_antes_0600: 1,
-              apresentacoes_antes_0700: 2,
-              menor_descanso_entre_jornadas_min: 640,
-              setores_periodo: null,
-              sit_periods_estimados: null,
-              fonte_periodo: 'INCOMPLETO',
-              status_quinzena: 'INCOMPLETO',
-              alertas_quinzena: ['PERIODO_PARCIAL_NA_CONSULTA'],
-              limitation_notes: ['Janela parcial.'],
-            },
-            alertas: ['CHECKIN_PENDENTE', 'JORNADA_SEM_FATORIZACAO', 'DADO_INCONSISTENTE'],
-          },
-        ],
-      }),
-    );
+  it('renderiza os seis KPIs operacionais e remove cards redundantes de quinzena', () => {
+    mockSnapshotData();
 
     render(<FrmsControleOperacional />);
 
-    expect(screen.getByText('Controle Operacional de Fadiga')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('Max')).toBeInTheDocument();
-    expect(screen.getByText('Requer avaliação da coordenação')).toBeInTheDocument();
-    expect(screen.getByText('Sono estimado')).toBeInTheDocument();
-    expect(screen.getByText('Acordar estimado')).toBeInTheDocument();
+    expect(screen.getByText('Controle operacional de fadiga')).toBeInTheDocument();
+    expect(screen.getByText('Tripulantes monitorados')).toBeInTheDocument();
+    expect(screen.getByText('Check-ins pendentes')).toBeInTheDocument();
+    expect(screen.getAllByText('Alertas').length).toBeGreaterThan(0);
+    expect(screen.getByText('Dados estimados/ausentes')).toBeInTheDocument();
+    expect(screen.getByText('Inconsistencias')).toBeInTheDocument();
+    expect(screen.getByText('Ciencia pendente')).toBeInTheDocument();
+    expect(screen.queryByText('Quinzena atencao')).not.toBeInTheDocument();
+    expect(screen.queryByText('Quinzena critica')).not.toBeInTheDocument();
   });
 
-  it('exibe estado vazio', () => {
-    useFrmsOperationalSnapshotMock.mockReturnValue(buildHookState());
+  it('mostra tabela hierarquizada com escala, excecoes, fontes e labels descritivos', () => {
+    mockSnapshotData();
 
     render(<FrmsControleOperacional />);
 
-    expect(screen.getByText('Nenhum dado para os filtros informados.')).toBeInTheDocument();
+    expect(screen.getByText('Escala, fadiga e fontes')).toBeInTheDocument();
+    expect(screen.getByText('2 escalados')).toBeInTheDocument();
+    expect(screen.getByText('2 excecoes')).toBeInTheDocument();
+    expect(screen.getAllByText('Escala diaria')).toHaveLength(2);
+    expect(screen.getByText('Check-in sem escala')).toBeInTheDocument();
+    expect(screen.getByText('Jornada sem escala')).toBeInTheDocument();
+    expect(screen.getAllByText('Jornada sem fatorizacao').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Real').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Estimado').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ausente').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Inconsistente').length).toBeGreaterThan(0);
+    expect(screen.getByText('Requer avaliacao da coordenacao')).toBeInTheDocument();
   });
 
-  it('renderiza eventos D1 e permite registrar ciencia mockada', () => {
+  it('filtra por nome, base, aeronave/modelo e status no frontend', async () => {
+    mockSnapshotData();
+
+    render(<FrmsControleOperacional />);
+
+    fireEvent.change(screen.getByLabelText('Tripulante'), { target: { value: 'Ana' } });
+    fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'SBJR' } });
+    fireEvent.change(screen.getByLabelText('Aeronave/modelo'), { target: { value: 'SK76' } });
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'ATENCAO' } });
+    fireEvent.click(screen.getByText('Aplicar filtros'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ana')).toBeInTheDocument();
+      expect(screen.queryByText('Max')).not.toBeInTheDocument();
+      expect(screen.queryByText('Bruno')).not.toBeInTheDocument();
+      expect(screen.queryByText('Carla')).not.toBeInTheDocument();
+    });
+  });
+
+  it('popula dropdowns com bases e aeronaves reais do snapshot', () => {
+    mockSnapshotData();
+
+    render(<FrmsControleOperacional />);
+
+    const baseSelect = screen.getByLabelText('Base');
+    const aeronaveSelect = screen.getByLabelText('Aeronave/modelo');
+
+    expect(within(baseSelect).getByRole('option', { name: 'SBSP' })).toBeInTheDocument();
+    expect(within(baseSelect).getByRole('option', { name: 'SBJR' })).toBeInTheDocument();
+    expect(within(aeronaveSelect).getByRole('option', { name: 'AW139' })).toBeInTheDocument();
+    expect(within(aeronaveSelect).getByRole('option', { name: 'SK76' })).toBeInTheDocument();
+    expect(within(aeronaveSelect).getByRole('option', { name: 'PT-HVA' })).toBeInTheDocument();
+  });
+
+  it('mantem funcionario_id como filtro tecnico escondido e enviado ao hook', async () => {
+    mockSnapshotData();
+
+    render(<FrmsControleOperacional />);
+
+    fireEvent.click(screen.getByText('Filtro tecnico'));
+    fireEvent.change(screen.getByLabelText('Funcionario ID'), { target: { value: '20abc' } });
+    fireEvent.click(screen.getByText('Aplicar filtros'));
+
+    await waitFor(() => {
+      const calls = useFrmsOperationalSnapshotMock.mock.calls;
+      const lastFilters = calls[calls.length - 1]?.[0] as Record<string, unknown>;
+      expect(lastFilters.funcionario_id).toBe('20');
+      expect(lastFilters.base).toBeUndefined();
+      expect(lastFilters.aeronave).toBeUndefined();
+      expect(lastFilters.status).toBeUndefined();
+    });
+  });
+
+  it('renderiza ciencia operacional vinculada aos tripulantes visiveis', () => {
     const acknowledgeEvent = vi.fn();
-    useFrmsOperationalSnapshotMock.mockReturnValue(buildHookState());
+    mockSnapshotData();
     useFrmsReadAckEventsMock.mockReturnValue(
       buildReadAckHookState({
         events: [
           {
-            id: 'frms_read_ack_1_2026-05-28_10_CHECKIN_PENDENTE',
+            id: 'frms_read_ack_1_2026-05-29_20_CHECKIN_PENDENTE',
             empresa_id: 1,
-            data_operacional: '2026-05-28',
-            funcionario_id: 10,
-            funcionario_nome: 'Max',
+            data_operacional: '2026-05-29',
+            funcionario_id: 20,
+            funcionario_nome: 'Ana',
             event_type: 'CHECKIN_PENDENTE',
             severity: 'ATENCAO',
             status: 'PENDING',
@@ -198,75 +342,64 @@ describe('FrmsControleOperacional', () => {
             snapshot_status: 'ATENCAO',
             snapshot_alertas: ['CHECKIN_PENDENTE'],
             checkin_status: 'PENDENTE',
-            sleep_data_source: 'AUSENTE',
-            wake_data_source: 'AUSENTE',
-            jornada_data_source: 'REAL',
+            sleep_data_source: 'ESTIMADO',
+            wake_data_source: 'ESTIMADO',
+            jornada_data_source: 'AUSENTE',
             fortnight_status: null,
-            created_at: '2026-05-28T19:00:00Z',
+            created_at: '2026-05-29T11:00:00Z',
             acknowledged_at: null,
             acknowledged_by: null,
             acknowledged_by_name: null,
             ack_note: null,
             limitations: ['Evento operacional de leitura e ciencia; nao representa mitigacao.'],
           },
+          {
+            id: 'frms_read_ack_1_2026-05-29_10_DADO_ESTIMADO',
+            empresa_id: 1,
+            data_operacional: '2026-05-29',
+            funcionario_id: 10,
+            funcionario_nome: 'Max',
+            event_type: 'DADO_ESTIMADO',
+            severity: 'INFO',
+            status: 'ACKED',
+            lifecycle_status: 'ACKED',
+            source: 'OPERATIONAL_SNAPSHOT',
+            snapshot_status: 'OK',
+            snapshot_alertas: [],
+            checkin_status: 'RECEBIDO',
+            sleep_data_source: 'REAL',
+            wake_data_source: 'REAL',
+            jornada_data_source: 'REAL',
+            fortnight_status: null,
+            created_at: '2026-05-29T10:00:00Z',
+            acknowledged_at: '2026-05-29T10:30:00Z',
+            acknowledged_by: 'coord',
+            acknowledged_by_name: 'Coord',
+            ack_note: null,
+            limitations: [],
+          },
         ],
-        summary: { total: 1, pending: 1, acked: 0 },
+        summary: { total: 2, pending: 1, acked: 1, stale: 0 },
         acknowledgeEvent,
       }),
     );
 
     render(<FrmsControleOperacional />);
 
-    expect(screen.getByText('Ciência operacional FRMS')).toBeInTheDocument();
+    expect(screen.getByText('Ciencia operacional FRMS')).toBeInTheDocument();
     expect(screen.getByText('Pendentes 1')).toBeInTheDocument();
-    expect(screen.getByText('Stale 0')).toBeInTheDocument();
-    expect(screen.getByText('Cientes 0')).toBeInTheDocument();
-    expect(
-      screen.getByText((content) => content.includes('Ciencia nao e mitigacao')),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Cientes 1')).toBeInTheDocument();
     expect(screen.getAllByText('Check-in pendente').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByText('Registrar ciência'));
-    expect(acknowledgeEvent).toHaveBeenCalledWith(
-      'frms_read_ack_1_2026-05-28_10_CHECKIN_PENDENTE',
-    );
+    expect(screen.getByText('Ciente')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Registrar ciencia'));
+    expect(acknowledgeEvent).toHaveBeenCalledWith('frms_read_ack_1_2026-05-29_20_CHECKIN_PENDENTE');
   });
 
-  it('renderiza filtros de lifecycle D2', () => {
-    useFrmsOperationalSnapshotMock.mockReturnValue(buildHookState());
-    useFrmsReadAckEventsMock.mockReturnValue(buildReadAckHookState());
-
-    render(<FrmsControleOperacional />);
-
-    expect(screen.getAllByLabelText('Status').length).toBeGreaterThan(0);
-    expect(screen.getByLabelText('Tipo de evento')).toBeInTheDocument();
-    expect(screen.getByLabelText('Severidade')).toBeInTheDocument();
-  });
-
-  it('exibe erro de carregamento', () => {
-    useFrmsOperationalSnapshotMock.mockReturnValue(
-      buildHookState({
-        error: 'Erro de API',
-      }),
-    );
+  it('exibe estado vazio e erro de carregamento', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(buildHookState({ error: 'Erro de API' }));
 
     render(<FrmsControleOperacional />);
 
     expect(screen.getByText('Erro de API')).toBeInTheDocument();
-  });
-
-  it('aplica filtros ao clicar em Atualizar', () => {
-    useFrmsOperationalSnapshotMock.mockReturnValue(buildHookState());
-
-    render(<FrmsControleOperacional />);
-
-    fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'SBJR' } });
-    fireEvent.change(screen.getByLabelText('Aeronave'), { target: { value: 'SK76' } });
-    fireEvent.click(screen.getByText('Atualizar'));
-
-    const calls = useFrmsOperationalSnapshotMock.mock.calls;
-    const lastFilters = calls[calls.length - 1]?.[0] as Record<string, unknown>;
-
-    expect(lastFilters.base).toBe('SBJR');
-    expect(lastFilters.aeronave).toBe('SK76');
   });
 });

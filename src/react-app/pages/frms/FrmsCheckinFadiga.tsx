@@ -3,12 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle2,
-  ShieldAlert,
   History,
   Users,
   HeartPulse,
   Clock,
-  Zap,
+  MessageCircleWarning,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
@@ -47,70 +46,55 @@ function badgeNivel(nivel: string) {
   );
 }
 
-// ── sono mapping ──────────────────────────────────────────────────────────────
-
 type SonoOpcao = 'menos4' | 'ate5' | 'ate6' | 'ate8' | 'mais8';
-type Sono48Opcao = 'lt8' | 'de8a10' | 'de10a12' | 'gt12';
 
 const SONO_OPCOES: { key: SonoOpcao; label: string; horas: number; risco?: 'critico' | 'atencao' }[] = [
-  { key: 'menos4', label: '< 4h',  horas: 3.5, risco: 'critico' },
-  { key: 'ate5',   label: '4–5h',  horas: 4.5, risco: 'atencao' },
-  { key: 'ate6',   label: '5–6h',  horas: 5.5 },
-  { key: 'ate8',   label: '6–8h',  horas: 7 },
-  { key: 'mais8',  label: '> 8h',  horas: 8.5 },
+  { key: 'menos4', label: '< 4h', horas: 3.5, risco: 'critico' },
+  { key: 'ate5', label: '4-5h', horas: 4.5, risco: 'atencao' },
+  { key: 'ate6', label: '5-6h', horas: 5.5 },
+  { key: 'ate8', label: '6-8h', horas: 7 },
+  { key: 'mais8', label: '> 8h', horas: 8.5 },
 ];
-
-const SONO_MENOR_5H: SonoOpcao[] = ['menos4', 'ate5'];
-const SONO_48_OPCOES: { key: Sono48Opcao; label: string; horas: number; risco?: 'critico' | 'atencao' }[] = [
-  { key: 'lt8', label: '< 8h', horas: 7, risco: 'critico' },
-  { key: 'de8a10', label: '8–10h', horas: 9, risco: 'atencao' },
-  { key: 'de10a12', label: '10–12h', horas: 11 },
-  { key: 'gt12', label: '> 12h', horas: 13 },
-];
-
-// ── fadiga mapping ────────────────────────────────────────────────────────────
-
-const FADIGA_OPCOES: { nivel: number; label: string; sublabel: string; risco?: 'critico' | 'atencao' }[] = [
-  { nivel: 1, label: '1 — Muito alerta', sublabel: 'Acordado, atento e disposto.' },
-  { nivel: 2, label: '2 — Alerta', sublabel: 'Bem, com leve cansaço.' },
-  { nivel: 3, label: '3 — Regular', sublabel: 'Cansado, mas mantendo atenção.' },
-  { nivel: 4, label: '4 — Sonolento', sublabel: 'Atenção reduzida ou esforço para manter o foco.', risco: 'atencao' },
-  { nivel: 5, label: '5 — Muito sonolento', sublabel: 'Dificuldade para manter atenção ou permanecer acordado.', risco: 'critico' },
-];
-
-const FADIGA_TO_SUBJECTIVE: Record<number, number> = { 1: 1, 2: 3, 3: 5, 4: 8, 5: 10 };
 
 const KSS_OPCOES = [
-  { value: 1, label: '1', hint: 'Extremamente alerta' },
-  { value: 2, label: '2', hint: 'Muito alerta' },
-  { value: 3, label: '3', hint: 'Alerta' },
-  { value: 4, label: '4', hint: 'Mais alerta que sonolento' },
-  { value: 5, label: '5', hint: 'Nem alerta nem sonolento' },
-  { value: 6, label: '6', hint: 'Alguns sinais de sonolência' },
-  { value: 7, label: '7', hint: 'Sonolento, sem esforço para ficar acordado' },
-  { value: 8, label: '8', hint: 'Sonolento, com esforço para ficar acordado' },
-  { value: 9, label: '9', hint: 'Muito sonolento' },
+  { value: 1, hint: 'Extremamente alerta' },
+  { value: 2, hint: 'Muito alerta' },
+  { value: 3, hint: 'Alerta' },
+  { value: 4, hint: 'Mais alerta que sonolento' },
+  { value: 5, hint: 'Nem alerta nem sonolento' },
+  { value: 6, hint: 'Alguns sinais de sonolencia' },
+  { value: 7, hint: 'Sonolento, sem esforco para ficar acordado' },
+  { value: 8, hint: 'Sonolento, com esforco para ficar acordado' },
+  { value: 9, hint: 'Muito sonolento' },
 ];
 
 const QUALIDADE_SONO_OPCOES = [
-  { value: 1, label: '1', hint: 'Muito ruim' },
-  { value: 2, label: '2', hint: 'Ruim' },
-  { value: 3, label: '3', hint: 'Regular' },
-  { value: 4, label: '4', hint: 'Boa' },
-  { value: 5, label: '5', hint: 'Muito boa' },
+  { value: 1, hint: 'Muito ruim' },
+  { value: 2, hint: 'Ruim' },
+  { value: 3, hint: 'Regular' },
+  { value: 4, hint: 'Boa' },
+  { value: 5, hint: 'Muito boa' },
 ];
 
-type SintomaKey = 'sonolencia_diurna' | 'fadiga_fisica' | 'dificuldade_concentracao';
 type OptionalBinaryResponse = boolean | null;
-
-const SINTOMAS_OPCOES: { key: SintomaKey; label: string }[] = [
-  { key: 'sonolencia_diurna', label: 'Sonolência' },
-  { key: 'fadiga_fisica', label: 'Cansaço físico' },
-  { key: 'dificuldade_concentracao', label: 'Concentração reduzida' },
-];
+type FitForDutyChoice = 'sim' | 'nao' | 'coord' | null;
 
 export function optionalBinaryResponseToPayload(value: OptionalBinaryResponse): boolean | null {
   return value;
+}
+
+export function mapKssToSubjectiveFatigue(kssScore: number): number {
+  if (kssScore >= 8) return 10;
+  if (kssScore >= 7) return 8;
+  if (kssScore >= 5) return 5;
+  if (kssScore >= 3) return 3;
+  return 1;
+}
+
+function fitChoiceToPayload(choice: FitForDutyChoice): boolean | null {
+  if (choice === 'sim') return true;
+  if (choice === 'nao' || choice === 'coord') return false;
+  return null;
 }
 
 export function isFadigaCheckinSubmitReady(input: {
@@ -118,58 +102,38 @@ export function isFadigaCheckinSubmitReady(input: {
   wakeTime: string;
   qualidadeSono: number | null;
   kssScore: number | null;
-  fadigaNivel: number | null;
-  fitForDuty: boolean | null;
+  fitForDutyChoice: FitForDutyChoice;
   aceiteTermos: boolean;
   aceitePrivacidade: boolean;
   observacao: string;
 }): boolean {
+  const fitForDutyPayload = fitChoiceToPayload(input.fitForDutyChoice);
   return (
     input.sonoOpcao !== null &&
     input.wakeTime !== '' &&
     input.qualidadeSono !== null &&
     input.kssScore !== null &&
-    input.fadigaNivel !== null &&
-    input.fitForDuty !== null &&
+    fitForDutyPayload !== null &&
     input.aceiteTermos &&
     input.aceitePrivacidade &&
-    !(input.fitForDuty === false && !input.observacao.trim())
+    !((input.fitForDutyChoice === 'nao' || input.fitForDutyChoice === 'coord') &&
+      !input.observacao.trim())
   );
 }
 
-// ── risco local estimado ──────────────────────────────────────────────────────
-
-function calcRiscoLocal(
-  sonoOpcao:   SonoOpcao | null,
-  sono48Opcao: Sono48Opcao | null,
-  fadigaNivel: number | null,
-  fitForDuty:  boolean,
-): number {
-  const sonoRisco: Record<SonoOpcao, number> = { menos4: 45, ate5: 28, ate6: 15, ate8: 5, mais8: 0 };
-  const sono48Risco: Record<Sono48Opcao, number> = { lt8: 14, de8a10: 6, de10a12: 0, gt12: -3 };
-  const fadigaRisco: Record<number, number>  = { 1: 0, 2: 10, 3: 25, 4: 40, 5: 60 };
-  const s = sonoOpcao   ? sonoRisco[sonoOpcao]           : 0;
-  const s48 = sono48Opcao ? sono48Risco[sono48Opcao] : 0;
-  const f = fadigaNivel ? (fadigaRisco[fadigaNivel] ?? 0) : 0;
-  const d = fitForDuty  ? 0 : 20;
-  return Math.max(0, Math.min(100, s + s48 + f + d));
-}
-
-// ── HistóricoTab ──────────────────────────────────────────────────────────────
-
 function HistoricoTab() {
-  const hoje   = getTodayLocalKey();
+  const hoje = getTodayLocalKey();
   const inicio = `${hoje.slice(0, 8)}01`;
   const { data, isLoading } = useFadigaHistorico({ data_inicio: inicio, data_fim: hoje, limit: 30 });
   const rows = data?.data ?? [];
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="mb-3 text-sm font-semibold text-slate-700">Meus check-ins do mês atual</p>
+      <p className="mb-3 text-sm font-semibold text-slate-700">Meus check-ins do mes atual</p>
       {isLoading ? (
-        <p className="text-sm text-slate-400">Carregando…</p>
+        <p className="text-sm text-slate-400">Carregando...</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-slate-400">Nenhum check-in registrado este mês.</p>
+        <p className="text-sm text-slate-400">Nenhum check-in registrado este mes.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -179,7 +143,7 @@ function HistoricoTab() {
                 <th className="py-2 text-left font-medium text-slate-500">KSS</th>
                 <th className="py-2 text-left font-medium text-slate-500">Sono (h)</th>
                 <th className="py-2 text-left font-medium text-slate-500">Score</th>
-                <th className="py-2 text-left font-medium text-slate-500">Nível de alerta</th>
+                <th className="py-2 text-left font-medium text-slate-500">Nivel de alerta</th>
                 <th className="py-2 text-left font-medium text-slate-500">Status Op.</th>
               </tr>
             </thead>
@@ -202,8 +166,6 @@ function HistoricoTab() {
   );
 }
 
-// ── PainelGestorTab ───────────────────────────────────────────────────────────
-
 function PainelGestorTab() {
   const hoje = getTodayLocalKey();
   const [data, setData] = useState(hoje);
@@ -213,8 +175,11 @@ function PainelGestorTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <label className="text-sm font-medium text-slate-700">Data de referência</label>
+        <label htmlFor="data-gestor" className="text-sm font-medium text-slate-700">
+          Data de referencia
+        </label>
         <input
+          id="data-gestor"
           type="date"
           value={data}
           onChange={(e) => setData(e.target.value)}
@@ -223,7 +188,7 @@ function PainelGestorTab() {
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         {isLoading ? (
-          <div className="py-10 text-center text-sm text-slate-400">Carregando…</div>
+          <div className="py-10 text-center text-sm text-slate-400">Carregando...</div>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-400">Nenhum check-in registrado para esta data.</div>
         ) : (
@@ -234,7 +199,7 @@ function PainelGestorTab() {
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Tripulante</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">KSS</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Score</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-500">Nível de alerta</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-500">Nivel de alerta</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Status Op.</th>
                 </tr>
               </thead>
@@ -246,13 +211,13 @@ function PainelGestorTab() {
                         to={`/frms/tripulante/${encodeURIComponent(String(r.funcionario_id || ''))}`}
                         className="font-medium text-slate-800 hover:text-blue-700 hover:underline"
                       >
-                        {String(r.funcionario_nome ?? r.funcionario_id ?? '—')}
+                        {String(r.funcionario_nome ?? r.funcionario_id ?? '-')}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{String(r.kss_score ?? '—')}</td>
+                    <td className="px-4 py-3 text-slate-700">{String(r.kss_score ?? '-')}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">{Math.round(Number(r.score_fadiga ?? 0))}</td>
                     <td className="px-4 py-3">{badgeNivel(String(r.nivel_fadiga ?? ''))}</td>
-                    <td className="px-4 py-3 text-slate-600">{String(r.status_operacional ?? '—')}</td>
+                    <td className="px-4 py-3 text-slate-600">{String(r.status_operacional ?? '-')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -264,8 +229,6 @@ function PainelGestorTab() {
   );
 }
 
-// ── FormCard — wrapper visual para cada seção ─────────────────────────────────
-
 function FormCard({
   label,
   hint,
@@ -276,117 +239,135 @@ function FormCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition-shadow duration-200 hover:shadow-md">
-      <p className="text-sm font-semibold text-slate-800">{label}</p>
-      {hint && <p className="text-xs text-slate-400 mt-0.5 mb-3">{hint}</p>}
-      {!hint && <div className="mb-3" />}
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-800">{label}</h2>
+      {hint ? <p className="mt-1 mb-3 text-xs text-slate-500">{hint}</p> : <div className="mb-3" />}
       {children}
+    </section>
+  );
+}
+
+function TriStateButtons({
+  value,
+  onChange,
+  baseId,
+}: {
+  value: OptionalBinaryResponse;
+  onChange: (value: OptionalBinaryResponse) => void;
+  baseId: string;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <button
+        id={`${baseId}-nao`}
+        type="button"
+        aria-pressed={value === false}
+        onClick={() => onChange(false)}
+        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${
+          value === false
+            ? 'border-blue-400 bg-blue-50 text-blue-700'
+            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+        }`}
+      >
+        Nao
+      </button>
+      <button
+        id={`${baseId}-sim`}
+        type="button"
+        aria-pressed={value === true}
+        onClick={() => onChange(true)}
+        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${
+          value === true
+            ? 'border-amber-400 bg-amber-50 text-amber-700'
+            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+        }`}
+      >
+        Sim
+      </button>
+      <button
+        id={`${baseId}-prefiro-nao`}
+        type="button"
+        aria-pressed={value === null}
+        onClick={() => onChange(null)}
+        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${
+          value === null
+            ? 'border-slate-400 bg-slate-100 text-slate-700'
+            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+        }`}
+      >
+        Prefiro nao informar
+      </button>
     </div>
   );
 }
 
-// ── formulário principal ──────────────────────────────────────────────────────
-
 export default function FrmsCheckinFadiga() {
-  const navigate        = useNavigate();
-  const today           = getTodayLocalKey();
+  const navigate = useNavigate();
+  const today = getTodayLocalKey();
   const { isAdmin, isGestor } = usePermissions();
-  const canViewTeam     = isAdmin || isGestor;
+  const canViewTeam = isAdmin || isGestor;
 
   type TabType = 'form' | 'historico' | 'gestor';
   const [activeTab, setActiveTab] = useState<TabType>('form');
 
-  const [sonoOpcao,         setSonoOpcao]         = useState<SonoOpcao | null>(null);
-  const [sono48Opcao,       setSono48Opcao]       = useState<Sono48Opcao | null>(null);
-  const [wakeTime,          setWakeTime]           = useState('');
-  const [qualidadeSono,     setQualidadeSono]      = useState<number | null>(null);
-  const [kssScore,          setKssScore]           = useState<number | null>(null);
-  const [fadigaNivel,       setFadigaNivel]        = useState<number | null>(null);
-  const [medsUlt12h,        setMedsUlt12h]         = useState<OptionalBinaryResponse>(null);
-  const [alcoolUlt12h,      setAlcoolUlt12h]       = useState<OptionalBinaryResponse>(null);
-  const [sintomas,          setSintomas]           = useState<Record<SintomaKey, boolean>>({
-    sonolencia_diurna: false,
-    fadiga_fisica: false,
-    dificuldade_concentracao: false,
-  });
-  const [fitForDuty,        setFitForDuty]         = useState<boolean | null>(null);
-  const [observacao,        setObservacao]         = useState('');
-  const [aceiteTermos,      setAceiteTermos]       = useState(false);
-  const [aceitePrivacidade, setAceitePrivacidade]  = useState(false);
+  const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(null);
+  const [wakeTime, setWakeTime] = useState('');
+  const [qualidadeSono, setQualidadeSono] = useState<number | null>(null);
+  const [kssScore, setKssScore] = useState<number | null>(null);
+  const [fitForDutyChoice, setFitForDutyChoice] = useState<FitForDutyChoice>(null);
+  const [medsUlt12h, setMedsUlt12h] = useState<OptionalBinaryResponse>(null);
+  const [alcoolUlt12h, setAlcoolUlt12h] = useState<OptionalBinaryResponse>(null);
+  const [observacao, setObservacao] = useState('');
+  const [aceiteTermos, setAceiteTermos] = useState(false);
+  const [aceitePrivacidade, setAceitePrivacidade] = useState(false);
 
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
-
-  const sonoHoras = sonoOpcao
-    ? (SONO_OPCOES.find((o) => o.key === sonoOpcao)?.horas ?? null)
-    : null;
-  const sonoHoras48 = sono48Opcao
-    ? (SONO_48_OPCOES.find((o) => o.key === sono48Opcao)?.horas ?? null)
-    : null;
-
-  const showObservacao =
-    fitForDuty === false ||
-    (fadigaNivel !== null && fadigaNivel >= 4) ||
-    (sonoOpcao  !== null && SONO_MENOR_5H.includes(sonoOpcao));
-
-  const riscoLocal = calcRiscoLocal(sonoOpcao, sono48Opcao, fadigaNivel, fitForDuty ?? true);
-  const nivelLocal =
-    riscoLocal >= 80 ? 'VERMELHO' : riscoLocal >= 60 ? 'LARANJA' : riscoLocal >= 40 ? 'AMARELO' : 'VERDE';
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
     wakeTime,
     qualidadeSono,
     kssScore,
-    fadigaNivel,
-    fitForDuty,
+    fitForDutyChoice,
     aceiteTermos,
     aceitePrivacidade,
     observacao,
   });
 
+  const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';
+
   const submit = async () => {
     if (!canSubmit) {
       toast.error(
-        fitForDuty === false && !observacao.trim()
-          ? 'Informe o motivo da inaptidão no campo de observações'
-          : 'Preencha todos os campos obrigatórios',
+        isNeedsCoordinatorReview && !observacao.trim()
+          ? 'Informe uma observacao para revisao da coordenacao'
+          : 'Preencha os campos obrigatorios',
       );
       return;
     }
 
-    const subjectiveFatigueLevel = FADIGA_TO_SUBJECTIVE[fadigaNivel!];
-    const sintomasPayload = Object.entries(sintomas).reduce<Record<string, number>>(
-      (acc, [key, checked]) => {
-        if (checked) acc[key] = 2;
-        return acc;
-      },
-      {},
-    );
-
     try {
+      const kss = kssScore!;
+      const subjectiveFatigueLevel = mapKssToSubjectiveFatigue(kss);
+      const fitForDuty = fitChoiceToPayload(fitForDutyChoice);
+
       const result = await submitMutation.mutateAsync({
         reference_date: today,
-        data_checkin:   today,
-        hora_acordou:   wakeTime,
-        wake_time:      wakeTime,
-        horas_sono_24h: sonoHoras!,
-        horas_sono_48h: sonoHoras48 ?? undefined,
+        data_checkin: today,
+        hora_acordou: wakeTime,
+        wake_time: wakeTime,
+        horas_sono_24h: SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas,
         qualidade_sono: qualidadeSono!,
+        kss_score: kss,
         subjective_fatigue_level: subjectiveFatigueLevel,
-        sleepiness_level:         subjectiveFatigueLevel,
-        kss_score:                kssScore!,
-        sintomas: Object.keys(sintomasPayload).length > 0 ? sintomasPayload : undefined,
-        fit_for_duty:             fitForDuty!,
-        motivo_inaptidao:
-          fitForDuty === false ? observacao.trim() : undefined,
-        free_text_notes:
-          fitForDuty !== false && showObservacao && observacao.trim()
-            ? observacao.trim()
-            : undefined,
-        meds_ult_12h:       optionalBinaryResponseToPayload(medsUlt12h),
-        alcool_ult_12h:     optionalBinaryResponseToPayload(alcoolUlt12h),
-        aceite_termos:      true,
+        sleepiness_level: subjectiveFatigueLevel,
+        fit_for_duty: fitForDuty!,
+        motivo_inaptidao: isNeedsCoordinatorReview ? observacao.trim() : undefined,
+        free_text_notes: !isNeedsCoordinatorReview && observacao.trim() ? observacao.trim() : undefined,
+        meds_ult_12h: optionalBinaryResponseToPayload(medsUlt12h),
+        alcool_ult_12h: optionalBinaryResponseToPayload(alcoolUlt12h),
+        aceite_termos: true,
         aceite_privacidade: true,
       });
 
@@ -394,7 +375,7 @@ export default function FrmsCheckinFadiga() {
       await refetch();
 
       if ((result as { data?: { requires_frat_review?: number } })?.data?.requires_frat_review) {
-        toast.warning('Check-in indica revisão FRAT recomendada');
+        toast.warning('Check-in indica revisao FRAT recomendada');
         navigate(`/sgso/frat?prefill=fadiga&date=${today}`);
       }
     } catch (error) {
@@ -403,8 +384,8 @@ export default function FrmsCheckinFadiga() {
   };
 
   const TABS: { key: TabType; label: string; icon: React.ReactNode }[] = [
-    { key: 'form',     label: 'Fadiga Diária', icon: <HeartPulse className="h-4 w-4" /> },
-    { key: 'historico', label: 'Histórico',    icon: <History    className="h-4 w-4" /> },
+    { key: 'form', label: 'Fadiga Diaria', icon: <HeartPulse className="h-4 w-4" /> },
+    { key: 'historico', label: 'Historico', icon: <History className="h-4 w-4" /> },
     ...(canViewTeam
       ? [{ key: 'gestor' as TabType, label: 'Equipe', icon: <Users className="h-4 w-4" /> }]
       : []),
@@ -413,21 +394,19 @@ export default function FrmsCheckinFadiga() {
   return (
     <AppLayout>
       <div className="space-y-4">
-
-        {/* Cabeçalho com badge */}
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <PageHeader
-                title="Fadiga Diária"
-                subtitle="Check-in rápido para apoiar o gerenciamento de risco de fadiga."
+                title="Fadiga Diaria"
+                subtitle="Check-in rapido para apoiar o gerenciamento de risco de fadiga."
               />
-              <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700">
-                <Zap className="h-3 w-3" />
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                <Clock className="h-3 w-3" />
                 Leva menos de 1 minuto
               </span>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={() => navigate('/frms')} className="text-xs sm:text-sm">
                 Voltar ao FRMS
               </Button>
@@ -437,512 +416,302 @@ export default function FrmsCheckinFadiga() {
             </div>
           </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-slate-200">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors ${
-                activeTab === t.key
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </div>
+          <div className="flex border-b border-slate-200">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setActiveTab(t.key)}
+                className={`flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors sm:flex-none sm:px-4 sm:text-sm ${
+                  activeTab === t.key
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {activeTab === 'historico' && <HistoricoTab />}
-        {activeTab === 'gestor'    && <PainelGestorTab />}
+        {activeTab === 'gestor' && <PainelGestorTab />}
 
         {activeTab === 'form' && (
           <>
-            {/* Mensagem de segurança — tom humano */}
-            <div className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm">
-              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
-              <div>
-                <p className="text-sky-900">
-                  Se houver sinal de fadiga significativa, a coordenação poderá revisar a escala com você.
-                </p>
-                <p className="mt-0.5 text-xs text-sky-600">
-                  Este registro não remove você da escala automaticamente — ele sinaliza atenção operacional.
-                </p>
-              </div>
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              Se houver sinal de fadiga significativa, a coordenacao pode revisar sua jornada.
             </div>
 
             {existente && (
-              <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 animate-fade-in">
+              <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                Check-in de hoje já registrado. Você pode atualizar e reenviar.
+                Check-in de hoje ja registrado. Voce pode atualizar e reenviar.
               </div>
             )}
 
-            {/* Risco compacto — mobile primeiro */}
-            <div className="lg:hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm animate-fade-in">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <ShieldAlert className="h-5 w-5 text-slate-500 shrink-0" />
+            <div className="space-y-3">
+              <FormCard label="Bloco 1 - Sono" hint="Informe seu descanso mais recente.">
+                <div className="space-y-4">
                   <div>
-                    <p className="text-xs text-slate-400">Risco estimado</p>
-                    <p className="text-2xl font-bold text-slate-900 tabular-nums">{riscoLocal}<span className="text-sm font-normal text-slate-400">/100</span></p>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1.5">
-                  {badgeNivel(nivelLocal)}
-                  <div className="w-24 overflow-hidden rounded-full bg-slate-100 h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-500 ${
-                        riscoLocal >= 80 ? 'bg-red-500' : riscoLocal >= 60 ? 'bg-orange-500' : riscoLocal >= 40 ? 'bg-amber-400' : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${riscoLocal}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3 flex items-start gap-2 text-xs text-slate-600">
-                {riscoLocal >= 60 ? (
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-                ) : (
-                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                )}
-                <p>
-                  {riscoLocal >= 80
-                    ? 'Nível crítico. Considere uma revisão antes de iniciar a jornada.'
-                    : riscoLocal >= 60
-                      ? 'Nível elevado. Revisão FRAT recomendada.'
-                      : riscoLocal >= 40
-                        ? 'Nível moderado. Mantenha atenção redobrada.'
-                        : 'Nível operacional adequado.'}
-                </p>
-              </div>
-            </div>
-
-            {/* Layout principal */}
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-
-              {/* Formulário em cards */}
-              <div className="space-y-3">
-
-                {/* 1 — Sono 24h */}
-                <FormCard
-                  label="Quanto você dormiu nas últimas 24h?"
-                  hint="Toque no intervalo mais próximo"
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {SONO_OPCOES.map((op) => {
-                      const selected = sonoOpcao === op.key;
-                      return (
-                        <button
-                          key={op.key}
-                          type="button"
-                          onClick={() => setSonoOpcao(op.key)}
-                          className={`rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-95 ${
-                            selected
-                              ? op.risco === 'critico'
-                                ? 'border-red-400 bg-red-100 text-red-700 shadow-sm'
-                                : op.risco === 'atencao'
-                                  ? 'border-amber-400 bg-amber-100 text-amber-700 shadow-sm'
-                                  : 'border-blue-400 bg-blue-100 text-blue-700 shadow-sm'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          {op.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </FormCard>
-
-                {/* 2 — Sono 48h */}
-                <FormCard
-                  label="Quanto você dormiu nas últimas 48h?"
-                  hint="Opcional — ajuda a calibrar o risco estimado"
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {SONO_48_OPCOES.map((op) => {
-                      const selected = sono48Opcao === op.key;
-                      return (
-                        <button
-                          key={op.key}
-                          type="button"
-                          onClick={() => setSono48Opcao(op.key)}
-                          className={`rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-95 ${
-                            selected
-                              ? op.risco === 'critico'
-                                ? 'border-red-400 bg-red-100 text-red-700 shadow-sm'
-                                : op.risco === 'atencao'
-                                  ? 'border-amber-400 bg-amber-100 text-amber-700 shadow-sm'
-                                  : 'border-blue-400 bg-blue-100 text-blue-700 shadow-sm'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          {op.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </FormCard>
-
-                {/* 3 — Horário acordou */}
-                <FormCard label="Que horas você acordou?">
-                  <input
-                    type="time"
-                    value={wakeTime}
-                    onChange={(e) => setWakeTime(e.target.value)}
-                    className="w-full sm:w-40 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </FormCard>
-
-                {/* 4 — Qualidade do sono */}
-                <FormCard
-                  label="Qual foi a qualidade do seu sono?"
-                  hint="Escala 1–5 usada diretamente no score diário"
-                >
-                  <div className="grid grid-cols-5 gap-2">
-                    {QUALIDADE_SONO_OPCOES.map((op) => {
-                      const selected = qualidadeSono === op.value;
-                      return (
-                        <button
-                          key={op.value}
-                          type="button"
-                          onClick={() => setQualidadeSono(op.value)}
-                          className={`rounded-xl border px-3 py-2 text-center transition-all duration-150 active:scale-95 ${
-                            selected
-                              ? 'border-blue-400 bg-blue-100 text-blue-700 shadow-sm'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                          title={op.hint}
-                        >
-                          <span className="block text-sm font-semibold">{op.label}</span>
-                          <span className="block text-[10px] leading-tight text-slate-500">{op.hint}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </FormCard>
-
-                {/* 5 — KSS real 1–9 */}
-                <FormCard
-                  label="Karolinska Sleepiness Scale (KSS)"
-                  hint="Escala real 1–9 de sonolência no momento do check-in"
-                >
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-9">
-                    {KSS_OPCOES.map((op) => {
-                      const selected = kssScore === op.value;
-                      return (
-                        <button
-                          key={op.value}
-                          type="button"
-                          onClick={() => setKssScore(op.value)}
-                          className={`rounded-xl border px-2 py-2 text-center transition-all duration-150 active:scale-95 ${
-                            selected
-                              ? op.value >= 8
-                                ? 'border-red-400 bg-red-100 text-red-700 shadow-sm'
-                                : op.value >= 7
-                                  ? 'border-amber-400 bg-amber-100 text-amber-700 shadow-sm'
-                                  : 'border-blue-400 bg-blue-100 text-blue-700 shadow-sm'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                          title={op.hint}
-                        >
-                          <span className="block text-sm font-semibold">{op.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {kssScore && (
-                    <p className="mt-2 text-xs text-slate-500">
-                      {KSS_OPCOES.find((op) => op.value === kssScore)?.hint}
-                    </p>
-                  )}
-                </FormCard>
-
-                {/* 6 — Alerta 1–5 */}
-                <FormCard
-                  label="Como está seu nível subjetivo de fadiga agora?"
-                  hint="Escala operacional simples; não substitui a KSS 1–9"
-                >
-                  <div className="space-y-2">
-                    {FADIGA_OPCOES.map((op) => {
-                      const selected = fadigaNivel === op.nivel;
-                      return (
-                        <button
-                          key={op.nivel}
-                          type="button"
-                          onClick={() => setFadigaNivel(op.nivel)}
-                          className={`w-full rounded-xl border px-4 py-3 text-left transition-all duration-150 active:scale-[0.99] ${
-                            selected
-                              ? op.risco === 'critico'
-                                ? 'border-red-400 bg-red-50 shadow-sm'
-                                : op.risco === 'atencao'
-                                  ? 'border-amber-400 bg-amber-50 shadow-sm'
-                                  : 'border-blue-400 bg-blue-50 shadow-sm'
-                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span
-                            className={`block text-sm font-semibold ${
+                    <p className="mb-2 text-sm font-medium text-slate-700">Horas de sono nas ultimas 24h</p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                      {SONO_OPCOES.map((op) => {
+                        const selected = sonoOpcao === op.key;
+                        return (
+                          <button
+                            key={op.key}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => setSonoOpcao(op.key)}
+                            className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
                               selected
                                 ? op.risco === 'critico'
-                                  ? 'text-red-800'
+                                  ? 'border-red-400 bg-red-100 text-red-700'
                                   : op.risco === 'atencao'
-                                    ? 'text-amber-800'
-                                    : 'text-blue-800'
-                                : 'text-slate-800'
+                                    ? 'border-amber-400 bg-amber-100 text-amber-700'
+                                    : 'border-blue-400 bg-blue-100 text-blue-700'
+                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                             }`}
                           >
                             {op.label}
-                          </span>
-                          <span className="block text-xs text-slate-500 mt-0.5">{op.sublabel}</span>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </FormCard>
 
-                {/* 7 — Fatores recentes */}
-                <FormCard label="Houve algum fator relevante nas últimas 12h?">
-                  <p className="mb-3 text-xs text-slate-500">
-                    Resposta opcional. Se preferir não informar, o sistema tratará como dado ausente, não como resposta negativa.
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <p className="mb-2 text-xs font-medium text-slate-500">Medicação com efeito sonolento</p>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <button
-                          type="button"
-                          onClick={() => setMedsUlt12h(true)}
-                          className={`rounded-xl border px-2 py-2 text-sm font-semibold ${medsUlt12h === true ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600'}`}
-                        >
-                          Sim
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMedsUlt12h(false)}
-                          className={`rounded-xl border px-2 py-2 text-sm font-semibold ${medsUlt12h === false ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}
-                        >
-                          Não
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMedsUlt12h(null)}
-                          className={`rounded-xl border px-2 py-2 text-xs font-semibold sm:text-sm ${medsUlt12h === null ? 'border-slate-400 bg-slate-100 text-slate-700' : 'border-slate-200 bg-white text-slate-600'}`}
-                        >
-                          Prefiro não informar
-                        </button>
-                      </div>
+                      <label htmlFor="wake-time" className="mb-2 block text-sm font-medium text-slate-700">
+                        Hora em que acordou
+                      </label>
+                      <input
+                        id="wake-time"
+                        type="time"
+                        value={wakeTime}
+                        onChange={(e) => setWakeTime(e.target.value)}
+                        className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
+
                     <div>
-                      <p className="mb-2 text-xs font-medium text-slate-500">Álcool nas últimas 12h</p>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <button
-                          type="button"
-                          onClick={() => setAlcoolUlt12h(true)}
-                          className={`rounded-xl border px-2 py-2 text-sm font-semibold ${alcoolUlt12h === true ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600'}`}
-                        >
-                          Sim
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAlcoolUlt12h(false)}
-                          className={`rounded-xl border px-2 py-2 text-sm font-semibold ${alcoolUlt12h === false ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}
-                        >
-                          Não
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAlcoolUlt12h(null)}
-                          className={`rounded-xl border px-2 py-2 text-xs font-semibold sm:text-sm ${alcoolUlt12h === null ? 'border-slate-400 bg-slate-100 text-slate-700' : 'border-slate-200 bg-white text-slate-600'}`}
-                        >
-                          Prefiro não informar
-                        </button>
+                      <p className="mb-2 text-sm font-medium text-slate-700">Qualidade do sono</p>
+                      <div className="grid grid-cols-5 gap-2">
+                        {QUALIDADE_SONO_OPCOES.map((op) => {
+                          const selected = qualidadeSono === op.value;
+                          return (
+                            <button
+                              key={op.value}
+                              type="button"
+                              aria-label={`Qualidade ${op.value}: ${op.hint}`}
+                              aria-pressed={selected}
+                              onClick={() => setQualidadeSono(op.value)}
+                              className={`min-h-11 rounded-xl border px-2 py-2 text-center text-sm font-semibold ${
+                                selected
+                                  ? 'border-blue-400 bg-blue-100 text-blue-700'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                              }`}
+                            >
+                              {op.value}
+                            </button>
+                          );
+                        })}
                       </div>
+                      {qualidadeSono != null && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          {QUALIDADE_SONO_OPCOES.find((op) => op.value === qualidadeSono)?.hint}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div className="mt-4">
-                    <p className="mb-2 text-xs font-medium text-slate-500">Sintomas atuais</p>
-                    <div className="flex flex-wrap gap-2">
-                      {SINTOMAS_OPCOES.map((op) => (
-                        <label
-                          key={op.key}
-                          className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={sintomas[op.key]}
-                            onChange={(e) =>
-                              setSintomas((prev) => ({ ...prev, [op.key]: e.target.checked }))
-                            }
-                            className="h-4 w-4 accent-blue-600"
-                          />
-                          {op.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </FormCard>
+                </div>
+              </FormCard>
 
-                {/* 8 — Condição segura */}
-                <FormCard label="Você se sente em condições seguras para cumprir a escala de hoje?">
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setFitForDuty(true)}
-                      className={`flex flex-col items-center justify-center gap-2 rounded-2xl border py-4 text-sm font-semibold transition-all duration-150 active:scale-95 ${
-                        fitForDuty === true
-                          ? 'border-emerald-400 bg-emerald-50 text-emerald-700 shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <CheckCircle2 className={`h-6 w-6 transition-colors duration-200 ${fitForDuty === true ? 'text-emerald-600' : 'text-slate-300'}`} />
-                      Sim, estou apto
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFitForDuty(false)}
-                      className={`flex flex-col items-center justify-center gap-2 rounded-2xl border py-4 text-sm font-semibold transition-all duration-150 active:scale-95 ${
-                        fitForDuty === false
-                          ? 'border-red-400 bg-red-50 text-red-700 shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <AlertTriangle className={`h-6 w-6 transition-colors duration-200 ${fitForDuty === false ? 'text-red-500' : 'text-slate-300'}`} />
-                      Não, preciso de revisão
-                    </button>
-                  </div>
-                  {fitForDuty === false && (
-                    <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                      A coordenação será notificada para revisar a situação com você antes da jornada.
-                    </div>
-                  )}
-                </FormCard>
+              <FormCard
+                label="Bloco 2 - Sonolencia agora"
+                hint="Quao sonolento ou alerta voce esta agora? Escolha a opcao que melhor descreve seu estado neste momento."
+              >
+                <p className="mb-3 text-xs text-slate-500">Escala KSS (1-9).</p>
+                <div className="space-y-2">
+                  {KSS_OPCOES.map((op) => {
+                    const selected = kssScore === op.value;
+                    return (
+                      <button
+                        key={op.value}
+                        type="button"
+                        aria-pressed={selected}
+                        aria-label={`KSS ${op.value}: ${op.hint}`}
+                        onClick={() => setKssScore(op.value)}
+                        className={`w-full rounded-xl border px-4 py-3 text-left ${
+                          selected
+                            ? op.value >= 8
+                              ? 'border-red-400 bg-red-50'
+                              : op.value >= 7
+                                ? 'border-amber-400 bg-amber-50'
+                                : 'border-blue-400 bg-blue-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <span className="block text-sm font-semibold text-slate-800">{op.value}</span>
+                        <span className="block text-xs text-slate-600">{op.hint}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </FormCard>
 
-                {/* Observação condicional */}
-                {showObservacao && (
-                  <div className="animate-fade-in">
-
-                  <FormCard
-                    label={
-                      fitForDuty === false
-                        ? 'Motivo da inaptidão'
-                        : 'Observação rápida para a coordenação'
-                    }
-                    hint={
-                      fitForDuty === false
-                        ? 'Obrigatório quando não apto'
-                        : 'Opcional — contextualiza o check-in para revisão operacional'
-                    }
+              <FormCard label="Bloco 3 - Aptidao operacional">
+                <p className="mb-3 text-sm text-slate-700">
+                  Voce se sente em condicao segura para iniciar a jornada?
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <button
+                    id="fit-choice-sim"
+                    type="button"
+                    aria-pressed={fitForDutyChoice === 'sim'}
+                    onClick={() => setFitForDutyChoice('sim')}
+                    className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold ${
+                      fitForDutyChoice === 'sim'
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                    }`}
                   >
-                    <textarea
-                      value={observacao}
-                      onChange={(e) => setObservacao(e.target.value)}
-                      rows={3}
-                      placeholder={
-                        fitForDuty === false
-                          ? 'Descreva brevemente o motivo…'
-                          : 'Ex: dormiu mal por ruído externo, viagem longa no dia anterior…'
-                      }
-                      className={`w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 resize-none ${
-                        fitForDuty === false
-                          ? 'border-red-200 bg-red-50 focus:ring-red-400 text-slate-800'
-                          : 'border-slate-200 bg-white focus:ring-blue-500 text-slate-800'
-                      }`}
-                    />
-                  </FormCard>
+                    Sim
+                  </button>
+                  <button
+                    id="fit-choice-nao"
+                    type="button"
+                    aria-pressed={fitForDutyChoice === 'nao'}
+                    onClick={() => setFitForDutyChoice('nao')}
+                    className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold ${
+                      fitForDutyChoice === 'nao'
+                        ? 'border-red-400 bg-red-50 text-red-700'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    Nao
+                  </button>
+                  <button
+                    id="fit-choice-coord"
+                    type="button"
+                    aria-pressed={fitForDutyChoice === 'coord'}
+                    onClick={() => setFitForDutyChoice('coord')}
+                    className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold ${
+                      fitForDutyChoice === 'coord'
+                        ? 'border-amber-400 bg-amber-50 text-amber-700'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    Preciso falar com a coordenacao
+                  </button>
+                </div>
+
+                {isNeedsCoordinatorReview && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    A coordenacao sera notificada para revisar a situacao com voce.
                   </div>
                 )}
 
-                {/* Declarações — visual leve */}
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Declaração</p>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={aceiteTermos}
-                      onChange={(e) => setAceiteTermos(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600"
-                    />
-                    <span className="text-sm text-slate-600 leading-relaxed">
-                      As informações que forneci são verídicas e estou ciente das responsabilidades operacionais associadas ao meu estado de fadiga.
-                    </span>
+                <div className="mt-4">
+                  <label htmlFor="observacao" className="mb-2 block text-sm font-medium text-slate-700">
+                    {isNeedsCoordinatorReview
+                      ? 'Explique rapidamente (obrigatorio)'
+                      : 'Ha algo que a coordenacao precisa saber? (opcional)'}
                   </label>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={aceitePrivacidade}
-                      onChange={(e) => setAceitePrivacidade(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600"
-                    />
-                    <span className="text-sm text-slate-600 leading-relaxed">
-                      Aceito que estes dados sejam utilizados pelo FRMS conforme a política de privacidade da empresa.
-                    </span>
-                  </label>
+                  <textarea
+                    id="observacao"
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    rows={3}
+                    placeholder={
+                      isNeedsCoordinatorReview
+                        ? 'Descreva brevemente o motivo...'
+                        : 'Ex: noite de sono ruim por ruido externo...'
+                    }
+                    className={`w-full rounded-xl border px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 ${
+                      isNeedsCoordinatorReview
+                        ? 'border-amber-300 bg-amber-50 focus:ring-amber-400'
+                        : 'border-slate-200 bg-white focus:ring-blue-500'
+                    }`}
+                  />
                 </div>
+              </FormCard>
 
-                <Button
-                  onClick={submit}
-                  loading={submitMutation.isPending}
-                  disabled={!canSubmit}
-                  className="w-full py-3 text-base"
-                >
-                  Confirmar Fadiga Diária
-                </Button>
+              <FormCard label="Bloco 4 - Fatores relevantes" hint="Esses itens sao opcionais.">
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="meds-ult-12h-nao" className="mb-2 block text-sm font-medium text-slate-700">
+                      Medicacao que pode causar sonolencia
+                    </label>
+                    <TriStateButtons value={medsUlt12h} onChange={setMedsUlt12h} baseId="meds-ult-12h" />
+                  </div>
+
+                  <div>
+                    <label htmlFor="alcool-ult-12h-nao" className="mb-2 block text-sm font-medium text-slate-700">
+                      Alcool nas ultimas 12h
+                    </label>
+                    <TriStateButtons value={alcoolUlt12h} onChange={setAlcoolUlt12h} baseId="alcool-ult-12h" />
+                  </div>
+                </div>
+              </FormCard>
+
+              <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Declaracao</p>
+                <label className="flex items-start gap-3">
+                  <input
+                    id="aceite-termos"
+                    type="checkbox"
+                    checked={aceiteTermos}
+                    onChange={(e) => setAceiteTermos(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600"
+                  />
+                  <span className="text-sm text-slate-700">
+                    As informacoes fornecidas sao veridicas e refletem meu estado atual.
+                  </span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <input
+                    id="aceite-privacidade"
+                    type="checkbox"
+                    checked={aceitePrivacidade}
+                    onChange={(e) => setAceitePrivacidade(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600"
+                  />
+                  <span className="text-sm text-slate-700">
+                    Aceito o uso dos dados no FRMS conforme a politica de privacidade da empresa.
+                  </span>
+                </label>
               </div>
 
-              {/* Sidebar — estimativa de risco (desktop) */}
-              <aside className="hidden lg:block space-y-3">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ShieldAlert className="h-4 w-4 text-slate-500" />
-                    <span className="text-sm font-semibold text-slate-800">Risco estimado</span>
-                  </div>
-                  <p className="text-xs text-slate-400 mb-4">Com base no check-in atual</p>
+              <Button
+                id="submit-checkin-fadiga"
+                onClick={submit}
+                loading={submitMutation.isPending}
+                disabled={!canSubmit}
+                className="min-h-12 w-full text-base"
+              >
+                Confirmar Check-in Diario
+              </Button>
 
-                  <div className="text-4xl font-bold text-slate-900 tabular-nums">{riscoLocal}</div>
-                  <div className="mt-0.5 text-xs text-slate-400">/ 100</div>
+              {!canSubmit && (
+                <p className="flex items-start gap-2 text-xs text-slate-500">
+                  <MessageCircleWarning className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  Preencha os campos obrigatorios para liberar o envio.
+                </p>
+              )}
+            </div>
 
-                  <div className="mt-3">{badgeNivel(nivelLocal)}</div>
+            {isNeedsCoordinatorReview && !observacao.trim() && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                Quando voce seleciona "Nao" ou "Preciso falar com a coordenacao", a observacao e obrigatoria.
+              </div>
+            )}
 
-                  <div className="mt-4 overflow-hidden rounded-full bg-slate-100 h-2.5">
-                    <div
-                      className={`h-2.5 rounded-full transition-all duration-500 ${
-                        riscoLocal >= 80
-                          ? 'bg-red-500'
-                          : riscoLocal >= 60
-                            ? 'bg-orange-500'
-                            : riscoLocal >= 40
-                              ? 'bg-amber-400'
-                              : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${riscoLocal}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-start gap-2 text-sm text-slate-600">
-                    {riscoLocal >= 60 ? (
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                    ) : (
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                    )}
-                    <p>
-                      {riscoLocal >= 80
-                        ? 'Nível crítico. Considere uma revisão antes de iniciar a jornada.'
-                        : riscoLocal >= 60
-                          ? 'Nível elevado. Revisão FRAT recomendada.'
-                          : riscoLocal >= 40
-                            ? 'Nível moderado. Mantenha atenção redobrada.'
-                            : 'Nível operacional adequado. Bom voo!'}
-                    </p>
-                  </div>
-                </div>
-
-              </aside>
+            <div className="hidden rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-500 lg:block">
+              Este formulario foi simplificado para check-in mobile-first e coleta apenas campos com uso
+              operacional claro no backend FRMS.
             </div>
           </>
         )}
