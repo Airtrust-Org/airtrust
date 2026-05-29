@@ -124,3 +124,11 @@ Migration criada localmente, mas nao aplicada em producao nesta fase.
 ## 12) Fase D completa
 
 A Fase D completa continua bloqueada para mitigacao automatica, acao corretiva, alteracao de escala, SGSO automatico, gatilhos por quinzena/setores/sit periods e qualquer decisao automatica de aptidao.
+
+## 13) Evolucao D4-B - Backfill controlado
+
+A D4-B adiciona script versionado para migrar eventos legados `FRMS_READ_ACK_EVENT` e `FRMS_READ_ACK_ACK` para as tabelas dedicadas, com dry-run obrigatorio por padrao e apply filtrado por `empresa_id` e janela de data.
+
+Referencia: `docs/FRMS_D4B_READ_ACK_BACKFILL_PLAN.md`.
+
+O backfill nao apaga nem altera `frms_fadiga_evento`; a leitura continua deduplicada porque a fonte dedicada prevalece sobre o legado quando o mesmo `id` existe nas duas fontes.
