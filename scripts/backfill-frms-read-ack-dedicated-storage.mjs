@@ -27,6 +27,7 @@ export function parseArgs(argv) {
     else if (arg === '--env') args.env = argv[++i];
     else if (arg === '--local') args.remote = false;
     else if (arg === '--remote') args.remote = true;
+    else if (arg === '--limit') args.limit = Number(argv[++i]);
     else if (arg === '--max-apply-events') args.maxApplyEvents = Number(argv[++i]);
     else if (arg === '--help' || arg === '-h') {
       printHelp();
@@ -39,7 +40,7 @@ export function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Uso: node scripts/backfill-frms-read-ack-dedicated-storage.mjs [--dry-run|--apply] --empresa-id <id> --data-inicio YYYY-MM-DD --data-fim YYYY-MM-DD
+  console.log(`Uso: node scripts/backfill-frms-read-ack-dedicated-storage.mjs [--dry-run|--apply] --empresa-id <id> --data-inicio YYYY-MM-DD --data-fim YYYY-MM-DD [--limit N]
 
 Backfill controlado de FRMS_READ_ACK_EVENT/FRMS_READ_ACK_ACK legado para frms_read_ack_events/frms_read_ack_event_audit.
 Dry-run e obrigatorio por padrao. Apply exige empresa/data e usa INSERT OR IGNORE/WHERE NOT EXISTS.`);
@@ -61,6 +62,9 @@ export function assertRequiredFilters(args) {
   if (args.apply && (!Number.isFinite(args.maxApplyEvents) || args.maxApplyEvents <= 0)) {
     throw new Error('--max-apply-events deve ser positivo');
   }
+  if (args.limit !== undefined && (!Number.isInteger(args.limit) || args.limit <= 0)) {
+    throw new Error('--limit deve ser inteiro positivo');
+  }
 }
 
 export function sqlString(value) {
@@ -69,6 +73,7 @@ export function sqlString(value) {
 }
 
 function sqlNumber(value) {
+  if (value === null || value === undefined || value === '') return 'NULL';
   return Number.isFinite(Number(value)) ? String(Number(value)) : 'NULL';
 }
 
@@ -134,6 +139,7 @@ function stringOrNull(value) {
 }
 
 function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
@@ -249,6 +255,7 @@ function summarizePlan({ legacyEvents, legacyAcks, dedicatedExisting, auditExist
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   assertRequiredFilters(args);
+  const limitClause = args.limit ? `\nLIMIT ${sqlNumber(args.limit)}` : '';
 
   const eventSql = `SELECT id, empresa_id, tipo, created_at, payload_json
 FROM frms_fadiga_evento
@@ -256,7 +263,7 @@ WHERE empresa_id = ${sqlNumber(args.empresaId)}
   AND tipo = '${EVENT_KIND}'
   AND json_extract(payload_json, '$.data_operacional') >= ${sqlString(args.dataInicio)}
   AND json_extract(payload_json, '$.data_operacional') <= ${sqlString(args.dataFim)}
-ORDER BY created_at, id`;
+ORDER BY created_at, id${limitClause}`;
 
   const ackSql = `SELECT a.id, a.empresa_id, a.tipo, a.created_at, a.payload_json
 FROM frms_fadiga_evento a
@@ -269,6 +276,7 @@ WHERE a.empresa_id = ${sqlNumber(args.empresaId)}
        AND e.tipo = '${EVENT_KIND}'
        AND json_extract(e.payload_json, '$.data_operacional') >= ${sqlString(args.dataInicio)}
        AND json_extract(e.payload_json, '$.data_operacional') <= ${sqlString(args.dataFim)}
+     ORDER BY e.created_at, e.id${limitClause}
   )
 ORDER BY a.created_at, a.id`;
 
