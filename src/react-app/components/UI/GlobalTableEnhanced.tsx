@@ -393,7 +393,7 @@ export const GlobalTableEnhanced: React.FC<GlobalTablePropsEnhanced> = ({
                 setSearchQuery(e.target.value);
                 onSearch?.(e.target.value);
               }}
-              className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg focus-visible:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
         )}

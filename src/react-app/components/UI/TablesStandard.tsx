@@ -281,7 +281,7 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
                     placeholder={searchPlaceholder}
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg focus-visible:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               </div>

@@ -101,7 +101,7 @@ export function FormDateInput({
               ? 'border-red-500 focus:ring-red-500'
               : 'border-gray-300 focus:ring-primary/30'
           }
-          focus:outline-none focus:ring-2
+          focus-visible:outline-none focus:ring-2
         `}
         aria-invalid={!!displayError}
         aria-describedby={displayError ? `${label}-error` : undefined}

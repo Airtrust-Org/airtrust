@@ -98,13 +98,13 @@ export const Calendar: React.FC<CalendarProps> = ({ events, onEventClick, onDate
 
           {/* Filtros */}
           <div className="flex items-center gap-3">
-            <select className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
+            <select className="px-3 py-2 border border-slate-300 rounded-md text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
               <option value="">Todos Simuladores</option>
               <option value="A320">A320 FFS</option>
               <option value="B737">B737 MAX FFS</option>
               <option value="E190">E190-E2 FTD</option>
             </select>
-            <select className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
+            <select className="px-3 py-2 border border-slate-300 rounded-md text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
               <option value="">Todos Instrutores</option>
             </select>
           </div>

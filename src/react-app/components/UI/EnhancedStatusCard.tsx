@@ -89,7 +89,7 @@ export const EnhancedStatusCard: React.FC<StatusCardProps> = ({
         shadow-lg ${config.shadow}
         transition-all duration-300
         hover:scale-105 ${config.hoverShadow} hover:shadow-2xl
-        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/30
+        focus-visible:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/30
         transform cursor-pointer
         group
       `}
