@@ -72,6 +72,20 @@ function CustomTooltip({ active, payload, config }: CustomTooltipProps) {
               Despertar: {point.hora_despertar_estimada.slice(0, 5)}
             </p>
           )}
+          {point.processado_com_bug === 1 ? (
+            <p className="mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+              Dado legado pré-C2
+            </p>
+          ) : point.processado_com_bug === 0 ? (
+            <p className="mt-1 inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+              Cálculo C2 corrigido
+            </p>
+          ) : null}
+          {!point.hora_despertar_estimada && point.duracao_sono_efetiva_min == null ? (
+            <p className="mt-1 inline-flex rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+              Sem horário de apresentação: recálculo pendente
+            </p>
+          ) : null}
           {point.tempo_abaixo_limiar_min != null && point.tempo_abaixo_limiar_min > 0 && (
             <p className="text-xs text-amber-600">
               ⚠ {formatMinutes(point.tempo_abaixo_limiar_min)} abaixo do limiar
@@ -111,6 +125,7 @@ function ColoredDot(props: {
 interface ChartPoint {
   data_apresentacao: string;
   effectiveness_pct: number | null;
+  processado_com_bug: number | null;
   duracao_sono_efetiva_min: number | null;
   hora_despertar_estimada: string | null;
   tempo_abaixo_limiar_min: number | null;
@@ -169,6 +184,7 @@ export default function FrmsEffectivenessTimeline({
       jornadas.map((j) => ({
         data_apresentacao: j.data_apresentacao,
         effectiveness_pct: j.effectiveness_pct,
+        processado_com_bug: j.processado_com_bug ?? null,
         duracao_sono_efetiva_min: j.duracao_sono_efetiva_min ?? null,
         hora_despertar_estimada: j.hora_despertar_estimada ?? null,
         tempo_abaixo_limiar_min: j.tempo_abaixo_limiar_min ?? null,

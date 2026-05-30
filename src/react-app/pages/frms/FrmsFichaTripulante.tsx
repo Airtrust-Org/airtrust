@@ -6,7 +6,7 @@
  * - Histórico de alertas
  * - Botão para lançar jornada
  */
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Calendar, ChevronLeft, ChevronRight, CalendarX, X } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -222,6 +222,50 @@ const STATUS_COLORS: Record<string, string> = {
   POSITIONING: 'bg-cyan-100 text-cyan-800',
 };
 
+function resolveSonoFonteBadge(
+  fonteSono: FrmsJornadaRow['fonte_sono'],
+): { label: string; tone: string; help: string } {
+  if (fonteSono === 'INFORMADO') {
+    return {
+      label: 'Fonte do sono: informado',
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      help: 'O sono foi informado no check-in ou ajustado manualmente.',
+    };
+  }
+  if (fonteSono === 'PADRAO') {
+    return {
+      label: 'Fonte do sono: padrão',
+      tone: 'border-amber-200 bg-amber-50 text-amber-700',
+      help: 'Foi aplicada estimativa padrão por ausência de sono informado.',
+    };
+  }
+  return {
+    label: 'Fonte do sono: estimado',
+    tone: 'border-slate-200 bg-slate-100 text-slate-600',
+    help: 'A origem do sono não veio explícita; leitura tratada como estimada.',
+  };
+}
+
+function resolveC2Badge(
+  processadoComBug: number | null | undefined,
+): { label: string; tone: string; help: string } | null {
+  if (processadoComBug === 1) {
+    return {
+      label: 'Dado legado pré-C2',
+      tone: 'border-amber-200 bg-amber-50 text-amber-700',
+      help: 'Este cálculo foi processado antes da correção técnica C2.',
+    };
+  }
+  if (processadoComBug === 0) {
+    return {
+      label: 'Cálculo C2 corrigido',
+      tone: 'border-sky-200 bg-sky-50 text-sky-700',
+      help: 'Este cálculo já foi processado com a correção técnica C2.',
+    };
+  }
+  return null;
+}
+
 function getCurrentMonthKeyLocal(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -244,12 +288,26 @@ export default function FrmsFichaTripulante() {
   const [editingJornada, setEditingJornada] = useState<FrmsJornadaRow | null>(null);
   const [selectedExplanationDate, setSelectedExplanationDate] = useState<string | null>(null);
   const hojeIso = new Date().toISOString().slice(0, 10);
+  const rangeMes = getMonthRange(mesAtual);
 
   const { data: recentJornadasRaw } = useFrmsJornadasEffectiveness(id, 7);
+  const { data: jornadasMesEffectRaw } = useFrmsJornadasEffectiveness(
+    id,
+    365,
+    rangeMes ? { inicio: rangeMes.dataInicio, fim: rangeMes.dataFim } : undefined,
+  );
   const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: hojeIso });
   const recentJornadas = recentJornadasRaw as FrmsEffectivenessJornadaRow[] | null;
   const latestJornada =
     recentJornadas && recentJornadas.length > 0 ? recentJornadas[recentJornadas.length - 1] : null;
+  const jornadasMesEffect = (jornadasMesEffectRaw as FrmsEffectivenessJornadaRow[] | null) ?? [];
+  const processadoComBugPorData = useMemo(() => {
+    const map = new Map<string, number | null>();
+    jornadasMesEffect.forEach((row) => {
+      map.set(row.data_apresentacao, row.processado_com_bug ?? null);
+    });
+    return map;
+  }, [jornadasMesEffect]);
   const ultimaJornadaMes =
     ultimaJornadaRaw?.data?.[0]?.data && /^\d{4}-\d{2}-\d{2}$/.test(ultimaJornadaRaw.data[0].data)
       ? ultimaJornadaRaw.data[0].data.slice(0, 7)
@@ -262,7 +320,6 @@ export default function FrmsFichaTripulante() {
     jornadasVersion,
   );
   const { data: acumuloRaw, loading: loadingA, refetch: refetchA } = useFrmsAcumulo(id, mesAtual);
-  const rangeMes = getMonthRange(mesAtual);
   const { data: alertasMesRaw, refetch: refetchAlertasMes } = useFrmsAlertas(
     id && rangeMes
       ? {
@@ -666,7 +723,13 @@ export default function FrmsFichaTripulante() {
                     </td>
                   </tr>
                 ) : (
-                  jornadas.map((j) => (
+                  jornadas.map((j) => {
+                    const processadoComBug = processadoComBugPorData.get(j.data);
+                    const c2Badge = resolveC2Badge(processadoComBug);
+                    const sonoFonteBadge = resolveSonoFonteBadge(j.fonte_sono);
+                    const semHoraApresentacao = !j.hora_apresentacao;
+
+                    return (
                     <tr key={j.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-4 py-2.5 text-gray-700 tabular-nums font-medium">
                         {j.data.slice(8, 10)}/{j.data.slice(5, 7)}
@@ -679,9 +742,36 @@ export default function FrmsFichaTripulante() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                          {j.origem || 'MANUAL'}
-                        </span>
+                        <div className="flex min-w-[230px] flex-wrap gap-1">
+                          <span
+                            className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                            title="Origem do registro da jornada"
+                          >
+                            {j.origem || 'MANUAL'}
+                          </span>
+                          <span
+                            title={sonoFonteBadge.help}
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sonoFonteBadge.tone}`}
+                          >
+                            {sonoFonteBadge.label}
+                          </span>
+                          {c2Badge ? (
+                            <span
+                              title={c2Badge.help}
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${c2Badge.tone}`}
+                            >
+                              {c2Badge.label}
+                            </span>
+                          ) : null}
+                          {semHoraApresentacao ? (
+                            <span
+                              title="Sem hora de apresentação registrada; recálculo depende desse dado."
+                              className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
+                            >
+                              Sem horário de apresentação: recálculo pendente
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
                         {j.hora_apresentacao || '—'}
@@ -750,7 +840,8 @@ export default function FrmsFichaTripulante() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
