@@ -15,6 +15,7 @@ import {
   getEffectivenessColor,
   getEffectivenessHex,
   getEffectivenessLabel,
+  formatFrmsDate,
 } from '../frmsUtils';
 
 // Defaults: AVISO=80, ATENCAO=90, CRITICO=95, VIOLACAO=101
@@ -240,5 +241,16 @@ describe('frmsUtils — limites customizados', () => {
 
   it('getEffectivenessLabel: 61% → Degradação estimada moderada com VERMELHO=60', () => {
     expect(getEffectivenessLabel(61, custom)).toBe('Degradação estimada moderada');
+  });
+});
+
+describe('formatFrmsDate', () => {
+  it('converte ISO para DD/MM/YYYY', () => {
+    expect(formatFrmsDate('2026-05-30')).toBe('30/05/2026');
+  });
+
+  it('mantém entrada inválida sem quebrar', () => {
+    expect(formatFrmsDate('30/05/2026')).toBe('30/05/2026');
+    expect(formatFrmsDate(null)).toBe('—');
   });
 });

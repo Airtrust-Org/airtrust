@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
+  Bot,
+  Brain,
   CalendarDays,
+  Clock3,
   Copy,
   FileText,
   FlaskConical,
+  MoonStar,
   X,
 } from 'lucide-react';
 import {
   useFrmsCompararDias,
   useFrmsDayExplanation,
-  useFrmsJornadasEffectiveness,
   useFrmsJustificativas,
   useFrmsMutation,
   type FrmsJustificativaGeradaResponse,
@@ -17,9 +21,14 @@ import {
 } from '@/react-app/hooks/useFrms';
 import type {
   FrmsDayExplanationFactor,
+  FrmsDayExplanationRecommendation,
 } from '@/react-app/hooks/useFrms';
-import { buildFrmsDayExplanationTrace } from '../frmsDayExplanationTrace';
-import { getEffectivenessHex, getEffectivenessLabel, type ConfigLimites } from '../frmsUtils';
+import {
+  formatFrmsDate,
+  getEffectivenessHex,
+  getEffectivenessLabel,
+  type ConfigLimites,
+} from '../frmsUtils';
 
 function formatMinutes(totalMinutes: number | null | undefined): string {
   if (totalMinutes == null) return 'Sem dado';
@@ -36,11 +45,6 @@ function formatMinutesCompact(totalMinutes: number | null | undefined): string {
   return `${rounded} min`;
 }
 
-function toBrDate(value: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  return `${value.slice(8, 10)}/${value.slice(5, 7)}`;
-}
-
 function previousDate(value: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const d = new Date(`${value}T00:00:00Z`);
@@ -48,19 +52,55 @@ function previousDate(value: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderLightMarkdown(text: string): string {
+  const escaped = escapeHtml(text || '');
+  const withBold = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return withBold.replace(/\n\n+/g, '<br/><br/>').replace(/\n/g, '<br/>');
+}
+
 function factorLabel(code: string): string {
-  if (code === 'basica') return 'Penalização de base do dia';
-  if (code === 'processo_c') return 'Janela circadiana';
-  if (code === 'processo_s') return 'Ciclo embarcado';
-  if (code === 'hv') return 'Acúmulo de horas de voo';
+  if (code === 'basica') return 'Contexto circadiano basal';
+  if (code === 'processo_c') return 'Circadiano';
+  if (code === 'processo_s') return 'Ciclo Embarcado';
+  if (code === 'hv') return 'Acúmulo HV';
   if (code === 'repouso') return 'Repouso';
-  if (code === 'duracao') return 'Duração da jornada';
+  if (code === 'duracao') return 'Duração';
   return code;
 }
 
-function formatImpact(factor: FrmsDayExplanationFactor): string {
-  if (factor.codigo === 'basica') return 'Contexto basal (sem leitura isolada em pp)';
-  return `${factor.impacto_pct > 0 ? '+' : ''}${factor.impacto_pct.toFixed(1)} pp`;
+function sanitizeOperationalText(text: string): string {
+  return (text || '')
+    .replace(/fator_basica_pct\s*:\s*[\d.,-]+/gi, 'contexto circadiano basal auxiliar')
+    .replace(/7d pior dia (\d{4}-\d{2}-\d{2}) \(([\d.,]+)\)\.?/gi, (_, date, score) => {
+      return `Na janela de 7 dias, o pior ponto foi ${formatFrmsDate(date)}, com índice estimado de ${score}%.`;
+    })
+    .replace(/28d pior dia (\d{4}-\d{2}-\d{2}) \(([\d.,]+)\)\.?/gi, (_, date, score) => {
+      return `Na janela de 28 dias, o pior ponto foi ${formatFrmsDate(date)}, com índice estimado de ${score}%.`;
+    });
+}
+
+function priorityClass(priority: FrmsDayExplanationRecommendation['prioridade']): string {
+  if (priority === 'alta') return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (priority === 'media') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-sky-200 bg-sky-50 text-sky-700';
+}
+
+function factorClass(factor: FrmsDayExplanationFactor, faixa: string): string {
+  if (factor.direcao === 'penaliza') {
+    if (factor.impacto_pct <= -10) return 'border-rose-200 bg-rose-50';
+    return faixa === 'verde' ? 'border-amber-200 bg-amber-50' : 'border-rose-200 bg-rose-50';
+  }
+  if (factor.direcao === 'favorece') return 'border-teal-200 bg-teal-50';
+  return 'border-slate-200 bg-slate-50';
 }
 
 interface Props {
@@ -79,10 +119,6 @@ export default function FrmsDayExplanationPanel({
   source = 'desconhecida',
 }: Props) {
   const { data, loading, error } = useFrmsDayExplanation(tripulanteId, date, { source });
-  const { data: timelineRows } = useFrmsJornadasEffectiveness(tripulanteId, 7, {
-    inicio: date ?? undefined,
-    fim: date ?? undefined,
-  });
   const [showComparison, setShowComparison] = useState(false);
   const [comparisonDate, setComparisonDate] = useState<string | null>(
     date ? previousDate(date) : null,
@@ -152,31 +188,6 @@ export default function FrmsDayExplanationPanel({
     });
   }, [comparisonData]);
 
-  const timelineRow = useMemo(() => {
-    if (!timelineRows || !date) return null;
-    return timelineRows.find((row) => row.data_apresentacao === date) ?? null;
-  }, [timelineRows, date]);
-
-  const trace = useMemo(() => {
-    if (!data) return null;
-    const pct = data.jornada.effectiveness_pct;
-    const duracaoFactor =
-      data.diagnostico.fatores.find((factor) => factor.codigo === 'duracao')?.impacto_pct ?? null;
-    const pctFimEstimado =
-      pct != null && duracaoFactor != null
-        ? Math.max(0, Math.min(100, pct + duracaoFactor))
-        : null;
-    const pctPrincipal = pctFimEstimado ?? pct;
-    const displayedEffectivenessLabel =
-      pctPrincipal != null ? getEffectivenessLabel(pctPrincipal, config) : 'Sem classificação';
-
-    return buildFrmsDayExplanationTrace({
-      explanation: data,
-      timelineRow,
-      displayedEffectivenessLabel,
-    });
-  }, [data, timelineRow, config]);
-
   if (!tripulanteId || !date) {
     return null;
   }
@@ -204,14 +215,6 @@ export default function FrmsDayExplanationPanel({
     );
   }
 
-  if (!trace) {
-    return (
-      <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
-        Não foi possível gerar a explicação desse dia agora.
-      </div>
-    );
-  }
-
   const pct = data.jornada.effectiveness_pct;
   const duracaoFactor =
     data.diagnostico.fatores.find((factor) => factor.codigo === 'duracao')?.impacto_pct ?? null;
@@ -221,81 +224,35 @@ export default function FrmsDayExplanationPanel({
   const accent = pctPrincipal != null ? getEffectivenessHex(pctPrincipal, config) : '#64748B';
   const label =
     pctPrincipal != null ? getEffectivenessLabel(pctPrincipal, config) : 'Sem classificação';
+  const penalizacaoBaseDiaPts = data.diagnostico.fatores
+    .filter((factor) => factor.codigo !== 'duracao' && factor.direcao === 'penaliza')
+    .reduce((sum, factor) => sum + Math.abs(Math.min(0, factor.impacto_pct)), 0);
+  const penalizacaoIntrajornadaPts = Math.abs(Math.min(0, duracaoFactor ?? 0));
+  const semVariacaoIntrajornada = penalizacaoIntrajornadaPts < 0.05;
   const diasCriticosConsecutivos = data.jornada.dias_criticos_consecutivos ?? 0;
-  const fonteSonoBadge = data.jornada.hora_acordou
+  const faixa = data.diagnostico.faixa?.toLowerCase() ?? '';
+  const statusTone = faixa.includes('verde')
     ? {
-        label: 'Fonte do sono: informado',
-        tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-        help: 'Há horário de acordar informado para o cálculo do dia.',
+        wrap: 'border-teal-200 bg-teal-50/70',
+        title: 'text-teal-800',
       }
-    : data.jornada.duracao_sono_efetiva_min != null
+    : faixa.includes('amarel') || faixa.includes('aten')
       ? {
-          label: 'Fonte do sono: padrão',
-          tone: 'border-amber-200 bg-amber-50 text-amber-700',
-          help: 'Sem horário informado; cálculo usa estimativa padrão de sono.',
+          wrap: 'border-amber-200 bg-amber-50/70',
+          title: 'text-amber-800',
         }
       : {
-          label: 'Fonte do sono: estimado',
-          tone: 'border-slate-200 bg-slate-100 text-slate-600',
-          help: 'Não há dado de sono informado suficiente para o dia.',
+          wrap: 'border-rose-200 bg-rose-50/70',
+          title: 'text-rose-800',
         };
-  const recalcPendente = !data.jornada.hora_apresentacao;
-  const wakeTime = data.jornada.hora_acordou || data.jornada.hora_despertar_estimada;
-
-  const explanationRows = data.diagnostico.fatores.map((factor) => {
-    let dadoUsado = 'Dado bruto não disponível neste payload.';
-    let comoEntrou = factor.resumo;
-
-    if (factor.codigo === 'hv') {
-      dadoUsado =
-        trace.inputs.priorDaysWindow && !trace.inputs.priorDaysWindow.includes('não disponível')
-          ? trace.inputs.priorDaysWindow
-          : 'Horas brutas 7d/28d/mês não disponíveis neste payload.';
-      comoEntrou = 'Componente de acúmulo recente de voo no modelo de efetividade do dia.';
-    } else if (factor.codigo === 'processo_s') {
-      dadoUsado =
-        data.jornada.dia_periodo_embarcado != null && data.jornada.total_dias_periodo != null
-          ? `${data.jornada.dia_periodo_embarcado}º dia de ${data.jornada.total_dias_periodo} do período embarcado`
-          : 'Dia do ciclo embarcado não disponível neste payload.';
-      comoEntrou = 'Penalização progressiva por avanço do período embarcado.';
-    } else if (factor.codigo === 'processo_c') {
-      dadoUsado =
-        wakeTime && data.jornada.hora_apresentacao
-          ? `Despertar ${wakeTime}; apresentação ${data.jornada.hora_apresentacao}`
-          : 'Horário de despertar/apresentação incompleto no payload.';
-      comoEntrou = 'Penalização circadiana pela janela de apresentação do dia.';
-    } else if (factor.codigo === 'repouso') {
-      dadoUsado = `${formatMinutes(data.jornada.duracao_sono_efetiva_min)} (${fonteSonoBadge.label.toLowerCase()})`;
-      comoEntrou = 'Componente de repouso/sono da jornada processada.';
-    } else if (factor.codigo === 'duracao') {
-      dadoUsado =
-        data.jornada.tempo_abaixo_limiar_min != null
-          ? `Tempo em faixa de atenção: ${formatMinutesCompact(data.jornada.tempo_abaixo_limiar_min)}`
-          : 'Duração bruta da jornada não disponível neste payload.';
-      comoEntrou = 'Componente de duração da jornada no cálculo diário de efetividade.';
-    } else if (factor.codigo === 'basica') {
-      dadoUsado =
-        timelineRow?.fator_basica_pct != null
-          ? `fator_basica_pct: ${timelineRow.fator_basica_pct.toFixed(4)}`
-          : 'fator_basica_pct não disponível neste payload.';
-      comoEntrou =
-        'Contexto basal/circadiano auxiliar; não representa impacto direto isolado em pp na leitura operacional.';
-    }
-
-    return {
-      key: factor.codigo,
-      componente: factor.titulo || factorLabel(factor.codigo),
-      dadoUsado,
-      comoEntrou,
-      impacto: formatImpact(factor),
-      impactoAbs: Math.abs(Math.min(0, factor.impacto_pct)),
-    };
-  });
-
-  const dominantRow =
-    explanationRows
-      .filter((row) => row.key !== 'basica')
-      .sort((a, b) => b.impactoAbs - a.impactoAbs)[0] ?? null;
+  const factors = data.diagnostico.fatores.map((factor) => ({
+    ...factor,
+    resumo: sanitizeOperationalText(factor.resumo),
+    titulo: factor.codigo === 'basica' ? 'Contexto circadiano basal' : factor.titulo,
+  }));
+  const resumoExecutivo = sanitizeOperationalText(data.diagnostico.resumo_executivo);
+  const explicacaoDidatica = sanitizeOperationalText(data.diagnostico.explicacao_didatica);
+  const explicacaoTecnica = sanitizeOperationalText(data.diagnostico.explicacao_tecnica);
 
   const handleSimular = async () => {
     if (!tripulanteId || !date) return;
@@ -364,27 +321,11 @@ export default function FrmsDayExplanationPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="text-lg font-semibold text-slate-900">
-            {tripulanteNome || data.tripulante.nome} · {date.slice(8, 10)}/{date.slice(5, 7)}
+            {tripulanteNome || data.tripulante.nome} · {formatFrmsDate(date)}
           </h4>
           <p className="mt-1 text-sm text-slate-500">
-            Análise estimada.
+            Diagnóstico determinístico com explicação pela IA.
           </p>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <span
-              title={fonteSonoBadge.help}
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${fonteSonoBadge.tone}`}
-            >
-              {fonteSonoBadge.label}
-            </span>
-            {recalcPendente ? (
-              <span
-                title="Sem horário de apresentação registrado para a jornada."
-                className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
-              >
-                Sem horário de apresentação: recálculo pendente
-              </span>
-            ) : null}
-          </div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right shadow-sm">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
@@ -401,117 +342,92 @@ export default function FrmsDayExplanationPanel({
           ) : null}
         </div>
       </div>
-      <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
-        {tripulanteNome || data.tripulante.nome} ficou em <strong>{label.toLowerCase()}</strong>{' '}
-        porque a combinação de fatores do dia reduziu a margem operacional estimada.
-      </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h5 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-800">
-          Como chegamos ao índice
-        </h5>
-        <div className="mt-3 overflow-auto rounded-xl border border-slate-200">
-          <table className="min-w-full text-xs">
-            <thead className="bg-slate-100 text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-left">Componente</th>
-                <th className="px-3 py-2 text-left">Dado usado</th>
-                <th className="px-3 py-2 text-left">Como entrou no cálculo</th>
-                <th className="px-3 py-2 text-right">Impacto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {explanationRows.map((row) => (
-                <tr key={row.key} className="border-t border-slate-100 align-top">
-                  <td className="px-3 py-2 font-semibold text-slate-800">{row.componente}</td>
-                  <td className="px-3 py-2 text-slate-600">{row.dadoUsado}</td>
-                  <td className="px-3 py-2 text-slate-600">{row.comoEntrou}</td>
-                  <td className="px-3 py-2 text-right font-semibold text-slate-700">{row.impacto}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 xl:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h5 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-800">
-            O que mais pesou
-          </h5>
-          <p className="mt-2 text-sm leading-6 text-slate-700">
-            {dominantRow
-              ? `Maior impacto observado em ${dominantRow.componente}: ${dominantRow.dadoUsado} (${dominantRow.impacto}).`
-              : 'Sem componente dominante com impacto material neste payload.'}
+      <div className="mt-4 grid gap-3 xl:grid-cols-[1.25fr_0.9fr]">
+        <section className={`rounded-2xl border p-4 shadow-sm ${statusTone.wrap}`}>
+          <div className="flex items-center gap-2 text-slate-800">
+            <Brain className="h-4 w-4" />
+            <h5 className={`text-sm font-semibold uppercase tracking-[0.16em] ${statusTone.title}`}>
+              Síntese do Dia
+            </h5>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-700">
+            {resumoExecutivo}
           </p>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h5 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-800">
-            O que verificar antes de agir
-          </h5>
-          <ul className="mt-2 list-disc space-y-1.5 pl-4 text-sm text-slate-700">
-            <li>Confirmar se as horas recentes de voo estão corretas.</li>
-            <li>Conferir sono informado e horário de despertar.</li>
-            <li>Verificar horário real de apresentação.</li>
-            <li>Avaliar janela operacional para ajuste.</li>
-            <li>Considerar relato/check-in do tripulante quando disponível.</li>
-          </ul>
-        </section>
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-xs text-sky-900">
-        Ferramenta de triagem operacional. Esta leitura é uma estimativa operacional: não
-        diagnostica fadiga, não determina aptidão ou restrição automática, exige revisão humana e
-        não valida SAFTE-FAST.{' '}
-        {trace.sourceFlags.informedData
-          ? 'Para este dia, há dado informado no payload.'
-          : 'Sem dado informado completo no dia, o sistema usa proxy operacional com base nos dados disponíveis.'}
-      </div>
-
-      <details className="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
-        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
-          Trace técnico (secundário)
-        </summary>
-        <div className="mt-3 space-y-2 text-xs text-slate-600">
-          <p>
-            Crew: {trace.crewMemberLabel} · Data: {trace.date} · Fonte sono: {trace.inputs.sleepSource}
-            {' '}· Wake source: {trace.inputs.wakeTimeSource}
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            {explicacaoDidatica || explicacaoTecnica}
           </p>
-          <p>
-            Apresentação: {trace.inputs.reportTime || 'sem dado'} · Despertar:{' '}
-            {trace.inputs.wakeTime || 'sem dado'} · Min acordado pré-apresentação:{' '}
-            {trace.inputs.minutesAwakeBeforeReport != null
-              ? `${trace.inputs.minutesAwakeBeforeReport} min`
-              : 'sem dado'}
-          </p>
-          <p>
-            Janelas: {trace.windowsUsed.map((w) => `${w.key}:${w.used ? 'ok' : 'indisponível'}`).join(' · ')}
-          </p>
-          <p>
-            Flags: {trace.sourceFlags.informedData ? 'dado informado' : 'dado estimado'} ·{' '}
-            {trace.sourceFlags.legacyPreC2
-              ? 'legado pré-C2'
-              : trace.sourceFlags.c2Corrected
-                ? 'C2 corrigido'
-                : 'sem status C2'}{' '}
-            · {trace.sourceFlags.recalculationPending ? 'recálculo pendente' : 'sem recálculo pendente'}
-          </p>
-        </div>
-      </details>
 
-      {diasCriticosConsecutivos >= 2 ? (
-        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700">
-          ⚠️ {diasCriticosConsecutivos} dias críticos consecutivos
-        </div>
-      ) : null}
-      {diasCriticosConsecutivos === 1 ? (
-        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-          1º dia crítico consecutivo
-        </div>
-      ) : null}
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">
+                Penalização de Base do Dia
+              </div>
+              <p className="mt-1 text-base font-bold text-rose-800">
+                {penalizacaoBaseDiaPts.toFixed(1)} pp
+              </p>
+              <p className="text-[11px] text-rose-600">Basal, S, circadiano, repouso e HV.</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+                Penalização Intrajornada
+              </div>
+              <p className="mt-1 text-base font-bold text-amber-800">
+                {penalizacaoIntrajornadaPts.toFixed(1)} pp
+              </p>
+              <p className="text-[11px] text-amber-600">Componente de duração da jornada.</p>
+            </div>
+          </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+          {semVariacaoIntrajornada ? (
+            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+              Sem variação intrajornada por duração neste dia. Por isso, início e fim estimado podem
+              coincidir.
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <Clock3 className="h-3.5 w-3.5" />
+                Tempo Crítico
+              </div>
+              <p className="mt-2 text-base font-semibold text-slate-900">
+                {formatMinutesCompact(data.jornada.tempo_abaixo_limiar_min)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <MoonStar className="h-3.5 w-3.5" />
+                Sono Efetivo
+              </div>
+              <p className="mt-2 text-base font-semibold text-slate-900">
+                {formatMinutes(data.jornada.duracao_sono_efetiva_min)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Fator Principal
+              </div>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
+                {data.diagnostico.fator_principal}
+              </p>
+            </div>
+          </div>
+
+          {diasCriticosConsecutivos >= 2 ? (
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700">
+              ⚠️ {diasCriticosConsecutivos} dias críticos consecutivos
+            </div>
+          ) : null}
+          {diasCriticosConsecutivos === 1 ? (
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+              1º dia crítico consecutivo
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setShowComparison((prev) => !prev)}
@@ -535,12 +451,12 @@ export default function FrmsDayExplanationPanel({
               className="inline-flex items-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black"
             >
               <FileText className="h-3.5 w-3.5" />
-              📄 Registrar justificativa
+              📄 Gerar justificativa
             </button>
-      </div>
+          </div>
 
-      {showComparison ? (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          {showComparison ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
                   Comparar com
@@ -560,8 +476,8 @@ export default function FrmsDayExplanationPanel({
               ) : comparisonData ? (
                 <>
                   <p className="mb-2 text-xs font-semibold text-slate-700">
-                    COMPARAÇÃO: {toBrDate(comparisonData.dia_a.data)} →{' '}
-                    {toBrDate(comparisonData.dia_b.data)}
+                    COMPARAÇÃO: {formatFrmsDate(comparisonData.dia_a.data)} →{' '}
+                    {formatFrmsDate(comparisonData.dia_b.data)}
                   </p>
                   <div className="overflow-auto rounded-xl border border-slate-200 bg-white">
                     <table className="min-w-full text-xs">
@@ -569,10 +485,10 @@ export default function FrmsDayExplanationPanel({
                         <tr>
                           <th className="px-3 py-2 text-left">Fator</th>
                           <th className="px-3 py-2 text-right">
-                            {toBrDate(comparisonData.dia_a.data)}
+                            {formatFrmsDate(comparisonData.dia_a.data)}
                           </th>
                           <th className="px-3 py-2 text-right">
-                            {toBrDate(comparisonData.dia_b.data)}
+                            {formatFrmsDate(comparisonData.dia_b.data)}
                           </th>
                           <th className="px-3 py-2 text-right">Delta</th>
                         </tr>
@@ -608,7 +524,87 @@ export default function FrmsDayExplanationPanel({
                 </>
               ) : null}
             </div>
-      ) : null}
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-slate-800">
+            <Bot className="h-4 w-4" />
+            <h5 className="text-sm font-semibold uppercase tracking-[0.16em]">
+              Explicação pela IA
+            </h5>
+          </div>
+          <div
+            className="mt-3 text-sm leading-6 text-slate-700 [&_strong]:font-semibold [&_strong]:text-slate-900"
+            dangerouslySetInnerHTML={{
+              __html: renderLightMarkdown(sanitizeOperationalText(data.copiloto.texto)),
+            }}
+          />
+        </section>
+      </div>
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h5 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-800">
+            Principais Fatores
+          </h5>
+          {data.diagnostico.faixa === 'verde' ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Os impactos abaixo mostram contribuição de cada componente, mas não significam risco
+              operacional isolado quando o score final está em faixa verde.
+            </p>
+          ) : null}
+          <div className="mt-3 space-y-2.5">
+            {factors.map((factor) => (
+              <div
+                key={factor.codigo}
+                className={`rounded-2xl border p-3 ${factorClass(factor, data.diagnostico.faixa)}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-900">{factor.titulo}</p>
+                  <span className="text-sm font-bold text-slate-700">
+                    {factor.impacto_pct > 0 ? '+' : ''}
+                    {factor.impacto_pct.toFixed(1)} pp
+                  </span>
+                </div>
+                <p className="mt-1 text-sm leading-5 text-slate-600">{factor.resumo}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Os pontos percentuais mostram contribuição estimada dos componentes para a margem
+            operacional do dia. Não são diagnóstico médico nem decisão automática.
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h5 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-800">
+            O que verificar antes de agir
+          </h5>
+          <div className="mt-3 space-y-2.5">
+            {data.diagnostico.recomendacoes.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                Sem recomendação adicional para este dia além do monitoramento normal.
+              </div>
+            ) : (
+              data.diagnostico.recomendacoes.map((recommendation) => (
+                <div
+                  key={recommendation.codigo}
+                  className={`rounded-2xl border p-3 ${priorityClass(recommendation.prioridade)}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold">{recommendation.titulo}</p>
+                    <span className="rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em]">
+                      {recommendation.prioridade}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm leading-5 opacity-90">{recommendation.descricao}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
 
       {showSimulation ? (
         <div className="fixed inset-0 z-modal flex justify-end bg-black/30 backdrop-blur-sm">
@@ -731,7 +727,7 @@ export default function FrmsDayExplanationPanel({
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
                   <option>Manteve operação normalmente</option>
-                  <option>Registrou briefing reforçado</option>
+                  <option>Aplicou mitigação (briefing reforçado)</option>
                   <option>Substituiu o tripulante</option>
                   <option>Adiou / cancelou voo</option>
                   <option>Outro (especificar)</option>
@@ -778,7 +774,7 @@ export default function FrmsDayExplanationPanel({
                 <p>JUSTIFICATIVA OPERACIONAL — FRMS</p>
                 <p>
                   Tripulante: {justificativaGerada.documento.tripulante.nome} · Data:{' '}
-                  {justificativaGerada.documento.data_voo}
+                  {formatFrmsDate(justificativaGerada.documento.data_voo)}
                 </p>
                 <p>
                   Efetividade: {justificativaGerada.documento.effectiveness_real ?? '—'}% —{' '}
