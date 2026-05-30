@@ -3,9 +3,9 @@
  *
  * Eixo Y: tripulantes (ordenados por severidade DESC)
  * Eixo X: dias do período selecionado
- * Células coloridas por compliance HV/jornada ou índice estimado de efetividade
+ * Células coloridas por compliance HV/jornada ou índice estimado de prontidão operacional
  *
- * Dual-tab: [Compliance Regulatório] | [Índice estimado de efetividade]
+ * Dual-tab: [Compliance Regulatório] | [Prontidão estimada]
  */
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -357,7 +357,7 @@ export default function FrmsHeatmap({
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100'
             }`}
           >
-            Índice de efetividade
+            Prontidão estimada
           </button>
         </div>
       </div>
@@ -373,6 +373,11 @@ export default function FrmsHeatmap({
           </span>
         ))}
       </div>
+      <p className="mb-4 text-[11px] text-slate-500 dark:text-slate-400">
+        {activeTab === 'compliance'
+          ? 'Estar dentro do limite legal não significa ausência de fadiga. Use este dado junto com check-in, sono e sinais operacionais.'
+          : 'Prontidão estimada é proxy local não validado, inspirado em modelos biomatemáticos, e não é SAFTE-FAST validado.'}
+      </p>
 
       {loading && (
         <div className="flex h-40 items-center justify-center text-sm text-slate-400 dark:text-slate-500">
@@ -510,7 +515,7 @@ export default function FrmsHeatmap({
             {tooltip.isEffectiveness ? (
               <>
                 <p>
-                  Efetividade:{' '}
+                  Prontidão estimada:{' '}
                   <span
                     className="font-semibold"
                     style={{ color: getEffectivenessHex(tooltip.effectiveness_pct ?? 0, config) }}

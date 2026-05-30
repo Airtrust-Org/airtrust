@@ -2,7 +2,7 @@
 export type ConfigLimites = Partial<Record<string, number>> | null;
 
 // ============================================================
-// PAINEL A — Índice estimado de efetividade (proxy local inspirado em modelos biomatemáticos)
+// PAINEL A — Índice estimado de prontidão operacional (proxy local não validado)
 // ============================================================
 
 export function getEffectivenessColor(pct: number, config: ConfigLimites): string {
@@ -39,10 +39,10 @@ export function getEffectivenessLabel(pct: number, config: ConfigLimites): strin
   const verde = config?.EFFECTIV_VERDE_MIN ?? 90;
   const amarelo = config?.EFFECTIV_AMARELO_MAX ?? 77;
   const vermelho = config?.EFFECTIV_VERMELHO_MAX ?? 65;
-  if (pct >= verde) return 'Desempenho Pleno';
-  if (pct <= vermelho) return 'Efetividade severamente degradada';
-  if (pct <= amarelo) return 'Início de Degradação';
-  return 'Atenção';
+  if (pct >= verde) return 'Sem degradação estimada';
+  if (pct <= vermelho) return 'Degradação estimada elevada';
+  if (pct <= amarelo) return 'Degradação estimada moderada';
+  return 'Atenção operacional';
 }
 
 export function getEffectivenessStroke(pct: number, config: ConfigLimites): string {

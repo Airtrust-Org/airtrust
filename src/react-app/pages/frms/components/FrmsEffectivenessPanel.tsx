@@ -1,5 +1,5 @@
 /**
- * FrmsEffectivenessPanel — Painel A: índice estimado de efetividade
+ * FrmsEffectivenessPanel — Painel A: índice estimado de prontidão operacional
  * Mostra score circular, decomposição por componente e nível textual.
  */
 import { getEffectivenessBg, getEffectivenessLabel, getEffectivenessHex } from '../frmsUtils';
@@ -62,7 +62,10 @@ export default function FrmsEffectivenessPanel({
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2" title={`Índice estimado de efetividade: ${pct.toFixed(1)}% — ${nivel}`}>
+      <div
+        className="flex items-center gap-2"
+        title={`Índice estimado de prontidão operacional: ${pct.toFixed(1)}% — ${nivel}`}
+      >
         <div className="relative w-8 h-8">
           <svg viewBox="0 0 36 36" className="w-8 h-8 -rotate-90">
             <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" strokeWidth="3" />
@@ -97,7 +100,7 @@ export default function FrmsEffectivenessPanel({
   return (
     <div className="rounded-xl border border-slate-200/50 bg-white/80 backdrop-blur-sm p-4 shadow-md">
       <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-        Índice estimado de efetividade
+        Índice estimado de prontidão operacional
       </h4>
 
       {/* Score circle + label */}
@@ -132,7 +135,10 @@ export default function FrmsEffectivenessPanel({
           >
             {nivel}
           </span>
-          <p className="text-[10px] text-slate-400 mt-1">Proxy local inspirado em modelos biomatemáticos</p>
+          <p className="text-[10px] text-slate-400 mt-1">
+            Proxy local inspirado em modelos biomatemáticos; não é SAFTE-FAST validado e não
+            substitui avaliação operacional humana
+          </p>
         </div>
       </div>
 

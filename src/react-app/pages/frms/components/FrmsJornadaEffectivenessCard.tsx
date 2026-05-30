@@ -2,7 +2,7 @@
  * FrmsJornadaEffectivenessCard — Cards de Efetividade por Jornada
  *
  * Exibe indicadores de efetividade por jornada individual
- * no estilo Leon Crew Panel, usando proxy local de efetividade.
+ * em layout operacional, usando proxy local estimado.
  */
 import type { FrmsEffectivenessJornadaRow } from '@/react-app/hooks/useFrms';
 import { getEffectivenessHex, getEffectivenessLabel } from '../frmsUtils';
@@ -190,6 +190,10 @@ export default function FrmsJornadaEffectivenessCard({
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
         Para planejamento, o sinal mais útil é como a jornada terminou e como o tripulante tende a
         iniciar a próxima apresentação.
+      </div>
+      <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+        Prontidão estimada é proxy local não validado, inspirado em modelos biomatemáticos, e não é
+        SAFTE-FAST validado.
       </div>
 
       {/* Círculos de efetividade */}
