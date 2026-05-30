@@ -184,6 +184,31 @@ export default function FrmsDayExplanationPanel({
     });
   }, [comparisonData]);
 
+  const timelineRow = useMemo(() => {
+    if (!timelineRows || !date) return null;
+    return timelineRows.find((row) => row.data_apresentacao === date) ?? null;
+  }, [timelineRows, date]);
+
+  const trace = useMemo(() => {
+    if (!data) return null;
+    const pct = data.jornada.effectiveness_pct;
+    const duracaoFactor =
+      data.diagnostico.fatores.find((factor) => factor.codigo === 'duracao')?.impacto_pct ?? null;
+    const pctFimEstimado =
+      pct != null && duracaoFactor != null
+        ? Math.max(0, Math.min(100, pct + duracaoFactor))
+        : null;
+    const pctPrincipal = pctFimEstimado ?? pct;
+    const displayedEffectivenessLabel =
+      pctPrincipal != null ? getEffectivenessLabel(pctPrincipal, config) : 'Sem classificação';
+
+    return buildFrmsDayExplanationTrace({
+      explanation: data,
+      timelineRow,
+      displayedEffectivenessLabel,
+    });
+  }, [data, timelineRow, config]);
+
   if (!tripulanteId || !date) {
     return null;
   }
@@ -204,6 +229,14 @@ export default function FrmsDayExplanationPanel({
   }
 
   if (error || !data) {
+    return (
+      <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
+        Não foi possível gerar a explicação desse dia agora.
+      </div>
+    );
+  }
+
+  if (!trace) {
     return (
       <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
         Não foi possível gerar a explicação desse dia agora.
@@ -254,19 +287,6 @@ export default function FrmsDayExplanationPanel({
     tempoAtencaoMin: data.jornada.tempo_abaixo_limiar_min,
     recalcPendente,
   });
-  const timelineRow = useMemo(() => {
-    if (!timelineRows || !date) return null;
-    return timelineRows.find((row) => row.data_apresentacao === date) ?? null;
-  }, [timelineRows, date]);
-  const trace = useMemo(
-    () =>
-      buildFrmsDayExplanationTrace({
-        explanation: data,
-        timelineRow,
-        displayedEffectivenessLabel: label,
-      }),
-    [data, timelineRow, label],
-  );
 
   const handleSimular = async () => {
     if (!tripulanteId || !date) return;
