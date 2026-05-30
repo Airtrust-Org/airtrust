@@ -113,11 +113,17 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(formatWakeTimeInput('1230')).toBe('12:30');
     expect(formatWakeTimeInput('0730')).toBe('07:30');
     expect(formatWakeTimeInput('730')).toBe('07:30');
+    expect(formatWakeTimeInput('0080')).toBe('00:');
+    expect(formatWakeTimeInput('2360')).toBe('23:');
+    expect(formatWakeTimeInput('2400')).toBe('24');
   });
 
   it('valida formato e faixa de horario HH:mm', () => {
+    expect(isValidWakeTime('00:00')).toBe(true);
     expect(isValidWakeTime('06:30')).toBe(true);
     expect(isValidWakeTime('23:59')).toBe(true);
+    expect(isValidWakeTime('00:80')).toBe(false);
+    expect(isValidWakeTime('24:00')).toBe(false);
     expect(isValidWakeTime('25:61')).toBe(false);
     expect(isValidWakeTime('6:30')).toBe(false);
   });
@@ -239,6 +245,9 @@ describe('FrmsCheckinFadiga UI', () => {
 
     fireEvent.change(wakeInput, { target: { value: '730' } });
     expect(wakeInput.value).toBe('07:30');
+
+    fireEvent.change(wakeInput, { target: { value: '0080' } });
+    expect(wakeInput.value).toBe('00:');
   });
 
   it('exibe indicador de pendencias quando formulario incompleto', () => {
@@ -312,7 +321,9 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.change(wakeInput, { target: { value: '2561' } });
 
     expect(wakeInput).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText('Informe um horario valido, ex.: 06:30.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Informe um horário válido no formato HH:mm. Minutos devem ficar entre 00 e 59.'),
+    ).toBeInTheDocument();
   });
 
   it('bloqueia envio quando horario e invalido e mostra mensagem clara', () => {
@@ -326,7 +337,9 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
 
-    expect(screen.getByText('Informe um horario valido, ex.: 06:30.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Informe um horário válido no formato HH:mm. Minutos devem ficar entre 00 e 59.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeDisabled();
   });
 
