@@ -1,8 +1,8 @@
 /**
  * FrmsComponentesChart — Decomposição de Fatores de Fadiga (Radar)
  *
- * Exibe a contribuição de cada fator no score de efetividade.
- * Perfil de fatores FRMS do proxy local.
+ * Exibe a contribuição de cada fator no índice estimado de prontidão operacional.
+ * Perfil de fatores FRMS em proxy local estimado.
  */
 import {
   RadarChart,
@@ -109,8 +109,11 @@ export default function FrmsComponentesChart({ componentes, tripulante }: Props)
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       {/* Header */}
       <div className="mb-2">
-        <h4 className="text-sm font-semibold text-slate-800">Perfil de Fadiga</h4>
+        <h4 className="text-sm font-semibold text-slate-800">Perfil de fatores operacionais</h4>
         {tripulante && <p className="text-xs text-slate-400">{tripulante}</p>}
+        <p className="text-[10px] text-slate-400 mt-1">
+          Proxy local estimado, não validado e não equivalente a SAFTE-FAST validado.
+        </p>
       </div>
 
       <ResponsiveContainer width="100%" height={200}>
