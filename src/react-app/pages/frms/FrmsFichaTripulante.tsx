@@ -163,7 +163,7 @@ function ProgressBar({
       </div>
       <div className="relative h-3 rounded-xl bg-slate-100 overflow-hidden shadow-inner border border-slate-200/50">
         <div
-          className={`${barColor} h-full shadow-lg group-hover:shadow-xl transition-all duration-700`}
+          className={`${barColor} h-full shadow-lg group-hover:shadow-xl transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none`}
           style={{ width: `${Math.min(clamped, 100)}%` }}
         />
       </div>
@@ -482,7 +482,7 @@ export default function FrmsFichaTripulante() {
             <div className="flex items-center gap-4 min-w-0">
               <button
                 onClick={() => navigate('/frms')}
-                className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shrink-0"
+                className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors duration-150 shrink-0"
               >
                 <ArrowLeft className="h-4 w-4" /> Voltar
               </button>
@@ -646,7 +646,7 @@ export default function FrmsFichaTripulante() {
               <button
                 type="button"
                 onClick={handleMesAnterior}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors duration-150"
                 title="Mês anterior"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -658,7 +658,7 @@ export default function FrmsFichaTripulante() {
               <button
                 type="button"
                 onClick={handleMesSeguinte}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors duration-150"
                 title="Próximo mês"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -821,19 +821,19 @@ export default function FrmsFichaTripulante() {
                         <div className="inline-flex items-center gap-2">
                           <button
                             onClick={() => setSelectedExplanationDate(j.data)}
-                            className="text-xs text-slate-700 hover:text-slate-900 font-medium"
+                            className="text-xs text-slate-700 hover:text-slate-900 font-medium transition-colors duration-150"
                           >
                             Explicar
                           </button>
                           <button
                             onClick={() => handleEditar(j)}
-                            className="text-xs text-primary hover:text-blue-800 font-medium"
+                            className="text-xs text-primary hover:text-blue-800 font-medium transition-colors duration-150"
                           >
                             Editar
                           </button>
                           <button
                             onClick={() => handleExcluir(j)}
-                            className="text-xs text-red-600 hover:text-red-800 font-medium"
+                            className="text-xs text-red-600 hover:text-red-800 font-medium transition-colors duration-150"
                           >
                             Excluir
                           </button>
@@ -858,14 +858,14 @@ export default function FrmsFichaTripulante() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={paginado.pagination.page <= 1}
-                  className="px-3 py-1 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                  className="px-3 py-1 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors duration-150"
                 >
                   ← Anterior
                 </button>
                 <button
                   onClick={() => setPage((p) => p + 1)}
                   disabled={paginado.pagination.page >= paginado.pagination.totalPages}
-                  className="px-3 py-1 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                  className="px-3 py-1 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors duration-150"
                 >
                   Próxima →
                 </button>

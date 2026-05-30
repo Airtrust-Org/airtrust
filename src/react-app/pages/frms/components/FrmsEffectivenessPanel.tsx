@@ -31,7 +31,7 @@ function ComponentBar({ label, value, color }: { label: string; value: number; c
       <span className="text-[10px] text-slate-500 w-20 text-right truncate">{label}</span>
       <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
         <div
-          className={`h-1.5 rounded-full transition-all ${color}`}
+          className={`h-1.5 rounded-full transition-[width] duration-200 ease-out motion-reduce:transition-none ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
