@@ -229,7 +229,7 @@ function buildTraceFromBackend(
       whatToCheck:
         'Verifique fonte de sono, horário de apresentação e janelas 7d/28d quando disponíveis.',
       limitationsText:
-        `${limitationsTextBase} Não é diagnóstico médico e não é decisão automática.`,
+        `${limitationsTextBase} É uma leitura de triagem operacional: não é diagnóstico médico, não é validação SAFTE-FAST e não é decisão automática.`,
     },
   };
 }
@@ -352,7 +352,7 @@ function buildTraceFallback(
       whatToCheck:
         'Verifique horário de apresentação, origem dos dados de sono/despertar e diferenças de pior dia/fatores entre tripulantes.',
       limitationsText:
-        'Não é diagnóstico médico e não é decisão automática. Onde o payload não traz breakdown por janela/fonte, a limitação é exibida explicitamente.',
+        'É uma leitura de triagem operacional: não é diagnóstico médico, não é validação SAFTE-FAST e não é decisão automática. Onde o payload não traz breakdown por janela/fonte, a limitação é exibida explicitamente.',
     },
   };
 }

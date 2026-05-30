@@ -1,9 +1,9 @@
 /**
- * FRMS — Configuração Científica (/frms/configuracoes)
+ * FRMS — Configuração Metodológica (/frms/configuracoes)
  *
  * 3 Tabs:
  *   1. Limites Regulatórios (FDP, HV, Repouso, Alertas)
- *   2. Fatorização Científica (Apresentação, Duração, Repouso, Noturno, Ciclo Embarcado, HV)
+ *   2. Fatorização Metodológica (Apresentação, Duração, Repouso, Noturno, Ciclo Embarcado, HV)
  *   3. Notificações por Cargo
  */
 import { useState, useEffect, useCallback } from 'react';
@@ -173,7 +173,7 @@ const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
     label: 'Limiares configuráveis do índice estimado de efetividade (Painel A)',
     icon: <Brain className="w-4 h-4" />,
     description:
-      'Limiares configuráveis do índice estimado de efetividade. Proxy local inspirado em modelos biomatemáticos; não é validação SAFTE-FAST proprietária.',
+      'Limiares configuráveis do índice estimado de efetividade. Proxy local inspirado em modelos biomatemáticos; não representa validação formal SAFTE-FAST.',
     keys: [
       'EFFECTIV_VERDE_MIN',
       'EFFECTIV_AMARELO_MAX',
@@ -354,7 +354,7 @@ export default function FrmsConfiguracoes() {
   }, [values, mutate]);
 
   const handleRestore = useCallback(async () => {
-    if (!(await confirmDialog('Restaurar TODOS os parâmetros para os valores padrão científicos?')))
+    if (!(await confirmDialog('Restaurar TODOS os parâmetros para os valores padrão de referência?')))
       return;
     setRestoring(true);
     try {
@@ -414,7 +414,7 @@ export default function FrmsConfiguracoes() {
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'regulatorios', label: 'Limites Regulatórios', icon: <Shield className="w-4 h-4" /> },
-    { id: 'fatorizacao', label: 'Fatorização Científica', icon: <Brain className="w-4 h-4" /> },
+    { id: 'fatorizacao', label: 'Fatorização Metodológica', icon: <Brain className="w-4 h-4" /> },
     { id: 'notificacoes', label: 'Notificações', icon: <Bell className="w-4 h-4" /> },
   ];
 
@@ -475,7 +475,7 @@ export default function FrmsConfiguracoes() {
           <div className="flex-1">
             <h1 className="text-xl font-bold text-gray-900">Configuração FRMS</h1>
             <p className="text-sm text-gray-500">
-              Parâmetros científicos de fatorização e limites regulatórios
+              Parâmetros metodológicos de fatorização e limites regulatórios
             </p>
           </div>
           <div className="flex gap-2">
@@ -563,7 +563,7 @@ export default function FrmsConfiguracoes() {
                 </div>
               )}
 
-              {/* Tab: Fatorização Científica */}
+              {/* Tab: Fatorização Metodológica */}
               {activeTab === 'fatorizacao' && (
                 <div>
                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">

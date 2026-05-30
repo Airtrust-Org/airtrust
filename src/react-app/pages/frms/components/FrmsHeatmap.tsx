@@ -376,7 +376,7 @@ export default function FrmsHeatmap({
       <p className="mb-4 text-[11px] text-slate-500 dark:text-slate-400">
         {activeTab === 'compliance'
           ? 'Estar dentro do limite legal não significa ausência de fadiga. Use este dado junto com check-in, sono e sinais operacionais.'
-          : 'Prontidão estimada é proxy local não validado, inspirado em modelos biomatemáticos, e não é SAFTE-FAST validado.'}
+          : 'Prontidão estimada é proxy local inspirado em modelos biomatemáticos e não representa validação formal SAFTE-FAST.'}
       </p>
 
       {loading && (

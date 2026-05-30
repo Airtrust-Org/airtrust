@@ -18,8 +18,10 @@ describe('buildFrmsOperatorExplanationCopy', () => {
     expect(copy.fatores).toContain('Principal influência registrada: Repouso.');
     expect(copy.fatores).toContain('Sono considerado no cálculo: 6h50.');
     expect(copy.interpretacao).toContain('não como liberação ou bloqueio automático');
+    expect(copy.limitacao).toContain('triagem');
     expect(copy.limitacao).toContain('Não é diagnóstico médico');
-    expect(JSON.stringify(copy)).not.toMatch(/apto|inapto|SAFTE-FAST|cientificamente validado/i);
+    expect(copy.limitacao).toContain('não é validação SAFTE-FAST');
+    expect(JSON.stringify(copy)).not.toMatch(/apto|inapto|cientificamente validado/i);
   });
 
   it('destaca recálculo pendente quando falta base de apresentação', () => {
