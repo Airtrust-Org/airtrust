@@ -57,7 +57,7 @@ vi.mock('@/react-app/hooks/useFrms', () => {
 });
 
 describe('FrmsDayExplanationPanel', () => {
-  it('formata data e remove texto técnico da explicação principal', () => {
+  it('formata data, remove termos técnicos e mostra explicação operacional curta', () => {
     render(
       <FrmsDayExplanationPanel tripulanteId="1" date="2026-05-30" config={null} source="ficha" />,
     );
@@ -69,12 +69,15 @@ describe('FrmsDayExplanationPanel', () => {
     expect(screen.queryByText(/28d pior dia/i)).toBeNull();
     expect(screen.getByText('Explicação operacional')).toBeDefined();
     expect(screen.queryByText('Explicação pela IA')).toBeNull();
-    expect(screen.getByText(/janelas de 7 e 28 dias/i)).toBeDefined();
+    expect(screen.getByText(/Como interpretar esta leitura/i)).toBeDefined();
+    expect(screen.getByText(/Acúmulo de horas de voo:/i)).toBeDefined();
+    expect(screen.getByText(/Pior ponto nas janelas de 7 e 28 dias: 30\/05\/2026/i)).toBeDefined();
     expect(screen.getByText(/triagem operacional/i)).toBeDefined();
     expect(screen.getByText(/revisão humana/i)).toBeDefined();
     expect(screen.getByText(/não diagnostica fadiga/i)).toBeDefined();
     expect(screen.getByText(/não determina aptidão ou restrição automática/i)).toBeDefined();
     expect(screen.getByText(/não valida SAFTE-FAST/i)).toBeDefined();
+    expect(screen.getAllByText(/Ferramenta de triagem operacional/i)).toHaveLength(1);
     expect(screen.getByText(/soma dos fatores já presentes no início do dia/i)).toBeDefined();
     expect(screen.getByText(/Maior impacto: -10,0 pp/)).toBeDefined();
   });
