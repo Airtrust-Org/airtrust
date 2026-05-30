@@ -135,7 +135,7 @@ describe('FrmsDayExplanationPanel', () => {
     });
   });
 
-  it('não quebra ao trocar de loading para dados e renderiza as 6 seções', () => {
+  it('não quebra ao trocar de loading para dados e renderiza os blocos principais', () => {
     let state: { data: FrmsDayExplanationResponse | null; loading: boolean; error: string | null } =
       {
         data: null,
@@ -169,12 +169,13 @@ describe('FrmsDayExplanationPanel', () => {
       />,
     );
 
-    expect(screen.getByText('Resumo do dia')).toBeInTheDocument();
+    expect(
+      screen.getByText(/combinação de fatores do dia reduziu a margem operacional estimada/i),
+    ).toBeInTheDocument();
     expect(screen.getByText('Como chegamos ao índice')).toBeInTheDocument();
     expect(screen.getByText('O que mais pesou')).toBeInTheDocument();
-    expect(screen.getByText('Por que pode diferir de outro tripulante')).toBeInTheDocument();
-    expect(screen.getByText('Como usar esta informação')).toBeInTheDocument();
-    expect(screen.getByText('Limitações do dado')).toBeInTheDocument();
+    expect(screen.getByText('O que verificar antes de agir')).toBeInTheDocument();
+    expect(screen.getByText('Trace técnico (secundário)')).toBeInTheDocument();
   });
 
   it('mostra recálculo pendente quando não há hora de apresentação', () => {
@@ -221,8 +222,10 @@ describe('FrmsDayExplanationPanel', () => {
       />,
     );
 
-    expect(screen.getAllByText(/triagem operacional/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/ferramenta de triagem operacional/i)).toBeInTheDocument();
     expect(screen.getByText(/não determina aptidão ou restrição automática/i)).toBeInTheDocument();
+    expect(screen.getByText(/exige revisão humana/i)).toBeInTheDocument();
+    expect(screen.getByText(/não valida SAFTE-FAST/i)).toBeInTheDocument();
   });
 
   it('exibe fator basica como contexto, sem pontos percentuais de impacto', () => {
@@ -257,7 +260,9 @@ describe('FrmsDayExplanationPanel', () => {
     );
 
     expect(screen.getByText('Condição circadiana basal estimada')).toBeInTheDocument();
-    expect(screen.getByText('Contexto')).toBeInTheDocument();
+    expect(
+      screen.getByText('Contexto basal (sem leitura isolada em pp)'),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/\+84(\.0)?\s*pp/i)).not.toBeInTheDocument();
   });
 });
