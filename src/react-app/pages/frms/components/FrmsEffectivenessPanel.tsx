@@ -108,18 +108,12 @@ export default function FrmsEffectivenessPanel({
         <div className="relative w-16 h-16 shrink-0">
           <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
             <circle cx="18" cy="18" r="15" fill="none" stroke="#f1f5f9" strokeWidth="2.5" />
-            <defs>
-              <linearGradient id="eff-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#10b77f" />
-                <stop offset="100%" stopColor="#059669" />
-              </linearGradient>
-            </defs>
             <circle
               cx="18"
               cy="18"
               r="15"
               fill="none"
-              stroke="url(#eff-gradient)"
+              stroke={hex}
               strokeWidth="2.5"
               strokeDasharray={`${(pct / 100) * 94.25} 94.25`}
               strokeLinecap="round"

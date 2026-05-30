@@ -6,7 +6,7 @@
  * - Histórico de alertas
  * - Botão para lançar jornada
  */
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Calendar, ChevronLeft, ChevronRight, CalendarX, X } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -30,6 +30,7 @@ import FrmsFormJornada from './FrmsFormJornada';
 import FrmsEffectivenessPanel from './components/FrmsEffectivenessPanel';
 import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { formatFrmsDate } from './frmsUtils';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
@@ -163,7 +164,7 @@ function ProgressBar({
       </div>
       <div className="relative h-3 rounded-xl bg-slate-100 overflow-hidden shadow-inner border border-slate-200/50">
         <div
-          className={`${barColor} h-full shadow-lg group-hover:shadow-xl transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none`}
+          className={`${barColor} h-full shadow-lg group-hover:shadow-xl transition-all duration-700`}
           style={{ width: `${Math.min(clamped, 100)}%` }}
         />
       </div>
@@ -198,7 +199,7 @@ function nivelBadge(nivel: string) {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  ES: 'Escala de Serviço',
+  ES: 'Escala',
   TS: 'Treinamento de Solo',
   TV: 'Treinamento de Voo',
   EX: 'Exame de Voo',
@@ -222,50 +223,6 @@ const STATUS_COLORS: Record<string, string> = {
   POSITIONING: 'bg-cyan-100 text-cyan-800',
 };
 
-function resolveSonoFonteBadge(
-  fonteSono: FrmsJornadaRow['fonte_sono'],
-): { label: string; tone: string; help: string } {
-  if (fonteSono === 'INFORMADO') {
-    return {
-      label: 'Fonte do sono: informado',
-      tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-      help: 'O sono foi informado no check-in ou ajustado manualmente.',
-    };
-  }
-  if (fonteSono === 'PADRAO') {
-    return {
-      label: 'Fonte do sono: padrão',
-      tone: 'border-amber-200 bg-amber-50 text-amber-700',
-      help: 'Foi aplicada estimativa padrão por ausência de sono informado.',
-    };
-  }
-  return {
-    label: 'Fonte do sono: estimado',
-    tone: 'border-slate-200 bg-slate-100 text-slate-600',
-    help: 'A origem do sono não veio explícita; leitura tratada como estimada.',
-  };
-}
-
-function resolveC2Badge(
-  processadoComBug: number | null | undefined,
-): { label: string; tone: string; help: string } | null {
-  if (processadoComBug === 1) {
-    return {
-      label: 'Dado legado pré-C2',
-      tone: 'border-amber-200 bg-amber-50 text-amber-700',
-      help: 'Este cálculo foi processado antes da correção técnica C2.',
-    };
-  }
-  if (processadoComBug === 0) {
-    return {
-      label: 'Cálculo C2 corrigido',
-      tone: 'border-sky-200 bg-sky-50 text-sky-700',
-      help: 'Este cálculo já foi processado com a correção técnica C2.',
-    };
-  }
-  return null;
-}
-
 function getCurrentMonthKeyLocal(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -288,26 +245,12 @@ export default function FrmsFichaTripulante() {
   const [editingJornada, setEditingJornada] = useState<FrmsJornadaRow | null>(null);
   const [selectedExplanationDate, setSelectedExplanationDate] = useState<string | null>(null);
   const hojeIso = new Date().toISOString().slice(0, 10);
-  const rangeMes = getMonthRange(mesAtual);
 
   const { data: recentJornadasRaw } = useFrmsJornadasEffectiveness(id, 7);
-  const { data: jornadasMesEffectRaw } = useFrmsJornadasEffectiveness(
-    id,
-    365,
-    rangeMes ? { inicio: rangeMes.dataInicio, fim: rangeMes.dataFim } : undefined,
-  );
   const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: hojeIso });
   const recentJornadas = recentJornadasRaw as FrmsEffectivenessJornadaRow[] | null;
   const latestJornada =
     recentJornadas && recentJornadas.length > 0 ? recentJornadas[recentJornadas.length - 1] : null;
-  const jornadasMesEffect = (jornadasMesEffectRaw as FrmsEffectivenessJornadaRow[] | null) ?? [];
-  const processadoComBugPorData = useMemo(() => {
-    const map = new Map<string, number | null>();
-    jornadasMesEffect.forEach((row) => {
-      map.set(row.data_apresentacao, row.processado_com_bug ?? null);
-    });
-    return map;
-  }, [jornadasMesEffect]);
   const ultimaJornadaMes =
     ultimaJornadaRaw?.data?.[0]?.data && /^\d{4}-\d{2}-\d{2}$/.test(ultimaJornadaRaw.data[0].data)
       ? ultimaJornadaRaw.data[0].data.slice(0, 7)
@@ -320,6 +263,7 @@ export default function FrmsFichaTripulante() {
     jornadasVersion,
   );
   const { data: acumuloRaw, loading: loadingA, refetch: refetchA } = useFrmsAcumulo(id, mesAtual);
+  const rangeMes = getMonthRange(mesAtual);
   const { data: alertasMesRaw, refetch: refetchAlertasMes } = useFrmsAlertas(
     id && rangeMes
       ? {
@@ -482,7 +426,7 @@ export default function FrmsFichaTripulante() {
             <div className="flex items-center gap-4 min-w-0">
               <button
                 onClick={() => navigate('/frms')}
-                className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors duration-150 shrink-0"
+                className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shrink-0"
               >
                 <ArrowLeft className="h-4 w-4" /> Voltar
               </button>
@@ -502,14 +446,14 @@ export default function FrmsFichaTripulante() {
           </div>
         </section>
 
-        {/* Effectiveness + Compliance cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {/* Índice estimado de efetividade */}
+        {/* Effectiveness Panel (Painel A) + Compliance Cards (Painel B) */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {/* Painel A — Score de Efetividade */}
           {acumulo?.effectiveness ? (
-            <div className="md:col-span-1">
+            <div className="lg:col-span-4 xl:col-span-3">
               {latestJornada?.processado_com_bug === 0 && (
                 <div className="mb-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-                  Dados recalculados com o índice estimado de efetividade FRMS.
+                  Dados recalculados com a fórmula corrigida de effectiveness FRMS.
                 </div>
               )}
               <FrmsEffectivenessPanel
@@ -540,15 +484,11 @@ export default function FrmsFichaTripulante() {
             </div>
           ) : null}
 
-          {/* Compliance regulatório */}
-          <div className={`${acumulo?.effectiveness ? 'md:col-span-4' : 'md:col-span-5'}`}>
+          {/* Painel B — Compliance Regulatório */}
+          <div className={`${acumulo?.effectiveness ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'}`}>
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               Compliance Regulatório (ANAC)
             </h4>
-            <p className="mb-2 text-xs text-slate-500">
-              Estar dentro do limite legal não significa ausência de fadiga. Use este dado junto com
-              check-in, sono e sinais operacionais.
-            </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {rolling || acumulo?.mensal ? (
                 <>
@@ -646,7 +586,7 @@ export default function FrmsFichaTripulante() {
               <button
                 type="button"
                 onClick={handleMesAnterior}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors duration-150"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
                 title="Mês anterior"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -658,7 +598,7 @@ export default function FrmsFichaTripulante() {
               <button
                 type="button"
                 onClick={handleMesSeguinte}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors duration-150"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
                 title="Próximo mês"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -695,10 +635,10 @@ export default function FrmsFichaTripulante() {
                     Alertas do Dia
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
-                    Fadiga Jornada %
+                    Fat.Jornada%
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
-                    Fadiga HV %
+                    Fat.HV%
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-center">
                     Ações
@@ -723,55 +663,23 @@ export default function FrmsFichaTripulante() {
                     </td>
                   </tr>
                 ) : (
-                  jornadas.map((j) => {
-                    const processadoComBug = processadoComBugPorData.get(j.data);
-                    const c2Badge = resolveC2Badge(processadoComBug);
-                    const sonoFonteBadge = resolveSonoFonteBadge(j.fonte_sono);
-                    const semHoraApresentacao = !j.hora_apresentacao;
-
-                    return (
+                  jornadas.map((j) => (
                     <tr key={j.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-4 py-2.5 text-gray-700 tabular-nums font-medium">
-                        {j.data.slice(8, 10)}/{j.data.slice(5, 7)}
+                        {formatFrmsDate(j.data)}
                       </td>
                       <td className="px-4 py-2.5">
                         <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[j.status] || 'bg-gray-100 text-gray-700'}`}
+                          className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold leading-none ${STATUS_COLORS[j.status] || 'bg-gray-100 text-gray-700'}`}
+                          title={j.status === 'ES' ? 'Escala de Serviço' : STATUS_LABELS[j.status] || j.status}
                         >
                           {STATUS_LABELS[j.status] || j.status}
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        <div className="flex min-w-[230px] flex-wrap gap-1">
-                          <span
-                            className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
-                            title="Origem do registro da jornada"
-                          >
-                            {j.origem || 'MANUAL'}
-                          </span>
-                          <span
-                            title={sonoFonteBadge.help}
-                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sonoFonteBadge.tone}`}
-                          >
-                            {sonoFonteBadge.label}
-                          </span>
-                          {c2Badge ? (
-                            <span
-                              title={c2Badge.help}
-                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${c2Badge.tone}`}
-                            >
-                              {c2Badge.label}
-                            </span>
-                          ) : null}
-                          {semHoraApresentacao ? (
-                            <span
-                              title="Sem hora de apresentação registrada; recálculo depende desse dado."
-                              className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
-                            >
-                              Sem horário de apresentação: recálculo pendente
-                            </span>
-                          ) : null}
-                        </div>
+                        <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                          {j.origem || 'MANUAL'}
+                        </span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
                         {j.hora_apresentacao || '—'}
@@ -821,27 +729,26 @@ export default function FrmsFichaTripulante() {
                         <div className="inline-flex items-center gap-2">
                           <button
                             onClick={() => setSelectedExplanationDate(j.data)}
-                            className="text-xs text-slate-700 hover:text-slate-900 font-medium transition-colors duration-150"
+                            className="text-xs text-slate-700 hover:text-slate-900 font-medium"
                           >
                             Explicar
                           </button>
                           <button
                             onClick={() => handleEditar(j)}
-                            className="text-xs text-primary hover:text-blue-800 font-medium transition-colors duration-150"
+                            className="text-xs text-primary hover:text-blue-800 font-medium"
                           >
                             Editar
                           </button>
                           <button
                             onClick={() => handleExcluir(j)}
-                            className="text-xs text-red-600 hover:text-red-800 font-medium transition-colors duration-150"
+                            className="text-xs text-red-600 hover:text-red-800 font-medium"
                           >
                             Excluir
                           </button>
                         </div>
                       </td>
                     </tr>
-                    );
-                  })
+                  ))
                 )}
               </tbody>
             </table>
@@ -858,14 +765,14 @@ export default function FrmsFichaTripulante() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={paginado.pagination.page <= 1}
-                  className="px-3 py-1 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors duration-150"
+                  className="px-3 py-1 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
                 >
                   ← Anterior
                 </button>
                 <button
                   onClick={() => setPage((p) => p + 1)}
                   disabled={paginado.pagination.page >= paginado.pagination.totalPages}
-                  className="px-3 py-1 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors duration-150"
+                  className="px-3 py-1 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
                 >
                   Próxima →
                 </button>
