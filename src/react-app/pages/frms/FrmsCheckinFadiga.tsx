@@ -135,6 +135,10 @@ export function formatWakeTimeInput(rawValue: string): string {
   const normalized = digits.length === 3 ? `0${digits}` : digits;
   const hour = normalized.slice(0, 2);
   const minute = normalized.slice(2, 4);
+  const hourNumber = Number(hour);
+
+  if (hourNumber > 23) return hour;
+  if (minute.length >= 1 && Number(minute[0]) > 5) return `${hour}:`;
 
   return `${hour}:${minute}`;
 }
@@ -627,11 +631,11 @@ export default function FrmsCheckinFadiga() {
                         }`}
                       />
                       <p id="wake-time-help" className="mt-2 text-xs text-slate-500">
-                        Digite os numeros. Ex.: 0630 vira 06:30.
+                        Digite um horário real entre 00:00 e 23:59. Ex.: 0630 vira 06:30.
                       </p>
                       {wakeTimeHasValue && !wakeTimeValid && (
                         <p id="wake-time-error" className="mt-1 text-xs text-red-700">
-                          Informe um horario valido, ex.: 06:30.
+                          Informe um horário válido no formato HH:mm. Minutos devem ficar entre 00 e 59.
                         </p>
                       )}
                     </div>

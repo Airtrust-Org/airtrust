@@ -23,6 +23,7 @@ import type {
   FrmsDayExplanationFactor,
   FrmsDayExplanationRecommendation,
 } from '@/react-app/hooks/useFrms';
+import { buildFrmsOperatorExplanationCopy } from '../frmsDayExplanationCopy';
 import { getEffectivenessHex, getEffectivenessLabel, type ConfigLimites } from '../frmsUtils';
 
 function formatMinutes(totalMinutes: number | null | undefined): string {
@@ -237,6 +238,16 @@ export default function FrmsDayExplanationPanel({
           help: 'Não há dado de sono informado suficiente para o dia.',
         };
   const recalcPendente = !data.jornada.hora_apresentacao;
+  const operatorCopy = buildFrmsOperatorExplanationCopy({
+    tripulanteNome: tripulanteNome || data.tripulante.nome,
+    effectivenessPct: pctPrincipal,
+    effectivenessLabel: label,
+    fatorPrincipal: data.diagnostico.fator_principal,
+    sonoEfetivoMin: data.jornada.duracao_sono_efetiva_min,
+    fonteSonoLabel: fonteSonoBadge.label,
+    tempoAtencaoMin: data.jornada.tempo_abaixo_limiar_min,
+    recalcPendente,
+  });
 
   const handleSimular = async () => {
     if (!tripulanteId || !date) return;
@@ -357,6 +368,33 @@ export default function FrmsDayExplanationPanel({
           <p className="mt-3 text-sm leading-6 text-slate-600">
             {data.diagnostico.explicacao_tecnica}
           </p>
+
+          <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+            <p className="font-semibold">Resumo para a coordenação</p>
+            <p className="mt-1 leading-6">{operatorCopy.resumo}</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  O que pesou
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-sky-900">
+                  {operatorCopy.fatores.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  Como interpretar
+                </p>
+                <p className="mt-2 text-xs leading-5">{operatorCopy.interpretacao}</p>
+                <p className="mt-2 text-xs leading-5">{operatorCopy.atencaoOperacional}</p>
+              </div>
+            </div>
+            <p className="mt-3 rounded-xl border border-sky-100 bg-white/70 px-3 py-2 text-xs leading-5 text-sky-800">
+              {operatorCopy.limitacao}
+            </p>
+          </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3">
