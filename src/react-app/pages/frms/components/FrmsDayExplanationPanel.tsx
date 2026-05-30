@@ -14,6 +14,7 @@ import {
 import {
   useFrmsCompararDias,
   useFrmsDayExplanation,
+  useFrmsJornadasEffectiveness,
   useFrmsJustificativas,
   useFrmsMutation,
   type FrmsJustificativaGeradaResponse,
@@ -24,6 +25,7 @@ import type {
   FrmsDayExplanationRecommendation,
 } from '@/react-app/hooks/useFrms';
 import { buildFrmsOperatorExplanationCopy } from '../frmsDayExplanationCopy';
+import { buildFrmsDayExplanationTrace } from '../frmsDayExplanationTrace';
 import { getEffectivenessHex, getEffectivenessLabel, type ConfigLimites } from '../frmsUtils';
 
 function formatMinutes(totalMinutes: number | null | undefined): string {
@@ -109,6 +111,10 @@ export default function FrmsDayExplanationPanel({
   source = 'desconhecida',
 }: Props) {
   const { data, loading, error } = useFrmsDayExplanation(tripulanteId, date, { source });
+  const { data: timelineRows } = useFrmsJornadasEffectiveness(tripulanteId, 7, {
+    inicio: date ?? undefined,
+    fim: date ?? undefined,
+  });
   const [showComparison, setShowComparison] = useState(false);
   const [comparisonDate, setComparisonDate] = useState<string | null>(
     date ? previousDate(date) : null,
@@ -248,6 +254,19 @@ export default function FrmsDayExplanationPanel({
     tempoAtencaoMin: data.jornada.tempo_abaixo_limiar_min,
     recalcPendente,
   });
+  const timelineRow = useMemo(() => {
+    if (!timelineRows || !date) return null;
+    return timelineRows.find((row) => row.data_apresentacao === date) ?? null;
+  }, [timelineRows, date]);
+  const trace = useMemo(
+    () =>
+      buildFrmsDayExplanationTrace({
+        explanation: data,
+        timelineRow,
+        displayedEffectivenessLabel: label,
+      }),
+    [data, timelineRow, label],
+  );
 
   const handleSimular = async () => {
     if (!tripulanteId || !date) return;
@@ -372,11 +391,29 @@ export default function FrmsDayExplanationPanel({
           <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
             <p className="font-semibold">Resumo para a coordenação</p>
             <p className="mt-1 leading-6">{operatorCopy.resumo}</p>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="mt-3 grid gap-2">
               <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
-                  O que pesou
+                  Resumo do dia
                 </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">{trace.operatorExplanation.simpleSummary}</p>
+              </div>
+              <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  Como chegamos ao índice
+                </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">
+                  Entradas usadas: sono {trace.inputs.sleepDurationMinutes != null ? `${formatMinutes(trace.inputs.sleepDurationMinutes)}` : 'sem dado'}, fonte {trace.inputs.sleepSource}, despertar {trace.inputs.wakeTime || 'sem dado'}, apresentação {trace.inputs.reportTime || 'sem dado'}.
+                </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">
+                  Janelas rastreáveis neste payload: {trace.windowsUsed.filter((w) => w.used).map((w) => w.key).join(', ') || 'nenhuma'}.
+                </p>
+              </div>
+              <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  O que mais pesou
+                </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">{trace.operatorExplanation.whatInfluenced}</p>
                 <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-sky-900">
                   {operatorCopy.fatores.map((item) => (
                     <li key={item}>{item}</li>
@@ -385,15 +422,46 @@ export default function FrmsDayExplanationPanel({
               </div>
               <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
-                  Como interpretar
+                  Por que pode diferir de outro tripulante
                 </p>
-                <p className="mt-2 text-xs leading-5">{operatorCopy.interpretacao}</p>
-                <p className="mt-2 text-xs leading-5">{operatorCopy.atencaoOperacional}</p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">
+                  Mesmo iniciando na mesma quinzena, os índices podem divergir por diferenças em sono/despertar, horário de apresentação, componente mais penalizante do dia e disponibilidade de dado informado versus dado estimado.
+                </p>
+              </div>
+              <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  Como usar esta informação
+                </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">{trace.operatorExplanation.howToInterpret}</p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">{trace.operatorExplanation.whatToCheck}</p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">{operatorCopy.atencaoOperacional}</p>
+              </div>
+              <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  Limitações do dado
+                </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">{trace.operatorExplanation.limitationsText}</p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">
+                  Flags: {trace.sourceFlags.informedData ? 'dado informado' : 'dado estimado'} ·{' '}
+                  {trace.sourceFlags.legacyPreC2 ? 'legado pré-C2' : trace.sourceFlags.c2Corrected ? 'C2 corrigido' : 'sem status C2'} ·{' '}
+                  {trace.sourceFlags.recalculationPending ? 'recálculo pendente' : 'sem recálculo pendente'}.
+                </p>
+              </div>
+              <div className="rounded-xl border border-sky-100 bg-white/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  Trace técnico
+                </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">
+                  Crew: {trace.crewMemberLabel} · Data: {trace.date} · Final: {trace.finalReadinessPct != null ? `${trace.finalReadinessPct.toFixed(1)}%` : 'sem dado'}.
+                </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">
+                  Wake source: {trace.inputs.wakeTimeSource} · Min acordado antes da apresentação: {trace.inputs.minutesAwakeBeforeReport != null ? `${trace.inputs.minutesAwakeBeforeReport} min` : 'sem dado'}.
+                </p>
+                <p className="mt-2 text-xs leading-5 text-sky-900">
+                  Janela 7d/28d: {trace.windowsUsed.filter((w) => !w.used).map((w) => `${w.key} indisponível`).join(', ')}.
+                </p>
               </div>
             </div>
-            <p className="mt-3 rounded-xl border border-sky-100 bg-white/70 px-3 py-2 text-xs leading-5 text-sky-800">
-              {operatorCopy.limitacao}
-            </p>
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
