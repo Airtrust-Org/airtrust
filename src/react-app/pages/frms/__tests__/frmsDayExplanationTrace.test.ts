@@ -59,6 +59,7 @@ function makeExplanation(
       provider: 'rule-engine',
       model: 'frms-day-explainer-v1',
     },
+    explanation_trace: undefined,
     ...partial,
   };
 }
@@ -92,6 +93,87 @@ function makeTimelineRow(partial?: Partial<FrmsEffectivenessJornadaRow>): FrmsEf
 }
 
 describe('buildFrmsDayExplanationTrace', () => {
+  it('prioriza explanation_trace do backend quando disponível', () => {
+    const trace = buildFrmsDayExplanationTrace({
+      explanation: makeExplanation({
+        explanation_trace: {
+          version: 'frms-day-trace-v1',
+          dataQuality: {
+            data_source: 'crew_reported',
+            confidence: 'reported',
+            sourceSummary: 'informed',
+            limitations: ['Limitação backend explícita.'],
+          },
+          sleep: {
+            durationMinutes: 400,
+            source: 'INFORMADO',
+            wakeTime: '06:10',
+            wakeTimeSource: 'crew_reported',
+            sleepStartEstimated: '23:20',
+            wakeTimeEstimated: '06:10',
+          },
+          duty: {
+            date: '2026-05-28',
+            reportTime: '07:30',
+            minutesAwakeBeforeReport: 80,
+            missingReportTime: false,
+          },
+          calculation: {
+            effectivenessPct: 82.4,
+            readinessPct: 80.8,
+            level: 'ATENCAO',
+            timeBelowThresholdMinutes: 45,
+            mainFactor: 'repouso',
+            mainFactorImpact: '-8.2 pp',
+            components: {
+              basica: 0.7,
+              processo_s: -0.2,
+              processo_c: -0.5,
+              repouso: -0.8,
+              hv: -0.1,
+              duracao: -1.6,
+            },
+          },
+          sourceFlags: {
+            informedData: true,
+            estimatedData: false,
+            legacyPreC2: false,
+            c2Corrected: true,
+            recalculationPending: false,
+          },
+          windows: {
+            daily: {
+              available: true,
+              date: '2026-05-28',
+              effectivenessPct: 82.4,
+              explanation: 'daily ok',
+            },
+            sevenDays: {
+              available: true,
+              worstDay: '2026-05-26',
+              worstEffectivenessPct: 79.1,
+              explanation: '7d ok',
+            },
+            twentyEightDays: {
+              available: false,
+              worstDay: null,
+              worstEffectivenessPct: null,
+              explanation: '28d indisponível',
+            },
+          },
+        },
+      }),
+      timelineRow: makeTimelineRow({ processado_com_bug: 1 }),
+      displayedEffectivenessLabel: 'Atenção',
+    });
+
+    expect(trace.inputs.wakeTimeSource).toBe('crew_reported');
+    expect(trace.windowsUsed.find((w) => w.key === '7d')?.used).toBe(true);
+    expect(trace.windowsUsed.find((w) => w.key === '28d')?.used).toBe(false);
+    expect(trace.sourceFlags.legacyPreC2).toBe(false);
+    expect(trace.operatorExplanation.limitationsText).toContain('Limitação backend explícita');
+  });
+
   it('marca dado informado e C2 corrigido quando há hora acordada informada', () => {
     const trace = buildFrmsDayExplanationTrace({
       explanation: makeExplanation(),
@@ -177,5 +259,17 @@ describe('buildFrmsDayExplanationTrace', () => {
     expect(traceB.operatorExplanation.limitationsText).not.toMatch(
       /apto|inapto|SAFTE-FAST validado|cientificamente validado/i,
     );
+  });
+
+  it('faz fallback para trace frontend quando backend trace não vier', () => {
+    const trace = buildFrmsDayExplanationTrace({
+      explanation: makeExplanation({ explanation_trace: undefined }),
+      timelineRow: makeTimelineRow({ processado_com_bug: 1 }),
+      displayedEffectivenessLabel: 'Crítico',
+    });
+
+    expect(trace.windowsUsed.find((w) => w.key === '7d')?.used).toBe(false);
+    expect(trace.sourceFlags.legacyPreC2).toBe(true);
+    expect(trace.inputs.priorDaysWindow).toContain('não disponível');
   });
 });
