@@ -183,25 +183,25 @@ describe('getEffectivenessHex', () => {
 // ─── getEffectivenessLabel ──────────────────────────────────────────
 
 describe('getEffectivenessLabel', () => {
-  it('≥ 90% → Desempenho Pleno', () => {
-    expect(getEffectivenessLabel(90, cfg)).toBe('Desempenho Pleno');
-    expect(getEffectivenessLabel(100, cfg)).toBe('Desempenho Pleno');
+  it('≥ 90% → Sem degradação estimada', () => {
+    expect(getEffectivenessLabel(90, cfg)).toBe('Sem degradação estimada');
+    expect(getEffectivenessLabel(100, cfg)).toBe('Sem degradação estimada');
   });
 
-  it('89% → Atenção', () => {
-    expect(getEffectivenessLabel(89, cfg)).toBe('Atenção');
+  it('89% → Atenção operacional', () => {
+    expect(getEffectivenessLabel(89, cfg)).toBe('Atenção operacional');
   });
 
-  it('77% → Início de Degradação (boundary)', () => {
-    expect(getEffectivenessLabel(77, cfg)).toBe('Início de Degradação');
+  it('77% → Degradação estimada moderada (boundary)', () => {
+    expect(getEffectivenessLabel(77, cfg)).toBe('Degradação estimada moderada');
   });
 
-  it('65% → Efetividade severamente degradada (boundary)', () => {
-    expect(getEffectivenessLabel(65, cfg)).toBe('Efetividade severamente degradada');
+  it('65% → Degradação estimada elevada (boundary)', () => {
+    expect(getEffectivenessLabel(65, cfg)).toBe('Degradação estimada elevada');
   });
 
-  it('0% → Efetividade severamente degradada', () => {
-    expect(getEffectivenessLabel(0, cfg)).toBe('Efetividade severamente degradada');
+  it('0% → Degradação estimada elevada', () => {
+    expect(getEffectivenessLabel(0, cfg)).toBe('Degradação estimada elevada');
   });
 });
 
@@ -234,11 +234,11 @@ describe('frmsUtils — limites customizados', () => {
     expect(getEffectivenessColor(95, custom)).toBe('text-teal-700');
   });
 
-  it('getEffectivenessLabel: 60% → Efetividade severamente degradada com VERMELHO=60 (boundary)', () => {
-    expect(getEffectivenessLabel(60, custom)).toBe('Efetividade severamente degradada');
+  it('getEffectivenessLabel: 60% → Degradação estimada elevada com VERMELHO=60 (boundary)', () => {
+    expect(getEffectivenessLabel(60, custom)).toBe('Degradação estimada elevada');
   });
 
-  it('getEffectivenessLabel: 61% → Início de Degradação com VERMELHO=60', () => {
-    expect(getEffectivenessLabel(61, custom)).toBe('Início de Degradação');
+  it('getEffectivenessLabel: 61% → Degradação estimada moderada com VERMELHO=60', () => {
+    expect(getEffectivenessLabel(61, custom)).toBe('Degradação estimada moderada');
   });
 });
