@@ -136,8 +136,8 @@ export default function FrmsEffectivenessPanel({
             {nivel}
           </span>
           <p className="text-[10px] text-slate-400 mt-1">
-            Proxy local inspirado em modelos biomatemáticos; não é SAFTE-FAST validado e não
-            substitui avaliação operacional humana
+            Proxy local inspirado em modelos biomatemáticos; não substitui avaliação operacional
+            humana e não representa validação formal SAFTE-FAST
           </p>
         </div>
       </div>

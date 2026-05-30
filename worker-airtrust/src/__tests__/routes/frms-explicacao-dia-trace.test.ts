@@ -139,7 +139,10 @@ describe('GET /frms/tripulante/:id/explicacao-dia backend trace', () => {
       success: boolean;
       data: {
         jornada: { effectiveness_pct: number | null };
-        diagnostico: { faixa: string };
+        diagnostico: {
+          faixa: string;
+          fatores: Array<{ codigo: string; impacto_pct: number; resumo: string }>;
+        };
         explanation_trace: {
           version: string;
           dataQuality: { sourceSummary: string; limitations: string[] };
@@ -152,6 +155,10 @@ describe('GET /frms/tripulante/:id/explicacao-dia backend trace', () => {
     expect(payload.success).toBe(true);
     expect(payload.data.jornada.effectiveness_pct).toBe(82.4);
     expect(payload.data.diagnostico.faixa).toBeTruthy();
+    const fatorBasica = payload.data.diagnostico.fatores.find((item) => item.codigo === 'basica');
+    expect(fatorBasica?.impacto_pct).toBe(0);
+    expect(fatorBasica?.resumo).toContain('coeficiente');
+    expect(fatorBasica?.resumo).not.toMatch(/\b70(\.0)?\s*pp\b/i);
     expect(payload.data.explanation_trace.version).toBe('frms-day-trace-v1');
     expect(payload.data.explanation_trace.dataQuality.sourceSummary).toBe('legacy');
     expect(payload.data.explanation_trace.sourceFlags.legacyPreC2).toBe(true);
