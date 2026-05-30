@@ -290,7 +290,7 @@ export default function FrmsDayExplanationPanel({
             {tripulanteNome || data.tripulante.nome} · {date.slice(8, 10)}/{date.slice(5, 7)}
           </h4>
           <p className="mt-1 text-sm text-slate-500">
-            Diagnóstico determinístico com explicação pela IA.
+            Análise estimada.
           </p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right shadow-sm">

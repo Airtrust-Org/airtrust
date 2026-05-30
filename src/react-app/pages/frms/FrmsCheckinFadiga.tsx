@@ -490,7 +490,7 @@ export default function FrmsCheckinFadiga() {
             <div>
               <PageHeader
                 title="Fadiga Diaria"
-                subtitle="Check-in rapido para apoiar o gerenciamento de risco de fadiga."
+                subtitle="Prévia estimada antes do envio para apoiar o gerenciamento de risco de fadiga."
               />
               <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                 <Clock className="h-3 w-3" />
@@ -745,7 +745,7 @@ export default function FrmsCheckinFadiga() {
                         onChange={() => setFitForDutyChoice('sim')}
                         className={HIDDEN_RADIO_INPUT_CLASS}
                       />
-                      Sim
+                      Sim, consigo iniciar a jornada com segurança
                     </label>
                     <label
                       id="fit-choice-nao"
@@ -795,7 +795,7 @@ export default function FrmsCheckinFadiga() {
                 <div className="mt-4">
                   <label htmlFor="observacao" className="mb-2 block text-sm font-medium text-slate-700">
                     {isNeedsCoordinatorReview
-                      ? 'Explique rapidamente (obrigatorio)'
+                      ? 'Explique o motivo para revisão pela coordenação'
                       : 'Ha algo que a coordenacao precisa saber? (opcional)'}
                   </label>
                   <textarea

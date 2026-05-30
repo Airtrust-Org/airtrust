@@ -223,7 +223,7 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByText(/observacao e obrigatoria/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('Explique rapidamente (obrigatorio)'), {
+    fireEvent.change(screen.getByLabelText('Explique o motivo para revisão pela coordenação'), {
       target: { value: 'Nao dormi adequadamente e preciso revisar com a coordenacao.' },
     });
 
