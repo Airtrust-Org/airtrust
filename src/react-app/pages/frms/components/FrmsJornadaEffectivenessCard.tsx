@@ -172,6 +172,22 @@ export default function FrmsJornadaEffectivenessCard({
   const tempoRiscoLabel = tempoRisco > 0 ? `${tempoRisco} min` : '—';
 
   const showRisk = effFimJornada != null && effFimJornada < amarelo;
+  const c2Badge =
+    jornada.processado_com_bug === 1
+      ? {
+          label: 'Dado legado pré-C2',
+          tone: 'border-amber-200 bg-amber-50 text-amber-700',
+          help: 'Cálculo realizado antes da correção técnica C2.',
+        }
+      : jornada.processado_com_bug === 0
+        ? {
+            label: 'Cálculo C2 corrigido',
+            tone: 'border-sky-200 bg-sky-50 text-sky-700',
+            help: 'Cálculo realizado com a correção técnica C2.',
+          }
+        : null;
+  const recalcPendencia =
+    !jornada.hora_despertar_estimada && jornada.duracao_sono_efetiva_min == null;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
@@ -185,6 +201,24 @@ export default function FrmsJornadaEffectivenessCard({
             ⚠️ {tempoRisco > 0 ? `~${tempoRisco} min abaixo de ${amarelo}%` : 'Atenção'}
           </span>
         )}
+      </div>
+      <div className="mb-3 flex flex-wrap gap-1">
+        {c2Badge ? (
+          <span
+            title={c2Badge.help}
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${c2Badge.tone}`}
+          >
+            {c2Badge.label}
+          </span>
+        ) : null}
+        {recalcPendencia ? (
+          <span
+            title="Sem horário de apresentação registrado para esse cálculo."
+            className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
+          >
+            Sem horário de apresentação: recálculo pendente
+          </span>
+        ) : null}
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
