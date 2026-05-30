@@ -28,6 +28,14 @@ vi.mock('@/react-app/hooks/useFrms', () => {
       fator_principal: 'Acúmulo de voo',
       fatores: [
         {
+          codigo: 'hv',
+          titulo: 'Acúmulo',
+          impacto_pct: -10,
+          impacto_abs_pct: 10,
+          direcao: 'penaliza',
+          resumo: 'Componente de acúmulo recente de voo',
+        },
+        {
           codigo: 'basica',
           titulo: 'fator_basica_pct',
           impacto_pct: -2.2,
@@ -59,13 +67,15 @@ describe('FrmsDayExplanationPanel', () => {
     expect(screen.queryByText(/fator_basica_pct/i)).toBeNull();
     expect(screen.queryByText(/7d pior dia/i)).toBeNull();
     expect(screen.queryByText(/28d pior dia/i)).toBeNull();
-    expect(screen.getByText(/Na janela de 7 dias/)).toBeDefined();
-    expect(screen.getByText(/Na janela de 28 dias/)).toBeDefined();
+    expect(screen.getByText('Explicação operacional')).toBeDefined();
+    expect(screen.queryByText('Explicação pela IA')).toBeNull();
+    expect(screen.getByText(/janelas de 7 e 28 dias/i)).toBeDefined();
     expect(screen.getByText(/triagem operacional/i)).toBeDefined();
     expect(screen.getByText(/revisão humana/i)).toBeDefined();
-    expect(screen.getByText(/não diagnóstico/i)).toBeDefined();
-    expect(screen.getByText(/não decisão automática/i)).toBeDefined();
+    expect(screen.getByText(/não diagnostica fadiga/i)).toBeDefined();
+    expect(screen.getByText(/não determina aptidão ou restrição automática/i)).toBeDefined();
     expect(screen.getByText(/não valida SAFTE-FAST/i)).toBeDefined();
-    expect(screen.getByText('Contexto circadiano basal')).toBeDefined();
+    expect(screen.getByText(/soma dos fatores já presentes no início do dia/i)).toBeDefined();
+    expect(screen.getByText(/Maior impacto: -10,0 pp/)).toBeDefined();
   });
 });

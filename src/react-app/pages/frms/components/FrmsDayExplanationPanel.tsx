@@ -69,11 +69,11 @@ function renderLightMarkdown(text: string): string {
 
 function factorLabel(code: string): string {
   if (code === 'basica') return 'Contexto circadiano basal';
-  if (code === 'processo_c') return 'Circadiano';
-  if (code === 'processo_s') return 'Ciclo Embarcado';
-  if (code === 'hv') return 'Acúmulo HV';
-  if (code === 'repouso') return 'Repouso';
-  if (code === 'duracao') return 'Duração';
+  if (code === 'processo_c') return 'Janela circadiana';
+  if (code === 'processo_s') return 'Ciclo embarcado';
+  if (code === 'hv') return 'Acúmulo de horas de voo';
+  if (code === 'repouso') return 'Repouso e sono';
+  if (code === 'duracao') return 'Duração da jornada';
   return code;
 }
 
@@ -86,6 +86,29 @@ function sanitizeOperationalText(text: string): string {
     .replace(/28d pior dia (\d{4}-\d{2}-\d{2}) \(([\d.,]+)\)\.?/gi, (_, date, score) => {
       return `Na janela de 28 dias, o pior ponto foi ${formatFrmsDate(date)}, com índice estimado de ${score}%.`;
     });
+}
+
+function formatPp(value: number): string {
+  return `${value.toFixed(1).replace('.', ',')} pp`;
+}
+
+function formatHora(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (/^\d{2}:\d{2}$/.test(value)) return value;
+  return null;
+}
+
+function parseWindowWorst(text: string): {
+  d7: { date: string; score: string } | null;
+  d28: { date: string; score: string } | null;
+} {
+  const safe = text || '';
+  const m7 = safe.match(/7d pior dia (\d{4}-\d{2}-\d{2}) \(([\d.,]+)\)/i);
+  const m28 = safe.match(/28d pior dia (\d{4}-\d{2}-\d{2}) \(([\d.,]+)\)/i);
+  return {
+    d7: m7 ? { date: formatFrmsDate(m7[1]), score: m7[2].replace('.', ',') } : null,
+    d28: m28 ? { date: formatFrmsDate(m28[1]), score: m28[2].replace('.', ',') } : null,
+  };
 }
 
 function priorityClass(priority: FrmsDayExplanationRecommendation['prioridade']): string {
@@ -250,9 +273,80 @@ export default function FrmsDayExplanationPanel({
     resumo: sanitizeOperationalText(factor.resumo),
     titulo: factor.codigo === 'basica' ? 'Contexto circadiano basal' : factor.titulo,
   }));
-  const resumoExecutivo = sanitizeOperationalText(data.diagnostico.resumo_executivo);
-  const explicacaoDidatica = sanitizeOperationalText(data.diagnostico.explicacao_didatica);
-  const explicacaoTecnica = sanitizeOperationalText(data.diagnostico.explicacao_tecnica);
+  const wakeTime = formatHora(data.jornada.hora_acordou || data.jornada.hora_despertar_estimada);
+  const apresentacaoTime = formatHora(data.jornada.hora_apresentacao);
+  const sonoFormatado = formatMinutes(data.jornada.duracao_sono_efetiva_min);
+  const principalFactor =
+    [...factors].sort((a, b) => Math.abs(b.impacto_pct) - Math.abs(a.impacto_pct))[0] ?? null;
+  const windows = parseWindowWorst(
+    `${data.diagnostico.resumo_executivo ?? ''} ${data.diagnostico.explicacao_didatica ?? ''} ${data.diagnostico.explicacao_tecnica ?? ''}`,
+  );
+  const resumoExecutivo = (() => {
+    const partes: string[] = [];
+    const nome = tripulanteNome || data.tripulante.nome;
+    if (principalFactor) {
+      partes.push(
+        `${nome} ficou em ${label.toLowerCase()} porque ${factorLabel(principalFactor.codigo).toLowerCase()} foi o principal redutor da margem operacional do dia.`,
+      );
+    } else {
+      partes.push(
+        `${nome} ficou em ${label.toLowerCase()} pela combinação dos fatores disponíveis no cálculo diário.`,
+      );
+    }
+    if (
+      data.jornada.dia_periodo_embarcado != null &&
+      data.jornada.total_dias_periodo != null &&
+      data.jornada.total_dias_periodo > 0
+    ) {
+      partes.push(
+        `O sistema também considerou o ${data.jornada.dia_periodo_embarcado}º dia de ${data.jornada.total_dias_periodo} do ciclo embarcado.`,
+      );
+    }
+    if (wakeTime && apresentacaoTime) {
+      partes.push(`Na janela circadiana, foram considerados despertar às ${wakeTime} e apresentação às ${apresentacaoTime}.`);
+    }
+    if (sonoFormatado !== 'Sem dado') {
+      partes.push(`O sono informado foi de ${sonoFormatado}.`);
+    }
+    return partes.join(' ');
+  })();
+  const explicacaoOperacional = (() => {
+    const partes: string[] = [`A leitura foi classificada como ${label.toLowerCase()}.`];
+    const hv = factors.find((f) => f.codigo === 'hv');
+    if (hv) {
+      partes.push(
+        `O maior peso veio de ${factorLabel(hv.codigo).toLowerCase()}, com impacto de ${formatPp(hv.impacto_pct)} na margem do dia.`,
+      );
+    }
+    const ciclo = factors.find((f) => f.codigo === 'processo_s');
+    if (
+      ciclo &&
+      data.jornada.dia_periodo_embarcado != null &&
+      data.jornada.total_dias_periodo != null &&
+      data.jornada.total_dias_periodo > 0
+    ) {
+      partes.push(
+        `O ciclo embarcado também contribuiu, pois o tripulante estava no ${data.jornada.dia_periodo_embarcado}º dia de ${data.jornada.total_dias_periodo} do período.`,
+      );
+    }
+    const circ = factors.find((f) => f.codigo === 'processo_c');
+    if (circ && wakeTime && apresentacaoTime) {
+      partes.push(
+        `A janela circadiana foi considerada menos favorável pela combinação entre despertar às ${wakeTime} e apresentação às ${apresentacaoTime}.`,
+      );
+    }
+    const repouso = factors.find((f) => f.codigo === 'repouso');
+    if (repouso && sonoFormatado !== 'Sem dado') {
+      partes.push(
+        `O sono informado de ${sonoFormatado} ${
+          Math.abs(repouso.impacto_pct) < 0.05
+            ? 'não acrescentou penalização relevante neste cálculo.'
+            : `entrou com impacto de ${formatPp(repouso.impacto_pct)}.`
+        }`,
+      );
+    }
+    return partes.join(' ');
+  })();
 
   const handleSimular = async () => {
     if (!tripulanteId || !date) return;
@@ -324,7 +418,7 @@ export default function FrmsDayExplanationPanel({
             {tripulanteNome || data.tripulante.nome} · {formatFrmsDate(date)}
           </h4>
           <p className="mt-1 text-sm text-slate-500">
-            Diagnóstico determinístico com explicação pela IA.
+            Leitura operacional baseada nos dados disponíveis do dia.
           </p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right shadow-sm">
@@ -355,7 +449,7 @@ export default function FrmsDayExplanationPanel({
             {resumoExecutivo}
           </p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            {explicacaoDidatica || explicacaoTecnica}
+            {explicacaoOperacional}
           </p>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -364,18 +458,23 @@ export default function FrmsDayExplanationPanel({
                 Penalização de Base do Dia
               </div>
               <p className="mt-1 text-base font-bold text-rose-800">
-                {penalizacaoBaseDiaPts.toFixed(1)} pp
+                {formatPp(penalizacaoBaseDiaPts)}
               </p>
-              <p className="text-[11px] text-rose-600">Basal, S, circadiano, repouso e HV.</p>
+              <p className="text-[11px] text-rose-600">
+                Soma dos fatores já presentes no início do dia: histórico recente de voo, ciclo
+                embarcado, janela circadiana e repouso/sono.
+              </p>
             </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
                 Penalização Intrajornada
               </div>
               <p className="mt-1 text-base font-bold text-amber-800">
-                {penalizacaoIntrajornadaPts.toFixed(1)} pp
+                {formatPp(penalizacaoIntrajornadaPts)}
               </p>
-              <p className="text-[11px] text-amber-600">Componente de duração da jornada.</p>
+              <p className="text-[11px] text-amber-600">
+                Componente associado à duração/variação da jornada.
+              </p>
             </div>
           </div>
 
@@ -411,8 +510,41 @@ export default function FrmsDayExplanationPanel({
                 Fator Principal
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-900">
-                {data.diagnostico.fator_principal}
+                {principalFactor ? factorLabel(principalFactor.codigo) : data.diagnostico.fator_principal}
               </p>
+              {principalFactor ? (
+                <p className="mt-1 text-xs text-slate-600">
+                  Maior impacto: {formatPp(principalFactor.impacto_pct)}
+                </p>
+              ) : null}
+              {windows.d7 && windows.d28 ? (
+                windows.d7.date === windows.d28.date && windows.d7.score === windows.d28.score ? (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Nas janelas de 7 e 28 dias, o pior ponto foi {windows.d7.date}, com índice
+                    estimado de {windows.d7.score}%.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Na janela de 7 dias, o pior ponto foi {windows.d7.date}, com índice estimado
+                    de {windows.d7.score}%. Na janela de 28 dias, o pior ponto foi{' '}
+                    {windows.d28.date}, com índice estimado de {windows.d28.score}%.
+                  </p>
+                )
+              ) : windows.d7 ? (
+                <p className="mt-1 text-xs text-slate-600">
+                  Na janela de 7 dias, o pior ponto foi {windows.d7.date}, com índice estimado de{' '}
+                  {windows.d7.score}%.
+                </p>
+              ) : windows.d28 ? (
+                <p className="mt-1 text-xs text-slate-600">
+                  Na janela de 28 dias, o pior ponto foi {windows.d28.date}, com índice estimado de{' '}
+                  {windows.d28.score}%.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-slate-600">
+                  Dado bruto da janela não disponível neste payload.
+                </p>
+              )}
             </div>
           </div>
 
@@ -531,7 +663,7 @@ export default function FrmsDayExplanationPanel({
           <div className="flex items-center gap-2 text-slate-800">
             <Bot className="h-4 w-4" />
             <h5 className="text-sm font-semibold uppercase tracking-[0.16em]">
-              Explicação pela IA
+              Explicação operacional
             </h5>
           </div>
           <div
@@ -561,10 +693,9 @@ export default function FrmsDayExplanationPanel({
                 className={`rounded-2xl border p-3 ${factorClass(factor, data.diagnostico.faixa)}`}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-900">{factor.titulo}</p>
+                  <p className="text-sm font-semibold text-slate-900">{factorLabel(factor.codigo)}</p>
                   <span className="text-sm font-bold text-slate-700">
-                    {factor.impacto_pct > 0 ? '+' : ''}
-                    {factor.impacto_pct.toFixed(1)} pp
+                    {formatPp(factor.impacto_pct)}
                   </span>
                 </div>
                 <p className="mt-1 text-sm leading-5 text-slate-600">{factor.resumo}</p>
@@ -572,8 +703,9 @@ export default function FrmsDayExplanationPanel({
             ))}
           </div>
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Os pontos percentuais mostram contribuição estimada dos componentes para a margem
-            operacional do dia. Não são diagnóstico médico nem decisão automática.
+            Ferramenta de triagem operacional. A leitura é estimativa, exige revisão humana, não
+            diagnostica fadiga, não determina aptidão ou restrição automática e não valida
+            SAFTE-FAST.
           </div>
         </section>
 
