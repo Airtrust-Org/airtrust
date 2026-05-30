@@ -1,5 +1,5 @@
 /**
- * FrmsEffectivenessPanel — Painel A: índice estimado de prontidão operacional
+ * FrmsEffectivenessPanel — índice estimado de prontidão operacional
  * Mostra score circular, decomposição por componente e nível textual.
  */
 import { getEffectivenessBg, getEffectivenessLabel, getEffectivenessHex } from '../frmsUtils';

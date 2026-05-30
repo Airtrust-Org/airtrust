@@ -67,7 +67,7 @@ export default function FrmsFadigaPainel() {
     <AppLayout>
       <div className="space-y-4">
         <PageHeader
-          title="Painel de Fadiga"
+          title="Monitor de Fadiga"
           subtitle="Visão do gestor de risco diário, tendência e priorização operacional"
           actions={
             <div className="flex items-center gap-2">

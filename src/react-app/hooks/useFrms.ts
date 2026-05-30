@@ -83,7 +83,7 @@ export interface FrmsFrotaRow {
   hv_dia_min: number;
   pct_dia: number;
   nivel_max: string;
-  // Effectiveness (proxy local não validado) — Painel A
+  // Effectiveness (proxy local não validado)
   effectiveness_pct?: number;
   effectiveness_nivel?: string;
   effectiveness_componentes?: {
