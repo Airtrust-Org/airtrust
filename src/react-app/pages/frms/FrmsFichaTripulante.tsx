@@ -502,9 +502,9 @@ export default function FrmsFichaTripulante() {
           </div>
         </section>
 
-        {/* Effectiveness Panel (Painel A) + Compliance Cards (Painel B) */}
+        {/* Effectiveness + Compliance cards */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {/* Painel A — índice estimado de efetividade */}
+          {/* Índice estimado de efetividade */}
           {acumulo?.effectiveness ? (
             <div className="md:col-span-1">
               {latestJornada?.processado_com_bug === 0 && (
@@ -540,7 +540,7 @@ export default function FrmsFichaTripulante() {
             </div>
           ) : null}
 
-          {/* Painel B — Compliance Regulatório */}
+          {/* Compliance regulatório */}
           <div className={`${acumulo?.effectiveness ? 'md:col-span-4' : 'md:col-span-5'}`}>
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               Compliance Regulatório (ANAC)

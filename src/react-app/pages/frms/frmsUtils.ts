@@ -56,7 +56,7 @@ export function getEffectivenessStroke(pct: number, config: ConfigLimites): stri
 }
 
 // ============================================================
-// PAINEL B — Compliance Regulatório (ANAC RBAC 117)
+// Compliance Regulatório (ANAC RBAC 117)
 // ============================================================
 
 export function getComplianceColor(pct: number, config: ConfigLimites): string {

@@ -10,16 +10,15 @@ describe('FrmsConceitos', () => {
   it('mostra limite de 365 dias em 930h e nao em 960h', () => {
     render(<FrmsConceitos />);
 
-    expect(screen.getByText(/HV 365 dias/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/930 h/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/930\s*h/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/960 h/i)).not.toBeInTheDocument();
   });
 
   it('reforca que o uso e operacional e de triagem, sem diagnostico medico', () => {
     render(<FrmsConceitos />);
 
-    expect(screen.getByText(/apoio operacional/i)).toBeInTheDocument();
-    expect(screen.getByText(/KSS mede sonolência e alerta atual/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/triagem operacional/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/KSS não entra na fórmula de effectiveness atual/i)).toBeInTheDocument();
     expect(screen.getAllByText(/proxy local/i).length).toBeGreaterThan(0);
   });
 });

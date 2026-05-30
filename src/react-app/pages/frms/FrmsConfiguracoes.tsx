@@ -170,7 +170,7 @@ const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
     keys: ['FATOR_BASE_AWAY_PCT', 'FATOR_ACLIMATADO_NAO_PCT', 'FATOR_TRIPULACAO_AUM_HORAS'],
   },
   {
-    label: 'Limiares configuráveis do índice estimado de efetividade (Painel A)',
+    label: 'Limiares configuráveis do índice estimado de efetividade',
     icon: <Brain className="w-4 h-4" />,
     description:
       'Limiares configuráveis do índice estimado de efetividade. Proxy local inspirado em modelos biomatemáticos; não representa validação formal SAFTE-FAST.',
@@ -247,7 +247,7 @@ const LABELS: Record<string, string> = {
   FATOR_BASE_AWAY_PCT: 'Penalidade AWAY (%)',
   FATOR_ACLIMATADO_NAO_PCT: 'Penalidade não-aclimatado (%)',
   FATOR_TRIPULACAO_AUM_HORAS: 'Extensão FDP trip. aumentada (h)',
-  // Thresholds de Efetividade (Painel A)
+  // Thresholds de Efetividade
   EFFECTIV_VERDE_MIN: 'Verde — mínimo (%)',
   EFFECTIV_AMARELO_MAX: 'Amarelo — máx (%)',
   EFFECTIV_VERMELHO_MAX: 'Vermelho — máx (%)',
