@@ -23,6 +23,12 @@ export interface FrmsJornadaRow {
   registrado_por: string;
   origem: string;
   created_at: string;
+  hora_dormiu?: string | null;
+  hora_acordou?: string | null;
+  sono_efetivo_min?: number | null;
+  fonte_sono?: 'PADRAO' | 'INFORMADO' | string | null;
+  acordou_na_wocl?: number | null;
+  repouso_regulatorio_min?: number | null;
   // Campos avançados (migration 0216)
   tipo_base?: 'HOME' | 'AWAY';
   tripulacao_aumentada?: number;

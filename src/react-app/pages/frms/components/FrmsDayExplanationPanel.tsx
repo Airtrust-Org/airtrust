@@ -219,6 +219,24 @@ export default function FrmsDayExplanationPanel({
   const penalizacaoIntrajornadaPts = Math.abs(Math.min(0, duracaoFactor ?? 0));
   const semVariacaoIntrajornada = penalizacaoIntrajornadaPts < 0.05;
   const diasCriticosConsecutivos = data.jornada.dias_criticos_consecutivos ?? 0;
+  const fonteSonoBadge = data.jornada.hora_acordou
+    ? {
+        label: 'Fonte do sono: informado',
+        tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+        help: 'Há horário de acordar informado para o cálculo do dia.',
+      }
+    : data.jornada.duracao_sono_efetiva_min != null
+      ? {
+          label: 'Fonte do sono: padrão',
+          tone: 'border-amber-200 bg-amber-50 text-amber-700',
+          help: 'Sem horário informado; cálculo usa estimativa padrão de sono.',
+        }
+      : {
+          label: 'Fonte do sono: estimado',
+          tone: 'border-slate-200 bg-slate-100 text-slate-600',
+          help: 'Não há dado de sono informado suficiente para o dia.',
+        };
+  const recalcPendente = !data.jornada.hora_apresentacao;
 
   const handleSimular = async () => {
     if (!tripulanteId || !date) return;
@@ -292,6 +310,22 @@ export default function FrmsDayExplanationPanel({
           <p className="mt-1 text-sm text-slate-500">
             Análise estimada.
           </p>
+          <div className="mt-2 flex flex-wrap gap-1">
+            <span
+              title={fonteSonoBadge.help}
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${fonteSonoBadge.tone}`}
+            >
+              {fonteSonoBadge.label}
+            </span>
+            {recalcPendente ? (
+              <span
+                title="Sem horário de apresentação registrado para a jornada."
+                className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
+              >
+                Sem horário de apresentação: recálculo pendente
+              </span>
+            ) : null}
+          </div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right shadow-sm">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">

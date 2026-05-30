@@ -4,7 +4,7 @@ import { History, Search } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
-import { useFrmsFadigaHistorico } from '@/react-app/hooks/useFrms';
+import { useFrmsFadigaHistorico, type FrmsFadigaCheckinRow } from '@/react-app/hooks/useFrms';
 
 const STATUS_OPERACIONAL_LABEL: Record<string, string> = {
   APTO: 'Prontidao normal',
@@ -26,6 +26,30 @@ function getTodayLocalKey(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function resolveCheckinDataSource(
+  row: Pick<FrmsFadigaCheckinRow, 'data_source'>,
+): { label: string; tone: string; help: string } {
+  if (row.data_source === 'crew_reported') {
+    return {
+      label: 'Dado informado',
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      help: 'Dados informados no check-in pelo tripulante.',
+    };
+  }
+  if (row.data_source === 'default_estimate') {
+    return {
+      label: 'Dado estimado',
+      tone: 'border-amber-200 bg-amber-50 text-amber-700',
+      help: 'Estimativa operacional (fallback) antes de envio do check-in.',
+    };
+  }
+  return {
+    label: 'Sem fonte declarada',
+    tone: 'border-slate-200 bg-slate-100 text-slate-600',
+    help: 'A fonte do dado não foi declarada no payload.',
+  };
 }
 
 export default function FrmsFadigaHistorico() {
@@ -56,7 +80,7 @@ export default function FrmsFadigaHistorico() {
         ? ((((data as { data?: { data?: unknown } }).data?.data as unknown[]) || []) as unknown[])
         : [];
 
-  const rows = baseRows;
+  const rows = baseRows as FrmsFadigaCheckinRow[];
 
   return (
     <AppLayout>
@@ -152,11 +176,14 @@ export default function FrmsFadigaHistorico() {
                     <th className="px-2 py-2">Score</th>
                     <th className="px-2 py-2">Nível de alerta informado</th>
                     <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2">Fonte do dado</th>
                     <th className="px-2 py-2">FRAT</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {rows.map((row) => {
+                    const sourceMeta = resolveCheckinDataSource(row);
+                    return (
                     <tr key={row.id} className="border-b border-slate-100 text-slate-700">
                       <td className="px-2 py-2">{row.data_checkin}</td>
                       <td className="px-2 py-2">
@@ -178,10 +205,19 @@ export default function FrmsFadigaHistorico() {
                       <td className="px-2 py-2">{row.nivel_fadiga}</td>
                       <td className="px-2 py-2">{statusOperacionalLabel(row.status_operacional)}</td>
                       <td className="px-2 py-2">
+                        <span
+                          title={sourceMeta.help}
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sourceMeta.tone}`}
+                        >
+                          {sourceMeta.label}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2">
                         {row.associado_frat_avaliacao_id ? 'Vinculado' : 'Pendente'}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
