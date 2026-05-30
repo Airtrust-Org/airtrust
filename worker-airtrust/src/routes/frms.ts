@@ -218,6 +218,94 @@ interface FrmsDayExplanationPayload {
     provider: string;
     model: string;
   };
+  explanation_trace?: FrmsDayExplanationTrace;
+}
+
+type FrmsExplanationTraceSourceSummary = 'informed' | 'estimated' | 'mixed' | 'legacy' | 'unknown';
+
+interface FrmsDayExplanationTrace {
+  version: 'frms-day-trace-v1';
+  dataQuality: {
+    data_source: 'crew_reported' | 'default_estimate' | 'not_applicable' | null;
+    confidence: 'reported' | 'reduced' | null;
+    sourceSummary: FrmsExplanationTraceSourceSummary;
+    limitations: string[];
+  };
+  sleep: {
+    durationMinutes: number | null;
+    source: string | null;
+    wakeTime: string | null;
+    wakeTimeSource: string | null;
+    sleepStartEstimated: string | null;
+    wakeTimeEstimated: string | null;
+  };
+  duty: {
+    date: string;
+    reportTime: string | null;
+    minutesAwakeBeforeReport: number | null;
+    missingReportTime: boolean;
+  };
+  calculation: {
+    effectivenessPct: number | null;
+    readinessPct: number | null;
+    level: string | null;
+    timeBelowThresholdMinutes: number | null;
+    mainFactor: string | null;
+    mainFactorImpact: string | null;
+    components: {
+      basica: number | null;
+      processo_s: number | null;
+      processo_c: number | null;
+      repouso: number | null;
+      hv: number | null;
+      duracao: number | null;
+    };
+  };
+  sourceFlags: {
+    informedData: boolean;
+    estimatedData: boolean;
+    legacyPreC2: boolean;
+    c2Corrected: boolean;
+    recalculationPending: boolean;
+  };
+  windows: {
+    daily: {
+      available: boolean;
+      date: string;
+      effectivenessPct: number | null;
+      explanation: string;
+    };
+    sevenDays: {
+      available: boolean;
+      worstDay: string | null;
+      worstEffectivenessPct: number | null;
+      explanation: string;
+    };
+    twentyEightDays: {
+      available: boolean;
+      worstDay: string | null;
+      worstEffectivenessPct: number | null;
+      explanation: string;
+    };
+  };
+}
+
+interface FrmsTraceWindowWorst {
+  available: boolean;
+  worstDay: string | null;
+  worstEffectivenessPct: number | null;
+}
+
+interface FrmsDayExplanationTraceContext {
+  dataSource: 'crew_reported' | 'default_estimate' | 'not_applicable' | null;
+  confidence: 'reported' | 'reduced' | null;
+  wakeTimeSource: string | null;
+  recalculationPending: boolean;
+  windows: {
+    sevenDays: FrmsTraceWindowWorst;
+    twentyEightDays: FrmsTraceWindowWorst;
+  };
+  limitations: string[];
 }
 
 interface FrmsComparisonDay {
@@ -748,10 +836,207 @@ function toComparisonDay(explanation: FrmsDayExplanationPayload): FrmsComparison
   };
 }
 
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function computeMinutesAwakeBeforeReport(
+  horaAcordou: string | null,
+  horaApresentacao: string | null,
+): number | null {
+  const wake = hhmmToMinutes(horaAcordou);
+  const report = hhmmToMinutes(horaApresentacao);
+  if (wake == null || report == null) return null;
+  return Math.max(0, report - wake);
+}
+
+function resolveTraceSourceSummary(flags: {
+  informedData: boolean;
+  estimatedData: boolean;
+  legacyPreC2: boolean;
+}): FrmsExplanationTraceSourceSummary {
+  if (flags.legacyPreC2) return 'legacy';
+  if (flags.informedData && flags.estimatedData) return 'mixed';
+  if (flags.informedData) return 'informed';
+  if (flags.estimatedData) return 'estimated';
+  return 'unknown';
+}
+
+function buildFrmsDayExplanationTrace(
+  row: Record<string, unknown>,
+  deterministicPayload: Omit<FrmsDayExplanationPayload, 'copiloto'>,
+  componentes: Record<string, number>,
+  fatorPrincipal: FrmsExplanationFactor | undefined,
+  context?: FrmsDayExplanationTraceContext,
+): FrmsDayExplanationTrace {
+  const horaAcordou = deterministicPayload.jornada.hora_acordou;
+  const horaDespertarEstimada = deterministicPayload.jornada.hora_despertar_estimada;
+  const horaApresentacao = deterministicPayload.jornada.hora_apresentacao;
+  const wakeTime = normalizeHora(horaAcordou || horaDespertarEstimada);
+  const duracaoFactorPct =
+    componentes.duracao != null && Number.isFinite(componentes.duracao)
+      ? roundOne(Number(componentes.duracao) * 100)
+      : null;
+  const readinessPct =
+    deterministicPayload.jornada.effectiveness_pct != null && duracaoFactorPct != null
+      ? Math.max(
+          0,
+          Math.min(100, roundOne(deterministicPayload.jornada.effectiveness_pct + duracaoFactorPct)),
+        )
+      : deterministicPayload.jornada.effectiveness_pct;
+
+  const legacyPreC2 = Number(row.processado_com_bug ?? 0) === 1;
+  const c2Corrected = Number(row.processado_com_bug ?? 0) === 0;
+  const informedData = Boolean(horaAcordou) || String(row.fonte_sono || '') === 'INFORMADO';
+  const estimatedData =
+    !informedData &&
+    (deterministicPayload.jornada.duracao_sono_efetiva_min != null || Boolean(horaDespertarEstimada));
+  const sourceSummary = resolveTraceSourceSummary({
+    informedData,
+    estimatedData,
+    legacyPreC2,
+  });
+  const limitations = Array.from(new Set(context?.limitations ?? []));
+  const sevenDays = context?.windows.sevenDays ?? {
+    available: false,
+    worstDay: null,
+    worstEffectivenessPct: null,
+  };
+  const twentyEightDays = context?.windows.twentyEightDays ?? {
+    available: false,
+    worstDay: null,
+    worstEffectivenessPct: null,
+  };
+
+  return {
+    version: 'frms-day-trace-v1',
+    dataQuality: {
+      data_source: context?.dataSource ?? null,
+      confidence: context?.confidence ?? null,
+      sourceSummary,
+      limitations,
+    },
+    sleep: {
+      durationMinutes: deterministicPayload.jornada.duracao_sono_efetiva_min,
+      source: typeof row.fonte_sono === 'string' ? String(row.fonte_sono) : null,
+      wakeTime,
+      wakeTimeSource: context?.wakeTimeSource ?? null,
+      sleepStartEstimated: deterministicPayload.jornada.hora_inicio_sono_estimado,
+      wakeTimeEstimated: deterministicPayload.jornada.hora_despertar_estimada,
+    },
+    duty: {
+      date: deterministicPayload.jornada.data,
+      reportTime: deterministicPayload.jornada.hora_apresentacao,
+      minutesAwakeBeforeReport: computeMinutesAwakeBeforeReport(wakeTime, horaApresentacao),
+      missingReportTime: !Boolean(horaApresentacao),
+    },
+    calculation: {
+      effectivenessPct: deterministicPayload.jornada.effectiveness_pct,
+      readinessPct,
+      level: deterministicPayload.jornada.effectiveness_nivel,
+      timeBelowThresholdMinutes: deterministicPayload.jornada.tempo_abaixo_limiar_min,
+      mainFactor: fatorPrincipal?.codigo ?? null,
+      mainFactorImpact: fatorPrincipal ? `${fatorPrincipal.impacto_pct.toFixed(1)} pp` : null,
+      components: {
+        basica: toNumberOrNull(componentes.basica),
+        processo_s: toNumberOrNull(componentes.processo_s),
+        processo_c: toNumberOrNull(componentes.processo_c),
+        repouso: toNumberOrNull(componentes.repouso),
+        hv: toNumberOrNull(componentes.hv),
+        duracao: toNumberOrNull(componentes.duracao),
+      },
+    },
+    sourceFlags: {
+      informedData,
+      estimatedData,
+      legacyPreC2,
+      c2Corrected,
+      recalculationPending: Boolean(context?.recalculationPending),
+    },
+    windows: {
+      daily: {
+        available: deterministicPayload.jornada.effectiveness_pct != null,
+        date: deterministicPayload.jornada.data,
+        effectivenessPct: deterministicPayload.jornada.effectiveness_pct,
+        explanation:
+          'Leitura diária baseada na jornada processada para a data selecionada, sem reprocessamento histórico.',
+      },
+      sevenDays: {
+        available: sevenDays.available,
+        worstDay: sevenDays.worstDay,
+        worstEffectivenessPct: sevenDays.worstEffectivenessPct,
+        explanation: sevenDays.available
+          ? 'Pior dia observado na janela rolling de 7 dias até a data selecionada.'
+          : 'Sem base suficiente para determinar pior dia na janela de 7 dias.',
+      },
+      twentyEightDays: {
+        available: twentyEightDays.available,
+        worstDay: twentyEightDays.worstDay,
+        worstEffectivenessPct: twentyEightDays.worstEffectivenessPct,
+        explanation: twentyEightDays.available
+          ? 'Pior dia observado na janela rolling de 28 dias até a data selecionada.'
+          : 'Sem base suficiente para determinar pior dia na janela de 28 dias.',
+      },
+    },
+  };
+}
+
+async function findWorstEffectivenessInWindow(
+  env: Env,
+  input: { tripulanteId: string; empresaId: number | undefined; data: string; days: number },
+): Promise<FrmsTraceWindowWorst> {
+  const offset = String(Math.max(0, input.days - 1));
+  try {
+    const row = await env.DB.prepare(
+      `SELECT
+          j.data AS data_apresentacao,
+          fj.effectiveness_pct
+       FROM frms_fatorizacao_jornada fj
+       JOIN frms_jornada j ON j.id = fj.jornada_id AND j.deleted_at IS NULL
+       JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER)
+       WHERE j.tripulante_id = ?
+         AND p.deleted_at IS NULL
+         AND COALESCE(p.ativo, 1) = 1
+         AND UPPER(COALESCE(NULLIF(TRIM(p.status), ''), 'ATIVO')) = 'ATIVO'
+         AND (? IS NULL OR p.empresa_id = ?)
+         AND fj.deleted_at IS NULL
+         AND fj.effectiveness_pct IS NOT NULL
+         AND j.data >= date(?, '-' || ? || ' days')
+         AND j.data <= ?
+       ORDER BY fj.effectiveness_pct ASC, j.data DESC, fj.created_at DESC
+       LIMIT 1`,
+    )
+      .bind(
+        input.tripulanteId,
+        input.empresaId ?? null,
+        input.empresaId ?? null,
+        input.data,
+        offset,
+        input.data,
+      )
+      .first<{ data_apresentacao: string | null; effectiveness_pct: number | null }>();
+
+    if (!row?.data_apresentacao || row.effectiveness_pct == null) {
+      return { available: false, worstDay: null, worstEffectivenessPct: null };
+    }
+
+    return {
+      available: true,
+      worstDay: String(row.data_apresentacao),
+      worstEffectivenessPct: roundOne(Number(row.effectiveness_pct)),
+    };
+  } catch {
+    return { available: false, worstDay: null, worstEffectivenessPct: null };
+  }
+}
+
 async function buildFrmsDayExplanation(
   env: Env,
   row: Record<string, unknown>,
   limites: Record<string, number> | null,
+  traceContext?: FrmsDayExplanationTraceContext,
 ): Promise<FrmsDayExplanationPayload> {
   const pct = row.effectiveness_pct == null ? null : Number(row.effectiveness_pct);
   const faixa = formatEffectivenessBand(pct, limites);
@@ -855,10 +1140,18 @@ async function buildFrmsDayExplanation(
       recomendacoes: recommendations,
     },
   };
+  const explanationTrace = buildFrmsDayExplanationTrace(
+    row,
+    deterministicPayload,
+    componentes,
+    fatorPrincipal,
+    traceContext,
+  );
 
   if (!isFrmsDayExplanationAiEnabled(env)) {
     return {
       ...deterministicPayload,
+      explanation_trace: explanationTrace,
       copiloto: {
         texto: deterministicPayload.diagnostico.explicacao_didatica,
         provider: 'rule-engine',
@@ -897,6 +1190,7 @@ async function buildFrmsDayExplanation(
       if (result?.response?.trim()) {
         return {
           ...deterministicPayload,
+          explanation_trace: explanationTrace,
           copiloto: {
             texto: sanitizeCopilotoTexto(
               result.response,
@@ -914,6 +1208,7 @@ async function buildFrmsDayExplanation(
 
   return {
     ...deterministicPayload,
+    explanation_trace: explanationTrace,
     copiloto: {
       texto: deterministicPayload.diagnostico.explicacao_didatica,
       provider: 'rule-engine',
@@ -1965,6 +2260,8 @@ frmsRoutes.get(
           j.data as data_apresentacao,
           j.hora_apresentacao,
           j.hora_acordou,
+          j.fonte_sono,
+          fj.processado_com_bug,
           fj.effectiveness_pct,
           fj.effectiveness_nivel,
           fj.effectiveness_componentes_json,
@@ -2002,6 +2299,82 @@ frmsRoutes.get(
       );
     }
 
+    const [checkinRow, recalcEvent, worst7d, worst28d] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT id, wake_time, report_source
+         FROM frms_fadiga_checkin
+         WHERE empresa_id = ?
+           AND funcionario_id = ?
+           AND data_checkin = ?
+           AND deleted_at IS NULL
+         LIMIT 1`,
+      )
+        .bind(empresaId, Number(tripulanteId), data)
+        .first<{ id: string; wake_time: string | null; report_source: string | null }>()
+        .catch(() => null),
+      c.env.DB.prepare(
+        `SELECT 1 AS has_pending
+         FROM frms_fadiga_evento e
+         JOIN frms_fadiga_checkin c ON c.id = e.checkin_id
+         WHERE c.empresa_id = ?
+           AND c.funcionario_id = ?
+           AND c.data_checkin = ?
+           AND c.deleted_at IS NULL
+           AND e.empresa_id = ?
+           AND e.tipo = 'FRMS_RECALCULO_NECESSARIO'
+         LIMIT 1`,
+      )
+        .bind(empresaId, Number(tripulanteId), data, empresaId)
+        .first<{ has_pending: number }>()
+        .catch(() => null),
+      findWorstEffectivenessInWindow(c.env, {
+        tripulanteId,
+        empresaId,
+        data,
+        days: 7,
+      }),
+      findWorstEffectivenessInWindow(c.env, {
+        tripulanteId,
+        empresaId,
+        data,
+        days: 28,
+      }),
+    ]);
+
+    const wakeTimeSource = normalizeHora(row.hora_acordou as string | null | undefined)
+      ? 'crew_reported'
+      : normalizeHora(row.hora_despertar_estimada as string | null | undefined)
+        ? 'fallback_apresentacao_minus_config'
+        : normalizeHora(checkinRow?.wake_time)
+          ? 'crew_reported'
+          : null;
+    const sourceByCheckin =
+      checkinRow != null
+        ? ({
+            dataSource: 'crew_reported',
+            confidence: 'reported',
+          } as const)
+        : ({
+            dataSource: 'default_estimate',
+            confidence: 'reduced',
+          } as const);
+    const traceLimitations: string[] = [];
+    if (!checkinRow) {
+      traceLimitations.push('Sem check-in diário para a data selecionada; usando estimativa operacional.');
+    }
+    if (!row.hora_apresentacao) {
+      traceLimitations.push('Sem hora de apresentação na jornada; minutos acordado antes da apresentação não disponíveis.');
+    }
+    if (!worst7d.available) {
+      traceLimitations.push('Janela de 7 dias indisponível para determinar pior dia.');
+    }
+    if (!worst28d.available) {
+      traceLimitations.push('Janela de 28 dias indisponível para determinar pior dia.');
+    }
+    if (Number(row.processado_com_bug ?? 0) === 1) {
+      traceLimitations.push('Registro marcado como legado pré-C2; considerar reprocessamento histórico em fase separada.');
+    }
+
     const limites = await carregarLimites(c.env.DB);
     const diasCriticosConsecutivos = await countDiasCriticosConsecutivos(
       c.env,
@@ -2017,6 +2390,17 @@ frmsRoutes.get(
         dias_criticos_consecutivos: diasCriticosConsecutivos,
       },
       limites as unknown as Record<string, number>,
+      {
+        dataSource: sourceByCheckin.dataSource,
+        confidence: sourceByCheckin.confidence,
+        wakeTimeSource,
+        recalculationPending: Boolean(recalcEvent?.has_pending) || !Boolean(row.hora_apresentacao),
+        windows: {
+          sevenDays: worst7d,
+          twentyEightDays: worst28d,
+        },
+        limitations: traceLimitations,
+      },
     );
 
     try {
@@ -2103,6 +2487,8 @@ frmsRoutes.get(
             j.data as data_apresentacao,
             j.hora_apresentacao,
             j.hora_acordou,
+            j.fonte_sono,
+            fj.processado_com_bug,
             fj.effectiveness_pct,
             fj.effectiveness_nivel,
             fj.effectiveness_componentes_json,
@@ -2441,6 +2827,8 @@ frmsRoutes.post(
           j.data as data_apresentacao,
           j.hora_apresentacao,
           j.hora_acordou,
+          j.fonte_sono,
+          fj.processado_com_bug,
           fj.effectiveness_pct,
           fj.effectiveness_nivel,
           fj.effectiveness_componentes_json,

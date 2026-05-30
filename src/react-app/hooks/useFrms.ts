@@ -285,6 +285,73 @@ export interface FrmsDayExplanationRecommendation {
   descricao: string;
 }
 
+export interface FrmsDayExplanationTraceResponse {
+  version: 'frms-day-trace-v1';
+  dataQuality: {
+    data_source?: 'crew_reported' | 'default_estimate' | 'not_applicable' | null;
+    confidence?: 'reported' | 'reduced' | null;
+    sourceSummary: 'informed' | 'estimated' | 'mixed' | 'legacy' | 'unknown';
+    limitations: string[];
+  };
+  sleep: {
+    durationMinutes: number | null;
+    source: string | null;
+    wakeTime: string | null;
+    wakeTimeSource: string | null;
+    sleepStartEstimated: string | null;
+    wakeTimeEstimated: string | null;
+  };
+  duty: {
+    date: string;
+    reportTime: string | null;
+    minutesAwakeBeforeReport: number | null;
+    missingReportTime: boolean;
+  };
+  calculation: {
+    effectivenessPct: number | null;
+    readinessPct: number | null;
+    level: string | null;
+    timeBelowThresholdMinutes: number | null;
+    mainFactor: string | null;
+    mainFactorImpact: string | null;
+    components: {
+      basica: number | null;
+      processo_s: number | null;
+      processo_c: number | null;
+      repouso: number | null;
+      hv: number | null;
+      duracao: number | null;
+    };
+  };
+  sourceFlags: {
+    informedData: boolean;
+    estimatedData: boolean;
+    legacyPreC2: boolean;
+    c2Corrected: boolean;
+    recalculationPending: boolean;
+  };
+  windows: {
+    daily: {
+      available: boolean;
+      date: string;
+      effectivenessPct: number | null;
+      explanation: string;
+    };
+    sevenDays: {
+      available: boolean;
+      worstDay: string | null;
+      worstEffectivenessPct: number | null;
+      explanation: string;
+    };
+    twentyEightDays: {
+      available: boolean;
+      worstDay: string | null;
+      worstEffectivenessPct: number | null;
+      explanation: string;
+    };
+  };
+}
+
 export interface FrmsDayExplanationResponse {
   tripulante: {
     id: string;
@@ -319,6 +386,7 @@ export interface FrmsDayExplanationResponse {
     provider: string;
     model: string;
   };
+  explanation_trace?: FrmsDayExplanationTraceResponse;
 }
 
 export function useFrmsJornadasEffectiveness(
