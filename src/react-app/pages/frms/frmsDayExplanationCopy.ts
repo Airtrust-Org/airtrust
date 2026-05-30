@@ -65,7 +65,7 @@ export function buildFrmsOperatorExplanationCopy(
     : 'Compare com sono informado, jornada prevista, histórico recente e percepção do tripulante antes de decidir qualquer ação.';
 
   const limitacao =
-    'Esta é uma estimativa operacional baseada nos dados disponíveis. Não é diagnóstico médico, decisão automática ou prova isolada de capacidade para a jornada.';
+    'Esta é uma estimativa operacional de triagem baseada nos dados disponíveis. Não é diagnóstico médico, não é validação SAFTE-FAST e não determina automaticamente aptidão ou restrição operacional.';
 
   return {
     resumo,

@@ -640,6 +640,18 @@ function buildExplanationFactor(
   codigo: FrmsExplanationComponentKey,
   impactoRaw: number,
 ): FrmsExplanationFactor {
+  if (codigo === 'basica') {
+    const coeficienteBasal = Number.isFinite(impactoRaw) ? Math.max(0, impactoRaw) : 0;
+    return {
+      codigo,
+      titulo: 'Condição circadiana basal estimada',
+      impacto_pct: 0,
+      impacto_abs_pct: 0,
+      direcao: 'neutro',
+      resumo: `Contexto basal observado em coeficiente ${coeficienteBasal.toFixed(2)} (escala 0 a 1). Este valor orienta leitura contextual e não entra como impacto direto em pontos percentuais do dia.`,
+    };
+  }
+
   const impactoPct = roundOne(impactoRaw * 100);
   const impactoAbsPct = Math.abs(impactoPct);
   const direcao = impactoPct < 0 ? 'penaliza' : impactoPct > 0 ? 'favorece' : 'neutro';

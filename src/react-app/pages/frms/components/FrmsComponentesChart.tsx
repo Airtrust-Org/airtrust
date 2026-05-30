@@ -112,7 +112,7 @@ export default function FrmsComponentesChart({ componentes, tripulante }: Props)
         <h4 className="text-sm font-semibold text-slate-800">Perfil de fatores operacionais</h4>
         {tripulante && <p className="text-xs text-slate-400">{tripulante}</p>}
         <p className="text-[10px] text-slate-400 mt-1">
-          Proxy local estimado, não validado e não equivalente a SAFTE-FAST validado.
+          Proxy local estimado, sem validação formal SAFTE-FAST, para apoio de revisão humana.
         </p>
       </div>
 

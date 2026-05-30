@@ -186,7 +186,8 @@ describe('buildFrmsDayExplanationTrace', () => {
     expect(trace.sourceFlags.c2Corrected).toBe(true);
     expect(trace.sourceFlags.legacyPreC2).toBe(false);
     expect(trace.inputs.wakeTimeSource).toBe('crew_reported');
-    expect(trace.operatorExplanation.limitationsText).toContain('Não é diagnóstico médico');
+    expect(trace.operatorExplanation.limitationsText).toContain('triagem operacional');
+    expect(trace.operatorExplanation.limitationsText).toMatch(/não é diagnóstico médico/i);
     expect(trace.operatorExplanation.limitationsText).toContain('não é decisão automática');
   });
 

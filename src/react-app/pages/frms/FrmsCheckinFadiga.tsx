@@ -536,7 +536,8 @@ export default function FrmsCheckinFadiga() {
         {activeTab === 'form' && (
           <>
             <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-              Se houver sinal de fadiga significativa, a coordenacao pode revisar sua jornada.
+              Ferramenta de triagem operacional: este check-in gera sinalização para revisão humana.
+              Não é diagnóstico médico e não determina automaticamente aptidão ou restrição operacional.
             </div>
 
             {existente && (
@@ -727,7 +728,7 @@ export default function FrmsCheckinFadiga() {
                 </fieldset>
               </FormCard>
 
-              <FormCard label="Bloco 3 - Aptidao operacional">
+              <FormCard label="Bloco 3 - Condicao para jornada">
                 <fieldset>
                   <legend className="mb-3 text-sm text-slate-700">
                     Voce se sente em condicao segura para iniciar a jornada?
@@ -767,7 +768,7 @@ export default function FrmsCheckinFadiga() {
                         onChange={() => setFitForDutyChoice('nao')}
                         className={HIDDEN_RADIO_INPUT_CLASS}
                       />
-                      Nao
+                      Nao, preciso revisao com a coordenacao
                     </label>
                     <label
                       id="fit-choice-coord"

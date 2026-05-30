@@ -670,6 +670,11 @@ function DashboardContent() {
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-4 sm:p-6">
             <FrmsFilterChips />
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              Ferramenta de triagem operacional: os índices são estimativas para apoiar revisão humana.
+              Não são diagnóstico médico, não são validação SAFTE-FAST e não determinam automaticamente
+              aptidão ou restrição operacional.
+            </div>
 
             <FrmsMetricCards
               complianceCards={[

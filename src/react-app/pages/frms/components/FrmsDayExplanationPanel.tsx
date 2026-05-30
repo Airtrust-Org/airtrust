@@ -392,6 +392,10 @@ export default function FrmsDayExplanationPanel({
           ) : null}
         </div>
       </div>
+      <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+        Triagem operacional: esta leitura é estimativa/proxy para apoiar revisão humana. Não é
+        diagnóstico médico, não valida SAFTE-FAST e não determina aptidão ou restrição automática.
+      </div>
 
       <div className="mt-4 grid gap-3 xl:grid-cols-[1.25fr_0.9fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -492,7 +496,7 @@ export default function FrmsDayExplanationPanel({
               <p className="mt-1 text-base font-bold text-rose-800">
                 {penalizacaoBaseDiaPts.toFixed(1)} pp
               </p>
-              <p className="text-[11px] text-rose-600">Basal, S, circadiano, repouso e HV.</p>
+              <p className="text-[11px] text-rose-600">Processo S, circadiano, repouso e HV.</p>
             </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
@@ -687,8 +691,9 @@ export default function FrmsDayExplanationPanel({
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-slate-900">{factor.titulo}</p>
                   <span className="text-sm font-bold text-slate-700">
-                    {factor.impacto_pct > 0 ? '+' : ''}
-                    {factor.impacto_pct.toFixed(1)} pp
+                    {factor.codigo === 'basica'
+                      ? 'Contexto'
+                      : `${factor.impacto_pct > 0 ? '+' : ''}${factor.impacto_pct.toFixed(1)} pp`}
                   </span>
                 </div>
                 <p className="mt-1 text-sm leading-5 text-slate-600">{factor.resumo}</p>

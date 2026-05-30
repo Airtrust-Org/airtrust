@@ -203,4 +203,61 @@ describe('FrmsDayExplanationPanel', () => {
 
     expect(screen.getByText('Sem horário de apresentação: recálculo pendente')).toBeInTheDocument();
   });
+
+  it('mantém disclaimer de triagem visível no painel', () => {
+    useFrmsDayExplanationMock.mockReturnValue({
+      data: makeExplanation(),
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <FrmsDayExplanationPanel
+        tripulanteId="35"
+        tripulanteNome="Tripulante Teste"
+        date="2026-05-28"
+        config={null}
+        source="dashboard"
+      />,
+    );
+
+    expect(screen.getAllByText(/triagem operacional/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/não determina aptidão ou restrição automática/i)).toBeInTheDocument();
+  });
+
+  it('exibe fator basica como contexto, sem pontos percentuais de impacto', () => {
+    useFrmsDayExplanationMock.mockReturnValue({
+      data: makeExplanation({
+        diagnostico: {
+          ...makeExplanation().diagnostico,
+          fatores: [
+            {
+              codigo: 'basica',
+              titulo: 'Condição circadiana basal estimada',
+              impacto_pct: 0,
+              impacto_abs_pct: 0,
+              direcao: 'neutro',
+              resumo: 'Contexto basal observado em coeficiente 0.84 (escala 0 a 1).',
+            },
+          ],
+        },
+      }),
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <FrmsDayExplanationPanel
+        tripulanteId="35"
+        tripulanteNome="Tripulante Teste"
+        date="2026-05-28"
+        config={null}
+        source="dashboard"
+      />,
+    );
+
+    expect(screen.getByText('Condição circadiana basal estimada')).toBeInTheDocument();
+    expect(screen.getByText('Contexto')).toBeInTheDocument();
+    expect(screen.queryByText(/\+84(\.0)?\s*pp/i)).not.toBeInTheDocument();
+  });
 });

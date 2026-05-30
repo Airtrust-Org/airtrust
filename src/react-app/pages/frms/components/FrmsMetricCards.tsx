@@ -90,12 +90,12 @@ const CARDS = [
 const EFFECTIVENESS_CARDS = [
   {
     key: 'PLENA',
-    label: 'Plena',
+    label: 'Margem preservada',
     icon: Brain,
     accent: 'bg-teal-600',
     accentSoft:
       'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-200 dark:border-teal-500/30',
-    description: 'Capacidade preservada',
+    description: 'Leitura estimada sem atenção imediata',
   },
   {
     key: 'ATENCAO',
@@ -104,7 +104,7 @@ const EFFECTIVENESS_CARDS = [
     accent: 'bg-orange-500',
     accentSoft:
       'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-200 dark:border-orange-500/30',
-    description: 'Queda inicial de performance',
+    description: 'Sinal de atenção na leitura estimada',
   },
   {
     key: 'DEGRADADA',
@@ -113,16 +113,16 @@ const EFFECTIVENESS_CARDS = [
     accent: 'bg-amber-500',
     accentSoft:
       'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/30',
-    description: 'Redução mensurável',
+    description: 'Redução relevante na margem estimada',
   },
   {
     key: 'SEVERA',
-    label: 'Severa',
+    label: 'Atenção elevada',
     icon: AlertTriangle,
     accent: 'bg-rose-700',
     accentSoft:
       'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-200 dark:border-rose-500/30',
-    description: 'Pede ação operacional',
+    description: 'Risco alto — revisar com gestor',
   },
 ] as const;
 

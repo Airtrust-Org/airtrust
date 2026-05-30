@@ -368,4 +368,10 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByText('Requer revisao operacional')).toBeInTheDocument();
     expect(screen.queryByText(/^INAPTO$/)).not.toBeInTheDocument();
   });
+
+  it('mantem disclaimer de triagem operacional no check-in', () => {
+    render(<FrmsCheckinFadiga />);
+    expect(screen.getByText(/Ferramenta de triagem operacional/i)).toBeInTheDocument();
+    expect(screen.getByText(/não determina automaticamente aptidão ou restrição operacional/i)).toBeInTheDocument();
+  });
 });
