@@ -488,6 +488,10 @@ export default function FrmsFichaTripulante() {
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               Compliance Regulatório (ANAC)
             </h4>
+            <p className="mb-2 text-xs text-slate-500">
+              Estar dentro do limite legal não significa ausência de fadiga. Use este dado junto com
+              check-in, sono e sinais operacionais.
+            </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {rolling || acumulo?.mensal ? (
                 <>
