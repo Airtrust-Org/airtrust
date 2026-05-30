@@ -332,7 +332,7 @@ export default function FrmsEffectivenessTimeline({
         </span>
         <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
           <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
-          Fadiga severa
+          Fadiga alta — revisar com gestor
         </span>
       </div>
     </div>

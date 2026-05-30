@@ -634,10 +634,10 @@ export default function FrmsFichaTripulante() {
                     Alertas do Dia
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
-                    Fat.Jornada%
+                    Fadiga Jornada %
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
-                    Fat.HV%
+                    Fadiga HV %
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-center">
                     Ações

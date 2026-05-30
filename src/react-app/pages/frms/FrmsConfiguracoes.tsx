@@ -170,10 +170,10 @@ const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
     keys: ['FATOR_BASE_AWAY_PCT', 'FATOR_ACLIMATADO_NAO_PCT', 'FATOR_TRIPULACAO_AUM_HORAS'],
   },
   {
-    label: 'Thresholds do índice estimado de efetividade (Painel A)',
+    label: 'Limiares configuráveis do índice estimado de efetividade (Painel A)',
     icon: <Brain className="w-4 h-4" />,
     description:
-      'Limiares visuais do índice estimado de efetividade. Proxy local inspirado em modelos biomatemáticos; não é validação SAFTE-FAST proprietária.',
+      'Limiares configuráveis do índice estimado de efetividade. Proxy local inspirado em modelos biomatemáticos; não é validação SAFTE-FAST proprietária.',
     keys: [
       'EFFECTIV_VERDE_MIN',
       'EFFECTIV_AMARELO_MAX',
