@@ -629,3 +629,36 @@ export async function criarQualificacoesPlanejadas(
 
   return { criadas, puladas, conflitosUniques, bloqueadasDataPassada };
 }
+
+export async function sincronizarQualificacoesDaSessaoConcluida(
+  db: D1Database,
+  params: {
+    sessaoId: number;
+    empresaId?: number | null;
+  },
+): Promise<{ atualizadas: number }> {
+  const empresaId =
+    typeof params.empresaId === 'number' && Number.isFinite(params.empresaId)
+      ? Number(params.empresaId)
+      : null;
+
+  const queryBase = `
+    UPDATE qualificacoes_historico
+       SET status = 'CONCLUIDA',
+           data_confirmacao = COALESCE(data_confirmacao, datetime('now')),
+           updated_at = datetime('now')
+     WHERE sessao_id = ?
+       AND COALESCE(status, 'PLANEJADA') = 'PLANEJADA'
+       AND deleted_at IS NULL
+  `;
+
+  const result =
+    empresaId && empresaId > 0
+      ? await db
+          .prepare(`${queryBase} AND empresa_id = ?`)
+          .bind(params.sessaoId, empresaId)
+          .run()
+      : await db.prepare(queryBase).bind(params.sessaoId).run();
+
+  return { atualizadas: Number(result.meta?.changes || 0) };
+}
