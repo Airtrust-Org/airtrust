@@ -129,28 +129,27 @@ export function mapKssToSubjectiveFatigue(kssScore: number): number {
   return 1;
 }
 
-export function formatWakeTimeInput(rawValue: string): string {
-  const digits = rawValue.replace(/\D/g, '').slice(0, 4);
-  if (!digits) return '';
-  if (digits.length <= 2) return digits;
+export function normalizeWakeTimeInput(rawValue: string): string | null {
+  const compact = String(rawValue ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+  if (!compact) return null;
 
-  const normalized = digits.length === 3 ? `0${digits}` : digits;
-  const hour = normalized.slice(0, 2);
-  const minute = normalized.slice(2, 4);
-  const hourNumber = Number(hour);
+  if (/^\d{1,2}[:h]\d{1,2}$/.test(compact)) {
+    return normalizeTimeInput(compact);
+  }
 
-  if (hourNumber > 23) return hour;
-  if (minute.length >= 1 && Number(minute[0]) > 5) return `${hour}:`;
+  const digitsOnly = compact.replace(/\D/g, '');
+  if (digitsOnly.length === 3 || digitsOnly.length === 4) {
+    return normalizeTimeInput(digitsOnly);
+  }
 
-  return `${hour}:${minute}`;
+  return null;
 }
 
 export function isValidWakeTime(value: string): boolean {
-  if (!/^\d{2}:\d{2}$/.test(value)) return false;
-  const [hourText, minuteText] = value.split(':');
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+  return normalizeWakeTimeInput(value) !== null;
 }
 
 function fitChoiceToPayload(choice: FitForDutyChoice): boolean | null {
@@ -392,6 +391,7 @@ export default function FrmsCheckinFadiga() {
 
   const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(null);
   const [wakeTime, setWakeTime] = useState('');
+  const [wakeTimeTouched, setWakeTimeTouched] = useState(false);
   const [qualidadeSono, setQualidadeSono] = useState<number | null>(null);
   const [kssScore, setKssScore] = useState<number | null>(null);
   const [fitForDutyChoice, setFitForDutyChoice] = useState<FitForDutyChoice>(null);
@@ -400,6 +400,7 @@ export default function FrmsCheckinFadiga() {
   const [observacao, setObservacao] = useState('');
   const [aceiteTermos, setAceiteTermos] = useState(false);
   const [aceitePrivacidade, setAceitePrivacidade] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
@@ -417,8 +418,9 @@ export default function FrmsCheckinFadiga() {
 
   const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';
   const wakeTimeHasValue = wakeTime.trim().length > 0;
-  const wakeTimeNormalized = normalizeTimeInput(wakeTime);
-  const wakeTimeValid = isValidWakeTime(wakeTime);
+  const wakeTimeNormalized = normalizeWakeTimeInput(wakeTime);
+  const wakeTimeValid = wakeTimeNormalized !== null;
+  const wakeTimeShowInvalid = (wakeTimeTouched || submitAttempted) && wakeTimeHasValue && !wakeTimeValid;
 
   const missingItems: string[] = [];
   if (sonoOpcao === null) missingItems.push('Horas de sono nas ultimas 24h');
@@ -434,6 +436,7 @@ export default function FrmsCheckinFadiga() {
   if (!aceitePrivacidade) missingItems.push('Aceite da politica de privacidade');
 
   const submit = async () => {
+    setSubmitAttempted(true);
     if (!canSubmit) {
       toast.error(
         !wakeTimeValid && wakeTimeHasValue
@@ -624,12 +627,17 @@ export default function FrmsCheckinFadiga() {
                       </label>
                       <TimeInput
                         id="wake-time"
-                        aria-invalid={wakeTimeHasValue && !wakeTimeValid}
+                        aria-invalid={wakeTimeShowInvalid}
                         aria-describedby="wake-time-help wake-time-error"
                         value={wakeTime}
-                        onChange={(nextValue) => setWakeTime(formatWakeTimeInput(nextValue))}
+                        onChange={(nextValue) => {
+                          setWakeTime(nextValue);
+                          if (!nextValue.trim()) setWakeTimeTouched(false);
+                        }}
+                        onBlur={() => setWakeTimeTouched(true)}
+                        normalizer={normalizeWakeTimeInput}
                         className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-base font-semibold text-slate-800 focus:outline-none focus:ring-2 ${
-                          wakeTimeHasValue && !wakeTimeValid
+                          wakeTimeShowInvalid
                             ? 'border-red-400 focus:ring-red-400'
                             : 'border-slate-200 focus:ring-blue-500'
                         }`}
@@ -637,7 +645,7 @@ export default function FrmsCheckinFadiga() {
                       <p id="wake-time-help" className="mt-2 text-xs text-slate-500">
                         Digite um horário real entre 00:00 e 23:59. Ex.: 0630 vira 06:30.
                       </p>
-                      {wakeTimeHasValue && !wakeTimeValid && (
+                      {wakeTimeShowInvalid && (
                         <p id="wake-time-error" className="mt-1 text-xs text-red-700">
                           Informe um horário válido no formato HH:mm. Minutos devem ficar entre 00 e 59.
                         </p>

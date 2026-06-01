@@ -11,6 +11,7 @@ interface TimeInputProps extends BaseProps {
   value: string;
   onChange: (value: string) => void;
   invalidMessage?: string;
+  normalizer?: (value: string) => string | null;
 }
 
 const DEFAULT_INVALID_MESSAGE = 'Informe um horário válido no formato HH:mm (00:00 até 23:59).';
@@ -20,6 +21,7 @@ export default function TimeInput({
   onChange,
   onBlur,
   invalidMessage = DEFAULT_INVALID_MESSAGE,
+  normalizer = normalizeTimeInput,
   placeholder = 'HH:mm',
   inputMode = 'numeric',
   maxLength = 5,
@@ -39,7 +41,7 @@ export default function TimeInput({
       return;
     }
 
-    const normalized = normalizeTimeInput(trimmed);
+    const normalized = normalizer(trimmed);
     if (!normalized) {
       event.currentTarget.setCustomValidity(invalidMessage);
       event.currentTarget.reportValidity();
