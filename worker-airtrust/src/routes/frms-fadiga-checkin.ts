@@ -41,7 +41,7 @@ type DailyRiskLevel = 'normal' | 'attention' | 'critical' | 'unfit_for_duty';
 
 type NormalizedCheckinInput = {
   dataCheckin: string;
-  horaDormiu: string;
+  horaDormiu: string | null;
   horaAcordou: string;
   horasSono24h: number;
   horasSono48h: number | null;
@@ -257,7 +257,7 @@ function mapNivelToLegacy(
  */
 function normalizeFitForDutyPayload(
   input: Pick<CheckinCreateInput, 'fit_for_duty' | 'apto'>,
-): { apto: 0 | 1 } | { conflict: true } {
+): { apto: 0 | 1 } | { conflict: true } | { missing: true } {
   const hasApto = typeof input.apto === 'number';
   const hasFitForDuty = typeof input.fit_for_duty === 'boolean';
   if (hasApto && hasFitForDuty) {
@@ -266,17 +266,47 @@ function normalizeFitForDutyPayload(
   }
   if (hasFitForDuty) return { apto: input.fit_for_duty ? 1 : 0 };
   if (hasApto) return { apto: input.apto === 0 ? 0 : 1 };
-  return { apto: 1 };
+  return { missing: true };
 }
 
-function normalizeCheckinInput(input: CheckinCreateInput): NormalizedCheckinInput {
+function validateCheckinPayloadCompleteness(
+  input: CheckinCreateInput,
+): { ok: true } | { ok: false; error: string; message: string; field: string } {
+  const wakeTime = input.wake_time || input.hora_acordou;
+  if (!wakeTime) {
+    return {
+      ok: false,
+      error: 'wake_time_required',
+      field: 'wake_time',
+      message: 'Informe wake_time ou hora_acordou para registrar o check-in de fadiga.',
+    };
+  }
+
+  const hasHorasSono24h = typeof input.horas_sono_24h === 'number';
+  const hasHoraDormiu = Boolean(input.hora_dormiu);
+  if (!hasHorasSono24h && !hasHoraDormiu) {
+    return {
+      ok: false,
+      error: 'sleep_data_required',
+      field: 'horas_sono_24h',
+      message: 'Informe horas_sono_24h ou hora_dormiu para registrar o check-in de fadiga.',
+    };
+  }
+
+  return { ok: true };
+}
+
+function normalizeCheckinInput(
+  input: CheckinCreateInput,
+  aptoNormalizado: 0 | 1,
+): NormalizedCheckinInput {
   const dataCheckin = input.reference_date || input.data_checkin || todayIso();
-  const horaAcordou = input.wake_time || input.hora_acordou || '06:00';
-  const horaDormiu = input.hora_dormiu || '22:00';
+  const horaAcordou = input.wake_time || input.hora_acordou || '';
+  const horaDormiu = input.hora_dormiu || null;
   const horasSono24h =
     typeof input.horas_sono_24h === 'number'
       ? clamp(input.horas_sono_24h, 0, 24)
-      : calcularHorasSono(horaDormiu, horaAcordou);
+      : calcularHorasSono(horaDormiu || horaAcordou, horaAcordou);
   const sleepinessLevel =
     typeof input.sleepiness_level === 'number' ? clamp(input.sleepiness_level, 0, 10) : null;
   const kssScore =
@@ -289,13 +319,6 @@ function normalizeCheckinInput(input: CheckinCreateInput): NormalizedCheckinInpu
     typeof input.subjective_fatigue_level === 'number'
       ? clamp(input.subjective_fatigue_level, 0, 10)
       : null;
-  // fit_for_duty is canonical; apto is legacy. Conflict is caught upstream by normalizeFitForDutyPayload.
-  const aptoNormalizado: 0 | 1 =
-    typeof input.fit_for_duty === 'boolean'
-      ? input.fit_for_duty ? 1 : 0
-      : typeof input.apto === 'number'
-        ? input.apto === 0 ? 0 : 1
-        : 1;
   const riscoAutoavaliado =
     typeof input.risco_autoavaliado === 'number'
       ? clamp(input.risco_autoavaliado, 1, 10)
@@ -1009,8 +1032,27 @@ router.post('/fadiga-checkin', async (c) => {
         400,
       );
     }
+    if ('missing' in fitNorm) {
+      return c.json(
+        { success: false, error: 'fit_for_duty_required', message: 'Informe fit_for_duty ou apto para registrar o check-in de fadiga.' },
+        400,
+      );
+    }
 
-    const input = normalizeCheckinInput(parsed.data);
+    const completeness = validateCheckinPayloadCompleteness(parsed.data);
+    if (!completeness.ok) {
+      return c.json(
+        {
+          success: false,
+          error: completeness.error,
+          message: completeness.message,
+          field: completeness.field,
+        },
+        400,
+      );
+    }
+
+    const input = normalizeCheckinInput(parsed.data, fitNorm.apto);
     const dataCheckin = input.dataCheckin;
 
     const config = await getConfig(c.env.DB, empresaId);
