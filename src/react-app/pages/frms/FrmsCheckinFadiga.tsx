@@ -49,11 +49,11 @@ function badgeNivel(nivel: string) {
 }
 
 const STATUS_OPERACIONAL_LABEL: Record<string, string> = {
-  APTO: 'Prontidao normal',
-  APTO_COM_RESSALVA: 'Atencao - revisar com gestor',
-  INAPTO: 'Requer revisao operacional',
-  NAO_APTO: 'Requer revisao imediata',
-  RESTRITO: 'Requer revisao operacional',
+  APTO: 'Prontidão normal',
+  APTO_COM_RESSALVA: 'Atenção - revisar com gestor',
+  INAPTO: 'Requer revisão operacional',
+  NAO_APTO: 'Requer revisão imediata',
+  RESTRITO: 'Requer revisão operacional',
 };
 
 function statusOperacionalLabel(value: unknown): string {
@@ -78,9 +78,9 @@ const KSS_OPCOES = [
   { value: 3, hint: 'Alerta' },
   { value: 4, hint: 'Mais alerta que sonolento' },
   { value: 5, hint: 'Nem alerta nem sonolento' },
-  { value: 6, hint: 'Alguns sinais de sonolencia' },
-  { value: 7, hint: 'Sonolento, sem esforco para ficar acordado' },
-  { value: 8, hint: 'Sonolento, com esforco para ficar acordado' },
+  { value: 6, hint: 'Alguns sinais de sonolência' },
+  { value: 7, hint: 'Sonolento, sem esforço para ficar acordado' },
+  { value: 8, hint: 'Sonolento, com esforço para ficar acordado' },
   { value: 9, hint: 'Muito sonolento' },
 ];
 
@@ -88,7 +88,7 @@ const QUALIDADE_SONO_OPCOES = [
   {
     value: 1,
     title: 'Muito ruim',
-    description: 'Dormi muito mal; acordei varias vezes ou quase nao descansei.',
+    description: 'Dormi muito mal; acordei várias vezes ou quase não descansei.',
   },
   {
     value: 2,
@@ -191,11 +191,11 @@ function HistoricoTab() {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="mb-3 text-sm font-semibold text-slate-700">Meus check-ins do mes atual</p>
+      <p className="mb-3 text-sm font-semibold text-slate-700">Meus check-ins do mês atual</p>
       {isLoading ? (
         <p className="text-sm text-slate-400">Carregando...</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-slate-400">Nenhum check-in registrado este mes.</p>
+        <p className="text-sm text-slate-400">Nenhum check-in registrado este mês.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -205,7 +205,7 @@ function HistoricoTab() {
                 <th className="py-2 text-left font-medium text-slate-500">KSS</th>
                 <th className="py-2 text-left font-medium text-slate-500">Sono (h)</th>
                 <th className="py-2 text-left font-medium text-slate-500">Score</th>
-                <th className="py-2 text-left font-medium text-slate-500">Nivel de alerta</th>
+                <th className="py-2 text-left font-medium text-slate-500">Nível de alerta</th>
                 <th className="py-2 text-left font-medium text-slate-500">Status Op.</th>
               </tr>
             </thead>
@@ -238,7 +238,7 @@ function PainelGestorTab() {
     <div className="space-y-4">
       <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <label htmlFor="data-gestor" className="text-sm font-medium text-slate-700">
-          Data de referencia
+          Data de referência
         </label>
         <input
           id="data-gestor"
@@ -261,7 +261,7 @@ function PainelGestorTab() {
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Tripulante</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">KSS</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Score</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-500">Nivel de alerta</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-500">Nível de alerta</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Status Op.</th>
                 </tr>
               </thead>
@@ -338,7 +338,7 @@ function TriStateButtons({
           onChange={() => onChange(false)}
           className={HIDDEN_RADIO_INPUT_CLASS}
         />
-        Nao
+        Não
       </label>
       <label
         id={`${baseId}-sim`}
@@ -374,7 +374,7 @@ function TriStateButtons({
           onChange={() => onChange(null)}
           className={HIDDEN_RADIO_INPUT_CLASS}
         />
-        Prefiro nao informar
+        Prefiro não informar
       </label>
     </div>
   );
@@ -423,33 +423,33 @@ export default function FrmsCheckinFadiga() {
   const wakeTimeShowInvalid = (wakeTimeTouched || submitAttempted) && wakeTimeHasValue && !wakeTimeValid;
 
   const missingItems: string[] = [];
-  if (sonoOpcao === null) missingItems.push('Horas de sono nas ultimas 24h');
+  if (sonoOpcao === null) missingItems.push('Horas de sono nas últimas 24h');
   if (!wakeTimeValid) {
     if (!wakeTimeHasValue) missingItems.push('Hora em que acordou');
-    else missingItems.push('Horario invalido - corrija a hora em que acordou');
+    else missingItems.push('Horário inválido - corrija a hora em que acordou');
   }
   if (qualidadeSono === null) missingItems.push('Qualidade do sono');
-  if (kssScore === null) missingItems.push('Nivel de sonolencia (KSS)');
-  if (fitForDutyChoice === null) missingItems.push('Condicao para iniciar a jornada');
-  if (isNeedsCoordinatorReview && !observacao.trim()) missingItems.push('Observacao obrigatoria para revisao');
-  if (!aceiteTermos) missingItems.push('Declaracao de veracidade');
-  if (!aceitePrivacidade) missingItems.push('Aceite da politica de privacidade');
+  if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');
+  if (fitForDutyChoice === null) missingItems.push('Condição para iniciar a jornada');
+  if (isNeedsCoordinatorReview && !observacao.trim()) missingItems.push('Observação obrigatória para revisão');
+  if (!aceiteTermos) missingItems.push('Declaração de veracidade');
+  if (!aceitePrivacidade) missingItems.push('Aceite da política de privacidade');
 
   const submit = async () => {
     setSubmitAttempted(true);
     if (!canSubmit) {
       toast.error(
         !wakeTimeValid && wakeTimeHasValue
-          ? 'Informe um horario valido, ex.: 06:30.'
+          ? 'Informe um horário válido, ex.: 06:30.'
           : isNeedsCoordinatorReview && !observacao.trim()
-          ? 'Informe uma observacao para revisao da coordenacao'
-          : 'Preencha os campos obrigatorios',
+          ? 'Informe uma observação para revisão da coordenação'
+          : 'Preencha os campos obrigatórios',
       );
       return;
     }
 
     if (!wakeTimeNormalized) {
-      toast.error('Informe um horario valido para "Hora em que acordou" (HH:mm).');
+      toast.error('Informe um horário válido para "Hora em que acordou" (HH:mm).');
       return;
     }
 
@@ -481,7 +481,7 @@ export default function FrmsCheckinFadiga() {
       await refetch();
 
       if ((result as { data?: { requires_frat_review?: number } })?.data?.requires_frat_review) {
-        toast.warning('Check-in indica revisao FRAT recomendada');
+        toast.warning('Check-in indica revisão FRAT recomendada');
         navigate(`/sgso/frat?prefill=fadiga&date=${today}`);
       }
     } catch (error) {
@@ -490,8 +490,8 @@ export default function FrmsCheckinFadiga() {
   };
 
   const TABS: { key: TabType; label: string; icon: React.ReactNode }[] = [
-    { key: 'form', label: 'Fadiga Diaria', icon: <HeartPulse className="h-4 w-4" /> },
-    { key: 'historico', label: 'Historico', icon: <History className="h-4 w-4" /> },
+    { key: 'form', label: 'Fadiga Diária', icon: <HeartPulse className="h-4 w-4" /> },
+    { key: 'historico', label: 'Histórico', icon: <History className="h-4 w-4" /> },
     ...(canViewTeam
       ? [{ key: 'gestor' as TabType, label: 'Equipe', icon: <Users className="h-4 w-4" /> }]
       : []),
@@ -504,7 +504,7 @@ export default function FrmsCheckinFadiga() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <PageHeader
-                title="Fadiga Diaria"
+                title="Fadiga Diária"
                 subtitle="Prévia estimada antes do envio para apoiar o gerenciamento de risco de fadiga."
               />
               <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
@@ -554,7 +554,7 @@ export default function FrmsCheckinFadiga() {
             {existente && (
               <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                Check-in de hoje ja registrado. Voce pode atualizar e reenviar.
+                Check-in de hoje já registrado. Você pode atualizar e reenviar.
               </div>
             )}
 
@@ -587,7 +587,7 @@ export default function FrmsCheckinFadiga() {
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
-                      Horas de sono nas ultimas 24h
+                      Horas de sono nas últimas 24h
                     </legend>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                       {SONO_OPCOES.map((op) => {
@@ -693,8 +693,8 @@ export default function FrmsCheckinFadiga() {
               </FormCard>
 
               <FormCard
-                label="Bloco 2 - Sonolencia agora"
-                hint="Quao sonolento ou alerta voce esta agora? Escolha a opcao que melhor descreve seu estado neste momento."
+                label="Bloco 2 - Sonolência agora"
+                hint="Quão sonolento ou alerta você está agora? Escolha a opção que melhor descreve seu estado neste momento."
               >
                 <fieldset>
                   <legend className="mb-3 text-xs font-medium text-slate-500">
@@ -739,10 +739,10 @@ export default function FrmsCheckinFadiga() {
                 </fieldset>
               </FormCard>
 
-              <FormCard label="Bloco 3 - Condicao para jornada">
+              <FormCard label="Bloco 3 - Condição para jornada">
                 <fieldset>
                   <legend className="mb-3 text-sm text-slate-700">
-                    Voce se sente em condicao segura para iniciar a jornada?
+                    Você se sente em condição segura para iniciar a jornada?
                   </legend>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <label
@@ -779,7 +779,7 @@ export default function FrmsCheckinFadiga() {
                         onChange={() => setFitForDutyChoice('nao')}
                         className={HIDDEN_RADIO_INPUT_CLASS}
                       />
-                      Nao, preciso revisao com a coordenacao
+                      Não, preciso revisão com a coordenação
                     </label>
                     <label
                       id="fit-choice-coord"
@@ -797,14 +797,14 @@ export default function FrmsCheckinFadiga() {
                         onChange={() => setFitForDutyChoice('coord')}
                         className={HIDDEN_RADIO_INPUT_CLASS}
                       />
-                      Preciso falar com a coordenacao
+                      Preciso falar com a coordenação
                     </label>
                   </div>
                 </fieldset>
 
                 {isNeedsCoordinatorReview && (
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                    A coordenacao sera notificada para revisar a situacao com voce.
+                    A coordenação será notificada para revisar a situação com você.
                   </div>
                 )}
 
@@ -812,7 +812,7 @@ export default function FrmsCheckinFadiga() {
                   <label htmlFor="observacao" className="mb-2 block text-sm font-medium text-slate-700">
                     {isNeedsCoordinatorReview
                       ? 'Explique o motivo para revisão pela coordenação'
-                      : 'Ha algo que a coordenacao precisa saber? (opcional)'}
+                      : 'Há algo que a coordenação precisa saber? (opcional)'}
                   </label>
                   <textarea
                     id="observacao"
@@ -822,7 +822,7 @@ export default function FrmsCheckinFadiga() {
                     placeholder={
                       isNeedsCoordinatorReview
                         ? 'Descreva brevemente o motivo...'
-                        : 'Ex: noite de sono ruim por ruido externo...'
+                        : 'Ex: noite de sono ruim por ruído externo...'
                     }
                     className={`w-full rounded-xl border px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 ${
                       isNeedsCoordinatorReview
@@ -833,18 +833,18 @@ export default function FrmsCheckinFadiga() {
                 </div>
               </FormCard>
 
-              <FormCard label="Bloco 4 - Fatores relevantes" hint="Esses itens sao opcionais.">
+              <FormCard label="Bloco 4 - Fatores relevantes" hint="Esses itens são opcionais.">
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
-                      Medicacao que pode causar sonolencia
+                      Medicação que pode causar sonolência
                     </legend>
                     <TriStateButtons value={medsUlt12h} onChange={setMedsUlt12h} baseId="meds-ult-12h" />
                   </fieldset>
 
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
-                      Alcool nas ultimas 12h
+                      Álcool nas últimas 12h
                     </legend>
                     <TriStateButtons value={alcoolUlt12h} onChange={setAlcoolUlt12h} baseId="alcool-ult-12h" />
                   </fieldset>
@@ -852,7 +852,7 @@ export default function FrmsCheckinFadiga() {
               </FormCard>
 
               <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Declaracao</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Declaração</p>
                 <label className="flex cursor-pointer items-start gap-3 py-2" htmlFor="aceite-termos">
                   <input
                     id="aceite-termos"
@@ -862,7 +862,7 @@ export default function FrmsCheckinFadiga() {
                     className="mt-0.5 h-5 w-5 shrink-0 accent-blue-600"
                   />
                   <span className="text-sm leading-relaxed text-slate-700">
-                    As informacoes fornecidas sao veridicas e refletem meu estado atual.
+                    As informações fornecidas são verídicas e refletem meu estado atual.
                   </span>
                 </label>
                 <label className="flex cursor-pointer items-start gap-3 py-2" htmlFor="aceite-privacidade">
@@ -874,7 +874,7 @@ export default function FrmsCheckinFadiga() {
                     className="mt-0.5 h-5 w-5 shrink-0 accent-blue-600"
                   />
                   <span className="text-sm leading-relaxed text-slate-700">
-                    Aceito o uso dos dados no FRMS conforme a politica de privacidade da empresa.
+                    Aceito o uso dos dados no FRMS conforme a política de privacidade da empresa.
                   </span>
                 </label>
               </div>
@@ -886,7 +886,7 @@ export default function FrmsCheckinFadiga() {
                 disabled={!canSubmit}
                 className="min-h-12 w-full text-base"
               >
-                Confirmar Check-in Diario
+                Confirmar Check-in Diário
               </Button>
 
               {!canSubmit && (
@@ -902,12 +902,12 @@ export default function FrmsCheckinFadiga() {
                 className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
                 role="alert"
               >
-                Quando voce seleciona "Nao" ou "Preciso falar com a coordenacao", a observacao e obrigatoria.
+                Quando você seleciona "Não" ou "Preciso falar com a coordenação", a observação é obrigatória.
               </div>
             )}
 
             <div className="hidden rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-500 lg:block">
-              Este formulario foi simplificado para check-in mobile-first e coleta apenas campos com uso
+              Este formulário foi simplificado para check-in mobile-first e coleta apenas campos com uso
               operacional claro no backend FRMS.
             </div>
           </>
