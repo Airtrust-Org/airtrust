@@ -109,7 +109,7 @@ async function substituirAlocacaoSobreposta(
   db: D1Database,
   params: {
     conflitoId: string;
-    empresaId: number | undefined;
+    empresaId: number;
     userId: string;
     logger: ReturnType<typeof createLogger>;
   },
@@ -137,10 +137,11 @@ async function substituirAlocacaoSobreposta(
        FROM escala_alocacoes ea
        JOIN escalas_mensais em ON em.id = ea.escala_id AND em.deleted_at IS NULL
        WHERE ea.id = ?
+         AND em.empresa_id = ?
          AND ea.deleted_at IS NULL
        LIMIT 1`,
     )
-    .bind(params.conflitoId)
+    .bind(params.conflitoId, params.empresaId)
     .first<{
       id: string;
       escala_id: string;
@@ -161,9 +162,16 @@ async function substituirAlocacaoSobreposta(
       `UPDATE escala_alocacoes
           SET deleted_at = ?, updated_at = ?
         WHERE id = ?
-          AND deleted_at IS NULL`,
+          AND deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1
+              FROM escalas_mensais em
+             WHERE em.id = escala_alocacoes.escala_id
+               AND em.deleted_at IS NULL
+               AND em.empresa_id = ?
+          )`,
     )
-    .bind(now, now, conflito.id)
+    .bind(now, now, conflito.id, params.empresaId)
     .run();
 
   await db
@@ -239,6 +247,7 @@ function buildNotInClause(ids: string[], column = 'ea.id'): { sql: string; bindi
 async function checarSobreposicaoFuncionarioLote(
   db: D1Database,
   params: {
+    empresaId: number;
     funcionarioId: string;
     dataInicio: string;
     dataFim: string;
@@ -279,6 +288,7 @@ async function checarSobreposicaoFuncionarioLote(
            ON UPPER(est.codigo) = UPPER(COALESCE(ea.situacao_tipo, ''))
           AND est.deleted_at IS NULL
         WHERE CAST(ea.funcionario_id AS TEXT) = ?
+          AND em.empresa_id = ?
           AND ea.deleted_at IS NULL
           AND ea.status != 'cancelado'
           ${ignoreSql}
@@ -288,6 +298,7 @@ async function checarSobreposicaoFuncionarioLote(
     )
     .bind(
       params.funcionarioId,
+      params.empresaId,
       ...ignoreBindings,
       params.aeronaveIdPrioritaria ?? null,
       params.dataInicio,
@@ -766,6 +777,7 @@ alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), a
 
     for (const contexto of contextos) {
       const sobreposicaoFunc = await checarSobreposicaoFuncionarioLote(db, {
+        empresaId,
         funcionarioId: contexto.funcionarioId,
         dataInicio: contexto.dataInicio,
         dataFim: contexto.dataFim,
@@ -960,7 +972,8 @@ alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), a
                       cma_override_by = ?,
                       modelo_aeronave = ?,
                       updated_at = ?
-                WHERE id = ?`,
+                WHERE id = ?
+                  AND escala_id = ?`,
             )
             .bind(
               contexto.funcionarioId,
@@ -977,6 +990,7 @@ alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), a
               contexto.modeloAeronave,
               now,
               contexto.alocacaoId,
+              escalaId,
             ),
         );
 
@@ -1312,6 +1326,7 @@ alocacoes.post('/:id/alocacoes', auth(), requireRole('admin', 'manager'), async 
     // 5. Sobreposição de período do funcionário (outras aeronaves)
     const sobreposicaoFunc = await checarSobreposicaoFuncionario(
       db,
+      empresaId,
       d.funcionario_id,
       d.data_inicio,
       d.data_fim,
@@ -1826,6 +1841,7 @@ alocacoes.put('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'), as
     if (d.data_inicio || d.data_fim || d.funcao || d.funcionario_id) {
       const sobreposicaoFunc = await checarSobreposicaoFuncionario(
         db,
+        empresaId,
         novoFuncionarioId,
         novaInicio,
         novaFim,
@@ -1992,8 +2008,8 @@ alocacoes.put('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'), as
     }
 
     await db
-      .prepare(`UPDATE escala_alocacoes SET ${camposUpdate.join(', ')} WHERE id = ?`)
-      .bind(...valoresUpdate, alocacaoId)
+      .prepare(`UPDATE escala_alocacoes SET ${camposUpdate.join(', ')} WHERE id = ? AND escala_id = ?`)
+      .bind(...valoresUpdate, alocacaoId, escalaId)
       .run();
 
     if (alocacaoAtual.quinzena_id && alocacaoAtual.quinzena_id !== novaQuinzenaId) {
@@ -2140,9 +2156,12 @@ alocacoes.delete('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'),
     // Soft-delete da alocação
     await db
       .prepare(
-        `UPDATE escala_alocacoes SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE escala_alocacoes
+            SET deleted_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ?
+            AND escala_id = ?`,
       )
-      .bind(alocacaoId)
+      .bind(alocacaoId, escalaId)
       .run();
 
     // ── Limpar folga automática órfã ────────────────────────────────────────
