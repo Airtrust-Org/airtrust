@@ -384,7 +384,7 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
     expect(state.historico.filter((h) => h.deleted_at === null && h.status === 'PLANEJADA')).toHaveLength(0);
   });
 
-  it('não duplica quando já existe legado CONCLUIDA com mesma chave UNIQUE', async () => {
+  it('não duplica quando já existe legado CONCLUIDA com mesma chave UNIQUE (data futura)', async () => {
     const state = baseState();
     state.participantes.push({ sessao_id: 91, funcionario_id: 19, deleted_at: null });
     state.historico.push({
@@ -393,7 +393,7 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
       qualificacao_id: 91,
       qualificacao_codigo: 'R',
       categoria: 'TREINAMENTO DE VOO',
-      data_conclusao: '2026-05-30',
+      data_conclusao: '2099-05-30',
       validade_meses: 12,
       status: 'CONCLUIDA',
       renovada: 0,
@@ -413,7 +413,7 @@ describe('simuladores planejadas no edit de sessão (PUT)', () => {
       sessaoId: 91,
       modeloId: 78,
       tipoSessao: 'PER',
-      data: '2026-05-30',
+      data: '2099-05-30',
       participantes,
       empresaId: 6,
     });
