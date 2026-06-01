@@ -13,6 +13,8 @@ import { Plus, Save, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import TimeInput from '@/react-app/components/TimeInput';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
 
 interface Simulador {
@@ -178,6 +180,11 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
       toast.warning('Por favor, preencha todos os campos obrigatórios');
       return;
     }
+    const horaInicioNormalizada = normalizeTimeInput(formData.hora_inicio);
+    if (!horaInicioNormalizada) {
+      toast.warning('Informe um horário válido no formato HH:mm.');
+      return;
+    }
 
     if (formData.participantes.some((p) => !p.funcionario_id)) {
       toast.warning('Por favor, selecione todos os participantes');
@@ -196,7 +203,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
         simulador_id: parseInt(formData.simulador_id),
         modelo_id: parseInt(formData.modelo_id),
         instrutor_id: parseInt(formData.instrutor_id),
-        data_inicio: `${formData.data_inicio}T${formData.hora_inicio}:00`,
+        data_inicio: `${formData.data_inicio}T${horaInicioNormalizada}:00`,
         participantes: formData.participantes.map((p) => ({
           funcionario_id: parseInt(p.funcionario_id),
           funcao: p.funcao,
@@ -304,10 +311,9 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Hora *
               </label>
-              <input
-                type="time"
+              <TimeInput
                 value={formData.hora_inicio}
-                onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, hora_inicio: value })}
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>

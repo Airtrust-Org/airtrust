@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import PageHeader from '@/react-app/components/PageHeader';
+import TimeInput from '@/react-app/components/TimeInput';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
@@ -37,6 +38,7 @@ import {
   type TreinamentoPlanejadoParticipante,
   type TreinamentoPlanejadoStatus,
 } from '@/react-app/hooks/useTreinamentosPlanejados';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 
 type AbaAtiva = 'calendario' | 'quadro' | 'auditoria';
 
@@ -518,7 +520,19 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
       return;
     }
 
-    if (formState.hora_inicio && formState.hora_fim && formState.hora_fim < formState.hora_inicio) {
+    const horaInicioNormalizada = formState.hora_inicio
+      ? normalizeTimeInput(formState.hora_inicio)
+      : null;
+    const horaFimNormalizada = formState.hora_fim ? normalizeTimeInput(formState.hora_fim) : null;
+    if (formState.hora_inicio && !horaInicioNormalizada) {
+      toast.error('Hora de início inválida. Use HH:mm.');
+      return;
+    }
+    if (formState.hora_fim && !horaFimNormalizada) {
+      toast.error('Hora de fim inválida. Use HH:mm.');
+      return;
+    }
+    if (horaInicioNormalizada && horaFimNormalizada && horaFimNormalizada < horaInicioNormalizada) {
       toast.error('O horario final precisa ser maior ou igual ao horario inicial.');
       return;
     }
@@ -530,8 +544,8 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
       observacoes: normalizeText(formState.observacoes),
       local: normalizeText(formState.local),
       data_prevista: formState.data_prevista,
-      hora_inicio: normalizeText(formState.hora_inicio),
-      hora_fim: normalizeText(formState.hora_fim),
+      hora_inicio: horaInicioNormalizada || normalizeText(formState.hora_inicio),
+      hora_fim: horaFimNormalizada || normalizeText(formState.hora_fim),
       instrutor_id: formState.instrutor_id ? Number(formState.instrutor_id) : null,
       carga_horaria_prevista: formState.carga_horaria_prevista
         ? Number(formState.carga_horaria_prevista)
@@ -1262,11 +1276,10 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
 
               <label className="space-y-1.5 xl:col-span-1">
                 <span className="text-sm font-medium text-slate-700">Hora inicio</span>
-                <input
-                  type="time"
+                <TimeInput
                   value={formState.hora_inicio}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, hora_inicio: event.target.value }))
+                  onChange={(value) =>
+                    setFormState((current) => ({ ...current, hora_inicio: value }))
                   }
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
                 />
@@ -1274,11 +1287,10 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
 
               <label className="space-y-1.5 xl:col-span-1">
                 <span className="text-sm font-medium text-slate-700">Hora fim</span>
-                <input
-                  type="time"
+                <TimeInput
                   value={formState.hora_fim}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, hora_fim: event.target.value }))
+                  onChange={(value) =>
+                    setFormState((current) => ({ ...current, hora_fim: value }))
                   }
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
                 />

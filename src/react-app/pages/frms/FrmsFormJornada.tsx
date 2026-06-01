@@ -11,6 +11,8 @@ import { useFrmsMutation } from '@/react-app/hooks/useFrms';
 import type { FrmsJornadaRow } from '@/react-app/hooks/useFrms';
 import { toast } from 'sonner';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
+import TimeInput from '@/react-app/components/TimeInput';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 
 function getTodayLocalKey(): string {
   const now = new Date();
@@ -83,14 +85,16 @@ export default function FrmsFormJornada({
 
   // Dispara preview ao mudar campos relevantes
   useEffect(() => {
-    if (!showHorarios || !horaApres || !horaTerm) {
+    const horaApresNormalizada = normalizeTimeInput(horaApres);
+    const horaTermNormalizada = normalizeTimeInput(horaTerm);
+    if (!showHorarios || !horaApresNormalizada || !horaTermNormalizada) {
       setPreview(null);
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      const apresMin = hhmmToMin(horaApres);
-      const termMin = hhmmToMin(horaTerm);
+      const apresMin = hhmmToMin(horaApresNormalizada);
+      const termMin = hhmmToMin(horaTermNormalizada);
       if (apresMin < 0 || termMin < 0) return;
       const duracao = termMin >= apresMin ? termMin - apresMin : 1440 - apresMin + termMin;
       const hvParsed = horasVoo ? hhmmToMin(horasVoo) : 0;
@@ -152,8 +156,14 @@ export default function FrmsFormJornada({
     };
 
     if (showHorarios) {
-      body.hora_apresentacao = horaApres || null;
-      body.hora_termino = horaTerm || null;
+      const horaApresNormalizada = normalizeTimeInput(horaApres);
+      const horaTermNormalizada = normalizeTimeInput(horaTerm);
+      if (!horaApresNormalizada || !horaTermNormalizada) {
+        toast.error('Informe horários válidos no formato HH:mm (00:00 até 23:59).');
+        return;
+      }
+      body.hora_apresentacao = horaApresNormalizada;
+      body.hora_termino = horaTermNormalizada;
       const hvMin = horasVoo ? hhmmToMin(horasVoo) : null;
       body.horas_voo_minutos = hvMin !== null && hvMin >= 0 ? hvMin : null;
     }
@@ -282,10 +292,9 @@ export default function FrmsFormJornada({
                   <label className="block text-xs font-medium text-gray-500 mb-1">
                     Hora Apresentação
                   </label>
-                  <input
-                    type="time"
+                  <TimeInput
                     value={horaApres}
-                    onChange={(e) => setHoraApres(e.target.value)}
+                    onChange={setHoraApres}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                   />
                 </div>
@@ -293,10 +302,9 @@ export default function FrmsFormJornada({
                   <label className="block text-xs font-medium text-gray-500 mb-1">
                     Hora Término
                   </label>
-                  <input
-                    type="time"
+                  <TimeInput
                     value={horaTerm}
-                    onChange={(e) => setHoraTerm(e.target.value)}
+                    onChange={setHoraTerm}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                   />
                 </div>
@@ -335,7 +343,7 @@ export default function FrmsFormJornada({
           </div>
 
           {/* Preview em Tempo Real */}
-          {showHorarios && horaApres && horaTerm && (
+          {showHorarios && normalizeTimeInput(horaApres) && normalizeTimeInput(horaTerm) && (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5">
               <div className="flex items-center gap-1.5 mb-1">
                 {loadingPreview ? (

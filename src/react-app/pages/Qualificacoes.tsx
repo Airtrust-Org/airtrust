@@ -49,6 +49,7 @@ import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink
 import { Modal } from '@/components/ui/Modal';
 import { ModalAlertaEAD } from '@/react-app/components/modals/ModalAlertaEAD';
 import PageHeader from '@/react-app/components/PageHeader';
+import TimeInput from '@/react-app/components/TimeInput';
 import { lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 // 🚀 LAZY LOADING: Modais carregados apenas quando necessário
 const ModalAtribuirQualificacao = lazyWithRetry(
@@ -3997,10 +3998,10 @@ export default function Qualificacoes() {
               />
             </FormField>
             <FormField label="Horario">
-              <TextInput
-                type="time"
+              <TimeInput
                 value={turmaPlanejadaHorario}
-                onChange={(e) => setTurmaPlanejadaHorario(e.target.value)}
+                onChange={setTurmaPlanejadaHorario}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:border-primary-600 focus:ring-primary-600/20"
               />
             </FormField>
             <FormField label="Local">

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
+import TimeInput from '@/react-app/components/TimeInput';
 import EscalasTabBar from './components/EscalasTabBar';
 import Button from '@/react-app/components/Button';
 import { useApi } from '@/react-app/hooks/useApi';
@@ -33,6 +34,7 @@ import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 
 function authHeaders(): Record<string, string> {
   const token = getAccessToken();
@@ -597,36 +599,7 @@ function roleCanBeSic(value: string | null | undefined): boolean {
 function normalizeHorarioInput(raw: string): string | null {
   const value = String(raw || '').trim();
   if (!value) return '';
-
-  let horaTexto = '';
-  let minutoTexto = '';
-
-  if (value.includes(':')) {
-    const [h = '', m = ''] = value.split(':');
-    if (!h || !m) return null;
-    horaTexto = h;
-    minutoTexto = m;
-  } else {
-    const digits = value.replace(/\D/g, '');
-    if (digits.length <= 2) {
-      horaTexto = digits;
-      minutoTexto = '00';
-    } else if (digits.length === 3) {
-      horaTexto = digits.slice(0, 1);
-      minutoTexto = digits.slice(1);
-    } else if (digits.length === 4) {
-      horaTexto = digits.slice(0, 2);
-      minutoTexto = digits.slice(2);
-    } else {
-      return null;
-    }
-  }
-
-  const hora = Number(horaTexto);
-  const minuto = Number(minutoTexto);
-  if (!Number.isInteger(hora) || !Number.isInteger(minuto)) return null;
-  if (hora < 0 || hora > 23 || minuto < 0 || minuto > 59) return null;
-  return `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`;
+  return normalizeTimeInput(value);
 }
 
 export default function EvdPage() {
@@ -2484,11 +2457,9 @@ function EvdCreateForm({
                 <label className="mb-1 block text-[11px] font-medium text-slate-500">
                   Apresentação <span className="text-slate-400">HH:MM</span>
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
+                <TimeInput
                   value={form.hora_apresentacao}
-                  onChange={(e) => setForm((prev) => ({ ...prev, hora_apresentacao: e.target.value }))}
+                  onChange={(value) => setForm((prev) => ({ ...prev, hora_apresentacao: value }))}
                   onBlur={() => handleHorarioBlur('hora_apresentacao', 'Apresentação')}
                   placeholder="06:00"
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-center font-mono transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
@@ -2498,12 +2469,10 @@ function EvdCreateForm({
                 <label className="mb-1 block text-[11px] font-medium text-slate-500">
                   Início <span className="text-slate-400">HH:MM</span>
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
+                <TimeInput
                   value={form.hora_decolagem_prevista}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, hora_decolagem_prevista: e.target.value }))
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, hora_decolagem_prevista: value }))
                   }
                   onBlur={() => handleHorarioBlur('hora_decolagem_prevista', 'Início')}
                   placeholder="06:30"
@@ -2514,11 +2483,9 @@ function EvdCreateForm({
                 <label className="mb-1 block text-[11px] font-medium text-slate-500">
                   Término <span className="text-slate-400">HH:MM</span>
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
+                <TimeInput
                   value={form.hora_pouso_previsto}
-                  onChange={(e) => setForm((prev) => ({ ...prev, hora_pouso_previsto: e.target.value }))}
+                  onChange={(value) => setForm((prev) => ({ ...prev, hora_pouso_previsto: value }))}
                   onBlur={() => handleHorarioBlur('hora_pouso_previsto', 'Término')}
                   placeholder="07:15"
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-center font-mono transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"

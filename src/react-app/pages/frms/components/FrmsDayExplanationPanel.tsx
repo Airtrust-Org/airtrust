@@ -19,6 +19,8 @@ import {
   type FrmsJustificativaGeradaResponse,
   type FrmsSimulacaoResponse,
 } from '@/react-app/hooks/useFrms';
+import TimeInput from '@/react-app/components/TimeInput';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import type {
   FrmsDayExplanationFactor,
   FrmsDayExplanationRecommendation,
@@ -348,11 +350,16 @@ export default function FrmsDayExplanationPanel({
 
   const handleSimular = async () => {
     if (!tripulanteId || !date) return;
+    const horaApresentacaoNormalizada = normalizeTimeInput(simHoraApresentacao);
+    const horaAcordouNormalizada = normalizeTimeInput(simHoraAcordou);
+    if (simHoraApresentacao && !horaApresentacaoNormalizada) return;
+    if (simHoraAcordou && !horaAcordouNormalizada) return;
+
     const payload: Record<string, unknown> = {
       origem_tela: comparisonSource,
     };
-    if (simHoraApresentacao) payload.hora_apresentacao_simulada = simHoraApresentacao;
-    if (simHoraAcordou) payload.hora_acordou_simulada = simHoraAcordou;
+    if (horaApresentacaoNormalizada) payload.hora_apresentacao_simulada = horaApresentacaoNormalizada;
+    if (horaAcordouNormalizada) payload.hora_acordou_simulada = horaAcordouNormalizada;
     if (Number.isFinite(simSonoHoras))
       payload.sono_efetivo_simulado_min = Math.round(simSonoHoras * 60);
 
@@ -765,10 +772,9 @@ export default function FrmsDayExplanationPanel({
                 <span className="mb-1 block text-xs font-semibold text-slate-600">
                   Hora de apresentação
                 </span>
-                <input
-                  type="time"
+                <TimeInput
                   value={simHoraApresentacao}
-                  onChange={(event) => setSimHoraApresentacao(event.target.value)}
+                  onChange={setSimHoraApresentacao}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </label>
@@ -777,10 +783,9 @@ export default function FrmsDayExplanationPanel({
                 <span className="mb-1 block text-xs font-semibold text-slate-600">
                   Hora que acordou
                 </span>
-                <input
-                  type="time"
+                <TimeInput
                   value={simHoraAcordou}
-                  onChange={(event) => setSimHoraAcordou(event.target.value)}
+                  onChange={setSimHoraAcordou}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </label>

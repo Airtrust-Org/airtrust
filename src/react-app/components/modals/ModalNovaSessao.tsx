@@ -18,9 +18,11 @@ import { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Mail, MessageCircle, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import TimeInput from '@/react-app/components/TimeInput';
 import AlertModal from '@/react-app/components/modals/AlertModal';
 import ConfirmDeleteModal from '@/react-app/components/modals/ConfirmDeleteModal';
 import { emitirEventoModulo, escutarEventosModulo } from '@/react-app/lib/moduloBus';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import {
   filterCompatibleCheckIds,
@@ -200,7 +202,9 @@ export default function ModalNovaSessao({
   });
 
   function addMinutesToTimeHHMM(timeHHMM: string, minutesToAdd: number): string {
-    const [hStr, mStr] = timeHHMM.split(':');
+    const horarioNormalizado = normalizeTimeInput(timeHHMM);
+    if (!horarioNormalizado) return '';
+    const [hStr, mStr] = horarioNormalizado.split(':');
     const h = Number(hStr);
     const m = Number(mStr);
     if (!Number.isFinite(h) || !Number.isFinite(m)) return '';
@@ -949,6 +953,11 @@ export default function ModalNovaSessao({
     if (!data) return 'Selecione a data';
     if (!horarioInicio) return 'Informe o horário de início';
     if (!horarioFim) return 'Informe o horário de fim';
+    const horarioInicioNormalizado = normalizeTimeInput(horarioInicio);
+    const horarioFimNormalizado = normalizeTimeInput(horarioFim);
+    if (!horarioInicioNormalizado || !horarioFimNormalizado) {
+      return 'Informe horários válidos no formato HH:mm (00:00 até 23:59)';
+    }
     if (!instrutorId) return 'Selecione o instrutor';
 
     // Se selecionou examinador, exige ao menos 1 check
@@ -970,7 +979,7 @@ export default function ModalNovaSessao({
 
     // Validar horários: apenas garanta que não sejam iguais
     // Permite horarioInicio > horarioFim (significa que passa para próximo dia)
-    if (horarioInicio === horarioFim) {
+    if (horarioInicioNormalizado === horarioFimNormalizado) {
       return 'Horário de fim deve ser diferente do horário de início';
     }
 
@@ -1003,8 +1012,13 @@ export default function ModalNovaSessao({
     setLoading(true);
 
     try {
-      const [hIni, mIni] = horarioInicio.split(':').map(Number);
-      const [hFim, mFim] = horarioFim.split(':').map(Number);
+      const horarioInicioNormalizado = normalizeTimeInput(horarioInicio);
+      const horarioFimNormalizado = normalizeTimeInput(horarioFim);
+      if (!horarioInicioNormalizado || !horarioFimNormalizado) {
+        throw new Error('Horários inválidos. Informe HH:mm.');
+      }
+      const [hIni, mIni] = horarioInicioNormalizado.split(':').map(Number);
+      const [hFim, mFim] = horarioFimNormalizado.split(':').map(Number);
       let duracaoMinutos = hFim * 60 + mFim - (hIni * 60 + mIni);
       // Se duração é negativa, significa que passou para o dia seguinte
       if (duracaoMinutos < 0) {
@@ -1027,8 +1041,8 @@ export default function ModalNovaSessao({
         aeronave_id: tipoDispositivo === 'AERONAVE' ? aeronaveRealId : null,
         modelo_sessao_id: modeloSessaoId,
         data: data,
-        horario_inicio: horarioInicio,
-        horario_fim: horarioFim,
+        horario_inicio: horarioInicioNormalizado,
+        horario_fim: horarioFimNormalizado,
         duracao_minutos: duracaoMinutos,
         instrutor_id: instrutorId,
         tipo_sessao: tipoSessaoObj?.codigo || 'TREINAMENTO',
@@ -1460,11 +1474,9 @@ export default function ModalNovaSessao({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Horário Início <span className="text-red-500">*</span>
               </label>
-              <input
-                type="time"
+              <TimeInput
                 value={horarioInicio}
-                onChange={(e) => {
-                  const v = e.target.value;
+                onChange={(v) => {
                   setHorarioInicio(v);
                   if (!horarioFimFoiEditado) {
                     const autoFim = addMinutesToTimeHHMM(v, 120);
@@ -1480,11 +1492,9 @@ export default function ModalNovaSessao({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Horário Fim <span className="text-red-500">*</span>
               </label>
-              <input
-                type="time"
+              <TimeInput
                 value={horarioFim}
-                onChange={(e) => {
-                  const v = e.target.value;
+                onChange={(v) => {
                   setHorarioFim(v);
                   setHorarioFimFoiEditado(!!v);
                 }}

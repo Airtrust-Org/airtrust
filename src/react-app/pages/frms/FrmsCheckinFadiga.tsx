@@ -12,6 +12,7 @@ import {
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
+import TimeInput from '@/react-app/components/TimeInput';
 import {
   useCheckinHoje,
   useSubmitCheckin,
@@ -19,6 +20,7 @@ import {
   useFadigaPainel,
 } from '@/react-app/hooks/useFadigaCheckin';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { toast } from 'sonner';
 
 function getTodayLocalKey(): string {
@@ -127,28 +129,8 @@ export function mapKssToSubjectiveFatigue(kssScore: number): number {
   return 1;
 }
 
-export function formatWakeTimeInput(rawValue: string): string {
-  const digits = rawValue.replace(/\D/g, '').slice(0, 4);
-  if (!digits) return '';
-  if (digits.length <= 2) return digits;
-
-  const normalized = digits.length === 3 ? `0${digits}` : digits;
-  const hour = normalized.slice(0, 2);
-  const minute = normalized.slice(2, 4);
-  const hourNumber = Number(hour);
-
-  if (hourNumber > 23) return hour;
-  if (minute.length >= 1 && Number(minute[0]) > 5) return `${hour}:`;
-
-  return `${hour}:${minute}`;
-}
-
 export function isValidWakeTime(value: string): boolean {
-  if (!/^\d{2}:\d{2}$/.test(value)) return false;
-  const [hourText, minuteText] = value.split(':');
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+  return normalizeTimeInput(value) !== null;
 }
 
 function fitChoiceToPayload(choice: FitForDutyChoice): boolean | null {
@@ -415,6 +397,7 @@ export default function FrmsCheckinFadiga() {
 
   const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';
   const wakeTimeHasValue = wakeTime.trim().length > 0;
+  const wakeTimeNormalized = normalizeTimeInput(wakeTime);
   const wakeTimeValid = isValidWakeTime(wakeTime);
 
   const missingItems: string[] = [];
@@ -450,8 +433,8 @@ export default function FrmsCheckinFadiga() {
       const result = await submitMutation.mutateAsync({
         reference_date: today,
         data_checkin: today,
-        hora_acordou: wakeTime,
-        wake_time: wakeTime,
+        hora_acordou: wakeTimeNormalized!,
+        wake_time: wakeTimeNormalized!,
         horas_sono_24h: SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
@@ -614,17 +597,12 @@ export default function FrmsCheckinFadiga() {
                       <label htmlFor="wake-time" className="mb-2 block text-sm font-medium text-slate-700">
                         Hora em que acordou
                       </label>
-                      <input
+                      <TimeInput
                         id="wake-time"
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        maxLength={5}
-                        placeholder="Ex.: 0630"
                         aria-invalid={wakeTimeHasValue && !wakeTimeValid}
                         aria-describedby="wake-time-help wake-time-error"
                         value={wakeTime}
-                        onChange={(e) => setWakeTime(formatWakeTimeInput(e.target.value))}
+                        onChange={setWakeTime}
                         className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-base font-semibold text-slate-800 focus:outline-none focus:ring-2 ${
                           wakeTimeHasValue && !wakeTimeValid
                             ? 'border-red-400 focus:ring-red-400'

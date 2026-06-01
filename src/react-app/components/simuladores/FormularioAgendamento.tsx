@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { useNavigate } from 'react-router-dom';
 import { X, Calendar, Clock, User, Users } from 'lucide-react';
+import TimeInput from '@/react-app/components/TimeInput';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 
 interface Participante {
   colaborador_id: string;
@@ -93,8 +95,9 @@ export default function FormularioAgendamento({
   };
 
   const calcularHoraFim = (horaInicio: string) => {
-    if (!horaInicio) return '';
-    const [h, m] = horaInicio.split(':').map(Number);
+    const horarioNormalizado = normalizeTimeInput(horaInicio);
+    if (!horarioNormalizado) return '';
+    const [h, m] = horarioNormalizado.split(':').map(Number);
     const novaHora = h + 2;
     return `${String(novaHora).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
@@ -108,6 +111,8 @@ export default function FormularioAgendamento({
   };
 
   const validarFormulario = () => {
+    const horaInicioNormalizada = normalizeTimeInput(dadosGerais.hora_inicio);
+    const horaFimNormalizada = normalizeTimeInput(dadosGerais.hora_fim);
     if (!dadosGerais.simulador_id) {
       toast.warning('Selecione um simulador');
       return false;
@@ -120,6 +125,10 @@ export default function FormularioAgendamento({
 
     if (!dadosGerais.data_inicio || !dadosGerais.hora_inicio || !dadosGerais.hora_fim) {
       toast.warning('Preencha data e horários');
+      return false;
+    }
+    if (!horaInicioNormalizada || !horaFimNormalizada) {
+      toast.warning('Informe horários válidos no formato HH:mm.');
       return false;
     }
 
@@ -151,8 +160,8 @@ export default function FormularioAgendamento({
           instrutor_id: parseInt(dadosGerais.instrutor_id),
           treinamento_sessao_id: null, // MANTIDO: sempre null (sem vínculo a treinamento)
           data_inicio: dadosGerais.data_inicio,
-          hora_inicio: dadosGerais.hora_inicio,
-          hora_fim: dadosGerais.hora_fim,
+          hora_inicio: normalizeTimeInput(dadosGerais.hora_inicio),
+          hora_fim: normalizeTimeInput(dadosGerais.hora_fim),
           tipo_sessao: dadosGerais.tipo_sessao,
           observacoes: dadosGerais.observacoes,
         },
@@ -302,10 +311,9 @@ export default function FormularioAgendamento({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Hora Início <span className="text-red-500">*</span>
               </label>
-              <input
-                type="time"
+              <TimeInput
                 value={dadosGerais.hora_inicio}
-                onChange={(e) => handleHoraInicioChange(e.target.value)}
+                onChange={handleHoraInicioChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 required
               />
@@ -317,10 +325,9 @@ export default function FormularioAgendamento({
                 Hora Fim <span className="text-red-500">*</span>
                 <span className="text-xs text-gray-500 ml-2">(calculado automaticamente +2h)</span>
               </label>
-              <input
-                type="time"
+              <TimeInput
                 value={dadosGerais.hora_fim}
-                onChange={(e) => setDadosGerais({ ...dadosGerais, hora_fim: e.target.value })}
+                onChange={(value) => setDadosGerais({ ...dadosGerais, hora_fim: value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 required
               />
