@@ -129,8 +129,28 @@ export function mapKssToSubjectiveFatigue(kssScore: number): number {
   return 1;
 }
 
+export function formatWakeTimeInput(rawValue: string): string {
+  const digits = rawValue.replace(/\D/g, '').slice(0, 4);
+  if (!digits) return '';
+  if (digits.length <= 2) return digits;
+
+  const normalized = digits.length === 3 ? `0${digits}` : digits;
+  const hour = normalized.slice(0, 2);
+  const minute = normalized.slice(2, 4);
+  const hourNumber = Number(hour);
+
+  if (hourNumber > 23) return hour;
+  if (minute.length >= 1 && Number(minute[0]) > 5) return `${hour}:`;
+
+  return `${hour}:${minute}`;
+}
+
 export function isValidWakeTime(value: string): boolean {
-  return normalizeTimeInput(value) !== null;
+  if (!/^\d{2}:\d{2}$/.test(value)) return false;
+  const [hourText, minuteText] = value.split(':');
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
 }
 
 function fitChoiceToPayload(choice: FitForDutyChoice): boolean | null {
@@ -425,6 +445,11 @@ export default function FrmsCheckinFadiga() {
       return;
     }
 
+    if (!wakeTimeNormalized) {
+      toast.error('Informe um horario valido para "Hora em que acordou" (HH:mm).');
+      return;
+    }
+
     try {
       const kss = kssScore!;
       const subjectiveFatigueLevel = mapKssToSubjectiveFatigue(kss);
@@ -602,7 +627,7 @@ export default function FrmsCheckinFadiga() {
                         aria-invalid={wakeTimeHasValue && !wakeTimeValid}
                         aria-describedby="wake-time-help wake-time-error"
                         value={wakeTime}
-                        onChange={setWakeTime}
+                        onChange={(nextValue) => setWakeTime(formatWakeTimeInput(nextValue))}
                         className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-base font-semibold text-slate-800 focus:outline-none focus:ring-2 ${
                           wakeTimeHasValue && !wakeTimeValid
                             ? 'border-red-400 focus:ring-red-400'
