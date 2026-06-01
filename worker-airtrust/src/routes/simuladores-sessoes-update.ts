@@ -23,6 +23,7 @@ import {
   normalizeChecksSessao,
   criarQualificacoesPlanejadas,
   listarParticipantesDaSessaoParaQualificacao,
+  sincronizarQualificacoesDaSessaoConcluida,
 } from './simuladores-shared';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -816,6 +817,20 @@ app.put('/sessoes/:id', async (c) => {
       .bind(id)
       .first<any>();
 
+    const statusAnterior = String((a as any)?.status || '').toUpperCase();
+    const statusNovo = String((u as any)?.status || '').toUpperCase();
+    if (statusNovo === 'CONCLUIDA' && statusAnterior !== 'CONCLUIDA') {
+      try {
+        const syncQualResult = await sincronizarQualificacoesDaSessaoConcluida(c.env.DB, {
+          sessaoId: Number(id),
+          empresaId: Number((c as any).get('empresaId') || (u as any)?.empresa_id || 0),
+        });
+        diag.qualificacoesConcluidas = syncQualResult.atualizadas;
+      } catch (error: any) {
+        diag.qualificacoesConcluidasErro = error?.message || String(error);
+      }
+    }
+
     console.log('[PUT /sessoes] DEPOIS:', { tipo_sessao: u?.tipo_sessao, nome: u?.nome });
 
     await audit(c.env.DB, {
@@ -883,8 +898,6 @@ app.put('/sessoes/:id', async (c) => {
 
     // Email: when session transitions to CONCLUIDA and fichas are in AVALIACAO_PENDENTE,
     // notify instrutor to fill the evaluation.
-    const statusAnterior = String(a?.status || '').toUpperCase();
-    const statusNovo = String((u as any)?.status || '').toUpperCase();
     if (statusNovo === 'CONCLUIDA' && statusAnterior !== 'CONCLUIDA') {
       try {
         const fichasRows = await c.env.DB.prepare(
