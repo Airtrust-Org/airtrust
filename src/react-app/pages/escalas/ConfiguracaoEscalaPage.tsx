@@ -25,6 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
+import TimeInput from '@/react-app/components/TimeInput';
 import { Button } from '@/react-app/components/UI';
 import { mutateApi } from './hooks/queries/useEscalasQuery';
 import {
@@ -43,6 +44,7 @@ import {
   useTiposEventoResolvidos,
 } from './hooks/useTiposEventoResolvidos';
 import { formatDate } from '@/react-app/utils/formatDate';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { getDefaultQuinzenaRange } from './utils/quinzenas';
 import CompactColorPicker from './components/CompactColorPicker';
 
@@ -1146,14 +1148,28 @@ function AbaGeral() {
   };
 
   const handleSalvarPreferencias = async () => {
+    const turnoAInicioNormalizado = normalizeTimeInput(turnoAInicio);
+    const turnoAFimNormalizado = normalizeTimeInput(turnoAFim);
+    const turnoBInicioNormalizado = normalizeTimeInput(turnoBInicio);
+    const turnoBFimNormalizado = normalizeTimeInput(turnoBFim);
+    if (
+      !turnoAInicioNormalizado ||
+      !turnoAFimNormalizado ||
+      !turnoBInicioNormalizado ||
+      !turnoBFimNormalizado
+    ) {
+      toast.error('Informe horários válidos dos turnos no formato HH:mm.');
+      return;
+    }
+
     try {
       await salvarPreferencias({
         exibir_nome: exibirNome,
         padrao_quinzena: padraoQuinzena,
-        turno_a_inicio: turnoAInicio,
-        turno_a_fim: turnoAFim,
-        turno_b_inicio: turnoBInicio,
-        turno_b_fim: turnoBFim,
+        turno_a_inicio: turnoAInicioNormalizado,
+        turno_a_fim: turnoAFimNormalizado,
+        turno_b_inicio: turnoBInicioNormalizado,
+        turno_b_fim: turnoBFimNormalizado,
         limite_fdp_dia: limiteDia,
         limite_fdp_noite: limiteNoite,
         alerta_cma_ativo: alertaCmaAtivo,
@@ -1270,17 +1286,15 @@ function AbaGeral() {
           <label className="text-xs text-slate-500">
             Turno A
             <div className="flex items-center gap-2 mt-1">
-              <input
-                type="time"
+              <TimeInput
                 value={turnoAInicio}
-                onChange={(e) => setTurnoAInicio(e.target.value)}
+                onChange={setTurnoAInicio}
                 className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
               />
               <span>às</span>
-              <input
-                type="time"
+              <TimeInput
                 value={turnoAFim}
-                onChange={(e) => setTurnoAFim(e.target.value)}
+                onChange={setTurnoAFim}
                 className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
               />
             </div>
@@ -1288,17 +1302,15 @@ function AbaGeral() {
           <label className="text-xs text-slate-500">
             Turno B
             <div className="flex items-center gap-2 mt-1">
-              <input
-                type="time"
+              <TimeInput
                 value={turnoBInicio}
-                onChange={(e) => setTurnoBInicio(e.target.value)}
+                onChange={setTurnoBInicio}
                 className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
               />
               <span>às</span>
-              <input
-                type="time"
+              <TimeInput
                 value={turnoBFim}
-                onChange={(e) => setTurnoBFim(e.target.value)}
+                onChange={setTurnoBFim}
                 className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
               />
             </div>

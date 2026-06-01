@@ -3,6 +3,7 @@ import { useFormValidation } from '@/react-app/hooks/useFormValidation';
 import { agendamentoSchema, type AgendamentoFormData } from '@/react-app/lib/validations/schemas';
 import { Input, Select, TextArea } from '@/react-app/components/UI/Input';
 import { Button } from '@/react-app/components/UI/Button';
+import { normalizeTimeInput, sanitizeTimeInputForTyping } from '@/react-app/lib/time-input';
 import { toast } from 'sonner';
 
 const TIPOS_AGENDAMENTO = [
@@ -67,6 +68,7 @@ export function AgendamentoForm({
       setSubmitting(false);
     }
   });
+  const horaField = form.getFieldProps('hora');
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
@@ -117,8 +119,41 @@ export function AgendamentoForm({
 
         <Input
           label="Hora"
-          type="time"
-          {...form.getFieldProps('hora')}
+          type="text"
+          {...horaField}
+          inputMode="numeric"
+          placeholder="HH:mm"
+          maxLength={5}
+          pattern="([01]\\d|2[0-3]):[0-5]\\d"
+          title="Formato HH:mm (00:00 até 23:59)"
+          onChange={(event) => {
+            event.currentTarget.setCustomValidity('');
+            event.target.value = sanitizeTimeInputForTyping(event.target.value);
+            horaField.onChange(event);
+          }}
+          onBlur={(event) => {
+            const raw = event.target.value.trim();
+            if (!raw) {
+              event.currentTarget.setCustomValidity('');
+              horaField.onBlur(event);
+              return;
+            }
+            const normalized = normalizeTimeInput(raw);
+            if (!normalized) {
+              event.currentTarget.setCustomValidity(
+                'Informe um horário válido no formato HH:mm (00:00 até 23:59).',
+              );
+              event.currentTarget.reportValidity();
+              return;
+            }
+            event.currentTarget.setCustomValidity('');
+            form.setValue('hora', normalized, {
+              shouldDirty: true,
+              shouldValidate: true,
+              shouldTouch: true,
+            });
+            horaField.onBlur(event);
+          }}
           required
           disabled={isLoading || submitting}
         />

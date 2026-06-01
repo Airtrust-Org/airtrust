@@ -1,16 +1,13 @@
 import { API_BASE_URL } from '@/react-app/config/api';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import TimeInput from '@/react-app/components/TimeInput';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 
 import { X, Save } from 'lucide-react';
 
-const formatTimeInput = (value: string): string => {
-  const digits = value.replace(/\D/g, '').slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-};
-
-const isValidTimeValue = (value: string): boolean => {
+const isValidTimeValue = (value: string | null): boolean => {
+  if (!value) return false;
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
 };
 
@@ -68,8 +65,8 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const horaInicio = formData.hora_inicio.trim();
-    const horaFim = formData.hora_fim.trim();
+    const horaInicio = normalizeTimeInput(formData.hora_inicio);
+    const horaFim = normalizeTimeInput(formData.hora_fim);
 
     if (!isValidTimeValue(horaInicio) || !isValidTimeValue(horaFim)) {
       toast.warning('Informe horários válidos no formato HH:mm (00:00 até 23:59).');
@@ -87,7 +84,7 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
       const response = await fetch(`${API_BASE_URL}/simuladores/sessoes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, hora_inicio: horaInicio, hora_fim: horaFim }),
       });
 
       const data = await response.json();
@@ -155,14 +152,10 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
             {/* Hora Início */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Hora Início *</label>
-              <input
-                type="text"
+              <TimeInput
                 required
                 value={formData.hora_inicio}
-                onChange={(e) => setFormData({ ...formData, hora_inicio: formatTimeInput(e.target.value) })}
-                placeholder="HH:MM"
-                maxLength={5}
-                inputMode="numeric"
+                onChange={(value) => setFormData({ ...formData, hora_inicio: value })}
                 className="w-full  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
               />
             </div>
@@ -170,14 +163,10 @@ export default function FormSessao({ isOpen, onClose, onSuccess }: Props) {
             {/* Hora Fim */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Hora Fim *</label>
-              <input
-                type="text"
+              <TimeInput
                 required
                 value={formData.hora_fim}
-                onChange={(e) => setFormData({ ...formData, hora_fim: formatTimeInput(e.target.value) })}
-                placeholder="HH:MM"
-                maxLength={5}
-                inputMode="numeric"
+                onChange={(value) => setFormData({ ...formData, hora_fim: value })}
                 className="w-full  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
               />
             </div>

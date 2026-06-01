@@ -3,14 +3,11 @@ import { useState, useEffect } from 'react';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Calendar, Clock, AlertCircle, CheckCircle, Save, ArrowLeft, Loader2 } from 'lucide-react';
+import TimeInput from '@/react-app/components/TimeInput';
+import { normalizeTimeInput } from '@/react-app/lib/time-input';
 
-const formatTimeInput = (value: string): string => {
-  const digits = value.replace(/\D/g, '').slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-};
-
-const isValidTimeValue = (value: string): boolean => {
+const isValidTimeValue = (value: string | null): boolean => {
+  if (!value) return false;
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
 };
 import { FuncionarioCombobox } from '../../components/simuladores/FuncionarioCombobox';
@@ -81,13 +78,15 @@ export default function NovoAgendamento() {
       return;
     }
 
-    if (!isValidTimeValue(formData.hora_inicio) || !isValidTimeValue(formData.hora_fim)) {
+    const horaInicioNormalizada = normalizeTimeInput(formData.hora_inicio);
+    const horaFimNormalizada = normalizeTimeInput(formData.hora_fim);
+    if (!isValidTimeValue(horaInicioNormalizada) || !isValidTimeValue(horaFimNormalizada)) {
       setError('Informe horários válidos no formato HH:mm (00:00 até 23:59).');
       return;
     }
 
     // Validar horários
-    if (formData.hora_inicio >= formData.hora_fim) {
+    if ((horaInicioNormalizada || '') >= (horaFimNormalizada || '')) {
       setError('Hora de início deve ser anterior à hora de término');
       return;
     }
@@ -103,6 +102,8 @@ export default function NovoAgendamento() {
           simulador_id: parseInt(simuladorId!),
           funcionario_id: funcionario.id,
           ...formData,
+          hora_inicio: horaInicioNormalizada,
+          hora_fim: horaFimNormalizada,
         }),
       });
 
@@ -206,14 +207,10 @@ export default function NovoAgendamento() {
                 <Clock className="w-4 h-4 inline mr-1" />
                 Hora Início *
               </label>
-              <input
-                type="text"
+              <TimeInput
                 required
                 value={formData.hora_inicio}
-                onChange={(e) => setFormData({ ...formData, hora_inicio: formatTimeInput(e.target.value) })}
-                placeholder="HH:MM"
-                maxLength={5}
-                inputMode="numeric"
+                onChange={(value) => setFormData({ ...formData, hora_inicio: value })}
                 className="w-full  py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all"
               />
             </div>
@@ -223,14 +220,10 @@ export default function NovoAgendamento() {
                 <Clock className="w-4 h-4 inline mr-1" />
                 Hora Fim *
               </label>
-              <input
-                type="text"
+              <TimeInput
                 required
                 value={formData.hora_fim}
-                onChange={(e) => setFormData({ ...formData, hora_fim: formatTimeInput(e.target.value) })}
-                placeholder="HH:MM"
-                maxLength={5}
-                inputMode="numeric"
+                onChange={(value) => setFormData({ ...formData, hora_fim: value })}
                 className="w-full  py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all"
               />
             </div>
