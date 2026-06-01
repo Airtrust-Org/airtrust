@@ -48,9 +48,9 @@ describe('FrmsMetricCards', () => {
     expect(screen.getAllByText('Atenção')).toHaveLength(2);
     expect(screen.getByText('Crítico')).toBeDefined();
     expect(screen.getByText('Violação')).toBeDefined();
-    expect(screen.getByText('Plena')).toBeDefined();
+    expect(screen.getByText('Margem preservada')).toBeDefined();
     expect(screen.getByText('Degradada')).toBeDefined();
-    expect(screen.getByText('Severa')).toBeDefined();
+    expect(screen.getByText('Atenção elevada')).toBeDefined();
   });
 
   it('shows zero counts when all zeros', async () => {
