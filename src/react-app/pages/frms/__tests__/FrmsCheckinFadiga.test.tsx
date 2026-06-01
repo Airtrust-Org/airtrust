@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsCheckinFadiga, {
-  formatWakeTimeInput,
   isFadigaCheckinSubmitReady,
   isValidWakeTime,
   mapKssToSubjectiveFatigue,
+  normalizeWakeTimeInput,
   optionalBinaryResponseToPayload,
 } from '../FrmsCheckinFadiga';
 
@@ -109,23 +109,35 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(mapKssToSubjectiveFatigue(9)).toBe(10);
   });
 
-  it('aplica mascara de hora em digitacao continua', () => {
-    expect(formatWakeTimeInput('1230')).toBe('12:30');
-    expect(formatWakeTimeInput('0730')).toBe('07:30');
-    expect(formatWakeTimeInput('730')).toBe('07:30');
-    expect(formatWakeTimeInput('0080')).toBe('00:');
-    expect(formatWakeTimeInput('2360')).toBe('23:');
-    expect(formatWakeTimeInput('2400')).toBe('24');
+  it('normaliza wake time em formatos aceitos', () => {
+    expect(normalizeWakeTimeInput('1230')).toBe('12:30');
+    expect(normalizeWakeTimeInput('0730')).toBe('07:30');
+    expect(normalizeWakeTimeInput('730')).toBe('07:30');
+    expect(normalizeWakeTimeInput('0630')).toBe('06:30');
+    expect(normalizeWakeTimeInput('7:30')).toBe('07:30');
+    expect(normalizeWakeTimeInput('07h00')).toBe('07:00');
+    expect(normalizeWakeTimeInput('7h30')).toBe('07:30');
   });
 
-  it('valida formato e faixa de horario HH:mm', () => {
+  it('rejeita wake time incompleto ou invalido', () => {
+    expect(normalizeWakeTimeInput('')).toBeNull();
+    expect(normalizeWakeTimeInput('07')).toBeNull();
+    expect(normalizeWakeTimeInput('7')).toBeNull();
+    expect(normalizeWakeTimeInput('2360')).toBeNull();
+    expect(normalizeWakeTimeInput('2400')).toBeNull();
+    expect(normalizeWakeTimeInput('9999')).toBeNull();
+  });
+
+  it('valida faixa e formato aceitos para wake time', () => {
     expect(isValidWakeTime('00:00')).toBe(true);
     expect(isValidWakeTime('06:30')).toBe(true);
     expect(isValidWakeTime('23:59')).toBe(true);
+    expect(isValidWakeTime('700')).toBe(true);
+    expect(isValidWakeTime('7h30')).toBe(true);
     expect(isValidWakeTime('00:80')).toBe(false);
     expect(isValidWakeTime('24:00')).toBe(false);
     expect(isValidWakeTime('25:61')).toBe(false);
-    expect(isValidWakeTime('6:30')).toBe(false);
+    expect(isValidWakeTime('6')).toBe(false);
   });
 });
 
@@ -236,18 +248,28 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeEnabled();
   });
 
-  it('mascara hora de acordar para formato HH:mm com digitacao continua', () => {
+  it('inicia vazio e normaliza wake time no blur', () => {
     render(<FrmsCheckinFadiga />);
 
     const wakeInput = screen.getByLabelText('Hora em que acordou') as HTMLInputElement;
-    fireEvent.change(wakeInput, { target: { value: '1230' } });
-    expect(wakeInput.value).toBe('12:30');
+    expect(wakeInput.value).toBe('');
 
-    fireEvent.change(wakeInput, { target: { value: '730' } });
+    fireEvent.change(wakeInput, { target: { value: '0700' } });
+    expect(wakeInput.value).toBe('0700');
+    fireEvent.blur(wakeInput);
+    expect(wakeInput.value).toBe('07:00');
+
+    fireEvent.change(wakeInput, { target: { value: '700' } });
+    expect(wakeInput.value).toBe('700');
+    fireEvent.blur(wakeInput);
+    expect(wakeInput.value).toBe('07:00');
+
+    fireEvent.change(wakeInput, { target: { value: '7h30' } });
+    fireEvent.blur(wakeInput);
     expect(wakeInput.value).toBe('07:30');
 
-    fireEvent.change(wakeInput, { target: { value: '0080' } });
-    expect(wakeInput.value).toBe('00:');
+    fireEvent.change(wakeInput, { target: { value: '' } });
+    expect(wakeInput.value).toBe('');
   });
 
   it('exibe indicador de pendencias quando formulario incompleto', () => {
@@ -318,7 +340,8 @@ describe('FrmsCheckinFadiga UI', () => {
     render(<FrmsCheckinFadiga />);
 
     const wakeInput = screen.getByLabelText('Hora em que acordou');
-    fireEvent.change(wakeInput, { target: { value: '2561' } });
+    fireEvent.change(wakeInput, { target: { value: '2400' } });
+    fireEvent.blur(wakeInput);
 
     expect(wakeInput).toHaveAttribute('aria-invalid', 'true');
     expect(
@@ -330,7 +353,9 @@ describe('FrmsCheckinFadiga UI', () => {
     render(<FrmsCheckinFadiga />);
 
     fireEvent.click(screen.getByRole('radio', { name: '6-8h' }));
-    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '2561' } });
+    const wakeInput = screen.getByLabelText('Hora em que acordou');
+    fireEvent.change(wakeInput, { target: { value: '2400' } });
+    fireEvent.blur(wakeInput);
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
     fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
@@ -341,6 +366,25 @@ describe('FrmsCheckinFadiga UI', () => {
       screen.getByText('Informe um horário válido no formato HH:mm. Minutos devem ficar entre 00 e 59.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeDisabled();
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('submete 0630 como 06:30', async () => {
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('radio', { name: '6-8h' }));
+    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0630' } });
+    fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
+    fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
+    fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diario' }));
+
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.wake_time).toBe('06:30');
+    expect(payload.hora_acordou).toBe('06:30');
   });
 
   it('renderiza status operacional com rotulos seguros na aba Historico', () => {
