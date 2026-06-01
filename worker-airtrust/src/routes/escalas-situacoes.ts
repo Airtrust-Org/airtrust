@@ -135,13 +135,21 @@ situacoes.post('/:id/situacoes', auth(), requireRole('admin', 'manager'), async 
               aeronave_id IS NOT NULL
               OR (situacao_tipo IS NOT NULL AND UPPER(situacao_tipo) = 'FOLGA')
             )
+            AND EXISTS (
+              SELECT 1
+                FROM escalas_mensais em
+               WHERE em.id = escala_alocacoes.escala_id
+                 AND em.deleted_at IS NULL
+                 AND em.empresa_id = ?
+            )
             AND NOT (data_fim < ? OR data_inicio > ?)`,
       )
-      .bind(d.funcionario_id, d.data_inicio, d.data_fim)
+      .bind(d.funcionario_id, empresaId, d.data_inicio, d.data_fim)
       .run();
 
     const sobreposicao = await checarSobreposicaoFuncionario(
       db,
+      empresaId,
       d.funcionario_id,
       d.data_inicio,
       d.data_fim,
@@ -372,13 +380,21 @@ situacoes.put('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'), as
               aeronave_id IS NOT NULL
               OR (situacao_tipo IS NOT NULL AND UPPER(situacao_tipo) = 'FOLGA')
             )
+            AND EXISTS (
+              SELECT 1
+                FROM escalas_mensais em
+               WHERE em.id = escala_alocacoes.escala_id
+                 AND em.deleted_at IS NULL
+                 AND em.empresa_id = ?
+            )
             AND NOT (data_fim < ? OR data_inicio > ?)`,
       )
-      .bind(funcionarioId, situacaoId, dataInicio, dataFim)
+      .bind(funcionarioId, situacaoId, empresaId, dataInicio, dataFim)
       .run();
 
     const sobreposicao = await checarSobreposicaoFuncionario(
       db,
+      empresaId,
       funcionarioId,
       dataInicio,
       dataFim,
@@ -437,8 +453,8 @@ situacoes.put('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'), as
     }
 
     await db
-      .prepare(`UPDATE escala_alocacoes SET ${campos.join(', ')} WHERE id = ?`)
-      .bind(...valores, situacaoId)
+      .prepare(`UPDATE escala_alocacoes SET ${campos.join(', ')} WHERE id = ? AND escala_id = ?`)
+      .bind(...valores, situacaoId, escalaId)
       .run();
 
     if (atual.quinzena_id && atual.quinzena_id !== quinzenaEfetiva) {
@@ -551,9 +567,10 @@ situacoes.delete('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'),
       .prepare(
         `UPDATE escala_alocacoes
             SET deleted_at = datetime('now'), updated_at = datetime('now')
-          WHERE id = ?`,
+          WHERE id = ?
+            AND escala_id = ?`,
       )
-      .bind(situacaoId)
+      .bind(situacaoId, escalaId)
       .run();
 
     await removerFuncionarioFeriasPorAlocacao(db, situacaoId);

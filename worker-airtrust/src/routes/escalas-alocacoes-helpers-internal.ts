@@ -370,6 +370,7 @@ export async function resolverQuinzenaPadraoPorPeriodo(
 
 export async function checarSobreposicaoFuncionario(
   db: D1Database,
+  empresaId: number,
   funcionarioId: string,
   dataInicio: string,
   dataFim: string,
@@ -406,6 +407,7 @@ export async function checarSobreposicaoFuncionario(
            ON UPPER(est.codigo) = UPPER(COALESCE(ea.situacao_tipo, ''))
           AND est.deleted_at IS NULL
         WHERE ea.funcionario_id = ?
+          AND em.empresa_id = ?
           AND ea.deleted_at IS NULL
           AND ea.status != 'cancelado'
           AND ea.id != ?
@@ -431,6 +433,7 @@ ${filtroBloqueio}
            ON UPPER(est.codigo) = UPPER(COALESCE(ea.situacao_tipo, ''))
           AND est.deleted_at IS NULL
         WHERE ea.funcionario_id = ?
+          AND em.empresa_id = ?
           AND ea.deleted_at IS NULL
           AND ea.status != 'cancelado'
 ${filtroBloqueio}
@@ -440,11 +443,18 @@ ${filtroBloqueio}
   return ignorarId
     ? db
         .prepare(sql)
-        .bind(funcionarioId, ignorarId, aeronaveIdPrioritaria ?? null, dataInicio, dataFim)
+        .bind(
+          funcionarioId,
+          empresaId,
+          ignorarId,
+          aeronaveIdPrioritaria ?? null,
+          dataInicio,
+          dataFim,
+        )
         .first()
     : db
         .prepare(sql)
-        .bind(funcionarioId, aeronaveIdPrioritaria ?? null, dataInicio, dataFim)
+        .bind(funcionarioId, empresaId, aeronaveIdPrioritaria ?? null, dataInicio, dataFim)
         .first();
 }
 
