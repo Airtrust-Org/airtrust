@@ -16,6 +16,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
+import { getTenantContext } from '../middleware/tenant';
 import adminDomainEventsRoutes from './admin-domain-events';
 import adminManualMigrationsRoutes from './admin-manual-migrations';
 import { backfillSessionChecks } from '../services/backfill-session-checks';
@@ -120,6 +121,61 @@ async function registrarAcaoAdmin(
   }
 }
 
+function resolveTenantScope(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+): { empresaId: number; empresaCodigo: string | null } | null {
+  let empresaId = Number(c.get('empresaId') || 0);
+  let empresaCodigo: string | null = null;
+
+  try {
+    const tenantContext = getTenantContext(c);
+    if (tenantContext?.empresaId) {
+      empresaId = Number(tenantContext.empresaId);
+      empresaCodigo = tenantContext.empresaCodigo || null;
+    }
+  } catch {
+    // Contexto de tenant pode não estar disponível em cenários legados/testes.
+  }
+
+  if (!Number.isFinite(empresaId) || empresaId <= 0) {
+    return null;
+  }
+
+  return { empresaId, empresaCodigo };
+}
+
+async function tableHasColumn(db: D1Database, tableName: string, columnName: string): Promise<boolean> {
+  const cols = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
+  const names = (cols.results || []).map((c) => String(c.name || '').trim().toLowerCase());
+  return names.includes(columnName.toLowerCase());
+}
+
+async function validateTenantScopeSupport(
+  db: D1Database,
+  params: { requireQualificacoesTiposEmpresaId?: boolean },
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const hasFuncionariosEmpresaId = await tableHasColumn(db, 'funcionarios', 'empresa_id');
+  if (!hasFuncionariosEmpresaId) {
+    return {
+      ok: false,
+      reason: 'Tabela funcionarios sem coluna empresa_id: escopo tenant não pode ser garantido.',
+    };
+  }
+
+  if (params.requireQualificacoesTiposEmpresaId) {
+    const hasTiposEmpresaId = await tableHasColumn(db, 'qualificacoes_tipos', 'empresa_id');
+    if (!hasTiposEmpresaId) {
+      return {
+        ok: false,
+        reason:
+          'Tabela qualificacoes_tipos sem coluna empresa_id: reset multi-tenant não pode ser executado com segurança.',
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
 // ===== ROTAS DE RESET =====
 
 /**
@@ -138,8 +194,51 @@ app.delete('/reset/funcionarios', auth(), adminOnly(), async (c) => {
   const startTime = Date.now();
   const userId = (c.get('userId') as number) || 0;
   const userEmail = (c.get('userEmail') as string) || 'unknown';
+  const tenantScope = resolveTenantScope(c);
 
   try {
+    if (!tenantScope) {
+      await registrarAcaoAdmin(c.env.DB, {
+        userId,
+        userEmail,
+        action: 'RESET_FUNCIONARIOS',
+        module: 'funcionarios',
+        deletedCount: 0,
+        success: false,
+        errorMessage: 'tenant_scope_required',
+      });
+      return c.json(
+        {
+          success: false,
+          error: 'tenant_scope_required',
+          message: 'Contexto de tenant inválido. Operação bloqueada.',
+        },
+        403,
+      );
+    }
+
+    const support = await validateTenantScopeSupport(c.env.DB, {});
+    if (!support.ok) {
+      await registrarAcaoAdmin(c.env.DB, {
+        userId,
+        userEmail,
+        action: 'RESET_FUNCIONARIOS',
+        module: 'funcionarios',
+        deletedCount: 0,
+        success: false,
+        errorMessage: support.reason,
+        metadata: { empresa_id: tenantScope.empresaId },
+      });
+      return c.json(
+        {
+          success: false,
+          error: 'tenant_scope_not_supported',
+          message: support.reason,
+        },
+        409,
+      );
+    }
+
     console.log('[ADMIN] Iniciando reset de funcionários. User:', userEmail);
 
     let totalDeleted = 0;
@@ -148,17 +247,22 @@ app.delete('/reset/funcionarios', auth(), adminOnly(), async (c) => {
     // IMPORTANTE: Usar soft delete devido aos triggers de proteção
 
     // 1. Soft delete histórico de qualificações
-    const histResult = await c.env.DB.prepare(
-      "UPDATE qualificacoes_historico SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE funcionario_id IN (SELECT id FROM funcionarios WHERE deleted_at IS NULL) AND deleted_at IS NULL",
-    ).run();
+    const histResult = await c.env.DB
+      .prepare(
+        "UPDATE qualificacoes_historico SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE funcionario_id IN (SELECT id FROM funcionarios WHERE empresa_id = ? AND deleted_at IS NULL) AND deleted_at IS NULL",
+      )
+      .bind(tenantScope.empresaId)
+      .run();
     details.qualificacoes_historico = histResult.meta.changes || 0;
     totalDeleted += details.qualificacoes_historico;
 
     // 2. Soft delete aeronaves associadas (se existir)
     try {
       const aeroResult = await c.env.DB.prepare(
-        "UPDATE funcionarios_aeronaves SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE funcionario_id IN (SELECT id FROM funcionarios WHERE deleted_at IS NULL) AND deleted_at IS NULL",
-      ).run();
+        "UPDATE funcionarios_aeronaves SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE funcionario_id IN (SELECT id FROM funcionarios WHERE empresa_id = ? AND deleted_at IS NULL) AND deleted_at IS NULL",
+      )
+        .bind(tenantScope.empresaId)
+        .run();
       details.funcionarios_aeronaves = aeroResult.meta.changes || 0;
       totalDeleted += details.funcionarios_aeronaves;
     } catch (e) {
@@ -168,8 +272,10 @@ app.delete('/reset/funcionarios', auth(), adminOnly(), async (c) => {
     // 3. Soft delete documentos (se existir)
     try {
       const docResult = await c.env.DB.prepare(
-        "UPDATE funcionario_documentos SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE funcionario_id IN (SELECT id FROM funcionarios WHERE deleted_at IS NULL) AND deleted_at IS NULL",
-      ).run();
+        "UPDATE funcionario_documentos SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE funcionario_id IN (SELECT id FROM funcionarios WHERE empresa_id = ? AND deleted_at IS NULL) AND deleted_at IS NULL",
+      )
+        .bind(tenantScope.empresaId)
+        .run();
       details.funcionario_documentos = docResult.meta.changes || 0;
       totalDeleted += details.funcionario_documentos;
     } catch (e) {
@@ -177,9 +283,12 @@ app.delete('/reset/funcionarios', auth(), adminOnly(), async (c) => {
     }
 
     // 4. Finalmente, soft delete funcionários
-    const funcResult = await c.env.DB.prepare(
-      "UPDATE funcionarios SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE deleted_at IS NULL",
-    ).run();
+    const funcResult = await c.env.DB
+      .prepare(
+        "UPDATE funcionarios SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE empresa_id = ? AND deleted_at IS NULL",
+      )
+      .bind(tenantScope.empresaId)
+      .run();
     details.funcionarios = funcResult.meta.changes || 0;
     totalDeleted += details.funcionarios;
 
@@ -193,7 +302,7 @@ app.delete('/reset/funcionarios', auth(), adminOnly(), async (c) => {
       module: 'funcionarios',
       deletedCount: totalDeleted,
       success: true,
-      metadata: { details, duration },
+      metadata: { details, duration, empresa_id: tenantScope.empresaId, empresa_codigo: tenantScope.empresaCodigo },
       ipAddress: c.req.header('cf-connecting-ip'),
       userAgent: c.req.header('user-agent'),
     });
@@ -247,8 +356,53 @@ app.delete('/reset/qualificacoes-tipos', auth(), adminOnly(), async (c) => {
   const startTime = Date.now();
   const userId = (c.get('userId') as number) || 0;
   const userEmail = (c.get('userEmail') as string) || 'unknown';
+  const tenantScope = resolveTenantScope(c);
 
   try {
+    if (!tenantScope) {
+      await registrarAcaoAdmin(c.env.DB, {
+        userId,
+        userEmail,
+        action: 'RESET_QUALIFICACOES_TIPOS',
+        module: 'qualificacoes_tipos',
+        deletedCount: 0,
+        success: false,
+        errorMessage: 'tenant_scope_required',
+      });
+      return c.json(
+        {
+          success: false,
+          error: 'tenant_scope_required',
+          message: 'Contexto de tenant inválido. Operação bloqueada.',
+        },
+        403,
+      );
+    }
+
+    const support = await validateTenantScopeSupport(c.env.DB, {
+      requireQualificacoesTiposEmpresaId: true,
+    });
+    if (!support.ok) {
+      await registrarAcaoAdmin(c.env.DB, {
+        userId,
+        userEmail,
+        action: 'RESET_QUALIFICACOES_TIPOS',
+        module: 'qualificacoes_tipos',
+        deletedCount: 0,
+        success: false,
+        errorMessage: support.reason,
+        metadata: { empresa_id: tenantScope.empresaId },
+      });
+      return c.json(
+        {
+          success: false,
+          error: 'tenant_scope_not_supported',
+          message: support.reason,
+        },
+        409,
+      );
+    }
+
     console.log('[ADMIN] Iniciando reset de tipos de qualificação. User:', userEmail);
 
     let totalDeleted = 0;
@@ -258,16 +412,22 @@ app.delete('/reset/qualificacoes-tipos', auth(), adminOnly(), async (c) => {
     await c.env.DB.prepare('PRAGMA recursive_triggers = OFF').run();
 
     // 1. Soft delete histórico que referencia tipos
-    const histResult = await c.env.DB.prepare(
-      "UPDATE qualificacoes_historico SET deleted_at = datetime('now') WHERE qualificacao_id IN (SELECT id FROM qualificacoes_tipos WHERE deleted_at IS NULL) AND deleted_at IS NULL",
-    ).run();
+    const histResult = await c.env.DB
+      .prepare(
+        "UPDATE qualificacoes_historico SET deleted_at = datetime('now') WHERE deleted_at IS NULL AND funcionario_id IN (SELECT id FROM funcionarios WHERE empresa_id = ? AND deleted_at IS NULL) AND qualificacao_id IN (SELECT id FROM qualificacoes_tipos WHERE empresa_id = ? AND deleted_at IS NULL)",
+      )
+      .bind(tenantScope.empresaId, tenantScope.empresaId)
+      .run();
     details.qualificacoes_historico = histResult.meta.changes || 0;
     totalDeleted += details.qualificacoes_historico;
 
     // 2. Soft delete tipos
-    const tiposResult = await c.env.DB.prepare(
-      "UPDATE qualificacoes_tipos SET deleted_at = datetime('now') WHERE deleted_at IS NULL",
-    ).run();
+    const tiposResult = await c.env.DB
+      .prepare(
+        "UPDATE qualificacoes_tipos SET deleted_at = datetime('now') WHERE empresa_id = ? AND deleted_at IS NULL",
+      )
+      .bind(tenantScope.empresaId)
+      .run();
     details.qualificacoes_tipos = tiposResult.meta.changes || 0;
     totalDeleted += details.qualificacoes_tipos;
 
@@ -284,7 +444,7 @@ app.delete('/reset/qualificacoes-tipos', auth(), adminOnly(), async (c) => {
       module: 'qualificacoes_tipos',
       deletedCount: totalDeleted,
       success: true,
-      metadata: { details, duration },
+      metadata: { details, duration, empresa_id: tenantScope.empresaId, empresa_codigo: tenantScope.empresaCodigo },
       ipAddress: c.req.header('cf-connecting-ip'),
       userAgent: c.req.header('user-agent'),
     });
@@ -335,16 +495,62 @@ app.delete('/reset/qualificacoes-historico', auth(), adminOnly(), async (c) => {
   const startTime = Date.now();
   const userId = (c.get('userId') as number) || 0;
   const userEmail = (c.get('userEmail') as string) || 'unknown';
+  const tenantScope = resolveTenantScope(c);
 
   try {
+    if (!tenantScope) {
+      await registrarAcaoAdmin(c.env.DB, {
+        userId,
+        userEmail,
+        action: 'RESET_QUALIFICACOES_HISTORICO',
+        module: 'qualificacoes_historico',
+        deletedCount: 0,
+        success: false,
+        errorMessage: 'tenant_scope_required',
+      });
+      return c.json(
+        {
+          success: false,
+          error: 'tenant_scope_required',
+          message: 'Contexto de tenant inválido. Operação bloqueada.',
+        },
+        403,
+      );
+    }
+
+    const support = await validateTenantScopeSupport(c.env.DB, {});
+    if (!support.ok) {
+      await registrarAcaoAdmin(c.env.DB, {
+        userId,
+        userEmail,
+        action: 'RESET_QUALIFICACOES_HISTORICO',
+        module: 'qualificacoes_historico',
+        deletedCount: 0,
+        success: false,
+        errorMessage: support.reason,
+        metadata: { empresa_id: tenantScope.empresaId },
+      });
+      return c.json(
+        {
+          success: false,
+          error: 'tenant_scope_not_supported',
+          message: support.reason,
+        },
+        409,
+      );
+    }
+
     console.log('[ADMIN] Iniciando reset de histórico de qualificações. User:', userEmail);
 
     // Desabilitar triggers temporariamente
     await c.env.DB.prepare('PRAGMA recursive_triggers = OFF').run();
 
-    const result = await c.env.DB.prepare(
-      "UPDATE qualificacoes_historico SET deleted_at = datetime('now') WHERE deleted_at IS NULL",
-    ).run();
+    const result = await c.env.DB
+      .prepare(
+        "UPDATE qualificacoes_historico SET deleted_at = datetime('now') WHERE deleted_at IS NULL AND funcionario_id IN (SELECT id FROM funcionarios WHERE empresa_id = ? AND deleted_at IS NULL)",
+      )
+      .bind(tenantScope.empresaId)
+      .run();
     const deletedCount = result.meta.changes || 0;
 
     // Reabilitar triggers
@@ -360,7 +566,7 @@ app.delete('/reset/qualificacoes-historico', auth(), adminOnly(), async (c) => {
       module: 'qualificacoes_historico',
       deletedCount,
       success: true,
-      metadata: { duration },
+      metadata: { duration, empresa_id: tenantScope.empresaId, empresa_codigo: tenantScope.empresaCodigo },
       ipAddress: c.req.header('cf-connecting-ip'),
       userAgent: c.req.header('user-agent'),
     });

@@ -69,6 +69,14 @@ export const CheckinCreateSchema = z
     path: ['horas_sono_24h'],
   })
   .refine((data) => {
+    const hasFitForDuty = typeof data.fit_for_duty === 'boolean';
+    const hasApto = typeof data.apto === 'number';
+    return hasFitForDuty || hasApto;
+  }, {
+    message: 'Informe fit_for_duty ou apto',
+    path: ['fit_for_duty'],
+  })
+  .refine((data) => {
     // fit_for_duty is canonical; apto is legacy fallback
     const fitForDutyNorm =
       typeof data.fit_for_duty === 'boolean'

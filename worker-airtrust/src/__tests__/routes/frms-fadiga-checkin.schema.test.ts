@@ -47,4 +47,15 @@ describe('frms-fadiga-checkin schema', () => {
 
     expect(parsed.success).toBe(true);
   });
+
+  it('rejeita payload sem fit_for_duty e sem apto', () => {
+    const parsed = CheckinCreateSchema.safeParse({
+      data_checkin: '2026-05-29',
+      wake_time: '05:30',
+      horas_sono_24h: 6,
+      kss_score: 5,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
 });
