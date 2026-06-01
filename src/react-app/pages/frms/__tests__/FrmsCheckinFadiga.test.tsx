@@ -157,10 +157,10 @@ describe('FrmsCheckinFadiga UI', () => {
   it('renderiza KSS com titulo claro e descritores', () => {
     render(<FrmsCheckinFadiga />);
 
-    expect(screen.getByText('Bloco 2 - Sonolencia agora')).toBeInTheDocument();
+    expect(screen.getByText('Bloco 2 - Sonolência agora')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Quao sonolento ou alerta voce esta agora? Escolha a opcao que melhor descreve seu estado neste momento.',
+        'Quão sonolento ou alerta você está agora? Escolha a opção que melhor descreve seu estado neste momento.',
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('Escala KSS (1-9)')).toBeInTheDocument();
@@ -176,7 +176,7 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByLabelText('Qualidade 4 - Boa')).toBeInTheDocument();
     expect(screen.getByLabelText('Qualidade 5 - Muito boa')).toBeInTheDocument();
     expect(
-      screen.getByText('Dormi muito mal; acordei varias vezes ou quase nao descansei.'),
+      screen.getByText('Dormi muito mal; acordei várias vezes ou quase não descansei.'),
     ).toBeInTheDocument();
   });
 
@@ -184,9 +184,9 @@ describe('FrmsCheckinFadiga UI', () => {
     render(<FrmsCheckinFadiga />);
 
     expect(screen.queryByText('Sintomas atuais')).not.toBeInTheDocument();
-    expect(screen.queryByText('Concentracao reduzida')).not.toBeInTheDocument();
+    expect(screen.queryByText('Concentração reduzida')).not.toBeInTheDocument();
     expect(screen.queryByText(/48h/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/nivel subjetivo de fadiga/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nível subjetivo de fadiga/i)).not.toBeInTheDocument();
   });
 
   it('envia payload minimo valido e compativel com null em meds/alcool', async () => {
@@ -198,7 +198,7 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
     fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
 
     fireEvent.click(document.getElementById('meds-ult-12h-sim') as HTMLElement);
@@ -206,7 +206,7 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(document.getElementById('alcool-ult-12h-sim') as HTMLElement);
     fireEvent.click(document.getElementById('alcool-ult-12h-prefiro-nao') as HTMLElement);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
 
@@ -233,19 +233,19 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('radio', { name: '4-5h' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 3 - Regular'));
-    fireEvent.click(screen.getByLabelText('KSS 6: Alguns sinais de sonolencia'));
+    fireEvent.click(screen.getByLabelText('KSS 6: Alguns sinais de sonolência'));
     fireEvent.click(document.getElementById('fit-choice-nao') as HTMLElement);
-    fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
 
-    expect(screen.getByText(/observacao e obrigatoria/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeDisabled();
+    expect(screen.getByText(/observação é obrigatória/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText('Explique o motivo para revisão pela coordenação'), {
-      target: { value: 'Nao dormi adequadamente e preciso revisar com a coordenacao.' },
+      target: { value: 'Não dormi adequadamente e preciso revisar com a coordenação.' },
     });
 
-    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toBeEnabled();
   });
 
   it('inicia vazio e normaliza wake time no blur', () => {
@@ -293,7 +293,7 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
     fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
-    fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -317,7 +317,7 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(qualidadeLabel).toHaveClass('block');
     expect(qualidadeLabel).toHaveClass('w-full');
 
-    const kssInput = screen.getByLabelText('KSS 8: Sonolento, com esforco para ficar acordado');
+    const kssInput = screen.getByLabelText('KSS 8: Sonolento, com esforço para ficar acordado');
     const kssLabel = kssInput.closest('label');
     expect(kssLabel).toBeTruthy();
     expect(kssLabel).toHaveClass('block');
@@ -359,13 +359,13 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
     fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
-    fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
 
     expect(
       screen.getByText('Informe um horário válido no formato HH:mm. Minutos devem ficar entre 00 e 59.'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diario' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toBeDisabled();
     expect(mutateAsyncMock).not.toHaveBeenCalled();
   });
 
@@ -377,9 +377,9 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
     fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
-    fireEvent.click(screen.getByRole('checkbox', { name: /As informacoes fornecidas sao veridicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
     const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
@@ -387,7 +387,7 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload.hora_acordou).toBe('06:30');
   });
 
-  it('renderiza status operacional com rotulos seguros na aba Historico', () => {
+  it('renderiza status operacional com rotulos seguros na aba Histórico', () => {
     useFadigaHistoricoMock.mockReturnValue({
       data: {
         data: [
@@ -407,9 +407,9 @@ describe('FrmsCheckinFadiga UI', () => {
 
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Historico' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Histórico' }));
 
-    expect(screen.getByText('Requer revisao operacional')).toBeInTheDocument();
+    expect(screen.getByText('Requer revisão operacional')).toBeInTheDocument();
     expect(screen.queryByText(/^INAPTO$/)).not.toBeInTheDocument();
   });
 
