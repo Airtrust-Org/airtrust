@@ -121,49 +121,6 @@ app.use('/alertas/whatsapp/delivery/:sid', auth());
 app.use('/alertas/whatsapp/templates', auth());
 app.use('/alertas/whatsapp/templates/*', auth());
 
-async function ensureWhatsAppDeliveryTable(db: D1Database): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS alertas_whatsapp_delivery (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        empresa_id INTEGER,
-        qualificacao_historico_id INTEGER,
-        funcionario_id INTEGER,
-        provider TEXT NOT NULL,
-        provider_message_id TEXT NOT NULL UNIQUE,
-        telefone_destino TEXT,
-        telefone_origem TEXT,
-        status TEXT NOT NULL,
-        error_code TEXT,
-        error_message TEXT,
-        payload_json TEXT,
-        accepted_at TEXT,
-        delivered_at TEXT,
-        failed_at TEXT,
-        last_event_at TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_alertas_whatsapp_delivery_empresa_status ON alertas_whatsapp_delivery (empresa_id, status, updated_at DESC)',
-    )
-    .run();
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_alertas_whatsapp_delivery_historico ON alertas_whatsapp_delivery (qualificacao_historico_id, updated_at DESC)',
-    )
-    .run();
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_alertas_whatsapp_delivery_funcionario ON alertas_whatsapp_delivery (funcionario_id, updated_at DESC)',
-    )
-    .run();
-}
-
 function formatDatePtBr(value: string): string {
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-BR');
@@ -185,8 +142,6 @@ async function upsertWhatsAppDeliveryLog(
     rawPayload?: Record<string, unknown> | null;
   },
 ): Promise<void> {
-  await ensureWhatsAppDeliveryTable(db);
-
   const status =
     String(payload.status || '')
       .trim()
@@ -456,8 +411,6 @@ app.get('/alertas/whatsapp/delivery/:sid', async (c: Context<{ Bindings: Env }>)
     if (!sid) {
       return alertasErrorResponse(c, 400, 'SID invalido', 'TWILIO_STATUS_INVALID_SID');
     }
-
-    await ensureWhatsAppDeliveryTable(c.env.DB);
 
     const localLog = await c.env.DB.prepare(
       `SELECT *

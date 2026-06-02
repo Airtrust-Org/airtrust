@@ -27,49 +27,10 @@ export type LocalWhatsAppTemplateRecord = {
   updated_at: string;
 };
 
-export async function ensureWhatsAppTemplatesTable(db: D1Database): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS alertas_whatsapp_templates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        template_key TEXT NOT NULL UNIQUE,
-        provider TEXT NOT NULL DEFAULT 'twilio',
-        friendly_name TEXT NOT NULL,
-        template_name TEXT NOT NULL,
-        category TEXT NOT NULL DEFAULT 'UTILITY',
-        language TEXT NOT NULL DEFAULT 'pt_BR',
-        body_text TEXT NOT NULL,
-        variables_json TEXT NOT NULL,
-        twilio_content_sid TEXT,
-        approval_status TEXT,
-        approval_error TEXT,
-        approval_payload_json TEXT,
-        last_synced_at TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        deleted_at TEXT
-      )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_alertas_whatsapp_templates_provider ON alertas_whatsapp_templates (provider, approval_status, updated_at DESC)',
-    )
-    .run();
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_alertas_whatsapp_templates_sid ON alertas_whatsapp_templates (twilio_content_sid)',
-    )
-    .run();
-}
-
 export async function upsertLocalWhatsAppTemplateDefinition(
   db: D1Database,
   template: AlertWhatsAppTemplateDefinition,
 ): Promise<void> {
-  await ensureWhatsAppTemplatesTable(db);
-
   await db
     .prepare(
       `INSERT INTO alertas_whatsapp_templates (
@@ -116,8 +77,6 @@ export async function seedLocalWhatsAppTemplateCatalog(db: D1Database): Promise<
 export async function listLocalWhatsAppTemplates(
   db: D1Database,
 ): Promise<LocalWhatsAppTemplateRecord[]> {
-  await ensureWhatsAppTemplatesTable(db);
-
   const result = await db
     .prepare(
       `SELECT template_key, provider, friendly_name, template_name, category, language,
@@ -136,8 +95,6 @@ export async function getLocalWhatsAppTemplateRecord(
   db: D1Database,
   templateKey: AlertWhatsAppTemplateKey,
 ): Promise<LocalWhatsAppTemplateRecord | null> {
-  await ensureWhatsAppTemplatesTable(db);
-
   return db
     .prepare(
       `SELECT template_key, provider, friendly_name, template_name, category, language,

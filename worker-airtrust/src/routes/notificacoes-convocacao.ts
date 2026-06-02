@@ -12,7 +12,6 @@ import {
   createGestorCopia,
   deleteGestorCopia,
   emailConvocacaoConfigSchema,
-  ensureConvocacaoEmailSchema,
   gestorCopiaSchema,
   getEmailConvocacaoConfig,
   listGestoresCopia,
@@ -28,8 +27,6 @@ notificacoesConvocacaoRoutes.use('*', auth());
 
 notificacoesConvocacaoRoutes.get('/convocacoes/config', async (c) => {
   const empresaId = getEmpresaId(c);
-  await ensureConvocacaoEmailSchema(c.env.DB);
-
   const empresa = await c.env.DB.prepare(
     'SELECT nome FROM empresas WHERE id = ? AND deleted_at IS NULL',
   )
@@ -65,8 +62,6 @@ notificacoesConvocacaoRoutes.put(
   requireRole('admin', 'manager'),
   async (c) => {
     const empresaId = getEmpresaId(c);
-    await ensureConvocacaoEmailSchema(c.env.DB);
-
     const parsed = emailConvocacaoConfigSchema.safeParse(await c.req.json());
     if (!parsed.success) {
       return c.json(
@@ -97,7 +92,6 @@ notificacoesConvocacaoRoutes.post(
   requireRole('admin', 'manager'),
   async (c) => {
     const empresaId = getEmpresaId(c);
-    await ensureConvocacaoEmailSchema(c.env.DB);
     const config = await getEmailConvocacaoConfig(c.env.DB, empresaId);
 
     const errors: string[] = [];
@@ -128,7 +122,6 @@ notificacoesConvocacaoRoutes.post(
   async (c) => {
     try {
       const empresaId = getEmpresaId(c);
-      await ensureConvocacaoEmailSchema(c.env.DB);
       const body = (await c.req.json().catch(() => ({}))) as {
         email?: string;
         emails?: string[];
@@ -179,8 +172,6 @@ notificacoesConvocacaoRoutes.post(
   async (c) => {
     try {
       const empresaId = getEmpresaId(c);
-      await ensureConvocacaoEmailSchema(c.env.DB);
-
       const body = (await c.req.json().catch(() => ({}))) as {
         qualificacao_id?: number;
         qualificacao_codigo?: string;
@@ -548,8 +539,6 @@ notificacoesConvocacaoRoutes.get('/convocacoes/gestores', async (c) => {
   const empresaId = getEmpresaId(c);
   const funcionarioIdRaw = c.req.query('funcionario_id');
   const funcionarioId = funcionarioIdRaw ? Number(funcionarioIdRaw) : null;
-  await ensureConvocacaoEmailSchema(c.env.DB);
-
   let gestores;
   if (funcionarioId && Number.isInteger(funcionarioId) && funcionarioId > 0) {
     // If funcionario_id provided, filter by their sector
@@ -568,7 +557,6 @@ notificacoesConvocacaoRoutes.post(
   requireRole('admin', 'manager'),
   async (c) => {
     const empresaId = getEmpresaId(c);
-    await ensureConvocacaoEmailSchema(c.env.DB);
     const parsed = gestorCopiaSchema.safeParse(await c.req.json());
     if (!parsed.success) {
       return c.json(
@@ -591,7 +579,6 @@ notificacoesConvocacaoRoutes.put(
       return c.json({ success: false, error: 'ID inválido' }, 400);
     }
 
-    await ensureConvocacaoEmailSchema(c.env.DB);
     const parsed = gestorCopiaSchema.safeParse(await c.req.json());
     if (!parsed.success) {
       return c.json(
@@ -618,7 +605,6 @@ notificacoesConvocacaoRoutes.delete(
       return c.json({ success: false, error: 'ID inválido' }, 400);
     }
 
-    await ensureConvocacaoEmailSchema(c.env.DB);
     await deleteGestorCopia(c.env.DB, empresaId, id);
     return c.json({ success: true });
   },

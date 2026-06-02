@@ -44,34 +44,6 @@ function makeId(): string {
   return crypto.randomUUID();
 }
 
-async function ensureFonteCalculoTable(db: D1Database): Promise<void> {
-  await db.batch([
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS frms_fonte_calculo_competencia (
-        id TEXT PRIMARY KEY,
-        empresa_id INTEGER,
-        tripulante_id INTEGER NOT NULL,
-        ano INTEGER NOT NULL,
-        mes INTEGER NOT NULL,
-        fonte_escolhida TEXT NOT NULL CHECK (fonte_escolhida IN ('SIGVOOS', 'FIRA')),
-        escolhido_por TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
-      )`,
-    ),
-    db.prepare(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_frms_fonte_calculo_competencia_uq
-       ON frms_fonte_calculo_competencia(empresa_id, tripulante_id, ano, mes)
-       WHERE deleted_at IS NULL`,
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_frms_fonte_calculo_competencia_lookup
-       ON frms_fonte_calculo_competencia(tripulante_id, ano, mes, deleted_at)`,
-    ),
-  ]);
-}
-
 function parseMesCompetencia(ano: unknown, mes: unknown): { ano: number; mes: number } | null {
   const anoNum = Number(ano);
   const mesNum = Number(mes);
@@ -561,8 +533,6 @@ firaRoutes.get(
       });
     }
 
-    await ensureFonteCalculoTable(c.env.DB);
-
     const preferencia = await c.env.DB.prepare(
       `SELECT fonte_escolhida
            FROM frms_fonte_calculo_competencia
@@ -710,8 +680,6 @@ firaRoutes.post(
 
     const denied = await assertTripulanteEmpresa(c, parsed.data.tripulante_id);
     if (denied) return denied;
-
-    await ensureFonteCalculoTable(c.env.DB);
 
     const competencia = parseMesCompetencia(parsed.data.ano, parsed.data.mes);
     if (!competencia) {

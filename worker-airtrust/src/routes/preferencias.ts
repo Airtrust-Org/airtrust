@@ -5,31 +5,6 @@ import { getEmpresaIdSafe } from './escalas-shared';
 
 const preferencias = new Hono<{ Bindings: Env }>();
 
-async function ensureUsuarioPreferenciasTable(db: D1Database): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS usuario_preferencias (
-        id TEXT PRIMARY KEY,
-        usuario_id TEXT NOT NULL,
-        empresa_id INTEGER NOT NULL,
-        chave TEXT NOT NULL,
-        valor TEXT,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        deleted_at TEXT,
-        UNIQUE(usuario_id, empresa_id, chave)
-      )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      `CREATE INDEX IF NOT EXISTS idx_usuario_preferencias_lookup
-       ON usuario_preferencias(usuario_id, empresa_id, chave)`,
-    )
-    .run();
-}
-
 function getUserId(c: { get: (key: string) => unknown }): string {
   return String(c.get('userId') || '');
 }
@@ -38,8 +13,6 @@ preferencias.get('/', auth(), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const userId = getUserId(c);
-
-  await ensureUsuarioPreferenciasTable(db);
 
   if (!userId) {
     return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
@@ -74,8 +47,6 @@ preferencias.put('/', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = getUserId(c);
   const body = (await c.req.json().catch(() => ({}))) as { exibir_nome_guerra?: unknown };
-
-  await ensureUsuarioPreferenciasTable(db);
 
   if (!userId) {
     return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
