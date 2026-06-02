@@ -368,7 +368,8 @@ app.get('/atividades-recentes', async (c) => {
  */
 app.get('/taxa-conclusao-mensal', async (c) => {
   try {
-    const taxas = await getTaxaConclusaoMensal(c.env.DB);
+    const { empresaId } = getTenantContext(c);
+    const taxas = await getTaxaConclusaoMensal(c.env.DB, empresaId);
     return c.json({ success: true, data: taxas });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error(
@@ -385,7 +386,8 @@ app.get('/taxa-conclusao-mensal', async (c) => {
  */
 app.get('/utilizacao-simuladores', async (c) => {
   try {
-    const utilizacao = await getUtilizacaoSimuladores(c.env.DB);
+    const { empresaId } = getTenantContext(c);
+    const utilizacao = await getUtilizacaoSimuladores(c.env.DB, empresaId);
     return c.json({ success: true, data: utilizacao });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error(
