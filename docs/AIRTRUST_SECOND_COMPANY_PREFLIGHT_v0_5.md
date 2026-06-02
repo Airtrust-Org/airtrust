@@ -36,7 +36,7 @@ Nao criar a segunda empresa antes de validar a empresa real atual com smoke aute
 
 Evidencia de 2026-06-02: `docs/AIRTRUST_AUTHENTICATED_SMOKE_EVIDENCE_20260602.md`.
 
-Status atual: public-only passou e o cenario sem credencial retornou `SKIPPED_AUTH_REQUIRED`. Smoke autenticado read-only e validacao da empresa esperada seguem pendentes porque nao havia `AIRTRUST_AUTH_TOKEN` nem `AIRTRUST_COOKIE` no ambiente.
+Status atual: public-only passou. O operador informou smoke autenticado manual com `npm run smoke:auth:login` como `PASS=11 FAIL=0 SKIPPED=2`, writes `NO`, sem registrar segredo ou PII. A empresa esperada ainda nao foi validada por `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO`.
 
 Sem credencial:
 
@@ -66,6 +66,8 @@ Aceite:
 - sem credencial retorna `SKIPPED_AUTH_REQUIRED`;
 - autenticado read-only passa, quando credencial existir;
 - empresa esperada validada quando `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO` for informado.
+
+Decisao de 2026-06-02: `CONDITIONAL GO` para piloto interno/controlado; GO pleno segue bloqueado ate validar empresa esperada e data quality operacional.
 
 ## 5. Modulos Liberados Para Novo Tenant
 
@@ -176,7 +178,8 @@ Ter definido antes de criar:
 - Link/commit da correcao de assets.
 - Resultado do probe `/api/assets/fira/123/test.pdf`.
 - Resultado do smoke public-only.
-- Resultado do smoke sem credencial (`SKIPPED_AUTH_REQUIRED`) ou autenticado read-only.
+- Resultado do smoke autenticado read-only sanitizado.
+- Validacao da empresa esperada por variavel explicita, ou aprovacao formal da excecao.
 - Registro da matriz de modulos aprovada.
 - Registro GO/NO-GO atualizado: `docs/AIRTRUST_SECOND_COMPANY_GO_NO_GO_v0_5.md`.
 - Data quality validado localmente e executado por operador autorizado.
