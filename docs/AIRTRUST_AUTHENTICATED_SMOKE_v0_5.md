@@ -40,6 +40,16 @@ AIRTRUST_COOKIE="<redacted>" bash scripts/smoke-authenticated-operational.sh
 
 O script aceita token bearer ou cookie. Ele nunca imprime o valor da credencial; a saida mostra apenas `Auth mode: bearer-token`, `cookie` ou `none`.
 
+## Login Interativo Sem Copiar Token
+
+Quando houver operador autorizado e voce quiser evitar copiar token ou cookie manualmente:
+
+```bash
+npm run smoke:auth:login
+```
+
+O comando pede email/login e senha no terminal, faz `POST /api/auth/login`, reaproveita apenas o material de autenticacao retornado em memoria e executa o smoke autenticado read-only na sequencia. Nada e salvo no repositorio, e a saida nao imprime senha, token ou cookie.
+
 ## Validacao de Empresa Esperada
 
 Para reduzir risco de cross-tenant, informe opcionalmente a empresa esperada:
@@ -98,6 +108,7 @@ O resumo final e sanitizado:
 - Rodar seed, importacao, migration ou `wrangler d1 execute --remote`.
 - Criar empresa ou usuario durante o smoke.
 - Salvar token/cookie em arquivo, historico, print, log ou commit.
+- Rodar `npm run smoke:auth:login` com `set -x`/xtrace habilitado.
 - Usar credencial de escopo amplo se nao for possivel limitar a execucao a read-only.
 
 ## Writes
