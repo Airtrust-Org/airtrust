@@ -1,0 +1,106 @@
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import AppLayout from '../AppLayout';
+
+const { authMock, permissionsMock } = vi.hoisted(() => ({
+  authMock: vi.fn(),
+  permissionsMock: vi.fn(),
+}));
+
+vi.mock('@/react-app/lib/hardRefresh', () => ({
+  hardRefreshApp: vi.fn(async () => undefined),
+}));
+
+vi.mock('../VersionBadge', () => ({
+  VersionBadge: () => <div>version</div>,
+}));
+
+vi.mock('../NotificacoesSistema', () => ({
+  NotificacoesSistema: () => <div>notificacoes-sistema</div>,
+}));
+
+vi.mock('../NotificacoesEscala', () => ({
+  NotificacoesEscala: () => <div>notificacoes-escala</div>,
+}));
+
+vi.mock('../../hooks/useAuth', () => ({
+  useAuth: () => authMock(),
+}));
+
+vi.mock('../../hooks/usePermissions', () => ({
+  usePermissions: () => permissionsMock(),
+}));
+
+vi.mock('../../hooks/useSystemSettings', () => ({
+  useSystemSettings: () => ({
+    logoSrc: '/logo.png',
+    settings: { compactHeader: false },
+  }),
+}));
+
+vi.mock('../../i18n/useLanguage', () => ({
+  useLanguage: () => ({
+    t: (key: string) => key,
+  }),
+}));
+
+vi.mock('../../theme/ThemeProvider', () => ({
+  useTheme: () => ({
+    isDark: false,
+    toggleTheme: vi.fn(),
+  }),
+}));
+
+describe('AppLayout module gating', () => {
+  beforeEach(() => {
+    authMock.mockReturnValue({
+      user: { nome: 'Teste Usuario', role: 'GESTOR' },
+      logout: vi.fn(),
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'funcionarios'] }],
+      empresaAtualId: 1,
+      selectEmpresa: vi.fn(async () => undefined),
+    });
+    permissionsMock.mockReturnValue({
+      can: (permission: string) => permission === 'dashboard.view' || permission === 'sgso.view',
+      isAdmin: false,
+      isGestor: true,
+      isInstrutor: false,
+      isAluno: false,
+    });
+  });
+
+  it('oculta LMS e SGSO quando a empresa nao libera esses modulos', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppLayout>
+          <div>conteudo</div>
+        </AppLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('link', { name: 'LMS' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'SGSO' })).toBeNull();
+  });
+
+  it('exibe LMS e SGSO quando os modulos beta estao ativos', () => {
+    authMock.mockReturnValue({
+      user: { nome: 'Teste Usuario', role: 'GESTOR' },
+      logout: vi.fn(),
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'lms', 'sgso'] }],
+      empresaAtualId: 1,
+      selectEmpresa: vi.fn(async () => undefined),
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppLayout>
+          <div>conteudo</div>
+        </AppLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'LMS' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'SGSO' })).toBeInTheDocument();
+  });
+});
