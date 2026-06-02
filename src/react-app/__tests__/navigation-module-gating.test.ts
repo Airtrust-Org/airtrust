@@ -38,9 +38,11 @@ describe('navigation module gating', () => {
       'dashboard',
       'funcionarios',
       'lms',
+      'hospedagem',
     ]);
 
     expect(visible.map((item) => item.id)).toContain('lms');
+    expect(visible.map((item) => item.id)).toContain('hospedagem');
   });
 
   it('nao mostra SIGVOOS sem ativacao explicita', () => {
@@ -48,5 +50,17 @@ describe('navigation module gating', () => {
       expect.not.arrayContaining([expect.objectContaining({ id: 'sigvoos' })]),
     );
   });
-});
 
+  it('mantem ocultos treinamentos e SGSO no menu principal enquanto nao ha item dedicado', () => {
+    const visible = getVisibleNavigationItems(NAVIGATION_CONFIG.main_menu, [
+      'dashboard',
+      'funcionarios',
+      'lms',
+      'sgso',
+      'treinamentos_planejados',
+    ]);
+
+    expect(visible.map((item) => item.id)).not.toContain('sgso');
+    expect(visible.map((item) => item.id)).not.toContain('treinamentos_planejados');
+  });
+});
