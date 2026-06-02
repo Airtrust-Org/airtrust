@@ -54,32 +54,32 @@ export async function getDashboardMetrics(
         .prepare(
           `SELECT
              COUNT(*) as total_qualificacoes,
-             SUM(CASE 
+             SUM(CASE
                WHEN qh.renovada = 1 THEN 0
                WHEN ${vencimentoExpr} IS NULL THEN 0
                WHEN date(${vencimentoExpr}) > date(?, '+' || ? || ' days') THEN 1
                ELSE 0
              END) as validas,
-             SUM(CASE 
+             SUM(CASE
                WHEN qh.renovada = 1 THEN 0
                WHEN ${vencimentoExpr} IS NULL THEN 0
                WHEN date(${vencimentoExpr}) >= date(?)
                 AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days') THEN 1
                ELSE 0
              END) as vencendo_30,
-             SUM(CASE 
+             SUM(CASE
                WHEN qh.renovada = 1 THEN 0
                WHEN ${vencimentoExpr} IS NULL THEN 0
                WHEN date(${vencimentoExpr}) < date(?) THEN 1
                ELSE 0
              END) as vencidas,
-             COUNT(DISTINCT CASE 
+             COUNT(DISTINCT CASE
                WHEN qh.renovada = 0
                AND ${vencimentoExpr} IS NOT NULL
                AND date(${vencimentoExpr}) BETWEEN date(?) AND date(?, '+' || ? || ' days')
                THEN qh.funcionario_id
              END) as tripulantes_vencendo,
-             COUNT(DISTINCT CASE 
+             COUNT(DISTINCT CASE
                WHEN qh.renovada = 0
                AND ${vencimentoExpr} IS NOT NULL
                AND date(${vencimentoExpr}) < date(?)
@@ -120,7 +120,7 @@ export async function getDashboardMetrics(
         .prepare(
           `SELECT
              COALESCE(
-               COUNT(CASE WHEN status = 'CONCLUIDO' THEN 1 END) * 100.0 / 
+               COUNT(CASE WHEN status IN ('CONCLUIDA', 'CONCLUIDO') THEN 1 END) * 100.0 /
                NULLIF(COUNT(*), 0),
                0
              ) as taxa_conclusao
@@ -181,7 +181,7 @@ export async function getDashboardMetrics(
         .prepare(
           `SELECT
              COALESCE(
-               COUNT(CASE WHEN status = 'CONCLUIDO' THEN 1 END) * 100.0 / 
+               COUNT(CASE WHEN status IN ('CONCLUIDA', 'CONCLUIDO') THEN 1 END) * 100.0 /
                NULLIF(COUNT(*), 0), 0
              ) as taxa
            FROM simulador_agendamentos
@@ -269,8 +269,8 @@ export async function getDashboardAlerts(
          AND qh.renovada = 0
          AND ${vencimentoExpr} IS NOT NULL
          AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days')
-         ORDER BY 
-           CASE 
+         ORDER BY
+           CASE
              WHEN CAST(julianday(date(${vencimentoExpr})) - julianday(date(?)) AS INTEGER) <= 0 THEN 0
              WHEN CAST(julianday(date(${vencimentoExpr})) - julianday(date(?)) AS INTEGER) <= 7 THEN 1
              ELSE 2
@@ -398,22 +398,22 @@ export async function getComplianceScore(
         .prepare(
           `SELECT
              COALESCE(
-               SUM(CASE 
-                 WHEN date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') >= date('now') THEN 1 
-                 ELSE 0 
+               SUM(CASE
+                 WHEN date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') >= date('now') THEN 1
+                 ELSE 0
                END) * 100.0 /
                NULLIF(COUNT(*), 0),
                100
              ) as percentual_qualificacoes_validas,
              COUNT(*) as total_qualificacoes,
-             SUM(CASE 
-               WHEN date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') >= date('now') THEN 1 
-               ELSE 0 
+             SUM(CASE
+               WHEN date(qh.data_conclusao, '+' || COALESCE(qt.validade, 12) || ' months') >= date('now') THEN 1
+               ELSE 0
              END) as qualificacoes_validas
            FROM qualificacoes_historico qh
            JOIN funcionarios f ON f.id = qh.funcionario_id
            JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
-           WHERE qh.deleted_at IS NULL 
+           WHERE qh.deleted_at IS NULL
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND f.empresa_id = ?
@@ -435,7 +435,7 @@ export async function getComplianceScore(
                (SELECT COUNT(*) FROM simulador_agendamentos
                 WHERE deleted_at IS NULL
                 AND empresa_id = ?
-                AND status = 'CONCLUIDO'
+                AND status IN ('CONCLUIDA', 'CONCLUIDO')
                 AND data >= date('now', '-3 months')) * 100.0 /
                NULLIF((SELECT COUNT(*) FROM simulador_agendamentos
                        WHERE deleted_at IS NULL
@@ -685,7 +685,7 @@ export async function getAtividadesRecentes(
            JOIN funcionarios f ON f.id = sa.instrutor_id
            LEFT JOIN simuladores s ON s.id = sa.simulador_id
            WHERE sa.deleted_at IS NULL
-           AND sa.status = 'CONCLUIDO'
+           AND sa.status IN ('CONCLUIDA', 'CONCLUIDO')
            AND f.empresa_id = ?
            ORDER BY sa.updated_at DESC
            LIMIT 10`,
@@ -761,20 +761,25 @@ export async function getAtividadesRecentes(
 /**
  * Busca taxa de conclusão mensal (últimos 6 meses)
  */
-export async function getTaxaConclusaoMensal(db: D1Database): Promise<TaxaConclusaoMensal> {
+export async function getTaxaConclusaoMensal(
+  db: D1Database,
+  empresaId: number,
+): Promise<TaxaConclusaoMensal> {
   try {
     const results = await db
       .prepare(
         `SELECT
            strftime('%Y-%m', data) as mes,
-           COUNT(CASE WHEN status = 'CONCLUIDO' THEN 1 END) * 100.0 / 
+           COUNT(CASE WHEN status IN ('CONCLUIDA', 'CONCLUIDO') THEN 1 END) * 100.0 /
            NULLIF(COUNT(*), 0) as taxa
          FROM simulador_agendamentos
          WHERE deleted_at IS NULL
+         AND empresa_id = ?
          AND data >= date('now', '-6 months')
          GROUP BY strftime('%Y-%m', data)
          ORDER BY mes ASC`,
       )
+      .bind(empresaId)
       .all();
 
     const meses: string[] = [];
@@ -820,7 +825,10 @@ export async function getTaxaConclusaoMensal(db: D1Database): Promise<TaxaConclu
 /**
  * Busca utilização de simuladores
  */
-export async function getUtilizacaoSimuladores(db: D1Database): Promise<UtilizacaoSimuladores> {
+export async function getUtilizacaoSimuladores(
+  db: D1Database,
+  empresaId: number,
+): Promise<UtilizacaoSimuladores> {
   try {
     const results = await db
       .prepare(
@@ -829,19 +837,22 @@ export async function getUtilizacaoSimuladores(db: D1Database): Promise<Utilizac
            s.nome,
            s.fabricante,
            s.modelo,
-           COALESCE(SUM(CASE WHEN sa.status IN ('AGENDADO', 'CONCLUIDO') THEN sa.duracao_minutos END), 0) / 60.0 as horas_programadas,
+           COALESCE(SUM(CASE WHEN sa.status IN ('AGENDADO', 'CONCLUIDA', 'CONCLUIDO') THEN sa.duracao_minutos END), 0) / 60.0 as horas_programadas,
            720 as horas_disponiveis,
-           COALESCE(SUM(CASE WHEN sa.status IN ('AGENDADO', 'CONCLUIDO') THEN sa.duracao_minutos END), 0) * 100.0 / (720 * 60) as taxa_utilizacao,
+           COALESCE(SUM(CASE WHEN sa.status IN ('AGENDADO', 'CONCLUIDA', 'CONCLUIDO') THEN sa.duracao_minutos END), 0) * 100.0 / (720 * 60) as taxa_utilizacao,
            'operacional' as status
          FROM simuladores s
          LEFT JOIN simulador_agendamentos sa ON sa.simulador_id = s.id
            AND sa.deleted_at IS NULL
+           AND sa.empresa_id = ?
            AND sa.data >= date('now', '-30 days')
            AND sa.data <= date('now')
          WHERE s.deleted_at IS NULL
+         AND s.empresa_id = ?
          GROUP BY s.id, s.nome, s.fabricante, s.modelo
          ORDER BY taxa_utilizacao DESC`,
       )
+      .bind(empresaId, empresaId)
       .all();
 
     const simuladores = (results.results || []).map((row: Record<string, unknown>) => ({
