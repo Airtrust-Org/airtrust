@@ -52,6 +52,14 @@ AIRTRUST_EXPECTED_EMPRESA_ID="<id-esperado>" AIRTRUST_AUTH_TOKEN="<redacted>" \
   bash scripts/smoke-authenticated-operational.sh
 ```
 
+Opcao interativa sem copiar token/cookie manualmente:
+
+```bash
+AIRTRUST_EXPECTED_EMPRESA_ID="<id-esperado>" npm run smoke:auth:login
+```
+
+Esse fluxo usa `POST /api/auth/login`, mantem o segredo apenas no processo atual e nao grava credenciais no repositorio.
+
 Aceite:
 
 - public-only passa;

@@ -132,6 +132,7 @@
     "logs:tail": "cd worker-airtrust && npx wrangler tail --env production",
     "logs:errors": "chmod +x scripts/analyze-logs.sh && ./scripts/analyze-logs.sh ERROR 60",
     "smoke:assets-public": "bash scripts/smoke-assets-public.sh",
+    "smoke:auth:login": "bash scripts/smoke-auth-login.sh",
     "smoke:core:prod": "BASE=https://api.airtrust.online bash scripts/smoke-test-core.sh",
     "sync:prod:local:safe": "AIRTRUST_ALLOW_PROD_SYNC=1 bash scripts/sync-d1-production-sanitized.sh --target local --yes",
     "sync:prod:dev:safe": "AIRTRUST_ALLOW_PROD_SYNC=1 bash scripts/sync-d1-production-sanitized.sh --target development --yes",
