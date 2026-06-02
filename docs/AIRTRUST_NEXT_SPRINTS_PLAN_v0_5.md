@@ -76,18 +76,19 @@ Modo: planejamento de sprints amplos atualizado apos Sprint A.
 - Risco: medio.
 - Criterio de aceite: operador autorizado consegue executar e registrar o pacote sem violar guard rails.
 
-## Sprint G - Repository pilot
+## Sprint H - Repository pilot
 
+- Status: executado parcialmente em 2026-06-02 com piloto em `dashboardService`; as metricas `taxaConclusaoMensal` e `utilizacaoSimuladores` passaram a usar repository read-only com contrato publico preservado.
 - Objetivo: testar o ganho real de uma camada de repository em um dominio critico.
 - Escopo: escolher um dominio com alta densidade de SQL e risco claro.
 - Fora do escopo: reescrever o worker inteiro.
-- Arquivos provaveis: dominio piloto entre `dashboardService`, `escalas`, `qualificacoes` ou `empresas-usuarios`.
-- Validacoes: diff controlado, testes existentes verdes, queda de SQL inline na area piloto.
+- Arquivos efetivamente tocados nesta fase: `worker-airtrust/src/repositories/dashboardMetricsRepository.ts`, `worker-airtrust/src/services/dashboardService.ts`, testes de repository/service e `docs/AIRTRUST_REPOSITORY_PILOT_DASHBOARD_v0_5.md`.
+- Validacoes: diff controlado, testes existentes verdes, queda de SQL inline na area piloto e tenant-scope preservado nas metricas extraidas.
 - Modelo recomendado: GPT-5.4 Alta.
 - Risco: medio.
-- Criterio de aceite: um dominio passa a ter acesso a dados encapsulado e mais testavel.
+- Criterio de aceite restante: expandir o piloto apenas para outras queries read-only do dashboard ou para um segundo dominio quando houver cobertura equivalente.
 
-## Sprint H - Supabase feasibility audit
+## Sprint I - Supabase feasibility audit
 
 - Objetivo: avaliar o que pode ser reaproveitado e o que deve ficar fora de uma eventual migracao futura.
 - Escopo: auth, tenant, storage, audit trail, FRMS, escalas e modulos com DDL residual.
