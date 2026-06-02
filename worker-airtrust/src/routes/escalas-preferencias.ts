@@ -56,31 +56,6 @@ const DEFAULT_PREFERENCIAS = {
   alerta_cma_dias: 30,
 };
 
-async function ensureUsuarioPreferenciasTable(db: D1Database): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS usuario_preferencias (
-        id TEXT PRIMARY KEY,
-        usuario_id TEXT NOT NULL,
-        empresa_id INTEGER NOT NULL,
-        chave TEXT NOT NULL,
-        valor TEXT,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        deleted_at TEXT,
-        UNIQUE(usuario_id, empresa_id, chave)
-      )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      `CREATE INDEX IF NOT EXISTS idx_usuario_preferencias_lookup
-       ON usuario_preferencias(usuario_id, empresa_id, chave)`,
-    )
-    .run();
-}
-
 function getUserId(c: { get: (key: string) => unknown }): string {
   return String((c as { get: (key: string) => unknown }).get('userId') || '');
 }
@@ -156,8 +131,6 @@ preferencias.get('/', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = getUserId(c);
 
-  await ensureUsuarioPreferenciasTable(db);
-
   if (!userId) {
     return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
   }
@@ -188,8 +161,6 @@ preferencias.put('/', auth(), async (c) => {
   const userId = getUserId(c);
   const body = await c.req.json().catch(() => ({}));
   const parsed = parseBody(PreferenciasSchema, body);
-
-  await ensureUsuarioPreferenciasTable(db);
 
   if (!parsed.ok) {
     return c.json({ success: false, error: parsed.error }, 400);
@@ -240,8 +211,6 @@ preferencias.put('/exibir-nome', auth(), async (c) => {
   const userId = getUserId(c);
   const body = await c.req.json().catch(() => ({}));
   const parsed = parseBody(ExibirNomeSchema, body);
-
-  await ensureUsuarioPreferenciasTable(db);
 
   if (!parsed.ok) {
     return c.json({ success: false, error: parsed.error }, 400);

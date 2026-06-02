@@ -8,7 +8,6 @@ import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-pl
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
 import {
   buildConvocacaoPreview,
-  ensureConvocacaoEmailSchema,
   getEmailConvocacaoConfig,
   listConvocacaoHistory,
   listGestoresCopia,
@@ -215,73 +214,6 @@ function buildMonthRange(mes?: string | null): { inicio: string; fim: string } |
     inicio: format(inicio),
     fim: format(fim),
   };
-}
-
-async function ensureTreinamentosPlanejadosSchema(db: D1Database): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS treinamentos_planejados (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        empresa_id INTEGER NOT NULL,
-        qualificacao_tipo_id INTEGER NOT NULL,
-        data_prevista TEXT NOT NULL,
-        hora_inicio TEXT,
-        hora_fim TEXT,
-        status TEXT NOT NULL DEFAULT 'PLANEJADO' CHECK(status IN ('PLANEJADO', 'CONFIRMADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'CANCELADO')),
-        instrutor_id INTEGER,
-        simulador_id INTEGER,
-        aeronave_id INTEGER,
-        local TEXT,
-        carga_horaria_prevista INTEGER,
-        titulo TEXT,
-        descricao TEXT,
-        observacoes TEXT,
-        motivo_cancelamento TEXT,
-        efetivado_em TEXT,
-        efetivado_por INTEGER,
-        sessao_id INTEGER,
-        created_by INTEGER,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        deleted_at TEXT
-      )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS treinamentos_participantes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        treinamento_id INTEGER NOT NULL,
-        funcionario_id INTEGER NOT NULL,
-        confirmado INTEGER DEFAULT 0,
-        presente INTEGER,
-        aprovado INTEGER,
-        nota REAL,
-        observacoes TEXT,
-        qualificacao_historico_id INTEGER,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        UNIQUE(treinamento_id, funcionario_id)
-      )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_treinamentos_planejados_empresa_data ON treinamentos_planejados(empresa_id, data_prevista, status) WHERE deleted_at IS NULL',
-    )
-    .run();
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_treinamentos_participantes_treinamento ON treinamentos_participantes(treinamento_id)',
-    )
-    .run();
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_treinamentos_participantes_funcionario ON treinamentos_participantes(funcionario_id)',
-    )
-    .run();
 }
 
 async function replaceParticipantes(
@@ -569,8 +501,6 @@ async function loadAuditoriaByTreinamento(
 treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  await ensureTreinamentosPlanejadosSchema(db);
-
   const items = await listEventos(db, empresaId, {
     status: c.req.query('status'),
     inicio: c.req.query('inicio'),
@@ -592,8 +522,6 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
 treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  await ensureTreinamentosPlanejadosSchema(db);
-
   const monthRange = buildMonthRange(c.req.query('mes'));
   const inicio = c.req.query('inicio') || monthRange?.inicio || null;
   const fim = c.req.query('fim') || monthRange?.fim || null;
@@ -622,8 +550,6 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
 treinamentosPlanejadosRoutes.get('/planejados/auditoria', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  await ensureTreinamentosPlanejadosSchema(db);
-
   const items = await listEventos(db, empresaId, {
     status: c.req.query('status'),
     inicio: c.req.query('inicio'),
@@ -672,8 +598,6 @@ treinamentosPlanejadosRoutes.get('/planejados/auditoria', async (c) => {
 treinamentosPlanejadosRoutes.get('/planejados/:id', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  await ensureTreinamentosPlanejadosSchema(db);
-
   const treinamentoId = Number(c.req.param('id'));
   if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -707,8 +631,6 @@ treinamentosPlanejadosRoutes.get('/planejados/:id', async (c) => {
 treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  await ensureTreinamentosPlanejadosSchema(db);
-
   const parsed = eventoSchema.safeParse(await c.req.json());
   if (!parsed.success) {
     return c.json(
@@ -785,9 +707,6 @@ treinamentosPlanejadosRoutes.post(
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureTreinamentosPlanejadosSchema(db);
-    await ensureConvocacaoEmailSchema(db);
-
     const treinamentoId = Number(c.req.param('id'));
     if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -859,9 +778,6 @@ treinamentosPlanejadosRoutes.post(
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureTreinamentosPlanejadosSchema(db);
-    await ensureConvocacaoEmailSchema(db);
-
     const treinamentoId = Number(c.req.param('id'));
     if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -994,9 +910,6 @@ treinamentosPlanejadosRoutes.post(
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureTreinamentosPlanejadosSchema(db);
-    await ensureConvocacaoEmailSchema(db);
-
     const treinamentoId = Number(c.req.param('id'));
     const body = (await c.req.json().catch(() => ({}))) as {
       funcionario_id?: number;
@@ -1089,8 +1002,6 @@ treinamentosPlanejadosRoutes.patch(
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureTreinamentosPlanejadosSchema(db);
-
     const treinamentoId = Number(c.req.param('id'));
     if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -1234,8 +1145,6 @@ treinamentosPlanejadosRoutes.post(
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureTreinamentosPlanejadosSchema(db);
-
     const treinamentoId = Number(c.req.param('id'));
     if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -1296,8 +1205,6 @@ treinamentosPlanejadosRoutes.patch(
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureTreinamentosPlanejadosSchema(db);
-
     const treinamentoId = Number(c.req.param('id'));
     if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -1412,8 +1319,6 @@ treinamentosPlanejadosRoutes.delete(
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureTreinamentosPlanejadosSchema(db);
-
     const treinamentoId = Number(c.req.param('id'));
     if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
       return c.json({ success: false, error: 'ID inválido' }, 400);

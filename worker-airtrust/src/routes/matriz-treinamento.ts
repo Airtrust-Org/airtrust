@@ -17,52 +17,6 @@ matrizTreinamento.use('/*', async (c, next) => {
   c.header('Vary', 'Authorization');
 });
 
-async function ensureSchema(db: D1Database) {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS matriz_treinamento_funcao (
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         empresa_id INTEGER NOT NULL,
-         funcao_id INTEGER NOT NULL,
-         qualificacao_tipo_id INTEGER NOT NULL,
-         obrigatoriedade TEXT NOT NULL DEFAULT 'OBRIGATORIA',
-         nivel_requerido INTEGER DEFAULT NULL,
-         critico_operacional INTEGER NOT NULL DEFAULT 0,
-         origem TEXT NOT NULL DEFAULT 'REGULATORIO',
-         observacoes TEXT DEFAULT NULL,
-         ativo INTEGER NOT NULL DEFAULT 1,
-         created_at DATETIME NOT NULL DEFAULT (datetime('now')),
-         updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
-         deleted_at DATETIME DEFAULT NULL
-       )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      `CREATE INDEX IF NOT EXISTS idx_matriz_treinamento_empresa_funcao
-         ON matriz_treinamento_funcao (empresa_id, funcao_id)
-         WHERE deleted_at IS NULL`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      `CREATE INDEX IF NOT EXISTS idx_matriz_treinamento_empresa_tipo
-         ON matriz_treinamento_funcao (empresa_id, qualificacao_tipo_id)
-         WHERE deleted_at IS NULL`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_matriz_treinamento_unique_ativo
-         ON matriz_treinamento_funcao (empresa_id, funcao_id, qualificacao_tipo_id)
-         WHERE ativo = 1 AND deleted_at IS NULL`,
-    )
-    .run();
-}
-
 function handleRouteError(route: string, fallbackMessage: string, error: unknown): never {
   console.error(`[matriz-treinamento] ${route}`, error);
 
@@ -79,8 +33,6 @@ matrizTreinamento.get('/registros', async (c) => {
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureSchema(db);
-
     const funcaoId = c.req.query('funcao_id');
     const ativo = c.req.query('ativo');
 
@@ -135,8 +87,6 @@ matrizTreinamento.get('/funcoes', async (c) => {
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureSchema(db);
-
     const { results: funcoes } = await db
       .prepare(
         `SELECT id, codigo, nome
@@ -197,8 +147,6 @@ matrizTreinamento.get('/registros/:id', async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
     const id = Number(c.req.param('id'));
-    await ensureSchema(db);
-
     const row = await db
       .prepare(
         `SELECT m.*, f.nome AS funcao_nome, qt.nome AS qualificacao_tipo_nome
@@ -222,8 +170,6 @@ matrizTreinamento.post('/registros', requireRole('admin', 'manager'), async (c) 
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureSchema(db);
-
     const body = (await c.req.json().catch(() => ({}))) as {
       funcao_id?: number;
       qualificacao_tipo_id?: number;
@@ -327,8 +273,6 @@ matrizTreinamento.post('/registros/bulk', requireRole('admin', 'manager'), async
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureSchema(db);
-
     const body = (await c.req.json().catch(() => ({}))) as {
       funcao_id?: number;
       qualificacao_tipo_ids?: number[];
@@ -440,8 +384,6 @@ matrizTreinamento.put('/registros/:id', requireRole('admin', 'manager'), async (
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
     const id = Number(c.req.param('id'));
-    await ensureSchema(db);
-
     const existing = await db
       .prepare(
         `SELECT id FROM matriz_treinamento_funcao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
@@ -508,8 +450,6 @@ matrizTreinamento.delete('/registros/:id', requireRole('admin', 'manager'), asyn
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
     const id = Number(c.req.param('id'));
-    await ensureSchema(db);
-
     const existing = await db
       .prepare(
         `SELECT id FROM matriz_treinamento_funcao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
@@ -539,8 +479,6 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
     const funcionarioId = Number(c.req.param('funcionario_id'));
-    await ensureSchema(db);
-
     // Pega função atual do funcionário (compatível com schema legado: funcao textual)
     const funcCols = await db.prepare(`PRAGMA table_info('funcionarios')`).all<{ name: string }>();
     const funcColSet = new Set((funcCols.results || []).map((c) => String(c.name || '')));
@@ -783,8 +721,6 @@ matrizTreinamento.get('/resumo', async (c) => {
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
-    await ensureSchema(db);
-
     const { results: funcoes } = await db
       .prepare(
         `SELECT f.id, f.nome,
