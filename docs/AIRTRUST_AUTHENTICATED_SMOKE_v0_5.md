@@ -1,69 +1,122 @@
 # AirTrust Authenticated Operational Smoke v0.5
 
-## 1) Objetivo
+Data: 2026-06-02
 
-Validar fluxos críticos operacionais após mudanças/deploys sem alterar regra de negócio:
+## Objetivo
 
-- autenticação e contexto de tenant;
-- FRMS/fadiga diária (read-only);
-- EVD (read-only);
-- simuladores (read-only);
-- qualificações (read-only);
-- health/version.
+Validar, em modo read-only, que a API em producao responde com autenticacao e contexto de tenant corretos para os fluxos minimos da empresa real atual. O smoke tambem confirma que a correcao de `/api/assets/*` segue bloqueando um caminho FIRA privado nao real.
 
-## 2) Variáveis necessárias
+Este smoke nao cria empresa, usuario, dados operacionais, seed, importacao ou migration.
 
-- `AIRTRUST_BASE_URL` (default: `https://api.airtrust.online`)
-- `AIRTRUST_AUTH_TOKEN` (Bearer) **ou** `AIRTRUST_COOKIE`
-- `AIRTRUST_PUBLIC_ONLY=YES` para rodar apenas endpoints públicos
+## Como Rodar Public-Only
 
-Variáveis de write (opcional e bloqueada por padrão):
-
-- `AIRTRUST_ALLOW_SMOKE_WRITES=YES`
-- `AIRTRUST_RUN_FRMS_FAIL_SAFE=YES`
-- se base for produção: `AIRTRUST_CONFIRM_PROD_SMOKE_WRITES="I understand this will create test data in production"`
-
-## 3) Como rodar read-only
-
-Sem autenticação (público):
+Use este modo quando nao houver credencial autenticada disponivel:
 
 ```bash
 AIRTRUST_PUBLIC_ONLY=YES bash scripts/smoke-authenticated-operational.sh
 ```
 
-Autenticado:
+Valida:
+
+- `GET /api/version`
+- `GET /api/health`
+- `GET /api/assets/fira/123/test.pdf`
+
+O probe de asset deve retornar qualquer status diferente de `200` e nao deve retornar PDF/documento.
+
+## Como Rodar Autenticado Read-Only
+
+Use uma credencial temporaria de operador autorizado, sem registrar o valor em terminal, arquivo ou log:
 
 ```bash
-AIRTRUST_AUTH_TOKEN="..." bash scripts/smoke-authenticated-operational.sh
+AIRTRUST_AUTH_TOKEN="<redacted>" bash scripts/smoke-authenticated-operational.sh
 ```
 
-ou
+ou:
 
 ```bash
-AIRTRUST_COOKIE="..." bash scripts/smoke-authenticated-operational.sh
+AIRTRUST_COOKIE="<redacted>" bash scripts/smoke-authenticated-operational.sh
 ```
 
-## 4) Interpretação dos resultados
+O script aceita token bearer ou cookie. Ele nunca imprime o valor da credencial; a saida mostra apenas `Auth mode: bearer-token`, `cookie` ou `none`.
 
-- Cada etapa imprime endpoint, método e HTTP status.
-- Qualquer status fora do esperado interrompe a execução (`exit 1`).
-- Sem credenciais no modo autenticado, o script falha cedo com instrução clara.
+## Validacao de Empresa Esperada
 
-## 5) Proibido em produção
+Para reduzir risco de cross-tenant, informe opcionalmente a empresa esperada:
 
-- Rodar mutações sem confirmação explícita.
-- Rodar smoke com writes sem checklist de risco.
-- Executar comandos manuais destrutivos fora do wrapper operacional.
+```bash
+AIRTRUST_EXPECTED_EMPRESA_ID="123" AIRTRUST_AUTH_TOKEN="<redacted>" \
+  bash scripts/smoke-authenticated-operational.sh
+```
 
-## 6) FRMS fail-safe (apenas staging/teste)
+ou:
 
-Quando liberado, o script testa payload incompleto em `POST /api/frms/daily-fatigue` e espera erro de validação (`400`/`422`).
+```bash
+AIRTRUST_EXPECTED_EMPRESA_CODIGO="empresa-codigo" AIRTRUST_AUTH_TOKEN="<redacted>" \
+  bash scripts/smoke-authenticated-operational.sh
+```
 
-Recomendação: manter `AIRTRUST_ALLOW_SMOKE_WRITES=NO` em produção.
+O script usa `GET /api/auth/empresas` e compara a empresa atual/primaria com o valor esperado. Se houver divergencia, o smoke falha.
 
-## 7) Checklist pós-deploy
+## Endpoints Validados
 
-1. `AIRTRUST_PUBLIC_ONLY=YES` (health/version)
-2. Smoke autenticado read-only
-3. Confirmar módulos críticos com HTTP 200
-4. Verificar ausência de mutações não autorizadas
+Read-only publico:
+
+- `GET /api/version`
+- `GET /api/health`
+- `GET /api/assets/fira/123/test.pdf`
+
+Read-only autenticado:
+
+- `GET /api/auth/me`
+- `GET /api/auth/empresas`
+- `GET /api/dashboard/metrics`
+- `GET /api/frms/daily-fatigue`
+- `GET /api/evd?data=<hoje>`
+- `GET /api/simuladores/sessoes?limit=1`
+- `GET /api/qualificacoes/historico?limit=1`
+- `GET /api/funcionarios?limit=1`
+
+Endpoints opcionais que retornem `404` ou `405` sao classificados como `SKIPPED_ENDPOINT_NOT_AVAILABLE`, nao como sucesso inventado.
+
+## Interpretacao
+
+- `PASS`: etapa validada com status HTTP esperado.
+- `FAIL`: etapa retornou status inesperado, contrato invalido ou empresa diferente da esperada.
+- `SKIPPED_AUTH_REQUIRED`: nao havia `AIRTRUST_AUTH_TOKEN` nem `AIRTRUST_COOKIE`, ou writes ficaram bloqueados.
+- `SKIPPED_ENDPOINT_NOT_AVAILABLE`: endpoint opcional nao existe, nao aceita o metodo ou a validacao opcional nao foi configurada.
+
+O resumo final e sanitizado:
+
+```text
+[SMOKE] Resumo sanitizado: PASS=<n> FAIL=<n> SKIPPED=<n>
+```
+
+## Proibido em Producao
+
+- Rodar mutacoes sem checklist e aprovacao explicita.
+- Rodar seed, importacao, migration ou `wrangler d1 execute --remote`.
+- Criar empresa ou usuario durante o smoke.
+- Salvar token/cookie em arquivo, historico, print, log ou commit.
+- Usar credencial de escopo amplo se nao for possivel limitar a execucao a read-only.
+
+## Writes
+
+O modo padrao e 100% read-only.
+
+As mutacoes de fail-safe FRMS continuam isoladas atras de todas as variaveis abaixo:
+
+- `AIRTRUST_RUN_FRMS_FAIL_SAFE=YES`
+- `AIRTRUST_ALLOW_SMOKE_WRITES=YES`
+- em producao, `AIRTRUST_CONFIRM_PROD_SMOKE_WRITES="I understand this will create test data in production"`
+
+Sem essas variaveis, writes sao classificados como skipped e nao executados.
+
+## Evidencia Sanitizada
+
+Para registrar evidencia:
+
+1. Salvar apenas a saida do script.
+2. Confirmar que nao ha token, cookie, email, nome de pessoa ou dados pessoais.
+3. Registrar data/hora, base URL, APP_VERSION e resumo final.
+4. Para autenticado, registrar somente que a empresa esperada foi validada, sem expor PII.
