@@ -43,6 +43,12 @@ Assets privados devem ficar em prefixos privados e ser servidos apenas por rota 
 
 Logs podem conter requestId, rota, status, erro interno e contexto tecnico. Nao devem conter token, cookie, documentos, payloads completos, emails desnecessarios, dados FRMS sensiveis ou stack em resposta client-facing. Audit trail deve registrar eventos criticos com empresa_id.
 
+Estado confirmado no HEAD `13dd8280a55eebc91f3051f94974306bcba2a721`:
+
+- `requestId` existe no runtime HTTP, mas ainda depende de metadata/payload sanitizado nos writers atuais.
+- `audit_logs` e `auditoria` nao possuem colunas dedicadas para `empresa_id`/`request_id`; a trilha minima nesta fase usa metadata contextual sem migration.
+- `assets` privados tenant-scoped agora podem ser auditados sem gravar URL completa ou nome real do arquivo.
+
 ## Dados por Empresa/Tenant
 
 Todo dado operacional deve resolver `empresa_id` por contexto autenticado, relacionamento direto ou tabela pai tenant-scoped. Rotas sem contexto de tenant devem falhar fechadas.
@@ -70,6 +76,7 @@ Todo dado operacional deve resolver `empresa_id` por contexto autenticado, relac
 - Audit trail ainda nao cobre todos os downloads, exports e acesso de suporte.
 - `modulos_ativos` existe no modelo, mas a ocultacao visual por tenant nao esta comprovada end-to-end.
 - Data quality ainda depende de execucao manual de checks read-only.
+- Writers legados fora do perimetro desta fase ainda precisam migrar para a camada de sanitizacao antes de se considerar o contrato LGPD suficientemente uniforme.
 
 ## Acoes Antes da Segunda Empresa
 

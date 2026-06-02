@@ -17,6 +17,8 @@ import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
+import { buildAuditMetadata } from '../lib/audit/context';
+import { sanitizeAuditPayload } from '../lib/audit/sanitize';
 import adminDomainEventsRoutes from './admin-domain-events';
 import adminManualMigrationsRoutes from './admin-manual-migrations';
 import { backfillSessionChecks } from '../services/backfill-session-checks';
@@ -109,8 +111,10 @@ async function registrarAcaoAdmin(
         params.module,
         params.deletedCount,
         params.success ? 1 : 0,
-        params.errorMessage || null,
-        params.metadata ? JSON.stringify(params.metadata) : null,
+        typeof sanitizeAuditPayload(params.errorMessage || null) === 'string'
+          ? (sanitizeAuditPayload(params.errorMessage || null) as string)
+          : null,
+        params.metadata ? JSON.stringify(sanitizeAuditPayload(params.metadata)) : null,
         params.ipAddress || null,
         params.userAgent || null,
       )
@@ -227,7 +231,7 @@ app.delete('/reset/funcionarios', auth(), adminOnly(), async (c) => {
         deletedCount: 0,
         success: false,
         errorMessage: support.reason,
-        metadata: { empresa_id: tenantScope.empresaId },
+        metadata: buildAuditMetadata(c, { empresa_id: tenantScope.empresaId }),
       });
       return c.json(
         {
@@ -302,7 +306,12 @@ app.delete('/reset/funcionarios', auth(), adminOnly(), async (c) => {
       module: 'funcionarios',
       deletedCount: totalDeleted,
       success: true,
-      metadata: { details, duration, empresa_id: tenantScope.empresaId, empresa_codigo: tenantScope.empresaCodigo },
+      metadata: buildAuditMetadata(c, {
+        details,
+        duration,
+        empresa_id: tenantScope.empresaId,
+        empresa_codigo: tenantScope.empresaCodigo,
+      }),
       ipAddress: c.req.header('cf-connecting-ip'),
       userAgent: c.req.header('user-agent'),
     });
@@ -391,7 +400,7 @@ app.delete('/reset/qualificacoes-tipos', auth(), adminOnly(), async (c) => {
         deletedCount: 0,
         success: false,
         errorMessage: support.reason,
-        metadata: { empresa_id: tenantScope.empresaId },
+        metadata: buildAuditMetadata(c, { empresa_id: tenantScope.empresaId }),
       });
       return c.json(
         {
@@ -444,7 +453,12 @@ app.delete('/reset/qualificacoes-tipos', auth(), adminOnly(), async (c) => {
       module: 'qualificacoes_tipos',
       deletedCount: totalDeleted,
       success: true,
-      metadata: { details, duration, empresa_id: tenantScope.empresaId, empresa_codigo: tenantScope.empresaCodigo },
+      metadata: buildAuditMetadata(c, {
+        details,
+        duration,
+        empresa_id: tenantScope.empresaId,
+        empresa_codigo: tenantScope.empresaCodigo,
+      }),
       ipAddress: c.req.header('cf-connecting-ip'),
       userAgent: c.req.header('user-agent'),
     });
@@ -528,7 +542,7 @@ app.delete('/reset/qualificacoes-historico', auth(), adminOnly(), async (c) => {
         deletedCount: 0,
         success: false,
         errorMessage: support.reason,
-        metadata: { empresa_id: tenantScope.empresaId },
+        metadata: buildAuditMetadata(c, { empresa_id: tenantScope.empresaId }),
       });
       return c.json(
         {
@@ -566,7 +580,11 @@ app.delete('/reset/qualificacoes-historico', auth(), adminOnly(), async (c) => {
       module: 'qualificacoes_historico',
       deletedCount,
       success: true,
-      metadata: { duration, empresa_id: tenantScope.empresaId, empresa_codigo: tenantScope.empresaCodigo },
+      metadata: buildAuditMetadata(c, {
+        duration,
+        empresa_id: tenantScope.empresaId,
+        empresa_codigo: tenantScope.empresaCodigo,
+      }),
       ipAddress: c.req.header('cf-connecting-ip'),
       userAgent: c.req.header('user-agent'),
     });

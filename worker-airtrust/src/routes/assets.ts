@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { getTenantContext, tenantMiddleware } from '../middleware/tenant';
 import type { Env, Variables } from '../types';
+import { buildAuditMetadata } from '../lib/audit/context';
+import { logAudit } from '../utils/db';
 
 export const assetsRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -59,7 +61,7 @@ export function classifyAssetAccess(key: string): AssetAccessPolicy {
 
 async function authorizeTenantAsset(c: Parameters<typeof getTenantContext>[0], empresaId: number) {
   let tenantAuthorized = false;
-  let tenantMiddlewareResponse: Response | void;
+  let tenantMiddlewareResponse: Response | void = undefined;
 
   const authResponse = await auth()(c, async () => {
     tenantMiddlewareResponse = await tenantMiddleware()(c, async () => {
@@ -121,6 +123,28 @@ assetsRouter.get('/*', async (c) => {
 
     if (!object) {
       return c.json({ success: false, error: 'Arquivo não encontrado' }, 404);
+    }
+
+    if (
+      policy.visibility === 'tenant' &&
+      c.env.DB &&
+      typeof (c.env.DB as Partial<D1Database>).prepare === 'function'
+    ) {
+      await logAudit(c.env.DB, {
+        userId: Number(c.get('userId') || 0) || undefined,
+        action: 'ASSET_ACCESS_GRANTED',
+        entityType: 'asset',
+        newValues: buildAuditMetadata(c, {
+          empresa_id: policy.empresaId,
+          asset_scope: 'fira',
+          asset_prefix: `fira/${policy.empresaId}`,
+          cache_policy: policy.cache,
+        }),
+        ipAddress: c.req.header('cf-connecting-ip'),
+        userAgent: c.req.header('user-agent'),
+      }).catch((error) => {
+        console.warn('[assets] falha ao registrar auditoria de acesso privado:', error);
+      });
     }
 
     // Determinar Content-Type

@@ -6,6 +6,14 @@ Data: 2026-06-02
 
 O sistema ja possui eventos e logs em partes do produto, mas a cobertura nao e uniforme para suporte, downloads, exports, offboarding e operacoes administrativas. Este sprint nao cria migration nem schema.
 
+## Estado Atual Confirmado no HEAD 13dd8280a55eebc91f3051f94974306bcba2a721
+
+- Writers atuais identificados: `auditoria` via `registrarAuditoria`, `audit_logs` via `logAudit`, `auditoria_avancada_v2` via `logAuditoria` do FRMS e `admin_actions` para eventos administrativos destrutivos.
+- `empresa_id` nao e persistido de forma canonica em `auditoria` nem em `audit_logs`; aparece em payloads FRMS e em alguns `metadata_json` de `admin_actions`.
+- `requestId` existe no middleware global e no handler de erro, mas nao tinha propagacao canonica para os writers de banco.
+- `dados_antes` e `dados_depois` ainda aceitam payload arbitrario em writers legados fora do perimetro deste sprint.
+- `assets.ts` protegia prefixos privados por tenant, mas nao registrava acesso privado autorizado.
+
 ## Empresa ID
 
 Todo evento auditavel deve conter `empresa_id` resolvido do tenant autenticado ou do recurso pai. Eventos sem empresa devem ser restritos a operacao interna claramente identificada.
@@ -52,6 +60,23 @@ Registrar desativacao de usuario, revogacao de convite, suspensao de tenant, exp
 - Criar runbooks e checks read-only.
 - Adicionar testes arquiteturais.
 - Definir allowlists de auditoria por entidade antes de schema.
+- Sanitizar payloads de auditoria em pontos centrais e rotas criticas de escopo controlado.
+- Embutir `request_id` e `empresa_id` em metadata/payload sanitizado quando a tabela atual nao possui colunas dedicadas.
+- Auditar acesso autorizado a assets privados tenant-scoped sem registrar nome de arquivo ou URL completa.
+
+## Endurecimento Aplicado Nesta Fase
+
+- Nova camada `worker-airtrust/src/lib/audit/` com sanitizacao conservadora, truncamento de tamanho e protecao contra payload circular/profundo.
+- `auth.ts`: evento de `IMPERSONATE` deixou de carregar email/nome do alvo e passou a registrar apenas contexto minimizado e sanitizado.
+- `admin.ts`: `metadata_json` e `error_message` passam por sanitizacao antes de persistir; `request_id` e `empresa_id` entram no metadata quando disponiveis.
+- `assets.ts`: acesso autorizado a prefixo privado `fira/{empresaId}` passa a registrar evento em `audit_logs` com prefixo tenant-scoped e sem nome real do arquivo.
+- `empresas.ts`: payloads de auditoria dos eventos `INSERT`, `UPDATE` e `DELETE` passam a ser envelopados com `_audit_context` sanitizado e sem campos sensiveis brutos.
+
+## Lacunas Que Permanecem
+
+- `auditoria`, `audit_logs` e `auditoria_avancada_v2` continuam sem contrato unico de colunas para `empresa_id`, `request_id`, motivo de suporte e correlacao assincroma.
+- Call sites legados fora do escopo desta fase ainda podem gravar payload amplo se enviarem objetos brutos.
+- `support` read-only por tenant ainda nao possui writer formal proprio nem matriz de justificativa operacional persistida.
 
 ## Ordem Recomendada
 

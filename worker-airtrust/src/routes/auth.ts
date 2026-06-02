@@ -19,6 +19,7 @@ import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { createLogger, toError } from '../utils/logger';
 import { hasUsuariosEmpresasTable, getUsuariosSchema } from '../utils/db-schema';
 import { logAudit } from '../utils/db'; // SECURITY: Import audit logging
+import { buildAuditMetadata } from '../lib/audit/context';
 import { enviarEmailAlert } from '../cron/notificacoes';
 import { isAdminRole, normalizeAirtrustRole } from '../utils/role-resolution';
 import { isLegacyPlatformAdminUserId } from '../middleware/tenant';
@@ -1513,12 +1514,12 @@ authRoutes.post('/impersonate', auth(), async (c) => {
       action: 'IMPERSONATE',
       entityType: 'usuario',
       entityId: targetUserId,
-      newValues: {
-        target_id: targetUserId,
-        target_email: target.email,
-        target_nome: target.nome,
-        impersonation_duration: '3600 segundos',
-      },
+      newValues: buildAuditMetadata(c, {
+        target_user_id: targetUserId,
+        impersonation_duration_seconds: 3600,
+      }),
+      ipAddress: c.req.header('cf-connecting-ip'),
+      userAgent: c.req.header('user-agent'),
     }).catch((err) => {
       logger.warn('[IMPERSONATE] Falha ao registrar auditoria', { error: toError(err).message });
       // Don't throw - audit failure shouldn't block login
