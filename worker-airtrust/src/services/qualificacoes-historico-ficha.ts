@@ -4,6 +4,12 @@ import {
   isG1SemQualificacaoCode,
   realizarG1SemPendente,
 } from './qualificacoes-g1-sem';
+import {
+  normalizeCompletedStatusForNewWrites,
+  normalizePlannedStatusForNewWrites,
+  normalizeQualificationStatusForCompatibility,
+  QUALIFICACAO_STATUS,
+} from '../lib/status/status-codes';
 
 export type UpsertQualificacaoHistoricoDaFichaParams = {
   fichaId: string | number;
@@ -210,7 +216,8 @@ async function reconcileQualificacaoHistoricoExistente(
     String(mesmaData.data_vencimento || '') !== params.dataVencimento ||
     Number(mesmaData.empresa_id || 0) !== Number(params.empresaId || 0) ||
     Number(mesmaData.renovada || 0) !== 0 ||
-    String(mesmaData.status || '') !== statusFinal ||
+    normalizeQualificationStatusForCompatibility(mesmaData.status) !==
+      normalizeQualificationStatusForCompatibility(statusFinal) ||
     String(mesmaData.observacoes || '') !== observacoesAtualizadas;
 
   if (precisaAtualizar) {
@@ -261,7 +268,10 @@ export async function upsertQualificacaoHistoricoDaFicha(
   const fichaId = String(params.fichaId);
   const qualificacaoCodigo = normalizeCodigo(params.qualificacaoCodigo);
   const marcadorRenovacao = `Renovada via ficha #${fichaId} em ${new Date().toISOString().slice(0, 10)}`;
-  const statusFinal = params.status || 'CONCLUIDA';
+  const statusFinal =
+    normalizePlannedStatusForNewWrites(params.status) ||
+    normalizeCompletedStatusForNewWrites(params.status) ||
+    QUALIFICACAO_STATUS.CONCLUIDA;
 
   if (isG1SemQualificacaoCode(qualificacaoCodigo)) {
     const realizacaoPendente = await realizarG1SemPendente(db, {
@@ -294,7 +304,7 @@ export async function upsertQualificacaoHistoricoDaFicha(
   const mesmaData = await findQualificacaoHistoricoMesmaDataComFallback(db, findParams);
 
   const anteriorAtiva =
-    statusFinal === 'PLANEJADA'
+    statusFinal === QUALIFICACAO_STATUS.PLANEJADA
       ? null
       : await db
           .prepare(

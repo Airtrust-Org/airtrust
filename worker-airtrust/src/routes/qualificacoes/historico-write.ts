@@ -23,6 +23,17 @@ import {
   publishQualificacaoEvent,
 } from './historico-helpers';
 import {
+  COMPLETED_STATUS_VALUES,
+  isPlannedQualificationStatus,
+  normalizeCompletedStatusForNewWrites,
+  normalizePlannedStatusForNewWrites,
+  normalizeQualificationStatusForCompatibility,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  QUALIFICACAO_STATUS,
+  sqlStatusEqualsAny,
+  sqlStatusNotEqualsAny,
+} from '../../lib/status/status-codes';
+import {
   garantirG1SemPlanejado,
   isG1QualificacaoCode,
   isG1SemQualificacaoCode,
@@ -30,6 +41,18 @@ import {
 } from '../../services/qualificacoes-g1-sem';
 
 const writeRouter = new Hono<{ Bindings: Env }>();
+
+function normalizeWritableHistoricoStatus(
+  status: string | null | undefined,
+): typeof QUALIFICACAO_STATUS.PLANEJADA | typeof QUALIFICACAO_STATUS.CONCLUIDA | null {
+  const planned = normalizePlannedStatusForNewWrites(status);
+  if (planned) return planned;
+
+  const completed = normalizeCompletedStatusForNewWrites(status);
+  if (completed) return completed;
+
+  return null;
+}
 
 async function resolveInstrutorNomePorPayload(
   db: D1Database,
@@ -474,7 +497,7 @@ writeRouter.post(
         instrutor_id: z.number().int().positive().optional(),
         instrutor: z.string().max(200).optional(),
         observacoes: z.string().nullable().optional(),
-        status: z.enum(['PLANEJADA', 'CONCLUIDA']).optional().default('CONCLUIDA'),
+        status: z.string().optional().default(QUALIFICACAO_STATUS.CONCLUIDA),
       })
       .refine((data) => data.funcionario_id !== undefined || data.funcionario_cpf !== undefined, {
         message: 'funcionario_id ou funcionario_cpf é obrigatório',
@@ -558,10 +581,20 @@ writeRouter.post(
     hoje.setHours(0, 0, 0, 0);
     const dataConclusaoDate = new Date(data_conclusao + 'T00:00:00Z');
 
-    let statusFinal = parsed.data.status;
+    let statusFinal = normalizeWritableHistoricoStatus(parsed.data.status);
+    if (!statusFinal) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Status inválido. Use uma variante compatível de PLANEJADA/PLANEJADO ou CONCLUIDA/CONCLUIDO.',
+        },
+        400,
+      );
+    }
     if (dataConclusaoDate > hoje) {
       // Data futura = qualificação planejada
-      statusFinal = 'PLANEJADA';
+      statusFinal = QUALIFICACAO_STATUS.PLANEJADA;
     }
 
     // Inserir registro — data_vencimento NULL (cálculo dinâmico), validade_meses só se override CMA >60
@@ -700,7 +733,7 @@ Alternativamente, edite ou exclua o registro existente antes de criar um novo.`,
     const createdHistoricoId = Number(result.meta.last_row_id || 0);
     let registroAnteriorRenovadoId: number | null = null;
 
-    if (statusFinal !== 'PLANEJADA') {
+    if (statusFinal !== QUALIFICACAO_STATUS.PLANEJADA) {
       const anterior = await db
         .prepare(
           `SELECT id
@@ -710,7 +743,7 @@ Alternativamente, edite ou exclua o registro existente antes de criar um novo.`,
               AND id <> ?
               AND deleted_at IS NULL
               AND COALESCE(renovada, 0) = 0
-              AND COALESCE(status, 'CONCLUIDA') <> 'PLANEJADA'
+              AND ${sqlStatusNotEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)}
             ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
             LIMIT 1`,
         )
@@ -1052,8 +1085,8 @@ writeRouter.patch(
       return c.json({ success: false, error: 'Qualificação não encontrada' }, 404);
     }
 
-    const currentStatus = existing.status || 'CONCLUIDA';
-    if (currentStatus !== 'PLANEJADA') {
+    const currentStatus = normalizeQualificationStatusForCompatibility(existing.status);
+    if (!isPlannedQualificationStatus(currentStatus)) {
       return c.json(
         {
           success: false,
@@ -1105,7 +1138,7 @@ writeRouter.patch(
         `UPDATE qualificacoes_historico
             SET data_conclusao = ?,
                 data_vencimento = ?,
-                status = 'PLANEJADA',
+                status = '${QUALIFICACAO_STATUS.PLANEJADA}',
                 updated_at = datetime('now')
           WHERE id = ? AND deleted_at IS NULL`,
       )
@@ -1121,7 +1154,7 @@ writeRouter.patch(
       acao: 'UPDATE',
       registro_id: id,
       dados_novos: {
-        status: 'PLANEJADA',
+        status: QUALIFICACAO_STATUS.PLANEJADA,
         data_conclusao: novaDataPlanejada,
         data_vencimento: dataVencimentoFinal,
       },
@@ -1133,7 +1166,7 @@ writeRouter.patch(
       message: 'Qualificação reagendada com sucesso',
       data: {
         id,
-        status: 'PLANEJADA',
+        status: QUALIFICACAO_STATUS.PLANEJADA,
         data_conclusao: novaDataPlanejada,
         data_vencimento: dataVencimentoFinal,
       },
@@ -1182,8 +1215,8 @@ writeRouter.post(
       return c.json({ success: false, error: 'Qualificação não encontrada' }, 404);
     }
 
-    const currentStatus = existing.status || 'CONCLUIDA';
-    if (currentStatus !== 'PLANEJADA') {
+    const currentStatus = normalizeQualificationStatusForCompatibility(existing.status);
+    if (!isPlannedQualificationStatus(currentStatus)) {
       return c.json(
         {
           success: false,
@@ -1197,7 +1230,7 @@ writeRouter.post(
     await db
       .prepare(
         `UPDATE qualificacoes_historico 
-         SET status = 'CONCLUIDA', 
+         SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
              data_confirmacao = datetime('now'), 
              confirmada_por = ?,
              updated_at = datetime('now')
@@ -1217,7 +1250,7 @@ writeRouter.post(
               AND qualificacao_codigo = ?
               AND id <> ?
               AND deleted_at IS NULL
-              AND COALESCE(status, 'CONCLUIDA') = 'CONCLUIDA'
+              AND ${sqlStatusEqualsAny('status', COMPLETED_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)}
               AND COALESCE(renovada, 0) = 0
             ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
             LIMIT 1`,
@@ -1249,7 +1282,7 @@ writeRouter.post(
       tabela: 'qualificacoes_historico',
       acao: 'UPDATE',
       registro_id: id,
-      dados_novos: { status: 'CONCLUIDA', confirmada_por: userId },
+      dados_novos: { status: QUALIFICACAO_STATUS.CONCLUIDA, confirmada_por: userId },
       ...ua4,
     });
 
@@ -1261,7 +1294,7 @@ writeRouter.post(
         existing.qualificacao_codigo,
         {
           registro_id: id,
-          status: 'CONCLUIDA',
+          status: QUALIFICACAO_STATUS.CONCLUIDA,
         },
       );
     } catch (error) {
@@ -1273,7 +1306,7 @@ writeRouter.post(
       message: 'Qualificação confirmada com sucesso',
       data: {
         id,
-        status: 'CONCLUIDA',
+        status: QUALIFICACAO_STATUS.CONCLUIDA,
         confirmada_por: userId,
         renovou_anterior: renovarAnterior,
         registro_anterior_renovado_id: registroAnteriorRenovadoId,
@@ -1308,8 +1341,8 @@ writeRouter.patch(
       return c.json({ success: false, error: 'Qualificação não encontrada' }, 404);
     }
 
-    const currentStatus = existing.status || 'CONCLUIDA';
-    if (currentStatus !== 'PLANEJADA') {
+    const currentStatus = normalizeQualificationStatusForCompatibility(existing.status);
+    if (!isPlannedQualificationStatus(currentStatus)) {
       return c.json(
         {
           success: false,
@@ -1323,7 +1356,7 @@ writeRouter.patch(
     await db
       .prepare(
         `UPDATE qualificacoes_historico 
-         SET status = 'CANCELADA', 
+         SET status = '${QUALIFICACAO_STATUS.CANCELADA}',
              updated_at = datetime('now')
          WHERE id = ?`,
       )
@@ -1339,7 +1372,7 @@ writeRouter.patch(
       tabela: 'qualificacoes_historico',
       acao: 'UPDATE',
       registro_id: id,
-      dados_novos: { status: 'CANCELADA' },
+      dados_novos: { status: QUALIFICACAO_STATUS.CANCELADA },
       ...ua5,
     });
 
@@ -1348,7 +1381,7 @@ writeRouter.patch(
       message: 'Qualificação cancelada com sucesso',
       data: {
         id,
-        status: 'CANCELADA',
+        status: QUALIFICACAO_STATUS.CANCELADA,
       },
     });
   }),

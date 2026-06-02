@@ -2,7 +2,7 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `13dd8280a55eebc91f3051f94974306bcba2a721`
+HEAD auditado: `300ecb9b036d153c0da5fa654e7083f09fee412b`
 Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem dados reais e sem deploy.
 
 ## Agora, antes de qualquer novo cliente externo
@@ -113,10 +113,12 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem da
 - Escopo: enum compartilhado por dominio, migracao incremental das queries de metrica e contagem.
 - Fora do escopo: normalizacao total de todos os status historicos no banco.
 - Modelo recomendado: GPT-5.4 Alta.
-- Deploy necessario?: sim, quando implementado.
+- Resultado atual em 2026-06-02: Sprint C executado sem migration na camada critica do worker; `dashboardService`, simuladores, qualificacoes e treinamentos planejados passaram a consumir helpers centrais de compatibilidade; leitura aceita `CONCLUIDA/CONCLUIDO`, `CANCELADA/CANCELADO`, `PLANEJADA/PLANEJADO`, `AGENDADO/AGENDADA` e `PENDENTE/PENDING` nos pontos cobertos.
+- Deploy necessario?: sim, apenas quando houver decisao explicita de publicar runtime alterado apos validacao final completa.
 - Migration necessaria?: nao para a primeira etapa.
 - Pode ser GPT-5.4?: sim.
 - Precisa GPT-5.5?: nao.
+- Documento de referencia: `docs/AIRTRUST_STATUS_ENUM_COMPATIBILITY_v0_5.md`.
 - Criterio de aceite: caminhos criticos deixam de usar strings literais soltas e passam a referenciar um contrato central.
 
 ### Item 9 - Testes dos modulos beta/ocultos

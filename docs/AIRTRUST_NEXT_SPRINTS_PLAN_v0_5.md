@@ -2,7 +2,7 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `13dd8280a55eebc91f3051f94974306bcba2a721`
+HEAD auditado: `300ecb9b036d153c0da5fa654e7083f09fee412b`
 Modo: planejamento de sprints amplos atualizado apos Sprint A.
 
 ## Sprint A - RBAC/Suporte
@@ -31,14 +31,15 @@ Modo: planejamento de sprints amplos atualizado apos Sprint A.
 
 ## Sprint C - Status Enum
 
+- Status: concluido parcialmente em 2026-06-02 na camada critica do worker, sem migration.
 - Objetivo: centralizar status criticos e migrar primeiro metrica/contagem.
-- Escopo: enums compartilhados e conversao inicial nos pontos de risco mais alto.
+- Escopo entregue nesta fase: modulo central `worker-airtrust/src/lib/status/status-codes.ts`, compatibilidade aplicada em `dashboardService`, simuladores, qualificacoes e treinamentos planejados, mais testes focados de compatibilidade.
 - Fora do escopo: normalizacao completa do banco e de todos os modulos em uma vez.
-- Arquivos provaveis: `worker-airtrust/src/services/dashboardService.ts`, `worker-airtrust/src/routes/*`, `src/react-app/*` de metricas e estados visuais.
-- Validacoes: grep reduzindo strings literais, testes de dashboard e contratos de status.
+- Arquivos efetivamente tocados: `worker-airtrust/src/lib/status/status-codes.ts`, `worker-airtrust/src/services/dashboardService.ts`, `worker-airtrust/src/routes/simuladores-*`, `worker-airtrust/src/routes/qualificacoes/*`, `worker-airtrust/src/services/qualificacoes-historico-ficha.ts`, `worker-airtrust/src/services/treinamentos-planejados-integration.ts`, testes e `docs/AIRTRUST_STATUS_ENUM_COMPATIBILITY_v0_5.md`.
+- Validacoes: testes de compatibilidade de status, suites existentes de dashboard/simuladores/qualificacoes/treinamentos planejados e inventario dos status magicos remanescentes.
 - Modelo recomendado: GPT-5.4 Alta.
 - Risco: medio.
-- Criterio de aceite: queries e componentes criticos deixam de depender de variantes manuais espalhadas.
+- Criterio de aceite restante: expandir a mesma disciplina para cron jobs, alertas e demais modulos que ainda usam strings soltas fora da camada critica atual.
 
 ## Sprint D - Testes dos modulos beta
 

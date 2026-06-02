@@ -110,7 +110,7 @@ function createMockDb(state: MockState): D1Database {
                   if (h.deleted_at !== null) return false;
                   if (h.sessao_id !== sessaoId) return false;
                   if (h.funcionario_id !== funcionarioId) return false;
-                  if (sql.includes("COALESCE(status, '') <> 'CANCELADA'") && h.status === 'CANCELADA') {
+                  if (['CANCELADA', 'CANCELADO'].includes(h.status)) {
                     return false;
                   }
                   return true;

@@ -26,6 +26,14 @@ import {
   MODELO_AERONAVE_EXPR,
   calcularDataVencimento,
 } from './historico-helpers';
+import {
+  CANCELLED_STATUS_VALUES,
+  isPlannedQualificationStatus,
+  normalizeQualificationStatusForCompatibility,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  QUALIFICACAO_STATUS,
+  sqlStatusEqualsAny,
+} from '../../lib/status/status-codes';
 import writeRouter from './historico-write';
 
 const router = new Hono<{ Bindings: Env }>();
@@ -158,11 +166,13 @@ router.get(
             break;
           case 'PLANEJADA':
             statusConditions.push(
-              "(qh.deleted_at IS NULL AND COALESCE(qh.renovada, 0) = 0 AND (qh.data_conclusao IS NULL OR UPPER(COALESCE(qh.status, '')) = 'PLANEJADA'))",
+              `(qh.deleted_at IS NULL AND COALESCE(qh.renovada, 0) = 0 AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny("UPPER(COALESCE(qh.status, ''))", PLANNED_QUALIFICATION_STATUS_VALUES)}))`,
             );
             break;
           case 'CANCELADA':
-            statusConditions.push('(qh.deleted_at IS NOT NULL)');
+            statusConditions.push(
+              `(qh.deleted_at IS NOT NULL OR ${sqlStatusEqualsAny("UPPER(COALESCE(qh.status, ''))", CANCELLED_STATUS_VALUES)})`,
+            );
             break;
         }
       }
@@ -198,7 +208,7 @@ router.get(
         ELSE 0 
       END) as vencidas,
       SUM(CASE WHEN qh.renovada = 1 THEN 1 ELSE 0 END) as renovadas,
-      SUM(CASE WHEN (qh.data_conclusao IS NULL OR qh.status = 'PLANEJADA') AND qh.deleted_at IS NULL AND qh.renovada = 0 THEN 1 ELSE 0 END) as planejadas
+      SUM(CASE WHEN (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny("UPPER(COALESCE(qh.status, ''))", PLANNED_QUALIFICATION_STATUS_VALUES)}) AND qh.deleted_at IS NULL AND qh.renovada = 0 THEN 1 ELSE 0 END) as planejadas
     FROM qualificacoes_historico qh
     LEFT JOIN funcionarios f ON f.id = qh.funcionario_id 
       AND f.deleted_at IS NULL 
@@ -312,10 +322,10 @@ router.get(
       }
 
       let derivedStatus: string;
-      const dbStatus = (r.qualificacao_status as string | null)?.toUpperCase();
+      const dbStatus = normalizeQualificationStatusForCompatibility(r.qualificacao_status);
       // Se o status salvo é PLANEJADA (data futura ou sem data), respeitar
-      if (dbStatus === 'PLANEJADA' || (!r.data_realizacao && !dataVencimentoCalculada)) {
-        derivedStatus = 'PLANEJADA';
+      if (isPlannedQualificationStatus(dbStatus) || (!r.data_realizacao && !dataVencimentoCalculada)) {
+        derivedStatus = QUALIFICACAO_STATUS.PLANEJADA;
       } else if (!dataVencimentoCalculada) {
         derivedStatus = 'INDEFINIDA';
       } else if (r.renovada) {

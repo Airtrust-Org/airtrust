@@ -8,6 +8,12 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import {
+  isCompletedStatus,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  QUALIFICACAO_STATUS,
+  sqlStatusEqualsAny,
+} from '../lib/status/status-codes';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
@@ -422,7 +428,11 @@ app.put('/sessoes/:id', async (c) => {
     // Sincronizar data_conclusao nas qualificações PLANEJADAS vinculadas (se a data mudou)
     if (b.data && b.data !== (a as any).data) {
       await c.env.DB.prepare(
-        "UPDATE qualificacoes_historico SET data_conclusao=?, updated_at=datetime('now') WHERE sessao_id=? AND status='PLANEJADA' AND deleted_at IS NULL",
+        `UPDATE qualificacoes_historico
+         SET data_conclusao=?, updated_at=datetime('now')
+         WHERE sessao_id=?
+           AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
+           AND deleted_at IS NULL`,
       )
         .bind(b.data, id)
         .run();
@@ -431,7 +441,11 @@ app.put('/sessoes/:id', async (c) => {
     // Criar qualificações PLANEJADAS se a sessão ainda não as tiver (ex: sessão criada antes do deploy)
     const diag: Record<string, unknown> = {};
     const hasPlanejadas = await c.env.DB.prepare(
-      "SELECT 1 FROM qualificacoes_historico WHERE sessao_id=? AND status='PLANEJADA' AND deleted_at IS NULL LIMIT 1",
+      `SELECT 1 FROM qualificacoes_historico
+       WHERE sessao_id=?
+         AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
+         AND deleted_at IS NULL
+       LIMIT 1`,
     )
       .bind(id)
       .first();
@@ -819,7 +833,7 @@ app.put('/sessoes/:id', async (c) => {
 
     const statusAnterior = String((a as any)?.status || '').toUpperCase();
     const statusNovo = String((u as any)?.status || '').toUpperCase();
-    if (statusNovo === 'CONCLUIDA' && statusAnterior !== 'CONCLUIDA') {
+    if (isCompletedStatus(statusNovo) && !isCompletedStatus(statusAnterior)) {
       try {
         const syncQualResult = await sincronizarQualificacoesDaSessaoConcluida(c.env.DB, {
           sessaoId: Number(id),
@@ -877,7 +891,7 @@ app.put('/sessoes/:id', async (c) => {
             publishDomainEvent(
               c.env.DB,
               'simuladores',
-              String((u as any)?.status || '').toUpperCase() === 'CONCLUIDA'
+              isCompletedStatus((u as any)?.status)
                 ? 'SIMULADOR_REALIZADO'
                 : 'SIMULADOR_AGENDADO',
               {
@@ -898,7 +912,7 @@ app.put('/sessoes/:id', async (c) => {
 
     // Email: when session transitions to CONCLUIDA and fichas are in AVALIACAO_PENDENTE,
     // notify instrutor to fill the evaluation.
-    if (statusNovo === 'CONCLUIDA' && statusAnterior !== 'CONCLUIDA') {
+    if (isCompletedStatus(statusNovo) && !isCompletedStatus(statusAnterior)) {
       try {
         const fichasRows = await c.env.DB.prepare(
           `SELECT id FROM fichas_sessao
@@ -973,7 +987,11 @@ app.delete('/sessoes/:id', async (c) => {
 
     // Cancelar qualificações PLANEJADAS vinculadas à sessão
     await c.env.DB.prepare(
-      "UPDATE qualificacoes_historico SET deleted_at=datetime('now') WHERE sessao_id=? AND status='PLANEJADA' AND deleted_at IS NULL",
+      `UPDATE qualificacoes_historico
+       SET deleted_at=datetime('now')
+       WHERE sessao_id=?
+         AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
+         AND deleted_at IS NULL`,
     )
       .bind(id)
       .run();
