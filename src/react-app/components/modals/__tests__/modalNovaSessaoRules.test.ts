@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   applyModelChangeDefaults,
   deriveSpecialFichaFlags,
+  filterModelosSessaoForModal,
+  isModeloSessaoCompativel,
+  normalizeModeloSessaoEquipamento,
   resolveEditModeloSelection,
 } from '../modalNovaSessaoRules';
 
@@ -105,6 +108,121 @@ describe('modalNovaSessaoRules', () => {
       });
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('filterModelosSessaoForModal', () => {
+    const modelos = [
+      {
+        id: 1,
+        codigo: 'SK76-I-01/12',
+        nome: '01/12 - Familiarizacao',
+        tipo: 'INICIAL',
+        tipo_sessao_id: 10,
+        tipo_sessao_codigo: 'INI',
+        tipo_sessao_nome: 'Inicial',
+        modelo_aeronave: 'SK76',
+      },
+      {
+        id: 2,
+        codigo: 'SK76-PER-01',
+        nome: 'SK76 Periodico',
+        tipo: 'SIMULADOR',
+        tipo_sessao_id: 20,
+        tipo_sessao_codigo: 'PER',
+        tipo_sessao_nome: 'Periodico',
+        modelo_aeronave: 'S-76',
+      },
+      {
+        id: 3,
+        codigo: 'AW139-I-01',
+        nome: 'AW139 Inicial',
+        tipo: 'SIMULADOR',
+        tipo_sessao_id: 10,
+        tipo_sessao_codigo: 'INI',
+        tipo_sessao_nome: 'Inicial',
+        modelo_aeronave: 'AW139',
+      },
+      {
+        id: 4,
+        codigo: 'AW139-PER-01',
+        nome: 'AW139 Periodico',
+        tipo: 'SIMULADOR',
+        tipo_sessao_id: 20,
+        tipo_sessao_codigo: 'PER',
+        tipo_sessao_nome: 'Periodico',
+        modelo_aeronave: 'AW139',
+      },
+      {
+        id: 5,
+        codigo: 'SK76-AER-01',
+        nome: 'SK76 Aeronave',
+        tipo: 'AERONAVE',
+        tipo_sessao_id: 10,
+        tipo_sessao_codigo: 'INI',
+        tipo_sessao_nome: 'Inicial',
+        modelo_aeronave: 'SK76',
+      },
+    ];
+
+    it('normaliza aliases de equipamento SK76', () => {
+      expect(normalizeModeloSessaoEquipamento('SK76 (Sikorsky)')).toBe('SK76');
+      expect(normalizeModeloSessaoEquipamento('S-76')).toBe('SK76');
+      expect(normalizeModeloSessaoEquipamento('s76')).toBe('SK76');
+    });
+
+    it('retorna modelos SK76 Inicial para equipamento com fabricante e tipo INI', () => {
+      const result = filterModelosSessaoForModal({
+        modelos,
+        tipoSessao: { codigo: 'INI', nome: 'Inicial' },
+        equipamento: 'SK76 (Sikorsky)',
+        tipoDispositivo: 'SIMULADOR',
+      });
+
+      expect(result.map((modelo) => modelo.codigo)).toEqual(['SK76-I-01/12']);
+    });
+
+    it('mantem AW139 funcionando com o mesmo filtro de tipo', () => {
+      const result = filterModelosSessaoForModal({
+        modelos,
+        tipoSessao: { codigo: 'INI', nome: 'Inicial' },
+        equipamento: 'AW139',
+        tipoDispositivo: 'SIMULADOR',
+      });
+
+      expect(result.map((modelo) => modelo.codigo)).toEqual(['AW139-I-01']);
+    });
+
+    it('mantem filtro por tipo Periodico sem misturar Inicial', () => {
+      const result = filterModelosSessaoForModal({
+        modelos,
+        tipoSessao: { codigo: 'PER', nome: 'Periódico' },
+        equipamento: 'SK76',
+        tipoDispositivo: 'SIMULADOR',
+      });
+
+      expect(result.map((modelo) => modelo.codigo)).toEqual(['SK76-PER-01']);
+    });
+
+    it('nao deixa modelo de outro equipamento aparecer indevidamente', () => {
+      expect(
+        isModeloSessaoCompativel(modelos[2], {
+          tipoSessao: { codigo: 'INI', nome: 'Inicial' },
+          equipamento: 'SK76',
+          tipoDispositivo: 'SIMULADOR',
+        }),
+      ).toBe(false);
+    });
+
+    it('nao inclui modelo de aeronave real quando a sessao e de simulador', () => {
+      const result = filterModelosSessaoForModal({
+        modelos,
+        tipoSessao: { codigo: 'INI', nome: 'Inicial' },
+        equipamento: 'SK76',
+        tipoDispositivo: 'SIMULADOR',
+      });
+
+      expect(result.map((modelo) => modelo.codigo)).not.toContain('SK76-AER-01');
     });
   });
 });
