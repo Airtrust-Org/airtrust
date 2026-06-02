@@ -4,6 +4,15 @@ set -euo pipefail
 # AirTrust full automated deploy script
 # Steps: build web, typecheck, publish worker, capture version ID, purge cache
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+
+echo "LEGACY SCRIPT - do not use for normal deploy"
+echo "Use npm run deploy:pages or npm run deploy:worker:safe for standard deploy flows."
+echo ""
+
+bash scripts/preflight-clean-deploy.sh
+
 # Usar Node 22 explicitamente — Node 24 tem bug de deadlock com esbuild
 export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
 echo "📦 Node: $(node --version)"
@@ -76,7 +85,7 @@ if command -v wrangler >/dev/null 2>&1; then
   # Produção do Pages é a branch production (domínio airtrust.online)
   # Observação: alguns ambientes têm CLOUDFLARE_API_TOKEN com permissões insuficientes para Pages.
   # Para garantir o deploy, força o wrangler a usar a sessão autenticada (ignora o token env).
-  CLOUDFLARE_API_TOKEN= npx wrangler pages deploy dist/client --project-name=airtrust --branch=production --commit-dirty=true >/dev/null 2>&1 || {
+  CLOUDFLARE_API_TOKEN= npx wrangler pages deploy dist/client --project-name=airtrust --branch=production >/dev/null 2>&1 || {
     echo "❌ Falha deploy Pages"; exit 1;
   }
   echo "✅ Pages deploy concluído"

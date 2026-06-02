@@ -30,10 +30,7 @@ VALUES (
   );
   console.log('----------------------------------------\n');
 
-  console.log('Ou via Wrangler CLI:');
-  console.log(
-    `npx wrangler d1 execute airtrust-db --remote --command="INSERT INTO usuarios (email, password_hash, nome, perfil, created_at, updated_at) VALUES ('admin@airtrust.com', '${passwordHash}', 'Admin Sistema', 'ADMIN', datetime('now'), datetime('now'));"`,
-  );
+  console.log('Para produção, use apenas o wrapper operacional com SQL allowlisted.');
 }
 
 criarUsuarioAdmin().catch(console.error);
