@@ -2,23 +2,26 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `a8947ba8b084f536ff1c09beb8be4335d6f1c769`
-Modo: planejamento tecnico-operacional, sem alterar runtime.
+HEAD auditado: `83c9503b9ad63580d70e3bba5f17e7cdfff2c296`
+Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem dados reais e sem deploy.
 
 ## Agora, antes de qualquer novo cliente externo
 
 ### Item 1 - RBAC de plataforma e suporte
 
+- Status em 2026-06-02: Sprint A executado parcialmente em codigo, sem migration.
 - Objetivo: remover a dependencia operacional de `userId === 1` e desenhar suporte read-only por tenant.
 - Risco: acesso amplo demais para suporte e operacao multiempresa.
 - Escopo: contrato de `platform_admin`, `support`, matriz minima de leitura e eventos auditados.
 - Fora do escopo: criar empresa, criar usuario real, aplicar migration em producao.
-- Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: nao nesta fase documental.
-- Migration necessaria?: sim, na implementacao final mais provavel.
+- Resultado atual: fallback legado centralizado em `middleware/tenant.ts`; rotas deixam de comparar `userId === 1` diretamente; `support` permanece inativo.
+- Documento de referencia: `docs/AIRTRUST_RBAC_SUPPORT_MODEL_v0_5.md`.
+- Modelo recomendado para etapa final: GPT-5.5 Altissimo.
+- Deploy necessario?: sim apenas quando a etapa final for implementada e aprovada.
+- Migration necessaria?: sim para persistir `platform_admin`/`support`, escopo e auditoria.
 - Pode ser GPT-5.4?: nao para implementacao sensivel.
 - Precisa GPT-5.5?: sim.
-- Criterio de aceite: backlog tecnico fechado, superficie afetada mapeada, fallback implicito inventariado e caminho de remocao sequenciado.
+- Criterio de aceite final: papel persistido, suporte read-only por tenant, trilha auditada, operador legado migrado e `LEGACY_PLATFORM_ADMIN_USER_ID` removido.
 
 ### Item 2 - Audit trail minimo por tenant
 

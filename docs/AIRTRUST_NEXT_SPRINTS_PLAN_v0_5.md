@@ -2,19 +2,20 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `a8947ba8b084f536ff1c09beb8be4335d6f1c769`
-Modo: planejamento de sprints amplos, sem microtarefas.
+HEAD auditado: `83c9503b9ad63580d70e3bba5f17e7cdfff2c296`
+Modo: planejamento de sprints amplos atualizado apos Sprint A.
 
 ## Sprint A - RBAC/Suporte
 
-- Objetivo: remover a dependencia operacional de `userId === 1` e desenhar `support` read-only por tenant.
-- Escopo: inventario dos call sites, matriz de acessos, plataforma vs tenant, trilha de acesso de suporte.
+- Status: concluido na camada sem-migration em 2026-06-02.
+- Objetivo: reduzir a dependencia operacional de `userId === 1` e desenhar `support` read-only por tenant.
+- Escopo entregue: inventario dos call sites, centralizacao do fallback legado, testes de fronteira plataforma, teste de `support` ainda inativo e documento de modelo.
 - Fora do escopo: criar empresa, criar usuario, executar migration, aplicar permissao em producao.
-- Arquivos provaveis: `worker-airtrust/src/routes/auth.ts`, `worker-airtrust/src/routes/empresas.ts`, `worker-airtrust/src/middleware/tenant.ts`, docs de RBAC/suporte.
-- Validacoes: grep sem novos atalhos implicitos, testes de caracterizacao RBAC, contrato de suporte documentado.
-- Modelo recomendado: GPT-5.5 Alta.
+- Arquivos alterados: `worker-airtrust/src/routes/auth.ts`, `worker-airtrust/src/routes/empresas.ts`, `worker-airtrust/src/middleware/tenant.ts`, testes e `docs/AIRTRUST_RBAC_SUPPORT_MODEL_v0_5.md`.
+- Validacoes: guard arquitetural sem novos atalhos diretos, testes de fronteira RBAC e contrato de suporte documentado.
+- Modelo recomendado para remover fallback via migration: GPT-5.5 Altissimo.
 - Risco: alto, porque auth/tenant e sensivel.
-- Criterio de aceite: fallback atual mapeado e substituicao segura planejada ponta-a-ponta.
+- Criterio de aceite restante: migration para `platform_admin`/`support`, eventos auditados e remocao de `LEGACY_PLATFORM_ADMIN_USER_ID`.
 
 ## Sprint B - Audit Trail/LGPD
 

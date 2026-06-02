@@ -12,7 +12,12 @@ import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { AppError } from '../utils/errors';
-import { getTenantContext, requireTenantRole, tenantMiddleware } from '../middleware/tenant';
+import {
+  getTenantContext,
+  isPlatformAdminContext,
+  requireTenantRole,
+  tenantMiddleware,
+} from '../middleware/tenant';
 import { generateRefreshToken } from '../utils/security';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { createLogger, toError } from '../utils/logger';
@@ -155,11 +160,7 @@ async function saveEmpresaSystemSettings(
 }
 
 function isPlatformSuperAdmin(c: any): boolean {
-  const tenantCtx = getTenantContext(c);
-  const userIdRaw = c.get('userId');
-  const userId = typeof userIdRaw === 'string' ? Number(userIdRaw) : Number(userIdRaw || 0);
-
-  return tenantCtx.empresaCodigo === 'airtrust' || userId === 1;
+  return isPlatformAdminContext(c);
 }
 
 // Tabela convites_usuarios criada via migration 0290 — não mais DDL em runtime.
