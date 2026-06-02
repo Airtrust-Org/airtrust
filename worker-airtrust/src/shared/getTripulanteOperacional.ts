@@ -1,4 +1,9 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import {
+  CANCELLED_STATUS_VALUES,
+  SESSION_STATUS,
+  sqlStatusNotEqualsAny,
+} from '../lib/status/status-codes';
 
 export type StatusOperacional =
   | 'APTO'
@@ -92,7 +97,7 @@ WITH tripulante_operacional AS (
       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
       WHERE qh.funcionario_id = f.id
         AND qh.deleted_at IS NULL
-        AND COALESCE(qh.status, 'CONCLUIDA') != 'CANCELADA'
+        AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
         AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
         AND COALESCE(
           qh.data_vencimento,
@@ -110,7 +115,7 @@ WITH tripulante_operacional AS (
         LEFT JOIN qualificacoes_tipos qt2 ON qt2.id = qh2.qualificacao_id AND qt2.deleted_at IS NULL
         WHERE qh2.funcionario_id = f.id
           AND qh2.deleted_at IS NULL
-          AND COALESCE(qh2.status, 'CONCLUIDA') != 'CANCELADA'
+          AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh2.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
           AND UPPER(COALESCE(qh2.qualificacao_codigo, qt2.codigo, '')) = 'CMA'
       )) - JULIANDAY('now')
     ) AS INTEGER) AS cma_dias_restantes,
@@ -124,7 +129,7 @@ WITH tripulante_operacional AS (
       LEFT JOIN qualificacoes_tipos qt3 ON qt3.id = qh3.qualificacao_id AND qt3.deleted_at IS NULL
       WHERE qh3.funcionario_id = f.id
         AND qh3.deleted_at IS NULL
-        AND COALESCE(qh3.status, 'CONCLUIDA') != 'CANCELADA'
+        AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh3.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
         AND UPPER(COALESCE(qh3.qualificacao_codigo, qt3.codigo, '')) = 'CMA'
     ) AS cma_validade_fim,
 
@@ -181,7 +186,10 @@ WITH tripulante_operacional AS (
       WHERE sp.funcionario_id = f.id
         AND sp.deleted_at IS NULL
         AND sa.deleted_at IS NULL
-        AND UPPER(COALESCE(sa.status, 'AGENDADA')) NOT IN ('CONCLUIDA', 'CANCELADA')
+        AND ${sqlStatusNotEqualsAny(
+          "UPPER(COALESCE(sa.status, 'AGENDADO'))",
+          [SESSION_STATUS.CONCLUIDA, SESSION_STATUS.CANCELADA],
+        )}
         AND date(sa.data) >= date('now')
     ) AS simuladores_pendentes,
 
@@ -192,7 +200,10 @@ WITH tripulante_operacional AS (
       WHERE sp2.funcionario_id = f.id
         AND sp2.deleted_at IS NULL
         AND sa2.deleted_at IS NULL
-        AND UPPER(COALESCE(sa2.status, 'AGENDADA')) NOT IN ('CONCLUIDA', 'CANCELADA')
+        AND ${sqlStatusNotEqualsAny(
+          "UPPER(COALESCE(sa2.status, 'AGENDADO'))",
+          [SESSION_STATUS.CONCLUIDA, SESSION_STATUS.CANCELADA],
+        )}
         AND date(sa2.data) >= date('now')
     ) AS proximo_simulador_data,
 
@@ -203,7 +214,7 @@ WITH tripulante_operacional AS (
         LEFT JOIN qualificacoes_tipos qt4 ON qt4.id = qh4.qualificacao_id AND qt4.deleted_at IS NULL
         WHERE qh4.funcionario_id = f.id
           AND qh4.deleted_at IS NULL
-          AND COALESCE(qh4.status, 'CONCLUIDA') != 'CANCELADA'
+          AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh4.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
           AND UPPER(COALESCE(qh4.qualificacao_codigo, qt4.codigo, '')) = 'CMA'
           AND COALESCE(
             qh4.data_vencimento,
@@ -228,7 +239,10 @@ WITH tripulante_operacional AS (
           LEFT JOIN qualificacoes_tipos qt5 ON qt5.id = qh5.qualificacao_id AND qt5.deleted_at IS NULL
           WHERE qh5.funcionario_id = f.id
             AND qh5.deleted_at IS NULL
-            AND COALESCE(qh5.status, 'CONCLUIDA') != 'CANCELADA'
+            AND ${sqlStatusNotEqualsAny(
+              "UPPER(COALESCE(qh5.status, 'CONCLUIDA'))",
+              CANCELLED_STATUS_VALUES,
+            )}
             AND UPPER(COALESCE(qh5.qualificacao_codigo, qt5.codigo, '')) = 'CMA'
         )) - JULIANDAY('now')
       ) AS INTEGER) <= 30 THEN 'ATENCAO_CMA'

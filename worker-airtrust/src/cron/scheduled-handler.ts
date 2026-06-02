@@ -7,6 +7,7 @@ import { frmsFadigaReminder } from './frms-fadiga-reminder';
 import { processarNotificacoesSgso, enqueueSlaAlerts } from './sgso-notificacoes';
 import { createStructuredConsole } from '../utils/logger';
 import { processarEventosParaModulo } from '../shared/handlers';
+import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 import {
   canReuseMatriculaCycle,
   ensureMatriculaCycle,
@@ -820,7 +821,7 @@ export async function runScheduledJobs(
              JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
              LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
              WHERE qh.deleted_at IS NULL
-               AND COALESCE(qh.status, 'CONCLUIDA') != 'CANCELADA'
+               AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
                AND CAST(
                  JULIANDAY(COALESCE(
                    qh.data_vencimento,
