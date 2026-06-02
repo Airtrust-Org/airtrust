@@ -34,6 +34,10 @@ Aceite:
 
 Nao criar a segunda empresa antes de validar a empresa real atual com smoke autenticado read-only.
 
+Evidencia de 2026-06-02: `docs/AIRTRUST_AUTHENTICATED_SMOKE_EVIDENCE_20260602.md`.
+
+Status atual: public-only passou e o cenario sem credencial retornou `SKIPPED_AUTH_REQUIRED`. Smoke autenticado read-only e validacao da empresa esperada seguem pendentes porque nao havia `AIRTRUST_AUTH_TOKEN` nem `AIRTRUST_COOKIE` no ambiente.
+
 Sem credencial:
 
 ```bash
