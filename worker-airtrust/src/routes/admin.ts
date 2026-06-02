@@ -660,9 +660,22 @@ app.route('/', adminManualMigrationsRoutes);
  * 2. Linka simulador_agendamentos sem template_id ao modelo pelo tipo_sessao
  * 3. Cria sessoes_checks_resultados aprovados para fichas APROVADAS sem resultado
  */
-app.post('/backfill-session-checks', async (c) => {
+app.post('/backfill-session-checks', auth(), adminOnly(), async (c) => {
+  const tenantScope = resolveTenantScope(c);
+
+  if (!tenantScope) {
+    return c.json(
+      {
+        success: false,
+        error: 'tenant_scope_required',
+        message: 'Contexto de tenant inválido. Operação bloqueada.',
+      },
+      403,
+    );
+  }
+
   try {
-    const resultado = await backfillSessionChecks(c.env.DB);
+    const resultado = await backfillSessionChecks(c.env.DB, tenantScope.empresaId);
     return c.json({ success: true, data: resultado });
   } catch (error) {
     console.error('[ADMIN] Erro no backfill:', error);

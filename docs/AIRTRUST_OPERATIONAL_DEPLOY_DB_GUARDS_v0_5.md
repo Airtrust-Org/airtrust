@@ -41,6 +41,9 @@ Os scripts `db:qualificacoes:*` agora chamam `scripts/run-production-db-script.s
 
 Esse wrapper:
 
+- usa `AIRTRUST_D1_ENV=production` por padrão e executa com `--env production`;
+- permite trocar o banco com `AIRTRUST_D1_DATABASE`, com padrão `airtrust-db`;
+- bloqueia qualquer `AIRTRUST_D1_ENV` diferente de `production` sem `AIRTRUST_ALLOW_NON_PROD_DB_ENV=YES`;
 - exige `AIRTRUST_ALLOW_PROD_DB_WRITE=YES`;
 - exige confirmação textual exata em `AIRTRUST_CONFIRM_PROD_DB_WRITE`;
 - exige branch `main`;
@@ -57,6 +60,22 @@ Exemplo:
 AIRTRUST_ALLOW_PROD_DB_WRITE=YES \
 AIRTRUST_CONFIRM_PROD_DB_WRITE="I understand this may modify production data" \
 bash scripts/run-production-db-script.sh sql/maintenance/2026-04-01-qualificacoes-legacy-codigo-safe-merge.sql
+```
+
+O comando auditado impresso pelo wrapper deve conter explicitamente:
+
+```bash
+npx wrangler d1 execute airtrust-db --env production --remote --file <sql-allowlisted>
+```
+
+Para testes controlados em ambiente não-produtivo, o operador precisa declarar a intenção:
+
+```bash
+AIRTRUST_D1_ENV=staging \
+AIRTRUST_ALLOW_NON_PROD_DB_ENV=YES \
+AIRTRUST_ALLOW_PROD_DB_WRITE=YES \
+AIRTRUST_CONFIRM_PROD_DB_WRITE="I understand this may modify production data" \
+bash scripts/run-production-db-script.sh sql/maintenance/2026-04-01-qualificacoes-legacy-codigo-residual-audit.sql
 ```
 
 ## 7) Proibições operacionais
