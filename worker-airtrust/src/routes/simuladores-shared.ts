@@ -6,6 +6,14 @@
 import { z } from 'zod';
 import type { Context } from 'hono';
 import type { Env } from '../types';
+import {
+  CANCELLED_STATUS_VALUES,
+  isCancelledStatus,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  QUALIFICACAO_STATUS,
+  sqlStatusEqualsAny,
+  sqlStatusNotEqualsAny,
+} from '../lib/status/status-codes';
 import { replaceManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
@@ -560,7 +568,7 @@ export async function criarQualificacoesPlanejadas(
          WHERE sessao_id = ?
            AND funcionario_id = ?
            AND deleted_at IS NULL
-           AND COALESCE(status, '') <> 'CANCELADA'
+           AND ${sqlStatusNotEqualsAny('status', CANCELLED_STATUS_VALUES, '')}
          LIMIT 1`,
       )
       .bind(params.sessaoId, part.funcionario_id)
@@ -588,7 +596,7 @@ export async function criarQualificacoesPlanejadas(
       // CANCELADA orphan records or same-session records can be archived and recreated.
       // This preserves history while unblocking a new active PLANEJADA record.
       if (
-        uniqueConflict.status === 'CANCELADA' &&
+        isCancelledStatus(uniqueConflict.status) &&
         (!uniqueConflict.sessao_id || Number(uniqueConflict.sessao_id) === Number(params.sessaoId))
       ) {
         await db
@@ -613,7 +621,7 @@ export async function criarQualificacoesPlanejadas(
               data_conclusao, validade_meses, status, renovada,
               carga_horaria, tipo_treinamento, empresa_id, sessao_id,
               created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'PLANEJADA', 0, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+           VALUES (?, ?, ?, ?, ?, ?, '${QUALIFICACAO_STATUS.PLANEJADA}', 0, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
         )
         .bind(
           part.funcionario_id,
@@ -652,11 +660,11 @@ export async function sincronizarQualificacoesDaSessaoConcluida(
 
   const queryBase = `
     UPDATE qualificacoes_historico
-       SET status = 'CONCLUIDA',
+       SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
            data_confirmacao = COALESCE(data_confirmacao, datetime('now')),
            updated_at = datetime('now')
      WHERE sessao_id = ?
-       AND COALESCE(status, 'PLANEJADA') = 'PLANEJADA'
+       AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
        AND deleted_at IS NULL
   `;
 

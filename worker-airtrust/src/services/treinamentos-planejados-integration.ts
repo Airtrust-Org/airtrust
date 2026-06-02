@@ -4,6 +4,14 @@ import {
   publishQualificacaoEvent,
   resolveCargaHorariaByTipo,
 } from '../routes/qualificacoes/historico-helpers';
+import {
+  COMPLETED_STATUS_VALUES,
+  isPlannedQualificationStatus,
+  normalizeQualificationStatusForCompatibility,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  QUALIFICACAO_STATUS,
+  sqlStatusEqualsAny,
+} from '../lib/status/status-codes';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 
 type EventoContextRow = {
@@ -308,7 +316,7 @@ async function findHistoricoPlanejadoCandidate(
             AND deleted_at IS NULL
             AND COALESCE(renovada, 0) = 0
             AND (
-              (COALESCE(status, 'CONCLUIDA') = 'PLANEJADA' AND date(COALESCE(data_conclusao, '1900-01-01')) = date(?))
+              (${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)} AND date(COALESCE(data_conclusao, '1900-01-01')) = date(?))
               OR COALESCE(observacoes, '') LIKE ?
             )
           ORDER BY CASE WHEN COALESCE(observacoes, '') LIKE ? THEN 0 ELSE 1 END,
@@ -391,7 +399,12 @@ async function upsertHistoricoPlanejadoForParticipante(
     );
   }
 
-  if (existing && ['CONCLUIDA', 'RENOVADA'].includes(String(existing.status || '').toUpperCase())) {
+  if (
+    existing &&
+    [QUALIFICACAO_STATUS.CONCLUIDA, QUALIFICACAO_STATUS.RENOVADA].includes(
+      normalizeQualificationStatusForCompatibility(existing.status) || '',
+    )
+  ) {
     await updateParticipanteHistoricoLink(db, evento.id, participante.funcionario_id, existing.id);
     return { historicoId: existing.id, changed: false };
   }
@@ -409,7 +422,7 @@ async function upsertHistoricoPlanejadoForParticipante(
                 data_vencimento = ?,
                 instrutor = ?,
                 observacoes = ?,
-                status = 'PLANEJADA',
+                status = '${QUALIFICACAO_STATUS.PLANEJADA}',
                 carga_horaria = ?,
                 tipo_treinamento = ?,
                 updated_at = datetime('now')
@@ -440,7 +453,7 @@ async function upsertHistoricoPlanejadoForParticipante(
         (funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
          data_conclusao, data_vencimento, validade_meses, instrutor, observacoes,
          status, renovada, carga_horaria, tipo_treinamento, empresa_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLANEJADA', 0, ?, ?, ?, datetime('now'), datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '${QUALIFICACAO_STATUS.PLANEJADA}', 0, ?, ?, ?, datetime('now'), datetime('now'))`,
     )
     .bind(
       participante.funcionario_id,
@@ -488,7 +501,7 @@ async function cancelManagedHistoricoForParticipante(
             WHERE empresa_id = ?
               AND funcionario_id = ?
               AND deleted_at IS NULL
-              AND COALESCE(status, 'CONCLUIDA') = 'PLANEJADA'
+              AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)}
               AND COALESCE(observacoes, '') LIKE ?
             ORDER BY id DESC
             LIMIT 1`,
@@ -501,11 +514,11 @@ async function cancelManagedHistoricoForParticipante(
     return false;
   }
 
-  if (String(historico.status || '').toUpperCase() === 'PLANEJADA') {
+  if (isPlannedQualificationStatus(historico.status)) {
     await db
       .prepare(
         `UPDATE qualificacoes_historico
-            SET status = 'CANCELADA',
+            SET status = '${QUALIFICACAO_STATUS.CANCELADA}',
                 updated_at = datetime('now')
           WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
@@ -534,15 +547,18 @@ async function concluirHistoricoPlanejado(
   if (!upserted.historicoId) return false;
 
   const existing = await loadHistoricoById(db, empresaId, upserted.historicoId);
-  const currentStatus = String(existing?.status || '').toUpperCase();
-  if (currentStatus === 'CONCLUIDA' || currentStatus === 'RENOVADA') {
+  const currentStatus = normalizeQualificationStatusForCompatibility(existing?.status);
+  if (
+    currentStatus === QUALIFICACAO_STATUS.CONCLUIDA ||
+    currentStatus === QUALIFICACAO_STATUS.RENOVADA
+  ) {
     return false;
   }
 
   await db
     .prepare(
       `UPDATE qualificacoes_historico
-          SET status = 'CONCLUIDA',
+          SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
               data_confirmacao = datetime('now'),
               confirmada_por = NULL,
               updated_at = datetime('now')
@@ -560,7 +576,7 @@ async function concluirHistoricoPlanejado(
           AND qualificacao_codigo = ?
           AND id <> ?
           AND deleted_at IS NULL
-          AND COALESCE(status, 'CONCLUIDA') = 'CONCLUIDA'
+          AND ${sqlStatusEqualsAny('status', COMPLETED_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)}
           AND COALESCE(renovada, 0) = 0
         ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
         LIMIT 1`,
@@ -589,7 +605,7 @@ async function concluirHistoricoPlanejado(
       evento.qualificacao_codigo,
       {
         registro_id: upserted.historicoId,
-        status: 'CONCLUIDA',
+        status: QUALIFICACAO_STATUS.CONCLUIDA,
       },
     );
   } catch (error) {

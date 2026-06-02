@@ -15,6 +15,11 @@ import type {
   SystemHealth,
 } from '../../../src/react-app/types/dashboard.types';
 import {
+  ACTIVE_OR_COMPLETED_SESSION_STATUS_SQL,
+  COMPLETED_STATUS_SQL,
+  SCHEDULED_SESSION_STATUS_SQL,
+} from '../lib/status/status-codes';
+import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
   getQualificacoesVencimentoExpr,
@@ -120,7 +125,7 @@ export async function getDashboardMetrics(
         .prepare(
           `SELECT
              COALESCE(
-               COUNT(CASE WHEN status IN ('CONCLUIDA', 'CONCLUIDO') THEN 1 END) * 100.0 /
+               COUNT(CASE WHEN status IN ${COMPLETED_STATUS_SQL} THEN 1 END) * 100.0 /
                NULLIF(COUNT(*), 0),
                0
              ) as taxa_conclusao
@@ -142,7 +147,7 @@ export async function getDashboardMetrics(
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
            AND empresa_id = ?
-           AND status IN ('AGENDADO', 'PENDENTE')
+           AND status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND data >= date('now')`,
         )
         .bind(empresaId)
@@ -181,7 +186,7 @@ export async function getDashboardMetrics(
         .prepare(
           `SELECT
              COALESCE(
-               COUNT(CASE WHEN status IN ('CONCLUIDA', 'CONCLUIDO') THEN 1 END) * 100.0 /
+               COUNT(CASE WHEN status IN ${COMPLETED_STATUS_SQL} THEN 1 END) * 100.0 /
                NULLIF(COUNT(*), 0), 0
              ) as taxa
            FROM simulador_agendamentos
@@ -435,7 +440,7 @@ export async function getComplianceScore(
                (SELECT COUNT(*) FROM simulador_agendamentos
                 WHERE deleted_at IS NULL
                 AND empresa_id = ?
-                AND status IN ('CONCLUIDA', 'CONCLUIDO')
+                AND status IN ${COMPLETED_STATUS_SQL}
                 AND data >= date('now', '-3 months')) * 100.0 /
                NULLIF((SELECT COUNT(*) FROM simulador_agendamentos
                        WHERE deleted_at IS NULL
@@ -555,7 +560,7 @@ export async function getDemandaTreinamento(
              COUNT(*) as total
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
-           AND status IN ('AGENDADO', 'PENDENTE')
+           AND status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND empresa_id = ?
            AND data BETWEEN date('now') AND date('now', '+90 days')`,
         )
@@ -570,7 +575,7 @@ export async function getDemandaTreinamento(
              COUNT(*) as quantidade
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
-           AND status IN ('AGENDADO', 'PENDENTE')
+           AND status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND empresa_id = ?
            AND data BETWEEN date('now') AND date('now', '+90 days')
            GROUP BY tipo_sessao`,
@@ -588,7 +593,7 @@ export async function getDemandaTreinamento(
            FROM simulador_agendamentos sa
            JOIN simuladores s ON s.id = sa.simulador_id
            WHERE sa.deleted_at IS NULL
-           AND sa.status IN ('AGENDADO', 'PENDENTE')
+           AND sa.status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND sa.empresa_id = ?
            AND sa.data BETWEEN date('now') AND date('now', '+90 days')
            GROUP BY s.id, s.nome
@@ -607,7 +612,7 @@ export async function getDemandaTreinamento(
            FROM simulador_agendamentos sa
            LEFT JOIN funcionarios f ON f.id = sa.instrutor_id AND f.deleted_at IS NULL
            WHERE sa.deleted_at IS NULL
-           AND sa.status IN ('AGENDADO', 'PENDENTE')
+           AND sa.status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND sa.empresa_id = ?
            AND sa.data BETWEEN date('now') AND date('now', '+90 days')
            AND sa.instrutor_id IS NOT NULL
@@ -685,7 +690,7 @@ export async function getAtividadesRecentes(
            JOIN funcionarios f ON f.id = sa.instrutor_id
            LEFT JOIN simuladores s ON s.id = sa.simulador_id
            WHERE sa.deleted_at IS NULL
-           AND sa.status IN ('CONCLUIDA', 'CONCLUIDO')
+           AND sa.status IN ${COMPLETED_STATUS_SQL}
            AND f.empresa_id = ?
            ORDER BY sa.updated_at DESC
            LIMIT 10`,
@@ -770,7 +775,7 @@ export async function getTaxaConclusaoMensal(
       .prepare(
         `SELECT
            strftime('%Y-%m', data) as mes,
-           COUNT(CASE WHEN status IN ('CONCLUIDA', 'CONCLUIDO') THEN 1 END) * 100.0 /
+           COUNT(CASE WHEN status IN ${COMPLETED_STATUS_SQL} THEN 1 END) * 100.0 /
            NULLIF(COUNT(*), 0) as taxa
          FROM simulador_agendamentos
          WHERE deleted_at IS NULL
@@ -837,9 +842,9 @@ export async function getUtilizacaoSimuladores(
            s.nome,
            s.fabricante,
            s.modelo,
-           COALESCE(SUM(CASE WHEN sa.status IN ('AGENDADO', 'CONCLUIDA', 'CONCLUIDO') THEN sa.duracao_minutos END), 0) / 60.0 as horas_programadas,
+           COALESCE(SUM(CASE WHEN sa.status IN ${ACTIVE_OR_COMPLETED_SESSION_STATUS_SQL} THEN sa.duracao_minutos END), 0) / 60.0 as horas_programadas,
            720 as horas_disponiveis,
-           COALESCE(SUM(CASE WHEN sa.status IN ('AGENDADO', 'CONCLUIDA', 'CONCLUIDO') THEN sa.duracao_minutos END), 0) * 100.0 / (720 * 60) as taxa_utilizacao,
+           COALESCE(SUM(CASE WHEN sa.status IN ${ACTIVE_OR_COMPLETED_SESSION_STATUS_SQL} THEN sa.duracao_minutos END), 0) * 100.0 / (720 * 60) as taxa_utilizacao,
            'operacional' as status
          FROM simuladores s
          LEFT JOIN simulador_agendamentos sa ON sa.simulador_id = s.id

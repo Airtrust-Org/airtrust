@@ -73,7 +73,7 @@ describe('dashboard metrics integrity service', () => {
     expect(query).toContain('sa.empresa_id = ?');
     expect(query).toContain('sa.deleted_at IS NULL');
     expect(query).toContain('s.deleted_at IS NULL');
-    expect(query).toContain("sa.status IN ('AGENDADO', 'CONCLUIDA', 'CONCLUIDO')");
+    expect(query).toContain("sa.status IN ('AGENDADO', 'AGENDADA', 'CONCLUIDA', 'CONCLUIDO')");
     expect(query).not.toContain('CANCELADA');
   });
 });

@@ -105,7 +105,7 @@ describe('dashboard home reliability fixes', () => {
     );
     const demanda = calls.find(
       (call) =>
-        call.query.includes("status IN ('AGENDADO', 'PENDENTE')") &&
+        call.query.includes("status IN ('AGENDADO', 'PENDENTE', 'AGENDADA', 'PENDING')") &&
         call.query.includes("data >= date('now')"),
     );
     const complianceSimuladores = calls.find((call) =>

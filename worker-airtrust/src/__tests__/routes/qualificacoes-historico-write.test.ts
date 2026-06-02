@@ -341,7 +341,7 @@ describe('qualificacoes historico write router', () => {
         },
       ],
       [
-        "AND COALESCE(status, 'CONCLUIDA') = 'CONCLUIDA'",
+        "COALESCE(status, 'CONCLUIDA') = 'CONCLUIDA'",
         {
           first: () => ({ id: 222 }),
         },
