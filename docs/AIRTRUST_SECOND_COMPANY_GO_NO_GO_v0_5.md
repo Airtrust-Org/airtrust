@@ -8,15 +8,18 @@ Status: **CONDITIONAL GO para piloto interno/controlado da segunda empresa**.
 
 Nao e GO pleno para liberacao ao cliente. A segunda empresa so pode seguir sob controle operacional interno, sem acesso de cliente, ate fechar as pendencias de empresa esperada, data quality operacional e aceite legal/compliance minimo.
 
+Este documento nao autoriza criar empresa agora. Ele registra apenas a decisao de gate para piloto interno/controlado.
+
 ## Evidencia Principal
 
 - Branch: `main`
-- HEAD: `f9adfa2c8fcd4041ca86c82414b114e5b2e1bbe0`
-- `origin/main`: `f9adfa2c8fcd4041ca86c82414b114e5b2e1bbe0`
+- HEAD: `a8947ba8b084f536ff1c09beb8be4335d6f1c769`
+- `origin/main`: `a8947ba8b084f536ff1c09beb8be4335d6f1c769`
 - APP_VERSION em producao: `2026-06-02T17:36:07Z-a543132`
 - Deploy neste gate: nao executado
 - Dossie final: `docs/AIRTRUST_SECOND_COMPANY_FINAL_LAUNCH_GATE_20260602.md`
 - Smoke autenticado: `docs/AIRTRUST_AUTHENTICATED_SMOKE_EVIDENCE_20260602.md`
+- Consolidacao Opus remanescente: `docs/AIRTRUST_OPUS_REMAINING_FINDINGS_CONSOLIDATION_v0_5.md`
 
 ## Gate Tecnico
 
@@ -73,9 +76,12 @@ O gate tecnico principal passou: assets privados continuam bloqueados, module ga
 
 O GO pleno permanece bloqueado porque a empresa esperada nao foi validada por variavel explicita, o data quality nao foi executado em ambiente aprovado e as pendencias legais/compliance ainda precisam aceite formal antes de liberar cliente.
 
+Os achados Opus remanescentes de RBAC/suporte, audit trail/LGPD, DDL residual, status enum e testes de modulos beta nao devem ser confundidos com onboarding imediato. Eles compoem o backlog de endurecimento para escala, nao uma autorizacao para criar tenant nesta fase.
+
 ## Condicoes Para Criar a Segunda Empresa
 
 - Manter criacao apenas como piloto interno/controlado.
+- Nao criar empresa nesta fase documental.
 - Nao liberar acesso ao cliente antes de validar empresa esperada por `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO`, ou registrar aprovacao formal da excecao.
 - Executar data quality em ambiente aprovado por operador autorizado, sem Codex e sem producao remota.
 - Registrar resultado de data quality sem PII.
@@ -85,6 +91,7 @@ O GO pleno permanece bloqueado porque a empresa esperada nao foi validada por va
 
 ## Proibido
 
+- Criar empresa nesta fase por inferencia deste documento.
 - Criar usuario real sem aprovacao operacional.
 - Rodar seed/importacao.
 - Executar migration ou criar schema.
@@ -95,4 +102,4 @@ O GO pleno permanece bloqueado porque a empresa esperada nao foi validada por va
 
 ## Proximo Passo
 
-Executar a criacao da segunda empresa somente se o responsavel operacional aceitar `CONDITIONAL GO` para piloto interno. Antes de liberar cliente, fechar empresa esperada, data quality operacional e aceite legal/compliance minimo.
+Executar a criacao da segunda empresa somente se o responsavel operacional aceitar `CONDITIONAL GO` para piloto interno. Antes de liberar cliente, fechar empresa esperada, data quality operacional e aceite legal/compliance minimo. Os temas Opus remanescentes continuam como backlog de endurecimento e nao equivalem a onboarding imediato.
