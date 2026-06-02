@@ -6,7 +6,7 @@ Data: 2026-06-02
 
 Status: **NO-GO parcial para criar/liberar a segunda empresa real hoje**.
 
-O repositorio esta preparado com matriz, guias e guards adicionais, mas ainda faltam evidencias operacionais obrigatorias: smoke autenticado da empresa atual, execucao segura de data quality e gating comprovado de modulos beta.
+O repositorio esta preparado com matriz, guias, guards adicionais e gating runtime conservador por `modulos_ativos`. Ainda faltam evidencias operacionais obrigatorias: smoke autenticado da empresa atual e execucao segura de data quality.
 
 ## Gate de Codigo
 
@@ -14,9 +14,9 @@ O repositorio esta preparado com matriz, guias e guards adicionais, mas ainda fa
 | --- | --- | --- |
 | Branch `main` alinhada a `origin/main` no inicio | GO | `8f4c4b6bac7b958e1930fcece12c5757f8d4f43e`, ahead/behind `0 0` |
 | Guards iniciais | GO | `bash scripts/preflight-clean-deploy.sh`, `npm run ops:guard` |
-| Mudanca de frontend | Nao executada | gating ficou em plano |
-| Mudanca de worker | Nao executada | nenhum endpoint alterado |
-| Deploy | Nao aplicavel | docs/scripts/package apenas |
+| Mudanca de frontend | GO tecnico | helper canonico, menu/cards e guard de rota direta |
+| Mudanca de worker | GO tecnico | `/api/auth/empresas` retorna `modulos_ativos` normalizado |
+| Deploy | Pendente ate publicacao | worker/pages devem conter Sprint 6 antes de acesso real |
 
 ## Gate de Modulos
 
@@ -28,7 +28,7 @@ O repositorio esta preparado com matriz, guias e guards adicionais, mas ainda fa
 | Hospedagem | NO-GO | manter oculto |
 | SIGVOOS | NO-GO bloqueado | nao ativar |
 | Configuracoes "em breve" | NO-GO para demo | revisar visualmente/ocultar |
-| Gating por `modulos_ativos` | NO-GO parcial | mecanismo nao conectado end-to-end |
+| Gating por `modulos_ativos` | GO tecnico conservador | explicit array aplica gating; null/undefined preserva modo legado |
 
 ## Gate de Data Quality
 
@@ -61,8 +61,7 @@ Ja e esperado:
 
 1. Smoke autenticado read-only da empresa atual ainda nao executado neste ambiente por falta de credencial.
 2. Data quality ainda nao executado por operador autorizado.
-3. Gating de modulos beta nao existe end-to-end; ocultacao depende de controle operacional/manual.
-4. Configuracoes visuais "em breve" precisam revisao antes de demo externa.
+3. Configuracoes visuais "em breve" precisam revisao antes de demo externa.
 
 ## Condicoes Para GO Controlado
 
@@ -72,9 +71,10 @@ Pode virar GO para onboarding controlado quando todos forem verdadeiros:
 - guards, TypeScript, build, testes frontend/worker e smokes public-only/sem credencial passam;
 - smoke autenticado read-only valida empresa esperada;
 - data quality bloqueante esta zerado ou mitigado;
-- modulos beta estao ocultos por gating testado ou por roteiro operacional aprovado;
+- novo tenant tem `modulos_ativos` explicito antes do primeiro acesso;
+- modulos beta estao ocultos por gating testado;
 - nenhuma migration, seed, import ou escrita em producao e necessaria para o primeiro acesso.
 
 ## Proximo Passo Objetivo
 
-Executar smoke autenticado read-only com empresa esperada e, em seguida, executar data quality em ambiente seguro por operador autorizado. Se ambos passarem, abrir sprint especifico para gating end-to-end antes da liberacao visual da segunda empresa.
+Executar smoke autenticado read-only com empresa esperada e, em seguida, executar data quality em ambiente seguro por operador autorizado. Se ambos passarem, configurar `modulos_ativos` explicito para o novo tenant antes da liberacao visual.

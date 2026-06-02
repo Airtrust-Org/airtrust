@@ -2,24 +2,27 @@ import React, { useState } from 'react';
 import { Bell, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { canAccessModule } from '@/react-app/lib/module-access';
 
 export const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, empresas = [], empresaAtualId = null } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  const modulosAtivos = empresaAtual?.modulos_ativos;
 
   const navItems = [
-    { label: 'Painel', path: '/' },
-    { label: 'Funcionários', path: '/funcionarios' },
-    { label: 'Qualificações', path: '/qualificacoes' },
-    { label: 'Simuladores & Voo', path: '/simuladores' },
-    { label: 'LMS', path: '/lms/cursos' },
-    { label: 'Escala', path: '/escalas' },
-    { label: 'FRMS', path: '/frms' },
-    { label: 'SGSO', path: '/sgso' },
-  ];
+    { label: 'Painel', path: '/', moduleKey: 'dashboard' },
+    { label: 'Funcionários', path: '/funcionarios', moduleKey: 'funcionarios' },
+    { label: 'Qualificações', path: '/qualificacoes', moduleKey: 'qualificacoes' },
+    { label: 'Simuladores & Voo', path: '/simuladores', moduleKey: 'simuladores' },
+    { label: 'LMS', path: '/lms/cursos', moduleKey: 'lms' },
+    { label: 'Escala', path: '/escalas', moduleKey: 'escalas' },
+    { label: 'FRMS', path: '/frms', moduleKey: 'frms' },
+    { label: 'SGSO', path: '/sgso', moduleKey: 'sgso' },
+  ].filter((item) => canAccessModule(item.moduleKey, modulosAtivos));
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';

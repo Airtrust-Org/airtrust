@@ -30,6 +30,7 @@ import { API_BASE_URL } from '../config/api';
 import { useLanguage } from '../i18n/useLanguage';
 import { useTheme } from '../theme/ThemeProvider';
 import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
+import { canAccessModule } from '@/react-app/lib/module-access';
 interface AppLayoutProps {
   children: ReactNode;
 }
@@ -49,18 +50,23 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hardRefreshLoading, setHardRefreshLoading] = useState(false);
   const [empresaLogoError, setEmpresaLogoError] = useState<Record<number, boolean>>({});
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  const modulosAtivos = empresaAtual?.modulos_ativos;
 
   // Flags de acesso a módulos
-  const showDashboard = can('dashboard.view') || isAdmin || isGestor;
-  const showFuncionarios = can('funcionarios.view');
-  const showQualificacoes = can('qualificacoes.view');
-  const showSimuladores = can('simuladores.view');
-  const showLms = !isAluno && !isInstrutor;
-  const showTreinamentosPlanejados =
-    !isAluno && (showQualificacoes || isAdmin || isGestor || isInstrutor);
-  const showEscalas = can('escalas.view') || can('self.escala');
-  const showFrms = can('frms.view');
-  const showSgso = can('sgso.view');
+  const showDashboard =
+    canAccessModule('dashboard', modulosAtivos) && (can('dashboard.view') || isAdmin || isGestor);
+  const showFuncionarios =
+    canAccessModule('funcionarios', modulosAtivos) && can('funcionarios.view');
+  const showQualificacoes =
+    canAccessModule('qualificacoes', modulosAtivos) && can('qualificacoes.view');
+  const showSimuladores =
+    canAccessModule('simuladores', modulosAtivos) && can('simuladores.view');
+  const showLms = canAccessModule('lms', modulosAtivos) && !isAluno && !isInstrutor;
+  const showEscalas =
+    canAccessModule('escalas', modulosAtivos) && (can('escalas.view') || can('self.escala'));
+  const showFrms = canAccessModule('frms', modulosAtivos) && can('frms.view');
+  const showSgso = canAccessModule('sgso', modulosAtivos) && can('sgso.view');
 
   const isActivePath = (path: string, exact = false) => {
     if (exact) return location.pathname === path;
@@ -73,8 +79,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
     return (names[0][0] + names[names.length - 1][0]).toUpperCase();
   };
-
-  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
 
   const hasEmpresaLogo = (empresaId: number, logoUrl?: string | null): boolean => {
     return Boolean(getEmpresaLogoUrl(logoUrl) && !empresaLogoError[empresaId]);

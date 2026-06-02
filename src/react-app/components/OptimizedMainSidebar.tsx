@@ -16,6 +16,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { getVisibleNavigationItems } from '@/react-app/lib/module-access';
 
 const NAVIGATION_ITEMS = [
   {
@@ -202,11 +203,17 @@ NavItem.displayName = 'NavItem';
 
 function OptimizedMainSidebar() {
   const location = useLocation();
+  const { empresas = [], empresaAtualId = null } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>([
     'treinamentos',
     'pessoas',
     'simuladores',
   ]);
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  const visibleNavigationItems = getVisibleNavigationItems(
+    NAVIGATION_ITEMS,
+    empresaAtual?.modulos_ativos,
+  );
 
   const toggleExpanded = useMemo(
     () => (itemId: string) => {
@@ -236,7 +243,7 @@ function OptimizedMainSidebar() {
 
       {/* Main Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-        {NAVIGATION_ITEMS.map((item) => (
+        {visibleNavigationItems.map((item) => (
           <NavItem
             key={item.id}
             item={item}

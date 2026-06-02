@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { NAVIGATION_CONFIG } from '../navigation.config';
 import { useSystemSettings } from '../hooks/useSystemSettings';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import { getVisibleNavigationItems } from '@/react-app/lib/module-access';
 
 const iconMap = {
   BarChart3,
@@ -33,7 +35,13 @@ const iconMap = {
 function MainSidebar() {
   const location = useLocation();
   const { logoSrc } = useSystemSettings();
+  const { empresas = [], empresaAtualId = null } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>(['lms', 'pessoas']);
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  const visibleMainMenu = getVisibleNavigationItems(
+    NAVIGATION_CONFIG.main_menu,
+    empresaAtual?.modulos_ativos,
+  );
   useEffect(() => {}, []);
 
   const toggleExpanded = (itemId: string) => {
@@ -71,7 +79,7 @@ function MainSidebar() {
 
       {/* Main Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-        {NAVIGATION_CONFIG.main_menu
+        {visibleMainMenu
           .filter((item) => hasAccess(item.id))
           .map((item) => {
             const Icon = iconMap[item.icon as keyof typeof iconMap];
