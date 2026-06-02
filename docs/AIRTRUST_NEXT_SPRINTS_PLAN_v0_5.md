@@ -50,7 +50,8 @@ Modo: planejamento de sprints amplos atualizado apos Sprint A.
 - Validacoes: `npm run test:worker`, novos testes de tenant-scope e erro.
 - Modelo recomendado: GPT-5.4 Alta.
 - Risco: medio.
-- Criterio de aceite: Hospedagem deixa de ter 0 testes e os demais modulos cobrem o fluxo minimo acordado.
+- Progresso em 2026-06-02: Hospedagem, SGSO e LMS/EAD ganharam contratos minimos de tenant-scope e fluxo simples; EVD permanece fora desta rodada.
+- Criterio de aceite: Hospedagem deixa de ter 0 testes e os demais modulos cobrem o fluxo minimo acordado sem liberar beta para cliente externo.
 
 ## Sprint E - DDL residual
 
