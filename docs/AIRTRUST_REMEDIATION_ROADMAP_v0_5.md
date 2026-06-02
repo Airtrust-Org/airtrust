@@ -2,7 +2,7 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `83c9503b9ad63580d70e3bba5f17e7cdfff2c296`
+HEAD auditado: `13dd8280a55eebc91f3051f94974306bcba2a721`
 Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem dados reais e sem deploy.
 
 ## Agora, antes de qualquer novo cliente externo
@@ -31,9 +31,10 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem da
 - Fora do escopo: migration executada, purge real, alteracao em dados reais.
 - Modelo recomendado: GPT-5.5 Alta.
 - Deploy necessario?: nao nesta fase documental.
-- Migration necessaria?: nao para o plano minimo; sim para consolidacao final futura.
+- Migration necessaria?: nao para o endurecimento minimo desta fase; sim para consolidacao final futura.
 - Pode ser GPT-5.4?: somente para documentacao auxiliar.
 - Precisa GPT-5.5?: sim.
+- Resultado atual em 2026-06-02: camada `lib/audit` criada para sanitizacao conservadora; `auth`, `admin`, `assets` e `empresas` passaram a carregar contexto minimizado sem schema novo; `auditoria_avancada_v2` e call sites legados seguem como backlog.
 - Criterio de aceite: writer canonico escolhido, campos minimos definidos, eventos criticos priorizados e lacunas sem schema separadas das que exigem schema.
 
 ### Item 3 - Data quality operacional

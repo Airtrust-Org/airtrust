@@ -2,7 +2,7 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `83c9503b9ad63580d70e3bba5f17e7cdfff2c296`
+HEAD auditado: `13dd8280a55eebc91f3051f94974306bcba2a721`
 Modo: planejamento de sprints amplos atualizado apos Sprint A.
 
 ## Sprint A - RBAC/Suporte
@@ -22,10 +22,11 @@ Modo: planejamento de sprints amplos atualizado apos Sprint A.
 - Objetivo: padronizar `empresa_id`, `request_id`, sanitizacao e retencao minima do audit trail.
 - Escopo: comparar `auditoria`, `audit_logs`, `auditoria_avancada_v2`, definir writer canonico e eventos criticos.
 - Fora do escopo: migration executada, purge real ou alteracao em dados reais.
-- Arquivos provaveis: `worker-airtrust/src/utils/auditoria.ts`, `worker-airtrust/src/utils/db.ts`, `worker-airtrust/src/middleware/requestId.ts`, docs LGPD/auditoria.
-- Validacoes: tabela de eventos criticos, contrato minimo do writer, evidencia de request correlation planejada.
+- Arquivos efetivamente usados nesta fase: `worker-airtrust/src/lib/audit/*`, `worker-airtrust/src/routes/auth.ts`, `worker-airtrust/src/routes/admin.ts`, `worker-airtrust/src/routes/assets.ts`, `worker-airtrust/src/routes/empresas.ts`, testes e docs LGPD/auditoria.
+- Validacoes: tabela de eventos criticos, contrato minimo do writer, testes de sanitizacao e evidencia de request correlation via metadata sem schema novo.
 - Modelo recomendado: GPT-5.5 Alta.
 - Risco: alto por compliance e dados sensiveis.
+- Estado apos esta fase: `audit_logs` e `admin_actions` ganharam sanitizacao/minimizacao no perimetro tocado; `auditoria` ficou encapsulada apenas em rotas de `empresas`; FRMS e demais call sites seguem classificados como adaptar em sprint proprio.
 - Criterio de aceite: cada writer existente fica classificado como manter, adaptar ou aposentar.
 
 ## Sprint C - Status Enum

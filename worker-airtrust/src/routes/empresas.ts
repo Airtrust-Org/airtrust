@@ -19,8 +19,9 @@ import {
   tenantMiddleware,
 } from '../middleware/tenant';
 import { generateRefreshToken } from '../utils/security';
-import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
+import { registrarAuditoria } from '../utils/auditoria';
 import { createLogger, toError } from '../utils/logger';
+import { buildLegacyAuditoriaActor, buildLegacyAuditPayload } from '../lib/audit/context';
 import empresasUsuariosRoutes from './empresas-usuarios';
 
 const empresasRoutes = new Hono<{ Bindings: Env }>();
@@ -704,14 +705,16 @@ empresasRoutes.post('/', requireTenantRole('admin'), async (c) => {
       .run();
 
     console.log('[EMPRESAS POST] Sucesso!');
-    const ua = extrairUsuarioAuditoria(c);
     await registrarAuditoria({
       db,
       tabela: 'empresas',
       acao: 'INSERT',
       registro_id: empresaId,
-      dados_novos: data,
-      ...ua,
+      dados_novos: buildLegacyAuditPayload(c, data, {
+        empresa_id: empresaId,
+        actor_empresa_id: getTenantContext(c).empresaId,
+      }),
+      ...buildLegacyAuditoriaActor(c),
     });
     return c.json(
       {
@@ -837,8 +840,14 @@ empresasRoutes.put('/:id', requireTenantRole('admin'), async (c) => {
       .bind(...values)
       .run();
 
-    const ua2 = extrairUsuarioAuditoria(c);
-    await registrarAuditoria({ db, tabela: 'empresas', acao: 'UPDATE', registro_id: id, ...ua2 });
+    await registrarAuditoria({
+      db,
+      tabela: 'empresas',
+      acao: 'UPDATE',
+      registro_id: id,
+      dados_novos: buildLegacyAuditPayload(c, body, { empresa_id: id }),
+      ...buildLegacyAuditoriaActor(c),
+    });
 
     return c.json({
       success: true,
@@ -923,8 +932,14 @@ empresasRoutes.delete('/:id', requireTenantRole('admin'), async (c) => {
     .bind(id)
     .run();
 
-  const ua3 = extrairUsuarioAuditoria(c);
-  await registrarAuditoria({ db, tabela: 'empresas', acao: 'DELETE', registro_id: id, ...ua3 });
+  await registrarAuditoria({
+    db,
+    tabela: 'empresas',
+    acao: 'DELETE',
+    registro_id: id,
+    dados_novos: buildLegacyAuditPayload(c, { deleted: true }, { empresa_id: id }),
+    ...buildLegacyAuditoriaActor(c),
+  });
 
   return c.json({
     success: true,
