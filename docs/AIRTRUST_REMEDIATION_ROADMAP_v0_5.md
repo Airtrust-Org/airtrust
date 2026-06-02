@@ -132,7 +132,8 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem da
 - Migration necessaria?: nao.
 - Pode ser GPT-5.4?: sim.
 - Precisa GPT-5.5?: nao.
-- Criterio de aceite: Hospedagem deixa de ter 0 testes e os demais modulos ganham cobertura minima dos fluxos criticos.
+- Resultado parcial em 2026-06-02: Hospedagem e LMS/EAD ganharam contratos funcionais minimos de listagem/criacao; SGSO ja possuia cobertura funcional em relatos, auditorias e workflow tenant-scoped e foi consolidado no inventario de cobertura.
+- Criterio de aceite: Hospedagem deixa de ter 0 testes e os demais modulos ganham cobertura minima dos fluxos criticos, sem liberar nenhum beta para cliente externo.
 
 ## Antes de 10 empresas
 

@@ -76,6 +76,16 @@ frms
 
 Manter fora do preset inicial: `lms`, `sgso`, `hospedagem`, `treinamentos_planejados`, `configuracoes_avancadas` e `sigvoos`.
 
+## Atualizacao Sprint F
+
+O piloto de cobertura funcional minima para modulos beta foi ampliado sem liberar nenhum modulo para cliente externo:
+
+- `hospedagem-beta-contract.test.ts` cobre listagem, criacao e validacao simples de datas.
+- `lms-cursos-beta-contract.test.ts` cobre listagem e criacao simples de curso no tenant atual.
+- `sgso-relatos-beta-contract.test.ts` cobre listagem e criacao simples de relato tenant-scoped.
+
+Mesmo com os contratos minimos, os modulos continuam classificados como `BETA/OCULTO` e fora do preset inicial ate decisão comercial explicita.
+
 ## Regras Para Demo
 
 - Nao expor telas com "em breve", "dados de teste" ou funcoes incompletas.
