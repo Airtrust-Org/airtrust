@@ -256,7 +256,7 @@ app.post('/fix-integer-ids', async (c) => {
       {
         success: false,
         error: 'Erro na migração',
-        details: error instanceof Error ? error.message : String(error),
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -331,7 +331,7 @@ app.get('/validate-ids', async (c) => {
       {
         success: false,
         error: 'Erro na validação',
-        details: error instanceof Error ? error.message : String(error),
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

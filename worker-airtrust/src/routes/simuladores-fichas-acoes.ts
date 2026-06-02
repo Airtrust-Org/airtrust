@@ -431,7 +431,7 @@ app.post('/fichas/:id/assinar', async (c) => {
       },
     });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -571,7 +571,7 @@ app.post('/fichas/:id/arquivar', async (c) => {
     });
   } catch (e: any) {
     console.error('Erro ao arquivar ficha:', e);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

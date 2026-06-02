@@ -175,7 +175,7 @@ tiposEvento.get('/', auth(), async (c) => {
       .all();
     return c.json({ success: true, data: rows.results || [] });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -304,7 +304,7 @@ tiposEvento.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -320,7 +320,7 @@ tiposEvento.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) =>
       .run();
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

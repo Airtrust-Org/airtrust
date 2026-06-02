@@ -30,7 +30,7 @@ app.get('/sessoes/:id/participantes', async (c) => {
       .all();
     return c.json({ success: true, data: p.results });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -87,7 +87,7 @@ app.post('/sessoes/:id/participantes', async (c) => {
 
     return c.json({ success: true, data: p }, 201);
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -113,7 +113,7 @@ app.put('/participantes/:id', async (c) => {
       .first();
     return c.json({ success: true, data: u });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -146,7 +146,7 @@ app.delete('/participantes/:id', async (c) => {
 
     return c.json({ success: true, message: 'Removido' });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -227,7 +227,7 @@ app.get('/sessoes/:id/checks', async (c) => {
 
     return c.json({ success: true, data: checksCompativeis });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

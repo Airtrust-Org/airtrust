@@ -290,7 +290,7 @@ app.get(
         'Erro ao listar templates de WhatsApp',
         'WHATSAPP_TEMPLATES_LIST_ERROR',
         {
-          details: error instanceof Error ? error.message : String(error),
+          details: 'Detalhes internos omitidos',
         },
       );
     }
@@ -327,7 +327,7 @@ app.post(
         'Erro ao sincronizar templates de WhatsApp',
         'WHATSAPP_TEMPLATES_SYNC_ERROR',
         {
-          details: error instanceof Error ? error.message : String(error),
+          details: 'Detalhes internos omitidos',
         },
       );
     }
@@ -396,7 +396,7 @@ app.post('/alertas/whatsapp/status-callback', async (c: Context<{ Bindings: Env 
       'Erro ao processar callback do Twilio',
       'TWILIO_WEBHOOK_ERROR',
       {
-        details: error instanceof Error ? error.message : String(error),
+        details: 'Detalhes internos omitidos',
       },
     );
   }
@@ -472,7 +472,7 @@ app.get('/alertas/whatsapp/delivery/:sid', async (c: Context<{ Bindings: Env }>)
       'Erro ao consultar status do WhatsApp',
       'TWILIO_STATUS_ERROR',
       {
-        details: error instanceof Error ? error.message : String(error),
+        details: 'Detalhes internos omitidos',
       },
     );
   }
@@ -557,7 +557,7 @@ app.get('/alertas/vencimentos', async (c: Context<{ Bindings: Env }>) => {
       'Erro ao buscar alertas de vencimento',
       'ALERTAS_VENCIMENTOS_ERROR',
       {
-        details: error instanceof Error ? error.message : String(error),
+        details: 'Detalhes internos omitidos',
       },
     );
   }

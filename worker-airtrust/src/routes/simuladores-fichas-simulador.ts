@@ -27,7 +27,7 @@ app.get('/fichas-simulador/:id/manobras', async (c) => {
       .all();
     return c.json({ success: true, data: m.results });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -163,7 +163,7 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
 
     return c.json({ success: true, data: atual });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -209,7 +209,7 @@ app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
       layout: '11 manobras por coluna',
     });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -227,7 +227,11 @@ app.post('/fichas-simulador/:id/gerar-qualificacao', async (c) => {
     );
   } catch (e: any) {
     const status = getQualificacaoGeracaoErrorStatus(String(e?.message || ''));
-    return c.json({ success: false, error: e.message }, (status || 500) as 400 | 404 | 500);
+    const publicError =
+      status === 400 || status === 404
+        ? String(e?.message || 'Erro ao gerar qualificação')
+        : 'Erro ao gerar qualificação';
+    return c.json({ success: false, error: publicError }, (status || 500) as 400 | 404 | 500);
   }
 });
 

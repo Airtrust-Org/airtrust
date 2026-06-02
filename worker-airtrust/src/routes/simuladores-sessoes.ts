@@ -222,7 +222,7 @@ app.get('/agendamentos', async (c) => {
     });
   } catch (e: any) {
     console.error('[AGENDAMENTOS] Erro:', e);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -262,7 +262,7 @@ app.get('/instrutores', async (c) => {
     });
   } catch (e: any) {
     console.error('[INSTRUTORES] Erro:', e);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -490,7 +490,7 @@ app.get('/sessoes', async (c) => {
     });
   } catch (e: any) {
     console.error('[SESSOES] Erro:', e);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -540,7 +540,7 @@ app.post('/sessoes', async (c) => {
     try {
       checksNormalizados = await normalizeChecksSessao(c.env.DB, checks, modeloAeronaveSessao);
     } catch (error: any) {
-      return c.json({ success: false, error: error?.message || 'Checks inválidos' }, 400);
+      return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
 
     // Validações por tipo_dispositivo
@@ -1076,7 +1076,7 @@ app.get('/sessoes/:id', async (c) => {
 
     return c.json({ success: true, sessao });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -1139,7 +1139,7 @@ app.get('/sessoes/:id/fichas', async (c) => {
 
     return c.json({ success: true, data: fichas.results });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -1466,7 +1466,7 @@ app.post('/sessoes/:id/notificacoes', async (c) => {
     return c.json(
       {
         success: false,
-        error: error?.message || 'Erro ao enviar notificações da sessão.',
+        error: 'Erro ao enviar notificações da sessão.',
         code: 'SESSION_NOTIFICATION_ERROR',
       },
       500,

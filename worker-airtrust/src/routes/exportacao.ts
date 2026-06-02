@@ -144,7 +144,7 @@ app.get('/funcionarios', auth(), async (c) => {
     });
   } catch (error: any) {
     createLogger(c, 'ExportacaoRoutes').error('Erro ao exportar funcionarios', error);
-    return c.json({ success: false, error: error.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -443,7 +443,7 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
     });
   } catch (error: any) {
     createLogger(c, 'ExportacaoRoutes').error('Erro ao exportar qualificacoes', error);
-    return c.json({ success: false, error: error.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -545,7 +545,7 @@ app.get('/qualificacoes-tipos', auth(), async (c) => {
     });
   } catch (error: any) {
     createLogger(c, 'ExportacaoRoutes').error('Erro ao exportar tipos de qualificacao', error);
-    return c.json({ success: false, error: error.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

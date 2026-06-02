@@ -109,7 +109,7 @@ app.post('/apply-migration-0133', async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );
@@ -209,7 +209,7 @@ app.post('/apply-migration-0134', async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );
@@ -251,7 +251,7 @@ app.post('/apply-migration-0135', async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );
@@ -290,7 +290,7 @@ app.get('/debug-funcionarios-old', async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );
@@ -537,7 +537,7 @@ app.post('/apply-migration-0136', async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );

@@ -180,7 +180,7 @@ router.get('/operational-snapshot', async (c) => {
       {
         success: false,
         error: 'Erro ao montar snapshot operacional FRMS',
-        details: error instanceof Error ? error.message : String(error ?? ''),
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

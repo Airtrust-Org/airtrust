@@ -888,7 +888,6 @@ app.post(
     } catch (error: any) {
       console.error('❌ [GERAR PDF] Erro completo:', {
         message: error?.message || 'Erro desconhecido',
-        stack: error?.stack,
         code: error?.code,
         details: String(error),
       });
@@ -896,8 +895,7 @@ app.post(
         {
           success: false,
           error: 'Erro ao gerar certificado',
-          message: error?.message || 'Erro desconhecido',
-          details: error?.stack || 'Sem stack trace',
+          code: 'INTERNAL_ERROR',
         },
         500,
       );
@@ -1146,7 +1144,7 @@ app.post(
         {
           success: false,
           error: 'Erro ao fazer upload do certificado',
-          details: error instanceof Error ? error.message : 'Erro desconhecido',
+          details: 'Detalhes internos omitidos',
         },
         500,
       );

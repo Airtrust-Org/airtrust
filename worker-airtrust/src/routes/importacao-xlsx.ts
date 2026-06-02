@@ -256,7 +256,7 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
     } as ImportResult);
   } catch (error: any) {
     createLogger(c, 'ImportacaoXlsxRoutes').error('Erro na importacao XLSX de funcionarios', error);
-    return c.json({ success: false, error: error.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -398,7 +398,7 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
     } as ImportResult);
   } catch (error: any) {
     createLogger(c, 'ImportacaoXlsxRoutes').error('Erro na importacao XLSX de historico', error);
-    return c.json({ success: false, error: error.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -531,7 +531,7 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
     return c.json(result);
   } catch (error: any) {
     createLogger(c, 'ImportacaoXlsxRoutes').error('Erro na importacao XLSX de tipos', error);
-    return c.json({ success: false, error: error.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

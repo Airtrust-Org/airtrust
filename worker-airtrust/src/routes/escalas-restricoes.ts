@@ -30,7 +30,7 @@ restricoes.get('/', auth(), async (c) => {
       .all();
     return c.json({ success: true, data: result.results });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -71,7 +71,7 @@ restricoes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
       .run();
     return c.json({ success: true, data: { id } }, 201);
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -89,7 +89,7 @@ restricoes.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => 
       .run();
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

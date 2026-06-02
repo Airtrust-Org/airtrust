@@ -127,7 +127,7 @@ export function registerPublicRoutes(app: PublicApp) {
       return c.json(
         {
           success: false,
-          error: error instanceof Error ? error.message : 'translation failed',
+          error: 'Erro interno do servidor',
         },
         500,
       );

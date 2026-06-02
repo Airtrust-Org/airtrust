@@ -349,7 +349,7 @@ status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) =
 
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -425,7 +425,7 @@ status.get('/:id/snapshot-publicado', auth(), async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -488,7 +488,7 @@ status.get('/:id/revisoes', auth(), async (c) => {
 
     return c.json({ success: true, data });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -552,7 +552,7 @@ status.get('/:id/revisoes/:rev', auth(), async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

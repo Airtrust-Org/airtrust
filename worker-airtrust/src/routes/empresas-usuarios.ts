@@ -832,7 +832,7 @@ app.get('/minha/logo-base64', async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro ao processar logo',
+        error: 'Erro interno do servidor',
       },
       500,
     );

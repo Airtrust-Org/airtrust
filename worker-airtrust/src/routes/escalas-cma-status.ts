@@ -63,7 +63,7 @@ cmaStatus.get('/', auth(), async (c) => {
 
     return c.json({ success: true, data });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

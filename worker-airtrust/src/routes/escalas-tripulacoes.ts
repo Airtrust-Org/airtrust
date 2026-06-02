@@ -604,7 +604,7 @@ tripulacoes.post('/:id/tripulacoes', auth(), requireRole('admin', 'manager'), as
       201,
     );
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -635,7 +635,7 @@ tripulacoes.get('/:id/tripulacoes', auth(), async (c) => {
       .all();
     return c.json({ success: true, data: result.results });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -721,7 +721,7 @@ tripulacoes.delete(
 
       return c.json({ success: true });
     } catch (e) {
-      return c.json({ success: false, error: String(e) }, 500);
+      return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
     }
   },
 );
@@ -910,7 +910,7 @@ tripulacoes.put('/:id/tripulacoes/:tripId', auth(), requireRole('admin', 'manage
 
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -972,7 +972,7 @@ tripulacoes.post(
 
       return c.json({ success: true, data: { eventos_gerados: eventosGerados } });
     } catch (e) {
-      return c.json({ success: false, error: String(e) }, 500);
+      return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
     }
   },
 );

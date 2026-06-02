@@ -110,7 +110,7 @@ app.post('/apply-migration-0133', async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );

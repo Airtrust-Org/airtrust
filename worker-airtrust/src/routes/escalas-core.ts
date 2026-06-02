@@ -238,7 +238,7 @@ escalas.post('/:id/notificar', auth(), requireRole('admin', 'manager'), async (c
 
     return c.json({ success: true, notificados: funcionarios.length });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -313,7 +313,7 @@ escalas.get('/frms-score/:funcionarioId', auth(), async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

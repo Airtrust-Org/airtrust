@@ -40,7 +40,7 @@ notificacoes.get('/', auth(), async (c) => {
       nao_lidas: naoLidas?.cnt ?? 0,
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -58,7 +58,7 @@ notificacoes.patch('/marcar-todas-lidas', auth(), async (c) => {
       .run();
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -76,7 +76,7 @@ notificacoes.patch('/:nid/lida', auth(), async (c) => {
       .run();
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

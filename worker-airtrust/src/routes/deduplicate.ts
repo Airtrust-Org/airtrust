@@ -259,7 +259,7 @@ app.post('/', async (c) => {
       {
         success: false,
         error: 'Erro ao remover duplicatas',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -306,7 +306,7 @@ app.get('/preview', async (c) => {
       {
         success: false,
         error: 'Erro ao buscar preview de duplicatas',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

@@ -34,7 +34,7 @@ app.get('/categorias', async (c) => {
     ).all();
     return c.json({ success: true, data: result.results });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -61,7 +61,7 @@ app.post('/categorias', async (c) => {
 
     return c.json({ success: true, data: { ...parsed.data, id: result.meta.last_row_id } });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -92,7 +92,7 @@ app.put('/categorias/:id', async (c) => {
       data: categoriaAtualizada && categoriaAtualizada.length > 0 ? categoriaAtualizada[0] : null,
     });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -110,7 +110,7 @@ app.delete('/categorias/:id', async (c) => {
       .run();
     return c.json({ success: true, message: 'Categoria excluída' });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -143,7 +143,7 @@ app.get('/manobras', async (c) => {
       .all();
     return c.json({ success: true, data: r.results });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -175,7 +175,7 @@ app.post('/manobras', async (c) => {
       .first();
     return c.json({ success: true, data: m }, 201);
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -216,7 +216,7 @@ app.put('/manobras/:id', async (c) => {
     });
     return c.json({ success: true, data: atu });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -231,7 +231,7 @@ app.delete('/manobras/:id', async (c) => {
       .run();
     return c.json({ success: true, message: 'Manobra excluída' });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

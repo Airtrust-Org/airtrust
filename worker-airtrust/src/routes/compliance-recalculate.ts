@@ -429,7 +429,7 @@ app.post('/recalculate', async (c: Context<AppEnv>) => {
     const response: RecalculateResponse = {
       success: false,
       message: 'Erro ao recalcular compliance',
-      error: error instanceof Error ? error.message : 'Erro desconhecido',
+      error: 'Erro interno do servidor',
     };
 
     return c.json(response, 500);
@@ -481,7 +481,7 @@ app.get('/stats', async (c: Context<AppEnv>) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );

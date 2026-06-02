@@ -65,7 +65,7 @@ app.get('/tipos-sessao', async (c) => {
     return c.json({ success: true, data: result.results });
   } catch (e: any) {
     console.error('❌ [TIPOS] Erro:', e);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -85,7 +85,7 @@ app.get('/tipos-sessao/:id', async (c) => {
 
     return c.json({ success: true, data: result });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -131,7 +131,7 @@ app.post('/tipos-sessao', async (c) => {
       data: { id: result.meta.last_row_id, codigo, nome, descricao },
     });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -187,7 +187,7 @@ app.put('/tipos-sessao/:id', async (c) => {
 
     return c.json({ success: true, data: { id, codigo, nome, descricao } });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -226,7 +226,7 @@ app.delete('/tipos-sessao/:id', async (c) => {
 
     return c.json({ success: true, message: 'Tipo excluído com sucesso' });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -351,7 +351,7 @@ app.get('/modelos-sessao', async (c) => {
     return c.json({ success: true, data: result.results });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro GET:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -393,7 +393,7 @@ app.get('/modelos-sessao/:id', async (c) => {
     return c.json({ success: true, data: { ...result, checks: checksResult.results || [] } });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro GET/:id:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -412,7 +412,7 @@ app.get('/modelos-sessao/:id/checks', async (c) => {
       .all();
     return c.json({ success: true, data: result.results || [] });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -446,7 +446,7 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
     return c.json({ success: true, data: result.results });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro GET manobras:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -503,7 +503,7 @@ app.put('/modelos-sessao/:id/manobras/reordenar', async (c) => {
     return c.json({ success: true, message: 'Ordem atualizada com sucesso' });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro PUT reordenar manobras:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -535,7 +535,7 @@ app.delete('/modelos-sessao/:id/manobras/:manobraId', async (c) => {
     return c.json({ success: true, message: 'Manobra removida com sucesso' });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro DELETE manobra:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -569,7 +569,7 @@ app.post('/modelos-sessao', async (c) => {
     try {
       checksIdsNormalizados = await normalizeChecksIdsModelo(c.env.DB, checks_ids, modelo_aeronave);
     } catch (error: any) {
-      return c.json({ success: false, error: error?.message || 'Checks inválidos' }, 400);
+      return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
 
     // Verificar duplicidade de código
@@ -648,7 +648,7 @@ app.post('/modelos-sessao', async (c) => {
     return c.json({ success: true, data: { id: modeloId, codigo, nome } }, 201);
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro POST:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -735,7 +735,7 @@ app.post('/modelos-sessao/:id/manobras', async (c) => {
     return c.json({ success: true, data: { inseridas } }, 201);
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro POST manobras:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -870,7 +870,7 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
     });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro POST clonar:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -1224,7 +1224,7 @@ app.put('/modelos-sessao/:id', async (c) => {
           modeloAeronaveFinal,
         );
       } catch (error: any) {
-        return c.json({ success: false, error: error?.message || 'Checks inválidos' }, 400);
+        return c.json({ success: false, error: 'Checks inválidos' }, 400);
       }
     }
     const newQualifTipoId =
@@ -1322,7 +1322,7 @@ app.put('/modelos-sessao/:id', async (c) => {
     });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro PUT:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -1371,7 +1371,7 @@ app.delete('/modelos-sessao/:id', async (c) => {
     return c.json({ success: true, message: 'Modelo excluído com sucesso' });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro DELETE:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -1423,7 +1423,7 @@ app.post('/fix/modelos-periodicos', async (c) => {
     });
   } catch (e: any) {
     console.error('❌ [FIX] Erro:', e.message);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

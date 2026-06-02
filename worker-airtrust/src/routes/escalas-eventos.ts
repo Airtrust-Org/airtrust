@@ -207,7 +207,7 @@ eventos.post('/:id/eventos', auth(), requireRole('admin', 'manager'), async (c) 
 
     return c.json({ success: true, data: { id: eventoId } }, 201);
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -235,7 +235,7 @@ eventos.get('/:id/eventos', auth(), async (c) => {
       .all();
     return c.json({ success: true, data: result.results });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -367,7 +367,7 @@ eventos.put('/:id/eventos/:eventoId', auth(), requireRole('admin', 'manager'), a
 
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -421,7 +421,7 @@ eventos.delete('/:id/eventos/:eventoId', auth(), requireRole('admin', 'manager')
 
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
