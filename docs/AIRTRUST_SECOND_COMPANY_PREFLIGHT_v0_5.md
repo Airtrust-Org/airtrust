@@ -78,6 +78,18 @@ Liberar apenas em piloto controlado:
 - Nao vender SGSO/LMS como produto pronto.
 - Manter Treinamentos Planejados, SGSO, LMS/EAD, Hospedagem e configuracoes "em breve" ocultos em demo/cliente.
 - Admin/manutencao e usuarios/empresas/permissoes ficam em uso interno operacional.
+- Sprint 5 confirmou que `modulos_ativos` ainda nao e gating end-to-end no frontend; antes de demo externa, aplicar roteiro operacional de ocultacao ou concluir `docs/AIRTRUST_MODULE_GATING_PLAN_v0_5.md`.
+
+## 6.1 Data Quality
+
+Antes de criar a segunda empresa:
+
+```bash
+bash scripts/validation/validate-data-quality-sql.sh
+npm run validate:data-quality-sql
+```
+
+Depois, operador autorizado deve executar `scripts/validation/data-quality-checks-readonly.sql` em ambiente aprovado, sem Codex, sem `wrangler d1 execute --remote` e sem versionar resultado com PII. Guia: `docs/AIRTRUST_DATA_QUALITY_EXECUTION_GUIDE_v0_5.md`.
 
 ## 7. Dados Minimos Para Onboarding
 
@@ -134,5 +146,7 @@ Ter definido antes de criar:
 - Resultado do smoke public-only.
 - Resultado do smoke sem credencial (`SKIPPED_AUTH_REQUIRED`) ou autenticado read-only.
 - Registro da matriz de modulos aprovada.
+- Registro GO/NO-GO atualizado: `docs/AIRTRUST_SECOND_COMPANY_GO_NO_GO_v0_5.md`.
+- Data quality validado localmente e executado por operador autorizado.
 - Runbook de onboarding revisado.
 - Confirmacao de que nao havera seed/import/migration/DB remoto.
