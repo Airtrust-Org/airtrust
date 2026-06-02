@@ -216,6 +216,27 @@ function normalizeAuthRole(value: unknown): string {
   return normalized;
 }
 
+function normalizeModulosAtivos(value: unknown): string[] | null {
+  if (Array.isArray(value)) {
+    const normalized = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    return normalized.length > 0 ? normalized : [];
+  }
+
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  } catch {
+    return null;
+  }
+}
+
 async function resolveAuthRoleForUser(
   db: D1Database,
   userId: number,
@@ -1225,10 +1246,12 @@ authRoutes.get('/empresas', auth(), async (c) => {
         e.nome,
         e.codigo,
         e.logo_url,
+        ec.modulos_ativos,
         'admin' AS role,
         CASE WHEN e.id = ? THEN 1 ELSE 0 END AS is_primary,
         CASE WHEN e.id = ? THEN 1 ELSE 0 END AS is_current
       FROM empresas e
+      LEFT JOIN empresas_config ec ON ec.empresa_id = e.id
       WHERE e.deleted_at IS NULL
         AND e.ativo = 1
       ORDER BY
@@ -1242,11 +1265,13 @@ authRoutes.get('/empresas', auth(), async (c) => {
         e.nome,
         e.codigo,
         e.logo_url,
+        ec.modulos_ativos,
         ue.role,
         ue.is_primary,
         CASE WHEN e.id = ? THEN 1 ELSE 0 END AS is_current
       FROM usuarios_empresas ue
       INNER JOIN empresas e ON e.id = ue.empresa_id
+      LEFT JOIN empresas_config ec ON ec.empresa_id = e.id
       WHERE ue.usuario_id = ?
         AND e.deleted_at IS NULL
         AND e.ativo = 1
@@ -1266,16 +1291,22 @@ authRoutes.get('/empresas', auth(), async (c) => {
       nome: string;
       codigo: string;
       logo_url: string | null;
+      modulos_ativos: string | null;
       role: string;
       is_primary: number;
       is_current: number;
     }>();
 
+  const normalizedEmpresas = (empresas.results || []).map((empresa) => ({
+    ...empresa,
+    modulos_ativos: normalizeModulosAtivos(empresa.modulos_ativos),
+  }));
+
   return c.json({
     success: true,
     data: {
       empresaAtualId: empresaIdAtual,
-      empresas: empresas.results || [],
+      empresas: normalizedEmpresas,
     },
   });
 });

@@ -1,6 +1,8 @@
 import { useLocation } from 'react-router';
 import { ChevronRight, Home } from 'lucide-react';
 import { NAVIGATION_CONFIG, SettingsItem } from '../../navigation.config';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import { canAccessModule } from '@/react-app/lib/module-access';
 
 interface MasterDetailLayoutProps {
   children: React.ReactNode;
@@ -10,9 +12,18 @@ interface MasterDetailLayoutProps {
 
 export default function MasterDetailLayout({ children, title, description }: MasterDetailLayoutProps) {
   const location = useLocation();
+  const { empresas = [], empresaAtualId = null } = useAuth();
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  const modulosAtivos = empresaAtual?.modulos_ativos;
+  const visibleSettingsMenu = NAVIGATION_CONFIG.settings_menu
+    .map((category) => ({
+      ...category,
+      items: category.items.filter((item) => canAccessModule(item.id, modulosAtivos)),
+    }))
+    .filter((category) => category.items.length > 0);
 
   const getCurrentItem = (): SettingsItem | undefined => {
-    for (const category of NAVIGATION_CONFIG.settings_menu) {
+    for (const category of visibleSettingsMenu) {
       const item = category.items.find(item => item.path === location.pathname);
       if (item) return item;
     }
@@ -56,7 +67,7 @@ export default function MasterDetailLayout({ children, title, description }: Mas
         </div>
 
         <div className="p-4">
-          {NAVIGATION_CONFIG.settings_menu.map((category) => (
+          {visibleSettingsMenu.map((category) => (
             <div key={category.category} className="mb-6">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                 {category.category}

@@ -20,6 +20,33 @@ Nao foi implementado gating por `modulos_ativos` porque o mecanismo existente na
 | Beta aparece em navegacao/rotas? | Sim, principalmente LMS e SGSO; Hospedagem tem rota direta e aparece em configuracao legada | `src/react-app/App.tsx`, `src/react-app/components/AppLayout.tsx`, `src/react-app/navigation.config.ts` |
 | Default atual e fail-closed? | Nao comprovado | fallback de `empresas.ts` usa lista permissiva historica em parse de `modulos_ativos` |
 
+## Atualizacao Sprint 6
+
+Status: **GO tecnico para gating runtime conservador**.
+
+Implementacao:
+
+- Backend: `/api/auth/empresas` inclui `modulos_ativos` via `empresas_config`, normalizado para `string[]` quando explicito.
+- Compatibilidade: config ausente, vazia em banco ou JSON invalido retorna `null`, preservando modo legado.
+- Frontend: `src/react-app/lib/modules.ts` registra os modulos canonicos do produto.
+- Frontend: `src/react-app/lib/module-access.ts` centraliza `hasExplicitModuleConfig`, `canAccessModule`, aliases legados e mapeamento de rotas.
+- Menu/cards: `AppLayout` e a Home operacional usam o helper de gating.
+- Rotas diretas: `ProtectedRoute` bloqueia URL direta de modulo nao ativo.
+- Testes: helper, filtragem de navegacao e contrato worker de `/api/auth/empresas`.
+
+Regra ativa:
+
+```text
+Se modulos_ativos e array:
+  permitir apenas modulos listados, com admin/internal preservado por RBAC existente.
+
+Se modulos_ativos e null/undefined:
+  preservar acesso legado para nao quebrar a empresa atual.
+
+SIGVOOS:
+  permanecer bloqueado para cliente/piloto.
+```
+
 ## Risco de Implementar Agora
 
 - Buscar `/api/empresas/minha` dentro do layout sem contrato de cache/erro pode deixar menu instavel em login, hard refresh e troca de empresa.
@@ -71,4 +98,4 @@ Nao foi implementado gating por `modulos_ativos` porque o mecanismo existente na
 
 ## Criterio de GO Futuro
 
-Gating passa a ser GO quando menu e rotas diretas forem cobertos por testes automatizados, `/api/auth/empresas` entregar modulos normalizados e a empresa atual tiver inventario aprovado de modulos ativos.
+Gating runtime passa a ser GO tecnico quando menu e rotas diretas forem cobertos por testes automatizados e `/api/auth/empresas` entregar modulos normalizados. Para liberacao operacional da segunda empresa, ainda faltam smoke autenticado read-only e data quality autorizada.

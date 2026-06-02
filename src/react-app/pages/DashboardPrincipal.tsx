@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import AppLayout from '../components/AppLayout';
 import { WidgetError } from '../components/UI/widget-states';
+import { useAuth } from '../hooks/useAuth';
+import { canAccessModule } from '../lib/module-access';
 import { formatDisplayDate, formatRelativeTime, getOperationStatus, safePct } from './dashboard/helpers';
 import { DashboardSkeleton } from './dashboard/DashboardSkeleton';
 import {
@@ -35,11 +37,16 @@ function isQualificationAlert(alerta: { tipo?: string; diasRestantes?: number })
 }
 
 export default function DashboardPrincipal() {
+  const { empresas, empresaAtualId } = useAuth();
   const metricsQ = useMetricsQuery();
   const alertasQ = useAlertasQuery();
   const frmsAlertasQ = useFrmsAlertasQuery();
   const escalasQ = useEscalasQuery(!!metricsQ.data);
   const sessoesQ = useSessoesSimuladorQuery(!!metricsQ.data);
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  const modulosAtivos = empresaAtual?.modulos_ativos;
+  const showFrmsCard = canAccessModule('frms', modulosAtivos);
+  const showSgsoCard = canAccessModule('sgso', modulosAtivos);
 
   const criticalQueries = [metricsQ, alertasQ, frmsAlertasQ, escalasQ, sessoesQ];
   const isEssentialLoading = metricsQ.isLoading && !metricsQ.data;
@@ -213,6 +220,7 @@ export default function DashboardPrincipal() {
         </section>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {showFrmsCard ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -293,7 +301,9 @@ export default function DashboardPrincipal() {
               </div>
             )}
           </section>
+          ) : null}
 
+          {showSgsoCard ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -339,6 +349,7 @@ export default function DashboardPrincipal() {
               </div>
             )}
           </section>
+          ) : null}
 
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">

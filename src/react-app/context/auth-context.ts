@@ -14,6 +14,7 @@ export interface UsuarioEmpresa {
   nome: string;
   codigo: string;
   logo_url?: string | null;
+  modulos_ativos?: string[] | null;
   role: string;
   is_primary: number;
   is_current: number;

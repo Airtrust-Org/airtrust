@@ -78,7 +78,30 @@ Liberar apenas em piloto controlado:
 - Nao vender SGSO/LMS como produto pronto.
 - Manter Treinamentos Planejados, SGSO, LMS/EAD, Hospedagem e configuracoes "em breve" ocultos em demo/cliente.
 - Admin/manutencao e usuarios/empresas/permissoes ficam em uso interno operacional.
-- Sprint 5 confirmou que `modulos_ativos` ainda nao e gating end-to-end no frontend; antes de demo externa, aplicar roteiro operacional de ocultacao ou concluir `docs/AIRTRUST_MODULE_GATING_PLAN_v0_5.md`.
+- Sprint 6 concluiu gating runtime conservador por `modulos_ativos`; antes de demo externa, novo tenant deve ter config explicita.
+
+Preset recomendado para a segunda empresa:
+
+```text
+dashboard
+funcionarios
+qualificacoes
+simuladores
+escalas
+evd
+frms
+```
+
+Manter inativos/ocultos no preset inicial:
+
+```text
+lms
+sgso
+hospedagem
+treinamentos_planejados
+configuracoes_avancadas
+sigvoos
+```
 
 ## 6.1 Data Quality
 
@@ -113,6 +136,7 @@ Apos criar a empresa e o primeiro admin, executar:
 - login do primeiro admin;
 - `GET /api/auth/me`;
 - `GET /api/auth/empresas`;
+- confirmacao de `modulos_ativos` explicito no payload de `/api/auth/empresas`;
 - smoke autenticado com empresa esperada;
 - checagem de que tenant novo nao enxerga dados da empresa atual;
 - checagem de que empresa atual nao enxerga dados do tenant novo;

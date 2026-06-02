@@ -35,7 +35,9 @@ Classificar os modulos para entrada da segunda empresa real em piloto controlado
 
 ## Observacao de Exposicao Atual
 
-Busca em 2026-06-02 encontrou referencias de LMS, SGSO e Hospedagem na navegacao (`src/react-app/navigation.config.ts`, `src/react-app/components/layout/Header.tsx` e `src/react-app/App.tsx`). Tambem existe tipo `modulos_ativos`, mas nao foi comprovado neste sprint que o frontend respeita esse mecanismo end-to-end. Por risco de ocultar modulo usado pela empresa real atual, nao foi implementada feature flag ampla nesta fase.
+Sprint 6 conectou `empresas_config.modulos_ativos` ao contrato autenticado usado pelo frontend (`/api/auth/empresas`) e adicionou gating em menu/cards/rotas diretas. A regra de compatibilidade e conservadora: empresa sem `modulos_ativos` explicito permanece em modo legado para nao quebrar a empresa real existente; empresa com array explicito passa a respeitar a lista de modulos ativos.
+
+`SIGVOOS` permanece bloqueado mesmo em modo legado, salvo regra interna futura explicitamente aprovada.
 
 ## Atualizacao Sprint 5
 
@@ -49,13 +51,39 @@ O mapeamento do Sprint 5 confirmou:
 
 Decisao: **NO-GO parcial para gating runtime nesta sprint**. Plano detalhado em `docs/AIRTRUST_MODULE_GATING_PLAN_v0_5.md`.
 
+## Atualizacao Sprint 6
+
+O gating runtime passou a existir em duas camadas:
+
+- `/api/auth/empresas` retorna `modulos_ativos` normalizado como array quando ha config explicita; config ausente/invalida retorna `null` para preservar modo legado.
+- `src/react-app/lib/modules.ts` define o registro canonico de modulos e status (`pilot`, `beta`, `internal`, `blocked`).
+- `src/react-app/lib/module-access.ts` centraliza compatibilidade legada, aliases e mapeamento de rotas.
+- `AppLayout` oculta itens de menu conforme modulo ativo.
+- `ProtectedRoute` bloqueia rota direta quando a empresa tem config explicita e o modulo nao esta ativo.
+- Home operacional oculta cards/atalhos de FRMS/SGSO conforme o mesmo helper.
+
+Preset recomendado para segunda empresa antes do primeiro acesso:
+
+```text
+dashboard
+funcionarios
+qualificacoes
+simuladores
+escalas
+evd
+frms
+```
+
+Manter fora do preset inicial: `lms`, `sgso`, `hospedagem`, `treinamentos_planejados`, `configuracoes_avancadas` e `sigvoos`.
+
 ## Regras Para Demo
 
 - Nao expor telas com "em breve", "dados de teste" ou funcoes incompletas.
 - Nao usar dados reais da empresa atual para demonstrar outro tenant.
 - Nao ativar modulo beta durante reuniao sem aprovacao previa.
 - Nao executar writes em producao para demonstracao.
-- Enquanto o gating end-to-end nao existir, roteiro de demo deve evitar LMS, SGSO, Hospedagem, SIGVOOS e configuracoes incompletas.
+- Para novo tenant, configurar `modulos_ativos` explicitamente antes do primeiro acesso.
+- Mesmo com gating, roteiro de demo deve evitar LMS, SGSO, Hospedagem, SIGVOOS e configuracoes incompletas salvo aprovacao especifica.
 
 ## Smoke Minimo Para Piloto
 

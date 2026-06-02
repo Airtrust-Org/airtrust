@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { Ban } from 'lucide-react';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
+import { canAccessModule, getModuleKeyForPath } from '@/react-app/lib/module-access';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -28,7 +29,7 @@ function normalizeRole(role?: string | null): string {
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, empresas = [], empresaAtualId = null } = useAuth();
   const location = useLocation();
   const { t } = useLanguage();
 
@@ -70,6 +71,29 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  const moduleKey = getModuleKeyForPath(location.pathname);
+
+  if (moduleKey && !canAccessModule(moduleKey, empresaAtual?.modulos_ativos)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
+          <Ban className="w-14 h-14 text-amber-500 mb-4 mx-auto" />
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Modulo indisponivel</h2>
+          <p className="text-sm text-slate-600 mb-6">
+            Este modulo nao esta ativo para a empresa selecionada.
+          </p>
+          <a
+            href="/"
+            className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            Voltar ao dashboard
+          </a>
+        </div>
+      </div>
+    );
   }
 
   // Verificar role se especificado
