@@ -31,6 +31,7 @@ import {
 import {
   applyModelChangeDefaults,
   deriveSpecialFichaFlags,
+  filterModelosSessaoForModal,
   resolveEditModeloSelection,
 } from './modalNovaSessaoRules';
 import { enviarNotificacaoSessao, montarResumoCanal } from '@/react-app/utils/sessaoNotificacoes';
@@ -88,6 +89,11 @@ interface ModeloSessao {
   nome: string;
   tipo_sessao_id: number;
   tipo_aeronave: string;
+  tipo?: string | null;
+  modelo_aeronave?: string | null;
+  codigo_aeronave?: string | null;
+  tipo_sessao_codigo?: string | null;
+  tipo_sessao_nome?: string | null;
   checks?: Array<{ id: number }>;
 }
 
@@ -723,15 +729,36 @@ export default function ModalNovaSessao({
     tipoSessaoIdParam: number,
     codigoAeronave: string,
     tipo?: 'SIMULADOR' | 'AERONAVE',
+    includeFilters = true,
   ) {
-    const params = new URLSearchParams({
-      tipo_sessao_id: String(tipoSessaoIdParam),
-      modelo_aeronave: codigoAeronave,
-      t: String(Date.now()),
-    });
-    if (tipo) params.set('tipo', tipo);
+    const params = new URLSearchParams({ t: String(Date.now()) });
+
+    if (includeFilters) {
+      const tipoSessaoObj = tiposSessao.find((item) => item.id === tipoSessaoIdParam);
+      params.set('tipo_sessao_id', String(tipoSessaoIdParam));
+      if (tipoSessaoObj?.codigo) params.set('tipo_sessao_codigo', tipoSessaoObj.codigo);
+      if (tipoSessaoObj?.nome) params.set('tipo_sessao_nome', tipoSessaoObj.nome);
+      params.set('modelo_aeronave', codigoAeronave);
+      if (tipo) params.set('tipo', tipo);
+    }
 
     return `${API_BASE_URL}/simuladores/modelos-sessao?${params.toString()}`;
+  }
+
+  function filtrarModelosSessaoModal(
+    modelosRecebidos: ModeloSessao[],
+    tipoSessaoIdParam: number,
+    codigoAeronave: string,
+    tipo?: 'SIMULADOR' | 'AERONAVE',
+  ) {
+    return filterModelosSessaoForModal({
+      modelos: modelosRecebidos,
+      tipoSessao: tiposSessao.find((item) => item.id === tipoSessaoIdParam) || {
+        id: tipoSessaoIdParam,
+      },
+      equipamento: codigoAeronave,
+      tipoDispositivo: tipo || tipoDispositivo,
+    });
   }
 
   async function carregarModelosSessao(
@@ -759,7 +786,31 @@ export default function ModalNovaSessao({
       console.log(`📦 [${origem}] Resposta recebida:`, data);
 
       if (data.success) {
-        const modelosAtualizados = data.data || [];
+        let modelosAtualizados = filtrarModelosSessaoModal(
+          data.data || [],
+          tipoSessaoIdParam,
+          codigoAeronave,
+          tipo,
+        );
+
+        if (modelosAtualizados.length === 0) {
+          const fallbackUrl = buildModelosSessaoUrl(tipoSessaoIdParam, codigoAeronave, tipo, false);
+          const fallbackRes = await fetch(fallbackUrl, {
+            headers: _authHeaders(),
+            cache: 'no-store',
+          });
+          const fallbackData = await fallbackRes.json();
+
+          if (fallbackData.success) {
+            modelosAtualizados = filtrarModelosSessaoModal(
+              fallbackData.data || [],
+              tipoSessaoIdParam,
+              codigoAeronave,
+              tipo,
+            );
+          }
+        }
+
         setModelos(modelosAtualizados);
 
         if (

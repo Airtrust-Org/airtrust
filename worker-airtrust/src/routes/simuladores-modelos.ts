@@ -49,6 +49,16 @@ async function normalizeChecksIdsModelo(
   ).map((check) => Number(check.id));
 }
 
+function buildModeloAeronaveSqlMatchExpression(expr: string): string {
+  const compact = `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(COALESCE(${expr}, '')), ' ', ''), '-', ''), '/', ''), '.', ''), '(', ''), ')', ''))`;
+
+  return `CASE
+    WHEN ${compact} LIKE '%AW139%' THEN 'AW139'
+    WHEN ${compact} LIKE '%SK76%' OR ${compact} LIKE '%S76%' THEN 'SK76'
+    ELSE ${compact}
+  END`;
+}
+
 // ==========================================================================
 // CRUD: TIPOS DE SESSÃO
 // ==========================================================================
@@ -304,13 +314,21 @@ app.get('/modelos-sessao', async (c) => {
     ]
       .filter(Boolean)
       .join(', ');
+    const modeloAeronaveExpr = filtroModeloExpr ? `COALESCE(${filtroModeloExpr}, '')` : "''";
 
     const tipo_sessao_id = c.req.query('tipo_sessao_id');
+    const tipoSessaoCodigo = String(
+      c.req.query('tipo_sessao_codigo') || c.req.query('tipo_sessao') || '',
+    )
+      .trim()
+      .toUpperCase();
+    const tipoSessaoNome = String(c.req.query('tipo_sessao_nome') || '').trim().toUpperCase();
     const tipo = c.req.query('tipo'); // SIMULADOR | AERONAVE
     const modelo_aeronave =
       c.req.query('modelo_aeronave') ||
       c.req.query('codigo_aeronave') ||
       c.req.query('tipo_aeronave');
+    const modeloAeronaveNormalizado = normalizeModeloAeronave(modelo_aeronave);
 
     let query = `
       SELECT
@@ -328,19 +346,44 @@ app.get('/modelos-sessao', async (c) => {
     `;
     const params: any[] = [];
 
-    if (tipo_sessao_id) {
-      query += ' AND ms.tipo_sessao_id = ?';
-      params.push(tipo_sessao_id);
+    if (tipo_sessao_id || tipoSessaoCodigo || tipoSessaoNome) {
+      const tipoClauses: string[] = [];
+
+      if (tipo_sessao_id) {
+        tipoClauses.push('ms.tipo_sessao_id = ?');
+        params.push(tipo_sessao_id);
+      }
+
+      if (tipoSessaoCodigo) {
+        tipoClauses.push('UPPER(TRIM(COALESCE(ts.codigo, \'\'))) = ?');
+        params.push(tipoSessaoCodigo);
+      }
+
+      if (tipoSessaoNome) {
+        tipoClauses.push('UPPER(TRIM(COALESCE(ts.nome, \'\'))) = ?');
+        params.push(tipoSessaoNome);
+      }
+
+      if (tipoSessaoCodigo === 'INI' || tipoSessaoCodigo === 'INICIAL' || tipoSessaoNome === 'INICIAL') {
+        tipoClauses.push("UPPER(TRIM(COALESCE(ts.codigo, ''))) IN ('INI', 'INICIAL')");
+        tipoClauses.push("UPPER(TRIM(COALESCE(ts.nome, ''))) = 'INICIAL'");
+        tipoClauses.push("UPPER(TRIM(COALESCE(ms.tipo, ''))) = 'INICIAL'");
+      }
+
+      query += ` AND (${tipoClauses.join(' OR ')})`;
     }
 
     if (tipo && (tipo === 'SIMULADOR' || tipo === 'AERONAVE')) {
-      query += " AND COALESCE(ms.tipo, 'SIMULADOR') = ?";
-      params.push(tipo);
+      if (tipo === 'AERONAVE') {
+        query += " AND UPPER(TRIM(COALESCE(ms.tipo, 'SIMULADOR'))) = 'AERONAVE'";
+      } else {
+        query += " AND UPPER(TRIM(COALESCE(ms.tipo, 'SIMULADOR'))) != 'AERONAVE'";
+      }
     }
 
-    if (modelo_aeronave) {
-      query += ` AND UPPER(TRIM(COALESCE(${filtroModeloExpr}))) = UPPER(TRIM(?))`;
-      params.push(modelo_aeronave);
+    if (modeloAeronaveNormalizado) {
+      query += ` AND ${buildModeloAeronaveSqlMatchExpression(modeloAeronaveExpr)} = ?`;
+      params.push(modeloAeronaveNormalizado);
     }
 
     query += ' ORDER BY ms.codigo';

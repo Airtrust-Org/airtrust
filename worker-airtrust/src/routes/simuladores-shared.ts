@@ -101,9 +101,17 @@ export function timeToMinutes(h: unknown): number | null {
 }
 
 export function normalizeModeloAeronave(modeloAeronave: unknown): string {
-  return String(modeloAeronave || '')
+  const normalized = String(modeloAeronave || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toUpperCase();
+  const compact = normalized.replace(/[^A-Z0-9]/g, '');
+
+  if (compact.includes('AW139')) return 'AW139';
+  if (compact.includes('SK76') || compact.includes('S76')) return 'SK76';
+
+  return compact;
 }
 
 export function isCheckCompativelComModeloAeronave(
