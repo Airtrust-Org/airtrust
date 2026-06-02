@@ -9,19 +9,23 @@ Orientar a execucao segura dos checks de data quality antes da segunda empresa r
 ## Artefatos
 
 - Catalogo: `docs/AIRTRUST_DATA_QUALITY_CHECKS_v0_5.md`
+- Runbook: `docs/AIRTRUST_DATA_QUALITY_RUNBOOK_v0_5.md`
 - SQL read-only: `scripts/validation/data-quality-checks-readonly.sql`
-- Validador local: `scripts/validation/validate-data-quality-sql.sh`
+- Validador estatico: `scripts/validation/validate-data-quality-sql.sh`
+- Runner local seguro: `scripts/validation/run-data-quality-local.sh`
 
 ## Politica de Execucao
 
-- Executar somente por operador autorizado.
-- Executar somente em ambiente aprovado e com credencial apropriada.
-- Nao executar contra producao a partir de Codex.
+- Executar somente em `local` ou `staging`.
+- Executar apenas quando `AIRTRUST_ALLOW_DATA_QUALITY_RUN=YES`.
+- `AIRTRUST_DATA_QUALITY_TARGET` deve ser `local` ou `staging`.
+- `production` e qualquer DB remoto sao proibidos.
 - Nao usar `wrangler d1 execute --remote`.
 - Nao salvar dumps, tokens, cookies, PII ou resultados sensiveis no repositorio.
-- Tratar resultado como evidencial operacional, nao como dado para commit.
+- O runner local trabalha com copia temporaria do SQLite local/staging e imprime apenas resumo agregado.
+- Se o banco local/staging nao estiver configurado, o runner encerra com `SKIPPED_DATA_QUALITY_RUN`.
 
-## Validacao Local do SQL
+## Validacao Estatica do SQL
 
 Antes de qualquer execucao operacional, validar que o arquivo permanece read-only:
 
@@ -37,51 +41,56 @@ Aceite:
 - todas as instrucoes efetivas iniciam com `SELECT`;
 - script encerra com status `0`.
 
-## Fluxo Recomendado
+## Execucao Local Segura
 
-1. Confirmar branch limpa e `main` alinhada.
-2. Rodar `npm run ops:guard`.
-3. Validar o SQL localmente com o validador.
-4. Exportar uma copia do SQL para o operador autorizado, fora do repositorio, se necessario.
-5. Executar em ambiente aprovado usando ferramenta read-only.
-6. Classificar achados como:
-   - `BLOCKER`: impede segunda empresa;
-   - `WARN`: corrige antes de carga/import;
-   - `INFO`: acompanhar.
-7. Registrar apenas resumo sem PII no dossie GO/NO-GO.
+Quando houver ambiente local aprovado:
 
-## Checks Bloqueantes
-
-Sao bloqueantes para criar a segunda empresa:
-
-- empresa ativa sem admin/manager;
-- usuario ativo sem empresa;
-- funcionario ativo sem empresa;
-- escala ativa sem tenant valido;
-- asset/documento privado em prefixo publico;
-- dashboard com agregados de tenant incorreto;
-- FRMS sem dados minimos para uso operacional.
-
-## Resultado Esperado Antes do Onboarding
-
-GO somente se:
-
-- checks bloqueantes retornarem zero ou tiverem mitigacao aprovada;
-- smoke autenticado read-only validar empresa esperada;
-- modulos beta permanecerem ocultos por controle operacional ou gating implementado;
-- nenhum script de seed/import/migration for necessario para a liberacao.
-
-## Modelo de Registro Sem PII
-
-```text
-Data:
-Ambiente:
-Executor:
-Hash do SQL:
-Validador local:
-BLOCKER:
-WARN:
-INFO:
-Decisao:
-Mitigacoes aprovadas:
+```bash
+export AIRTRUST_ALLOW_DATA_QUALITY_RUN=YES
+export AIRTRUST_DATA_QUALITY_TARGET=local
+npm run data-quality:local
 ```
+
+Quando houver ambiente staging aprovado e um caminho de banco seguro definido fora do repositorio:
+
+```bash
+export AIRTRUST_ALLOW_DATA_QUALITY_RUN=YES
+export AIRTRUST_DATA_QUALITY_TARGET=staging
+export AIRTRUST_DATA_QUALITY_DB_PATH=/caminho/seguro/para/staging.sqlite
+npm run data-quality:local
+```
+
+## Resultado Sanitizado
+
+O runner deve registrar somente:
+
+- `check_id`
+- `categoria`
+- `status` (`PASS`, `WARN`, `FAIL`, `SKIPPED`)
+- `count`
+- `bloqueia`
+- nota curta sem PII
+
+## Classificacao dos Achados
+
+- `FAIL`: bloqueia cliente externo ou representa risco operacional critico.
+- `WARN`: nao bloqueia a liberacao, mas deve entrar em remediacao antes de crescimento.
+- `INFO`: acompanhamento documental.
+
+## Bloqueia Cliente Externo
+
+Bloqueia cliente externo quando o achado compromete tenant isolation, acesso, FRMS, escalas ou qualquer fluxo que exponha dados ou comportamento incorreto para o cliente.
+
+## Bloqueia Piloto Interno
+
+Bloqueia piloto interno quando o achado compromete o uso minimo do tenant, a confianca em metricas, a integridade do fluxo ou a seguranca dos dados.
+
+## O Que Nunca Deve Ser Feito
+
+- Nao executar em producao.
+- Nao executar em D1 remoto.
+- Nao usar migration ou seed para corrigir data quality.
+- Nao corrigir dados nesta fase.
+- Nao registrar PII em evidencia.
+- Nao commitar saida bruta de consultas.
+- Nao adicionar `wrangler d1 execute --remote` em scripts novos.
