@@ -180,7 +180,7 @@ app.post('/historico-notas', async (c) => {
     );
   } catch (e: any) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao registrar histórico de notas', toError(e));
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -214,7 +214,7 @@ app.get('/historico-notas/ultima/:funcionarioId/:codigoManobra', async (c) => {
     return c.json({ success: true, data: ultimaNota });
   } catch (e: any) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao buscar última nota', toError(e));
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -241,7 +241,7 @@ app.get('/historico-notas/:funcionarioId', async (c) => {
     return c.json({ success: true, data: historico.results });
   } catch (e: any) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao listar histórico de notas', toError(e));
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -347,7 +347,7 @@ app.get('/dashboard/:funcionarioId', async (c) => {
     });
   } catch (e: any) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao buscar dashboard de manobras', toError(e));
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -424,7 +424,7 @@ app.post('/sessoes/:id/checks/resultados', async (c) => {
     });
   } catch (e: any) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao salvar resultados de checks', toError(e));
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

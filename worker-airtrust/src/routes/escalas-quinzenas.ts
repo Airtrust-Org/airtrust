@@ -89,7 +89,7 @@ quinzenas.get('/', auth(), async (c) => {
       .all();
     return c.json({ success: true, data: rows.results });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -130,7 +130,7 @@ quinzenas.post('/gerar-ano', auth(), async (c) => {
     await c.env.DB.batch(stmts);
     return c.json({ success: true, message: `${stmts.length} quinzenas geradas para ${ano}` });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -161,7 +161,7 @@ quinzenas.post('/', auth(), async (c) => {
       .run();
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -190,7 +190,7 @@ quinzenas.put('/:id', auth(), async (c) => {
 
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -212,7 +212,7 @@ quinzenas.delete('/:id', auth(), async (c) => {
 
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

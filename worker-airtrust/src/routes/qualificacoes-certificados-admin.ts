@@ -127,7 +127,7 @@ app.get('/debug/template/:id', auth(), async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );
@@ -187,7 +187,7 @@ app.post(
         {
           success: false,
           error: 'Erro ao copiar template',
-          details: error instanceof Error ? error.message : 'Erro desconhecido',
+          details: 'Detalhes internos omitidos',
         },
         500,
       );
@@ -224,7 +224,7 @@ app.get('/admin/empresas-com-templates', auth(), requireRole('admin'), async (c)
       {
         success: false,
         error: 'Erro ao listar empresas',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -284,7 +284,7 @@ app.post(
         {
           success: false,
           error: 'Erro ao ativar template',
-          details: error instanceof Error ? error.message : 'Erro desconhecido',
+          details: 'Detalhes internos omitidos',
         },
         500,
       );
@@ -320,7 +320,7 @@ app.get('/admin/templates/:empresaId', auth(), requireRole('admin'), async (c) =
       {
         success: false,
         error: 'Erro ao listar templates',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -451,7 +451,7 @@ app.get('/admin/inspecionar/:historicoId', auth(), requireRole('admin'), async (
       {
         success: false,
         error: 'Erro ao inspecionar',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -573,7 +573,7 @@ app.get('/admin/preview-html/:historicoId', auth(), requireRole('admin'), async 
       {
         success: false,
         error: 'Erro ao processar',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -708,7 +708,7 @@ app.get('/admin/debug-certificado-data/:historicoId', auth(), requireRole('admin
       {
         success: false,
         error: 'Erro ao processar',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -788,7 +788,7 @@ app.get('/admin/debug-template/:historicoId', auth(), requireRole('admin'), asyn
       {
         success: false,
         error: 'Erro ao processar',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -867,7 +867,7 @@ app.get('/admin/debug-query/:historicoId', auth(), requireRole('admin'), async (
       {
         success: false,
         error: 'Erro ao processar',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

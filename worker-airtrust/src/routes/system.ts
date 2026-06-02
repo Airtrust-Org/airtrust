@@ -30,7 +30,7 @@ export function registerSystemRoutes(app: SystemApp) {
     } catch (error) {
       checks.database = {
         status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown DB error',
+        error: 'Erro interno do servidor',
       };
       overallHealthy = false;
     }
@@ -51,7 +51,7 @@ export function registerSystemRoutes(app: SystemApp) {
     } catch (error) {
       checks.storage = {
         status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown R2 error',
+        error: 'Erro interno do servidor',
       };
       // R2 não é crítico, não marca como unhealthy
     }

@@ -587,7 +587,7 @@ app.post('/executar/:entidade', async (c: Context) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );
@@ -891,8 +891,8 @@ app.post('/validar-json/:entidade', async (c: Context) => {
     return c.json(
       {
         success: false,
-        error: errorMsg,
-        details: errorStack,
+        error: 'Erro ao validar importação',
+        code: 'INTERNAL_ERROR',
       },
       500,
     );
@@ -1009,7 +1009,10 @@ app.post('/batch-historico-v3', async (c: Context) => {
     const errorStack = error instanceof Error ? error.stack : '';
     debugLogs.push(`❌ ERRO CRÍTICO: ${errorMsg}`);
     console.error('[BATCH-HISTORICO-V3] Erro crítico:', errorMsg, errorStack);
-    return c.json({ success: false, error: errorMsg, details: errorStack, debugLogs }, 500);
+    return c.json(
+      { success: false, error: 'Erro ao executar importação em lote', code: 'INTERNAL_ERROR' },
+      500,
+    );
   }
 });
 
@@ -1181,8 +1184,8 @@ app.post('/executar-json/:entidade', async (c: Context) => {
     return c.json(
       {
         success: false,
-        error: errorMsg,
-        details: errorStack,
+        error: 'Erro ao executar importação',
+        code: 'INTERNAL_ERROR',
       },
       500,
     );
@@ -1223,7 +1226,7 @@ app.get('/historico/list', async (c: Context) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'Erro interno do servidor',
       },
       500,
     );

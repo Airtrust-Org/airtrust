@@ -432,7 +432,7 @@ app.post('/fichas/:id/edicoes', async (c) => {
     return c.json({ success: true, data: row ? serializeEdicao(row) : { id: edicaoId } }, 201);
   } catch (error: any) {
     console.error('[FICHAS_EDICOES] Erro ao solicitar edicao:', error);
-    return c.json({ success: false, error: error.message || 'Erro ao solicitar edição' }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -469,7 +469,7 @@ app.get('/fichas/:id/edicoes', async (c) => {
     return c.json({ success: true, data: (result.results || []).map(serializeEdicao) });
   } catch (error: any) {
     console.error('[FICHAS_EDICOES] Erro ao listar edicoes da ficha:', error);
-    return c.json({ success: false, error: error.message || 'Erro ao listar edições' }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -520,7 +520,7 @@ app.get('/fichas-edicoes', async (c) => {
     return c.json({ success: true, data: (result.results || []).map(serializeEdicao) });
   } catch (error: any) {
     console.error('[FICHAS_EDICOES] Erro ao listar fila:', error);
-    return c.json({ success: false, error: error.message || 'Erro ao listar fila de edições' }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -640,7 +640,7 @@ app.post('/fichas-edicoes/:edicaoId/aprovar', async (c) => {
     return c.json({ success: true, data: row ? serializeEdicao(row) : { id: Number(edicaoId) } });
   } catch (error: any) {
     console.error('[FICHAS_EDICOES] Erro ao aprovar:', error);
-    return c.json({ success: false, error: error.message || 'Erro ao aprovar edição' }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -715,7 +715,7 @@ app.post('/fichas-edicoes/:edicaoId/rejeitar', async (c) => {
     return c.json({ success: true, data: row ? serializeEdicao(row) : { id: Number(edicaoId) } });
   } catch (error: any) {
     console.error('[FICHAS_EDICOES] Erro ao rejeitar:', error);
-    return c.json({ success: false, error: error.message || 'Erro ao rejeitar edição' }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

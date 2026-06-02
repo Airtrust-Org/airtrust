@@ -659,8 +659,8 @@ app.get('/stats/dashboard', optionalAuth(), async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro ao carregar estatísticas',
-        details: error instanceof Error ? error.stack : undefined,
+        error: 'Erro interno do servidor',
+        code: 'INTERNAL_ERROR',
       },
       500,
     );

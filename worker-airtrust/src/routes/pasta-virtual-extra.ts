@@ -129,7 +129,7 @@ app.get('/download-certificados/:funcionario_id', auth(), async (c) => {
       {
         success: false,
         error: 'Erro ao gerar arquivo ZIP',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

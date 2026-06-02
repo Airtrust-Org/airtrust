@@ -1220,7 +1220,7 @@ empresasRoutes.put('/:id/config', requireTenantRole('admin'), async (c) => {
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro interno do servidor',
+        error: 'Erro interno do servidor',
       },
       500,
     );

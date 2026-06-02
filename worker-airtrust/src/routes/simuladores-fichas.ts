@@ -301,7 +301,7 @@ app.post('/fichas', async (c) => {
       .first();
     return c.json({ success: true, data: f }, 201);
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -703,7 +703,7 @@ app.get('/fichas/:id', async (c) => {
     return c.json({ success: true, data: ficha });
   } catch (e: any) {
     console.error('Erro ao buscar ficha:', e);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -916,7 +916,7 @@ app.post('/fichas/:id/pdf', async (c) => {
     });
   } catch (e: any) {
     console.error('Erro ao gerar PDF:', e);
-    return c.json({ success: false, error: e.message || 'Erro ao gerar PDF' }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -1086,7 +1086,7 @@ app.put('/fichas/:id', async (c) => {
 
     return c.json({ success: true, data: u });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -1113,7 +1113,7 @@ app.delete('/fichas/:id', async (c) => {
     });
     return c.json({ success: true, message: 'Excluída' });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

@@ -268,7 +268,7 @@ app.get('/', async (c) => {
       {
         success: false,
         error: 'Erro ao executar auditoria',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

@@ -146,7 +146,7 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
       {
         success: false,
         error: 'Erro ao listar certificados',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -304,7 +304,7 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
       {
         success: false,
         error: 'Erro ao remover certificado',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -369,7 +369,7 @@ app.get('/funcionario/:id', auth(), async (c) => {
       {
         success: false,
         error: 'Erro ao buscar certificados',
-        details: errorMessage,
+        code: 'INTERNAL_ERROR',
       },
       500,
     );
@@ -421,7 +421,7 @@ app.get('/download/:id', auth(), async (c) => {
       {
         success: false,
         error: 'Erro ao obter URL de download',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

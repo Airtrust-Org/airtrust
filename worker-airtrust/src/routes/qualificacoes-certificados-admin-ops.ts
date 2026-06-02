@@ -152,7 +152,7 @@ opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
       {
         success: false,
         error: 'Erro ao recuperar certificados',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );
@@ -250,7 +250,7 @@ opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => 
       {
         success: false,
         error: 'Erro ao limpar referências órfãs',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

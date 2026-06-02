@@ -21,6 +21,14 @@ export function jsonError(c: Context, error: string, status = 400, code?: string
   return c.json(body, status as ContentfulStatusCode);
 }
 
+export function jsonInternalError(
+  c: Context,
+  error = 'Erro interno do servidor',
+  code = 'INTERNAL_ERROR',
+) {
+  return jsonError(c, error, 500, code);
+}
+
 export function wrap<T>(handler: (c: Context) => Promise<T> | T) {
   return async (c: Context) => {
     try {

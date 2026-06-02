@@ -116,7 +116,7 @@ app.get('/', auth(), async (c) => {
       {
         success: false,
         error: 'Erro ao buscar habilitacoes',
-        details: error instanceof Error ? error.message : String(error),
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

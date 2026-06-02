@@ -156,7 +156,7 @@ app.post('/', async (c) => {
       {
         success: false,
         error: 'Erro ao corrigir renovadas',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

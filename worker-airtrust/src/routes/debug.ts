@@ -48,7 +48,7 @@ app.get('/historico/:id', async (c) => {
       {
         success: false,
         error: 'Erro ao buscar registro',
-        details: error instanceof Error ? error.message : String(error),
+        details: 'Detalhes internos omitidos',
       },
       500,
     );

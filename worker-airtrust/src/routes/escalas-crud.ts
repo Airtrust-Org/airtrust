@@ -185,7 +185,7 @@ crud.get('/', auth(), async (c) => {
       .all();
     return c.json({ success: true, data: result.results });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -251,7 +251,7 @@ crud.get('/:id', auth(), async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -321,7 +321,7 @@ crud.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 
     return c.json({ success: true, data: { id } }, 201);
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -377,7 +377,7 @@ crud.post('/gerar-ano', auth(), requireRole('admin', 'manager'), async (c) => {
     }
     return c.json({ success: true, data: { criados, ano } });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -430,7 +430,7 @@ crud.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     });
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -470,7 +470,7 @@ crud.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     });
     return c.json({ success: true });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

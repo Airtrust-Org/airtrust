@@ -66,7 +66,7 @@ confirmacoes.post('/minha-escala/confirmar', auth(), async (c) => {
       data: { escala_id: escalaId, funcionario_id: funcionarioId, confirmado: true },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -105,7 +105,7 @@ confirmacoes.get('/minha-escala/confirmacao-status', auth(), async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -166,7 +166,7 @@ confirmacoes.get('/:id/confirmacoes', auth(), requireRole('admin', 'manager'), a
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

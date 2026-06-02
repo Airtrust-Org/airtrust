@@ -882,7 +882,7 @@ app.post('/legado/edapp/importar', requireRole('admin', 'manager'), async (c) =>
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Erro ao importar histórico legado',
+        error: 'Erro interno do servidor',
         code: 'LMS_EDAPP_IMPORT_ERROR',
       },
       400,

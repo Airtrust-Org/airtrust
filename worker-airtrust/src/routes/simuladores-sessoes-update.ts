@@ -52,7 +52,7 @@ app.put('/sessoes/:id', async (c) => {
     try {
       checksNormalizados = await normalizeChecksSessao(c.env.DB, b.checks, modeloAeronaveSessao);
     } catch (error: any) {
-      return c.json({ success: false, error: error?.message || 'Checks inválidos' }, 400);
+      return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
 
     // ============================
@@ -925,7 +925,7 @@ app.put('/sessoes/:id', async (c) => {
     return c.json({ success: true, data: u, _diag_planejadas: diag });
   } catch (e: any) {
     console.error('[PUT /sessoes] ERRO:', e);
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -1002,7 +1002,7 @@ app.delete('/sessoes/:id', async (c) => {
       message: 'Sessão, participantes e fichas excluídos com sucesso',
     });
   } catch (e: any) {
-    return c.json({ success: false, error: e.message }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

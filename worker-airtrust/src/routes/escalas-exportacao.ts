@@ -199,7 +199,7 @@ exportacao.get('/:id/export', auth(), async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 

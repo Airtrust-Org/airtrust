@@ -199,7 +199,7 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -282,7 +282,7 @@ fadigaAcumulada.get('/fadiga-acumulada/frota', async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
@@ -380,7 +380,7 @@ fadigaAcumulada.get('/fadiga-acumulada/projecao', async (c) => {
       },
     });
   } catch (e) {
-    return c.json({ success: false, error: String(e) }, 500);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
