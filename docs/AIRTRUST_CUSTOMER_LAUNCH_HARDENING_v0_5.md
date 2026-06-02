@@ -39,6 +39,8 @@ Criado `docs/AIRTRUST_LGPD_DATA_INVENTORY_v0_5.md` cobrindo dados pessoais, oper
 
 Criado `docs/AIRTRUST_DATA_QUALITY_CHECKS_v0_5.md` e SQL read-only em `scripts/validation/data-quality-checks-readonly.sql`.
 
+Sprint 5 adicionou `docs/AIRTRUST_DATA_QUALITY_EXECUTION_GUIDE_v0_5.md` e o validador local `scripts/validation/validate-data-quality-sql.sh`, tambem exposto por `npm run validate:data-quality-sql`.
+
 ## Plano de Audit Trail Criado
 
 Criado `docs/AIRTRUST_AUDIT_TRAIL_LGPD_HARDENING_PLAN_v0_5.md`, sem migration/schema.
@@ -60,11 +62,14 @@ Criado `docs/AIRTRUST_AUDIT_TRAIL_LGPD_HARDENING_PLAN_v0_5.md`, sem migration/sc
 - Automacao de data quality.
 - Contratos juridicos, DPA, ToS, politica de privacidade e retencao.
 
+Sprint 5 formalizou o NO-GO parcial de gating em `docs/AIRTRUST_MODULE_GATING_PLAN_v0_5.md`, porque o contrato atual nao leva `modulos_ativos` de `/api/auth/empresas` ate menu e rotas diretas.
+
 ## Riscos Remanescentes Antes da Segunda Empresa
 
 - Smoke autenticado da empresa atual ainda pendente por falta de credencial.
 - Modulos beta aparecem na navegacao atual e devem ser controlados operacionalmente ou por feature gating antes de liberar cliente.
 - Data quality precisa ser executado em ambiente seguro por operador autorizado.
+- GO/NO-GO vigente: `docs/AIRTRUST_SECOND_COMPANY_GO_NO_GO_v0_5.md` permanece NO-GO parcial ate smoke autenticado, data quality e gating/ocultacao aprovados.
 
 ## Riscos Remanescentes Antes da Quinta Empresa
 

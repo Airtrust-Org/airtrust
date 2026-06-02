@@ -107,6 +107,7 @@
     "deploy:worker:safe": "bash scripts/deploy-worker-safe.sh",
     "deploy:all": "chmod +x scripts/build-and-deploy.sh && ./scripts/build-and-deploy.sh",
     "ops:guard": "bash scripts/audit-dangerous-ops.sh",
+    "validate:data-quality-sql": "bash scripts/validation/validate-data-quality-sql.sh",
     "test": "vitest",
     "test:run": "vitest run",
     "test:guard:sw-cache": "vitest run src/__tests__/service-worker-cache.test.ts",

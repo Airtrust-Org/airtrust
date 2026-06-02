@@ -37,12 +37,25 @@ Classificar os modulos para entrada da segunda empresa real em piloto controlado
 
 Busca em 2026-06-02 encontrou referencias de LMS, SGSO e Hospedagem na navegacao (`src/react-app/navigation.config.ts`, `src/react-app/components/layout/Header.tsx` e `src/react-app/App.tsx`). Tambem existe tipo `modulos_ativos`, mas nao foi comprovado neste sprint que o frontend respeita esse mecanismo end-to-end. Por risco de ocultar modulo usado pela empresa real atual, nao foi implementada feature flag ampla nesta fase.
 
+## Atualizacao Sprint 5
+
+O mapeamento do Sprint 5 confirmou:
+
+- `empresas_config.modulos_ativos` existe e `/api/empresas/minha` pode retornar esse campo.
+- O contexto usado por `AppLayout` recebe empresas via `/api/auth/empresas`, que nao retorna `modulos_ativos`.
+- `AppLayout` decide LMS/SGSO por permissoes/papel, nao por modulo ativo.
+- `App.tsx` protege rotas por autenticacao, mas nao por modulo ativo.
+- Gating por menu sem rota direta seria incompleto.
+
+Decisao: **NO-GO parcial para gating runtime nesta sprint**. Plano detalhado em `docs/AIRTRUST_MODULE_GATING_PLAN_v0_5.md`.
+
 ## Regras Para Demo
 
 - Nao expor telas com "em breve", "dados de teste" ou funcoes incompletas.
 - Nao usar dados reais da empresa atual para demonstrar outro tenant.
 - Nao ativar modulo beta durante reuniao sem aprovacao previa.
 - Nao executar writes em producao para demonstracao.
+- Enquanto o gating end-to-end nao existir, roteiro de demo deve evitar LMS, SGSO, Hospedagem, SIGVOOS e configuracoes incompletas.
 
 ## Smoke Minimo Para Piloto
 
