@@ -15,10 +15,13 @@ import type {
   SystemHealth,
 } from '../../../src/react-app/types/dashboard.types';
 import {
-  ACTIVE_OR_COMPLETED_SESSION_STATUS_SQL,
   COMPLETED_STATUS_SQL,
   SCHEDULED_SESSION_STATUS_SQL,
 } from '../lib/status/status-codes';
+import {
+  getTaxaConclusaoMensalMetricRows,
+  getUtilizacaoSimuladoresMetricRows,
+} from '../repositories/dashboardMetricsRepository';
 import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
@@ -771,26 +774,11 @@ export async function getTaxaConclusaoMensal(
   empresaId: number,
 ): Promise<TaxaConclusaoMensal> {
   try {
-    const results = await db
-      .prepare(
-        `SELECT
-           strftime('%Y-%m', data) as mes,
-           COUNT(CASE WHEN status IN ${COMPLETED_STATUS_SQL} THEN 1 END) * 100.0 /
-           NULLIF(COUNT(*), 0) as taxa
-         FROM simulador_agendamentos
-         WHERE deleted_at IS NULL
-         AND empresa_id = ?
-         AND data >= date('now', '-6 months')
-         GROUP BY strftime('%Y-%m', data)
-         ORDER BY mes ASC`,
-      )
-      .bind(empresaId)
-      .all();
-
     const meses: string[] = [];
     const taxas: number[] = [];
+    const rows = await getTaxaConclusaoMensalMetricRows(db, empresaId);
 
-    (results.results || []).forEach((row: Record<string, unknown>) => {
+    rows.forEach((row) => {
       // Converter YYYY-MM para nome do mês
       const mesRaw = String(row.mes || '');
       const [, mes] = mesRaw.split('-');
@@ -835,32 +823,9 @@ export async function getUtilizacaoSimuladores(
   empresaId: number,
 ): Promise<UtilizacaoSimuladores> {
   try {
-    const results = await db
-      .prepare(
-        `SELECT
-           s.id,
-           s.nome,
-           s.fabricante,
-           s.modelo,
-           COALESCE(SUM(CASE WHEN sa.status IN ${ACTIVE_OR_COMPLETED_SESSION_STATUS_SQL} THEN sa.duracao_minutos END), 0) / 60.0 as horas_programadas,
-           720 as horas_disponiveis,
-           COALESCE(SUM(CASE WHEN sa.status IN ${ACTIVE_OR_COMPLETED_SESSION_STATUS_SQL} THEN sa.duracao_minutos END), 0) * 100.0 / (720 * 60) as taxa_utilizacao,
-           'operacional' as status
-         FROM simuladores s
-         LEFT JOIN simulador_agendamentos sa ON sa.simulador_id = s.id
-           AND sa.deleted_at IS NULL
-           AND sa.empresa_id = ?
-           AND sa.data >= date('now', '-30 days')
-           AND sa.data <= date('now')
-         WHERE s.deleted_at IS NULL
-         AND s.empresa_id = ?
-         GROUP BY s.id, s.nome, s.fabricante, s.modelo
-         ORDER BY taxa_utilizacao DESC`,
-      )
-      .bind(empresaId, empresaId)
-      .all();
+    const rows = await getUtilizacaoSimuladoresMetricRows(db, empresaId);
 
-    const simuladores = (results.results || []).map((row: Record<string, unknown>) => ({
+    const simuladores = rows.map((row) => ({
       id: Number(row.id || 0),
       nome: String(row.nome || ''),
       fabricante: String(row.fabricante || ''),

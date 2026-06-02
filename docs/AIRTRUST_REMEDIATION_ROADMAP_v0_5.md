@@ -140,6 +140,7 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem da
 
 ### Item 10 - Repository pilot em dominio critico
 
+- Status em 2026-06-02: piloto executado parcialmente em `dashboardService`, com repository read-only dedicado para taxa de conclusao mensal e utilizacao de simuladores; contrato publico preservado e sem migration.
 - Objetivo: reduzir o acoplamento entre regra, SQL e HTTP onde o retorno e maior.
 - Risco: cada nova feature ampliar superficie de regressao em arquivos gigantes e SQL inline.
 - Escopo: escolher um dominio piloto, provavelmente `dashboard`, `escalas` ou `qualificacoes`.
@@ -149,6 +150,7 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem da
 - Migration necessaria?: nao.
 - Pode ser GPT-5.4?: sim.
 - Precisa GPT-5.5?: nao.
+- Documento de referencia: `docs/AIRTRUST_REPOSITORY_PILOT_DASHBOARD_v0_5.md`.
 - Criterio de aceite: um dominio passa a ter acesso a dados centralizado, com testes protegendo o contrato.
 
 ### Item 11 - Observabilidade multiempresa
