@@ -18,6 +18,12 @@ import {
   getQualificacoesVencimentoExpr,
   normalizeQualificacoesAlertaDias,
 } from '../utils/qualificacoes-alerta-config';
+import {
+  CANCELLED_STATUS_VALUES,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  QUALIFICACAO_STATUS,
+  sqlStatusNotEqualsAny,
+} from '../lib/status/status-codes';
 import { getEmpresaId } from '../middleware/tenant';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import {
@@ -65,7 +71,10 @@ export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string
         AND p.empresa_id = ?
         AND UPPER(COALESCE(NULLIF(TRIM(p.status), ''), 'ATIVO')) = 'ATIVO'
         AND COALESCE(qh.renovada, 0) = 0
-        AND UPPER(COALESCE(qh.status, 'CONCLUIDA')) NOT IN ('CANCELADA', 'RENOVADA')
+        AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", [
+          ...CANCELLED_STATUS_VALUES,
+          QUALIFICACAO_STATUS.RENOVADA,
+        ])}
         AND NOT EXISTS (
           SELECT 1
             FROM qualificacoes_historico qh_new
@@ -76,7 +85,11 @@ export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string
              AND qh_new.funcionario_id = qh.funcionario_id
              AND qh_new.id <> qh.id
              AND COALESCE(qh_new.renovada, 0) = 0
-             AND UPPER(COALESCE(qh_new.status, 'CONCLUIDA')) NOT IN ('CANCELADA', 'RENOVADA', 'PLANEJADA')
+             AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh_new.status, 'CONCLUIDA'))", [
+               ...CANCELLED_STATUS_VALUES,
+               QUALIFICACAO_STATUS.RENOVADA,
+               ...PLANNED_QUALIFICATION_STATUS_VALUES,
+             ])}
              AND UPPER(TRIM(COALESCE(qh_new.qualificacao_codigo, qt_new.codigo, ''))) =
                  UPPER(TRIM(COALESCE(qh.qualificacao_codigo, qt.codigo, '')))
              AND date(COALESCE(

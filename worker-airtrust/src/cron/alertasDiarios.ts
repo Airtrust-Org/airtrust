@@ -1,5 +1,11 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { Env } from '../types';
+import {
+  CANCELLED_STATUS_VALUES,
+  SCHEDULED_SESSION_STATUS_VALUES,
+  sqlStatusEqualsAny,
+  sqlStatusNotEqualsAny,
+} from '../lib/status/status-codes';
 import { publishDomainEvent } from '../shared/domainEvents';
 
 export async function alertasDiariosHandler(_event: ScheduledEvent, env: Env): Promise<void> {
@@ -35,7 +41,7 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
          AND f.deleted_at IS NULL
          AND COALESCE(f.ativo, 1) = 1
          AND qh.deleted_at IS NULL
-         AND COALESCE(qh.status, 'CONCLUIDA') != 'CANCELADA'
+         AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
          AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
        GROUP BY f.id
        HAVING dias BETWEEN 1 AND 30`,
@@ -63,7 +69,7 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
          AND f.deleted_at IS NULL
          AND COALESCE(f.ativo, 1) = 1
          AND qh.deleted_at IS NULL
-         AND COALESCE(qh.status, 'CONCLUIDA') != 'CANCELADA'
+         AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
          AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
          AND date(COALESCE(
            qh.data_vencimento,
@@ -94,7 +100,10 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
          AND COALESCE(f.ativo, 1) = 1
          AND sp.deleted_at IS NULL
          AND sa.deleted_at IS NULL
-         AND UPPER(COALESCE(sa.status, 'AGENDADO')) IN ('PENDENTE', 'AGENDADO')
+         AND ${sqlStatusEqualsAny(
+           "UPPER(COALESCE(sa.status, 'AGENDADO'))",
+           SCHEDULED_SESSION_STATUS_VALUES,
+         )}
          AND CAST(JULIANDAY(sa.data) - JULIANDAY('now') AS INTEGER) BETWEEN 0 AND 15
        GROUP BY sp.funcionario_id`,
     )

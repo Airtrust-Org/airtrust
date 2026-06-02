@@ -13,8 +13,10 @@ describe('alertas/vencimentos query', () => {
     );
 
     expect(sql).toContain('COALESCE(qh.renovada, 0) = 0');
-    expect(sql).toContain("UPPER(COALESCE(qh.status, 'CONCLUIDA')) NOT IN ('CANCELADA', 'RENOVADA')")
-    expect(sql).toContain("UPPER(COALESCE(qh_new.status, 'CONCLUIDA')) NOT IN ('CANCELADA', 'RENOVADA', 'PLANEJADA')");
+    expect(sql).toContain("UPPER(COALESCE(qh.status, 'CONCLUIDA')) <> 'CANCELADA'");
+    expect(sql).toContain("UPPER(COALESCE(qh.status, 'CONCLUIDA')) <> 'CANCELADO'");
+    expect(sql).toContain("UPPER(COALESCE(qh.status, 'CONCLUIDA')) <> 'RENOVADA'");
+    expect(sql).toContain("UPPER(COALESCE(qh_new.status, 'CONCLUIDA')) <> 'PLANEJADA'");
     expect(sql).toContain('AND NOT EXISTS ( SELECT 1 FROM qualificacoes_historico qh_new');
     expect(sql).toContain("COALESCE(qh_new.renovada, 0) = 0");
   });
