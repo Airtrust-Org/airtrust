@@ -39,6 +39,7 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem da
 
 ### Item 3 - Data quality operacional
 
+- Status em 2026-06-02: SQL read-only validado, runner local seguro criado e run executado apenas em snapshot local aprovado; alguns checks permaneceram `SKIPPED` por ausencia de tabelas no snapshot local atual.
 - Objetivo: sair de SQL validado estaticamente para execucao controlada e evidenciada.
 - Risco: onboarding externo com tenant errado, dados orfaos ou metricas inconsistentes.
 - Escopo: checklist de execucao local/staging, classificacao blocker/warn/info, registro sem PII.

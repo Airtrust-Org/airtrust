@@ -66,11 +66,12 @@ Modo: planejamento de sprints amplos atualizado apos Sprint A.
 
 ## Sprint F - Data Quality
 
+- Status: executado parcialmente em 2026-06-02, com SQL validado, runner local seguro criado, documento de execucao atualizado e evidencia sanitizada preparada; a execucao local mostrou cobertura parcial por ausencia de algumas tabelas no snapshot local atual.
 - Objetivo: transformar checks read-only em rotina operacional executavel fora do Codex.
 - Escopo: runner local/staging, classificacao blocker/warn/info, registro sem PII.
 - Fora do escopo: execucao em producao por Codex, automacao destrutiva, qualquer mutacao de dados.
-- Arquivos provaveis: `docs/AIRTRUST_DATA_QUALITY_CHECKS_v0_5.md`, `docs/AIRTRUST_DATA_QUALITY_EXECUTION_GUIDE_v0_5.md`, `scripts/validation/data-quality-checks-readonly.sql`.
-- Validacoes: `bash scripts/validation/validate-data-quality-sql.sh`, `npm run validate:data-quality-sql`, checklist operacional aprovado.
+- Arquivos provaveis: `docs/AIRTRUST_DATA_QUALITY_CHECKS_v0_5.md`, `docs/AIRTRUST_DATA_QUALITY_EXECUTION_GUIDE_v0_5.md`, `docs/AIRTRUST_DATA_QUALITY_RUNBOOK_v0_5.md`, `scripts/validation/data-quality-checks-readonly.sql`, `scripts/validation/run-data-quality-local.sh`.
+- Validacoes: `bash scripts/validation/validate-data-quality-sql.sh`, `npm run validate:data-quality-sql`, `npm run data-quality:local`, checklist operacional aprovado.
 - Modelo recomendado: GPT-5.4 Alta.
 - Risco: medio.
 - Criterio de aceite: operador autorizado consegue executar e registrar o pacote sem violar guard rails.

@@ -108,6 +108,7 @@
     "deploy:all": "chmod +x scripts/build-and-deploy.sh && ./scripts/build-and-deploy.sh",
     "ops:guard": "bash scripts/audit-dangerous-ops.sh",
     "validate:data-quality-sql": "bash scripts/validation/validate-data-quality-sql.sh",
+    "data-quality:local": "bash scripts/validation/run-data-quality-local.sh",
     "test": "vitest",
     "test:run": "vitest run",
     "test:guard:sw-cache": "vitest run src/__tests__/service-worker-cache.test.ts",
