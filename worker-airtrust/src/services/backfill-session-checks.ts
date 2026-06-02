@@ -23,6 +23,7 @@ export interface BackfillResult {
  */
 async function sincronizarModelosSessaoChecks(
   db: D1Database,
+  empresaId: number,
 ): Promise<{ inseridos: number; erros: string[] }> {
   const erros: string[] = [];
 
@@ -32,10 +33,14 @@ async function sincronizarModelosSessaoChecks(
       `SELECT DISTINCT sa.template_id AS modelo_id, sc.qualificacao_tipo_id
        FROM sessoes_checks sc
        JOIN simulador_agendamentos sa ON sa.id = sc.sessao_id AND sa.deleted_at IS NULL
+       JOIN modelos_sessao ms ON ms.id = sa.template_id AND ms.deleted_at IS NULL
        WHERE sc.deleted_at IS NULL
          AND sc.qualificacao_tipo_id IS NOT NULL
-         AND sa.template_id IS NOT NULL`,
+         AND sa.template_id IS NOT NULL
+         AND sa.empresa_id = ?
+         AND ms.empresa_id = ?`,
     )
+    .bind(empresaId, empresaId)
     .all<{ modelo_id: number; qualificacao_tipo_id: number }>();
 
   let inseridos = 0;
@@ -45,10 +50,15 @@ async function sincronizarModelosSessaoChecks(
     // Verifica se já existe
     const existe = await db
       .prepare(
-        `SELECT id FROM modelos_sessao_checks
-         WHERE modelo_id = ? AND qualificacao_tipo_id = ? AND deleted_at IS NULL`,
+        `SELECT msc.id
+         FROM modelos_sessao_checks msc
+         JOIN modelos_sessao ms ON ms.id = msc.modelo_id AND ms.deleted_at IS NULL
+         WHERE msc.modelo_id = ?
+           AND msc.qualificacao_tipo_id = ?
+           AND msc.deleted_at IS NULL
+           AND ms.empresa_id = ?`,
       )
-      .bind(row.modelo_id, row.qualificacao_tipo_id)
+      .bind(row.modelo_id, row.qualificacao_tipo_id, empresaId)
       .first<{ id: number }>();
 
     if (!existe) {
@@ -82,6 +92,7 @@ async function sincronizarModelosSessaoChecks(
  */
 async function linkarAgendamentosSemModelo(
   db: D1Database,
+  empresaId: number,
 ): Promise<{ linkados: number; checksCriados: number; erros: string[] }> {
   const erros: string[] = [];
   let linkados = 0;
@@ -95,10 +106,13 @@ async function linkarAgendamentosSemModelo(
        JOIN fichas_sessao f ON f.agendamento_slot_id = sa.id AND f.deleted_at IS NULL
        WHERE sa.template_id IS NULL
          AND sa.deleted_at IS NULL
+         AND sa.empresa_id = ?
+         AND f.empresa_id = ?
          AND f.status IN ('APROVADO', 'CONCLUIDA')
          AND f.aprovado = 1
        LIMIT 200`,
     )
+    .bind(empresaId, empresaId)
     .all<{ id: number; tipo_sessao: string }>();
 
   for (const agend of agendamentos.results || []) {
@@ -107,10 +121,10 @@ async function linkarAgendamentosSemModelo(
       const modelo = await db
         .prepare(
           `SELECT id FROM modelos_sessao
-           WHERE codigo = ? AND deleted_at IS NULL
+           WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL
            LIMIT 2`,
         )
-        .bind(agend.tipo_sessao)
+        .bind(agend.tipo_sessao, empresaId)
         .all<{ id: number }>();
 
       if ((modelo.results || []).length !== 1) {
@@ -123,28 +137,39 @@ async function linkarAgendamentosSemModelo(
       // Linka o agendamento ao modelo
       await db
         .prepare(
-          `UPDATE simulador_agendamentos SET template_id = ?, updated_at = datetime('now') WHERE id = ?`,
+          `UPDATE simulador_agendamentos
+           SET template_id = ?, updated_at = datetime('now')
+           WHERE id = ? AND empresa_id = ?`,
         )
-        .bind(modeloId, agend.id)
+        .bind(modeloId, agend.id, empresaId)
         .run();
       linkados++;
 
       // Cria sessoes_checks a partir do modelos_sessao_checks
       const modeloChecks = await db
         .prepare(
-          `SELECT qualificacao_tipo_id FROM modelos_sessao_checks
-           WHERE modelo_id = ? AND deleted_at IS NULL`,
+          `SELECT msc.qualificacao_tipo_id
+           FROM modelos_sessao_checks msc
+           JOIN modelos_sessao ms ON ms.id = msc.modelo_id AND ms.deleted_at IS NULL
+           WHERE msc.modelo_id = ?
+             AND msc.deleted_at IS NULL
+             AND ms.empresa_id = ?`,
         )
-        .bind(modeloId)
+        .bind(modeloId, empresaId)
         .all<{ qualificacao_tipo_id: number }>();
 
       for (const mc of modeloChecks.results || []) {
         const jaExiste = await db
           .prepare(
-            `SELECT id FROM sessoes_checks
-             WHERE sessao_id = ? AND qualificacao_tipo_id = ? AND deleted_at IS NULL`,
+            `SELECT sc.id
+             FROM sessoes_checks sc
+             JOIN simulador_agendamentos sa ON sa.id = sc.sessao_id AND sa.deleted_at IS NULL
+             WHERE sc.sessao_id = ?
+               AND sc.qualificacao_tipo_id = ?
+               AND sc.deleted_at IS NULL
+               AND sa.empresa_id = ?`,
           )
-          .bind(agend.id, mc.qualificacao_tipo_id)
+          .bind(agend.id, mc.qualificacao_tipo_id, empresaId)
           .first<{ id: number }>();
 
         if (!jaExiste) {
@@ -173,6 +198,7 @@ async function linkarAgendamentosSemModelo(
  */
 async function criarResultadosParaFichasAprovadas(
   db: D1Database,
+  empresaId: number,
 ): Promise<{ criados: number; erros: string[] }> {
   const erros: string[] = [];
   let criados = 0;
@@ -189,12 +215,15 @@ async function criarResultadosParaFichasAprovadas(
          AND f.aprovado = 1
        WHERE sc.deleted_at IS NULL
          AND sc.qualificacao_tipo_id IS NOT NULL
+         AND sa.empresa_id = ?
+         AND f.empresa_id = ?
          AND NOT EXISTS (
            SELECT 1 FROM sessoes_checks_resultados scr
            WHERE scr.sessao_check_id = sc.id AND scr.deleted_at IS NULL
          )
        LIMIT 500`,
     )
+    .bind(empresaId, empresaId)
     .all<{ check_id: number }>();
 
   const insertStmts = (checksSemResultado.results || []).map((row) =>
@@ -225,16 +254,20 @@ async function criarResultadosParaFichasAprovadas(
  * Executa o backfill completo.
  * Ordem: 1→ sincroniza modelos_sessao_checks, 2→ linka agendamentos, 3→ cria resultados.
  */
-export async function backfillSessionChecks(db: D1Database): Promise<BackfillResult> {
+export async function backfillSessionChecks(db: D1Database, empresaId: number): Promise<BackfillResult> {
+  if (!Number.isFinite(empresaId) || empresaId <= 0) {
+    throw new Error('tenant_scope_required');
+  }
+
   const erros: string[] = [];
 
-  const passo1 = await sincronizarModelosSessaoChecks(db);
+  const passo1 = await sincronizarModelosSessaoChecks(db, empresaId);
   erros.push(...passo1.erros);
 
-  const passo2 = await linkarAgendamentosSemModelo(db);
+  const passo2 = await linkarAgendamentosSemModelo(db, empresaId);
   erros.push(...passo2.erros);
 
-  const passo3 = await criarResultadosParaFichasAprovadas(db);
+  const passo3 = await criarResultadosParaFichasAprovadas(db, empresaId);
   erros.push(...passo3.erros);
 
   return {
