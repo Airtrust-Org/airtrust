@@ -5,14 +5,16 @@
 
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+bash scripts/preflight-clean-deploy.sh
+
 # Usar Node 22 explicitamente (Node 24 tem bug de deadlock com esbuild)
 export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
 
 echo "Node: $(node --version)"
 echo "NPM: $(npm --version)"
-
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
 
 echo ""
 echo "============================================="
@@ -44,8 +46,7 @@ echo ""
 echo "🌐 Deploy Cloudflare Pages..."
 CLOUDFLARE_API_TOKEN= npx wrangler pages deploy dist/client \
   --project-name=airtrust \
-  --branch=production \
-  --commit-dirty=true 2>&1 | tail -5
+  --branch=production 2>&1 | tail -5
 echo "✅ Pages deploy OK"
 
 echo ""
@@ -65,14 +66,6 @@ if [ -n "$VERSION_ID" ]; then
   echo "📌 Worker Version ID: $VERSION_ID"
 fi
 cd ..
-
-echo ""
-echo "📦 Git commit (se houver mudanças)..."
-if [ -n "$(git status --porcelain)" ]; then
-  git add -A
-  git commit -m "chore: build + deploy $GIT_COMMIT" || true
-  git push || true
-fi
 
 echo ""
 echo "✅ DEPLOY COMPLETO"

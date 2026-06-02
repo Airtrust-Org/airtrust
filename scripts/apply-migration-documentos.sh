@@ -1,27 +1,6 @@
-#!/bin/bash
-# ============================================================
-# Script: Aplicar Migration Tabela Documentos (D1 Remote)
-# Data: 2025-11-29
-# ============================================================
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
-
-echo "🗄️  Aplicando migration da tabela documentos no D1 produção..."
-
-# Aplicar migration
-wrangler d1 execute airtrust-db \
-  --remote \
-  --file=migrations/CREATE_TABLE_DOCUMENTOS_R2.sql
-
-echo ""
-echo "✅ Migration aplicada com sucesso!"
-echo ""
-echo "📊 Verificando criação da tabela..."
-
-# Verificar se tabela foi criada
-wrangler d1 execute airtrust-db \
-  --remote \
-  --command="SELECT name, sql FROM sqlite_master WHERE type='table' AND name='documentos'"
-
-echo ""
-echo "🎉 Tabela documentos configurada!"
+echo "ERROR: This legacy production migration script is blocked."
+echo "Use scripts/run-production-db-script.sh with an allowlisted SQL file and explicit production confirmation."
+exit 1
