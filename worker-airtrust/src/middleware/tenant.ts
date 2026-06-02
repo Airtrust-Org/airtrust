@@ -29,6 +29,34 @@ export interface TenantContext {
   permissions: string[];
 }
 
+export const LEGACY_PLATFORM_ADMIN_USER_ID = 1;
+
+export function normalizeContextUserId(userId: unknown): number {
+  const normalized = typeof userId === 'string' ? Number(userId) : Number(userId || 0);
+  return Number.isFinite(normalized) ? normalized : 0;
+}
+
+export function isLegacyPlatformAdminUserId(userId: unknown): boolean {
+  return normalizeContextUserId(userId) === LEGACY_PLATFORM_ADMIN_USER_ID;
+}
+
+export function isAirtrustPlatformTenant(
+  tenantCtx: Pick<TenantContext, 'empresaCodigo'> | null | undefined,
+): boolean {
+  return (
+    String(tenantCtx?.empresaCodigo || '')
+      .trim()
+      .toLowerCase() === 'airtrust'
+  );
+}
+
+export function isPlatformAdminContext(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+): boolean {
+  const tenantCtx = getTenantContext(c);
+  return isAirtrustPlatformTenant(tenantCtx) || isLegacyPlatformAdminUserId(c.get('userId'));
+}
+
 // Roles hierarchy para verificação de permissões
 const ROLE_HIERARCHY = {
   admin: 100,
@@ -240,9 +268,9 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
           }>();
 
     if (!result) {
-      const userIdNumber = typeof userId === 'string' ? Number(userId) : Number(userId || 0);
+      const userIdNumber = normalizeContextUserId(userId);
 
-      if (userIdNumber === 1) {
+      if (isLegacyPlatformAdminUserId(userIdNumber)) {
         const platformFallbackAtivo = await db
           .prepare(
             `
