@@ -66,13 +66,20 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 **Rollback:** Remover colunas e índice (não destrutivo — dados existentes não são perdidos)
 **Dependências:** Nenhuma — `solicitacoes_treinamento` já existe via `0280`
 
-**Status pós-Sprint X.0:** `BLOCKED_SCHEMA_PROBE_REQUIRED`
+**Status pós-Sprint X.1:** `BLOCKED_SCHEMA_PROBE_REQUIRED`
 
 **Evidência Sprint X.0 (2026-06-03):**
 - Probe local read-only executado com `PASS` em snapshot D1 local.
 - Resultado local: `solicitacoes_treinamento` existe, `treinamento_planejado_id` ausente, `status_pre_agendamento` ausente, `idx_solicitacoes_treinamento_planejado` ausente.
 - Probe de staging/produção não foi executado porque `AIRTRUST_ALLOW_SCHEMA_PROBE`, `AIRTRUST_SCHEMA_PROBE_TARGET` e `AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE` não estavam definidos.
-- Conclusão: o snapshot local sugere que uma M1 simples pode funcionar em ambiente limpo, mas **não** resolve a compatibilidade do ambiente aprovado. O runtime DDL ainda pode ter criado as colunas em staging/produção.
+
+**Evidência Sprint X.1 (2026-06-03):**
+- HEAD: `c09c0cbf4eef01cf93943592761952df3af2c201`
+- Pré-condições: branch `main`, HEAD == origin/main, preflight PASS, ops:guard PASS
+- Script revalidado: somente PRAGMA/SELECT, fail-closed, sem DML/DDL
+- Autorização: todas as 4 variáveis UNSET → `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`
+- Nenhum dado de linha consultado. Nenhum DML/DDL executado.
+- Conclusão: o estado de staging/produção permanece desconhecido. A decisão da M1 segue bloqueada por falta de autorização do operador. O script está pronto e seguro; a barreira é exclusivamente humana.
 
 ### 2.2 Migration M2 — `integracoes_sigvoos_*` base tables
 
