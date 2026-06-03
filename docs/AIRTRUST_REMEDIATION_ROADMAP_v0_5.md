@@ -100,10 +100,10 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. **R03 = RESOLVED.** Sprint Z0 mapeou integralmente R01 e a Sprint Z1 criou `0387` + teste local. **R01 = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL.**).
-- **Objetivo:** Concluir as fases remanescentes: Fase 2 (M2 SIGVOOS base — aplicar `0387` em fluxo controlado e depois remover fallback), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`. Fase 1 (R03 Treinamentos Link) está concluída.
+- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. **R03 = RESOLVED.** Sprint Z0 mapeou integralmente R01, a Sprint Z1 criou `0387` + teste local e a Sprint Z1.1 provou o bloqueio de cadeia em `0354`. **R01 = MIGRATION_CHAIN_BLOCKED_BY_0354.**).
+- **Objetivo:** Concluir as fases remanescentes: Fase 2 (M2 SIGVOOS base — definir baseline/chain plan antes de qualquer apply), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`. Fase 1 (R03 Treinamentos Link) está concluída.
 - **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente (mitigado para R03; mapeado para R01; permanece para R04).
-- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386` e removeu o fallback runtime local. **Sprint X.5 aplicou `0386` em produção e deployou o Worker/API (APP_VERSION=2026-06-03T17:00:27Z-c12d8bf).** Sprint Z0 produziu inventário completo de R01 e a Sprint Z1 criou `0387_integracoes_sigvoos_base_tables.sql` com teste local PASS, mas preservou o fallback por dependência anterior da `0354`. Restam 1 migration nova planejada (`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
+- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386` e removeu o fallback runtime local. **Sprint X.5 aplicou `0386` em produção e deployou o Worker/API (APP_VERSION=2026-06-03T17:00:27Z-c12d8bf).** Sprint Z0 produziu inventário completo de R01, a Sprint Z1 criou `0387_integracoes_sigvoos_base_tables.sql` e a Sprint Z1.1 confirmou localmente que a cadeia limpa falha em `0354` antes da `0387`. Restam 1 migration nova planejada (`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
 - **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 2-3: GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, quando implementado (Fase 1 deploy já feito).
 - **Migration necessária?:** Sim (2 migrations para as Fases 2-3).
@@ -200,7 +200,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 12 | DDL X.0–X.4 — Probe, versionar, remover fallback R03 ✅ | Concluído | 5+ empresas | GPT-5.4/5.5 |
 | 13 | DDL X.5 — Apply 0385/0386 + Deploy Worker/API ✅ | Concluído | Resolução R03 | GPT-5.4 Alta |
 | 14 | DDL Z0 — SIGVOOS readiness map ✅ | Concluído | 5+ empresas | GPT-5.4 Alta |
-| 15 | DDL Z1 — M2 SIGVOOS base (apply controlado de `0387` + depois remover fallback) | Imediato | 5+ empresas | GPT-5.5 Altissimo |
+| 15 | DDL Z1.1 — auditar cadeia 0354→0387 e definir plano de baseline | Imediato | 5+ empresas | GPT-5.5 Altissimo |
 | 16 | DDL Fase 3 — M3 Documentos canônico | Médio prazo | 5+ empresas | GPT-5.5 Alta |
 | 16 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
 | 17 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |

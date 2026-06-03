@@ -35,6 +35,38 @@ describe('migration 0387 sigvoos base tables schema', () => {
     new URL('../../../migrations/0352_sigvoos_frms_pendencias_e_enriquecimento.sql', import.meta.url),
     'utf8',
   );
+  const hardeningSql = readFileSync(
+    new URL('../../../migrations/0354_auditoria_critica_schema_hardening.sql', import.meta.url),
+    'utf8',
+  );
+  const migrationChainPrereqSql = `
+    CREATE TABLE frms_jornada (
+      id TEXT PRIMARY KEY,
+      tripulante_id INTEGER,
+      deleted_at TEXT,
+      data TEXT
+    );
+
+    CREATE TABLE funcionarios (
+      id INTEGER PRIMARY KEY,
+      empresa_id INTEGER
+    );
+
+    CREATE TABLE lms_matriculas (
+      empresa_id INTEGER,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE lms_cursos (
+      empresa_id INTEGER,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE qualificacoes_historico (
+      empresa_id INTEGER,
+      deleted_at TEXT
+    );
+  `;
 
   function createDb() {
     const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-sigvoos-base-'));
@@ -60,7 +92,14 @@ describe('migration 0387 sigvoos base tables schema', () => {
       return result.stdout.trim() ? (JSON.parse(result.stdout) as T[]) : [];
     }
 
-    return { sqlite, queryJson };
+    function sqliteResult(sql: string) {
+      return spawnSync('sqlite3', [databasePath], {
+        input: sql,
+        encoding: 'utf8',
+      });
+    }
+
+    return { sqlite, queryJson, sqliteResult };
   }
 
   afterAll(() => {
@@ -236,6 +275,37 @@ describe('migration 0387 sigvoos base tables schema', () => {
   });
 
   it('does not contain destructive or data-changing statements', () => {
+    for (const pattern of prohibitedPatterns) {
+      expect(migrationSql).not.toMatch(pattern);
+    }
+  });
+
+  it('shows that 0354 depends on integracoes_sigvoos_config before 0387 exists in a clean chain', () => {
+    const { sqliteResult } = createDb();
+
+    const result = sqliteResult(`
+      ${migrationChainPrereqSql}
+      ${hardeningSql}
+    `);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('no such table: integracoes_sigvoos_config');
+  });
+
+  it('shows that appending 0387 after 0354 does not rescue the clean-chain failure', () => {
+    const { sqliteResult } = createDb();
+
+    const result = sqliteResult(`
+      ${migrationChainPrereqSql}
+      ${hardeningSql}
+      ${migrationSql}
+    `);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('no such table: integracoes_sigvoos_config');
+  });
+
+  it('keeps 0387 itself free of destructive or data-changing statements even though the chain is blocked by 0354', () => {
     for (const pattern of prohibitedPatterns) {
       expect(migrationSql).not.toMatch(pattern);
     }
