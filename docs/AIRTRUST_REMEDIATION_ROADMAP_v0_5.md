@@ -2,8 +2,8 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `300ecb9b036d153c0da5fa654e7083f09fee412b`
-Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem dados reais e sem deploy.
+HEAD auditado: `871a140e47ec8eb53a21b169956c7fdd5d149179`
+Modo: roadmap tecnico-operacional atualizado apos Sprint I (Supabase Feasibility Audit) sem migration, sem dados reais e sem deploy.
 
 ## Agora, antes de qualquer novo cliente externo
 
@@ -194,4 +194,8 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint A sem migration, sem da
 - Migration necessaria?: sim, em eventual projeto futuro.
 - Pode ser GPT-5.4?: nao para cutover; sim para analise documental leve.
 - Precisa GPT-5.5?: sim.
-- Criterio de aceite: existe apenas um plano futuro de avaliacao, nao uma migracao em andamento.
+- **Status em 2026-06-02:** Sprint I — Supabase Feasibility Audit concluido. Decisao: NAO MIGRAR AGORA / HIBRIDO FUTURO.
+- **Documentos:** `docs/AIRTRUST_SUPABASE_FEASIBILITY_AUDIT_v0_5.md`, `docs/AIRTRUST_SUPABASE_MIGRATION_DECISION_RECORD_v0_5.md`, `docs/AIRTRUST_SUPABASE_RISK_MATRIX_v0_5.md`.
+- **Decisao:** Workers + D1 + R2 mantidos. Auth custom mantido. Supabase Postgres como caminho futuro quando gatilhos de escala forem atingidos. Repository pattern, auditoria tenant isolation, e Cloudflare Queues como acoes preparatorias.
+- **Gatilhos para reavaliar:** D1 atingir 80% de limite (5GB ou 1M statements/dia), incidente de tenant isolation, ou 2027-06-02 (12 meses).
+- Criterio de aceite: existe apenas um plano futuro de avaliacao, nao uma migracao em andamento. ✅ CONCLUIDO.
