@@ -63,6 +63,10 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
                d.updated_at,
                COALESCE(qh_link.numero_certificado, qh_current.numero_certificado, REPLACE(d.nome_arquivo, '.pdf', '')) AS numero_certificado
              FROM documentos d
+             JOIN funcionarios fd
+               ON fd.id = d.funcionario_id
+              AND fd.deleted_at IS NULL
+              AND fd.empresa_id = ?
              LEFT JOIN pasta_virtual pv
                ON pv.certificacao_id = ?
               AND pv.deleted_at IS NULL
@@ -92,6 +96,10 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
                d.updated_at,
                qh.numero_certificado
              FROM documentos d
+             JOIN funcionarios fd
+               ON fd.id = d.funcionario_id
+              AND fd.deleted_at IS NULL
+              AND fd.empresa_id = ?
              LEFT JOIN qualificacoes_historico qh ON qh.certificado_arquivo_id = d.id
              WHERE d.deleted_at IS NULL
                AND d.id = ?
@@ -99,8 +107,8 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
       )
       .bind(
         ...(storageColumns.pastaVirtualHasCertificacaoId
-          ? [id, context.historico.funcionario_id, certificadoId ?? 0]
-          : [certificadoId ?? 0]),
+          ? [empresaId, id, context.historico.funcionario_id, certificadoId ?? 0]
+          : [empresaId, certificadoId ?? 0]),
       )
       .all<Documento>();
 
@@ -121,9 +129,16 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
                   numero_certificado = NULL,
                   updated_at = datetime('now')
             WHERE id = ?
-              AND certificado_arquivo_id = ?`,
+              AND certificado_arquivo_id = ?
+              AND EXISTS (
+                SELECT 1
+                FROM funcionarios f
+                WHERE f.id = qualificacoes_historico.funcionario_id
+                  AND f.empresa_id = ?
+                  AND f.deleted_at IS NULL
+              )`,
         )
-        .bind(id, certificadoId)
+        .bind(id, certificadoId, empresaId)
         .run();
       if (!storageColumns.pastaVirtualHasCertificacaoId) {
         return c.json({ success: true, data: [] });
