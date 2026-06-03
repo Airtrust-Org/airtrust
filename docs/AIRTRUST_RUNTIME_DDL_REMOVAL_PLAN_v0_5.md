@@ -91,7 +91,7 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 
 ## Sprint V — DDL Runtime Residual Design (2026-06-03)
 
-**Status:** PARTIAL → R03 agora RESOLVED. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Restam R01 (SIGVOOS), R04 (Documentos) e R09 (shared.ts dinâmico).
+**Status:** PARTIAL → R03 RESOLVED, R01 READINESS_MAPPED. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS) — 5 tabelas, 8 índices, 10 call sites, 3 lacunas de migration confirmadas. Restam R04 (Documentos) e R09 (shared.ts dinâmico).
 
 ### Inventário atualizado
 
@@ -109,7 +109,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 | ID | Arquivo | Lacuna | Migration necessária |
 |---|---|---|---|
-| R01 | `services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` — 3 tabelas base + 1 unique index sem migration | `0387_integracoes_sigvoos_base_tables.sql` |
+| R01 | `services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` — 3 tabelas base + 4 índices sem migration | `0387_integracoes_sigvoos_base_tables.sql` (planejada Sprint Z1). **Status: READINESS_MAPPED.** Doc: `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md` |
 | R03 | `services/treinamentos-planejados-integration.ts` | `solicitacoes_treinamento.treinamento_planejado_id`, `status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` — 2 colunas + 1 índice parcial | `0386_solicitacoes_treinamento_planejado_link.sql` (`MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`) |
 | R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `documentos` — sem migration canônica única que cubra schema completo + 5 índices do bootstrap | `0388_documentos_canonical_schema.sql` |
 
@@ -141,4 +141,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = PARTIAL (R03 = RESOLVED após apply 0386 + deploy X.5; restam R01, R04 e R09 no runtime).
+DDL_RUNTIME = PARTIAL (R03 = RESOLVED após apply 0386 + deploy X.5; R01 = READINESS_MAPPED Sprint Z0; restam R04 e R09 no runtime).

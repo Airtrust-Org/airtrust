@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
-**Modo:** Planejamento atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado). Sem migration manual ou aplicação manual de dados reais.
+**HEAD base:** `d65fc9eab2e8abe608c5f4820a6a23319ad1bb2c`
+**Modo:** Planejamento atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado) e Sprint Z0 (R01 SIGVOOS readiness mapped). Sem migration manual ou aplicação manual de dados reais.
 
 ---
 
@@ -312,8 +312,25 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente:** DDL runtime remanescente: R01 (SIGVOOS), R04 (Documentos), R09 (shared.ts). Audit v2: staging flag test.
+- **Pendente:** DDL runtime remanescente: R04 (Documentos), R09 (shared.ts). R01 (SIGVOOS) = READINESS_MAPPED (Sprint Z0).
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
+
+### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03 (HEAD `d65fc9e`).
+- **Objetivo:** Mapear integralmente `ensureSigvoosTables()` (R01) em modo read-only/docs-only para preparar remoção futura.
+- **Entregue:**
+  - Inventário completo: 5 tabelas, 8 índices, 10 call sites em 2 arquivos.
+  - 3 lacunas de migration confirmadas: `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` + 4 índices sem migration base.
+  - Migração `0352` cobre integralmente `sigvoos_mapeamento_manual` e `frms_jornada_pendente` (com FK + CHECK extras que runtime não tem).
+  - Migração `0354` referencia `integracoes_sigvoos_config` (coluna `notificar_falha_email`) mas não cria a tabela base — dependência circular documentada.
+  - Migration `0387` planejada com schema completo incluindo `notificar_falha_email` no CREATE TABLE para resolver a circularidade.
+  - Guard, preflight, tsc, build, testes e smoke executados: todos PASS.
+  - R01 = READINESS_MAPPED.
+- **Documentos:** `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md` (novo). 7 docs existentes atualizados.
+- **Deploy necessário?:** Não (docs-only).
+- **Migration necessária?:** Não nesta fase. Migration `0387` planejada para Sprint Z1.
+- **Pendente:** Sprint Z1 — criar migration `0387`, teste local e plano de aplicação controlada.
+- **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados).
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
