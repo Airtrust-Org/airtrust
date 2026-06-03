@@ -1,10 +1,10 @@
 # AirTrust — Documentos DDL R04 Readiness v0.5
 
 **Data:** 2026-06-03
-**Sprint:** R04.3 — desenho documental da migration 0388
-**Status:** 0388_DESIGN_READY
+**Sprint:** R04.4 — versionamento local da migration 0388
+**Status:** MIGRATION_VERSIONED_PENDING_APPLY
 **Modelo:** DeepSeek V4 Pro
-**Próximo modelo recomendado:** GPT-5.5 Alta (para versionar/testar a migration 0388)
+**Próximo modelo recomendado:** GPT-5.5 Alta (para apply controlado + probe pós-apply da 0388)
 
 ---
 
@@ -15,6 +15,8 @@ Mapear o estado atual do runtime DDL de Documentos para preparar a futura migrat
 > **Addendum Sprint R04.2 (2026-06-03):** o probe estrutural remoto read-only foi executado manualmente em `production` usando somente `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`. Resultado operacional registrado: `Total queries executed: 6`, `Rows read: 0`, `Rows written: 0`, sem DML, sem DDL e sem consulta de dados de linha. Baseline confirmado: `documentos` existe com `empresa_id` e sem `historico_id`/`sha256_hash`; `idx_documentos_uuid` nominal não existe e a unicidade está coberta por autoíndices SQLite; `pasta_virtual.documento_id` não existe; `certificados_templates` existe em produção. **R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE.**
 >
 > **Addendum Sprint R04.3 (2026-06-03):** o desenho lógico da futura `0388_documentos_canonical_schema.sql` foi fechado em modo docs-only, sem criar migration, sem alterar runtime e sem tocar schema remoto. A decisão consolidada passou a ser: **`R04 = 0388_DESIGN_READY`**. A futura `0388` deve incluir apenas `CREATE TABLE IF NOT EXISTS documentos` aderente à baseline real de produção e os índices seguros `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo` e `idx_documentos_funcionario_tipo`. Permanecem fora da `0388` nesta fase: `historico_id`, `idx_documentos_historico`, `sha256_hash`, `idx_documentos_sha256`, `pasta_virtual.documento_id`, qualquer DDL em `certificados_templates` e os índices de `0200` dependentes de colunas fantasmas. Documento de desenho: `docs/AIRTRUST_DOCUMENTOS_0388_CANONICAL_SCHEMA_DESIGN_v0_5.md`.
+>
+> **Addendum Sprint R04.4 (2026-06-03):** a migration `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` e o teste `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts` foram versionados localmente com base no desenho aprovado, sem apply remoto, sem alteração de runtime e sem remoção do bootstrap. Novo status consolidado: **`R04 = MIGRATION_VERSIONED_PENDING_APPLY`**. Próxima fase: `R04.5` — apply controlado em ambiente aprovado + probe pós-apply + decisão posterior sobre remoção do bootstrap.
 
 ---
 
@@ -550,4 +552,4 @@ A migration 0388 desenhada em R04.3 é **DDL puro sem DML** — não altera dado
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.3 e desenho documental da `0388` baseado na baseline estrutural remota de produção. Próxima fase: versionar/testar a `0388_documentos_canonical_schema.sql` conforme `docs/AIRTRUST_DOCUMENTOS_0388_CANONICAL_SCHEMA_DESIGN_v0_5.md` (GPT-5.5 Alta).
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.4 e versionamento local da `0388` baseado na baseline estrutural remota de produção. Próxima fase: apply controlado + probe pós-apply da `0388_documentos_canonical_schema.sql` (GPT-5.5 Alta).

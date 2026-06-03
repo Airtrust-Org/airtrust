@@ -221,7 +221,7 @@
 - **Documentos:** `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
 - **Deploy:** Não (docs-only).
 - **Migration necessária:** Não nesta fase. 3 migrations planejadas para fases futuras.
-- **Pendente:** Fase 3 M3 (`0388` sobre baseline remota capturada + desenho aprovado → remoção bootstrap R04) e Fase 2 M2 (baseline/chain plan R01). R09 = RESOLVED (Sprint R09). R04 = 0388_DESIGN_READY (Sprint R04.3, 2026-06-03).
+- **Pendente:** Fase 3 M3 (apply controlado da `0388` já versionada + probe pós-apply → remoção bootstrap R04) e Fase 2 M2 (baseline/chain plan R01). R09 = RESOLVED (Sprint R09). R04 = MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4, 2026-06-03).
 - **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados por fase).
 
 ### Sprint W — DDL Pré-Fase: Remover `ensure*` já cobertos
@@ -312,7 +312,7 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente:** DDL runtime remanescente: R04 (Documentos) = 0388_DESIGN_READY (Sprint R04.3). R01 (SIGVOOS) = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1). R09 = RESOLVED (Sprint R09).
+- **Pendente:** DDL runtime remanescente: R04 (Documentos) = MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4). R01 (SIGVOOS) = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1). R09 = RESOLVED (Sprint R09).
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
 
 ### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
@@ -363,7 +363,7 @@
 - **Objetivo:** reconciliar o estado real dos achados remanescentes sem abrir novas microfases desnecessarias.
 - **Entregue:**
   - plano consolidado em `AIRTRUST_AUDIT_REMAINING_FINDINGS_CLOSURE_PLAN_v0_5.md`;
-  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 0388 -> R01 chain plan` (R09 = RESOLVED Sprint R09; R04 = 0388_DESIGN_READY Sprint R04.3);
+  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 0388 apply/probe -> R01 chain plan` (R09 = RESOLVED Sprint R09; R04 = MIGRATION_VERSIONED_PENDING_APPLY Sprint R04.4);
   - confirmacao de que esta rodada nao comporta alteracao segura de runtime, migration ou deploy.
 - **Decisao:** fechar esta sprint como docs-only. Nenhum schema remoto, nenhum deploy e nenhuma migration remota.
 
@@ -389,6 +389,16 @@
   - decisao de escopo conservador para a `0388`: incluir apenas `documentos` aderente a baseline real + `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo`, `idx_documentos_funcionario_tipo`;
   - registro explícito dos itens adiados/não tocados: `historico_id`, `sha256_hash`, `pasta_virtual.documento_id`, `certificados_templates` e índices de `0200` dependentes de colunas fantasmas.
 - **Decisao:** não versionar a `0388` nesta sprint. Próxima fase: criar testes locais e versionar a migration conforme o desenho aprovado.
+
+### Sprint R04.4 — Documentos 0388 Versioning ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** versionar localmente a `0388_documentos_canonical_schema.sql` e seu teste dedicado, sem apply remoto, sem alterar runtime e sem remover bootstrap.
+- **Entregue:**
+  - `worker-airtrust/migrations/0388_documentos_canonical_schema.sql`;
+  - `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts`;
+  - reclassificacao de R04 para `MIGRATION_VERSIONED_PENDING_APPLY`;
+  - atualização documental da próxima fase: `R04.5 = apply controlado + probe pós-apply`.
+- **Decisao:** não aplicar a migration nesta sprint. O bootstrap permanece intocado.
 
 ### Sprint OP-1 — Readiness Operacional Consolidada ✅ CONCLUIDO
 - **Status:** CONCLUIDO em 2026-06-03.

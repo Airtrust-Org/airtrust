@@ -4,6 +4,8 @@
 
 Definir o desenho lógico da futura migration `0388_documentos_canonical_schema.sql` usando a baseline estrutural real de produção capturada na Sprint R04.2, sem aplicar migration, sem alterar schema remoto e sem remover o bootstrap runtime nesta fase.
 
+> **Addendum Sprint R04.4 (2026-06-03):** o arquivo `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` foi versionado localmente a partir deste desenho, junto com o teste `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts`. Nenhuma migration remota foi aplicada, o bootstrap runtime não foi removido e o status consolidado passou a **`R04 = MIGRATION_VERSIONED_PENDING_APPLY`**.
+
 Objetivo prático da `0388`:
 
 - estabilizar a criação de `documentos` em ambiente limpo;
@@ -93,7 +95,7 @@ Objetos adiados para sprint específica, revisão de runtime ou reconciliação 
 
 ## 7. Draft lógico da migration 0388
 
-Draft lógico proposto, ainda **não versionado** como arquivo SQL:
+Draft lógico aprovado e agora **versionado** como `worker-airtrust/migrations/0388_documentos_canonical_schema.sql`:
 
 ```sql
 -- 0388_documentos_canonical_schema.sql
@@ -146,29 +148,28 @@ Decisões embutidas neste draft:
 
 ## 8. Testes necessários
 
-Como a sprint atual é docs-only, os testes abaixo ficam apenas definidos:
+Após a Sprint R04.4:
 
-1. Teste local de schema limpo aplicando a cadeia completa + draft final da `0388`.
+1. Teste local de schema limpo aplicando a `0388`.
 2. Teste de idempotência: rodar a `0388` duas vezes, sem erro na segunda execução.
-3. Teste estático confirmando que a `0388` não contém `DROP`, `UPDATE`, `DELETE`, `INSERT` ou backfill.
+3. Teste estático confirmando que a `0388` não contém `DROP`, `UPDATE`, `DELETE`, `INSERT`, `REPLACE`, `UPSERT`, `ALTER TABLE` ou backfill.
 4. Teste local garantindo existência de:
    - tabela `documentos`;
    - coluna `empresa_id`;
    - índices `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo`, `idx_documentos_funcionario_tipo`.
-5. Teste de regressão do bootstrap: o runtime ainda não deve ser removido nesta fase.
-6. Após versionamento e apply futuro: probe pós-migration em produção e smoke das rotas de certificados/pasta virtual.
+5. Teste estático garantindo que a migration não toca `pasta_virtual` nem `certificados_templates`.
+6. Teste de regressão do bootstrap: o runtime ainda não deve ser removido nesta fase.
+7. Após apply futuro: probe pós-migration em produção e smoke das rotas de certificados/pasta virtual.
 
 ## 9. Ordem segura futura
 
-1. Versionar `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` com o draft lógico aprovado.
-2. Criar testes locais de schema/idempotência para a `0388`.
-3. Validar a cadeia completa em ambiente limpo local.
-4. Revisar se `historico_id` e `sha256_hash` realmente merecem migration separada ou abandono explícito.
-5. Aplicar a `0388` em staging aprovado.
-6. Validar smoke funcional de certificados e pasta virtual.
-7. Aplicar em produção via fluxo oficial de migrations.
-8. Executar probe pós-migration.
-9. Só então discutir remoção de `ensureDocumentosTableExists()`.
+1. Validar a `0388` versionada em ambiente limpo local.
+2. Revisar se `historico_id` e `sha256_hash` realmente merecem migration separada ou abandono explícito.
+3. Aplicar a `0388` em staging aprovado.
+4. Validar smoke funcional de certificados e pasta virtual.
+5. Aplicar em produção via fluxo oficial de migrations.
+6. Executar probe pós-migration.
+7. Só então discutir remoção de `ensureDocumentosTableExists()`.
 
 ## 10. Critérios para remover bootstrap runtime
 
@@ -193,7 +194,7 @@ Como o desenho proposto é aditivo e conservador:
 ## 12. Fora do escopo
 
 - aplicar migration remota;
-- criar o arquivo SQL definitivo nesta sprint;
+- aplicar a migration remotamente nesta sprint;
 - alterar schema remoto;
 - remover bootstrap runtime;
 - criar `documento_id` em `pasta_virtual`;
