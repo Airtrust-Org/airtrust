@@ -131,8 +131,9 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 | Pré-Fase | Nenhuma | Concluída no Sprint W — removidos R02, R05, R06, R07, R08, R10 | BAIXO |
 | Gate X.0 | Probe read-only aprovado para `solicitacoes_treinamento` | Decidir formato real da M1 | MÉDIO |
 | Fase 1 | M1 — `0386` (link Treinamentos) | Remover R03 | MÉDIO |
-| Fase 2 | M2 — `0387` (SIGVOOS base) | Remover R01 | ALTO |
-| Fase 3 | M3 — `0388` (Documentos canônico) | Remover R04 | MÉDIO |
+| Fase 2 | R09 readiness/verification | Provar cobertura de `qualificacoes/shared.ts` e remover apenas se seguro | BAIXO/MEDIO |
+| Fase 3 | M3 — `0388` (Documentos canonico) | Remover R04 | MEDIO |
+| Fase 4 | R01 baseline/chain plan | Destravar `0354 -> 0387` antes de qualquer apply/remocao | ALTO |
 
 ### Documentos produzidos
 
@@ -141,4 +142,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = PARTIAL (R03 = RESOLVED após apply 0386 + deploy X.5; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1; restam R04 e R09 no runtime).
+DDL_RUNTIME = PARTIAL (R03 = RESOLVED apos apply 0386 + deploy X.5; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1; restam R04 e R09 no runtime).

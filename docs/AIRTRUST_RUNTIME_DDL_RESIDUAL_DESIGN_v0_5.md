@@ -329,10 +329,10 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | Resíduos RUNTIME_HOT_PATH_COVERED (já com migration) | 6 (R02, R05, R06, R07, R08, R10) |
 | Casos LEGACY_QUARANTINED | 4 (R11, R12, R13, R14) |
 | Falsos positivos / test-only | 7 (R15-R20 + R09 parcial) |
-| Lacunas de migration | 3 (SIGVOOS 3 tabelas base, Treinamentos 2 colunas+índice, Documentos canônico) |
+| Lacunas de migration remanescentes | 2 confirmadas (`R01` SIGVOOS base, `R04` Documentos canonico) + 1 verificacao de runtime (`R09`) |
 | Migrations existentes relacionadas | 10+ (`0172`, `0173`, `0183`, `0184`, `0280`, `0317`, `0345`, `0352`, `0354`, `0136`-`0138`, `0165`) |
-| Migrations novas necessárias | 3 |
-| Ordem recomendada | Fase 1 (cobertos) → Gate X.0 (probe aprovado para R03) → Fase 2 (Treinamentos Link) → Fase 3 (SIGVOOS) → Fase 4 (Documentos) |
+| Migrations novas necessarias | 2 confirmadas (`0387` ja versionada mas bloqueada por cadeia; `0388` planejada) |
+| Ordem recomendada restante | `R09` verification/readiness -> `R04` documentos canonico -> `R01` baseline/chain plan |
 | Status na matriz | DDL_RUNTIME = PARTIAL (R03 = RESOLVED; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1); restam R04 e R09 no runtime) |
 
 ---

@@ -134,13 +134,13 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 
 ---
 
-## 8. Próximas 5 ações recomendadas
+## 8. Proximas 5 acoes recomendadas
 
-1. **Executar Data Quality completo** em ambiente staging aprovado com schema completo → zerar checks SKIPPED.
-2. **Configurar `AIRTRUST_EXPECTED_EMPRESA_ID`** e reexecutar smoke autenticado para fechar pendência de validação de empresa esperada.
-3. **Executar o Sprint R de implementação do Audit Trail v2** — schema backward-compatible + canonical writer foundation.
-4. **Executar o Sprint S de implementação do RBAC/Suporte v2** — platform roles schema + shadow dual-read, somente depois do writer v2.
-5. **Obter revisão jurídica do draft de retenção** e fechar o contrato de `support_reason`/retenção antes de ativar enforcement de suporte.
+1. **Configurar `AIRTRUST_EXPECTED_EMPRESA_ID`** e reexecutar o smoke autenticado para fechar a validacao de empresa esperada.
+2. **Executar Data Quality completo** em ambiente staging aprovado com schema completo para zerar checks `SKIPPED`.
+3. **Executar o Audit v2 staging flag test** com schema ja aplicado, rollback por flag e validacao de paridade minima.
+4. **Executar a foundation de RBAC/Suporte v2** somente depois do Audit v2 staging flag test aprovado.
+5. **Fechar o bloco DDL residual restante** na ordem `R09 -> R04 -> R01`, mantendo a abordagem conservadora para schema/migrations.
 
 ---
 

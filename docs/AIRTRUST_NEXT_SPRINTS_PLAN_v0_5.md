@@ -358,6 +358,15 @@
 - **Decisão:** não aplicar `0387`, não remover `ensureSigvoosTables()`, não editar `0354` nesta fase.
 - **Próxima fase:** definir baseline/plano de cadeia segura para ambientes novos e só depois discutir apply controlado ou remoção do fallback.
 
+### Sprint Z2 — Remaining Findings Closure Plan ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** reconciliar o estado real dos achados remanescentes sem abrir novas microfases desnecessarias.
+- **Entregue:**
+  - plano consolidado em `AIRTRUST_AUDIT_REMAINING_FINDINGS_CLOSURE_PLAN_v0_5.md`;
+  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R09 -> R04 -> R01`;
+  - confirmacao de que esta rodada nao comporta alteracao segura de runtime, migration ou deploy.
+- **Decisao:** fechar esta sprint como docs-only. Nenhum schema remoto, nenhum deploy e nenhuma migration remota.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -416,7 +425,7 @@
 
 | # | Sprint | Prioridade | Modelo | Deploy | Migration |
 |---|---|---|---|---|---|
-| M | Data Quality + Smoke | Imediata | GPT-5.4 | Não | Não |
+| M | Data Quality + Smoke | Imediata | GPT-5.4 | Nao | Nao |
 | N | Blindagem Operacional P2 ✅ | — | GPT-5.4 | Não | Não |
 | O | Audit Trail/LGPD v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
 | P | RBAC/Suporte v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
@@ -425,21 +434,24 @@
 | S | Audit Trail v2 Canonical Writer + Dual-Write ✅ | Concluído | GPT-5.5 | Sim (X.5) | Aplicada (X.5); flag off |
 | T | Audit v2 Activation Readiness / Local-Staging Validation ✅ | Concluído | GPT-5.5 | Não | Não |
 | T.1 | Audit v2 Local Activation Run ✅ | Concluído | GPT-5.4 | Não | Não |
-| U | Audit v2 Staging Flag Test | Curto prazo | GPT-5.5 | Não/Controlado | Staging |
+| U | Audit v2 Staging Flag Test | Curto prazo | GPT-5.5 | Nao/Controlado | Staging |
 | V | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
-| W | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
+| W | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Nao |
 | V | DDL Residual Design ✅ | Concluído | GPT-5.5 | Não | Planejadas (3→2) |
 | W | DDL Pré-Fase — Remover 6 `ensure*` cobertos ✅ | Concluído | GPT-5.4 | Sim | Não |
 | X.0 | DDL Schema Probe Read-only ✅ | Concluído | GPT-5.4 | Não | Não |
 | X.1–X.4 | DDL Probe Runner + M1 Versionada ✅ | Concluído | GPT-5.4/5.5 | Não | Versionada |
 | X.5 | DDL Apply 0385/0386 + Deploy Worker/API ✅ | Concluído | GPT-5.4 | Sim | Aplicadas |
-| Y | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
-| Z | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
-| AA | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
-| AB | R2 Metadata Uploads | Longo prazo | GPT-5.4 | Sim | Não |
-| AC | Cloudflare Queues | Longo prazo | GPT-5.5 | Sim | Não |
-| AD | Observabilidade | Longo prazo | GPT-5.5 | Sim | Possível |
-| AE | Refatoração Estrutural | Longo prazo | GPT-5.4 | Sim | Não |
+| X.6 | R09 Readiness / Verification | Curto prazo | GPT-5.4 | Sim | Nao/Provar |
+| Y | Documentos Canonical Schema (`0388`) | Medio prazo | GPT-5.5 | Sim | Sim |
+| Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |
+| AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
+| AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
+| AC | Repository Pattern Expansao | Longo prazo | GPT-5.4 | Sim | Nao |
+| AD | R2 Metadata Uploads | Longo prazo | GPT-5.4 | Sim | Nao |
+| AE | Cloudflare Queues | Longo prazo | GPT-5.5 | Sim | Nao |
+| AF | Observabilidade | Longo prazo | GPT-5.5 | Sim | Possivel |
+| AG | Refatoracao Estrutural | Longo prazo | GPT-5.4 | Sim | Nao |
 
 ---
 

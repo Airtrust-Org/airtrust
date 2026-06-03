@@ -204,7 +204,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 ---
 
-## 6. Achados abertos prioritários
+## 6. Achados abertos prioritarios
 
 | ID | Categoria | Resumo | Bloqueia |
 |---|---|---|---|
@@ -215,9 +215,10 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | STATUS-02 | STATUS_ENUM | Status residual em cron/alertas/EVD | Parcialmente — escala |
 | DQ-02 | DATA_QUALITY | Execução operacional completa pendente | Sim — GO pleno |
 | BETA-05 | MODULOS_BETA | EVD sem cobertura de teste | Sim — cobertura |
-| DDL-02 | DDL_RUNTIME | `sigvoos-frms.ts` DDL residual | Não (bloqueia 5+ empresas) — DESIGN_READY |
+| DDL-02 | DDL_RUNTIME | `sigvoos-frms.ts` DDL residual | Nao (bloqueia 5+ empresas) - MIGRATION_CHAIN_BLOCKED_BY_0354 |
 | DDL-03 | DDL_RUNTIME | `treinamentos-planejados-integration.ts` DDL residual | ✅ RESOLVIDO (Sprint X.5) |
-| DDL-04 | DDL_RUNTIME | `auto-migration-documentos.ts` DDL residual | Não (bloqueia 5+ empresas) — DESIGN_READY |
+| DDL-04 | DDL_RUNTIME | `auto-migration-documentos.ts` DDL residual | Nao (bloqueia 5+ empresas) - DESIGN_READY |
+| DDL-09 | DDL_RUNTIME | `qualificacoes/shared.ts` dynamic DDL residual | Nao (bloqueia 5+ empresas) - OPEN_VERIFICATION_REQUIRED |
 | PERF-01 | PERFORMANCE_EFICIENCIA | Bundle grande, chunks duplicados | Não |
 | PERF-02 | PERFORMANCE_EFICIENCIA | Possíveis N+1 queries | Não |
 | PERF-03 | PERFORMANCE_EFICIENCIA | Rotas grandes sem auditoria | Não |
@@ -225,21 +226,18 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 ---
 
-## 7. Achados que exigem migration/schema
+## 7. Achados remanescentes que exigem migration/schema
 
 | ID | Descrição | Tipo de migration necessária |
 |---|---|---|
 | RBAC-01 | `userId===1` → `platform_admin` persistido | Nova tabela `platform_admins` ou coluna em `usuarios` |
 | RBAC-02 | Role `support` com escopo e auditoria | Nova tabela `support_access` com escopo, expiração, eventos |
 | RBAC-03 | `platform_admin` persistido | Schema para papéis de plataforma |
-| LGPD-01/02 | Unificação de `auditoria` + `audit_logs` + `auditoria_avancada_v2` | Writer v2 e integração LMS versionados; ativação/cobertura ampla pendentes |
-| LGPD-03 | Coluna `support_reason` | Versionada e validada pelo writer; aplicação e enforcement ainda pendentes |
 | MULTI-04 | `escala_alocacoes.empresa_id` denormalizado + UNIQUE parcial | ALTER TABLE + CREATE UNIQUE INDEX |
 | DDL-02 | Tabelas `integracoes_sigvoos_*` | CREATE TABLE migrations para 3 tabelas + 4 índices. **Status: MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1).** `0387` criada, mas a cadeia limpa continua inválida porque `0354` antecede a criação da tabela base. |
-| DDL-03 | Colunas `treinamento_planejado_id`, `status_pre_agendamento` em `solicitacoes_treinamento` | ALTER TABLE + CREATE INDEX |
 | DDL-04 | Consolidação de `documentos` em migration canônica | Migration única substituindo auto-bootstrap |
 
-**Total: 9 achados que exigem migration**, todos com severidade S2 ou inferior (nenhum P0/P1 ativo).
+**Nota:** Audit v2 ja tem schema aplicado em producao; o pendente real agora e ativacao/paridade por flag. `R03` ja nao entra mais nesta lista porque `0386` foi aplicada e o fallback saiu do runtime.
 
 ---
 
@@ -290,24 +288,17 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 ---
 
-## 12. Próxima sequência recomendada
+## 12. Proxima sequencia recomendada
 
-1. **Reauditoria read-only de documentos/assets tenant isolation** (confirmação de correções) — GPT-5.4 Alta
-2. **Data Quality com snapshot/staging completo** (executar checks pendentes) — GPT-5.4 Alta
-3. **Sprint R - Audit Trail v2 schema backward-compatible** ✅ — GPT-5.5 Altissimo
-4. **Sprint S - Canonical writer com dual-write mínimo** ✅ — GPT-5.5 Altissimo
-5. **Sprint T - Activation readiness / local-staging validation** ✅ — GPT-5.5 Altissimo
-6. **Sprint T.1 - Local activation run** ✅ — GPT-5.4 Alta
-7. **Sprint X.5 - Apply 0385/0386 + Deploy Worker/API** ✅ — GPT-5.4 Alta
-8. **Próxima fase - staging flag test com schema aplicado e rollback por flag** — GPT-5.5 Altissimo
-9. **Cobertura beta (EVD + complementos)** — GPT-5.4 Alta
-10. **DDL runtime residual design** ✅ (Sprint V concluído) — GPT-5.5 Altissimo
-11. **DDL Pré-Fase — remover `ensure*` já cobertos** ✅ (Sprint W concluído) — GPT-5.4 Alta
-12. **DDL Fase 1 — R03 Treinamentos Link** ✅ (Sprint X.5 concluído) — GPT-5.5 Altissimo
-13. **DDL Fase 2 — R01 SIGVOOS base tables** — GPT-5.5 Altissimo
-14. **DDL Fase 3 — R04 Documentos canônico** — GPT-5.5 Alta
-15. **R2 metadata para novos uploads** (defense-in-depth) — GPT-5.4 Alta
-16. **Segunda empresa apenas depois das condições mínimas** (CONDITIONAL GO)
+1. **Smoke autenticado com empresa esperada** - GPT-5.4 Baixa
+2. **Data Quality com staging/schema completo** - GPT-5.4 Alta
+3. **Audit v2 staging flag test + validacao de paridade** - GPT-5.5 Altissimo
+4. **RBAC/Suporte v2 foundation depois do Audit v2** - GPT-5.5 Altissimo
+5. **R09 readiness/verification em `qualificacoes/shared.ts`** - GPT-5.4 Alta
+6. **R04 Documentos canonical schema (`0388`)** - GPT-5.5 Alta
+7. **R01 SIGVOOS baseline/chain plan antes de qualquer apply** - GPT-5.5 Altissimo
+8. **Cobertura beta (EVD + complementos)** - GPT-5.4 Alta
+9. **Status residual / observabilidade / R2 metadata** - GPT-5.4 Alta
 
 ---
 
