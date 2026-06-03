@@ -118,14 +118,12 @@
 - **Pendências:** (1) Configurar `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO` e reexecutar smoke. (2) Executar Data Quality em staging com schema completo para zerar SKIPPED.
 - **Commit:** `1b496af`
 
-### Sprint N — Blindagem Operacional (P2 residuais)
-- **Prioridade:** Imediata.
-- **Objetivo:** Mover scripts destrutivos para wrapper seguro. ~~Remover `--commit-dirty=true` dos 2 scripts restantes~~ — **já resolvido no Sprint Z.1**.
-- **Escopo:** Identificar todos os scripts shell com `wrangler d1 execute --remote` sem wrapper → mover para `scripts/legacy/` ou adaptar. ~~Remover flag dirty de `build-and-deploy.sh:48` e `deploy-full-automated.sh:79`.~~
-- **Modelo recomendado:** GPT-5.4 Média.
-- **Deploy necessário?:** Não (scripts apenas).
-- **Migration necessária?:** Não.
-- **Risco:** Baixo (scripts shell, sem runtime).
+### Sprint N — Blindagem Operacional (P2 residuais) ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-02.
+- **Commit:** Sprint N.
+- **Deploy:** Não (scripts apenas).
+- **Entregue:** Inventário completo de 45 scripts `.sh` com `wrangler d1 execute`. 12 scripts bloqueados com banner+exit. 22 scripts read-only na allowlist. Guard `audit-dangerous-ops.sh` reforçado com 5 checks (commit-dirty, git-add, remote-D1, DDL+remote, legacy audit). Documento `AIRTRUST_D1_SCRIPT_HARDENING_AUDIT_v0_5.md` criado. OPS-02 reclassificado de PARTIAL → RESOLVED.
+- **Pendente:** Nenhum.
 
 ### Sprint O — Audit Trail/LGPD v2 Design
 - **Prioridade:** Curto prazo.
@@ -222,7 +220,7 @@
 | # | Sprint | Prioridade | Modelo | Deploy | Migration |
 |---|---|---|---|---|---|
 | M | Data Quality + Smoke | Imediata | GPT-5.4 | Não | Não |
-| N | Blindagem Operacional P2 | Imediata | GPT-5.4 | Não | Não |
+| N | Blindagem Operacional P2 ✅ | — | GPT-5.4 | Não | Não |
 | O | Audit Trail/LGPD v2 Design | Curto prazo | GPT-5.5 | Não | Futura |
 | P | RBAC/Suporte v2 Design | Curto prazo | GPT-5.5 | Não | Futura |
 | Q | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |

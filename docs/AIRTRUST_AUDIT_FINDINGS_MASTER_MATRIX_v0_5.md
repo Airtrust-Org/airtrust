@@ -21,7 +21,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 - **Pronto para 5+ empresas:** Não. Requer remoção de `userId===1`, DDL runtime residual, status enum central, e observabilidade multiempresa.
 
 **Total de achados consolidados:** 48
-**RESOLVED:** 22 | **PARTIAL:** 9 | **OPEN:** 10 | **DEFERRED:** 5 | **BACKLOG:** 2
+**RESOLVED:** 23 | **PARTIAL:** 8 | **OPEN:** 10 | **DEFERRED:** 5 | **BACKLOG:** 2
 
 ---
 
@@ -95,7 +95,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | OPS-01 | OPERACOES_DEPLOY_DB | `--commit-dirty=true` em deploy de Pages | P2 | RESOLVED | Removido do caminho principal; `preflight-clean-deploy.sh` bloqueia deploy com árvore suja | `b488105` | Sim | `ops:guard` PASS, preflight PASS | `deploy:all` e script legado ainda usam `--commit-dirty=true` (P2 residual) | Sprint futuro: fechar residuais | GPT-5.4 Baixa |
-| OPS-02 | OPERACOES_DEPLOY_DB | Scripts D1 destrutivos sem wrapper seguro | P1 | PARTIAL | `run-production-db-script.sh` com allowlist, confirmação dupla, branch=main, árvore limpa | `49d9057`, `b488105` | Sim | `ops:guard` PASS | Dezenas de scripts shell legados ainda rodam `wrangler d1 execute --remote` sem wrapper | Sprint futuro: blindar scripts legados | GPT-5.4 Média |
+| OPS-02 | OPERACOES_DEPLOY_DB | Scripts D1 destrutivos sem wrapper seguro | P1 | RESOLVED | `run-production-db-script.sh` com allowlist; 12 scripts bloqueados com banner+exit; 22 scripts read-only na allowlist; `audit-dangerous-ops.sh` com 5 guards ativos (commit-dirty, git-add, remote-D1, DDL+remote, legacy audit) | `4ebd777`, sprint N | Não (scripts apenas) | `ops:guard` PASS, preflight PASS, inventário completo em `AIRTRUST_D1_SCRIPT_HARDENING_AUDIT_v0_5.md` | Nenhum — todos os scripts perigosos bloqueados ou roteados pelo wrapper | — | GPT-5.4 Média |
 | OPS-03 | OPERACOES_DEPLOY_DB | `deploy:all` com `--commit-dirty=true` residual | P2 | RESOLVED | `--commit-dirty=true` removido de `build-and-deploy.sh:48` e `legacy/deploy-full-automated.sh:79`; ambos executam `preflight-clean-deploy.sh` como gate | `7e89b8b` | Sim | `ops:guard` PASS, preflight PASS | Nenhum | — | — |
 | OPS-04 | OPERACOES_DEPLOY_DB | Scripts legados bloqueados (seed, purge, cleanup, import) | P2 | RESOLVED | Bloqueados por padrão; retornam erro e orientam uso do wrapper | `b488105` | Sim | `ops:guard` PASS | Nenhum | — | — |
 | OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado pendente por validação de empresa esperada | P2 | PARTIAL | Script `smoke-authenticated-operational.sh` executado com `PASS=11, FAIL=0, SKIPPED=2`; evidência documentada em `AIRTRUST_AUTHENTICATED_SMOKE_EVIDENCE_20260602.md` | `28a4a89` | — | Smoke public-only PASS; smoke autenticado 11/11 PASS | `AIRTRUST_EXPECTED_EMPRESA_ID`/`AIRTRUST_EXPECTED_EMPRESA_CODIGO` não configurados — validação de empresa esperada pendente | Configurar variável de empresa esperada e reexecutar | GPT-5.4 Baixa |
@@ -182,7 +182,6 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | LGPD-02 | AUDIT_LGPD | `request_id` e `empresa_id` injetados em metadata mas não como colunas dedicadas | Migration de tabela padronizada com colunas dedicadas |
 | STATUS-01 | STATUS_ENUM | Status central aplicado em camada crítica mas não em cron/alertas/EVD | Expandir helpers para caminhos batch e operacionais |
 | DQ-01 | DATA_QUALITY | Runner funcional mas com 5 checks SKIPPED | Executar em ambiente com schema completo |
-| OPS-02 | OPERACOES_DEPLOY_DB | Wrapper seguro existe mas scripts legados ainda sem proteção | Mover scripts destrutivos para o wrapper |
 | OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado executado com PASS=11 mas empresa esperada não validada | Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` e reexecutar |
 | ARCH-01 | ARQUITETURA_SQL_REPOSITORY | Repository pilot em 2 domínios mas cobertura ainda pequena | Expandir gradualmente para próximos domínios read-only |
 

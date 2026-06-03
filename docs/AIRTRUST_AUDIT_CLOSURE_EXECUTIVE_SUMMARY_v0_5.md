@@ -124,7 +124,7 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 
 | Risco | Severidade | Probabilidade | Impacto |
 |---|---|---|---|
-| Script shell legado executado manualmente com `wrangler d1 execute --remote` | P2 | Baixa (requer credencial + ação manual) | Destruição de dados em produção |
+| Script shell legado executado manualmente com `wrangler d1 execute --remote` | P2 | Mitigado (Sprint N — 12 bloqueados, guard ativo, wrapper) | Destruição de dados em produção |
 | `deploy:all` com `--commit-dirty=true` (2 scripts) | P2 | Resolvido (flag removida) | Deploy de build não versionado |
 | Query futura em `escala_alocacoes` esquecer JOIN `escalas_mensais` | P3 | Baixa (testes de regressão) | Vazamento cross-tenant |
 | D1 atingir limite de 5GB ou 1M statements/dia | S3 | Média (crescimento) | Degradação de performance |
