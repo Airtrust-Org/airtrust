@@ -350,7 +350,7 @@ wrangler d1 execute airtrust-db-staging --env staging --remote \
 |---|---|---|---|---|---|
 | **Pré-Fase** | Nenhuma | Remover `ensure*` já cobertos: R02, R05, R06, R07, R08, R10 | 6 funções + call sites | BAIXO | GPT-5.4 Alta |
 | **Fase 1** | M1 — `0386_solicitacoes_treinamento_planejado_link.sql` | Adicionar 2 colunas + 1 índice parcial em `solicitacoes_treinamento` | `ensureSolicitacoesTreinamentoLinkSchema()` + 3 call sites | MÉDIO | GPT-5.5 Altissimo |
-| **Fase 2** | M2 — `0387_integracoes_sigvoos_base_tables.sql` | Criar 3 tabelas base + 4 índices + 1 unique index | `ensureSigvoosTables()` (escopo total ou parcial) + 10 call sites | ALTO | GPT-5.5 Altissimo | **Status: READINESS_MAPPED (Sprint Z0).** Próxima: Sprint Z1 criar migration + teste local. |
+| **Fase 2** | M2 — `0387_integracoes_sigvoos_base_tables.sql` | Criar 3 tabelas base + 4 índices + 1 unique index | `ensureSigvoosTables()` (escopo total ou parcial) + 10 call sites | ALTO | GPT-5.5 Altissimo | **Status: MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL (Sprint Z1).** `0387` criada + teste local PASS; fallback preservado por dependência prévia da `0354`. |
 | **Fase 3** | M3 — `0388_documentos_canonical_schema.sql` | Criar schema canônico de `documentos` com todos os índices | `ensureDocumentosTableExists()` + `api-bootstrap.ts` call | MÉDIO | GPT-5.5 Alta |
 
 ---
@@ -498,5 +498,7 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 **Addendum Sprint X.4:** o probe aprovado em produção confirmou que a tabela existe e que as 2 colunas + o índice ainda estão ausentes. A migration simples `0386_solicitacoes_treinamento_planejado_link.sql` foi versionada e o fallback runtime foi removido localmente. O status atual passa a `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`.
 
 **Addendum Sprint X.5:** as migrations `0385_audit_events_v2.sql` e `0386_solicitacoes_treinamento_planejado_link.sql` foram aplicadas em produção via Cloudflare D1 migrations apply. O probe pós-migration confirmou as colunas e índice em produção (`STATUS=PASS`). O Worker/API foi deployado com sucesso (`APP_VERSION=2026-06-03T17:00:27Z-c12d8bf`). Smoke pós-deploy: PASS (3/3). R03 = RESOLVED. Audit v2 schema = `APPLIED_SCHEMA_READY_FOR_FLAG_PLAN`. DDL runtime remanescente: R01, R04, R09. Observação: `/api/health stats.version` divergiu de `/api/version` — acompanhar em sprint de observabilidade.
+
+**Addendum Sprint Z1:** criada a migration `0387_integracoes_sigvoos_base_tables.sql` com as 3 tabelas base e 4 índices ainda garantidos por `ensureSigvoosTables()`. Teste local dedicado PASS, incluindo idempotência e cobertura combinada com `0352`. O fallback R01 foi **preservado** porque a migration `0354_auditoria_critica_schema_hardening.sql` já referenciava `integracoes_sigvoos_config` antes da existência de uma migration base. Estado novo: `MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL`.
 
 **Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure em 2026-06-03.
