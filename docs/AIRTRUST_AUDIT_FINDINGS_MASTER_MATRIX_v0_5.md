@@ -21,7 +21,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 - **Pronto para 5+ empresas:** Não. Requer remoção de `userId===1`, DDL runtime residual, status enum central, e observabilidade multiempresa.
 
 **Total de achados consolidados:** 48
-**RESOLVED:** 21 | **PARTIAL:** 8 | **OPEN:** 12 | **DEFERRED:** 5 | **BACKLOG:** 2
+**RESOLVED:** 22 | **PARTIAL:** 9 | **OPEN:** 10 | **DEFERRED:** 5 | **BACKLOG:** 2
 
 ---
 
@@ -96,9 +96,9 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | OPS-01 | OPERACOES_DEPLOY_DB | `--commit-dirty=true` em deploy de Pages | P2 | RESOLVED | Removido do caminho principal; `preflight-clean-deploy.sh` bloqueia deploy com árvore suja | `b488105` | Sim | `ops:guard` PASS, preflight PASS | `deploy:all` e script legado ainda usam `--commit-dirty=true` (P2 residual) | Sprint futuro: fechar residuais | GPT-5.4 Baixa |
 | OPS-02 | OPERACOES_DEPLOY_DB | Scripts D1 destrutivos sem wrapper seguro | P1 | PARTIAL | `run-production-db-script.sh` com allowlist, confirmação dupla, branch=main, árvore limpa | `49d9057`, `b488105` | Sim | `ops:guard` PASS | Dezenas de scripts shell legados ainda rodam `wrangler d1 execute --remote` sem wrapper | Sprint futuro: blindar scripts legados | GPT-5.4 Média |
-| OPS-03 | OPERACOES_DEPLOY_DB | `deploy:all` com `--commit-dirty=true` residual | P2 | OPEN | Não corrigido — `build-and-deploy.sh:48` e `deploy-full-automated.sh:79` | — | — | — | Foot-gun operacional que contorna preflight | Sprint futuro: remover ou rotear por preflight | GPT-5.4 Baixa |
+| OPS-03 | OPERACOES_DEPLOY_DB | `deploy:all` com `--commit-dirty=true` residual | P2 | RESOLVED | `--commit-dirty=true` removido de `build-and-deploy.sh:48` e `legacy/deploy-full-automated.sh:79`; ambos executam `preflight-clean-deploy.sh` como gate | `7e89b8b` | Sim | `ops:guard` PASS, preflight PASS | Nenhum | — | — |
 | OPS-04 | OPERACOES_DEPLOY_DB | Scripts legados bloqueados (seed, purge, cleanup, import) | P2 | RESOLVED | Bloqueados por padrão; retornam erro e orientam uso do wrapper | `b488105` | Sim | `ops:guard` PASS | Nenhum | — | — |
-| OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado pendente por credencial | P2 | OPEN | Script existe e é write-safe; falta `AIRTRUST_AUTH_TOKEN`/`AIRTRUST_COOKIE` | `28a4a89` | — | Smoke public-only PASS | Validação funcional autenticada ponta-a-ponta não executada | Fornecer credencial dedicada | GPT-5.4 Baixa |
+| OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado pendente por validação de empresa esperada | P2 | PARTIAL | Script `smoke-authenticated-operational.sh` executado com `PASS=11, FAIL=0, SKIPPED=2`; evidência documentada em `AIRTRUST_AUTHENTICATED_SMOKE_EVIDENCE_20260602.md` | `28a4a89` | — | Smoke public-only PASS; smoke autenticado 11/11 PASS | `AIRTRUST_EXPECTED_EMPRESA_ID`/`AIRTRUST_EXPECTED_EMPRESA_CODIGO` não configurados — validação de empresa esperada pendente | Configurar variável de empresa esperada e reexecutar | GPT-5.4 Baixa |
 
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -143,7 +143,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 ---
 
-## 4. Achados resolvidos (21)
+## 4. Achados resolvidos (22)
 
 | ID | Categoria | Resumo |
 |---|---|---|
@@ -157,6 +157,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | ASSETS-03 | ASSETS_DOCUMENTOS_R2 | GAP-014 recuperar-orfaos cross-tenant |
 | ASSETS-04 | ASSETS_DOCUMENTOS_R2 | 2 gaps médios de metadado/limpeza |
 | OPS-01 | OPERACOES_DEPLOY_DB | `--commit-dirty=true` removido do caminho principal |
+| OPS-03 | OPERACOES_DEPLOY_DB | `deploy:all` com `--commit-dirty=true` residual removido de ambos os scripts |
 | OPS-04 | OPERACOES_DEPLOY_DB | Scripts legados bloqueados por padrão |
 | BETA-06 | MODULOS_BETA | Module gating implementado e funcional |
 | BETA-07 | MODULOS_BETA | Contratos funcionais mínimos dos módulos beta |
@@ -171,7 +172,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 ---
 
-## 5. Achados parciais (8)
+## 5. Achados parciais (9)
 
 | ID | Categoria | Resumo | O que falta |
 |---|---|---|---|
@@ -182,11 +183,12 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | STATUS-01 | STATUS_ENUM | Status central aplicado em camada crítica mas não em cron/alertas/EVD | Expandir helpers para caminhos batch e operacionais |
 | DQ-01 | DATA_QUALITY | Runner funcional mas com 5 checks SKIPPED | Executar em ambiente com schema completo |
 | OPS-02 | OPERACOES_DEPLOY_DB | Wrapper seguro existe mas scripts legados ainda sem proteção | Mover scripts destrutivos para o wrapper |
+| OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado executado com PASS=11 mas empresa esperada não validada | Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` e reexecutar |
 | ARCH-01 | ARQUITETURA_SQL_REPOSITORY | Repository pilot em 2 domínios mas cobertura ainda pequena | Expandir gradualmente para próximos domínios read-only |
 
 ---
 
-## 6. Achados abertos (12)
+## 6. Achados abertos (10)
 
 | ID | Categoria | Resumo | Bloqueia |
 |---|---|---|---|
@@ -199,8 +201,6 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | LGPD-04 | AUDIT_LGPD | Retenção/audit trail v2 pendente | Sim — compliance |
 | STATUS-02 | STATUS_ENUM | Status residual em cron/alertas/EVD | Parcialmente — escala |
 | DQ-02 | DATA_QUALITY | Execução operacional completa pendente | Sim — GO pleno |
-| OPS-03 | OPERACOES_DEPLOY_DB | `deploy:all` com `--commit-dirty=true` residual | Não (foot-gun) |
-| OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado pendente | Parcialmente — validação |
 | BETA-05 | MODULOS_BETA | EVD sem cobertura de teste | Sim — cobertura |
 | DDL-02 | DDL_RUNTIME | `sigvoos-frms.ts` DDL residual | Não (bloqueia 5+ empresas) |
 | DDL-03 | DDL_RUNTIME | `treinamentos-planejados-integration.ts` DDL residual | Não (bloqueia 5+ empresas) |

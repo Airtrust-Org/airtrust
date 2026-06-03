@@ -48,13 +48,12 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não.
 
-### Item 4 — Fechar dirty-deploy residual (P2)
+### Item 4 — ~~Fechar dirty-deploy residual (P2)~~ ✅ RESOLVIDO
 
-- **Status:** Aberto (2 scripts).
-- **Objetivo:** Remover `--commit-dirty=true` de `build-and-deploy.sh:48` e `legacy/deploy-full-automated.sh:79`.
-- **Risco:** Deploy de build não versionado.
-- **Modelo recomendado:** GPT-5.4 Baixa — remoção de flag.
-- **Deploy necessário?:** Não (alteração de script).
+- **Status:** Resolvido (confirmado em 2026-06-02, Sprint Z.1).
+- **Objetivo:** ~~Remover `--commit-dirty=true` de `build-and-deploy.sh:48` e `legacy/deploy-full-automated.sh:79`.~~
+- **Evidência:** Ambos os scripts não contêm mais a flag. Ambos executam `preflight-clean-deploy.sh` como gate. `ops:guard` PASS.
+- **Deploy necessário?:** Não.
 
 ---
 
@@ -187,7 +186,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 1 | Smoke autenticado funcional | Imediata | Cliente externo | GPT-5.4 Baixa |
 | 2 | Data Quality completo (staging) | Imediata | GO pleno | GPT-5.4 Alta |
 | 3 | Blindar scripts legados (P2) | Imediata | Segurança operacional | GPT-5.4 Média |
-| 4 | Fechar dirty-deploy residual (P2) | Imediata | Integridade de deploy | GPT-5.4 Baixa |
+| 4 | ~~Fechar dirty-deploy residual (P2)~~ ✅ RESOLVIDO | — | — | — |
 | 5 | RBAC/Suporte v2 design | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
 | 6 | Audit Trail/LGPD v2 design | Curto prazo | Compliance | GPT-5.5 Alta |
 | 7 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |

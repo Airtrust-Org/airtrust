@@ -81,7 +81,7 @@ O código em produção (`59e601f`) está estável, com 588 testes worker e 478 
 2. **Audit trail**: writers não são padronizados; `support_reason` e colunas dedicadas ausentes.
 3. **Data quality**: execução operacional completa pendente (5 checks SKIPPED).
 4. **Cobertura de testes beta**: EVD sem cobertura; Hospedagem, SGSO, LMS com cobertura mínima.
-5. **Smoke autenticado**: validação funcional ponta-a-ponta pendente por credencial.
+5. **Smoke autenticado**: validação funcional executada (PASS=11/11). Pendente: configurar `AIRTRUST_EXPECTED_EMPRESA_ID`.
 
 ### Não bloqueadores (para piloto interno)
 
@@ -125,7 +125,7 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 | Risco | Severidade | Probabilidade | Impacto |
 |---|---|---|---|
 | Script shell legado executado manualmente com `wrangler d1 execute --remote` | P2 | Baixa (requer credencial + ação manual) | Destruição de dados em produção |
-| `deploy:all` com `--commit-dirty=true` (2 scripts) | P2 | Baixa (caminho alternativo) | Deploy de build não versionado |
+| `deploy:all` com `--commit-dirty=true` (2 scripts) | P2 | Resolvido (flag removida) | Deploy de build não versionado |
 | Query futura em `escala_alocacoes` esquecer JOIN `escalas_mensais` | P3 | Baixa (testes de regressão) | Vazamento cross-tenant |
 | D1 atingir limite de 5GB ou 1M statements/dia | S3 | Média (crescimento) | Degradação de performance |
 | DDL runtime residual causar drift de schema entre ambientes | P3 | Baixa (código existe mas raramente executa) | Inconsistência entre dev/staging/prod |
@@ -137,10 +137,10 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 ## 8. Próximas 5 ações recomendadas
 
 1. **Executar Data Quality completo** em ambiente staging aprovado com schema completo → zerar checks SKIPPED.
-2. **Fornecer credencial de smoke autenticado** (token read-only dedicado) e executar validação funcional ponta-a-ponta uma vez.
+2. **Configurar `AIRTRUST_EXPECTED_EMPRESA_ID`** e reexecutar smoke autenticado para fechar pendência de validação de empresa esperada.
 3. **Desenhar Audit Trail/LGPD v2** — definir contrato único de colunas para `empresa_id`, `request_id`, `support_reason` sem executar migration.
 4. **Desenhar RBAC/Suporte v2** — schema para `platform_admin` e `support` com escopo, expiração e eventos auditados, sem executar migration.
-5. **Fechar residuais P2 de deploy/scripts** — remover `--commit-dirty=true` dos 2 scripts restantes e blindar scripts shell legados.
+5. **Blindar scripts shell legados** — mover scripts D1 destrutivos restantes para o wrapper seguro.
 
 ---
 
@@ -166,12 +166,12 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 | Pronto para cliente externo amplo? | **Não ainda** (RBAC/suporte, audit trail, data quality pendentes) |
 | Pronto para múltiplas empresas sem governança adicional? | **Não** (requer RBAC formal, DDL residual removido, observabilidade) |
 | Riscos P0/P1 conhecidos ativos? | **Nenhum** |
-| Riscos P2 ativos? | **3** (scripts shell legados, `deploy:all` dirty, smoke pendente) — todos exigem ação manual |
+| Riscos P2 ativos? | **2** (scripts shell legados, smoke pendente por empresa esperada) — todos exigem ação manual |
 
 O AirTrust está em um estado sólido para continuar operação e evolução. O ciclo de auditoria identificou e corrigiu os riscos mais graves. O caminho para cliente externo e multiempresa passa por investimento em governança (RBAC, audit trail, data quality) — itens que não exigem reescrita, mas sim disciplina de engenharia e decisões de produto.
 
 **Total de achados consolidados:** 48
-**RESOLVED:** 21 | **PARTIAL:** 8 | **OPEN:** 12 | **DEFERRED:** 5 | **BACKLOG:** 2
+**RESOLVED:** 22 | **PARTIAL:** 9 | **OPEN:** 10 | **DEFERRED:** 5 | **BACKLOG:** 2
 
 ---
 
