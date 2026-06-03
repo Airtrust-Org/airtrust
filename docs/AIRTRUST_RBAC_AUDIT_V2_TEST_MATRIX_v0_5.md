@@ -1,12 +1,17 @@
 # AirTrust - RBAC + Audit Trail v2 Test Matrix
 
-**Data:** 2026-06-02
+**Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
-**Modo:** Matriz conceitual de testes obrigatorios para implementacao futura.
+**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
+**Modo:** Matriz de testes com cobertura de schema v2 implementada localmente; testes de writer/RBAC continuam futuros.
 
 | Caso | Tipo | Pre-condicao | Acao | Esperado | Audit obrigatorio | Bloqueia release? |
 |---|---|---|---|---|---|---|
+| migration `audit_events_v2` local | Schema | SQLite local vazio | executar `0385_audit_events_v2.sql` | tabela v2 criada sem acesso remoto | Nao aplicavel | Sim |
+| campos e indices v2 | Schema | migration local aplicada | inspecionar schema | campos obrigatorios e indices minimos existem | Nao aplicavel | Sim |
+| defaults e insert sanitizado v2 | Schema | migration local aplicada | inserir fixture sintetica minima | `support_mode=0`, `success=1`, `retention_class=standard` e JSON sanitizado aceito | Nao aplicavel | Sim |
+| compatibilidade `audit_logs` | Regressao | tabela legado sintetica criada | aplicar migration v2 | schema de `audit_logs` permanece inalterado | Nao aplicavel | Sim |
+| no sensitive schema fields | Contrato | migration local aplicada | inspecionar colunas v2 | nenhum campo `password`, `token`, `cookie`, `cpf`, `documento_bruto` ou `aso_bruto` | Nao aplicavel | Sim |
 | `platform_admin` grant | Integracao | papel persistido habilitado | conceder `platform_admin` | grant persistido, sem impacto em tenant roles | `PLATFORM_ROLE_GRANTED` | Sim |
 | `platform_admin` revoke | Integracao | grant existente | revogar papel | acesso removido e trilha registrada | `PLATFORM_ROLE_REVOKED` | Sim |
 | `tenant_admin` != `platform_admin` | Autorizacao | usuario `tenant_admin` sem papel de plataforma | acessar rota de plataforma | negado fail-closed | negacao de `ROLE_PERMISSION` ou equivalente | Sim |

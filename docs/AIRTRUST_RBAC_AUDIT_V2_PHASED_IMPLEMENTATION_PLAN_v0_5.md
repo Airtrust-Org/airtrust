@@ -1,9 +1,9 @@
 # AirTrust - RBAC + Audit Trail v2 Phased Implementation Plan
 
-**Data:** 2026-06-02
+**Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
-**Modo:** Plano faseado conceitual. Nenhuma migration real foi criada.
+**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
+**Modo:** Plano faseado com Fase 1 versionada localmente. Nenhuma migration foi executada em produção.
 
 ## 1. Fase 0 - Preconditions
 
@@ -19,18 +19,20 @@
 
 ## 2. Fase 1 - Audit Trail v2 schema
 
+- **Status:** `SCHEMA_READY` - migration `0385_audit_events_v2.sql` e testes locais criados.
 - **Objetivo:** introduzir estrutura canonica de auditoria em modo aditivo e backward-compatible.
-- **Arquivos provaveis:** migrations futuras, `worker-airtrust/src/lib/audit/*`, validadores e queries de observabilidade.
-- **Migrations provaveis:** nova tabela canonica de audit trail; indices para `empresa_id`, `target_empresa_id`, `request_id`, `correlation_id`, `event_category`, `entity_type`, `support_reason`.
-- **Testes obrigatorios:** apply/revert local; indices; leitura vazia; sanitizacao minima; no sensitive payloads.
-- **Rollback:** manter writers antigos e nao remover tabelas legadas.
+- **Arquivos implementados:** `worker-airtrust/migrations/0385_audit_events_v2.sql` e `worker-airtrust/src/__tests__/migrations/audit-events-v2-schema.test.ts`.
+- **Migration:** nova tabela `audit_events_v2`; indices minimos para empresa, target empresa, ator, request e categoria.
+- **Testes implementados:** apply local; campos; indices; insert sanitizado; defaults; no sensitive fields; coexistencia com `audit_logs`.
+- **Rollback:** nao executar a migration ou, apos aplicacao futura, preservar o schema aditivo sem uso; manter writers antigos e nao remover tabelas legadas.
 - **Risco:** alto.
 - **Modelo recomendado:** `GPT-5.5 Altissimo`.
-- **Deploy:** sim.
-- **Criterio de aceite:** schema aditivo aplicado sem quebrar readers antigos e sem alterar comportamento do auth/RBAC.
+- **Deploy:** nao realizado nesta sprint.
+- **Criterio de aceite:** schema aditivo versionado e validado sem alterar comportamento do auth/RBAC. Aplicacao em ambiente aprovado continua pendente.
 
 ## 3. Fase 2 - Audit writer canonicalization
 
+- **Status:** proxima fase recomendada; ainda nao implementada.
 - **Objetivo:** centralizar escrita de eventos criticos no writer canonico com dual-write controlado.
 - **Arquivos provaveis:** `worker-airtrust/src/utils/auditoria.ts`, `worker-airtrust/src/utils/db.ts`, `worker-airtrust/src/lib/frms/db-service-shared.ts`, `worker-airtrust/src/lib/audit/context.ts`, call sites criticos em auth/admin/assets/FRMS.
 - **Migrations provaveis:** nenhuma nova obrigatoria alem da Fase 1.
