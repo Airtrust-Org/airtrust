@@ -83,3 +83,58 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 2. Migrar todas as tabelas base de SIGVOOS e remover `ensureSigvoosTables` dos serviços e rotas.
 3. Canonicalizar `documentos` em migration única e remover `api-bootstrap`/`auto-migration-documentos`.
 4. Revisitar `qualificacoes` e `simuladores` para retirar os `ensure*` remanescentes já cobertos por migration.
+
+---
+
+## Sprint V — DDL Runtime Residual Design (2026-06-03)
+
+**Status:** DESIGN_READY. Sprint V executado em modo read-only/docs-only. Inventário completo, classificação, lacunas de migration mapeadas, ordem segura definida.
+
+### Inventário atualizado
+
+A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (excluindo docs/scripts), classificadas em:
+
+| Classe | Quantidade | Descrição |
+|---|---|---|
+| RUNTIME_HOT_PATH | 3 | DDL executado em handlers de rota HTTP normal, sem migration correspondente |
+| RUNTIME_HOT_PATH_COVERED | 6 | DDL em hot path mas já coberto por migration numerada |
+| RUNTIME_BOOTSTRAP | 1 | DDL executado apenas no startup do worker |
+| LEGACY_QUARANTINED | 4 | Rotas admin-only de migração manual |
+| TEST_ONLY / FALSE_POSITIVE | 6 | Apenas em arquivos de teste ou regex de detecção |
+
+### Resíduos confirmados (exigem migration)
+
+| ID | Arquivo | Lacuna | Migration necessária |
+|---|---|---|---|
+| R01 | `services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` — 3 tabelas base + 1 unique index sem migration | `0387_integracoes_sigvoos_base_tables.sql` |
+| R03 | `services/treinamentos-planejados-integration.ts` | `solicitacoes_treinamento.treinamento_planejado_id`, `status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` — 2 colunas + 1 índice parcial sem migration | `0386_solicitacoes_treinamento_planejado_link.sql` |
+| R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `documentos` — sem migration canônica única que cubra schema completo + 5 índices do bootstrap | `0388_documentos_canonical_schema.sql` |
+
+### Novos residuais encontrados (não documentados anteriormente)
+
+| ID | Arquivo | DDL | Cobertura |
+|---|---|---|---|
+| R05 | `routes/qualificacoes/tipos.ts` | ALTER TABLE (2 colunas) | `0317` — coberto ✓ |
+| R06 | `routes/qualificacoes/historico-helpers.ts` | ALTER TABLE (5 colunas em `qualificacoes_historico`) | `0173` + migrations antigas — coberto ✓ |
+| R07 | `routes/qualificacoes/historico-helpers.ts` | ALTER TABLE (2 colunas em `qualificacoes_tipos`) | `0317` — coberto ✓ |
+| R08 | `routes/qualificacoes/historico-helpers.ts` | ALTER TABLE + CREATE INDEX em `modelos_aeronave` | `0183` — coberto ✓ |
+| R09 | `routes/qualificacoes/shared.ts` | ALTER TABLE dinâmico | Cobertura incerta — requer verificação |
+| R10 | `routes/simuladores-modelos.ts` | ALTER TABLE + CREATE INDEX em `modelos_sessao` | `0184` — coberto ✓ |
+
+### Ordem revisada (4 fases)
+
+| Fase | Migration | Remoção | Risco |
+|---|---|---|---|
+| Pré-Fase | Nenhuma | Remover R02, R05, R06, R07, R08, R10 — 6 funções `ensure*` já cobertas | BAIXO |
+| Fase 1 | M1 — `0386` (link Treinamentos) | Remover R03 | MÉDIO |
+| Fase 2 | M2 — `0387` (SIGVOOS base) | Remover R01 | ALTO |
+| Fase 3 | M3 — `0388` (Documentos canônico) | Remover R04 | MÉDIO |
+
+### Documentos produzidos
+
+- `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md` — inventário completo, classificação, lacunas, ordem
+- `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md` — pré-condições, migrations detalhadas, validação, rollback
+
+### Status na matriz
+
+DDL_RUNTIME = DESIGN_READY (antes: PARTIAL para DDL-01, OPEN para DDL-02/03/04).

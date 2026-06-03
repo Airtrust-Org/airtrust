@@ -2,9 +2,9 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `87a5b2b3e107b72a64fb9d79080ea21068145816`
-**Modo:** Matriz atualizada após o Sprint T.1 de execução local aprovada do Audit v2. Sem migration remota, backfill ou alteração manual de dados reais.
-**Sprints de origem consolidados:** A (RBAC), B (Audit Trail/LGPD), C (Status Enum), D (Testes Beta), E (DDL), F (Data Quality), G (Runner), H (Repository Dashboard), I (Supabase Feasibility), J (Supabase Preparation), K (Tenant Isolation Docs), K.1 (Tenant Residuals), L (LMS Reports Integration), Reauditoria Opus v2, General Audit Opus.
+**HEAD base:** `78924b1ebdce474c7e38118f66db67b73afff94e`
+**Modo:** Matriz atualizada após Sprint V (DDL Runtime Residual Design). Sem migration remota, backfill ou alteração manual de dados reais.
+**Sprints de origem consolidados:** A (RBAC), B (Audit Trail/LGPD), C (Status Enum), D (Testes Beta), E (DDL), F (Data Quality), G (Runner), H (Repository Dashboard), I (Supabase Feasibility), J (Supabase Preparation), K (Tenant Isolation Docs), K.1 (Tenant Residuals), L (LMS Reports Integration), Reauditoria Opus v2, General Audit Opus, V (DDL Residual Design).
 
 ---
 
@@ -121,10 +121,11 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| DDL-01 | DDL_RUNTIME | DDL removido de hot paths (8 funções `ensure*` removidas) | S2 | PARTIAL | `ensure*` removidas de preferencias, escalas-preferencias, matriz-treinamento, frms-fira, alertas, notificacoes-convocacao, treinamentos-planejados; funções órfãs removidas | `01f0902` | Sim | `no-runtime-ddl-hot-paths.test.ts` | 3 residuais mantidos: `sigvoos-frms.ts`, `treinamentos-planejados-integration.ts`, `auto-migration-documentos.ts` | Sprint futuro: migrations para os 3 residuais | GPT-5.5 Altissimo |
-| DDL-02 | DDL_RUNTIME | `sigvoos-frms.ts` ainda cria tabelas `integracoes_sigvoos_*` em runtime | S2 | OPEN | Cobertura de migration apenas parcial; mantido por segurança | — | — | — | Exige migration explícita para 3 tabelas base e índices | Sprint futuro: migration SIGVOOS | GPT-5.5 Altissimo |
-| DDL-03 | DDL_RUNTIME | `treinamentos-planejados-integration.ts` ainda faz `ALTER TABLE` em `solicitacoes_treinamento` | S2 | OPEN | Mantido; sem migration para colunas de link | — | — | — | Exige migration para `treinamento_planejado_id`, `status_pre_agendamento`, índice | Sprint futuro: migration treinamentos | GPT-5.5 Altissimo |
-| DDL-04 | DDL_RUNTIME | `auto-migration-documentos.ts` segue no bootstrap da API | S2 | OPEN | Não tocado; cobertura de schema legada e mista | — | — | — | Exige consolidação de `documentos` em migration canônica única | Sprint futuro: canonicalizar schema documentos | GPT-5.5 Alta |
+| DDL-01 | DDL_RUNTIME | DDL removido de hot paths (8 funções `ensure*` removidas) | S2 | DESIGN_READY | Sprint E removeu 8 hot paths. Sprint V inventariou 20 ocorrências, classificou 3 residuais críticos (R01/R03/R04), 6 cobertos por migration (R02/R05-R10), 4 legacy quarantined. Design doc e readiness completos. | `01f0902`, Sprint V | Sim (Sprint E); Não (Sprint V — docs-only) | `no-runtime-ddl-hot-paths.test.ts` | 3 residuais mantidos (exigem migration); 6 cobertos pendentes de remoção na Pré-Fase | Pré-Fase (remover cobertos) → Fase 1-3 (migrar + remover residuais) | GPT-5.4 Alta (Pré-Fase) / GPT-5.5 Altissimo (Fases 1-3) |
+| DDL-02 | DDL_RUNTIME | `sigvoos-frms.ts` ainda cria tabelas `integracoes_sigvoos_*` em runtime | S2 | DESIGN_READY | Sprint V confirmou: cobertura de migration apenas parcial (`0352` cobre `sigvoos_mapeamento_manual` + `frms_jornada_pendente`; `0354` referencia `integracoes_sigvoos_config` mas não cria). 3 tabelas base + 1 unique index sem migration. | — | — | — | Exige M2 (`0387_integracoes_sigvoos_base_tables.sql`). 10 call sites a limpar. Atenção à dependência com `0354`. | Fase 2: migration SIGVOOS → remover DDL | GPT-5.5 Altissimo |
+| DDL-03 | DDL_RUNTIME | `treinamentos-planejados-integration.ts` ainda faz `ALTER TABLE` em `solicitacoes_treinamento` | S2 | DESIGN_READY | Sprint V confirmou: `0280` cria tabela base, `0345` adiciona `lms_matricula_id`. Nenhuma migration para `treinamento_planejado_id`, `status_pre_agendamento` e índice parcial. 2 colunas + 1 índice sem migration. | — | — | — | Exige M1 (`0386_solicitacoes_treinamento_planejado_link.sql`). 3 call sites a limpar. | Fase 1: migration Treinamentos Link → remover DDL | GPT-5.5 Altissimo |
+| DDL-04 | DDL_RUNTIME | `auto-migration-documentos.ts` segue no bootstrap da API | S2 | DESIGN_READY | Sprint V confirmou: `documentos` sem migration canônica única. Schema evoluiu via `0136`+`0137`+`0138`+`0165`+bootstrap. Exige extração de schema de produção para criar migration consolidada. | — | — | — | Exige M3 (`0388_documentos_canonical_schema.sql`). Requer extração prévia de schema de produção. | Fase 3: consolidar schema → remover bootstrap | GPT-5.5 Alta |
+| DDL-05 | DDL_RUNTIME | `qualificacoes/tipos.ts`, `historico-helpers.ts`, `simuladores-modelos.ts`, `shared.ts` — DDL residual em qualificações e simuladores | S3 | PARTIAL | Sprint V identificou 6 ocorrências RUNTIME_HOT_PATH_COVERED (R02, R05-R10) — todas já têm migration correspondente. Removíveis na Pré-Fase sem migration nova. | — | — | — | Remover funções `ensure*` já cobertas na Pré-Fase (zero migration). R09 (`shared.ts`) requer verificação adicional. | Pré-Fase: remover cobertos | GPT-5.4 Alta |
 
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -197,7 +198,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | BETA-03 | MODULOS_BETA | LMS/EAD com baseline mínimo | Cobrir upload real e sincronizações |
 | BETA-04 | MODULOS_BETA | Treinamentos Planejados com bloqueios básicos testados | Cobrir contratos separados de leitura/escrita |
 | ARCH-01 | ARQUITETURA_SQL_REPOSITORY | Repository pilot em 2 domínios mas cobertura ainda pequena | Expandir gradualmente para próximos domínios read-only |
-| DDL-01 | DDL_RUNTIME | 8 hot paths limpos, mas 3 residuais mantidos por segurança | Planejar migrations para SIGVOOS, treinamentos e documentos |
+| DDL-01 | DDL_RUNTIME | 8 hot paths limpos, mas 3 residuais mantidos por segurança + 6 cobertos pendentes de remoção | DESIGN_READY — Sprint V completou inventário/design. Pré-Fase (zero migration) remove os 6 cobertos; Fases 1-3 migram os 3 residuais |
 
 ---
 
@@ -212,9 +213,9 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | STATUS-02 | STATUS_ENUM | Status residual em cron/alertas/EVD | Parcialmente — escala |
 | DQ-02 | DATA_QUALITY | Execução operacional completa pendente | Sim — GO pleno |
 | BETA-05 | MODULOS_BETA | EVD sem cobertura de teste | Sim — cobertura |
-| DDL-02 | DDL_RUNTIME | `sigvoos-frms.ts` DDL residual | Não (bloqueia 5+ empresas) |
-| DDL-03 | DDL_RUNTIME | `treinamentos-planejados-integration.ts` DDL residual | Não (bloqueia 5+ empresas) |
-| DDL-04 | DDL_RUNTIME | `auto-migration-documentos.ts` DDL residual | Não (bloqueia 5+ empresas) |
+| DDL-02 | DDL_RUNTIME | `sigvoos-frms.ts` DDL residual | Não (bloqueia 5+ empresas) — DESIGN_READY |
+| DDL-03 | DDL_RUNTIME | `treinamentos-planejados-integration.ts` DDL residual | Não (bloqueia 5+ empresas) — DESIGN_READY |
+| DDL-04 | DDL_RUNTIME | `auto-migration-documentos.ts` DDL residual | Não (bloqueia 5+ empresas) — DESIGN_READY |
 | PERF-01 | PERFORMANCE_EFICIENCIA | Bundle grande, chunks duplicados | Não |
 | PERF-02 | PERFORMANCE_EFICIENCIA | Possíveis N+1 queries | Não |
 | PERF-03 | PERFORMANCE_EFICIENCIA | Rotas grandes sem auditoria | Não |
@@ -297,8 +298,9 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 6. **Sprint T.1 - Local activation run** ✅ — GPT-5.4 Alta
 7. **Próxima fase - staging flag test com schema aplicado e rollback por flag** — GPT-5.5 Altissimo
 6. **Cobertura beta (EVD + complementos)** — GPT-5.4 Alta
-7. **DDL runtime residual design-only** (planejar migrations sem executar) — GPT-5.5 Altissimo
-8. **R2 metadata para novos uploads** (defense-in-depth) — GPT-5.4 Alta
+7. **DDL runtime residual design** ✅ (Sprint V concluído — inventário, design e readiness prontos) — GPT-5.5 Altissimo
+8. **DDL Pré-Fase — remover `ensure*` já cobertos** (6 funções, zero migration, risco baixo) — GPT-5.4 Alta
+9. **R2 metadata para novos uploads** (defense-in-depth) — GPT-5.4 Alta
 9. **Segunda empresa apenas depois das condições mínimas** (CONDITIONAL GO)
 
 ---
