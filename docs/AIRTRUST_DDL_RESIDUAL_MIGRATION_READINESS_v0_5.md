@@ -207,7 +207,7 @@ Isso significa que `0354` **assume que a tabela já existe**. Se M2 for aplicada
 
 **Nome sugerido:** `0388_documentos_canonical_schema.sql`
 
-**Conteúdo:** A ser extraído do schema atual de produção (requer acesso read-only aprovado para extrair o DDL completo). O template:
+**Conteúdo:** Baseado no probe estrutural remoto já executado em produção com `PRAGMA table_info(...)` e `PRAGMA index_list(...)`. O template inicial continua sendo:
 
 ```sql
 -- Migration: Schema canônico da tabela documentos
@@ -247,11 +247,18 @@ CREATE INDEX IF NOT EXISTS idx_documentos_funcionario_tipo ON documentos(funcion
 
 **Tabelas afetadas:** `documentos`
 **Tipo:** Aditivo (CREATE TABLE IF NOT EXISTS + índices)
-**Risco:** BAIXO — `IF NOT EXISTS` garante que tabela existente não é alterada
+**Risco:** MÉDIO — produção já tem tabela existente com schema parcial/legado
 **Rollback:** N/A — não altera tabela existente
-**Dependências:** Extrair schema exato de produção antes de escrever a migration final
+**Dependências:** Usar a baseline remota já capturada para escrever a migration final de forma idempotente
 
-**⚠️ Pré-requisito:** Esta migration requer acesso read-only a produção para extrair o schema atual com `PRAGMA table_info('documentos')` e `SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='documentos'`. Sem isso, a migration pode não corresponder exatamente ao schema real.
+**⚠️ Pré-requisito atualizado:** o probe read-only já foi executado em produção usando apenas `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`. O que ele confirmou:
+- `documentos` existe com `empresa_id DEFAULT 1`
+- `historico_id` e `sha256_hash` não existem em produção
+- `idx_documentos_uuid` nominal não existe; a unicidade está coberta por autoíndices SQLite
+- `pasta_virtual.documento_id` não existe
+- `certificados_templates` existe em produção
+
+Portanto, a `0388` já pode ser especificada contra um baseline real, mas não pode ser `CREATE TABLE IF NOT EXISTS` puro. Ela deve ser canônica e idempotente sobre schema parcial/existente.
 
 ---
 
@@ -460,7 +467,7 @@ Cada fase só pode prosseguir se:
 2. ❌ **Não aplicar migration em produção sem testar em staging.** Schema divergente entre ambientes é difícil de diagnosticar.
 3. ❌ **Não remover `ensureSigvoosTables()` completamente sem verificar `0352`.** As tabelas `sigvoos_mapeamento_manual` e `frms_jornada_pendente` são criadas tanto por `0352` quanto por `ensureSigvoosTables()`. Se `0352` não foi aplicada em todos os ambientes, remover a função quebra.
 4. ❌ **Não assumir que `0354` foi aplicada com sucesso.** Se `0354` falhou silenciosamente porque `integracoes_sigvoos_config` não existia, a coluna `notificar_falha_email` nunca foi adicionada.
-5. ❌ **Não criar M3 sem extrair schema real de produção.** O schema de `documentos` pode ter colunas ou índices adicionais não capturados no bootstrap ou nas migrations conhecidas.
+5. ❌ **Não criar M3 ignorando a baseline remota já capturada.** A `0388` precisa partir do probe real de produção, não apenas do bootstrap ou das migrations históricas.
 6. ❌ **Não deployar worker com DDL removido sem antes aplicar a migration.** Ordem correta: migration primeiro, deploy do worker depois.
 
 ---
@@ -509,4 +516,6 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 
 **Addendum Sprint R04.1 (2026-06-03):** `R04 = READINESS_MAPPED`. A Sprint R04.1 executou o mapeamento completo do runtime DDL de Documentos sem criar migration. Confirmou-se: (1) o bootstrap `ensureDocumentosTableExists()` cria a tabela `documentos` com 12 colunas + 5 índices — executa via `onApiRequestBootstrap` em todo startup do Worker; (2) a coluna `historico_id` e o índice `idx_documentos_historico` só existem via bootstrap — NENHUMA migration os cria; (3) as colunas `sha256_hash` (0137_add_integrity_checks) e `empresa_id` (0165) só existem via migration — o bootstrap não as cria; (4) a migration 0200 referencia colunas `tipo_documento` e `qualificacao_historico_id` que nunca foram criadas por nenhuma migration — colunas fantasmas; (5) `certificados_templates` não tem migration CREATE — origem desconhecida; (6) `pasta_virtual.documento_id` nunca foi adicionado por migration — apenas probe estrutural em runtime; (7) 9 lacunas confirmadas (L1-L9) com severidades ALTA/MÉDIA/BAIXA; (8) probe estrutural remoto (`PRAGMA table_info(documentos)`) é OBRIGATÓRIO antes da criação da migration 0388; (9) ordem segura futura definida: probe → criar 0388 → testar local → staging → produção → remover bootstrap → deploy. Documento detalhado: `docs/AIRTRUST_DOCUMENTOS_DDL_R04_READINESS_v0_5.md`. Ordem restante consolidada: probe remoto R04 → criar/aplicar 0388 → R04 closure. Resta apenas R01 (MIGRATION_CHAIN_BLOCKED_BY_0354) após R04.
 
-**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R09 closure e Sprint R04.1 readiness mapping em 2026-06-03.
+**Addendum Sprint R04.2 (2026-06-03):** o probe estrutural remoto read-only de Documentos foi executado manualmente em `production` usando somente `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`. Resultado operacional registrado: `Total queries executed: 6`, `Rows read: 0`, `Rows written: 0`, sem DML, sem DDL e sem consulta de dados de linha. Evidência estrutural principal: `documentos` existe com `empresa_id DEFAULT 1`, mas sem `historico_id` e sem `sha256_hash`; `idx_documentos_uuid` nominal não existe; `pasta_virtual.documento_id` não existe; `certificados_templates` existe em produção. Novo status consolidado: **`R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE`**. Ordem restante atualizada: criar/testar/aplicar `0388` contra a baseline capturada → remover bootstrap → R04 closure. Depois disso, resta apenas `R01` (`MIGRATION_CHAIN_BLOCKED_BY_0354`).
+
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R09 closure, Sprint R04.1 readiness mapping e Sprint R04.2 probe baseline em 2026-06-03.

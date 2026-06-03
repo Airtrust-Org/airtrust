@@ -1,8 +1,8 @@
 # AirTrust — Documentos DDL R04 Readiness v0.5
 
 **Data:** 2026-06-03
-**Sprint:** R04.1 — Documentos canonical schema readiness
-**Status:** READINESS_MAPPED
+**Sprint:** R04.2 — fechamento documental do probe estrutural remoto
+**Status:** READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE
 **Modelo:** DeepSeek V4 Pro
 **Próximo modelo recomendado:** GPT-5.4 Alta (para criação da migration 0388)
 
@@ -11,6 +11,8 @@
 ## 1. Objetivo
 
 Mapear o estado atual do runtime DDL de Documentos para preparar a futura migration `0388_documentos_canonical_schema.sql`, que possibilitará a remoção segura de `auto-migration-documentos.ts` do runtime.
+
+> **Addendum Sprint R04.2 (2026-06-03):** o probe estrutural remoto read-only foi executado manualmente em `production` usando somente `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`. Resultado operacional registrado: `Total queries executed: 6`, `Rows read: 0`, `Rows written: 0`, sem DML, sem DDL e sem consulta de dados de linha. Baseline confirmado: `documentos` existe com `empresa_id` e sem `historico_id`/`sha256_hash`; `idx_documentos_uuid` nominal não existe e a unicidade está coberta por autoíndices SQLite; `pasta_virtual.documento_id` não existe; `certificados_templates` existe em produção. **R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE.**
 
 ---
 
@@ -222,7 +224,125 @@ CREATE INDEX IF NOT EXISTS idx_documentos_tipo ON documentos(tipo) WHERE deleted
 CREATE INDEX IF NOT EXISTS idx_documentos_funcionario_tipo ON documentos(funcionario_id, tipo) WHERE deleted_at IS NULL;
 ```
 
-### 6.3 Respostas às 10 perguntas
+### 6.3 Baseline remoto capturado em produção (R04.2)
+
+**Segurança do probe executado**
+
+```text
+Target: production
+SQL usado: PRAGMA only
+Total queries executed: 6
+Rows read: 0
+Rows written: 0
+DML/DDL: não
+Dados de linha: não
+```
+
+**Tabela `documentos`**
+
+```text
+Colunas:
+- id INTEGER pk
+- uuid TEXT notnull
+- funcionario_id INTEGER notnull
+- nome_arquivo TEXT notnull
+- tipo TEXT notnull
+- tamanho INTEGER notnull
+- r2_key TEXT notnull
+- descricao TEXT nullable
+- created_at TEXT notnull default datetime('now')
+- updated_at TEXT notnull default datetime('now')
+- deleted_at TEXT nullable default NULL
+- empresa_id INTEGER nullable default 1
+
+Índices:
+- idx_documentos_empresa
+- sqlite_autoindex_documentos_2
+- sqlite_autoindex_documentos_1
+
+Observações:
+- `historico_id` não existe em produção.
+- `sha256_hash` não existe em produção.
+- `idx_documentos_uuid` nominal não apareceu; unicidade de `uuid` está coberta por autoíndice SQLite.
+- Os índices nominais `idx_documentos_funcionario`, `idx_documentos_historico`, `idx_documentos_deleted` e `idx_documentos_r2_key` não apareceram no baseline remoto.
+```
+
+**Tabela `pasta_virtual`**
+
+```text
+Colunas:
+- id INTEGER pk
+- funcionario_id INTEGER notnull
+- tipo_documento TEXT notnull
+- categoria TEXT nullable
+- caminho_arquivo TEXT nullable
+- arquivourl TEXT nullable
+- nome_arquivo TEXT nullable
+- nomeoriginal TEXT nullable
+- arquivo_tamanho INTEGER nullable
+- tamanho INTEGER nullable
+- dataupload TEXT nullable
+- created_at TEXT nullable default datetime('now')
+- updated_at TEXT nullable default datetime('now')
+- uploadedby INTEGER nullable
+- certificacao_id INTEGER nullable
+- descricao TEXT nullable
+- deleted_at TEXT nullable
+- empresa_id INTEGER nullable default 1
+
+Índices:
+- idx_pasta_virtual_empresa
+- idx_pasta_virtual_deleted
+- idx_pasta_virtual_funcionario
+
+Observações:
+- `documento_id` não existe em produção.
+- Nenhum índice relacionado a `documento_id` existe no baseline remoto.
+```
+
+**Tabela `certificados_templates`**
+
+```text
+Colunas:
+- id INTEGER pk
+- empresa_id INTEGER notnull
+- nome VARCHAR(100) notnull
+- descricao TEXT nullable
+- tipo VARCHAR(50) default 'PADRAO'
+- template_json TEXT notnull
+- logo_url TEXT nullable
+- background_url TEXT nullable
+- assinatura_url TEXT nullable
+- fonte VARCHAR(50) default 'Arial'
+- tamanho_fonte_titulo INTEGER default 24
+- tamanho_fonte_corpo INTEGER default 14
+- cor_primaria VARCHAR(7) default '#000000'
+- cor_secundaria VARCHAR(7) default '#666666'
+- cor_destaque VARCHAR(7) default '#0066CC'
+- orientacao VARCHAR(20) default 'landscape'
+- tamanho_papel VARCHAR(10) default 'A4'
+- margem_cm DECIMAL(4,2) default 2.0
+- ativo BOOLEAN default 1
+- padrao BOOLEAN default 0
+- versao VARCHAR(10) default '1.0'
+- tags TEXT nullable
+- created_by INTEGER nullable
+- created_at DATETIME default CURRENT_TIMESTAMP
+- updated_by INTEGER nullable
+- updated_at DATETIME default CURRENT_TIMESTAMP
+- deleted_at DATETIME nullable
+
+Índices:
+- idx_templates_tipo
+- idx_templates_padrao
+- idx_templates_empresa_ativo
+
+Observações:
+- `certificados_templates` existe em produção.
+- A origem histórica continua sem migration CREATE reconciliada.
+```
+
+### 6.4 Respostas às 10 perguntas
 
 **1. Quais tabelas a 0388 precisa garantir?**
 Apenas `documentos`. As tabelas `pasta_virtual`, `arquivos`, `funcionario_documentos`, `documentos_downloads` e `certificados_templates` já são cobertas por migrations existentes (ou têm origem pré-migration confirmada em produção).
@@ -251,16 +371,16 @@ Os 9 índices listados em 6.2, cobrindo tanto os do bootstrap quanto os de migra
 **SIM, com ressalva.** `CREATE TABLE IF NOT EXISTS` é seguro para o caso feliz (tabela não existe). Mas em produção a tabela já existe com schema potencialmente incompleto — `IF NOT EXISTS` não faria nada. Será necessário complementar com `ALTER TABLE ADD COLUMN` para colunas faltantes (usando idempotência via try/catch ou probe estrutural prévio).
 
 **7. Há risco de ALTER TABLE ADD COLUMN duplicado?**
-Sim. Se o probe estrutural não for feito antes, as colunas `historico_id`, `sha256_hash`, ou `empresa_id` podem já existir → erro em D1. Estratégia recomendada: probe estrutural read-only antes da migration, ou usar `ALTER TABLE ADD COLUMN` dentro de bloco condicional no script de migration (D1 não suporta `IF NOT EXISTS` para colunas).
+Sim. O probe remoto já eliminou a incerteza principal do baseline de produção: `historico_id` e `sha256_hash` estão ausentes; `empresa_id` existe com default `1`. A futura `0388` ainda precisa ser idempotente para ambientes não-prod e para variações legadas, mas agora não deve assumir schema limpo nem usar `ALTER TABLE` às cegas.
 
 **8. Precisa probe estrutural remoto antes da 0388?**
-**SIM, FORTEMENTE RECOMENDADO.** O schema de produção é desconhecido em detalhes. Não sabemos se:
-- `historico_id` existe em produção
-- `sha256_hash` existe em produção
-- `empresa_id` existe e qual o default
-- As colunas `tipo_documento` e `qualificacao_historico_id` referenciadas por 0200 existem
-
-O probe remoto deve executar `PRAGMA table_info(documentos)` em produção e retornar a lista de colunas + tipos + defaults.
+**SIM — e ele já foi executado na Sprint R04.2.** O baseline de produção deixou de ser hipotético:
+- `historico_id` não existe em `documentos`
+- `sha256_hash` não existe em `documentos`
+- `empresa_id` existe com default `1`
+- `idx_documentos_uuid` nominal não existe
+- `pasta_virtual.documento_id` não existe
+- `certificados_templates` existe em produção
 
 **9. Pode remover auto-migration-documentos depois da 0388?**
 **SIM, APÓS confirmação.** Condições:
@@ -270,15 +390,14 @@ O probe remoto deve executar `PRAGMA table_info(documentos)` em produção e ret
 - Smoke test confirma rotas de certificados/pasta virtual funcionando
 
 **10. Qual ordem segura?**
-1. **Probe estrutural remoto** → `PRAGMA table_info(documentos)` em produção
-2. **Criar migration 0388** → adaptada ao resultado do probe
-3. **Testar migration localmente** → chain test com schema limpo
-4. **Aplicar migration em staging** → validar
-5. **Aplicar migration em produção** → via D1 migrations apply
-6. **Probe pós-migration** → confirmar schema
-7. **Remover** `ensureDocumentosTableExists` + `runApiBootstrap` call
-8. **Deploy Worker/API**
-9. **Smoke test** → certificados, pasta virtual
+1. **Criar migration 0388** → adaptada ao baseline remoto capturado
+2. **Testar migration localmente** → chain test com schema limpo
+3. **Aplicar migration em staging** → validar
+4. **Aplicar migration em produção** → via D1 migrations apply
+5. **Probe pós-migration** → confirmar schema
+6. **Remover** `ensureDocumentosTableExists` + `runApiBootstrap` call
+7. **Deploy Worker/API**
+8. **Smoke test** → certificados, pasta virtual
 
 ---
 
@@ -286,15 +405,15 @@ O probe remoto deve executar `PRAGMA table_info(documentos)` em produção e ret
 
 | # | Lacuna | Severidade | Impacto |
 |---|---|---|---|
-| L1 | `historico_id` só existe via bootstrap — NENHUMA migration a cria | ALTA | Migration chain pura não produz esta coluna; rotas de certificados podem usar esta FK |
+| L1 | `historico_id` não existe no baseline de produção e só existe via bootstrap — NENHUMA migration a cria | ALTA | Produção real diverge do bootstrap; a 0388 precisará decidir explicitamente se canonicaliza esta FK |
 | L2 | Colunas `tipo_documento` e `qualificacao_historico_id` referenciadas em 0200 nunca foram criadas | ALTA | Migration 0200 tenta criar índices em colunas inexistentes → possível falha silenciosa em D1 |
-| L3 | `sha256_hash` só existe via migration 0137_add_integrity_checks — bootstrap não a cria | MÉDIA | Ambiente novo via bootstrap-only não tem checksum |
-| L4 | `empresa_id` só existe via migration 0165 — bootstrap não a cria | ALTA | Ambiente novo via bootstrap-only não tem tenant isolation em `documentos` |
-| L5 | `idx_documentos_deleted` não tem cobertura explícita de migration | BAIXA | Performance de soft-delete queries |
-| L6 | `idx_documentos_uuid` não tem cobertura explícita de migration (mas UNIQUE gera índice automático) | BAIXA | Nome do índice pode divergir |
-| L7 | `certificados_templates` não tem migration CREATE — origem desconhecida | ALTA | Pode não existir em ambiente novo; referenciada em 0225/0226/backup |
-| L8 | `pasta_virtual.documento_id` nunca foi adicionado por migration — apenas probe estrutural | MÉDIA | Código adapta-se via probe, mas coluna pode não existir |
-| L9 | Bootstrap não cria índices parciais (WHERE deleted_at IS NULL) que migrations 0137/0138 criam | BAIXA | Performance de queries com soft-delete |
+| L3 | `sha256_hash` não existe no baseline de produção, embora exista em migration 0137_add_integrity_checks | MÉDIA | O schema real é parcial/legado; a 0388 terá de adicionar a coluna de forma idempotente |
+| L4 | `empresa_id` existe em produção via legado/migration, mas o bootstrap não a cria | ALTA | Ambientes bootstrap-only continuam sem isolamento tenant em `documentos` |
+| L5 | `idx_documentos_deleted` não tem cobertura explícita de migration e não apareceu no baseline remoto | BAIXA | Performance de soft-delete queries |
+| L6 | `idx_documentos_uuid` nominal não apareceu no baseline remoto (unicidade via autoíndice SQLite) | BAIXA | Nome do índice diverge do bootstrap; a 0388 não deve depender do nome nominal em produção |
+| L7 | `certificados_templates` existe em produção, mas segue sem migration CREATE reconciliada | ALTA | Origem histórica permanece obscura para ambientes novos |
+| L8 | `pasta_virtual.documento_id` não existe no baseline remoto e nunca foi adicionado por migration | MÉDIA | Código adapta-se via probe, mas a coluna não pode ser assumida como canônica |
+| L9 | Produção não expôs os índices nominais do bootstrap nem os índices parciais esperados | MÉDIA | A 0388 terá de tratar cobertura de índices sobre baseline parcial/legado |
 
 ---
 
@@ -304,42 +423,38 @@ O probe remoto deve executar `PRAGMA table_info(documentos)` em produção e ret
 |---|---|---|---|
 | 0200 falha em schema limpo (colunas inexistentes) | ALTA | Migration chain quebra | 0388 deve criar colunas antes de 0200 rodar, OU 0200 deve ser corrigido |
 | `certificados_templates` não existe em schema limpo | MÉDIA | Falha em rotas de template | Investigar origem; possivelmente adicionar CREATE TABLE na 0388 |
-| Schema híbrido bootstrap+migration em produção | ALTA | Dificuldade em reproduzir estado real | Probe estrutural remoto antes de qualquer ação |
+| Schema parcial/legado confirmado em produção | ALTA | Dificuldade em reproduzir estado real e risco de migration simplista | Usar a baseline remota capturada como insumo obrigatório da 0388 |
 | Duplicação de índices (bootstrap + migration criam mesmos índices) | BAIXA | Conflito de nomes | `IF NOT EXISTS` em ambos os lados mitiga |
 | FK `historico_id` quebra se `qualificacoes_historico` não existir | BAIXA | Erro em CREATE TABLE | `qualificacoes_historico` é criada cedo na chain (migration 0032) |
 
 ---
 
-## 9. Necessidade de probe estrutural remoto
+## 9. Evidência do probe estrutural remoto
 
-**SIM — OBRIGATÓRIO antes da criação da migration 0388.**
+**Executado com sucesso na Sprint R04.2.**
 
-### Comando proposto (read-only):
+### SQL efetivamente usado (read-only):
 
 ```sql
 PRAGMA table_info(documentos);
+PRAGMA index_list(documentos);
+
+PRAGMA table_info(pasta_virtual);
+PRAGMA index_list(pasta_virtual);
+
+PRAGMA table_info(certificados_templates);
+PRAGMA index_list(certificados_templates);
 ```
 
-Também recomendado:
+### O que o probe revelou:
 
-```sql
-SELECT name FROM sqlite_master WHERE type='table' AND name IN (
-  'documentos', 'pasta_virtual', 'arquivos', 'funcionario_documentos',
-  'documentos_downloads', 'certificados_templates', 'pasta_virtual_jobs'
-);
-SELECT name FROM sqlite_master WHERE type='index' AND name LIKE '%documento%';
-SELECT sql FROM sqlite_master WHERE type='table' AND name='documentos';
-```
-
-### O que o probe deve revelar:
-
-1. Lista exata de colunas em `documentos` na produção
-2. Se `historico_id` existe
-3. Se `sha256_hash` existe
-4. Se `empresa_id` existe e qual DEFAULT
-5. Se `tipo_documento` e `qualificacao_historico_id` existem (colunas fantasmas da 0200)
-6. Se `certificados_templates` existe
-7. Schema real de `pasta_virtual`
+1. Lista exata de colunas em `documentos`, `pasta_virtual` e `certificados_templates`
+2. `historico_id` e `sha256_hash` ausentes em `documentos`
+3. `empresa_id` presente em `documentos` e `pasta_virtual`, com default `1`
+4. `idx_documentos_uuid` nominal ausente, substituído por autoíndices SQLite
+5. `documento_id` ausente em `pasta_virtual`
+6. `certificados_templates` presente em produção
+7. Baseline suficiente para classificar R04 sem consultar dados de linha
 
 ---
 
@@ -368,25 +483,24 @@ A migration 0388 deve:
 
 ### Alternativa: Schema assert + conditional DDL
 
-Se o probe remoto confirmar que a tabela já existe com schema completo, a 0388 pode ser reduzida a um schema assert (verificação) + conditional DDL apenas para colunas/índices faltantes.
+Como o probe remoto confirmou que a tabela já existe com schema parcial/legado, a 0388 deve funcionar como migration canônica idempotente sobre baseline existente, e não como simples `CREATE TABLE IF NOT EXISTS`.
 
 ---
 
 ## 11. Ordem segura futura
 
 ```
-1. PROBE_REMOTO_READONLY     → PRAGMA table_info(documentos) em produção
-2. ANALISE_RESULTADO          → Decidir CREATE vs ALTER vs híbrido
-3. CRIAR_0388                 → Migration canônica adaptada
-4. TESTAR_LOCAL               → Chain test com schema limpo
-5. TESTAR_STAGING             → Aplicar em staging, validar
-6. REVIEW_MIGRATION           → Revisão de código
-7. APLICAR_PRODUCAO           → D1 migrations apply --remote
-8. PROBE_POS_MIGRATION        → Confirmar schema final
-9. REMOVER_BOOTSTRAP          → Deletar ensureDocumentosTableExists + runApiBootstrap
-10. DEPLOY_WORKER              → Deploy sem bootstrap
-11. SMOKE_TEST                  → Validar rotas de certificados/pasta virtual
-12. ATUALIZAR_DOCS             → R04 = RESOLVED
+1. ANALISE_BASELINE_REMOTA     → Consolidar colunas/índices já capturados
+2. CRIAR_0388                  → Migration canônica adaptada
+3. TESTAR_LOCAL                → Chain test com schema limpo
+4. TESTAR_STAGING              → Aplicar em staging, validar
+5. REVIEW_MIGRATION            → Revisão de código
+6. APLICAR_PRODUCAO            → D1 migrations apply --remote
+7. PROBE_POS_MIGRATION         → Confirmar schema final
+8. REMOVER_BOOTSTRAP           → Deletar ensureDocumentosTableExists + runApiBootstrap
+9. DEPLOY_WORKER               → Deploy sem bootstrap
+10. SMOKE_TEST                 → Validar rotas de certificados/pasta virtual
+11. ATUALIZAR_DOCS             → R04 = RESOLVED
 ```
 
 ---
@@ -396,7 +510,7 @@ Se o probe remoto confirmar que a tabela já existe com schema completo, a 0388 
 | Teste | Tipo | Descrição |
 |---|---|---|
 | Chain test 0388 em schema limpo | Unit/Local | Rodar todas as migrations do zero e verificar que `documentos` tem schema completo |
-| Probe estrutural remoto | Read-only prod | `PRAGMA table_info(documentos)` em produção |
+| Probe estrutural remoto | Read-only prod | ✅ Executado com `PRAGMA table_info/index_list` nas 3 tabelas-alvo |
 | Teste de idempotência | Unit/Local | Rodar 0388 duas vezes — segunda deve ser no-op |
 | Schema assertion test | Unit/Local | Verificar que todas as colunas e índices alvo existem após migration chain completa |
 | Smoke certificados | Integração | Upload + download de certificado após migration |
@@ -417,7 +531,7 @@ A migration 0388 é **DDL puro sem DML** — não altera dados. Rollback em prod
 ## 14. Fora do escopo desta fase
 
 - ❌ Criar migration 0388
-- ❌ Executar probe remoto
+- ❌ Criar migration 0388 nesta sprint
 - ❌ Alterar runtime
 - ❌ Alterar schema
 - ❌ Executar D1 remoto
@@ -432,4 +546,4 @@ A migration 0388 é **DDL puro sem DML** — não altera dados. Rollback em prod
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03. Sprint R04.1. Próxima fase: probe estrutural remoto (GPT-5.4 Alta).
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.2 e baseline estrutural remoto de produção. Próxima fase: criar/testar a `0388_documentos_canonical_schema.sql` contra a baseline capturada (GPT-5.4 Alta).

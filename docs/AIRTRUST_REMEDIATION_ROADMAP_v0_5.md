@@ -116,11 +116,11 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. **R03 = RESOLVED.** Sprint Z0 mapeou integralmente R01, a Sprint Z1 criou `0387` + teste local e a Sprint Z1.1 provou o bloqueio de cadeia em `0354`. **R01 = MIGRATION_CHAIN_BLOCKED_BY_0354.** Sprint R09 removeu o ALTER TABLE de `shared.ts`. **R09 = RESOLVED.** Sprint R04.1 mapeou integralmente R04 — 9 lacunas confirmadas, probe remoto OBRIGATÓRIO. **R04 = READINESS_MAPPED.**).
-- **Objetivo:** Concluir as fases remanescentes: Fase 3 (M3 Documentos canônico — probe remoto → criar/aplicar 0388 → remover bootstrap) e Fase 2 (M2 SIGVOOS base — definir baseline/chain plan). Fase 1 (R03 Treinamentos Link) concluída. R09 concluído (Sprint R09). R04 mapeado (Sprint R04.1).
-- **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente (mitigado para R03; mapeado para R01 e R04; 9 lacunas documentadas para R04).
-- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386` e removeu o fallback runtime local. **Sprint X.5 aplicou `0386` em produção e deployou o Worker/API (APP_VERSION=2026-06-03T17:00:27Z-c12d8bf).** Sprint Z0 produziu inventário completo de R01, a Sprint Z1 criou `0387_integracoes_sigvoos_base_tables.sql` e a Sprint Z1.1 confirmou localmente que a cadeia limpa falha em `0354` antes da `0387`. Sprint R04.1 produziu mapeamento completo de R04 com schema canônico alvo e 9 lacunas documentadas. Resta 1 migration nova planejada (`0388`). R09 (shared.ts) = RESOLVED (Sprint R09). R04 = READINESS_MAPPED (Sprint R04.1).
-- **Modelo recomendado:** R04 probe remoto: GPT-5.4 Alta. R04 criar 0388: GPT-5.4 Alta. R01 chain plan: GPT-5.5 Altissimo.
+- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. **R03 = RESOLVED.** Sprint Z0 mapeou integralmente R01, a Sprint Z1 criou `0387` + teste local e a Sprint Z1.1 provou o bloqueio de cadeia em `0354`. **R01 = MIGRATION_CHAIN_BLOCKED_BY_0354.** Sprint R09 removeu o ALTER TABLE de `shared.ts`. **R09 = RESOLVED.** Sprint R04.2 registrou o probe estrutural remoto de produção para R04. **R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE.**).
+- **Objetivo:** Concluir as fases remanescentes: Fase 3 (M3 Documentos canônico — criar/testar/aplicar `0388` sobre a baseline remota capturada → remover bootstrap) e Fase 2 (M2 SIGVOOS base — definir baseline/chain plan). Fase 1 (R03 Treinamentos Link) concluída. R09 concluído (Sprint R09). R04 com probe fechado (Sprint R04.2).
+- **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente (mitigado para R03; mapeado para R01; confirmado para R04 em baseline parcial/legada).
+- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386` e removeu o fallback runtime local. **Sprint X.5 aplicou `0386` em produção e deployou o Worker/API (APP_VERSION=2026-06-03T17:00:27Z-c12d8bf).** Sprint Z0 produziu inventário completo de R01, a Sprint Z1 criou `0387_integracoes_sigvoos_base_tables.sql` e a Sprint Z1.1 confirmou localmente que a cadeia limpa falha em `0354` antes da `0387`. Sprint R04.2 registrou a baseline remota de R04: `documentos` sem `historico_id`/`sha256_hash`, com `empresa_id DEFAULT 1`; `pasta_virtual.documento_id` ausente; `certificados_templates` presente. Resta 1 migration nova planejada (`0388`). R09 (shared.ts) = RESOLVED (Sprint R09). R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE (Sprint R04.2).
+- **Modelo recomendado:** R04 criar 0388: GPT-5.4 Alta. R01 chain plan: GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, quando implementado (Fase 1 deploy já feito; Fase 3 exigirá deploy após remoção do bootstrap).
 - **Migration necessária?:** Sim (1 migration para Fase 3; Fase 2 aguarda baseline/chain plan).
 - **Documentos de referência:** `AIRTRUST_RUNTIME_DDL_REMOVAL_PLAN_v0_5.md`, `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
@@ -208,7 +208,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 4 | Platform roles schema + RBAC/Suporte v2 foundation | Curto prazo, depois do item 3 | Cliente externo | GPT-5.5 Altissimo |
 | 5 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
 | 6 | ~~R09 `qualificacoes/shared.ts`~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | — | — |
-| 7 | DDL Fase 3 - M3 Documentos canonico | Medio prazo | 5+ empresas | GPT-5.5 Alta |
+| 7 | DDL Fase 3 - M3 Documentos canonico sobre baseline remota capturada | Medio prazo | 5+ empresas | GPT-5.5 Alta |
 | 8 | DDL R01 - SIGVOOS baseline/chain plan | Medio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 9 | Status enum expansao | Medio prazo | Escala | GPT-5.4 Alta |
 | 10 | Repository pattern expansao | Medio prazo | Manutenibilidade | GPT-5.4 Alta |
@@ -219,4 +219,4 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ---
 
-**Fim do roadmap.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas, Worker/API deployado, R03 = RESOLVED, Audit v2 schema = APPLIED_SCHEMA_READY_FOR_FLAG_PLAN) e Sprint Z0 (R01 SIGVOOS readiness mapped).
+**Fim do roadmap.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas, Worker/API deployado, R03 = RESOLVED, Audit v2 schema = APPLIED_SCHEMA_READY_FOR_FLAG_PLAN), Sprint Z0 (R01 SIGVOOS readiness mapped) e Sprint R04.2 (baseline estrutural remota de Documentos registrada; R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE).
