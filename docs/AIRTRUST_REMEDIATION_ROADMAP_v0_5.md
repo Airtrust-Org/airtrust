@@ -182,32 +182,24 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ---
 
-## Ordem de execução recomendada (atualizada após Sprint T)
+## Ordem de execucao recomendada (estado consolidado)
 
 | # | Item | Prioridade | Bloqueia | Modelo |
 |---|---|---|---|---|
-| 1 | Smoke autenticado funcional | Imediata | Cliente externo | GPT-5.4 Baixa |
-| 2 | Data Quality completo (staging) | Imediata | GO pleno | GPT-5.4 Alta |
-| 3 | Blindar scripts legados (P2) ✅ RESOLVIDO | — | — | — |
-| 4 | ~~Fechar dirty-deploy residual (P2)~~ ✅ RESOLVIDO | — | — | — |
-| 5 | Sprint R - Audit Trail v2 schema backward-compatible ✅ | Concluído | Compliance e base de suporte | GPT-5.5 Altissimo |
-| 6 | Sprint S - Canonical writer + dual-write mínimo ✅ | Concluído | Compliance e base de suporte | GPT-5.5 Altissimo |
-| 7 | Staging flag test com schema aplicado + validar paridade | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
-| 8 | Platform roles schema + RBAC dual-read foundation | Curto prazo, depois do staging flag test | Cliente externo | GPT-5.5 Altissimo |
-| 9 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
-| 10 | DDL runtime residual design ✅ | Concluído | 5+ empresas | GPT-5.5 Altissimo |
-| 11 | DDL Pré-Fase — remover 6 `ensure*` cobertos ✅ | Concluído | Limpeza | GPT-5.4 Alta |
-| 12 | DDL X.0–X.4 — Probe, versionar, remover fallback R03 ✅ | Concluído | 5+ empresas | GPT-5.4/5.5 |
-| 13 | DDL X.5 — Apply 0385/0386 + Deploy Worker/API ✅ | Concluído | Resolução R03 | GPT-5.4 Alta |
-| 14 | DDL Z0 — SIGVOOS readiness map ✅ | Concluído | 5+ empresas | GPT-5.4 Alta |
-| 15 | DDL Z1.1 — auditar cadeia 0354→0387 e definir plano de baseline | Imediato | 5+ empresas | GPT-5.5 Altissimo |
-| 16 | DDL Fase 3 — M3 Documentos canônico | Médio prazo | 5+ empresas | GPT-5.5 Alta |
-| 16 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
-| 17 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |
-| 18 | Performance/bundle/N+1 audit | Médio prazo | Escala | GPT-5.4 Alta |
-| 19 | Observabilidade multiempresa | Longo prazo | 5+ empresas | GPT-5.5 Alta |
-| 20 | R2 metadata novos uploads | Longo prazo | Defense-in-depth | GPT-5.4 Alta |
-| 21 | Cloudflare Queues dry-run | Longo prazo | Arquitetura | GPT-5.5 Alta |
+| 1 | Smoke autenticado funcional com empresa esperada | Imediata | Cliente externo | GPT-5.4 Baixa |
+| 2 | Data Quality completo (staging/schema completo) | Imediata | GO pleno | GPT-5.4 Alta |
+| 3 | Audit v2 staging flag test + paridade minima | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
+| 4 | Platform roles schema + RBAC/Suporte v2 foundation | Curto prazo, depois do item 3 | Cliente externo | GPT-5.5 Altissimo |
+| 5 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
+| 6 | R09 `qualificacoes/shared.ts` readiness/verification | Curto prazo | 5+ empresas | GPT-5.4 Alta |
+| 7 | DDL Fase 3 - M3 Documentos canonico | Medio prazo | 5+ empresas | GPT-5.5 Alta |
+| 8 | DDL R01 - SIGVOOS baseline/chain plan | Medio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 9 | Status enum expansao | Medio prazo | Escala | GPT-5.4 Alta |
+| 10 | Repository pattern expansao | Medio prazo | Manutenibilidade | GPT-5.4 Alta |
+| 11 | Performance/bundle/N+1 audit | Medio prazo | Escala | GPT-5.4 Alta |
+| 12 | Observabilidade multiempresa | Longo prazo | 5+ empresas | GPT-5.5 Alta |
+| 13 | R2 metadata novos uploads | Longo prazo | Defense-in-depth | GPT-5.4 Alta |
+| 14 | Cloudflare Queues dry-run | Longo prazo | Arquitetura | GPT-5.5 Alta |
 
 ---
 

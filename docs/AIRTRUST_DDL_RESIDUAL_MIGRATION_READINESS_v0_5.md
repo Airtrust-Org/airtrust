@@ -344,14 +344,14 @@ wrangler d1 execute airtrust-db-staging --env staging --remote \
 
 ---
 
-## 5. Ordem recomendada (visão consolidada)
+## 5. Ordem recomendada (visao consolidada, estado restante)
 
 | Fase | Migration | O que faz | Remoção de runtime | Risco | Modelo |
 |---|---|---|---|---|---|
-| **Pré-Fase** | Nenhuma | Remover `ensure*` já cobertos: R02, R05, R06, R07, R08, R10 | 6 funções + call sites | BAIXO | GPT-5.4 Alta |
-| **Fase 1** | M1 — `0386_solicitacoes_treinamento_planejado_link.sql` | Adicionar 2 colunas + 1 índice parcial em `solicitacoes_treinamento` | `ensureSolicitacoesTreinamentoLinkSchema()` + 3 call sites | MÉDIO | GPT-5.5 Altissimo |
-| **Fase 2** | M2 — `0387_integracoes_sigvoos_base_tables.sql` | Criar 3 tabelas base + 4 índices + 1 unique index | `ensureSigvoosTables()` (escopo total ou parcial) + 10 call sites | ALTO | GPT-5.5 Altissimo | **Status: MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1).** `0387` criada, mas a cadeia limpa continua inválida porque `0354` vem antes e faz `ALTER TABLE integracoes_sigvoos_config`. |
-| **Fase 3** | M3 — `0388_documentos_canonical_schema.sql` | Criar schema canônico de `documentos` com todos os índices | `ensureDocumentosTableExists()` + `api-bootstrap.ts` call | MÉDIO | GPT-5.5 Alta |
+| **Fechada** | `0386` | R03 resolvido: migration aplicada e fallback removido | Nenhum trabalho adicional neste eixo | FECHADO | — |
+| **Fase A** | Nenhuma ou prova local | Verificar `R09` em `qualificacoes/shared.ts` e remover apenas se a cobertura de migrations fechar | `ensureHistoricoSchema()` + call sites | BAIXO/MEDIO | GPT-5.4 Alta |
+| **Fase B** | M3 — `0388_documentos_canonical_schema.sql` | Criar schema canonico de `documentos` com todos os indices | `ensureDocumentosTableExists()` + `api-bootstrap.ts` call | MEDIO | GPT-5.5 Alta |
+| **Fase C** | M2 — `0387_integracoes_sigvoos_base_tables.sql` + baseline/chain plan | Tratar a cadeia `0354 -> 0387` antes de qualquer apply/remocao do fallback | `ensureSigvoosTables()` (escopo total ou parcial) + 10 call sites | ALTO | GPT-5.5 Altissimo |
 
 ---
 
@@ -501,6 +501,8 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 
 **Addendum Sprint Z1:** criada a migration `0387_integracoes_sigvoos_base_tables.sql` com as 3 tabelas base e 4 índices ainda garantidos por `ensureSigvoosTables()`. Teste local dedicado PASS, incluindo idempotência e cobertura combinada com `0352`. O fallback R01 foi **preservado** porque a migration `0354_auditoria_critica_schema_hardening.sql` já referenciava `integracoes_sigvoos_config` antes da existência de uma migration base.
 
-**Addendum Sprint Z1.1:** a cadeia foi auditada localmente em schema limpo com pré-requisitos mínimos. A `0354` falha antes da `0387` por ausência de `integracoes_sigvoos_config`, e concatenar a `0387` depois não resgata a execução. Estado novo: `MIGRATION_CHAIN_BLOCKED_BY_0354`.
+**Addendum Sprint Z1.1:** a cadeia foi auditada localmente em schema limpo com pre-requisitos minimos. A `0354` falha antes da `0387` por ausencia de `integracoes_sigvoos_config`, e concatenar a `0387` depois nao resgata a execucao. Estado novo: `MIGRATION_CHAIN_BLOCKED_BY_0354`.
+
+**Addendum Sprint Z2:** `R03` saiu definitivamente da ordem restante. A ordem consolidada agora e: provar/remover `R09` se seguro, planejar `R04` (`0388`) e manter `R01` em baseline/chain plan ate existir estrategia segura para ambientes novos.
 
 **Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure em 2026-06-03.
