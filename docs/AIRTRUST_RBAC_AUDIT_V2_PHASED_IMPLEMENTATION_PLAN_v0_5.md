@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
-**Modo:** Plano faseado com Fase 1 pronta e Fase 2 em dual-write parcial. Nenhuma migration foi executada em produção.
+**HEAD base:** `78509f9ea40b2bf0a50d9be0f1923f1ea66f5bdd`
+**Modo:** Plano faseado com Fase 1 pronta, Fase 2 em dual-write parcial e readiness local/staging documentada. Nenhuma migration foi executada em produção.
 
 ## 1. Fase 0 - Preconditions
 
@@ -36,9 +36,11 @@
 - **Objetivo:** centralizar escrita de eventos criticos no writer canonico com dual-write controlado.
 - **Arquivos implementados:** `worker-airtrust/src/lib/audit/audit-events-v2.ts` e helper de audit em `worker-airtrust/src/routes/lms-cursos.ts`.
 - **Controle de rollout:** `AUDIT_EVENTS_V2_DUAL_WRITE=true`; desabilitado por padrão enquanto `audit_events_v2` não estiver aplicado em ambiente aprovado.
+- **Readiness gate atual:** testes locais prontos; execução real dos runners depende de env explícita e target `local`.
 - **Migrations provaveis:** nenhuma nova obrigatoria alem da Fase 1.
 - **Testes implementados:** insert mínimo; defaults; tenant/ator/correlação; `support_reason`; falhas; allowlist de metadata; legado preservado; falha v2 sem quebrar resposta.
 - **Testes ainda obrigatorios:** paridade operacional em ambiente com schema aplicado; ampliação para eventos críticos; monitoramento de divergência.
+- **Bloqueio para Fase 3:** não avançar para platform roles schema antes da validação local/staging aprovada do Audit v2.
 - **Rollback:** desligar dual-write por flag e manter apenas writer legado.
 - **Risco:** alto.
 - **Modelo recomendado:** `GPT-5.5 Altissimo`.

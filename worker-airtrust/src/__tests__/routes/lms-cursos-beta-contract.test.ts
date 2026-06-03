@@ -322,4 +322,50 @@ describe('lms cursos beta contract', () => {
     expect(logAuditMock).toHaveBeenCalledTimes(1);
     expect(recordAuditEventV2Mock).not.toHaveBeenCalled();
   });
+
+  it('mantem apenas o writer legado quando a flag v2 esta explicitamente false', async () => {
+    const { db } = createMockDb([
+      [
+        'INSERT INTO lms_cursos',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 21 } }),
+        },
+      ],
+      [
+        'FROM lms_cursos WHERE id = ?',
+        {
+          first: () => ({
+            id: 21,
+            empresa_id: 77,
+            titulo: 'CRM Recorrente',
+            tipo_conteudo: 'video',
+            publicado: 1,
+          }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/cursos', lmsCursosRoutes);
+
+    const response = await app.request(
+      '/cursos',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titulo: 'CRM Recorrente',
+          tipo_conteudo: 'video',
+          publicado: 1,
+          carga_horaria_minutos: 30,
+          idioma: 'pt-BR',
+        }),
+      },
+      { DB: db, AUDIT_EVENTS_V2_DUAL_WRITE: 'false' } as unknown as Env,
+    );
+
+    expect(response.status).toBe(201);
+    expect(logAuditMock).toHaveBeenCalledTimes(1);
+    expect(recordAuditEventV2Mock).not.toHaveBeenCalled();
+  });
 });

@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
-**Modo:** Planejamento atualizado após Sprint S writer/dual-write mínimo. Sem migration remota ou aplicação manual de dados reais.
+**HEAD base:** `78509f9ea40b2bf0a50d9be0f1923f1ea66f5bdd`
+**Modo:** Planejamento atualizado após Sprint T de readiness local/staging do Audit v2. Sem migration remota ou aplicação manual de dados reais.
 
 ---
 
@@ -167,7 +167,17 @@
 - **Pendente:** ativação, paridade operacional, observabilidade e ampliação para eventos críticos.
 - **Risco:** Alto/Altissimo.
 
-### Sprint T — RBAC/Suporte v2 Implementation Foundation
+### Sprint T — Audit v2 Activation Readiness / Local-Staging Validation ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03.
+- **Objetivo:** confirmar readiness local/staging do Audit v2 sem ativação em produção.
+- **Entregue:** runners `audit-v2-local-activation-check.sh` e `audit-v2-dual-write-local-check.sh`; teste de readiness; confirmação de flag default off; evidência sanitizada.
+- **Resultado operacional:** execução real dos runners ficou `SKIPPED_AUDIT_V2_LOCAL_CHECK` porque `AIRTRUST_ALLOW_AUDIT_V2_LOCAL_CHECK` e `AIRTRUST_AUDIT_V2_TARGET` não estavam configuradas nesta sessão.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não.
+- **Pendente:** aplicar schema em ambiente aprovado, ativar flag e validar paridade.
+- **Risco:** Médio/Alto.
+
+### Sprint U — RBAC/Suporte v2 Implementation Foundation
 - **Prioridade:** Curto prazo.
 - **Objetivo:** Implementar platform roles schema e shadow dual-read de RBAC somente depois do writer v2 estar operacional e com paridade validada.
 - **Escopo:** `platform_admin`; grants persistidos; sessoes de suporte; shadow dual-read; logs de divergencia; rollback simples.
@@ -176,7 +186,7 @@
 - **Migration necessária?:** Sim.
 - **Risco:** Altissimo.
 
-### Sprint U — Cobertura Beta (EVD + Complementos)
+### Sprint V — Cobertura Beta (EVD + Complementos)
 - **Prioridade:** Curto prazo.
 - **Objetivo:** Criar cobertura de teste para EVD e complementar Hospedagem (update/checkout).
 - **Escopo:** Testes de tenant-scope para EVD; contratos de update/checkout em Hospedagem; revisão de cobertura SGSO e LMS.
@@ -185,7 +195,7 @@
 - **Migration necessária?:** Não.
 - **Risco:** Médio.
 
-### Sprint V — DDL Runtime Residual Design
+### Sprint W — DDL Runtime Residual Design
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Planejar migrations para os 3 DDL residuais sem executar.
 - **Escopo:** Criar migration para `integracoes_sigvoos_*` (3 tabelas + índices); criar migration para `solicitacoes_treinamento` (colunas de link + índice); consolidar `documentos` em migration canônica; plano de remoção segura.
@@ -194,7 +204,7 @@
 - **Migration necessária?:** Sim, em fase futura de implementação.
 - **Risco:** Alto (schema complexo, dependências entre tabelas).
 
-### Sprint W — Status Enum Expansão
+### Sprint X — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
 - **Escopo:** Auditar queries batch; aplicar helpers `status-codes.ts` onde usam strings soltas; testes de compatibilidade.
@@ -203,7 +213,7 @@
 - **Migration necessária?:** Não.
 - **Risco:** Médio.
 
-### Sprint X — Performance/Bundle Audit
+### Sprint Y — Performance/Bundle Audit
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Auditoria de bundle size, chunks duplicados, N+1 queries, rotas grandes.
 - **Escopo:** Análise de bundle com `vite build` + análise; identificação de chunks PDF duplicados; revisão de queries em rotas grandes (FRMS, SGSO, dashboard); documentar achados sem corrigir.
@@ -216,24 +226,24 @@
 
 ## Backlog (longo prazo)
 
-### Sprint Y — Repository Pattern Expansão
+### Sprint Z — Repository Pattern Expansão
 - **Objetivo:** Extrair queries read-only de `lms-cursos` e `qualificações` dashboard.
 - **Modelo:** GPT-5.4 Alta.
 
-### Sprint Z — R2 Metadata Novos Uploads
+### Sprint AA — R2 Metadata Novos Uploads
 - **Objetivo:** Adicionar `empresa_id` como custom metadata em novos uploads R2.
 - **Dependência:** Correções de tenant isolation já concluídas.
 - **Modelo:** GPT-5.4 Alta.
 
-### Sprint AA — Cloudflare Queues Dry-Run
+### Sprint AB — Cloudflare Queues Dry-Run
 - **Objetivo:** Implementar fila de domain_events substituindo D1.
 - **Modelo:** GPT-5.5 Alta.
 
-### Sprint AB — Observabilidade Multiempresa
+### Sprint AC — Observabilidade Multiempresa
 - **Objetivo:** Sinais por tenant, request correlation, falhas por módulo.
 - **Modelo:** GPT-5.5 Alta.
 
-### Sprint AC — Refatoração Estrutural Ampla
+### Sprint AD — Refatoração Estrutural Ampla
 - **Objetivo:** Quebrar arquivos gigantes (FRMS, SGSO, dashboard).
 - **Modelo:** GPT-5.4 Alta.
 
@@ -259,17 +269,18 @@
 | Q | Readiness Gate RBAC + Audit ✅ | Concluído | GPT-5.4/5.5 | Não | Não |
 | R | Audit Trail v2 Schema Backward-Compatible ✅ | Concluído | GPT-5.5 | Não | Versionada, não aplicada |
 | S | Audit Trail v2 Canonical Writer + Dual-Write ✅ | Concluído | GPT-5.5 | Sim | Aplicar v2 antes da flag |
-| T | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
-| U | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
-| V | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |
-| W | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
-| X | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
-| Y | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
-| Z | R2 Metadata Uploads | Longo prazo | GPT-5.4 | Sim | Não |
-| AA | Cloudflare Queues | Longo prazo | GPT-5.5 | Sim | Não |
-| AB | Observabilidade | Longo prazo | GPT-5.5 | Sim | Possível |
-| AC | Refatoração Estrutural | Longo prazo | GPT-5.4 | Sim | Não |
+| T | Audit v2 Activation Readiness / Local-Staging Validation ✅ | Concluído | GPT-5.5 | Não | Não |
+| U | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
+| V | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
+| W | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |
+| X | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
+| Y | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
+| Z | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
+| AA | R2 Metadata Uploads | Longo prazo | GPT-5.4 | Sim | Não |
+| AB | Cloudflare Queues | Longo prazo | GPT-5.5 | Sim | Não |
+| AC | Observabilidade | Longo prazo | GPT-5.5 | Sim | Possível |
+| AD | Refatoração Estrutural | Longo prazo | GPT-5.4 | Sim | Não |
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-02 com base na matriz consolidada de 48 achados do Sprint Z.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados e no Sprint T de readiness local/staging.
