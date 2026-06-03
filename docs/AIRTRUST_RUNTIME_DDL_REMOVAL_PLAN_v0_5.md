@@ -64,20 +64,20 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 - `services/sigvoos-frms.ts` ainda cria as tabelas `integracoes_sigvoos_*` em runtime.
   A cobertura encontrada em migrations é apenas parcial.
 - `runtime/api-bootstrap.ts` / `auto-migration-documentos.ts` permanecem como bootstrap de runtime.
-  A Sprint R04.2 executou o probe estrutural remoto read-only e confirmou baseline parcial/legado em produção: `documentos` sem `historico_id`/`sha256_hash`, com `empresa_id DEFAULT 1`, sem índice nominal `idx_documentos_uuid`; `pasta_virtual.documento_id` ausente; `certificados_templates` presente. Próxima ação: criar `0388` canônica/idempotente sobre essa baseline.
+  A Sprint R04.2 executou o probe estrutural remoto read-only e confirmou baseline parcial/legado em produção: `documentos` sem `historico_id`/`sha256_hash`, com `empresa_id DEFAULT 1`, sem índice nominal `idx_documentos_uuid`; `pasta_virtual.documento_id` ausente; `certificados_templates` presente. A Sprint R04.3 fechou o desenho documental da `0388`: incluir apenas `documentos` aderente à baseline real + índices seguros, sem tocar os itens legados controvertidos. Próxima ação: versionar/testar a `0388` conforme esse desenho.
 
 ## Migrations futuras necessárias
 
 1. ~~Aplicar `0386_solicitacoes_treinamento_planejado_link.sql`~~ ✅ CONCLUÍDO (Sprint X.5).
 2. ~~Deployar o Worker/API sem o fallback de R03~~ ✅ CONCLUÍDO (Sprint X.5).
 3. Criar migration explícita para `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` e índices associados.
-4. Consolidar `documentos` em `0388_documentos_canonical_schema.sql` com base na baseline remota já capturada e aposentar `auto-migration-documentos.ts`.
+4. Consolidar `documentos` em `0388_documentos_canonical_schema.sql` com base na baseline remota já capturada e no desenho aprovado na Sprint R04.3, então aposentar `auto-migration-documentos.ts`.
 
 ## Riscos de remover sem migration
 
 - `services/treinamentos-planejados-integration.ts` pode quebrar writes de sincronização para solicitações já aprovadas se as colunas de link não existirem.
 - `services/sigvoos-frms.ts` pode indisponibilizar leitura/escrita de configuração, eventos e mapeamentos SIGVOOS se as tabelas base não estiverem provisionadas.
-- `auto-migration-documentos.ts` ainda protege ambientes com schema drift; a Sprint R04.2 confirmou que a própria produção atual é parcial/legada, então a remoção só pode ocorrer depois da `0388`.
+- `auto-migration-documentos.ts` ainda protege ambientes com schema drift; a Sprint R04.2 confirmou que a própria produção atual é parcial/legada e a Sprint R04.3 definiu um desenho conservador para a `0388`, então a remoção só pode ocorrer depois de versionamento, apply e probe pós-migration.
 
 ## Ordem recomendada das próximas fases
 
@@ -91,7 +91,7 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 
 ## Sprint V — DDL Runtime Residual Design (2026-06-03)
 
-**Status:** PARTIAL → R03 RESOLVED, R09 RESOLVED, R04 READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE, R01 MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`, então o fallback permanece bloqueado por desenho de sequência. Sprint R09 (2026-06-03) removeu o ALTER TABLE de `shared.ts`. Sprint R04.2 (2026-06-03) registrou o probe estrutural remoto de produção para R04. Próximo: criar 0388 sobre a baseline capturada.
+**Status:** PARTIAL → R03 RESOLVED, R09 RESOLVED, R04 0388_DESIGN_READY, R01 MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`, então o fallback permanece bloqueado por desenho de sequência. Sprint R09 (2026-06-03) removeu o ALTER TABLE de `shared.ts`. Sprint R04.2 (2026-06-03) registrou o probe estrutural remoto de produção para R04 e a Sprint R04.3 fechou o desenho documental da `0388`. Próximo: versionar/testar a `0388` conforme o desenho aprovado.
 
 ### Inventário atualizado
 
@@ -111,7 +111,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 |---|---|---|---|
 | R01 | `services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` — 3 tabelas base + 4 índices sem migration | `0387_integracoes_sigvoos_base_tables.sql` (criada no Sprint Z1). **Status: MIGRATION_CHAIN_BLOCKED_BY_0354.** Doc: `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md` e `AIRTRUST_SIGVOOS_MIGRATION_CHAIN_AUDIT_v0_5.md` |
 | R03 | `services/treinamentos-planejados-integration.ts` | `solicitacoes_treinamento.treinamento_planejado_id`, `status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` — 2 colunas + 1 índice parcial | `0386_solicitacoes_treinamento_planejado_link.sql` (`MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`) |
-| R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `documentos` — produção confirmada como baseline parcial/legada; falta migration canônica/idempotente que cubra schema real + índices necessários | `0388_documentos_canonical_schema.sql` — READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE (Sprint R04.2, 2026-06-03) |
+| R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `documentos` — produção confirmada como baseline parcial/legada; desenho da migration canônica conservadora já fechado, faltando versionar/testar/aplicar | `0388_documentos_canonical_schema.sql` — 0388_DESIGN_READY (Sprint R04.3, 2026-06-03) |
 
 ### Novos residuais encontrados (não documentados anteriormente)
 
@@ -132,7 +132,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 | Gate X.0 | Probe read-only aprovado para `solicitacoes_treinamento` | Decidir formato real da M1 | MÉDIO |
 | Fase 1 | M1 — `0386` (link Treinamentos) | Remover R03 | MÉDIO |
 | Fase 2 | R09 — CONCLUÍDA (Sprint R09, 2026-06-03) | ALTER TABLE removido de `shared.ts`; colunas confirmadas: `renovada`=migration, `local`/`modalidade`=removidas por 0200 | — |
-| Fase 3 | M3 — `0388` (Documentos canonico) | Remover R04 — **READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE Sprint R04.2** | MEDIO |
+| Fase 3 | M3 — `0388` (Documentos canonico) | Remover R04 — **0388_DESIGN_READY Sprint R04.3** | MEDIO |
 | Fase 4 | R01 baseline/chain plan | Destravar `0354 -> 0387` antes de qualquer apply/remocao | ALTO |
 
 ### Documentos produzidos
@@ -142,4 +142,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = PARTIAL (R03 = RESOLVED apos apply 0386 + deploy X.5; R09 = RESOLVED Sprint R09 2026-06-03; R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE Sprint R04.2 2026-06-03; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1).
+DDL_RUNTIME = PARTIAL (R03 = RESOLVED apos apply 0386 + deploy X.5; R09 = RESOLVED Sprint R09 2026-06-03; R04 = 0388_DESIGN_READY Sprint R04.3 2026-06-03; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1).

@@ -1,10 +1,10 @@
 # AirTrust — Documentos DDL R04 Readiness v0.5
 
 **Data:** 2026-06-03
-**Sprint:** R04.2 — fechamento documental do probe estrutural remoto
-**Status:** READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE
+**Sprint:** R04.3 — desenho documental da migration 0388
+**Status:** 0388_DESIGN_READY
 **Modelo:** DeepSeek V4 Pro
-**Próximo modelo recomendado:** GPT-5.4 Alta (para criação da migration 0388)
+**Próximo modelo recomendado:** GPT-5.5 Alta (para versionar/testar a migration 0388)
 
 ---
 
@@ -13,6 +13,8 @@
 Mapear o estado atual do runtime DDL de Documentos para preparar a futura migration `0388_documentos_canonical_schema.sql`, que possibilitará a remoção segura de `auto-migration-documentos.ts` do runtime.
 
 > **Addendum Sprint R04.2 (2026-06-03):** o probe estrutural remoto read-only foi executado manualmente em `production` usando somente `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`. Resultado operacional registrado: `Total queries executed: 6`, `Rows read: 0`, `Rows written: 0`, sem DML, sem DDL e sem consulta de dados de linha. Baseline confirmado: `documentos` existe com `empresa_id` e sem `historico_id`/`sha256_hash`; `idx_documentos_uuid` nominal não existe e a unicidade está coberta por autoíndices SQLite; `pasta_virtual.documento_id` não existe; `certificados_templates` existe em produção. **R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE.**
+>
+> **Addendum Sprint R04.3 (2026-06-03):** o desenho lógico da futura `0388_documentos_canonical_schema.sql` foi fechado em modo docs-only, sem criar migration, sem alterar runtime e sem tocar schema remoto. A decisão consolidada passou a ser: **`R04 = 0388_DESIGN_READY`**. A futura `0388` deve incluir apenas `CREATE TABLE IF NOT EXISTS documentos` aderente à baseline real de produção e os índices seguros `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo` e `idx_documentos_funcionario_tipo`. Permanecem fora da `0388` nesta fase: `historico_id`, `idx_documentos_historico`, `sha256_hash`, `idx_documentos_sha256`, `pasta_virtual.documento_id`, qualquer DDL em `certificados_templates` e os índices de `0200` dependentes de colunas fantasmas. Documento de desenho: `docs/AIRTRUST_DOCUMENTOS_0388_CANONICAL_SCHEMA_DESIGN_v0_5.md`.
 
 ---
 
@@ -184,42 +186,35 @@ Parcial. O bootstrap NÃO inclui `empresa_id`. A coluna foi adicionada pela migr
 
 ## 6. Schema canônico alvo (proposta para 0388)
 
-### 6.1 Tabela `documentos` — schema alvo
+### 6.1 Tabela `documentos` — desenho canônico aprovado para a futura 0388
 
 ```sql
 CREATE TABLE IF NOT EXISTS documentos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uuid TEXT NOT NULL UNIQUE,
   funcionario_id INTEGER NOT NULL,
-  historico_id INTEGER,                          -- Presente no bootstrap, NÃO em migrations
   nome_arquivo TEXT NOT NULL,
   tipo TEXT NOT NULL,
   tamanho INTEGER NOT NULL,
   r2_key TEXT NOT NULL UNIQUE,
   descricao TEXT,
-  sha256_hash TEXT,                              -- Migration 0137_add_integrity_checks
-  empresa_id INTEGER DEFAULT NULL,               -- Migration 0165
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   deleted_at TEXT,
-  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),
-  FOREIGN KEY (historico_id) REFERENCES qualificacoes_historico(id)
+  empresa_id INTEGER DEFAULT 1,
+  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)
 );
 ```
 
 ### 6.2 Índices alvo
 
 ```sql
--- Índices básicos (presentes no bootstrap + migrations)
+-- Índices seguros aprovados para a 0388
 CREATE INDEX IF NOT EXISTS idx_documentos_funcionario ON documentos(funcionario_id);
-CREATE INDEX IF NOT EXISTS idx_documentos_historico ON documentos(historico_id);
 CREATE INDEX IF NOT EXISTS idx_documentos_deleted ON documentos(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_documentos_r2_key ON documentos(r2_key);
-CREATE INDEX IF NOT EXISTS idx_documentos_uuid ON documentos(uuid);
-CREATE INDEX IF NOT EXISTS idx_documentos_sha256 ON documentos(sha256_hash);
 CREATE INDEX IF NOT EXISTS idx_documentos_empresa ON documentos(empresa_id);
 
--- Índices parciais (migrations 0137/0138)
+-- Índices parciais seguros (já baseados em colunas reais da baseline)
 CREATE INDEX IF NOT EXISTS idx_documentos_tipo ON documentos(tipo) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_documentos_funcionario_tipo ON documentos(funcionario_id, tipo) WHERE deleted_at IS NULL;
 ```
@@ -348,10 +343,10 @@ Observações:
 Apenas `documentos`. As tabelas `pasta_virtual`, `arquivos`, `funcionario_documentos`, `documentos_downloads` e `certificados_templates` já são cobertas por migrations existentes (ou têm origem pré-migration confirmada em produção).
 
 **2. Quais colunas precisam estar presentes?**
-Todas as 15 colunas listadas em 6.1. Especial atenção a `historico_id` (bootstrap-only) e `sha256_hash`/`empresa_id` (migration-only).
+As 12 colunas confirmadas no baseline real de produção e reproduzidas em 6.1: `id`, `uuid`, `funcionario_id`, `nome_arquivo`, `tipo`, `tamanho`, `r2_key`, `descricao`, `created_at`, `updated_at`, `deleted_at`, `empresa_id`.
 
 **3. Quais índices precisam estar presentes?**
-Os 9 índices listados em 6.2, cobrindo tanto os do bootstrap quanto os de migrations 0137/0138.
+Os 5 índices listados em 6.2: `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo` e `idx_documentos_funcionario_tipo`.
 
 **4. Quais objetos já são cobertos por migrations históricas?**
 - Schema base (12 colunas): migration 0136 (rebuild)
@@ -368,10 +363,10 @@ Os 9 índices listados em 6.2, cobrindo tanto os do bootstrap quanto os de migra
 - Índice `idx_documentos_deleted` — NENHUMA migration o cria (pelo menos não explicitamente com este nome)
 
 **6. A futura 0388 pode usar CREATE TABLE IF NOT EXISTS?**
-**SIM, com ressalva.** `CREATE TABLE IF NOT EXISTS` é seguro para o caso feliz (tabela não existe). Mas em produção a tabela já existe com schema potencialmente incompleto — `IF NOT EXISTS` não faria nada. Será necessário complementar com `ALTER TABLE ADD COLUMN` para colunas faltantes (usando idempotência via try/catch ou probe estrutural prévio).
+**SIM.** O desenho aprovado na Sprint R04.3 é conservador: a `0388` deve garantir o schema base de `documentos` em ambiente limpo e criar apenas índices seguros sobre colunas reais já confirmadas. Nesta fase, ela **não** deve tentar materializar `historico_id`, `sha256_hash` ou outros objetos controvertidos do legado.
 
 **7. Há risco de ALTER TABLE ADD COLUMN duplicado?**
-Sim. O probe remoto já eliminou a incerteza principal do baseline de produção: `historico_id` e `sha256_hash` estão ausentes; `empresa_id` existe com default `1`. A futura `0388` ainda precisa ser idempotente para ambientes não-prod e para variações legadas, mas agora não deve assumir schema limpo nem usar `ALTER TABLE` às cegas.
+Baixo no desenho aprovado, porque a Sprint R04.3 deliberadamente evitou depender de `ALTER TABLE` para `historico_id` e `sha256_hash`. A implementação final ainda precisa ser idempotente, mas o desenho já removeu os aditivos mais arriscados do escopo da `0388`.
 
 **8. Precisa probe estrutural remoto antes da 0388?**
 **SIM — e ele já foi executado na Sprint R04.2.** O baseline de produção deixou de ser hipotético:
@@ -385,7 +380,7 @@ Sim. O probe remoto já eliminou a incerteza principal do baseline de produção
 **9. Pode remover auto-migration-documentos depois da 0388?**
 **SIM, APÓS confirmação.** Condições:
 - Migration 0388 aplicada com sucesso em produção
-- Probe pós-migration confirma schema completo
+- Probe pós-migration confirma o contrato aprovado para `documentos`
 - Deploy do Worker sem `ensureDocumentosTableExists`
 - Smoke test confirma rotas de certificados/pasta virtual funcionando
 
@@ -405,15 +400,15 @@ Sim. O probe remoto já eliminou a incerteza principal do baseline de produção
 
 | # | Lacuna | Severidade | Impacto |
 |---|---|---|---|
-| L1 | `historico_id` não existe no baseline de produção e só existe via bootstrap — NENHUMA migration a cria | ALTA | Produção real diverge do bootstrap; a 0388 precisará decidir explicitamente se canonicaliza esta FK |
+| L1 | `historico_id` não existe no baseline de produção e só existe via bootstrap — NENHUMA migration a cria | ALTA | Produção real diverge do bootstrap; a Sprint R04.3 decidiu não incluir essa FK na 0388 sem revisão adicional de runtime |
 | L2 | Colunas `tipo_documento` e `qualificacao_historico_id` referenciadas em 0200 nunca foram criadas | ALTA | Migration 0200 tenta criar índices em colunas inexistentes → possível falha silenciosa em D1 |
-| L3 | `sha256_hash` não existe no baseline de produção, embora exista em migration 0137_add_integrity_checks | MÉDIA | O schema real é parcial/legado; a 0388 terá de adicionar a coluna de forma idempotente |
+| L3 | `sha256_hash` não existe no baseline de produção, embora exista em migration 0137_add_integrity_checks | MÉDIA | O schema real é parcial/legado; a Sprint R04.3 decidiu adiar essa coluna para sprint própria ou abandono explícito |
 | L4 | `empresa_id` existe em produção via legado/migration, mas o bootstrap não a cria | ALTA | Ambientes bootstrap-only continuam sem isolamento tenant em `documentos` |
 | L5 | `idx_documentos_deleted` não tem cobertura explícita de migration e não apareceu no baseline remoto | BAIXA | Performance de soft-delete queries |
 | L6 | `idx_documentos_uuid` nominal não apareceu no baseline remoto (unicidade via autoíndice SQLite) | BAIXA | Nome do índice diverge do bootstrap; a 0388 não deve depender do nome nominal em produção |
-| L7 | `certificados_templates` existe em produção, mas segue sem migration CREATE reconciliada | ALTA | Origem histórica permanece obscura para ambientes novos |
+| L7 | `certificados_templates` existe em produção, mas segue sem migration CREATE reconciliada | ALTA | Origem histórica permanece obscura para ambientes novos; a Sprint R04.3 decidiu não tocar essa tabela na 0388 |
 | L8 | `pasta_virtual.documento_id` não existe no baseline remoto e nunca foi adicionado por migration | MÉDIA | Código adapta-se via probe, mas a coluna não pode ser assumida como canônica |
-| L9 | Produção não expôs os índices nominais do bootstrap nem os índices parciais esperados | MÉDIA | A 0388 terá de tratar cobertura de índices sobre baseline parcial/legado |
+| L9 | Produção não expôs os índices nominais do bootstrap nem os índices parciais esperados | MÉDIA | A 0388 deve ficar restrita a índices seguros e não depender de nomes legados/nominais do bootstrap |
 
 ---
 
@@ -421,11 +416,11 @@ Sim. O probe remoto já eliminou a incerteza principal do baseline de produção
 
 | Risco | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
-| 0200 falha em schema limpo (colunas inexistentes) | ALTA | Migration chain quebra | 0388 deve criar colunas antes de 0200 rodar, OU 0200 deve ser corrigido |
-| `certificados_templates` não existe em schema limpo | MÉDIA | Falha em rotas de template | Investigar origem; possivelmente adicionar CREATE TABLE na 0388 |
+| 0200 falha em schema limpo (colunas inexistentes) | ALTA | Migration chain quebra | Não reencenar `0200` na `0388`; tratar essa lacuna separadamente |
+| `certificados_templates` não existe em schema limpo | MÉDIA | Falha em rotas de template | Investigar origem em sprint separada; não misturar com a 0388 |
 | Schema parcial/legado confirmado em produção | ALTA | Dificuldade em reproduzir estado real e risco de migration simplista | Usar a baseline remota capturada como insumo obrigatório da 0388 |
 | Duplicação de índices (bootstrap + migration criam mesmos índices) | BAIXA | Conflito de nomes | `IF NOT EXISTS` em ambos os lados mitiga |
-| FK `historico_id` quebra se `qualificacoes_historico` não existir | BAIXA | Erro em CREATE TABLE | `qualificacoes_historico` é criada cedo na chain (migration 0032) |
+| Inclusão precipitada de colunas opcionais/legadas na 0388 | MÉDIA | Complexidade e regressão em baseline parcial | Manter `historico_id` e `sha256_hash` fora do escopo até revisão específica |
 
 ---
 
@@ -460,30 +455,38 @@ PRAGMA index_list(certificados_templates);
 
 ## 10. Estratégia recomendada para 0388
 
-### Abordagem: Migration canônica com idempotência estrutural
+### Abordagem: Migration canônica conservadora baseada na baseline real
 
 A migration 0388 deve:
 
-1. **Criar tabela se não existir** (cobre ambientes novos):
+1. **Criar tabela se não existir** (cobre ambientes novos) com o contrato aprovado em R04.3:
    ```sql
-   CREATE TABLE IF NOT EXISTS documentos (...schema canônico completo...);
+   CREATE TABLE IF NOT EXISTS documentos (...baseline real + empresa_id...);
    ```
 
-2. **Adicionar colunas faltantes** (cobre ambientes com schema parcial):
-   - Probe ou try/catch para `historico_id`, `sha256_hash`, `empresa_id`
-   - Usar `ALTER TABLE documentos ADD COLUMN` com tratamento de erro
+2. **Criar apenas índices seguros** (idempotente via `IF NOT EXISTS`):
+   - `idx_documentos_empresa`
+   - `idx_documentos_funcionario`
+   - `idx_documentos_deleted`
+   - `idx_documentos_tipo`
+   - `idx_documentos_funcionario_tipo`
 
-3. **Criar índices faltantes** (idempotente via IF NOT EXISTS)
+3. **NÃO adicionar nesta fase**:
+   - `historico_id`
+   - `idx_documentos_historico`
+   - `sha256_hash`
+   - `idx_documentos_sha256`
+   - `pasta_virtual.documento_id`
+   - qualquer DDL em `certificados_templates`
+   - índices de `0200` dependentes de colunas fantasmas
 
 4. **NÃO fazer backfill de dados** — apenas estrutura
 
-5. **NÃO criar tabelas relacionadas** — `pasta_virtual`, `arquivos`, etc. já têm cobertura de migration
-
-6. **Documentar** que `certificados_templates` precisa ser investigado separadamente
+5. **NÃO criar tabelas relacionadas** — `pasta_virtual`, `arquivos`, etc. já têm cobertura de migration ou exigem reconciliação separada
 
 ### Alternativa: Schema assert + conditional DDL
 
-Como o probe remoto confirmou que a tabela já existe com schema parcial/legado, a 0388 deve funcionar como migration canônica idempotente sobre baseline existente, e não como simples `CREATE TABLE IF NOT EXISTS`.
+Como o probe remoto confirmou que a tabela já existe com schema parcial/legado, a 0388 deve funcionar como migration canônica idempotente sobre baseline existente, mas sem ampliar escopo para objetos controvertidos do legado.
 
 ---
 
@@ -491,10 +494,10 @@ Como o probe remoto confirmou que a tabela já existe com schema parcial/legado,
 
 ```
 1. ANALISE_BASELINE_REMOTA     → Consolidar colunas/índices já capturados
-2. CRIAR_0388                  → Migration canônica adaptada
+2. VERSIONAR_0388              → Migration canônica conservadora conforme desenho R04.3
 3. TESTAR_LOCAL                → Chain test com schema limpo
 4. TESTAR_STAGING              → Aplicar em staging, validar
-5. REVIEW_MIGRATION            → Revisão de código
+5. REVIEW_MIGRATION            → Revisão de código + decisão explícita sobre itens adiados
 6. APLICAR_PRODUCAO            → D1 migrations apply --remote
 7. PROBE_POS_MIGRATION         → Confirmar schema final
 8. REMOVER_BOOTSTRAP           → Deletar ensureDocumentosTableExists + runApiBootstrap
@@ -509,10 +512,10 @@ Como o probe remoto confirmou que a tabela já existe com schema parcial/legado,
 
 | Teste | Tipo | Descrição |
 |---|---|---|
-| Chain test 0388 em schema limpo | Unit/Local | Rodar todas as migrations do zero e verificar que `documentos` tem schema completo |
+| Chain test 0388 em schema limpo | Unit/Local | Rodar todas as migrations do zero e verificar que `documentos` atende ao contrato conservador aprovado |
 | Probe estrutural remoto | Read-only prod | ✅ Executado com `PRAGMA table_info/index_list` nas 3 tabelas-alvo |
 | Teste de idempotência | Unit/Local | Rodar 0388 duas vezes — segunda deve ser no-op |
-| Schema assertion test | Unit/Local | Verificar que todas as colunas e índices alvo existem após migration chain completa |
+| Schema assertion test | Unit/Local | Verificar que as 12 colunas aprovadas e os 5 índices seguros existem após a chain completa |
 | Smoke certificados | Integração | Upload + download de certificado após migration |
 | Smoke pasta virtual | Integração | Listar + filtrar pasta virtual após migration |
 | Smoke multi-tenant | Integração | Verificar tenant isolation com empresa_id |
@@ -521,9 +524,9 @@ Como o probe remoto confirmou que a tabela já existe com schema parcial/legado,
 
 ## 13. Rollback
 
-A migration 0388 é **DDL puro sem DML** — não altera dados. Rollback em produção seria:
-- A migration em si não tem rollback automático (D1 não suporta DDL transacional para ALTER)
-- Se necessário reverter schema: criar migration 0389 com DROP COLUMN para colunas adicionadas indevidamente
+A migration 0388 desenhada em R04.3 é **DDL puro sem DML** — não altera dados nem faz backfill. Rollback em produção seria:
+- Preferir rollback de código/documentação antes de qualquer apply remoto
+- Se a `0388` vier a ser aplicada em ambiente limpo, avaliar rollback estrutural somente para objetos efetivamente criados nessa fase
 - O bootstrap (`ensureDocumentosTableExists`) NÃO deve ser removido ANTES de confirmar sucesso da migration — isso garante fallback
 
 ---
@@ -531,7 +534,7 @@ A migration 0388 é **DDL puro sem DML** — não altera dados. Rollback em prod
 ## 14. Fora do escopo desta fase
 
 - ❌ Criar migration 0388
-- ❌ Criar migration 0388 nesta sprint
+- ❌ Versionar `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` nesta sprint
 - ❌ Alterar runtime
 - ❌ Alterar schema
 - ❌ Executar D1 remoto
@@ -540,10 +543,11 @@ A migration 0388 é **DDL puro sem DML** — não altera dados. Rollback em prod
 - ❌ Alterar auth/RBAC/tenant
 - ❌ Tocar R2
 - ❌ Backfill de dados
-- ❌ Investigar `certificados_templates` (requer sprint separada)
+- ❌ Reconciliar `certificados_templates` (requer sprint separada)
 - ❌ Corrigir migration 0200 (colunas fantasmas `tipo_documento`/`qualificacao_historico_id`)
 - ❌ Resolver lacuna `pasta_virtual.documento_id`
+- ❌ Reintroduzir `historico_id` ou `sha256_hash` sem revisão específica
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.2 e baseline estrutural remoto de produção. Próxima fase: criar/testar a `0388_documentos_canonical_schema.sql` contra a baseline capturada (GPT-5.4 Alta).
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.3 e desenho documental da `0388` baseado na baseline estrutural remota de produção. Próxima fase: versionar/testar a `0388_documentos_canonical_schema.sql` conforme `docs/AIRTRUST_DOCUMENTOS_0388_CANONICAL_SCHEMA_DESIGN_v0_5.md` (GPT-5.5 Alta).
