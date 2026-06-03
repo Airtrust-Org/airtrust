@@ -244,6 +244,20 @@
 - **Migration necessária?:** Não nesta fase.
 - **Risco:** Baixo nesta fase; risco de implementação permanece médio/alto sem evidência do ambiente aprovado.
 
+### Sprint X.1 — Tentativa de Schema Probe Autorizado ⚠️ SKIPPED
+- **Status:** SKIPPED em 2026-06-03 (HEAD `c09c0cb`).
+- **Objetivo:** executar o probe read-only em staging ou produção explicitamente autorizada, consultando apenas estrutura da tabela `solicitacoes_treinamento`.
+- **Pré-condições:** branch `main` limpo, HEAD == origin/main, preflight PASS, ops:guard PASS.
+- **Script revalidado:** `bash -n` limpo; somente PRAGMA table_info/index_list/index_info; bloqueio de produção sem confirmação presente; sem impressão de dados de linha; sem DML/DDL.
+- **Autorização:** 4 variáveis UNSET (`AIRTRUST_ALLOW_SCHEMA_PROBE`, `AIRTRUST_SCHEMA_PROBE_TARGET`, `AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE`, `AIRTRUST_CONFIRM_PRODUCTION_READ_ONLY`).
+- **Resultado:** `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. Nenhum dado consultado. Nenhum DML/DDL executado.
+- **Decisão:** R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`.
+- **Bloqueio:** operador ainda não definiu as variáveis de autorização. O script está pronto e seguro — a barreira é exclusivamente humana.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não nesta fase.
+- **Risco:** Baixo nesta fase.
+- **Próxima fase:** Sprint X.2 — operador define env vars e reexecuta a Sprint X.1. Se target=staging/production, será necessário estender o script com runner remoto read-only (atualmente o script só implementa runner local; staging/production caem em `SKIPPED_NO_APPROVED_SCHEMA_PROBE_RUNNER`).
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.

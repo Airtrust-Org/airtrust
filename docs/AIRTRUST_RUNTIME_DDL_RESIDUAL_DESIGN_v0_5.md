@@ -9,6 +9,8 @@
 > **Addendum Sprint W (2026-06-03):** R02, R05, R06, R07, R08 e R10 foram removidos do runtime. Permanecem R01, R03, R04 e R09, além de casos legacy/test-only.
 >
 > **Addendum Sprint X.0 (2026-06-03):** foi criado um probe read-only fail-closed para `solicitacoes_treinamento`. O snapshot local mostrou a tabela sem `treinamento_planejado_id`, sem `status_pre_agendamento` e sem `idx_solicitacoes_treinamento_planejado`. Como staging/produção não estavam autorizados para consulta estrutural, R03 passou a `BLOCKED_SCHEMA_PROBE_REQUIRED`.
+>
+> **Addendum Sprint X.1 (2026-06-03):** HEAD `c09c0cb`. Tentativa de execução com autorização: todas as 4 variáveis UNSET. Probe retornou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`. Script validado como seguro (somente PRAGMA/SELECT, fail-closed, snapshot temporário). A barreira é exclusivamente de autorização do operador — o script está pronto para staging ou produção read-only assim que as env vars forem definidas.
 
 ---
 
