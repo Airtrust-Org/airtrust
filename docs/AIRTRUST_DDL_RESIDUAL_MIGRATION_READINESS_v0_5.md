@@ -505,4 +505,6 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 
 **Addendum Sprint Z2:** `R03` saiu definitivamente da ordem restante. A ordem consolidada agora e: provar/remover `R09` se seguro, planejar `R04` (`0388`) e manter `R01` em baseline/chain plan ate existir estrategia segura para ambientes novos.
 
-**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure em 2026-06-03.
+**Addendum Sprint R09 (2026-06-03):** `R09 = RESOLVED`. O ALTER TABLE foi removido de `qualificacoes/shared.ts` e substituido por no-op documentado. A verificacao confirmou: (1) `shared.ts` era dead code — nunca importado, o active path (`historico-helpers.ts:131`) ja era no-op; (2) `renovada` existe no schema final via migrations 0107/0200/0325; (3) `local` e `modalidade` foram intencionalmente removidas pela migration 0200 (`0200_remove_unused_columns_historico.sql`); (4) o DDL removido era anti-migration — adicionaria de volta colunas removidas. Teste dedicado criado em `qualificacoes-historico-shared-schema.test.ts`. Ordem restante atualizada: planejar `R04` (`0388`), manter `R01` em baseline/chain plan.
+
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R09 closure em 2026-06-03.

@@ -221,7 +221,7 @@
 - **Documentos:** `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
 - **Deploy:** Não (docs-only).
 - **Migration necessária:** Não nesta fase. 3 migrations planejadas para fases futuras.
-- **Pendente:** Fases 1-3 (migration + remoção dos 3 residuais críticos) + revisão do R09 em `qualificacoes/shared.ts`.
+- **Pendente:** Fases 1-3 (migration + remoção dos 2 residuais críticos R01/R04). R09 = RESOLVED (Sprint R09, 2026-06-03).
 - **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados por fase).
 
 ### Sprint W — DDL Pré-Fase: Remover `ensure*` já cobertos
@@ -312,7 +312,7 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente:** DDL runtime remanescente: R04 (Documentos), R09 (shared.ts). R01 (SIGVOOS) = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1).
+- **Pendente:** DDL runtime remanescente: R04 (Documentos). R01 (SIGVOOS) = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1). R09 = RESOLVED (Sprint R09).
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
 
 ### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
@@ -363,7 +363,7 @@
 - **Objetivo:** reconciliar o estado real dos achados remanescentes sem abrir novas microfases desnecessarias.
 - **Entregue:**
   - plano consolidado em `AIRTRUST_AUDIT_REMAINING_FINDINGS_CLOSURE_PLAN_v0_5.md`;
-  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R09 -> R04 -> R01`;
+  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 -> R01` (R09 = RESOLVED Sprint R09);
   - confirmacao de que esta rodada nao comporta alteracao segura de runtime, migration ou deploy.
 - **Decisao:** fechar esta sprint como docs-only. Nenhum schema remoto, nenhum deploy e nenhuma migration remota.
 
@@ -467,7 +467,7 @@
 | X.5 | DDL Apply 0385/0386 + Deploy Worker/API ✅ | Concluído | GPT-5.4 | Sim | Aplicadas |
 | OP-1 | Operational Readiness Evidence ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | OP-2 | Staging Operational Gate ✅ | Concluido | GPT-5.4 | Nao | Nao |
-| X.6 | R09 Readiness / Verification | Curto prazo | GPT-5.4 | Sim | Nao/Provar |
+| R09 | ~~R09 Readiness / Verification~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | GPT-5.4 DeepSeek | Sim (DDL removido) | Nao (sem migration) |
 | Y | Documentos Canonical Schema (`0388`) | Medio prazo | GPT-5.5 | Sim | Sim |
 | Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |

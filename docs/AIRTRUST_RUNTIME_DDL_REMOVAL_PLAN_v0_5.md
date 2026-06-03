@@ -91,7 +91,7 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 
 ## Sprint V — DDL Runtime Residual Design (2026-06-03)
 
-**Status:** PARTIAL → R03 RESOLVED, R01 MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`, então o fallback permanece bloqueado por desenho de sequência. Restam R04 (Documentos) e R09 (shared.ts dinâmico).
+**Status:** PARTIAL → R03 RESOLVED, R09 RESOLVED, R01 MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`, então o fallback permanece bloqueado por desenho de sequência. Sprint R09 (2026-06-03) removeu o ALTER TABLE de `shared.ts`; colunas `local`/`modalidade` removidas por 0200, `renovada` presente no schema final. Resta R04 (Documentos).
 
 ### Inventário atualizado
 
@@ -121,7 +121,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 | R06 | `routes/qualificacoes/historico-helpers.ts` | ALTER TABLE (5 colunas em `qualificacoes_historico`) | `0173` + migrations antigas — coberto ✓ |
 | R07 | `routes/qualificacoes/historico-helpers.ts` | ALTER TABLE (2 colunas em `qualificacoes_tipos`) | `0317` — coberto ✓ |
 | R08 | `routes/qualificacoes/historico-helpers.ts` | ALTER TABLE + CREATE INDEX em `modelos_aeronave` | `0183` — coberto ✓ |
-| R09 | `routes/qualificacoes/shared.ts` | ALTER TABLE dinâmico | Cobertura incerta — requer verificação |
+| R09 | `routes/qualificacoes/shared.ts` | ALTER TABLE dinâmico | ✅ RESOLVIDO (Sprint R09, 2026-06-03) — DDL removido; `renovada`=0200+, `local`/`modalidade`=removidas por 0200; active path (historico-helpers.ts) já é no-op |
 | R10 | `routes/simuladores-modelos.ts` | ALTER TABLE + CREATE INDEX em `modelos_sessao` | `0184` — coberto ✓ |
 
 ### Ordem revisada (4 fases)
@@ -131,7 +131,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 | Pré-Fase | Nenhuma | Concluída no Sprint W — removidos R02, R05, R06, R07, R08, R10 | BAIXO |
 | Gate X.0 | Probe read-only aprovado para `solicitacoes_treinamento` | Decidir formato real da M1 | MÉDIO |
 | Fase 1 | M1 — `0386` (link Treinamentos) | Remover R03 | MÉDIO |
-| Fase 2 | R09 readiness/verification | Provar cobertura de `qualificacoes/shared.ts` e remover apenas se seguro | BAIXO/MEDIO |
+| Fase 2 | R09 — CONCLUÍDA (Sprint R09, 2026-06-03) | ALTER TABLE removido de `shared.ts`; colunas confirmadas: `renovada`=migration, `local`/`modalidade`=removidas por 0200 | — |
 | Fase 3 | M3 — `0388` (Documentos canonico) | Remover R04 | MEDIO |
 | Fase 4 | R01 baseline/chain plan | Destravar `0354 -> 0387` antes de qualquer apply/remocao | ALTO |
 
@@ -142,4 +142,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = PARTIAL (R03 = RESOLVED apos apply 0386 + deploy X.5; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1; restam R04 e R09 no runtime).
+DDL_RUNTIME = PARTIAL (R03 = RESOLVED apos apply 0386 + deploy X.5; R09 = RESOLVED Sprint R09 2026-06-03; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1; resta R04 no runtime).

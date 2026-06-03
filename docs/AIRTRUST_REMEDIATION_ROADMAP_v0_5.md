@@ -116,10 +116,10 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. **R03 = RESOLVED.** Sprint Z0 mapeou integralmente R01, a Sprint Z1 criou `0387` + teste local e a Sprint Z1.1 provou o bloqueio de cadeia em `0354`. **R01 = MIGRATION_CHAIN_BLOCKED_BY_0354.**).
-- **Objetivo:** Concluir as fases remanescentes: Fase 2 (M2 SIGVOOS base — definir baseline/chain plan antes de qualquer apply), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`. Fase 1 (R03 Treinamentos Link) está concluída.
+- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. **R03 = RESOLVED.** Sprint Z0 mapeou integralmente R01, a Sprint Z1 criou `0387` + teste local e a Sprint Z1.1 provou o bloqueio de cadeia em `0354`. **R01 = MIGRATION_CHAIN_BLOCKED_BY_0354.** Sprint R09 removeu o ALTER TABLE de `shared.ts`. **R09 = RESOLVED.**).
+- **Objetivo:** Concluir as fases remanescentes: Fase 2 (M2 SIGVOOS base — definir baseline/chain plan antes de qualquer apply) e Fase 3 (M3 Documentos canônico). Fase 1 (R03 Treinamentos Link) concluída. R09 concluído (Sprint R09).
 - **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente (mitigado para R03; mapeado para R01; permanece para R04).
-- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386` e removeu o fallback runtime local. **Sprint X.5 aplicou `0386` em produção e deployou o Worker/API (APP_VERSION=2026-06-03T17:00:27Z-c12d8bf).** Sprint Z0 produziu inventário completo de R01, a Sprint Z1 criou `0387_integracoes_sigvoos_base_tables.sql` e a Sprint Z1.1 confirmou localmente que a cadeia limpa falha em `0354` antes da `0387`. Restam 1 migration nova planejada (`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
+- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386` e removeu o fallback runtime local. **Sprint X.5 aplicou `0386` em produção e deployou o Worker/API (APP_VERSION=2026-06-03T17:00:27Z-c12d8bf).** Sprint Z0 produziu inventário completo de R01, a Sprint Z1 criou `0387_integracoes_sigvoos_base_tables.sql` e a Sprint Z1.1 confirmou localmente que a cadeia limpa falha em `0354` antes da `0387`. Resta 1 migration nova planejada (`0388`). R09 (shared.ts) = RESOLVED (Sprint R09).
 - **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 2-3: GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, quando implementado (Fase 1 deploy já feito).
 - **Migration necessária?:** Sim (2 migrations para as Fases 2-3).
@@ -207,7 +207,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 3 | Audit v2 staging flag test + paridade minima | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
 | 4 | Platform roles schema + RBAC/Suporte v2 foundation | Curto prazo, depois do item 3 | Cliente externo | GPT-5.5 Altissimo |
 | 5 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
-| 6 | R09 `qualificacoes/shared.ts` readiness/verification | Curto prazo | 5+ empresas | GPT-5.4 Alta |
+| 6 | ~~R09 `qualificacoes/shared.ts`~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | — | — |
 | 7 | DDL Fase 3 - M3 Documentos canonico | Medio prazo | 5+ empresas | GPT-5.5 Alta |
 | 8 | DDL R01 - SIGVOOS baseline/chain plan | Medio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 9 | Status enum expansao | Medio prazo | Escala | GPT-5.4 Alta |
