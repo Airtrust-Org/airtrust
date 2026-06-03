@@ -26,6 +26,8 @@
 
 **Addendum Sprint Z1.1 (2026-06-03):** a auditoria de cadeia confirmou localmente a falha em schema limpo: `0354` quebra por ausência de `integracoes_sigvoos_config` e a `0387` posterior não corrige a ordem. Novo status: **`MIGRATION_CHAIN_BLOCKED_BY_0354`**. Restam R01, R04 e R09 no runtime.
 
+**Addendum Sprint R09 (2026-06-03):** **R09 = RESOLVED.** `shared.ts` era dead code (nunca importado); o DDL ativo nunca executou em runtime. O `ALTER TABLE qualificacoes_historico ADD COLUMN` foi removido e substituído por no-op documentado. Colunas: `renovada`=presente (0200+), `local`/`modalidade`=intencionalmente removidas por 0200. Active path (`historico-helpers.ts:131`) já é no-op. Schema test criado. Restam R01 e R04 no runtime.
+
 ---
 
 ## 1. Objetivo
@@ -79,7 +81,7 @@ Fechar a pendência arquitetural de **DDL runtime residual** em modo inventário
 | R06 | `routes/qualificacoes/historico-helpers.ts` | `ensureHistoricoSchema()` | ALTER TABLE (5 colunas) | `qualificacoes_historico.renovada`, `status`, `data_confirmacao`, `confirmada_por`, `tipo_treinamento` | RUNTIME_HOT_PATH_COVERED | BAIXO | `0173_add_status_to_qualificacoes.sql` cobre `status`. Demais colunas: cobertura parcial por migrations antigas (0095, etc.) | Migrations existem mas cobertura precisa de verificação caso a caso |
 | R07 | `routes/qualificacoes/historico-helpers.ts` | `ensureQualificacoesTiposTrainingSchema()` | ALTER TABLE (2) | `qualificacoes_tipos.carga_horaria_inicial`, `carga_horaria_recorrente` | RUNTIME_HOT_PATH_COVERED | BAIXO | `0317_split_carga_horaria_and_tipo_treinamento.sql` | Nenhuma |
 | R08 | `routes/qualificacoes/historico-helpers.ts` | inline in `ensureHistoricoSchema()` | ALTER TABLE (1) + CREATE INDEX (1) | `modelos_aeronave.modelo`, `idx_modelos_aeronave_modelo` | RUNTIME_HOT_PATH_COVERED | BAIXO | `0183_add_modelo_to_modelos_aeronave.sql` | Nenhuma |
-| R09 | `routes/qualificacoes/shared.ts` | dynamic ALTER TABLE | ALTER TABLE (dinâmico por `col.name`) | `qualificacoes_historico` (colunas dinâmicas) | RUNTIME_HOT_PATH | BAIXO | Desconhecida — colunas dinâmicas dependem do caso de uso | Verificar se todas as colunas dinâmicas possíveis têm migration |
+| R09 | `routes/qualificacoes/shared.ts` | ~~dynamic ALTER TABLE~~ → no-op | ~~ALTER TABLE removido~~ | `qualificacoes_historico` (colunas: `renovada`=0200+, `local`/`modalidade`=removidas por 0200) | RUNTIME_HOT_PATH_COVERED → RESOLVED (Sprint R09) | BAIXO | `0107`, `0113`, `0200` (remove local/modalidade), `0325` | Nenhuma — DDL removido, active path em historico-helpers.ts já é no-op |
 | R10 | `routes/simuladores-modelos.ts` | `ensureModelosSessaoModeloAeronaveColumn()` | ALTER TABLE (1) + CREATE INDEX (1) | `modelos_sessao.modelo_aeronave`, `idx_modelos_sessao_modelo_aeronave` | RUNTIME_HOT_PATH_COVERED | BAIXO | `0184_add_modelo_aeronave_to_modelos_sessao.sql` | Nenhuma |
 | R11 | `routes/admin-migration.ts` | handlers admin-only | CREATE TABLE, DROP TABLE, ALTER TABLE, CREATE INDEX | `pasta_virtual`, `avaliacoes_manobras` (rebuild completo) | LEGACY_QUARANTINED | BAIXO | N/A — rota admin manual | Admin-gated, não é hot path normal |
 | R12 | `routes/admin-manual-migrations.ts` | handlers admin-only | CREATE TABLE, DROP TABLE, ALTER TABLE, CREATE INDEX | Múltiplas tabelas (13+ rebuilds) | LEGACY_QUARANTINED | BAIXO | N/A — rota admin manual | Admin-gated, não é hot path normal |
@@ -325,15 +327,15 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | Métrica | Valor |
 |---|---|
 | Total de ocorrências DDL inventariadas (worker runtime) | 20 (excluindo docs/scripts) |
-| Resíduos RUNTIME_HOT_PATH confirmados | 2 críticos ativos no runtime atual (R01 SIGVOOS, R04 Documentos bootstrap) + 1 caso dinâmico incerto (R09). R03 = RESOLVIDO (migration 0386 aplicada + deploy). |
-| Resíduos RUNTIME_HOT_PATH_COVERED (já com migration) | 6 (R02, R05, R06, R07, R08, R10) |
+| Resíduos RUNTIME_HOT_PATH confirmados | 2 críticos ativos no runtime atual (R01 SIGVOOS, R04 Documentos bootstrap). R03 = RESOLVIDO (migration 0386 aplicada + deploy). R09 = RESOLVIDO (Sprint R09). |
+| Resíduos RUNTIME_HOT_PATH_COVERED (já com migration) | 7 (R02, R05, R06, R07, R08, R09, R10) |
 | Casos LEGACY_QUARANTINED | 4 (R11, R12, R13, R14) |
-| Falsos positivos / test-only | 7 (R15-R20 + R09 parcial) |
-| Lacunas de migration remanescentes | 2 confirmadas (`R01` SIGVOOS base, `R04` Documentos canonico) + 1 verificacao de runtime (`R09`) |
-| Migrations existentes relacionadas | 10+ (`0172`, `0173`, `0183`, `0184`, `0280`, `0317`, `0345`, `0352`, `0354`, `0136`-`0138`, `0165`) |
+| Falsos positivos / test-only | 7 (R15-R20) |
+| Lacunas de migration remanescentes | 2 confirmadas (`R01` SIGVOOS base, `R04` Documentos canonico) |
+| Migrations existentes relacionadas | 10+ (`0172`, `0173`, `0183`, `0184`, `0200`, `0280`, `0317`, `0345`, `0352`, `0354`, `0136`-`0138`, `0165`) |
 | Migrations novas necessarias | 2 confirmadas (`0387` ja versionada mas bloqueada por cadeia; `0388` planejada) |
-| Ordem recomendada restante | `R09` verification/readiness -> `R04` documentos canonico -> `R01` baseline/chain plan |
-| Status na matriz | DDL_RUNTIME = PARTIAL (R03 = RESOLVED; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1); restam R04 e R09 no runtime) |
+| Ordem recomendada restante | `R04` documentos canonico -> `R01` baseline/chain plan |
+| Status na matriz | DDL_RUNTIME = PARTIAL (R03 = RESOLVED; R09 = RESOLVED Sprint R09; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1); resta R04 no runtime) |
 
 ---
 

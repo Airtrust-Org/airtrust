@@ -83,30 +83,18 @@ export function safe(
   };
 }
 
-// Garantir colunas necessárias
-export async function ensureHistoricoSchema(db: D1Database) {
-  try {
-    const col = await db.prepare('PRAGMA table_info(qualificacoes_historico)').all();
-    const columns = (col.results || []).map((r: { name?: string }) => r.name);
-
-    const requiredColumns = [
-      { name: 'renovada', type: 'INTEGER DEFAULT 0' },
-      { name: 'local', type: 'TEXT' },
-      { name: 'modalidade', type: 'TEXT' },
-    ];
-
-    for (const col of requiredColumns) {
-      if (!columns.includes(col.name)) {
-        console.log(`[ensureHistoricoSchema] Adicionando coluna ${col.name}...`);
-        await db
-          .prepare(`ALTER TABLE qualificacoes_historico ADD COLUMN ${col.name} ${col.type}`)
-          .run();
-      }
-    }
-  } catch (e) {
-    console.warn(
-      '[ensureHistoricoSchema] Falha ao verificar/adicionar colunas:',
-      (e as Error).message,
-    );
-  }
+/**
+ * R09-RESOLVED: Runtime DDL removed.
+ *
+ * Migrations 0075/0107 added `renovada`, `local`, `modalidade` to qualificacoes_historico.
+ * Migration 0200 intentionally REMOVED `local` and `modalidade` (not used by the system).
+ * `renovada` persists through the 0200 rebuild and is present in the final schema.
+ *
+ * The active code path (historico-helpers.ts:131) already exports a no-op stub.
+ * This function is kept as a compatibility no-op — no ALTER TABLE is executed.
+ * See test: __tests__/migrations/qualificacoes-historico-shared-schema.test.ts
+ */
+export async function ensureHistoricoSchema(_db: D1Database) {
+  // No-op: schema is fully covered by migrations.
+  // Columns: renovada=present (0200+), local=removed (0200), modalidade=removed (0200).
 }

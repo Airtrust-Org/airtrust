@@ -30,6 +30,15 @@ const HOT_PATH_FILES = [
 
 // R01 stays documented until 0387 is applied in every environment and the
 // earlier 0354 sequencing dependency is normalized.
+//
+// historico.ts and historico-write.ts call ensureHistoricoSchema(db) (a no-op
+// stub from historico-helpers.ts:131 since R09). The call-site pattern matches
+// the ensure*Schema guard regex; these are safe no-op invocations.
+//
+// R09 (shared.ts ensureHistoricoSchema) — RESOLVED 2026-06-03.
+// The ALTER TABLE was removed from shared.ts. Migration 0200 intentionally
+// removed local + modalidade; renovada is present in the final schema.
+// shared.ts is dead code (not imported); the active path uses historico-helpers.ts.
 const DOCUMENTED_EXCEPTIONS = [
   'runtime/api-bootstrap.ts',
   'routes/qualificacoes/historico.ts',
