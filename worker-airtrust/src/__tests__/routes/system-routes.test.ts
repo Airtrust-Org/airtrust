@@ -36,6 +36,30 @@ describe('system routes extraction', () => {
     });
   });
 
+  it('GET /api/health usa getCanonicalVersion quando APP_VERSION está definida', async () => {
+    const app = createSystemApp();
+    const response = await app.request(
+      '/api/health',
+      {},
+      {
+        DB: createDbHealthyMock(),
+        APP_VERSION: '2026-06-03T17:00:27Z-c12d8bf',
+      } as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.stats.version).toBe('2026-06-03T17:00:27Z-c12d8bf');
+  });
+
+  it('GET /api/health retorna headers no-cache para impedir cache CDN stale', async () => {
+    const app = createSystemApp();
+    const response = await app.request('/api/health', {}, { DB: createDbHealthyMock() } as Env);
+
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store');
+  });
+
   it('mantém GET /api/version com success=true e shape atual', async () => {
     const app = createSystemApp();
     const response = await app.request(
@@ -58,6 +82,110 @@ describe('system routes extraction', () => {
         deploymentId: 'v-test-123',
       },
     });
+  });
+
+  it('GET /api/version retorna headers no-cache', async () => {
+    const app = createSystemApp();
+    const response = await app.request(
+      '/api/version',
+      {},
+      { APP_VERSION: 'v-test' } as Env,
+    );
+
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(response.headers.get('Pragma')).toBe('no-cache');
+  });
+
+  it('GET /api/status usa getCanonicalVersion mesmo com APP_VERSION ausente', async () => {
+    const app = createSystemApp();
+    const response = await app.request('/api/status', {}, {} as Env);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.backend_version).toBe('dev-local');
+    expect(body.frontend_version).toBeNull();
+  });
+
+  it('CONTRACT: /api/version.data.version === /api/health.stats.version', async () => {
+    const app = createSystemApp();
+    const env = {
+      DB: createDbHealthyMock(),
+      APP_VERSION: '2026-06-03T17:00:27Z-c12d8bf',
+      APP_BUILD_TIME: '2026-06-03T17:00:27.000Z',
+      ENVIRONMENT: 'production',
+    } as Env;
+
+    const [versionRes, healthRes] = await Promise.all([
+      app.request('/api/version', {}, env),
+      app.request('/api/health', {}, env),
+    ]);
+
+    const versionBody = await versionRes.json();
+    const healthBody = await healthRes.json();
+
+    expect(versionBody.data.version).toBe('2026-06-03T17:00:27Z-c12d8bf');
+    expect(healthBody.stats.version).toBe('2026-06-03T17:00:27Z-c12d8bf');
+    expect(versionBody.data.version).toBe(healthBody.stats.version);
+  });
+
+  it('CONTRACT: /api/health continua healthy com DB e storage ok', async () => {
+    const app = createSystemApp();
+    const response = await app.request(
+      '/api/health',
+      {},
+      {
+        DB: createDbHealthyMock(),
+        BUCKET: {
+          list: vi.fn().mockResolvedValue({ objects: [] }),
+        },
+        APP_VERSION: 'v-prod-abc',
+      } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.status).toBe('healthy');
+    expect(body.checks.database.status).toBe('ok');
+    expect(body.checks.storage.status).toBe('ok');
+    expect(body.stats.version).toBe('v-prod-abc');
+  });
+
+  it('FALLBACK: getCanonicalVersion usa CF_DEPLOYMENT_ID quando APP_VERSION ausente', async () => {
+    const app = createSystemApp();
+    // Simula acesso via Record para injetar CF_DEPLOYMENT_ID sem APP_VERSION
+    const env = {
+      DB: createDbHealthyMock(),
+      CF_DEPLOYMENT_ID: 'cf-deploy-999',
+    } as unknown as Env;
+
+    const [versionRes, healthRes] = await Promise.all([
+      app.request('/api/version', {}, env),
+      app.request('/api/health', {}, env),
+    ]);
+
+    const versionBody = await versionRes.json();
+    const healthBody = await healthRes.json();
+
+    expect(versionBody.data.version).toBe('cf-deploy-999');
+    expect(healthBody.stats.version).toBe('cf-deploy-999');
+    expect(versionBody.data.version).toBe(healthBody.stats.version);
+  });
+
+  it('FALLBACK: sem APP_VERSION nem CF_DEPLOYMENT_ID retorna dev-local em ambos', async () => {
+    const app = createSystemApp();
+    const env = { DB: createDbHealthyMock() } as Env;
+
+    const [versionRes, healthRes] = await Promise.all([
+      app.request('/api/version', {}, env),
+      app.request('/api/health', {}, env),
+    ]);
+
+    const versionBody = await versionRes.json();
+    const healthBody = await healthRes.json();
+
+    expect(versionBody.data.version).toBe('dev-local');
+    expect(healthBody.stats.version).toBe('dev-local');
+    expect(versionBody.data.version).toBe(healthBody.stats.version);
   });
 
   it('mantém GET /api/status com status 200 e contrato atual', async () => {

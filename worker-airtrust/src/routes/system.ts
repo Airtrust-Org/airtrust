@@ -4,15 +4,45 @@ import type { Env, Variables } from '../types';
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
 /**
+ * Retorna a versão canónica de deployment usada por todos os endpoints de sistema.
+ * Centralizada para garantir que /api/version, /api/health, /api/status sempre concordem.
+ *
+ * Ordem de precedência:
+ * 1. APP_VERSION (injetado pelo deploy script no wrangler.toml [vars])
+ * 2. CF_DEPLOYMENT_ID (fallback Cloudflare)
+ * 3. 'dev-local' (fallback seguro para desenvolvimento local)
+ */
+function getCanonicalVersion(env: Env): string {
+  const raw = env as unknown as Record<string, string>;
+  return raw.APP_VERSION || raw.CF_DEPLOYMENT_ID || 'dev-local';
+}
+
+/**
+ * Aplica headers no-cache para impedir que o CDN do Cloudflare sirva
+ * respostas stale com versão antiga após um deploy.
+ */
+function setNoCacheHeaders(c: { header: (name: string, value: string) => void }) {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
+  c.header('Surrogate-Control', 'no-store');
+  c.header('CDN-Cache-Control', 'no-store');
+  c.header('Cloudflare-CDN-Cache-Control', 'no-store');
+}
+
+/**
  * Registra rotas públicas/sistema no app principal.
  * Paths e contratos preservados do index.ts original.
  */
 export function registerSystemRoutes(app: SystemApp) {
   /**
    * GET /api/health
- * Health check completo - verifica D1, R2, KV e métricas
- */
+   * Health check completo - verifica D1, R2, KV e métricas.
+   * No-cache: versão deve refletir o deploy atual, nunca stale.
+   */
   app.get('/api/health', async (c) => {
+    setNoCacheHeaders(c);
+
     const startTime = Date.now();
     const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> =
       {};
@@ -56,11 +86,11 @@ export function registerSystemRoutes(app: SystemApp) {
       // R2 não é crítico, não marca como unhealthy
     }
 
-    // 3. Métricas básicas
+    // 3. Métricas básicas — versão canónica partilhada com /api/version
     const stats = {
       timestamp: new Date().toISOString(),
       environment: c.env.ENVIRONMENT || 'unknown',
-      version: c.env.APP_VERSION || 'dev-local',
+      version: getCanonicalVersion(c.env),
       region: c.req.header('CF-IPCountry') || 'unknown',
     };
 
@@ -88,19 +118,16 @@ export function registerSystemRoutes(app: SystemApp) {
     }
   });
 
-/**
- * GET /api/version
- * Exibe informações da versão/build atual do backend
- */
+  /**
+   * GET /api/version
+   * Exibe informações da versão/build atual do backend.
+   * No-cache: versão deve refletir o deploy atual, nunca stale.
+   */
   app.get('/api/version', (c) => {
-    const environment = c.env.ENVIRONMENT || 'development';
+    setNoCacheHeaders(c);
 
-    // Tenta obter o deployment ID via APP_VERSION primeiro (injetado pelo deploy script)
-    // Fallback para CF_DEPLOYMENT_ID depois
-    const deploymentId =
-      (c.env as unknown as Record<string, string>).APP_VERSION ||
-      (c.env as unknown as Record<string, string>).CF_DEPLOYMENT_ID ||
-      'unknown';
+    const environment = c.env.ENVIRONMENT || 'development';
+    const deploymentId = getCanonicalVersion(c.env);
 
     const builtAt =
       environment === 'development' ? new Date().toISOString() : c.env.APP_BUILD_TIME || null;
@@ -108,7 +135,7 @@ export function registerSystemRoutes(app: SystemApp) {
     return c.json({
       success: true,
       data: {
-        version: deploymentId !== 'unknown' ? deploymentId : c.env.APP_VERSION || '0.0.0-dev',
+        version: deploymentId,
         environment,
         builtAt,
         deploymentId,
@@ -116,14 +143,17 @@ export function registerSystemRoutes(app: SystemApp) {
     });
   });
 
-/**
- * GET /api/status
- * Health + versões (backend e opcionalmente frontend, se variável estiver configurada)
- */
+  /**
+   * GET /api/status
+   * Health + versões (backend e opcionalmente frontend, se variável estiver configurada).
+   * No-cache: versão deve refletir o deploy atual.
+   */
   app.get('/api/status', (c) => {
+    setNoCacheHeaders(c);
+
     return c.json({
       success: true,
-      backend_version: c.env.APP_VERSION || '0.0.0-dev',
+      backend_version: getCanonicalVersion(c.env),
       // opcional: configure FRONT_VERSION no deploy para refletir a versão do front
       frontend_version: (c.env as unknown as Record<string, string>).FRONT_VERSION || null,
       environment: c.env.ENVIRONMENT || 'development',
@@ -131,10 +161,10 @@ export function registerSystemRoutes(app: SystemApp) {
     });
   });
 
-/**
- * GET /api/system/health
- * Alias para compatibilidade com o frontend (/sistema)
- */
+  /**
+   * GET /api/system/health
+   * Alias para compatibilidade com o frontend (/sistema)
+   */
   app.get('/api/system/health', async (c) => {
     // Reutiliza a mesma lógica do /api/health
     const url = new URL(c.req.url);
@@ -142,10 +172,10 @@ export function registerSystemRoutes(app: SystemApp) {
     return c.redirect(`/api/health${url.search}`, 307);
   });
 
-/**
- * GET /api/sistema/health
- * Alias em português para compatibilidade
- */
+  /**
+   * GET /api/sistema/health
+   * Alias em português para compatibilidade
+   */
   app.get('/api/sistema/health', async (c) => {
     const url = new URL(c.req.url);
     return c.redirect(`/api/health${url.search}`, 307);
