@@ -125,19 +125,17 @@
 - **Entregue:** Inventário completo de 45 scripts `.sh` com `wrangler d1 execute`. 12 scripts bloqueados com banner+exit. 22 scripts read-only na allowlist. Guard `audit-dangerous-ops.sh` reforçado com 5 checks (commit-dirty, git-add, remote-D1, DDL+remote, legacy audit). Documento `AIRTRUST_D1_SCRIPT_HARDENING_AUDIT_v0_5.md` criado. OPS-02 reclassificado de PARTIAL → RESOLVED.
 - **Pendente:** Nenhum.
 
-### Sprint O — Audit Trail/LGPD v2 Design
-- **Prioridade:** Curto prazo.
-- **Objetivo:** Desenhar contrato único de auditoria sem executar migration.
-- **Escopo:** Comparar `auditoria`, `audit_logs`, `auditoria_avancada_v2`; mapear call sites; definir schema alvo com colunas `empresa_id`, `request_id`, `support_reason`, `actor`; classificar eventos críticos; plano de migração.
-- **Modelo recomendado:** GPT-5.5 Alta.
-- **Deploy necessário?:** Não nesta fase documental.
-- **Migration necessária?:** Sim, em fase futura de implementação.
-- **Risco:** Alto (compliance, dados sensíveis).
+### Sprint O — Audit Trail/LGPD v2 Design ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-02.
+- **Deploy:** Não (documental).
+- **Entregue:** design do Audit Trail v2; campos obrigatórios/proibidos; taxonomia de eventos; modelo auditável de suporte; draft técnico de retenção; plano de migration futura.
+- **Documentos:** `AIRTRUST_AUDIT_TRAIL_LGPD_V2_DESIGN_v0_5.md`, `AIRTRUST_AUDIT_EVENT_TAXONOMY_v0_5.md`, `AIRTRUST_AUDIT_RETENTION_POLICY_DRAFT_v0_5.md`, `AIRTRUST_SUPPORT_ACCESS_AUDIT_MODEL_v0_5.md`, `AIRTRUST_AUDIT_TRAIL_V2_MIGRATION_PLAN_v0_5.md`.
+- **Pendente:** implementação real, migration, validação jurídica do draft de retenção e integração com RBAC/suporte v2.
 
 ### Sprint P — RBAC/Suporte v2 Design
 - **Prioridade:** Curto prazo.
 - **Objetivo:** Desenhar schema para `platform_admin` e `support` sem executar migration.
-- **Escopo:** Modelo de dados para papéis de plataforma; permissões de `support` (leitura de diagnóstico, escopo por tenant, expiração); eventos auditados; política de revogação; plano de migração do operador legado (userId===1) para papel explícito.
+- **Escopo:** Modelo de dados para papéis de plataforma; permissões de `support` com base no modelo auditável do Sprint O (read-only, `support_reason`, `support_mode`, `target_empresa_id`, expiração); política de revogação; plano de migração do operador legado (userId===1) para papel explícito.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Deploy necessário?:** Não nesta fase documental.
 - **Migration necessária?:** Sim, em fase futura de implementação.
@@ -221,7 +219,7 @@
 |---|---|---|---|---|---|
 | M | Data Quality + Smoke | Imediata | GPT-5.4 | Não | Não |
 | N | Blindagem Operacional P2 ✅ | — | GPT-5.4 | Não | Não |
-| O | Audit Trail/LGPD v2 Design | Curto prazo | GPT-5.5 | Não | Futura |
+| O | Audit Trail/LGPD v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
 | P | RBAC/Suporte v2 Design | Curto prazo | GPT-5.5 | Não | Futura |
 | Q | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
 | R | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |

@@ -3,7 +3,7 @@
 **Data:** 2026-06-02
 **Branch:** `main`
 **HEAD:** `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
-**Modo:** Roadmap técnico-operacional atualizado após Sprint M (Data Quality + Smoke). Sem migration, sem dados reais, sem deploy.
+**Modo:** Roadmap técnico-operacional atualizado após Sprint O (Audit Trail/LGPD v2 design). Sem migration, sem dados reais, sem deploy.
 
 ---
 
@@ -11,7 +11,7 @@
 
 Este roadmap reflete o estado real após 12 sprints de auditoria e remediação (A até L + reauditorias). A ordem foi revisada com base na matriz consolidada de 48 achados.
 
-**Estado atual:** 22 RESOLVED, 9 PARTIAL, 10 OPEN, 5 DEFERRED, 2 BACKLOG.
+**Estado atual:** sem P0/P1 ativos em código de produção; itens de Audit Trail/LGPD v2 avançaram de backlog puramente aberto para design documental concluído, ainda sem implementação.
 **Nenhum P0/P1 ativo em código de produção.**
 
 ---
@@ -64,7 +64,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 5 — RBAC de plataforma e suporte (v2 design)
 
-- **Status:** Parcial (fallback centralizado, helpers canônicos, mas migration pendente).
+- **Status:** Parcial. Sprint O fechou o modelo de auditoria de suporte (`support_reason`, `support_mode`, `target_empresa_id`, read-only por padrão), mas o schema/RBAC persistido continua pendente.
 - **Objetivo:** Desenhar schema para `platform_admin` persistido, `support` read-only com escopo, expiração e eventos auditados. **Sem executar migration.**
 - **Risco:** Sem RBAC formal, multiempresa opera sem governança adequada.
 - **Escopo:** Modelo de dados, permissões, eventos, política de expiração/revogação, plano de rollback.
@@ -75,14 +75,14 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 6 — Audit Trail/LGPD v2 design
 
-- **Status:** Parcial (sanitização aplicada, writers legados sem contrato único).
-- **Objetivo:** Definir contrato único de auditoria com colunas dedicadas (`empresa_id`, `request_id`, `support_reason`, `actor`). **Sem executar migration.**
-- **Risco:** Compliance e LGPD sem trilha padronizada.
-- **Escopo:** Comparar `auditoria`, `audit_logs`, `auditoria_avancada_v2`; escolher writer canônico; definir schema alvo; mapear call sites; plano de migração.
+- **Status:** Design concluído nesta fase documental. Implementação/migration continuam abertas.
+- **Objetivo:** Converter o design produzido no Sprint O em sprint autorizada de implementação com migration, rollout e rollback seguros.
+- **Risco:** Compliance e LGPD continuam parcialmente cobertos enquanto o runtime persistir em três writers não padronizados.
+- **Escopo entregue no Sprint O:** contrato conceitual v2, campos obrigatórios/proibidos, taxonomia de eventos, modelo auditável de suporte, retenção draft e plano de migration futura.
 - **Modelo recomendado:** GPT-5.5 Alta.
 - **Deploy necessário?:** Sim, quando implementado.
 - **Migration necessária?:** Sim, na fase de implementação.
-- **Documento de referência:** `AIRTRUST_AUDIT_TRAIL_LGPD_HARDENING_PLAN_v0_5.md`.
+- **Documentos de referência:** `AIRTRUST_AUDIT_TRAIL_LGPD_HARDENING_PLAN_v0_5.md`, `AIRTRUST_AUDIT_TRAIL_LGPD_V2_DESIGN_v0_5.md`, `AIRTRUST_AUDIT_EVENT_TAXONOMY_v0_5.md`, `AIRTRUST_AUDIT_RETENTION_POLICY_DRAFT_v0_5.md`, `AIRTRUST_AUDIT_TRAIL_V2_MIGRATION_PLAN_v0_5.md`.
 
 ### Item 7 — Cobertura de testes dos módulos beta
 
@@ -191,7 +191,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 3 | Blindar scripts legados (P2) ✅ RESOLVIDO | — | — | — |
 | 4 | ~~Fechar dirty-deploy residual (P2)~~ ✅ RESOLVIDO | — | — | — |
 | 5 | RBAC/Suporte v2 design | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
-| 6 | Audit Trail/LGPD v2 design | Curto prazo | Compliance | GPT-5.5 Alta |
+| 6 | Implementação planejada do Audit Trail/LGPD v2 | Curto prazo | Compliance | GPT-5.5 Altissimo |
 | 7 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
 | 8 | DDL runtime residual design | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 9 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |

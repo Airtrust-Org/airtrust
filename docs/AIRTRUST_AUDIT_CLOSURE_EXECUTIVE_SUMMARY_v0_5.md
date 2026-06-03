@@ -3,7 +3,7 @@
 **Data:** 2026-06-02
 **Branch:** `main`
 **HEAD:** `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
-**Modo:** Documental/read-only. Este resumo consolida 14 sprints de auditoria e remediação executados entre maio e junho de 2026, incluindo Sprint Z.1 (reconciliação) e Sprint M (Data Quality + Smoke).
+**Modo:** Documental/read-only. Este resumo consolida 15 sprints de auditoria e remediação executados entre maio e junho de 2026, incluindo Sprint O (Audit Trail/LGPD v2 design-only).
 
 ---
 
@@ -16,8 +16,8 @@ O AirTrust passou por um ciclo intenso de auditoria e remediação. Partimos de 
 - **Nenhum P0 ativo.** O reset admin cross-tenant foi corrigido e testado.
 - **Nenhum P1 de código ativo.** Todos os P1 de runtime foram mitigados ou corrigidos.
 - **3 P2 residuais em scripts operacionais** (foot-guns que exigem invocação manual + credencial).
-- **12 achados abertos** — nenhum deles bloqueia piloto interno controlado.
-- **8 achados parciais** — funcionalidade entregue mas com cobertura ou migração pendente.
+- **Achados abertos remanescentes** continuam sem bloquear piloto interno controlado.
+- **Achados parciais** agora incluem o desenho documental concluído do Audit Trail/LGPD v2, ainda sem implementação.
 
 O código em produção (`59e601f`) está estável, com 588 testes worker e 478 testes frontend passando.
 
@@ -63,7 +63,7 @@ O código em produção (`59e601f`) está estável, com 588 testes worker e 478 
 | Área | O que foi feito | O que falta |
 |---|---|---|
 | **RBAC/Suporte** | `userId===1` centralizado, helpers nomeados, guard arquitetural | Migration para `platform_admin` persistido, role `support` ativada, remoção do fallback legado |
-| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; camada `lib/audit` | Unificar 3 writers (`auditoria`, `audit_logs`, `auditoria_avancada_v2`) em contrato único com colunas dedicadas |
+| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; camada `lib/audit`; Sprint O criou design v2, taxonomia, retenção draft e plano de migration | Implementar contrato único dos 3 writers com colunas dedicadas e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED) | Executar em ambiente com schema completo para zerar SKIPPED |
 | **DDL Runtime** | 8 hot paths limpos, funções órfãs removidas | 3 residuais mantidos: SIGVOOS, treinamentos-planejados, documentos (exigem migrations) |
@@ -78,7 +78,7 @@ O código em produção (`59e601f`) está estável, com 588 testes worker e 478 
 ### Bloqueadores para cliente externo
 
 1. **RBAC de plataforma**: `userId===1` ainda é o fallback; não existe `support` read-only formal.
-2. **Audit trail**: writers não são padronizados; `support_reason` e colunas dedicadas ausentes.
+2. **Audit trail**: o desenho v2 já existe, mas os writers ainda não foram padronizados nem migrados; `support_reason` continua ausente no runtime/schema atual.
 3. **Data quality**: execução operacional completa pendente (5 checks SKIPPED).
 4. **Cobertura de testes beta**: EVD sem cobertura; Hospedagem, SGSO, LMS com cobertura mínima.
 5. **Smoke autenticado**: validação funcional executada (PASS=11/11). Pendente: configurar `AIRTRUST_EXPECTED_EMPRESA_ID`.
@@ -138,9 +138,9 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 
 1. **Executar Data Quality completo** em ambiente staging aprovado com schema completo → zerar checks SKIPPED.
 2. **Configurar `AIRTRUST_EXPECTED_EMPRESA_ID`** e reexecutar smoke autenticado para fechar pendência de validação de empresa esperada.
-3. **Desenhar Audit Trail/LGPD v2** — definir contrato único de colunas para `empresa_id`, `request_id`, `support_reason` sem executar migration.
-4. **Desenhar RBAC/Suporte v2** — schema para `platform_admin` e `support` com escopo, expiração e eventos auditados, sem executar migration.
-5. **Blindar scripts shell legados** — mover scripts D1 destrutivos restantes para o wrapper seguro.
+3. **Desenhar RBAC/Suporte v2** — schema para `platform_admin` e `support` com base no modelo auditável do Sprint O, sem executar migration.
+4. **Obter revisão jurídica do draft de retenção** e fechar o contrato de `support_reason`/retenção antes da implementação.
+5. **Preparar a sprint de implementação segura do Audit Trail v2** — migration, dual-write controlado, rollback e data quality de auditoria.
 
 ---
 
@@ -170,8 +170,7 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 
 O AirTrust está em um estado sólido para continuar operação e evolução. O ciclo de auditoria identificou e corrigiu os riscos mais graves. O caminho para cliente externo e multiempresa passa por investimento em governança (RBAC, audit trail, data quality) — itens que não exigem reescrita, mas sim disciplina de engenharia e decisões de produto.
 
-**Total de achados consolidados:** 48
-**RESOLVED:** 22 | **PARTIAL:** 9 | **OPEN:** 10 | **DEFERRED:** 5 | **BACKLOG:** 2
+**Observação sobre contagem:** a matriz legacy consolidada mistura grupos históricos e subconjuntos resumidos. Após o Sprint O, usar a tabela detalhada da matriz mestre como fonte primária para status por achado.
 
 ---
 
