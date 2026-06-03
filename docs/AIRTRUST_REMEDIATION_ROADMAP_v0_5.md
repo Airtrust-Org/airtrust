@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-02
 **Branch:** `main`
-**HEAD:** `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
-**Modo:** Roadmap técnico-operacional atualizado após Sprint O (Audit Trail/LGPD v2 design). Sem migration, sem dados reais, sem deploy.
+**HEAD:** `c3328b59ab4d683d94a7fcbb4cfb30ceec77461f`
+**Modo:** Roadmap técnico-operacional atualizado após Sprint P (RBAC/Suporte v2 design). Sem migration, sem dados reais, sem deploy.
 
 ---
 
@@ -11,7 +11,7 @@
 
 Este roadmap reflete o estado real após 12 sprints de auditoria e remediação (A até L + reauditorias). A ordem foi revisada com base na matriz consolidada de 48 achados.
 
-**Estado atual:** sem P0/P1 ativos em código de produção; itens de Audit Trail/LGPD v2 avançaram de backlog puramente aberto para design documental concluído, ainda sem implementação.
+**Estado atual:** sem P0/P1 ativos em código de produção; itens de Audit Trail/LGPD v2 e RBAC/Suporte v2 avançaram de backlog puramente aberto para design documental concluído, ainda sem implementação.
 **Nenhum P0/P1 ativo em código de produção.**
 
 ---
@@ -62,16 +62,16 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ## Antes de 2 empresas com cliente usando
 
-### Item 5 — RBAC de plataforma e suporte (v2 design)
+### Item 5 — RBAC de plataforma e suporte (v2 design) ✅ DESIGN CONCLUÍDO
 
-- **Status:** Parcial. Sprint O fechou o modelo de auditoria de suporte (`support_reason`, `support_mode`, `target_empresa_id`, read-only por padrão), mas o schema/RBAC persistido continua pendente.
-- **Objetivo:** Desenhar schema para `platform_admin` persistido, `support` read-only com escopo, expiração e eventos auditados. **Sem executar migration.**
+- **Status:** Design concluído documentalmente no Sprint P. Implementação, migration e enforcement continuam pendentes.
+- **Objetivo:** Converter o design produzido no Sprint P em sprint autorizada de implementação com migration, dual-read, rollback e remoção segura do operador legado.
 - **Risco:** Sem RBAC formal, multiempresa opera sem governança adequada.
-- **Escopo:** Modelo de dados, permissões, eventos, política de expiração/revogação, plano de rollback.
+- **Escopo entregue no Sprint P:** modelo de papéis de plataforma; `support_read_only` tenant-scoped e fail-closed; separação entre papel de plataforma e papel de tenant; integração RBAC/audit; plano conceitual de migração do `userId===1`.
 - **Modelo recomendado:** GPT-5.5 Altissimo — schema sensível de auth.
 - **Deploy necessário?:** Sim, quando implementado.
 - **Migration necessária?:** Sim, na fase de implementação.
-- **Documento de referência:** `AIRTRUST_RBAC_SUPPORT_MODEL_v0_5.md`.
+- **Documentos de referência:** `AIRTRUST_RBAC_SUPPORT_V2_DESIGN_v0_5.md`, `AIRTRUST_PLATFORM_ROLES_MODEL_v0_5.md`, `AIRTRUST_SUPPORT_READ_ONLY_MODEL_v0_5.md`, `AIRTRUST_RBAC_V2_MIGRATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_INTEGRATION_PLAN_v0_5.md`.
 
 ### Item 6 — Audit Trail/LGPD v2 design
 
@@ -182,7 +182,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ---
 
-## Ordem de execução recomendada (atualizada após Sprint Z)
+## Ordem de execução recomendada (atualizada após Sprint P)
 
 | # | Item | Prioridade | Bloqueia | Modelo |
 |---|---|---|---|---|
@@ -190,7 +190,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 2 | Data Quality completo (staging) | Imediata | GO pleno | GPT-5.4 Alta |
 | 3 | Blindar scripts legados (P2) ✅ RESOLVIDO | — | — | — |
 | 4 | ~~Fechar dirty-deploy residual (P2)~~ ✅ RESOLVIDO | — | — | — |
-| 5 | RBAC/Suporte v2 design | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
+| 5 | Implementação planejada do RBAC/Suporte v2 | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
 | 6 | Implementação planejada do Audit Trail/LGPD v2 | Curto prazo | Compliance | GPT-5.5 Altissimo |
 | 7 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
 | 8 | DDL runtime residual design | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |

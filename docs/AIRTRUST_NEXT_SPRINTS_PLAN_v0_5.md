@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-02
 **Branch:** `main`
-**HEAD:** `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
-**Modo:** Planejamento de sprints atualizado após Sprint M (Data Quality + Smoke). Baseado na matriz de 48 achados.
+**HEAD:** `c3328b59ab4d683d94a7fcbb4cfb30ceec77461f`
+**Modo:** Planejamento de sprints atualizado após Sprint P (RBAC/Suporte v2 design). Baseado na matriz de 48 achados.
 
 ---
 
@@ -132,14 +132,12 @@
 - **Documentos:** `AIRTRUST_AUDIT_TRAIL_LGPD_V2_DESIGN_v0_5.md`, `AIRTRUST_AUDIT_EVENT_TAXONOMY_v0_5.md`, `AIRTRUST_AUDIT_RETENTION_POLICY_DRAFT_v0_5.md`, `AIRTRUST_SUPPORT_ACCESS_AUDIT_MODEL_v0_5.md`, `AIRTRUST_AUDIT_TRAIL_V2_MIGRATION_PLAN_v0_5.md`.
 - **Pendente:** implementação real, migration, validação jurídica do draft de retenção e integração com RBAC/suporte v2.
 
-### Sprint P — RBAC/Suporte v2 Design
-- **Prioridade:** Curto prazo.
-- **Objetivo:** Desenhar schema para `platform_admin` e `support` sem executar migration.
-- **Escopo:** Modelo de dados para papéis de plataforma; permissões de `support` com base no modelo auditável do Sprint O (read-only, `support_reason`, `support_mode`, `target_empresa_id`, expiração); política de revogação; plano de migração do operador legado (userId===1) para papel explícito.
-- **Modelo recomendado:** GPT-5.5 Altissimo.
-- **Deploy necessário?:** Não nesta fase documental.
-- **Migration necessária?:** Sim, em fase futura de implementação.
-- **Risco:** Alto (auth/tenant sensível, schema com dados de plataforma).
+### Sprint P — RBAC/Suporte v2 Design ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-02.
+- **Deploy:** Não (documental).
+- **Entregue:** modelo v2 para `platform_admin`, `support_read_only` e `support_elevated`; separação entre papéis de plataforma e de tenant; fail-closed para suporte; integração RBAC/audit; plano conceitual de migração do fallback legado `userId===1`.
+- **Documentos:** `AIRTRUST_RBAC_SUPPORT_V2_DESIGN_v0_5.md`, `AIRTRUST_PLATFORM_ROLES_MODEL_v0_5.md`, `AIRTRUST_SUPPORT_READ_ONLY_MODEL_v0_5.md`, `AIRTRUST_RBAC_V2_MIGRATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_INTEGRATION_PLAN_v0_5.md`.
+- **Pendente:** implementação real, migration, dual-read, enforcement runtime, remoção segura do `userId===1` e rollback operacional.
 
 ### Sprint Q — Cobertura Beta (EVD + Complementos)
 - **Prioridade:** Curto prazo.
@@ -220,7 +218,7 @@
 | M | Data Quality + Smoke | Imediata | GPT-5.4 | Não | Não |
 | N | Blindagem Operacional P2 ✅ | — | GPT-5.4 | Não | Não |
 | O | Audit Trail/LGPD v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
-| P | RBAC/Suporte v2 Design | Curto prazo | GPT-5.5 | Não | Futura |
+| P | RBAC/Suporte v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
 | Q | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
 | R | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |
 | S | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
