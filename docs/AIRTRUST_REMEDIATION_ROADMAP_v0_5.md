@@ -18,27 +18,27 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ## Agora, antes de qualquer novo cliente externo
 
-### Item 1 — Smoke autenticado funcional (Sprint M executado, OP-1 revalidada)
+### Item 1 — Smoke autenticado funcional (Sprint M executado, OP-1/OP-2 revalidada)
 
-- **Status:** PARTIAL. Smoke autenticado executado historicamente (Z.1: PASS=11). Em OP-1, a sessao atual ficou `SKIPPED_AUTH_REQUIRED` porque nao havia credencial efemera/read-only nem `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO`.
+- **Status:** PARTIAL. Smoke autenticado executado historicamente (Z.1: PASS=11). Em OP-1 e OP-2, a sessao atual ficou `SKIPPED_AUTH_REQUIRED` porque nao havia credencial efemera/read-only nem `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO`.
 - **Objetivo:** Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO` e reexecutar `npm run smoke:auth:login` para validar empresa esperada.
 - **Risco:** Sem validação de empresa esperada, não há confirmação de que o tenant correto foi acessado.
 - **Escopo:** Operador configura variável de empresa esperada → executa login interativo → documenta resultado sanitizado.
 - **Modelo recomendado:** GPT-5.4 Baixa — execução de script existente + configuração de env var.
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não.
-- **Evidencia Sprint M/OP-1:** Smoke publico PASS=3. OP-1 confirmou novamente `PASS=3 FAIL=0 SKIPPED=1` no script, com skip explicito do bloco autenticado por ausencia de auth material na sessao.
+- **Evidencia Sprint M/OP-1/OP-2:** Smoke publico PASS=3. OP-1 e OP-2 confirmaram `PASS=3 FAIL=0 SKIPPED=1` no script, com skip explicito do bloco autenticado por ausencia de auth material na sessao.
 
-### Item 2 — Data Quality operacional completo (Sprint M executado, OP-1 revalidado)
+### Item 2 — Data Quality operacional completo (Sprint M executado, OP-1/OP-2 revalidado)
 
-- **Status:** PARTIAL. Runner local executado no Sprint M e repetido em OP-1: PASS=5, WARN=4, FAIL=0, SKIPPED=5.
+- **Status:** PARTIAL. Runner local executado no Sprint M e repetido em OP-1 e OP-2: PASS=5, WARN=4, FAIL=0, SKIPPED=5.
 - **Objetivo:** Executar todos os checks em ambiente staging com schema completo para zerar SKIPPED.
 - **Risco:** Onboarding externo com dados inconsistentes ou métricas erradas. 5 checks SKIPPED por schema local incompleto — staging necessário.
 - **Escopo:** Apontar staging aprovado com schema completo; executar runner; classificar blocker/warn/info; registrar sumário sem PII.
 - **Modelo recomendado:** GPT-5.4 Alta.
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não.
-- **Evidencia Sprint M/OP-1:** 15 checks executados, 0 FAIL. 5 SKIPPED por ausencia de colunas/tabelas no snapshot local (nao sao erros de SQL).
+- **Evidencia Sprint M/OP-1/OP-2:** 15 checks executados, 0 FAIL. 5 SKIPPED por ausencia de colunas/tabelas no snapshot local (nao sao erros de SQL). OP-2 tambem confirmou que nao havia `AIRTRUST_DATA_QUALITY_*` de staging configurado na sessao.
 
 ### Item OP-1 — Readiness operacional consolidada ✅ CONCLUIDO
 
@@ -47,6 +47,14 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 - **Resultado:** `CONDITIONAL GO`.
 - **Entregue:** `AIRTRUST_OPERATIONAL_READINESS_EVIDENCE_v0_5.md`.
 - **Pendente:** credencial/auth para smoke autenticado com empresa esperada, schema completo para Data Quality e staging flag test do Audit v2.
+
+### Item OP-2 — Staging operational gate ✅ CONCLUIDO
+
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** tentar fechar smoke autenticado, Data Quality e readiness de staging sem migration, sem schema remoto e sem deploy.
+- **Resultado:** `CONDITIONAL GO` mantido.
+- **Entregue:** revalidacao read-only da evidencia operacional no mesmo artefato `AIRTRUST_OPERATIONAL_READINESS_EVIDENCE_v0_5.md`.
+- **Pendente:** credencial/auth para smoke autenticado com empresa esperada, staging/snapshot aprovado com schema completo e autorizacao separada para eventual staging flag test do Audit v2.
 
 ### Item 3 — Blindagem operacional de scripts legados (P2) ✅ RESOLVIDO
 
