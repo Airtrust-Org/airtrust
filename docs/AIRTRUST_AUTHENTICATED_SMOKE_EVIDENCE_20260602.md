@@ -1,30 +1,30 @@
 # AirTrust Authenticated Smoke Evidence - 2026-06-02
 
+**Sprint:** M — Data Quality completo + Smoke com empresa esperada
+
 ## Escopo
 
-Evidencia sanitizada do Launch Gate final antes da segunda empresa real.
+Evidencia sanitizada do Sprint M, incluindo smoke público baseline e tentativa de smoke com empresa esperada.
 
 - Branch: `main`
-- HEAD do gate: `f9adfa2c8fcd4041ca86c82414b114e5b2e1bbe0`
-- `origin/main`: `f9adfa2c8fcd4041ca86c82414b114e5b2e1bbe0`
+- HEAD do gate: `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
+- `origin/main`: `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
 - Divergencia `origin/main...HEAD`: `0 0`
 - Base URL: `https://api.airtrust.online`
-- APP_VERSION em producao: `2026-06-02T17:36:07Z-a543132`
 - Deploy neste gate: nao executado
-- Writes: zero writes executados por Codex
+- Writes: zero writes executados
 
 ## Controle de Credencial
 
 - Senha registrada nesta evidencia: nao
 - Token/cookie registrado nesta evidencia: nao
 - E-mail, nome, usuario, funcionario, FRMS, qualificacao ou payload bruto registrado: nao
-- `AIRTRUST_AUTH_TOKEN` no ambiente Codex: nao presente
-- `AIRTRUST_COOKIE` no ambiente Codex: nao presente
-- `AIRTRUST_EXPECTED_EMPRESA_ID/CODIGO` no ambiente Codex: nao presente
+- `AIRTRUST_AUTH_TOKEN` no ambiente: nao presente
+- `AIRTRUST_COOKIE` no ambiente: nao presente
+- `AIRTRUST_EXPECTED_EMPRESA_ID` no ambiente: **nao configurado**
+- `AIRTRUST_EXPECTED_EMPRESA_CODIGO` no ambiente: **nao configurado**
 
-Codex nao coletou credenciais e nao reexecutou login autenticado interativo nesta sessao. A evidencia autenticada abaixo foi informada pelo operador como resultado manual sanitizado de `npm run smoke:auth:login`.
-
-## Smoke Public-Only Codex
+## Smoke Public-Only (Sprint M)
 
 Comando:
 
@@ -42,15 +42,23 @@ Resultado: `PASS`
 
 Resumo sanitizado: `PASS=3 FAIL=0 SKIPPED=0`
 
-## Smoke Autenticado Manual Operador
+## Smoke Autenticado com Empresa Esperada (Sprint M)
 
-Comando operacional usado pelo operador:
+Status: `SKIPPED_EXPECTED_EMPRESA_NOT_CONFIGURED`
+
+Motivo: Nem `AIRTRUST_EXPECTED_EMPRESA_ID` nem `AIRTRUST_EXPECTED_EMPRESA_CODIGO` foram configurados no ambiente. Sem essas variáveis, não é possível validar que o tenant retornado corresponde à empresa esperada.
+
+Para executar, o operador deve configurar uma das variáveis antes de rodar `npm run smoke:auth:login`:
 
 ```bash
-npm run smoke:auth:login
+export AIRTRUST_EXPECTED_EMPRESA_ID="..."
+# ou
+export AIRTRUST_EXPECTED_EMPRESA_CODIGO="..."
 ```
 
-Resultado sanitizado informado:
+## Smoke Autenticado Anterior (Sprint Z.1 — 2026-06-02)
+
+Evidência mantida da execução anterior para referência:
 
 | Check | Resultado |
 | --- | --- |
@@ -68,26 +76,22 @@ Resultado sanitizado informado:
 | Writes habilitados | NO |
 | Resumo sanitizado | `PASS=11 FAIL=0 SKIPPED=2` |
 
-Nenhum token, cookie, senha, e-mail, nome, ID de usuario, payload bruto ou PII foi registrado.
-
 ## Validacao de Empresa Esperada
 
-Status: `NAO VALIDADA POR VARIAVEL EXPLICITA`
+Status: `NAO VALIDADA`
 
-Motivo: `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO` nao foi informado no ambiente Codex nem registrado na evidencia sanitizada do operador.
+- Sprint Z.1: smoke autenticado PASS=11 mas `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO` nao configurado.
+- Sprint M: mesma situacao — variaveis continuam nao configuradas.
 
-Conclusao: smoke autenticado passou, mas a decisao maxima do gate e `CONDITIONAL GO`.
+## Resultado do Gate Autenticado (Sprint M)
 
-## Probe de Assets
+Status: `PARTIAL`
 
-Status: `PASS`
-
-`GET /api/assets/fira/123/test.pdf` retornou HTTP `404` com corpo `application/json`, sem PDF/documento publico.
-
-## Resultado do Gate Autenticado
-
-Status: `PASS COM PENDENCIA CONTROLADA`
+- Smoke público: PASS=3 ✅
+- Smoke autenticado com empresa esperada: SKIPPED (variáveis não configuradas)
+- Smoke autenticado anterior (Z.1): PASS=11 ✅ (sem validação de empresa)
 
 Pendencia restante:
 
-- validar empresa esperada por `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO`, ou registrar aprovacao formal da excecao antes de liberar acesso do cliente.
+- Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO` e reexecutar `npm run smoke:auth:login`.
+- Ou registrar aprovacao formal da excecao antes de liberar acesso do cliente.

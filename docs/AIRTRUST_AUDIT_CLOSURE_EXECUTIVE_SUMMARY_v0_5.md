@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-02
 **Branch:** `main`
-**HEAD:** `59e601f0a25cbbbe7e842dd83844af4ce91279ab`
-**Modo:** Documental/read-only. Este resumo consolida 12 sprints de auditoria e remediação executados entre maio e junho de 2026.
+**HEAD:** `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
+**Modo:** Documental/read-only. Este resumo consolida 14 sprints de auditoria e remediação executados entre maio e junho de 2026, incluindo Sprint Z.1 (reconciliação) e Sprint M (Data Quality + Smoke).
 
 ---
 
