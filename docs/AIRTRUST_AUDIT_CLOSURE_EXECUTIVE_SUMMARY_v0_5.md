@@ -66,7 +66,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 | **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; Sprint X.5 aplicou migration `0385` em produção | Ativar flag, validar paridade, ampliar cobertura dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED); OP-1 e OP-2 repetiram a evidencia local com o mesmo perfil agregado | Executar em ambiente com schema completo para zerar SKIPPED |
-| **DDL Runtime** | 15 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Sprint Z0 mapeou integralmente R01 (SIGVOOS), Sprint Z1 criou `0387` e Sprint Z1.1 provou a falha da cadeia limpa na `0354`. R01 = MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint R09 removeu o ALTER TABLE de `shared.ts`; R09 = RESOLVED. Resta 1 residual crítico no runtime (R04). |
+| **DDL Runtime** | 15 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Sprint Z0 mapeou integralmente R01 (SIGVOOS), Sprint Z1 criou `0387` e Sprint Z1.1 provou a falha da cadeia limpa na `0354`. R01 = MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint R09 removeu o ALTER TABLE de `shared.ts`; R09 = RESOLVED. Sprint R04.1 mapeou integralmente R04 (Documentos) — 9 lacunas confirmadas, probe remoto OBRIGATÓRIO antes da 0388. R04 = READINESS_MAPPED. |
 | **Repository Pattern** | Piloto em 2 domínios (dashboard, LMS reports) | Expandir gradualmente para lms-cursos, qualificações |
 | **Scripts DB** | Wrapper seguro criado para scripts críticos | Scripts shell legados ainda sem wrapper |
 | **`escala_alocacoes`** | Tenant-scope por JOIN garantido e testado | Migration opcional P3 para coluna `empresa_id` própria + UNIQUE parcial |
@@ -85,7 +85,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 
 ### Não bloqueadores (para piloto interno)
 
-6. **DDL runtime residual** em SIGVOOS e documentos. R03 = RESOLVED (Sprint X.5: `0386` aplicada + deploy). R09 = RESOLVED (Sprint R09: ALTER TABLE removido de `shared.ts`; colunas `local`/`modalidade` removidas por migration 0200, `renovada` presente no schema final; active path já era no-op). R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1: prova local da falha de cadeia limpa antes da `0387`). Resta 1 residual crítico no runtime (R04).
+6. **DDL runtime residual** em SIGVOOS e documentos. R03 = RESOLVED (Sprint X.5: `0386` aplicada + deploy). R09 = RESOLVED (Sprint R09: ALTER TABLE removido de `shared.ts`). R04 = READINESS_MAPPED (Sprint R04.1: 9 lacunas confirmadas, probe remoto OBRIGATÓRIO antes da 0388). R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1).
 7. **Status residual** em cron/alertas/EVD (bloqueia escala, não piloto).
 8. **R2 metadata** de tenant ausente (defense-in-depth, não critério de segurança).
 9. **Performance/bundle/N+1** sem auditoria (dívida estrutural).
@@ -140,7 +140,7 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 2. **Executar Data Quality completo** em ambiente staging aprovado com schema completo para zerar checks `SKIPPED`.
 3. **Executar o Audit v2 staging flag test** com schema ja aplicado, rollback por flag e validacao de paridade minima.
 4. **Executar a foundation de RBAC/Suporte v2** somente depois do Audit v2 staging flag test aprovado.
-5. **Fechar o bloco DDL residual restante** na ordem `R04 -> R01`, mantendo a abordagem conservadora para schema/migrations. R09 = RESOLVED (Sprint R09).
+5. **Fechar o bloco DDL residual restante** na ordem `R04 -> R01`, mantendo a abordagem conservadora para schema/migrations. R09 = RESOLVED (Sprint R09). R04 = READINESS_MAPPED (Sprint R04.1). Próximo passo: probe estrutural remoto (PRAGMA table_info(documentos)) → criar/aplicar 0388.
 
 **Decisao operacional OP-1/OP-2:** `CONDITIONAL GO`.
 

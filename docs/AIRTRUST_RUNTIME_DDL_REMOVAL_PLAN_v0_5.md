@@ -91,7 +91,7 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 
 ## Sprint V — DDL Runtime Residual Design (2026-06-03)
 
-**Status:** PARTIAL → R03 RESOLVED, R09 RESOLVED, R01 MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`, então o fallback permanece bloqueado por desenho de sequência. Sprint R09 (2026-06-03) removeu o ALTER TABLE de `shared.ts`; colunas `local`/`modalidade` removidas por 0200, `renovada` presente no schema final. Resta R04 (Documentos).
+**Status:** PARTIAL → R03 RESOLVED, R09 RESOLVED, R04 READINESS_MAPPED, R01 MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`, então o fallback permanece bloqueado por desenho de sequência. Sprint R09 (2026-06-03) removeu o ALTER TABLE de `shared.ts`. Sprint R04.1 (2026-06-03) mapeou integralmente R04 (Documentos) — 9 lacunas confirmadas, probe remoto OBRIGATÓRIO antes da 0388. Próximo: probe remoto → criar 0388.
 
 ### Inventário atualizado
 
@@ -111,7 +111,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 |---|---|---|---|
 | R01 | `services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` — 3 tabelas base + 4 índices sem migration | `0387_integracoes_sigvoos_base_tables.sql` (criada no Sprint Z1). **Status: MIGRATION_CHAIN_BLOCKED_BY_0354.** Doc: `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md` e `AIRTRUST_SIGVOOS_MIGRATION_CHAIN_AUDIT_v0_5.md` |
 | R03 | `services/treinamentos-planejados-integration.ts` | `solicitacoes_treinamento.treinamento_planejado_id`, `status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` — 2 colunas + 1 índice parcial | `0386_solicitacoes_treinamento_planejado_link.sql` (`MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`) |
-| R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `documentos` — sem migration canônica única que cubra schema completo + 5 índices do bootstrap | `0388_documentos_canonical_schema.sql` |
+| R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `documentos` — sem migration canônica única que cubra schema completo + 5 índices do bootstrap | `0388_documentos_canonical_schema.sql` — READINESS_MAPPED (Sprint R04.1, 2026-06-03) |
 
 ### Novos residuais encontrados (não documentados anteriormente)
 
@@ -132,7 +132,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 | Gate X.0 | Probe read-only aprovado para `solicitacoes_treinamento` | Decidir formato real da M1 | MÉDIO |
 | Fase 1 | M1 — `0386` (link Treinamentos) | Remover R03 | MÉDIO |
 | Fase 2 | R09 — CONCLUÍDA (Sprint R09, 2026-06-03) | ALTER TABLE removido de `shared.ts`; colunas confirmadas: `renovada`=migration, `local`/`modalidade`=removidas por 0200 | — |
-| Fase 3 | M3 — `0388` (Documentos canonico) | Remover R04 | MEDIO |
+| Fase 3 | M3 — `0388` (Documentos canonico) | Remover R04 — **READINESS_MAPPED Sprint R04.1** | MEDIO |
 | Fase 4 | R01 baseline/chain plan | Destravar `0354 -> 0387` antes de qualquer apply/remocao | ALTO |
 
 ### Documentos produzidos
@@ -142,4 +142,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = PARTIAL (R03 = RESOLVED apos apply 0386 + deploy X.5; R09 = RESOLVED Sprint R09 2026-06-03; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1; resta R04 no runtime).
+DDL_RUNTIME = PARTIAL (R03 = RESOLVED apos apply 0386 + deploy X.5; R09 = RESOLVED Sprint R09 2026-06-03; R04 = READINESS_MAPPED Sprint R04.1 2026-06-03; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1).
