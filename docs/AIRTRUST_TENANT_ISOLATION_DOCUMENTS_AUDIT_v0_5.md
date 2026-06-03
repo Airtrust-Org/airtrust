@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-02
 **Sprint:** J — Supabase Preparation
-**Status:** Auditoria concluida; Sprint K corrigiu os 7 gaps criticos e parte dos altos
+**Status:** Auditoria concluida; Sprint K corrigiu criticos/altos locais; Sprint K.1 fechou residuais de certificados admin
 
 ---
 
@@ -69,16 +69,19 @@ Auditoria de todas as rotas que servem documentos, certificados e assets (R2) no
 
 | Método | Path | Tenant Check | Risco | Gap |
 |---|---|---|---|---|
-| GET | `/historico/:id/certificados` | ✅ JOIN `funcionarios f ON f.id = qh.funcionario_id` com `f.empresa_id = ?` | Baixo | — |
+| GET | `/historico/:id/certificados` | ✅ Sprint K.1 — historico e documento vinculado validados por `funcionarios.empresa_id` antes de retornar metadado | MEDIO CORRIGIDO | MED-002 |
 | **DELETE** | **`/historico/:id/certificados/:certId`** | ✅ Sprint K — documento validado por tenant e historico compatível antes de R2/cascata | **CRÍTICO CORRIGIDO** | GAP-010 |
 | GET | `/funcionario/:id` | ✅ Sprint K — JOIN `funcionarios.empresa_id` | ALTO CORRIGIDO | GAP-011 |
 | **GET** | **`/download/:id`** | ✅ Sprint K — documento validado por tenant antes de retornar stream URL | **CRÍTICO CORRIGIDO** | GAP-012 |
 | POST | `/historico/:id/certificados/gerar` | ✅ Usa `getEmpresaId(c)` + `AND f.empresa_id = ?` | Baixo | — |
 | POST | `/historico/:id/certificados/upload` | ✅ Usa `getEmpresaId(c)` + armazena empresa_id | Baixo | — |
 | **POST** | **`/historico/export-zip`** | ✅ Sprint K — `auth()` confirmado e query filtrada por `funcionarios.empresa_id` antes de R2 | **CRÍTICO CORRIGIDO** | GAP-013 |
-| POST | `/recuperar-orfaos` | ❌ admin-only mas query cross-tenant sem boundary | ALTO | GAP-014 |
+| POST | `/recuperar-orfaos` | ✅ Sprint K.1 — busca, candidato e update filtrados por tenant | ALTO CORRIGIDO | GAP-014 |
+| POST | `/limpar-refs-orfas` | ✅ Sprint K.1 — limpeza limitada ao tenant e detecta refs cross-tenant | MEDIO CORRIGIDO | MED-001 |
 
 **Nota Sprint K sobre GAP-013:** a auditoria registrou ausência de auth, mas o código atual já tinha `auth()`. O gap real corrigido foi ausência de filtro `empresa_id`, que permitia export cross-empresa antes de ler objetos R2.
+
+**Nota Sprint K.1:** a mencao original a "2 medios" no inventario Sprint J nao nomeava os endpoints. A fase K.1 classificou e corrigiu os residuais como: MED-001 (`POST /api/certificados/limpar-refs-orfas`) e MED-002 (`GET /api/certificados/historico/:id/certificados` quando o historico aponta para documento de outro tenant).
 
 ---
 
@@ -133,18 +136,25 @@ Auditoria de todas as rotas que servem documentos, certificados e assets (R2) no
 | GAP-011 | `GET /api/certificados/funcionario/:id` | Lista certificados de qualquer funcionario |
 | GAP-014 | `POST /api/certificados/recuperar-orfaos` | Cross-link de docs entre tenants |
 
-### Status Sprint K (2026-06-02)
+### Medios (2) — metadado/limpeza residual cross-tenant
+
+| ID | Endpoint | Risco |
+|---|---|---|
+| MED-001 | `POST /api/certificados/limpar-refs-orfas` | Admin cleanup varria historicos sem boundary claro de tenant |
+| MED-002 | `GET /api/certificados/historico/:id/certificados` | Historico era validado por tenant, mas o documento vinculado podia expor metadado cross-tenant |
+
+### Status Sprint K / K.1 (2026-06-02)
 
 | Grupo | Status |
 |---|---|
 | 7 gaps criticos | Corrigidos em runtime e cobertos por teste de regressao cross-tenant |
 | GAP-001, GAP-002, GAP-006, GAP-008, GAP-009, GAP-011 | Corrigidos junto com os criticos por serem locais e compartilharem o mesmo padrao |
-| GAP-014 | Pendente; rota administrativa de recuperacao de orfaos exige fase propria |
-| 2 medios citados no inventario Sprint J | Pendentes de classificacao explicita em documento separado |
-| `lmsRelatoriosRepository` | Nao integrado neste sprint para manter foco em documentos/R2 |
+| GAP-014 | Corrigido no Sprint K.1 com query de orfaos, candidato e update tenant-scoped |
+| 2 medios citados no inventario Sprint J | Classificados como MED-001/MED-002 e corrigidos no Sprint K.1 |
+| `lmsRelatoriosRepository` | Nao integrado no K.1 para manter foco em isolamento residual de documentos/certificados |
 
 Teste adicionado: `worker-airtrust/src/__tests__/routes/documentos-tenant-isolation.test.ts`.
-Garantias cobertas: cross-tenant nao chama `BUCKET.get()`, `BUCKET.put()`, `BUCKET.delete()` nem executa mutations; tenant correto mantem acesso em stream/export.
+Garantias cobertas: cross-tenant nao chama `BUCKET.get()`, `BUCKET.put()`, `BUCKET.delete()` nem executa mutations; tenant correto mantem acesso em stream/export; rotas admin residuais nao fazem cross-link/limpeza fora do tenant; metadado de certificado cross-tenant nao e retornado.
 
 ---
 
@@ -185,14 +195,14 @@ WHERE d.id = ? AND d.deleted_at IS NULL
 1. **Fase 1:** Corrigir GAP-004 e GAP-013 — concluido no Sprint K.
 2. **Fase 2:** Corrigir GAP-003, GAP-005, GAP-007, GAP-010, GAP-012 — concluido no Sprint K.
 3. **Fase 3:** Corrigir GAP-001, GAP-002, GAP-006, GAP-008, GAP-009, GAP-011 — concluido no Sprint K.
-4. **Pendente:** GAP-014 e gaps medios, para fase propria.
-5. **Validação:** Testes de tenant isolation adicionados para stream/download/export/delete.
+4. **Fase 4:** Corrigir GAP-014 e classificar/corrigir os 2 gaps medios — concluido no Sprint K.1.
+5. **Validação:** Testes de tenant isolation adicionados para stream/download/export/delete/admin residual/metadado de certificado.
 
 ---
 
 ## 7. O que NÃO foi feito neste sprint
 
-- **Foram aplicadas correções de runtime para os 7 gaps criticos e altos locais selecionados**
+- **Foram aplicadas correções de runtime para os 7 gaps criticos, altos locais selecionados, GAP-014 e 2 residuais medios**
 - **NÃO** foram alterados objetos R2
 - **NÃO** foram alteradas políticas de assets
 - **NÃO** foi modificada a middleware de auth/tenant

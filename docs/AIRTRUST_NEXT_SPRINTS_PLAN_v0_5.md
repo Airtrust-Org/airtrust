@@ -127,14 +127,17 @@ Modo: planejamento de sprints amplos atualizado apos Sprint J (Supabase Preparat
 - Risco: alto (runtime sensivel — documentos, certificados, R2 access, cascading deletes).
 - Documento referencia: `docs/AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`.
 - Criterio de aceite: 7 gaps criticos corrigidos, testes de tenant isolation para stream/download/export/delete, sem regressao em upload/download/stream.
-- Pendente: GAP-014, gaps medios e integracao de `lmsRelatoriosRepository`.
+- Pendente apos Sprint K: GAP-014, gaps medios e decisao de integracao de `lmsRelatoriosRepository`.
 
-## Sprint K.1 - Tenant Isolation Residuals (recomendado como proximo)
+## Sprint K.1 - Tenant Isolation Residuals (2026-06-02)
 
+- Status: concluido.
 - Objetivo: fechar GAP-014, classificar/corrigir os 2 gaps medios e decidir integracao de `lmsRelatoriosRepository`.
-- Escopo: rotas admin de recuperacao/limpeza de certificados orfaos e preparacao LMS read-only.
+- Escopo executado: rotas admin de recuperacao/limpeza de certificados orfaos e guard adicional na listagem de metadado de certificado por historico.
 - Fora do escopo: schema, migration, R2 metadata, objetos R2 reais, deploy Pages.
 - Modelo recomendado: GPT-5.5 Alta.
 - Deploy necessario?: sim, se runtime for alterado.
 - Migration necessaria?: nao.
+- Resultado: GAP-014 corrigido; MED-001 (`limpar-refs-orfas`) e MED-002 (`historico/:id/certificados`) classificados e corrigidos; testes de isolamento ampliados.
+- Decisao LMS: `lmsRelatoriosRepository` nao integrado no K.1 para nao competir com runtime sensivel de documentos/certificados; permanece como proxima opcao read-only.
 - Criterio de aceite: pendencias de Sprint K zeradas ou reclassificadas com evidencia.

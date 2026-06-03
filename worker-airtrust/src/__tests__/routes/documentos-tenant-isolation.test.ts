@@ -64,8 +64,9 @@ type DocumentRow = {
 type HistoricoRow = {
   id: number;
   funcionario_id: number;
-  certificado_arquivo_id: number;
+  certificado_arquivo_id: number | null;
   empresa_id: number;
+  codigo: string;
   deleted_at: string | null;
 };
 
@@ -101,6 +102,16 @@ function createMockEnv() {
       deleted_at: null,
     },
     {
+      id: 303,
+      funcionario_id: 11,
+      empresa_id: 1,
+      nome_arquivo: 'CERT-PILOTO-X1-20260101.pdf',
+      tipo: 'application/pdf',
+      tamanho: 7,
+      r2_key: 'certificados/orfao-a.pdf',
+      deleted_at: null,
+    },
+    {
       id: 202,
       funcionario_id: 22,
       empresa_id: 2,
@@ -108,6 +119,16 @@ function createMockEnv() {
       tipo: 'application/pdf',
       tamanho: 7,
       r2_key: 'certificados/b.pdf',
+      deleted_at: null,
+    },
+    {
+      id: 404,
+      funcionario_id: 22,
+      empresa_id: 2,
+      nome_arquivo: 'CERT-PILOTO-X1-20260101.pdf',
+      tipo: 'application/pdf',
+      tamanho: 7,
+      r2_key: 'certificados/orfao-b.pdf',
       deleted_at: null,
     },
   ];
@@ -118,6 +139,7 @@ function createMockEnv() {
       funcionario_id: 11,
       certificado_arquivo_id: 101,
       empresa_id: 1,
+      codigo: 'CERT',
       deleted_at: null,
     },
     {
@@ -125,6 +147,31 @@ function createMockEnv() {
       funcionario_id: 22,
       certificado_arquivo_id: 202,
       empresa_id: 2,
+      codigo: 'CERT',
+      deleted_at: null,
+    },
+    {
+      id: 601,
+      funcionario_id: 11,
+      certificado_arquivo_id: null,
+      empresa_id: 1,
+      codigo: 'X1',
+      deleted_at: null,
+    },
+    {
+      id: 602,
+      funcionario_id: 22,
+      certificado_arquivo_id: null,
+      empresa_id: 2,
+      codigo: 'X1',
+      deleted_at: null,
+    },
+    {
+      id: 701,
+      funcionario_id: 11,
+      certificado_arquivo_id: 202,
+      empresa_id: 1,
+      codigo: 'CERT',
       deleted_at: null,
     },
   ];
@@ -152,6 +199,30 @@ function createMockEnv() {
 
         if (query.includes('PRAGMA table_info')) {
           return null;
+        }
+
+        if (query.includes('qt.nome as qualificacao_nome')) {
+          const historicoId = Number(args[0]);
+          const historico = historicos.find((row) => row.id === historicoId && !row.deleted_at);
+
+          if (!historico) return null;
+          return {
+            id: historico.id,
+            funcionario_id: historico.funcionario_id,
+            data_conclusao: '2026-01-01',
+            data_vencimento: '2027-01-01',
+            certificado_arquivo_id: historico.certificado_arquivo_id,
+            qualificacao_nome: 'Qualificacao',
+            codigo: historico.codigo,
+            funcionario_cpf: '123',
+            funcionario_nome: 'Tripulante',
+          };
+        }
+
+        if (query.includes('SELECT f.empresa_id FROM qualificacoes_historico qh')) {
+          const historicoId = Number(args[0]);
+          const historico = historicos.find((row) => row.id === historicoId && !row.deleted_at);
+          return historico ? { empresa_id: historico.empresa_id } : null;
         }
 
         if (query.includes('LEFT JOIN qualificacoes_historico qh')) {
@@ -192,16 +263,96 @@ function createMockEnv() {
       const executeAll = async (args: unknown[]) => {
         calls.push({ query, args, method: 'all' });
 
+        if (query.includes('PRAGMA table_info')) {
+          return { results: [] };
+        }
+
+        if (query.includes('FROM documentos d') && query.includes('qh_link.certificado_arquivo_id')) {
+          const empresaId = Number(args[0]);
+          return {
+            results: docs
+              .filter((doc) => doc.empresa_id === empresaId && !doc.deleted_at)
+              .filter((doc) => doc.nome_arquivo.startsWith('CERT-'))
+              .filter(
+                (doc) =>
+                  !historicos.some(
+                    (historico) =>
+                      historico.certificado_arquivo_id === doc.id && !historico.deleted_at,
+                  ),
+              )
+              .map((doc) => ({
+                documento_id: doc.id,
+                nome_arquivo: doc.nome_arquivo,
+                funcionario_id: doc.funcionario_id,
+                documento_data: '2026-01-01',
+                r2_key: doc.r2_key,
+              })),
+          };
+        }
+
+        if (query.includes('FROM qualificacoes_historico qh') && query.includes('qh.codigo = ?')) {
+          const funcionarioId = Number(args[0]);
+          const codigo = String(args[1]);
+          const empresaId = Number(args[2]);
+          return {
+            results: historicos
+              .filter(
+                (historico) =>
+                  historico.funcionario_id === funcionarioId &&
+                  historico.codigo === codigo &&
+                  historico.empresa_id === empresaId &&
+                  historico.certificado_arquivo_id === null &&
+                  !historico.deleted_at,
+              )
+              .map((historico) => ({ id: historico.id, data_conclusao: '2026-01-01' })),
+          };
+        }
+
+        if (query.includes('qh.id as historico_id')) {
+          const empresaId = Number(args[0]);
+          return {
+            results: historicos
+              .filter(
+                (historico) =>
+                  historico.empresa_id === empresaId &&
+                  historico.certificado_arquivo_id !== null &&
+                  !historico.deleted_at,
+              )
+              .filter((historico) => {
+                const doc = docs.find((row) => row.id === historico.certificado_arquivo_id);
+                return !doc || doc.deleted_at || doc.empresa_id !== historico.empresa_id;
+              })
+              .map((historico) => ({
+                historico_id: historico.id,
+                funcionario_id: historico.funcionario_id,
+                codigo: historico.codigo,
+                certificado_arquivo_id: historico.certificado_arquivo_id,
+              })),
+          };
+        }
+
+        if (
+          query.includes('FROM documentos d') &&
+          query.includes('JOIN funcionarios fd') &&
+          query.includes('d.id = ?')
+        ) {
+          const empresaId = Number(args[0]);
+          const certId = Number(args[1]);
+          const doc = findScopedDocument(certId, empresaId);
+          return { results: doc ? [doc] : [] };
+        }
+
         if (query.includes('FROM qualificacoes_historico qh')) {
           const empresaId = Number(args[0]);
           const ids = args.slice(1).map(Number);
           return {
             results: historicos
               .filter((historico) => !historico.deleted_at)
+              .filter((historico) => historico.certificado_arquivo_id !== null)
               .filter((historico) => ids.length === 0 || ids.includes(historico.id))
               .map((historico) => ({
                 historico,
-                doc: findScopedDocument(historico.certificado_arquivo_id, empresaId),
+                doc: findScopedDocument(historico.certificado_arquivo_id ?? 0, empresaId),
               }))
               .filter(({ doc }) => doc)
               .map(({ historico, doc }) => ({
@@ -342,6 +493,76 @@ describe('documentos tenant isolation', () => {
     expect(bucket.put).not.toHaveBeenCalled();
     expect(bucket.delete).not.toHaveBeenCalled();
     expect(runs).toHaveLength(0);
+  });
+
+  it('recupera certificados orfaos somente dentro do tenant atual', async () => {
+    const { env, bucket, runs } = createMockEnv();
+
+    const response = await request('/api/certificados/recuperar-orfaos', env, 1, {
+      method: 'POST',
+    });
+    const body = await response.json<{ data: { linkedCount: number; orfaosCount: number } }>();
+
+    expect(response.status).toBe(200);
+    expect(body.data.linkedCount).toBe(1);
+    expect(body.data.orfaosCount).toBe(1);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].args).toEqual([303, 601, 11, 1]);
+    expect(JSON.stringify(runs)).not.toContain('404');
+    expect(bucket.get).not.toHaveBeenCalled();
+    expect(bucket.put).not.toHaveBeenCalled();
+    expect(bucket.delete).not.toHaveBeenCalled();
+  });
+
+  it('limpa refs orfas e cross-tenant somente no tenant atual', async () => {
+    const { env, bucket, runs } = createMockEnv();
+
+    const response = await request('/api/certificados/limpar-refs-orfas', env, 1, {
+      method: 'POST',
+    });
+    const body = await response.json<{ data: { cleanedCount: number; refsCount: number } }>();
+
+    expect(response.status).toBe(200);
+    expect(body.data.cleanedCount).toBe(1);
+    expect(body.data.refsCount).toBe(1);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].args).toEqual([701, 1]);
+    expect(JSON.stringify(runs)).not.toContain('502');
+    expect(bucket.get).not.toHaveBeenCalled();
+    expect(bucket.put).not.toHaveBeenCalled();
+    expect(bucket.delete).not.toHaveBeenCalled();
+  });
+
+  it('nao lista metadado de certificado quando historico aponta para documento cross-tenant', async () => {
+    const { env, bucket, runs } = createMockEnv();
+
+    const response = await request('/api/certificados/historico/701/certificados', env, 1);
+    const body = await response.json<{ data: unknown[] }>();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toEqual([]);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].args).toEqual([701, 202, 1]);
+    expect(bucket.get).not.toHaveBeenCalled();
+    expect(bucket.put).not.toHaveBeenCalled();
+    expect(bucket.delete).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia admin residual sem Authorization antes de mutation', async () => {
+    const app = createApp();
+    const { env, bucket, runs } = createMockEnv();
+
+    const response = await app.fetch(
+      new Request('http://localhost/api/certificados/recuperar-orfaos', { method: 'POST' }),
+      env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(401);
+    expect(runs).toHaveLength(0);
+    expect(bucket.get).not.toHaveBeenCalled();
+    expect(bucket.put).not.toHaveBeenCalled();
+    expect(bucket.delete).not.toHaveBeenCalled();
   });
 
   it('bloqueia sem Authorization', async () => {

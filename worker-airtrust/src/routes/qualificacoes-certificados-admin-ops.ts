@@ -16,6 +16,7 @@ const opsRouter = new Hono<{ Bindings: Env }>();
 // 🔧 Endpoint para recuperar certificados órfãos (não linkados)
 opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
 
   try {
     console.log('🔧 [RECUPERAR ORFAOS] Iniciando busca de certificados órfãos...');
@@ -31,15 +32,22 @@ opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
           d.created_at as documento_data,
           d.r2_key
         FROM documentos d
+        JOIN funcionarios f
+          ON f.id = d.funcionario_id
+         AND f.deleted_at IS NULL
         WHERE d.deleted_at IS NULL
+          AND f.empresa_id = ?
           AND d.nome_arquivo LIKE 'CERT-%'
-          AND d.id NOT IN (
-            SELECT certificado_arquivo_id FROM qualificacoes_historico
-            WHERE certificado_arquivo_id IS NOT NULL AND deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM qualificacoes_historico qh_link
+            WHERE qh_link.certificado_arquivo_id = d.id
+              AND qh_link.deleted_at IS NULL
           )
         ORDER BY d.funcionario_id, d.created_at DESC
         `,
       )
+      .bind(empresaId)
       .all<{
         documento_id: number;
         nome_arquivo: string;
@@ -89,15 +97,19 @@ opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
               qh.id,
               qh.data_conclusao
             FROM qualificacoes_historico qh
+            JOIN funcionarios f
+              ON f.id = qh.funcionario_id
+             AND f.deleted_at IS NULL
             WHERE qh.funcionario_id = ?
               AND qh.codigo = ?
+              AND f.empresa_id = ?
               AND qh.certificado_arquivo_id IS NULL
               AND qh.deleted_at IS NULL
             ORDER BY qh.id DESC
             LIMIT 1
             `,
           )
-          .bind(orfao.funcionario_id, codigo)
+          .bind(orfao.funcionario_id, codigo, empresaId)
           .all<{ id: number; data_conclusao: string }>();
 
         if (!candidatos || candidatos.length === 0) {
@@ -118,9 +130,18 @@ opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
           .prepare(
             `UPDATE qualificacoes_historico
              SET certificado_arquivo_id = ?, updated_at = datetime('now')
-             WHERE id = ?`,
+             WHERE id = ?
+               AND funcionario_id = ?
+               AND deleted_at IS NULL
+               AND EXISTS (
+                 SELECT 1
+                 FROM funcionarios f
+                 WHERE f.id = qualificacoes_historico.funcionario_id
+                   AND f.empresa_id = ?
+                   AND f.deleted_at IS NULL
+               )`,
           )
-          .bind(orfao.documento_id, melhorCandidato.id)
+          .bind(orfao.documento_id, melhorCandidato.id, orfao.funcionario_id, empresaId)
           .run();
 
         console.log(
@@ -163,6 +184,7 @@ opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
 // 🧹 Endpoint para limpar referências órfãs (certificado_arquivo_id apontando para documento inexistente)
 opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
 
   try {
     console.log('🧹 [LIMPAR REFS] Iniciando limpeza de referências órfãs...');
@@ -177,13 +199,26 @@ opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => 
           qh.codigo,
           qh.certificado_arquivo_id
         FROM qualificacoes_historico qh
+        JOIN funcionarios f
+          ON f.id = qh.funcionario_id
+         AND f.deleted_at IS NULL
+        LEFT JOIN documentos d
+          ON d.id = qh.certificado_arquivo_id
+         AND d.deleted_at IS NULL
+        LEFT JOIN funcionarios fd
+          ON fd.id = d.funcionario_id
+         AND fd.deleted_at IS NULL
         WHERE qh.certificado_arquivo_id IS NOT NULL
+          AND f.empresa_id = ?
           AND qh.deleted_at IS NULL
-          AND qh.certificado_arquivo_id NOT IN (
-            SELECT id FROM documentos WHERE deleted_at IS NULL
+          AND (
+            d.id IS NULL
+            OR fd.empresa_id IS NULL
+            OR fd.empresa_id != f.empresa_id
           )
         `,
       )
+      .bind(empresaId)
       .all<{
         historico_id: number;
         funcionario_id: number;
@@ -214,9 +249,17 @@ opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => 
           .prepare(
             `UPDATE qualificacoes_historico
              SET certificado_arquivo_id = NULL, updated_at = datetime('now')
-             WHERE id = ?`,
+             WHERE id = ?
+               AND deleted_at IS NULL
+               AND EXISTS (
+                 SELECT 1
+                 FROM funcionarios f
+                 WHERE f.id = qualificacoes_historico.funcionario_id
+                   AND f.empresa_id = ?
+                   AND f.deleted_at IS NULL
+               )`,
           )
-          .bind(ref.historico_id)
+          .bind(ref.historico_id, empresaId)
           .run();
 
         console.log(`✅ [LIMPAR] Limpado historico ${ref.historico_id}`);
