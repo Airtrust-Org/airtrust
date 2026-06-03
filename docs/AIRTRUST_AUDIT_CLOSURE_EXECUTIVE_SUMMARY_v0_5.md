@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `78924b1ebdce474c7e38118f66db67b73afff94e`
-**Modo:** Consolidado. Este resumo inclui sprints documentais e sprints de implementação pontual, incluindo o Sprint V (design) e o Sprint W (remoção dos DDL runtime já cobertos por migration).
+**HEAD:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
+**Modo:** Consolidado. Este resumo inclui sprints documentais e sprints de implementação pontual, incluindo o Sprint V (design), Sprint W (remoção dos DDL runtime já cobertos por migration) e Sprint X.5 (apply 0385/0386 + deploy Worker/API).
 
 ---
 
@@ -63,10 +63,10 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 | Área | O que foi feito | O que falta |
 |---|---|---|
 | **RBAC/Suporte** | `userId===1` centralizado; Sprint P definiu `platform_admin` e `support_read_only`; Sprint Q definiu dual-read, enforcement e rollback por fases | Migration para `platform_admin` persistido, grants de suporte, shadow dual-read, enforcement runtime e remocao do fallback legado |
-| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first | Implementar contrato único dos 3 writers com colunas dedicadas, dual-write e validação jurídica de retenção |
+| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; Sprint X.5 aplicou migration `0385` em produção | Ativar flag, validar paridade, ampliar cobertura dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED) | Executar em ambiente com schema completo para zerar SKIPPED |
-| **DDL Runtime** | 15 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback runtime de R03 localmente. Restam 2 residuais críticos no runtime (R01, R04), 1 caso dinâmico incerto (`shared.ts`) e a aplicação/deploy seguro de R03 |
+| **DDL Runtime** | 15 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Restam 2 residuais críticos no runtime (R01, R04) e 1 caso dinâmico incerto (`shared.ts`) |
 | **Repository Pattern** | Piloto em 2 domínios (dashboard, LMS reports) | Expandir gradualmente para lms-cursos, qualificações |
 | **Scripts DB** | Wrapper seguro criado para scripts críticos | Scripts shell legados ainda sem wrapper |
 | **`escala_alocacoes`** | Tenant-scope por JOIN garantido e testado | Migration opcional P3 para coluna `empresa_id` própria + UNIQUE parcial |
@@ -85,7 +85,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 
 ### Não bloqueadores (para piloto interno)
 
-6. **DDL runtime residual** em SIGVOOS, documentos e `shared.ts` + apply/deploy pendente de R03 — PARTIAL (Sprint X.4 versionou `0386` e removeu o fallback local; restam 2 residuais críticos no runtime + 1 caso dinâmico + 1 apply/deploy pendente).
+6. **DDL runtime residual** em SIGVOOS, documentos e `shared.ts`. R03 = RESOLVED (Sprint X.5: `0386` aplicada + deploy). Restam 2 residuais críticos no runtime (R01, R04) + 1 caso dinâmico (R09).
 7. **Status residual** em cron/alertas/EVD (bloqueia escala, não piloto).
 8. **R2 metadata** de tenant ausente (defense-in-depth, não critério de segurança).
 9. **Performance/bundle/N+1** sem auditoria (dívida estrutural).
@@ -97,7 +97,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 
 **Sim, bloqueia.** Os seguintes itens precisam ser resolvidos antes de liberar acesso a um cliente externo real:
 
-1. **Audit trail padronizado** — sem `empresa_id`, `request_id` e `support_reason` em todos os eventos, não há compliance nem base segura para ativar suporte auditável.
+1. **Audit trail padronizado** — schema `audit_events_v2` já aplicado em produção via `0385`, mas writer canônico e flag ainda não ativados. `support_reason` presente no schema mas não em uso operacional ainda.
 2. **RBAC/Suporte formal** — sem `platform_admin` persistido e `support` read-only, não há governança para multiempresa.
 3. **Data quality executado** — sem validação operacional completa, não há garantia de integridade dos dados.
 4. **Smoke autenticado** — sem validação funcional, não há confirmação de que o tenant funciona ponta-a-ponta.
@@ -174,4 +174,4 @@ O AirTrust está em um estado sólido para continuar operação e evolução. O 
 
 ---
 
-**Fim do resumo executivo.** Documento gerado em 2026-06-02. Nenhum código alterado, nenhum deploy, nenhuma migration.
+**Fim do resumo executivo.** Documento gerado em 2026-06-02. Atualizado com Sprint X.5 closure em 2026-06-03 (migrations 0385/0386 aplicadas em produção, Worker/API deployado, APP_VERSION=2026-06-03T17:00:27Z-c12d8bf, smoke pós-deploy PASS, R03=RESOLVED).

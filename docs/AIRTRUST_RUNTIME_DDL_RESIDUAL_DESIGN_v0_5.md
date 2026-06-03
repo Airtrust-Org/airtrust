@@ -2,9 +2,9 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `cf5866907d820fb085472f748243968c6d03510d`
-**Sprint:** V/W/X.0 — DDL Runtime Residual Design + Pré-Fase + Schema Probe
-**Modo:** Sprint V read-only / docs-only. Sprint W removeu apenas DDL runtime já coberto por migrations existentes; Sprint X.0 executou somente probe estrutural read-only. Nenhuma migration, schema ou banco real foi alterado manualmente.
+**HEAD:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
+**Sprint:** V/W/X.0–X.5 — DDL Runtime Residual Design + Pré-Fase + Schema Probe + Apply/Deploy
+**Modo:** Sprint V read-only / docs-only. Sprint W removeu apenas DDL runtime já coberto por migrations existentes; Sprint X.0 executou somente probe estrutural read-only. Sprint X.5 executou apply de migrations 0385/0386 + deploy Worker/API. Nenhuma migration, schema ou banco real foi alterado manualmente.
 
 > **Addendum Sprint W (2026-06-03):** R02, R05, R06, R07, R08 e R10 foram removidos do runtime. Permanecem R01, R03, R04 e R09, além de casos legacy/test-only.
 >
@@ -17,6 +17,8 @@
 > **Addendum Sprint X.3 (2026-06-03):** HEAD `ed354f9`. Execução movida para worktree limpo (`/Users/filipedaumas/SAAS/Airtrust-r03-probe`) para preservar untracked fora do escopo no repositório principal. `ops:guard` PASS; `preflight-clean-deploy.sh` falhou apenas por exigir deploy em `main`, o que conflita com a estratégia obrigatória de worktree em branch dedicada. As 4 env vars de autorização permaneceram `UNSET`; o probe retornou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. Nenhum probe remoto foi executado, nenhum dado de linha foi consultado e R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`.
 >
 > **Addendum Sprint X.4 (2026-06-03):** o probe read-only aprovado em produção confirmou `TABLE_EXISTS=yes`, `TREINAMENTO_PLANEJADO_ID_EXISTS=no`, `STATUS_PRE_AGENDAMENTO_EXISTS=no` e `IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS=no`. Com isso, R03 foi reclassificado para `READY_FOR_SIMPLE_M1`, a migration `0386_solicitacoes_treinamento_planejado_link.sql` foi versionada e `ensureSolicitacoesTreinamentoLinkSchema()` saiu do runtime local. O novo estado é `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`: código pronto, aplicação remota + deploy ainda pendentes.
+>
+> **Addendum Sprint X.5 (2026-06-03):** as migrations `0385_audit_events_v2.sql` e `0386_solicitacoes_treinamento_planejado_link.sql` foram aplicadas em produção via Cloudflare D1 migrations apply. O probe pós-migration confirmou `STATUS=PASS` com as colunas e índice presentes em produção. O Worker/API foi deployado (`APP_VERSION=2026-06-03T17:00:27Z-c12d8bf`). Smoke pós-deploy: PASS (3/3). **R03 = RESOLVED.** O Audit v2 schema está `APPLIED_SCHEMA_READY_FOR_FLAG_PLAN`. Permanecem no runtime apenas R01 (SIGVOOS), R04 (Documentos bootstrap) e R09 (shared.ts dinâmico).
 
 ---
 
@@ -65,7 +67,7 @@ Fechar a pendência arquitetural de **DDL runtime residual** em modo inventário
 |---|---|---|---|---|---|---|---|---|
 | R01 | `services/sigvoos-frms.ts` | `ensureSigvoosTables()` | CREATE TABLE (5) + CREATE INDEX (6) | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos`, `sigvoos_mapeamento_manual`, `frms_jornada_pendente` + 6 índices | RUNTIME_HOT_PATH | ALTO | `0352` cobre `sigvoos_mapeamento_manual` + `frms_jornada_pendente`. `0354` referencia `integracoes_sigvoos_config` (adiciona coluna `notificar_falha_email`) mas NÃO cria a tabela base. | **3 tabelas base sem migration**: `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` + unique index `idx_integracoes_sigvoos_config_empresa_chave` |
 | R02 | `services/treinamentos-planejados-integration.ts` | `ensureTreinamentosPlanejadosSchema()` | CREATE TABLE (2) + CREATE INDEX (3) | `treinamentos_planejados`, `treinamentos_participantes` + 3 índices | RUNTIME_HOT_PATH_COVERED | BAIXO | `0172_create_treinamentos_planejados.sql` — cobertura completa | Nenhuma — migration cobre schema integralmente |
-| R03 | `services/treinamentos-planejados-integration.ts` | `ensureSolicitacoesTreinamentoLinkSchema()` | ALTER TABLE (2) + CREATE INDEX (1) | `solicitacoes_treinamento.treinamento_planejado_id`, `solicitacoes_treinamento.status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` | RUNTIME_HOT_PATH | MÉDIO | `0280` cria `solicitacoes_treinamento` base. `0345` adiciona `lms_matricula_id`. `0386` agora versiona as 2 colunas + o índice parcial. | **Migration versionada e fallback removido localmente. Status atual: `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`** |
+| R03 | `services/treinamentos-planejados-integration.ts` | ~~`ensureSolicitacoesTreinamentoLinkSchema()`~~ | ALTER TABLE (2) + CREATE INDEX (1) | `solicitacoes_treinamento.treinamento_planejado_id`, `solicitacoes_treinamento.status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` | RESOLVED | NENHUM | `0280` cria `solicitacoes_treinamento` base. `0345` adiciona `lms_matricula_id`. `0386` versiona as 2 colunas + o índice parcial, aplicada em produção. Fallback runtime removido. Worker/API deployado. | **RESOLVED. Migration 0386 aplicada + Worker deployado. Nenhum DDL runtime neste caminho.** |
 | R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `ensureDocumentosTableExists()` | CREATE TABLE (1) + CREATE INDEX (5) | `documentos` + 5 índices (`idx_documentos_funcionario`, `idx_documentos_historico`, `idx_documentos_deleted`, `idx_documentos_r2_key`, `idx_documentos_uuid`) | RUNTIME_BOOTSTRAP | MÉDIO | `0136` reconstrói `documentos` com schema antigo. `0137`/`0138` adicionam índices parciais. `0165` adiciona `empresa_id`. Nenhuma migration canônica única cobre o schema completo atual. | **Sem migration canônica** que crie `documentos` com todas as colunas atuais + 5 índices do bootstrap |
 | R05 | `routes/qualificacoes/tipos.ts` | `ensureTiposSchema()` | ALTER TABLE (2) | `qualificacoes_tipos.carga_horaria_inicial`, `qualificacoes_tipos.carga_horaria_recorrente` | RUNTIME_HOT_PATH_COVERED | BAIXO | `0317_split_carga_horaria_and_tipo_treinamento.sql` | Nenhuma |
 | R06 | `routes/qualificacoes/historico-helpers.ts` | `ensureHistoricoSchema()` | ALTER TABLE (5 colunas) | `qualificacoes_historico.renovada`, `status`, `data_confirmacao`, `confirmada_por`, `tipo_treinamento` | RUNTIME_HOT_PATH_COVERED | BAIXO | `0173_add_status_to_qualificacoes.sql` cobre `status`. Demais colunas: cobertura parcial por migrations antigas (0095, etc.) | Migrations existem mas cobertura precisa de verificação caso a caso |
@@ -93,7 +95,7 @@ Fechar a pendência arquitetural de **DDL runtime residual** em modo inventário
 | # | Arquivo | O que faz | Tabelas/Colunas afetadas | Call sites | Migration necessária |
 |---|---|---|---|---|---|
 | **R01** | `services/sigvoos-frms.ts:690-794` | `ensureSigvoosTables()` — CREATE TABLE IF NOT EXISTS (5 tabelas) + CREATE INDEX (6 índices) a cada request SIGVOOS/FRMS | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` (3 tabelas base) + 1 unique index | 10 call sites: `routes/integracoes_sigvoos.ts` (3×), `services/sigvoos-frms.ts` (7×) | Criar migration com CREATE TABLE IF NOT EXISTS para as 3 tabelas base + unique index `idx_integracoes_sigvoos_config_empresa_chave` |
-| **R03** | `services/treinamentos-planejados-integration.ts:201-227` | `ensureSolicitacoesTreinamentoLinkSchema()` — ALTER TABLE (2 colunas) + CREATE INDEX (1 parcial) a cada sync de treinamento | `solicitacoes_treinamento.treinamento_planejado_id`, `solicitacoes_treinamento.status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` | 3 call sites (linhas 736, 820, 942) | Criar migration com ALTER TABLE ADD COLUMN para as 2 colunas + CREATE INDEX para o índice parcial. **Gate atual:** `BLOCKED_SCHEMA_PROBE_REQUIRED` em ambiente aprovado |
+| R03 | `services/treinamentos-planejados-integration.ts:201-227` | ~~`ensureSolicitacoesTreinamentoLinkSchema()`~~ — ALTER TABLE (2 colunas) + CREATE INDEX (1 parcial) a cada sync de treinamento | `solicitacoes_treinamento.treinamento_planejado_id`, `solicitacoes_treinamento.status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` | 3 call sites (linhas 736, 820, 942) | ✅ RESOLVIDO. Migration `0386` aplicada em produção + Worker/API deployado. |
 | **R04** | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `ensureDocumentosTableExists()` — CREATE TABLE + 5 índices no startup | `documentos` (tabela completa + 5 índices) | 1 call site: `runApiBootstrap()` no startup do worker | Consolidar schema completo de `documentos` em migration canônica única |
 
 ### 4.2 Resíduos já cobertos por migration (removíveis com segurança)
@@ -317,7 +319,7 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | Métrica | Valor |
 |---|---|
 | Total de ocorrências DDL inventariadas (worker runtime) | 20 (excluindo docs/scripts) |
-| Resíduos RUNTIME_HOT_PATH confirmados | 2 críticos ativos no runtime atual (R01 SIGVOOS, R04 Documentos bootstrap) + 1 caso dinâmico incerto (R09) |
+| Resíduos RUNTIME_HOT_PATH confirmados | 2 críticos ativos no runtime atual (R01 SIGVOOS, R04 Documentos bootstrap) + 1 caso dinâmico incerto (R09). R03 = RESOLVIDO (migration 0386 aplicada + deploy). |
 | Resíduos RUNTIME_HOT_PATH_COVERED (já com migration) | 6 (R02, R05, R06, R07, R08, R10) |
 | Casos LEGACY_QUARANTINED | 4 (R11, R12, R13, R14) |
 | Falsos positivos / test-only | 7 (R15-R20 + R09 parcial) |
@@ -325,8 +327,8 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | Migrations existentes relacionadas | 10+ (`0172`, `0173`, `0183`, `0184`, `0280`, `0317`, `0345`, `0352`, `0354`, `0136`-`0138`, `0165`) |
 | Migrations novas necessárias | 3 |
 | Ordem recomendada | Fase 1 (cobertos) → Gate X.0 (probe aprovado para R03) → Fase 2 (Treinamentos Link) → Fase 3 (SIGVOOS) → Fase 4 (Documentos) |
-| Status na matriz | DDL_RUNTIME = PARTIAL (R03 versionado e sem fallback local, pendente apply/deploy; restam R01, R04 e R09 no runtime) |
+| Status na matriz | DDL_RUNTIME = PARTIAL (R03 = RESOLVED; restam R01, R04 e R09 no runtime) |
 
 ---
 
-**Fim do design document.** Gerado em 2026-06-03. Nenhum código, schema, migration ou banco real alterado.
+**Fim do design document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure (migrations 0385/0386 aplicadas, Worker/API deployado, R03 = RESOLVED).

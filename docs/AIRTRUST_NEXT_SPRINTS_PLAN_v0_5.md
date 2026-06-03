@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `cf5866907d820fb085472f748243968c6d03510d`
-**Modo:** Planejamento atualizado após Sprint X.0 (DDL schema probe read-only). Sem migration remota ou aplicação manual de dados reais.
+**HEAD base:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
+**Modo:** Planejamento atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado). Sem migration manual ou aplicação manual de dados reais.
 
 ---
 
@@ -151,7 +151,7 @@
 - **Objetivo:** Versionar somente o schema backward-compatible do Audit Trail v2.
 - **Entregue:** migration `0385_audit_events_v2.sql`; tabela `audit_events_v2`; campos canônicos; índices mínimos; teste local de schema/migration.
 - **Compatibilidade:** `auditoria`, `audit_logs` e `auditoria_avancada_v2` preservadas; nenhum writer, auth, tenant ou RBAC alterado.
-- **Deploy:** Não. Nenhuma migration remota ou aplicação em produção.
+- **Deploy:** Migration aplicada em produção (Sprint X.5). Writer e flag permanecem desabilitados.
 - **Pendente:** ativação do dual-write, paridade em ambiente aprovado e retenção operacional.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Risco:** Alto, mitigado por schema aditivo e ausência de runtime.
@@ -160,10 +160,10 @@
 - **Status:** CONCLUÍDO em 2026-06-03.
 - **Objetivo:** Integrar o canonical writer ao schema v2 com dual-write mínimo e controlado, mantendo writers legados.
 - **Entregue:** `recordAuditEventV2()`; metadata por allowlist; validações de suporte/falha; integração no helper de cursos LMS; testes de isolamento de falha.
-- **Rollout:** `AUDIT_EVENTS_V2_DUAL_WRITE` desabilitada por padrão enquanto o schema não estiver aplicado em ambiente aprovado.
+- **Rollout:** `AUDIT_EVENTS_V2_DUAL_WRITE` desabilitada por padrão. Schema `audit_events_v2` já aplicado em produção via migration `0385` (Sprint X.5). Flag permanece desabilitada até staging flag test.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
-- **Deploy necessário?:** Sim.
-- **Migration necessária?:** Aplicar a migration v2 em ambiente aprovado antes de ativar a flag.
+- **Deploy necessário?:** Sim (já feito no Sprint X.5 junto com 0386).
+- **Migration necessária?:** Já aplicada em produção via migration `0385` (Sprint X.5). Flag permanece desabilitada.
 - **Pendente:** ativação, paridade operacional, observabilidade e ampliação para eventos críticos.
 - **Risco:** Alto/Altissimo.
 
@@ -299,6 +299,22 @@
 - **Risco:** Médio/alto se deployar sem aplicar a migration; controlado enquanto o deploy permanecer bloqueado.
 - **Próxima fase:** aplicar `0386` por procedimento aprovado no ambiente-alvo e só depois deployar o Worker/API.
 
+### Sprint X.5 — Apply 0385/0386 + Deploy Worker/API ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03 (HEAD `c12d8bf`).
+- **Objetivo:** aplicar as migrations `0385` e `0386` em produção via Cloudflare D1 migrations apply, executar probe pós-migration e deployar o Worker/API.
+- **Entregue:**
+  - Migrations `0385_audit_events_v2.sql` e `0386_solicitacoes_treinamento_planejado_link.sql` aplicadas em produção (mecanismo oficial Cloudflare D1).
+  - Probe pós-migration: `STATUS=PASS` (target=production, todas as colunas/índices confirmados).
+  - Worker/API deployado: `APP_VERSION=2026-06-03T17:00:27Z-c12d8bf`.
+  - Smoke pós-deploy: PASS (3/3 público, health OK).
+  - R03 = RESOLVED.
+  - Audit v2 schema = `APPLIED_SCHEMA_READY_FOR_FLAG_PLAN`.
+  - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
+- **Deploy necessário?:** Já executado (Worker/API).
+- **Migration necessária?:** Já aplicadas (0385 e 0386).
+- **Pendente:** DDL runtime remanescente: R01 (SIGVOOS), R04 (Documentos), R09 (shared.ts). Audit v2: staging flag test.
+- **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -362,16 +378,18 @@
 | O | Audit Trail/LGPD v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
 | P | RBAC/Suporte v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
 | Q | Readiness Gate RBAC + Audit ✅ | Concluído | GPT-5.4/5.5 | Não | Não |
-| R | Audit Trail v2 Schema Backward-Compatible ✅ | Concluído | GPT-5.5 | Não | Versionada, não aplicada |
-| S | Audit Trail v2 Canonical Writer + Dual-Write ✅ | Concluído | GPT-5.5 | Sim | Aplicar v2 antes da flag |
+| R | Audit Trail v2 Schema Backward-Compatible ✅ | Concluído + Aplicado | GPT-5.5 | Sim (X.5) | Versionada e aplicada (X.5) |
+| S | Audit Trail v2 Canonical Writer + Dual-Write ✅ | Concluído | GPT-5.5 | Sim (X.5) | Aplicada (X.5); flag off |
 | T | Audit v2 Activation Readiness / Local-Staging Validation ✅ | Concluído | GPT-5.5 | Não | Não |
 | T.1 | Audit v2 Local Activation Run ✅ | Concluído | GPT-5.4 | Não | Não |
 | U | Audit v2 Staging Flag Test | Curto prazo | GPT-5.5 | Não/Controlado | Staging |
 | V | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
 | W | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
-| V | DDL Residual Design ✅ | Concluído | GPT-5.5 | Não | Planejadas (3) |
-| W | DDL Pré-Fase — Remover 6 `ensure*` cobertos | Curto prazo | GPT-5.4 | Sim | Não |
+| V | DDL Residual Design ✅ | Concluído | GPT-5.5 | Não | Planejadas (3→2) |
+| W | DDL Pré-Fase — Remover 6 `ensure*` cobertos ✅ | Concluído | GPT-5.4 | Sim | Não |
 | X.0 | DDL Schema Probe Read-only ✅ | Concluído | GPT-5.4 | Não | Não |
+| X.1–X.4 | DDL Probe Runner + M1 Versionada ✅ | Concluído | GPT-5.4/5.5 | Não | Versionada |
+| X.5 | DDL Apply 0385/0386 + Deploy Worker/API ✅ | Concluído | GPT-5.4 | Sim | Aplicadas |
 | Y | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
 | Z | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
 | AA | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
@@ -382,4 +400,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados e no Sprint X.0 de probe estrutural read-only.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, APP_VERSION=2026-06-03T17:00:27Z-c12d8bf, R03=RESOLVED, Audit v2=APPLIED_SCHEMA_READY_FOR_FLAG_PLAN).

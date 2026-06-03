@@ -621,3 +621,132 @@ MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY
 - Sem PII registrada.
 - Sem `git add .`.
 - Untracked do repositório principal permaneceram intocados.
+
+---
+
+## 15. Sprint X.5 — Aplicação e Deploy (2026-06-03)
+
+### 15.1 Estado inicial
+
+- Branch: `main`
+- HEAD: `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
+- origin/main: `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
+- Divergência: 0 left, 0 right
+- preflight: PASS
+- ops:guard: PASS (2 warnings, não bloqueantes)
+- Tracked pendentes: nenhum
+
+### 15.2 Escopo
+
+Diferentemente das sprints X.0–X.4, a Sprint X.5 executou ações operacionais reais:
+
+- Aplicar migrations `0385` e `0386` em produção via Cloudflare D1 migrations apply.
+- Executar probe pós-migration para confirmar o schema.
+- Deployar o Worker/API após confirmação do schema.
+
+**Nenhuma alteração manual de schema, dados, runtime ou R2 foi feita.**
+
+### 15.3 Migrations aplicadas
+
+| Migration | Arquivo | Status |
+|---|---|---|
+| 0385 | `0385_audit_events_v2.sql` | Aplicada em produção |
+| 0386 | `0386_solicitacoes_treinamento_planejado_link.sql` | Aplicada em produção |
+
+Mecanismo: Cloudflare D1 migrations apply (oficial).
+
+SQL manual usado: não.
+
+Backfill executado: não.
+
+Migrations pendentes após apply: `No migrations to apply`.
+
+### 15.4 Probe pós-migration (produção)
+
+```text
+STATUS=PASS
+TARGET=production
+TABLE_EXISTS=yes
+TREINAMENTO_PLANEJADO_ID_EXISTS=yes
+STATUS_PRE_AGENDAMENTO_EXISTS=yes
+IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS=yes
+REMOTE_RUNNER_USED=yes
+```
+
+As 2 colunas de link e o índice parcial foram confirmados em produção após a aplicação da migration `0386`.
+
+### 15.5 Deploy Worker/API
+
+```text
+APP_VERSION=2026-06-03T17:00:27Z-c12d8bf
+Current Version ID=41ee084b-dca7-4550-8666-9ea289af114d
+Deploy Worker/API: PASS
+Deploy Pages: não
+```
+
+O Worker/API foi deployado com sucesso após a confirmação do schema. Nenhum Pages deploy foi executado.
+
+### 15.6 Smoke pós-deploy
+
+```text
+smoke-production-readonly: PASS
+smoke public-only: PASS=3 FAIL=0 SKIPPED=0
+/api/version: 2026-06-03T17:00:27Z-c12d8bf
+/api/health: healthy, DB ok, storage ok
+```
+
+### 15.7 Observação: /api/health stats.version
+
+O endpoint `/api/health` retornou status `healthy` com DB e storage ok, mas `stats.version` ainda mostrou `2026-06-03T14:31:59Z-cf58669`, divergente do `/api/version` que corretamente exibiu `2026-06-03T17:00:27Z-c12d8bf`.
+
+**Classificação:** observação menor de version reporting, não falha de deploy.
+
+**Ação futura:** monitorar em sprint menor de observabilidade/version reporting.
+
+### 15.8 Decisão final R03
+
+Classificação final aplicada ao R03:
+
+```text
+R03 = RESOLVED
+```
+
+Cadeia completa:
+
+```
+BLOCKED_SCHEMA_PROBE_REQUIRED (X.0–X.3)
+  → READY_FOR_SIMPLE_M1 (X.4 após probe aprovado)
+    → MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY (X.4 após versionar 0386)
+      → RESOLVED (X.5 após apply 0386 + deploy Worker/API)
+```
+
+### 15.9 Status Audit v2
+
+```text
+APPLIED_SCHEMA_READY_FOR_FLAG_PLAN
+```
+
+A migration `0385_audit_events_v2.sql` foi aplicada em produção. A tabela `audit_events_v2` existe com schema canônico. O writer canônico e a flag `AUDIT_EVENTS_V2_DUAL_WRITE` permanecem desabilitados por padrão. O próximo passo é o staging flag test com schema aplicado e validação de paridade.
+
+### 15.10 DDL runtime remanescente
+
+Após a resolução de R03, permanecem no runtime:
+
+| ID | Resíduo | Status |
+|---|---|---|
+| R01 | `services/sigvoos-frms.ts` — `ensureSigvoosTables()` | DESIGN_READY |
+| R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | DESIGN_READY |
+| R09 | `routes/qualificacoes/shared.ts` — DDL dinâmico | OPEN |
+
+### 15.11 Confirmações de segurança (Sprint X.5)
+
+- Migration aplicada via Cloudflare D1 migrations apply (oficial).
+- Nenhum SQL manual executado.
+- Nenhum D1 command avulso.
+- Nenhum runtime alterado nesta fase.
+- Nenhum schema alterado manualmente.
+- Nenhum R2 real alterado.
+- Nenhuma PII registrada.
+- Nenhum secret versionado.
+- Nenhum `git add .` usado.
+- Nenhum deploy de Pages executado.
