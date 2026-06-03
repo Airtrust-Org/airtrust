@@ -1,10 +1,10 @@
 # AirTrust — SIGVOOS DDL R01 Readiness v0.5
 
 **Data:** 2026-06-03
-**Sprint:** Z0 readiness + Z1 migration local
+**Sprint:** Z0 readiness + Z1 migration local + Z1.1 chain audit
 **Branch:** `main`
 **HEAD:** `f2d0db6276e0600e34716823645622b5001d8b02`
-**Modo:** Z0 foi read-only/docs-only. Z1 criou migration local + testes + atualização documental. Nenhum D1 remoto, nenhum banco real alterado, nenhum deploy.
+**Modo:** Z0 foi read-only/docs-only. Z1 criou migration local + testes + atualização documental. Z1.1 auditou a cadeia `0354 -> 0387` com prova local. Nenhum D1 remoto, nenhum banco real alterado, nenhum deploy.
 
 ---
 
@@ -26,7 +26,7 @@ Mapear integralmente o escopo de `ensureSigvoosTables()` (R01) para preparar sua
 | Call sites em rotas | 2 (`worker-airtrust/src/routes/integracoes_sigvoos.ts:374,600`) |
 | Call sites em serviços | 8 (`worker-airtrust/src/services/sigvoos-frms.ts:625,802,852,914,948,1045,2238,2500`) |
 | Status na matriz | DESIGN_READY |
-| Status nesta sprint | MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL |
+| Status nesta sprint | MIGRATION_CHAIN_BLOCKED_BY_0354 |
 
 ---
 
@@ -316,7 +316,16 @@ Inventário completo. Lacunas documentadas. Nenhuma ação de código.
 
 **Motivo da preservação do fallback:** a migration `0354_auditoria_critica_schema_hardening.sql` já existente faz `ALTER TABLE integracoes_sigvoos_config ADD COLUMN notificar_falha_email TEXT` antes do novo número `0387`. Em um ambiente limpo que aplique migrations em ordem numérica, `0354` continua dependendo da existência prévia de `integracoes_sigvoos_config`. Como esta sprint não podia reordenar nem reescrever `0354`, a criação da `0387` **não é suficiente para remover o fallback runtime com segurança**.
 
-**Status resultante:** `R01 = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL`.
+**Status resultante após Z1:** `R01 = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL`.
+
+### Addendum Sprint Z1.1 (2026-06-03): cadeia bloqueada pela 0354
+
+- O teste local foi expandido para simular uma cadeia limpa com pré-requisitos mínimos.
+- Resultado confirmado: `0354_auditoria_critica_schema_hardening.sql` falha por ausência de `integracoes_sigvoos_config`.
+- Concatenar `0387` depois da `0354` não corrige a falha, porque o erro acontece antes.
+- Probe remoto SIGVOOS não foi executado nesta fase: `SKIPPED_NO_SIGVOOS_SCHEMA_PROBE`.
+
+**Status resultante após Z1.1:** `R01 = MIGRATION_CHAIN_BLOCKED_BY_0354`.
 
 ### Próxima fase (Z1): Criar migration + teste local
 
@@ -411,7 +420,9 @@ CREATE INDEX IF NOT EXISTS idx_integracoes_sigvoos_mapeamentos_empresa_canac
 - [x] Aplicar `0387` em SQLite local limpo → verificar que tabelas são criadas
 - [x] Reaplicar `0387` com tabelas runtime-shaped já existentes → verificar idempotência
 - [x] Verificar que `0352` + `0387` juntos cobrem todas as 5 tabelas e 8 índices do runtime SIGVOOS
-- [ ] Resolver e validar explicitamente a ordem `0354` + `0387` em ambiente limpo/controlado
+- [x] Demonstrar localmente que `0354` falha em cadeia limpa sem `integracoes_sigvoos_config`
+- [x] Demonstrar que `0387` depois da `0354` não resgata a cadeia limpa
+- [ ] Definir baseline/estratégia segura para ambientes novos antes de remover o fallback
 
 ### 10.2 Testes funcionais (fase Z1)
 
@@ -467,4 +478,4 @@ Reverter o commit que removeu/reduziu `ensureSigvoosTables()`. A função é ide
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado no Sprint Z1 com a migration `0387`, teste local e decisão de manter o fallback R01 por segurança.
+**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1 e Z1.1 com a migration `0387`, prova local da falha de cadeia em `0354` e decisão de manter o fallback R01.

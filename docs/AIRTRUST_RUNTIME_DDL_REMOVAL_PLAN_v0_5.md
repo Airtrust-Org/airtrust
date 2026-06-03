@@ -91,7 +91,7 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 
 ## Sprint V — DDL Runtime Residual Design (2026-06-03)
 
-**Status:** PARTIAL → R03 RESOLVED, R01 MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local, mas preservou o fallback por causa da dependência anterior da `0354`. Restam R04 (Documentos) e R09 (shared.ts dinâmico).
+**Status:** PARTIAL → R03 RESOLVED, R01 MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`, então o fallback permanece bloqueado por desenho de sequência. Restam R04 (Documentos) e R09 (shared.ts dinâmico).
 
 ### Inventário atualizado
 
@@ -109,7 +109,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 | ID | Arquivo | Lacuna | Migration necessária |
 |---|---|---|---|
-| R01 | `services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` — 3 tabelas base + 4 índices sem migration | `0387_integracoes_sigvoos_base_tables.sql` (criada no Sprint Z1). **Status: MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL.** Doc: `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md` |
+| R01 | `services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` — 3 tabelas base + 4 índices sem migration | `0387_integracoes_sigvoos_base_tables.sql` (criada no Sprint Z1). **Status: MIGRATION_CHAIN_BLOCKED_BY_0354.** Doc: `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md` e `AIRTRUST_SIGVOOS_MIGRATION_CHAIN_AUDIT_v0_5.md` |
 | R03 | `services/treinamentos-planejados-integration.ts` | `solicitacoes_treinamento.treinamento_planejado_id`, `status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` — 2 colunas + 1 índice parcial | `0386_solicitacoes_treinamento_planejado_link.sql` (`MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`) |
 | R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `documentos` — sem migration canônica única que cubra schema completo + 5 índices do bootstrap | `0388_documentos_canonical_schema.sql` |
 
@@ -141,4 +141,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = PARTIAL (R03 = RESOLVED após apply 0386 + deploy X.5; R01 = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL Sprint Z1; restam R04 e R09 no runtime).
+DDL_RUNTIME = PARTIAL (R03 = RESOLVED após apply 0386 + deploy X.5; R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 Sprint Z1.1; restam R04 e R09 no runtime).

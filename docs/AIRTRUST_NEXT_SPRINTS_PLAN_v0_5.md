@@ -312,7 +312,7 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente:** DDL runtime remanescente: R04 (Documentos), R09 (shared.ts). R01 (SIGVOOS) = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL (Sprint Z1).
+- **Pendente:** DDL runtime remanescente: R04 (Documentos), R09 (shared.ts). R01 (SIGVOOS) = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1).
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
 
 ### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
@@ -344,7 +344,19 @@
 - **Decisão:** não remover o fallback nesta sprint, porque `0354_auditoria_critica_schema_hardening.sql` ainda referencia `integracoes_sigvoos_config` antes de `0387` numa cadeia limpa de migrations.
 - **Deploy necessário?:** Não.
 - **Migration remota?:** Não nesta sprint.
-- **Próxima fase:** planejar e executar apply controlado de `0387` em ambiente aprovado, com estratégia explícita para a dependência `0354 -> integracoes_sigvoos_config`; só depois remover o fallback R01.
+- **Próxima fase:** auditar formalmente a cadeia `0354 -> 0387` antes de qualquer apply.
+
+### Sprint Z1.1 — SIGVOOS Migration Chain Audit ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03 (HEAD `9da88c1` ou posterior).
+- **Objetivo:** provar se a cadeia limpa de migrations SIGVOOS continua inválida por causa da `0354`.
+- **Entregue:**
+  - Auditoria formal em `AIRTRUST_SIGVOOS_MIGRATION_CHAIN_AUDIT_v0_5.md`.
+  - Teste local expandido provando que `0354` falha sem `integracoes_sigvoos_config`.
+  - Teste local provando que `0387` posterior não resgata a cadeia limpa.
+  - Probe remoto SIGVOOS não executado: `SKIPPED_NO_SIGVOOS_SCHEMA_PROBE`.
+  - R01 = `MIGRATION_CHAIN_BLOCKED_BY_0354`.
+- **Decisão:** não aplicar `0387`, não remover `ensureSigvoosTables()`, não editar `0354` nesta fase.
+- **Próxima fase:** definir baseline/plano de cadeia segura para ambientes novos e só depois discutir apply controlado ou remoção do fallback.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
