@@ -15,6 +15,8 @@
 > **Addendum Sprint X.2 (2026-06-03):** HEAD `d775bea`. Runner remoto read-only implementado com suporte a `staging` e `production` via `wrangler d1 execute --remote --json --command="PRAGMA ..."`. Validação de SQL reforçada com bloqueio de `SELECT *` e `FROM` em tabelas de usuário. 5 cenários de autorização testados: todos corretamente bloqueados ou encaminhados. Local: `PASS`. Staging autorizado: `FAIL` esperado (sem `wrangler login`). R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED` — o runner está completo; a barreira é dupla (env vars + Cloudflare auth).
 >
 > **Addendum Sprint X.3 (2026-06-03):** HEAD `ed354f9`. Execução movida para worktree limpo (`/Users/filipedaumas/SAAS/Airtrust-r03-probe`) para preservar untracked fora do escopo no repositório principal. `ops:guard` PASS; `preflight-clean-deploy.sh` falhou apenas por exigir deploy em `main`, o que conflita com a estratégia obrigatória de worktree em branch dedicada. As 4 env vars de autorização permaneceram `UNSET`; o probe retornou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. Nenhum probe remoto foi executado, nenhum dado de linha foi consultado e R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`.
+>
+> **Addendum Sprint X.4 (2026-06-03):** o probe read-only aprovado em produção confirmou `TABLE_EXISTS=yes`, `TREINAMENTO_PLANEJADO_ID_EXISTS=no`, `STATUS_PRE_AGENDAMENTO_EXISTS=no` e `IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS=no`. Com isso, R03 foi reclassificado para `READY_FOR_SIMPLE_M1`, a migration `0386_solicitacoes_treinamento_planejado_link.sql` foi versionada e `ensureSolicitacoesTreinamentoLinkSchema()` saiu do runtime local. O novo estado é `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`: código pronto, aplicação remota + deploy ainda pendentes.
 
 ---
 
@@ -63,7 +65,7 @@ Fechar a pendência arquitetural de **DDL runtime residual** em modo inventário
 |---|---|---|---|---|---|---|---|---|
 | R01 | `services/sigvoos-frms.ts` | `ensureSigvoosTables()` | CREATE TABLE (5) + CREATE INDEX (6) | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos`, `sigvoos_mapeamento_manual`, `frms_jornada_pendente` + 6 índices | RUNTIME_HOT_PATH | ALTO | `0352` cobre `sigvoos_mapeamento_manual` + `frms_jornada_pendente`. `0354` referencia `integracoes_sigvoos_config` (adiciona coluna `notificar_falha_email`) mas NÃO cria a tabela base. | **3 tabelas base sem migration**: `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` + unique index `idx_integracoes_sigvoos_config_empresa_chave` |
 | R02 | `services/treinamentos-planejados-integration.ts` | `ensureTreinamentosPlanejadosSchema()` | CREATE TABLE (2) + CREATE INDEX (3) | `treinamentos_planejados`, `treinamentos_participantes` + 3 índices | RUNTIME_HOT_PATH_COVERED | BAIXO | `0172_create_treinamentos_planejados.sql` — cobertura completa | Nenhuma — migration cobre schema integralmente |
-| R03 | `services/treinamentos-planejados-integration.ts` | `ensureSolicitacoesTreinamentoLinkSchema()` | ALTER TABLE (2) + CREATE INDEX (1) | `solicitacoes_treinamento.treinamento_planejado_id`, `solicitacoes_treinamento.status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` | RUNTIME_HOT_PATH | MÉDIO | `0280` cria `solicitacoes_treinamento` base. `0345` adiciona `lms_matricula_id`. **Nenhuma migration para** `treinamento_planejado_id`, `status_pre_agendamento`, ou o índice parcial. | **2 colunas + 1 índice parcial sem migration. Status atual: `BLOCKED_SCHEMA_PROBE_REQUIRED`** |
+| R03 | `services/treinamentos-planejados-integration.ts` | `ensureSolicitacoesTreinamentoLinkSchema()` | ALTER TABLE (2) + CREATE INDEX (1) | `solicitacoes_treinamento.treinamento_planejado_id`, `solicitacoes_treinamento.status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` | RUNTIME_HOT_PATH | MÉDIO | `0280` cria `solicitacoes_treinamento` base. `0345` adiciona `lms_matricula_id`. `0386` agora versiona as 2 colunas + o índice parcial. | **Migration versionada e fallback removido localmente. Status atual: `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`** |
 | R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `ensureDocumentosTableExists()` | CREATE TABLE (1) + CREATE INDEX (5) | `documentos` + 5 índices (`idx_documentos_funcionario`, `idx_documentos_historico`, `idx_documentos_deleted`, `idx_documentos_r2_key`, `idx_documentos_uuid`) | RUNTIME_BOOTSTRAP | MÉDIO | `0136` reconstrói `documentos` com schema antigo. `0137`/`0138` adicionam índices parciais. `0165` adiciona `empresa_id`. Nenhuma migration canônica única cobre o schema completo atual. | **Sem migration canônica** que crie `documentos` com todas as colunas atuais + 5 índices do bootstrap |
 | R05 | `routes/qualificacoes/tipos.ts` | `ensureTiposSchema()` | ALTER TABLE (2) | `qualificacoes_tipos.carga_horaria_inicial`, `qualificacoes_tipos.carga_horaria_recorrente` | RUNTIME_HOT_PATH_COVERED | BAIXO | `0317_split_carga_horaria_and_tipo_treinamento.sql` | Nenhuma |
 | R06 | `routes/qualificacoes/historico-helpers.ts` | `ensureHistoricoSchema()` | ALTER TABLE (5 colunas) | `qualificacoes_historico.renovada`, `status`, `data_confirmacao`, `confirmada_por`, `tipo_treinamento` | RUNTIME_HOT_PATH_COVERED | BAIXO | `0173_add_status_to_qualificacoes.sql` cobre `status`. Demais colunas: cobertura parcial por migrations antigas (0095, etc.) | Migrations existem mas cobertura precisa de verificação caso a caso |
@@ -206,8 +208,8 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 
 **Evidência Sprint X.0:**
 - Snapshot local (`PASS`): tabela existe; `treinamento_planejado_id` ausente; `status_pre_agendamento` ausente; `idx_solicitacoes_treinamento_planejado` ausente.
-- Staging/produção: `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`.
-- Decisão: o resultado local só confirma o caminho de ambiente limpo. O caminho do ambiente aprovado continua indefinido porque o runtime pode já ter criado as colunas fora de migration.
+- Produção aprovada (`PASS`): tabela existe; `treinamento_planejado_id` ausente; `status_pre_agendamento` ausente; índice ausente.
+- Decisão Sprint X.4: `READY_FOR_SIMPLE_M1`.
 
 **Impacto se remover sem migration:** Sync de solicitações aprovadas → treinamentos planejados quebraria. Colunas não existiriam e o código tenta escrever nelas.
 
@@ -253,7 +255,7 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | 5 | Criar migration numerada com ALTER TABLE ADD COLUMN (`treinamento_planejado_id`, `status_pre_agendamento`) + CREATE INDEX parcial em `solicitacoes_treinamento` | Ambiente aprovado |
 | 6 | Aplicar migration em staging, validar | Migration aplicada com sucesso |
 | 7 | Aplicar migration em produção | Staging validado |
-| 8 | Remover `ensureSolicitacoesTreinamentoLinkSchema()` e suas 3 chamadas | Migration aplicada em produção |
+| 8 | Remover `ensureSolicitacoesTreinamentoLinkSchema()` e suas 3 chamadas | Concluído no repositório após versionar `0386`; deploy segue condicionado à aplicação da migration |
 
 **Resultado esperado:** 1 função `ensure*` removida. 1 migration nova. Risco: MÉDIO.
 
@@ -315,7 +317,7 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | Métrica | Valor |
 |---|---|
 | Total de ocorrências DDL inventariadas (worker runtime) | 20 (excluindo docs/scripts) |
-| Resíduos RUNTIME_HOT_PATH confirmados | 3 (R01 SIGVOOS, R03 Treinamentos Link, R04 Documentos bootstrap) |
+| Resíduos RUNTIME_HOT_PATH confirmados | 2 críticos ativos no runtime atual (R01 SIGVOOS, R04 Documentos bootstrap) + 1 caso dinâmico incerto (R09) |
 | Resíduos RUNTIME_HOT_PATH_COVERED (já com migration) | 6 (R02, R05, R06, R07, R08, R10) |
 | Casos LEGACY_QUARANTINED | 4 (R11, R12, R13, R14) |
 | Falsos positivos / test-only | 7 (R15-R20 + R09 parcial) |
@@ -323,7 +325,7 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | Migrations existentes relacionadas | 10+ (`0172`, `0173`, `0183`, `0184`, `0280`, `0317`, `0345`, `0352`, `0354`, `0136`-`0138`, `0165`) |
 | Migrations novas necessárias | 3 |
 | Ordem recomendada | Fase 1 (cobertos) → Gate X.0 (probe aprovado para R03) → Fase 2 (Treinamentos Link) → Fase 3 (SIGVOOS) → Fase 4 (Documentos) |
-| Status na matriz | DDL_RUNTIME = PARTIAL (Pré-Fase concluída; restam R01, R03, R04 e R09) |
+| Status na matriz | DDL_RUNTIME = PARTIAL (R03 versionado e sem fallback local, pendente apply/deploy; restam R01, R04 e R09 no runtime) |
 
 ---
 

@@ -57,7 +57,7 @@ ALTER TABLE solicitacoes_treinamento ADD COLUMN status_pre_agendamento TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
   ON solicitacoes_treinamento(treinamento_planejado_id)
-  WHERE treinamento_planejado_id IS NOT NULL AND deleted_at IS NULL;
+  WHERE treinamento_planejado_id IS NOT NULL;
 ```
 
 **Tabelas afetadas:** `solicitacoes_treinamento`
@@ -66,7 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 **Rollback:** Remover colunas e índice (não destrutivo — dados existentes não são perdidos)
 **Dependências:** Nenhuma — `solicitacoes_treinamento` já existe via `0280`
 
-**Status pós-Sprint X.3:** `BLOCKED_SCHEMA_PROBE_REQUIRED`
+**Status pós-Sprint X.4:** `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`
 
 **Evidência Sprint X.0 (2026-06-03):**
 - Probe local read-only executado com `PASS` em snapshot D1 local: tabela existe, colunas ausentes, índice ausente.
@@ -92,6 +92,13 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 - `preflight-clean-deploy.sh` falhou apenas pelo gate `deploy only from main`, incompatível com a própria exigência de worktree em branch separada; nenhum deploy foi tentado.
 - Variáveis de autorização continuaram UNSET; probe retornou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`.
 - Decisão mantida: não criar M1, não remover fallback runtime, não deployar.
+
+**Evidência Sprint X.4 (2026-06-03):**
+- Probe estrutural aprovado em `production`: `TABLE_EXISTS=yes`, `TREINAMENTO_PLANEJADO_ID_EXISTS=no`, `STATUS_PRE_AGENDAMENTO_EXISTS=no`, `IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS=no`, `REMOTE_RUNNER_USED=yes`.
+- Classificação: `READY_FOR_SIMPLE_M1`.
+- Migration `0386_solicitacoes_treinamento_planejado_link.sql` criada.
+- `ensureSolicitacoesTreinamentoLinkSchema()` removida do runtime local junto com seus call sites.
+- Deploy deliberadamente adiado até a aplicação aprovada da migration no ambiente-alvo.
 
 ### 2.2 Migration M2 — `integracoes_sigvoos_*` base tables
 
@@ -362,7 +369,7 @@ DROP TABLE IF EXISTS documentos;
 
 ### 7.1 Testes de arquitetura
 
-**Sprint W executado:** `routes/qualificacoes/tipos.ts`, `routes/qualificacoes/historico-helpers.ts` e `routes/simuladores-modelos.ts` já saíram da allowlist implícita e entraram na lista de arquivos verificados pelo guard. `services/treinamentos-planejados-integration.ts` permanece exceção apenas por R03.
+**Sprint X.4 executado:** `services/treinamentos-planejados-integration.ts` saiu da allowlist do guard arquitetural. R03 agora está versionado e sem fallback runtime no repositório, mas ainda pendente de aplicação da migration + deploy seguro.
 
 Atualizar `worker-airtrust/src/__tests__/architecture/no-runtime-ddl-hot-paths.test.ts`:
 
@@ -461,5 +468,7 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 **Addendum Sprint W:** a Pré-Fase foi executada sem migration nova. Restam apenas R01, R03, R04 e R09 para fases futuras.
 
 **Addendum Sprint X.0:** foi criado o runner `scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh`, fail-closed e somente com `PRAGMA`/`SELECT`. O probe local indicou ausência das 2 colunas e do índice em snapshot local; o probe de ambiente aprovado ficou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. Portanto, R03 saiu de `DESIGN_READY` para `BLOCKED_SCHEMA_PROBE_REQUIRED` até existir evidência estrutural do ambiente aprovado.
+
+**Addendum Sprint X.4:** o probe aprovado em produção confirmou que a tabela existe e que as 2 colunas + o índice ainda estão ausentes. A migration simples `0386_solicitacoes_treinamento_planejado_link.sql` foi versionada e o fallback runtime foi removido localmente. O status atual passa a `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`.
 
 **Fim do readiness document.** Gerado em 2026-06-03. Nenhum schema ou migration foi alterado nesta fase; Sprint W removeu somente DDL runtime já coberto.

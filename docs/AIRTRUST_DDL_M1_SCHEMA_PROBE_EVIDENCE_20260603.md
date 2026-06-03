@@ -556,3 +556,68 @@ Próxima fase recomendada: **Sprint X.4 — operador autentica no Wrangler, defi
 - Sem PII registrada.
 - Sem `git add .`.
 - Untracked do repositório principal permaneceram intocados.
+
+---
+
+## 14. Sprint X.4 — Probe aprovado + M1 versionada (2026-06-03)
+
+### 14.1 Evidência estrutural aprovada
+
+- Target: `production`
+- Probe autorizado: sim
+- D1 remoto executado: sim, somente `PRAGMA` estrutural
+- Dados de linha consultados: não
+- DML/DDL executado no probe: não
+
+Resultado aprovado:
+
+```text
+STATUS=PASS
+TARGET=production
+TABLE_EXISTS=yes
+TREINAMENTO_PLANEJADO_ID_EXISTS=no
+STATUS_PRE_AGENDAMENTO_EXISTS=no
+IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS=no
+REMOTE_RUNNER_USED=yes
+```
+
+### 14.2 Decisão M1
+
+Classificação aplicada ao R03:
+
+```text
+R03 = READY_FOR_SIMPLE_M1
+```
+
+O probe aprovado em produção eliminou o risco de `duplicate column name` para a M1 simples: a tabela existe e as 2 colunas + o índice ainda não existem no ambiente-alvo aprovado.
+
+### 14.3 Implementação desta sprint
+
+- Migration criada: `worker-airtrust/migrations/0386_solicitacoes_treinamento_planejado_link.sql`
+- Fallback runtime removido localmente: `ensureSolicitacoesTreinamentoLinkSchema()` + call sites
+- Teste de migration/schema criado: `worker-airtrust/src/__tests__/migrations/solicitacoes-treinamento-planejado-link-schema.test.ts`
+- Guard arquitetural atualizado: R03 saiu da allowlist de runtime DDL
+
+### 14.4 Status operacional resultante
+
+Status atual do R03:
+
+```text
+MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY
+```
+
+- Migration aplicada remotamente nesta sprint: não
+- Schema de produção alterado por esta sprint: não
+- Deploy Worker/API nesta sprint: não
+- Motivo do não deploy: remover o fallback antes da aplicação da `0386` no ambiente-alvo poderia quebrar o runtime em produção
+
+### 14.5 Confirmações de segurança (Sprint X.4)
+
+- Sem backfill.
+- Sem dados reais alterados.
+- Sem auth/RBAC/tenant alterado.
+- Sem R2 real.
+- Sem secrets versionados.
+- Sem PII registrada.
+- Sem `git add .`.
+- Untracked do repositório principal permaneceram intocados.
