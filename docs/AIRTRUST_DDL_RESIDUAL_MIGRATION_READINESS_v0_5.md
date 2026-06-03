@@ -2,9 +2,9 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `78924b1ebdce474c7e38118f66db67b73afff94e`
-**Sprint:** V — DDL Runtime Residual Design
-**Modo:** Read-only / docs-only. Nenhum código, schema, migration ou banco real alterado.
+**HEAD:** `cf5866907d820fb085472f748243968c6d03510d`
+**Sprint:** V/W/X.0 — DDL Runtime Residual Design + Schema Probe
+**Modo:** Read-only / docs+runner-only. Nenhum runtime, schema, migration ou banco real alterado.
 
 ---
 
@@ -65,6 +65,14 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 **Risco:** BAIXO — colunas novas com NULL permitido, índice parcial
 **Rollback:** Remover colunas e índice (não destrutivo — dados existentes não são perdidos)
 **Dependências:** Nenhuma — `solicitacoes_treinamento` já existe via `0280`
+
+**Status pós-Sprint X.0:** `BLOCKED_SCHEMA_PROBE_REQUIRED`
+
+**Evidência Sprint X.0 (2026-06-03):**
+- Probe local read-only executado com `PASS` em snapshot D1 local.
+- Resultado local: `solicitacoes_treinamento` existe, `treinamento_planejado_id` ausente, `status_pre_agendamento` ausente, `idx_solicitacoes_treinamento_planejado` ausente.
+- Probe de staging/produção não foi executado porque `AIRTRUST_ALLOW_SCHEMA_PROBE`, `AIRTRUST_SCHEMA_PROBE_TARGET` e `AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE` não estavam definidos.
+- Conclusão: o snapshot local sugere que uma M1 simples pode funcionar em ambiente limpo, mas **não** resolve a compatibilidade do ambiente aprovado. O runtime DDL ainda pode ter criado as colunas em staging/produção.
 
 ### 2.2 Migration M2 — `integracoes_sigvoos_*` base tables
 
@@ -432,5 +440,7 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 ---
 
 **Addendum Sprint W:** a Pré-Fase foi executada sem migration nova. Restam apenas R01, R03, R04 e R09 para fases futuras.
+
+**Addendum Sprint X.0:** foi criado o runner `scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh`, fail-closed e somente com `PRAGMA`/`SELECT`. O probe local indicou ausência das 2 colunas e do índice em snapshot local; o probe de ambiente aprovado ficou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. Portanto, R03 saiu de `DESIGN_READY` para `BLOCKED_SCHEMA_PROBE_REQUIRED` até existir evidência estrutural do ambiente aprovado.
 
 **Fim do readiness document.** Gerado em 2026-06-03. Nenhum schema ou migration foi alterado nesta fase; Sprint W removeu somente DDL runtime já coberto.

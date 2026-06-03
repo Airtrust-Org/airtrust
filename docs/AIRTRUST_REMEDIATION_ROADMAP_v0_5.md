@@ -100,10 +100,10 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase).
+- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.0 deixou R03 em `BLOCKED_SCHEMA_PROBE_REQUIRED`).
 - **Objetivo:** Concluir as fases remanescentes: Fase 1 (M1 Treinamentos Link), Fase 2 (M2 SIGVOOS base), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`.
 - **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente.
-- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Restam 3 migrations novas planejadas (`0386`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
+- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only para R03 e registrou que o snapshot local não tem as 2 colunas nem o índice, mas o ambiente aprovado continua sem autorização de consulta. Restam 3 migrations novas planejadas (`0386`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
 - **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 1-3: GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, quando implementado.
 - **Migration necessária?:** Sim (3 migrations para as Fases 1-3; Pré-Fase não requer).
@@ -197,9 +197,10 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 9 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
 | 10 | DDL runtime residual design ✅ | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 11 | DDL Pré-Fase — remover 6 `ensure*` cobertos ✅ | Concluído | Limpeza | GPT-5.4 Alta |
-| 12 | DDL Fase 1 — M1 Treinamentos Link | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
-| 13 | DDL Fase 2 — M2 SIGVOOS base | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
-| 14 | DDL Fase 3 — M3 Documentos canônico | Médio prazo | 5+ empresas | GPT-5.5 Alta |
+| 12 | DDL X.0 — Autorizar probe read-only de R03 em ambiente aprovado | Médio prazo | 5+ empresas | GPT-5.4 Alta |
+| 13 | DDL Fase 1 — M1 Treinamentos Link | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 14 | DDL Fase 2 — M2 SIGVOOS base | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 15 | DDL Fase 3 — M3 Documentos canônico | Médio prazo | 5+ empresas | GPT-5.5 Alta |
 | 11 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
 | 12 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |
 | 13 | Performance/bundle/N+1 audit | Médio prazo | Escala | GPT-5.4 Alta |
@@ -209,4 +210,4 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ---
 
-**Fim do roadmap.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados e no Sprint T.1 de execução local aprovada.
+**Fim do roadmap.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados e no Sprint X.0 de probe estrutural read-only.
