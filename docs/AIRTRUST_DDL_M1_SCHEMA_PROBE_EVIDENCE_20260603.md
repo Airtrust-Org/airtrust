@@ -474,3 +474,85 @@ Após execução, a decisão da M1 será reclassificada conforme:
 - Nenhuma PII foi registrada.
 - Nenhum `git add .` foi usado.
 - Apenas o arquivo `docs/AIRTRUST_DDL_M1_SCHEMA_PROBE_EVIDENCE_20260603.md` foi modificado nesta sprint.
+
+---
+
+## 13. Sprint X.3 — Worktree limpo + tentativa sem autorização (2026-06-03)
+
+### 13.1 Estado inicial
+
+- Repositório principal mantido intacto em `/Users/filipedaumas/SAAS/Airtrust`
+- Worktree limpo criado em `/Users/filipedaumas/SAAS/Airtrust-r03-probe`
+- Branch do worktree: `sprint-x3-r03-probe`
+- HEAD: `ed354f94bd1a9c23375ee3d8535707e93d1dc4b7`
+- origin/main: `ed354f94bd1a9c23375ee3d8535707e93d1dc4b7`
+- Divergência: `0 0`
+- `git status --short --untracked-files=all`: limpo no worktree
+- `npm run ops:guard`: `PASS` (2 warnings históricos, não bloqueantes)
+- `bash scripts/preflight-clean-deploy.sh`: `FAIL` esperado com `ERROR: deploy only from main (current: sprint-x3-r03-probe)`
+
+**Nota operacional:** o `preflight-clean-deploy.sh` é um gate de deploy em `main`. Nesta Sprint X.3, o uso de branch não-`main` foi obrigatório para isolar os untracked do repositório principal. Como não houve deploy e nenhuma alteração de runtime/schema, essa falha foi tratada como incompatibilidade de procedimento, não como risco técnico do probe.
+
+### 13.2 Runner e autorização
+
+- Script revalidado: `bash -n` sem erros
+- `staging|production` chama `run_remote_probe "$TARGET"` sem `skip` incondicional
+- Produção continua exigindo `AIRTRUST_CONFIRM_PRODUCTION_READ_ONLY=YES`
+- SQL remoto continua limitado a:
+  - `PRAGMA table_info(solicitacoes_treinamento);`
+  - `PRAGMA index_list(solicitacoes_treinamento);`
+  - `PRAGMA index_info(idx_solicitacoes_treinamento_planejado);`
+- DDL/DML bloqueados: sim
+- `SELECT *` bloqueado: sim
+- Dados de linha consultados: não
+
+Autorização observada no ambiente:
+
+| Variável | Valor |
+|---|---|
+| `AIRTRUST_ALLOW_SCHEMA_PROBE` | `UNSET` |
+| `AIRTRUST_SCHEMA_PROBE_TARGET` | `UNSET` |
+| `AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE` | `UNSET` |
+| `AIRTRUST_CONFIRM_PRODUCTION_READ_ONLY` | `UNSET` |
+
+### 13.3 Resultado do probe
+
+```
+STATUS=SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED
+REASON=AIRTRUST_ALLOW_SCHEMA_PROBE_not_set
+```
+
+Resumo estrutural registrado:
+
+| Campo | Valor |
+|---|---|
+| `STATUS` | `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED` |
+| `TARGET` | não consultado |
+| `TABLE_EXISTS` | não consultado |
+| `TREINAMENTO_PLANEJADO_ID_EXISTS` | não consultado |
+| `STATUS_PRE_AGENDAMENTO_EXISTS` | não consultado |
+| `IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS` | não consultado |
+| `REMOTE_RUNNER_USED` | não |
+
+### 13.4 Decisão e próxima fase
+
+- Classificação aplicada ao R03: `BLOCKED_SCHEMA_PROBE_REQUIRED`
+- Migration criada: não
+- Fallback runtime removido: não
+- Deploy Worker/API: não
+- Deploy Pages: não
+
+Próxima fase recomendada: **Sprint X.4 — operador autentica no Wrangler, define as env vars de autorização e executa o probe remoto aprovado (staging ou produção read-only)**.
+
+### 13.5 Confirmações de segurança (Sprint X.3)
+
+- Sem backfill.
+- Sem dados reais alterados.
+- Sem DML/DDL executado no probe.
+- Sem dados de linha consultados.
+- Sem auth/RBAC/tenant alterado.
+- Sem R2 real.
+- Sem secrets versionados.
+- Sem PII registrada.
+- Sem `git add .`.
+- Untracked do repositório principal permaneceram intocados.

@@ -13,6 +13,8 @@
 > **Addendum Sprint X.1 (2026-06-03):** HEAD `c09c0cb`. Tentativa de execução com autorização: todas as 4 variáveis UNSET. Probe retornou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`. Script validado como seguro (somente PRAGMA/SELECT, fail-closed, snapshot temporário). A barreira é exclusivamente de autorização do operador — o script está pronto para staging ou produção read-only assim que as env vars forem definidas.
 >
 > **Addendum Sprint X.2 (2026-06-03):** HEAD `d775bea`. Runner remoto read-only implementado com suporte a `staging` e `production` via `wrangler d1 execute --remote --json --command="PRAGMA ..."`. Validação de SQL reforçada com bloqueio de `SELECT *` e `FROM` em tabelas de usuário. 5 cenários de autorização testados: todos corretamente bloqueados ou encaminhados. Local: `PASS`. Staging autorizado: `FAIL` esperado (sem `wrangler login`). R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED` — o runner está completo; a barreira é dupla (env vars + Cloudflare auth).
+>
+> **Addendum Sprint X.3 (2026-06-03):** HEAD `ed354f9`. Execução movida para worktree limpo (`/Users/filipedaumas/SAAS/Airtrust-r03-probe`) para preservar untracked fora do escopo no repositório principal. `ops:guard` PASS; `preflight-clean-deploy.sh` falhou apenas por exigir deploy em `main`, o que conflita com a estratégia obrigatória de worktree em branch dedicada. As 4 env vars de autorização permaneceram `UNSET`; o probe retornou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. Nenhum probe remoto foi executado, nenhum dado de linha foi consultado e R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`.
 
 ---
 

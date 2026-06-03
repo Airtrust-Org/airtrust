@@ -66,7 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 **Rollback:** Remover colunas e índice (não destrutivo — dados existentes não são perdidos)
 **Dependências:** Nenhuma — `solicitacoes_treinamento` já existe via `0280`
 
-**Status pós-Sprint X.2:** `BLOCKED_SCHEMA_PROBE_REQUIRED`
+**Status pós-Sprint X.3:** `BLOCKED_SCHEMA_PROBE_REQUIRED`
 
 **Evidência Sprint X.0 (2026-06-03):**
 - Probe local read-only executado com `PASS` em snapshot D1 local: tabela existe, colunas ausentes, índice ausente.
@@ -84,6 +84,14 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 - Testes de autorização: 5 cenários (no-auth, staging sem confirm, production sem production_read_only, local autorizado PASS, staging autorizado FAIL por falta de wrangler auth).
 - Autorização: 4 variáveis ainda UNSET → `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`.
 - Conclusão: o runner remoto está completo e fail-closed. A barreira agora é dupla: (a) env vars e (b) `wrangler login` ativo. Ambas são operacionais, não técnicas.
+
+**Evidência Sprint X.3 (2026-06-03):**
+- Worktree limpo isolado em `/Users/filipedaumas/SAAS/Airtrust-r03-probe` para não tocar os untracked do repositório principal.
+- Branch de execução: `sprint-x3-r03-probe`; HEAD == `origin/main` (`ed354f94bd1a9c23375ee3d8535707e93d1dc4b7`).
+- `git status` limpo no worktree; `npm run ops:guard` PASS.
+- `preflight-clean-deploy.sh` falhou apenas pelo gate `deploy only from main`, incompatível com a própria exigência de worktree em branch separada; nenhum deploy foi tentado.
+- Variáveis de autorização continuaram UNSET; probe retornou `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`.
+- Decisão mantida: não criar M1, não remover fallback runtime, não deployar.
 
 ### 2.2 Migration M2 — `integracoes_sigvoos_*` base tables
 
