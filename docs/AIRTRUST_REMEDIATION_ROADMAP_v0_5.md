@@ -2,8 +2,8 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `871a140e47ec8eb53a21b169956c7fdd5d149179`
-Modo: roadmap tecnico-operacional atualizado apos Sprint I (Supabase Feasibility Audit) sem migration, sem dados reais e sem deploy.
+HEAD auditado: `871a140e47ec8eb53a21b169956c7fdd5d149179` → Sprint J em execucao sobre `bdbc200`
+Modo: roadmap tecnico-operacional atualizado apos Sprint J (Supabase Preparation) sem migration, sem dados reais e sem deploy.
 
 ## Agora, antes de qualquer novo cliente externo
 
@@ -165,6 +165,28 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint I (Supabase Feasibility
 - Pode ser GPT-5.4?: somente para docs auxiliares.
 - Precisa GPT-5.5?: sim.
 - Criterio de aceite: equipe consegue responder "qual tenant, qual request, qual modulo, qual ator" sem ambiguidade.
+
+## Sprint J — Supabase Preparation (2026-06-02)
+
+- **Status: CONCLUIDO.**
+- Objetivo: transformar a decisao do Sprint I em acoes preparatorias seguras, sem iniciar migracao.
+- **Repository pattern expandido:** `lmsRelatoriosRepository` (3 queries read-only, testes criados).
+- **Tenant isolation documentos/assets auditado:** 14 gaps identificados (7 criticos, 5 altos, 2 medios). Correcoes planejadas para Sprint K com GPT-5.5.
+- **Cloudflare Queues planejado:** arquitetura, fases, tiers definidos. Implementacao postergada.
+- **R2 metadata planejado:** politica, call sites, backfill, validacao definidos. Depende de correcoes de tenant isolation.
+- Documentos: `AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`, `AIRTRUST_DOMAIN_EVENTS_QUEUE_PLAN_v0_5.md`, `AIRTRUST_R2_METADATA_TENANT_PLAN_v0_5.md`, `AIRTRUST_SUPABASE_PREPARATION_PLAN_v0_5.md`.
+
+### Item 11.5 — Tenant isolation documentos (NOVO, Sprint J)
+
+- Objetivo: corrigir 14 gaps de tenant isolation em rotas de documentos, certificados e assets.
+- Risco: 7 gaps criticos permitem exfiltracao de documentos cross-tenant ou delecao sem verificacao de empresa_id.
+- Escopo: adicionar JOIN `funcionarios.empresa_id` em queries que acessam `documentos` diretamente.
+- Fora do escopo: alterar schema, migration, R2 metadata.
+- Modelo recomendado: GPT-5.5 Alta.
+- Deploy necessario?: sim, quando implementado.
+- Migration necessaria?: nao.
+- Documento: `docs/AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`.
+- Criterio de aceite: todos os 14 gaps corrigidos e testados com tenant isolation verification.
 
 ## Pode esperar
 
