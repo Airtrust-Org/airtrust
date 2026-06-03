@@ -2,8 +2,8 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `871a140e47ec8eb53a21b169956c7fdd5d149179`
-Modo: planejamento de sprints amplos atualizado apos Sprint I (Supabase Feasibility Audit).
+HEAD auditado: `871a140e47ec8eb53a21b169956c7fdd5d149179` → Sprint J em execucao sobre `bdbc200`
+Modo: planejamento de sprints amplos atualizado apos Sprint J (Supabase Preparation).
 
 ## Sprint A - RBAC/Suporte
 
@@ -103,13 +103,26 @@ Modo: planejamento de sprints amplos atualizado apos Sprint I (Supabase Feasibil
 - **Gatilhos de reavaliacao:** D1 80% limite, incidente tenant isolation, ou 2027-06-02.
 - Criterio de aceite: existe apenas um feasibility audit claro, sem trabalho de migracao prematuro. ✅ CONCLUIDO.
 
-## Sprint J - Supabase Preparation (recomendado como proximo)
+## Sprint J - Supabase Preparation
 
+- **Status: CONCLUIDO em 2026-06-02.**
 - Objetivo: executar acoes preparatorias identificadas no Sprint I sem iniciar migracao.
-- Escopo: Repository pattern em 1-2 modulos piloto adicionais, auditoria de tenant isolation (fechar ~5 gaps em endpoints de documentos), migrar `domain_events` para Cloudflare Queues, adicionar `empresa_id` como metadata R2.
-- Fora do escopo: criar projeto Supabase, migrar schema, alterar auth, alterar storage.
-- Modelo recomendado: GPT-5.4 Alta.
+- **Repository pattern:** `lmsRelatoriosRepository` criado com 3 queries read-only + 8 testes. ✅
+- **Tenant isolation audit:** 14 gaps identificados em documentos/assets (7 criticos). ✅ Plano de correcao pronto.
+- **Cloudflare Queues:** Plano de arquitetura e fases criado. Implementacao postergada para Sprint L+. ✅
+- **R2 metadata:** Plano de politica, call sites e backfill criado. Depende de Sprint K. ✅
+- Fora do escopo: criar projeto Supabase, migrar schema, alterar auth, alterar storage. ✅ Respeitado.
+- Documentos: 4 novos docs + 2 atualizados. ✅
+- Criterio de aceite: repository criado, auditoria concluida, planos documentados. ✅ CONCLUIDO.
+
+## Sprint K - Tenant Isolation Hardening (recomendado como proximo)
+
+- Objetivo: corrigir os 14 gaps de tenant isolation identificados no Sprint J.
+- Escopo: adicionar JOIN `funcionarios.empresa_id` em queries de documentos/certificados. Atualizar `lms-relatorios.ts` para usar `lmsRelatoriosRepository`.
+- Fora do escopo: alterar schema, migration, auth/tenant middleware, R2 metadata, R2 objetos reais.
+- Modelo recomendado: GPT-5.5 Alta.
 - Deploy necessario?: sim, quando implementado e testado.
-- Migration necessaria?: nao (Cloudflare Queues e configuracao, sem schema novo).
-- Risco: medio (Queues e mexe em storage metadata, mas sem alteracao de dados).
-- Criterio de aceite: 1-2 repositorios criados e testados, gaps de tenant isolation fechados, domain_events operando em Queues, metadata R2 com empresa_id.
+- Migration necessaria?: nao.
+- Risco: alto (runtime sensivel — documentos, certificados, R2 access, cascading deletes).
+- Documento referencia: `docs/AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`.
+- Criterio de aceite: 14 gaps corrigidos, testes de tenant isolation por endpoint, sem regressao em upload/download/stream.
