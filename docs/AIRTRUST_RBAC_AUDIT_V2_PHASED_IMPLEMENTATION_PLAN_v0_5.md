@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
-**Modo:** Plano faseado com Fase 1 versionada localmente. Nenhuma migration foi executada em produção.
+**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
+**Modo:** Plano faseado com Fase 1 pronta e Fase 2 em dual-write parcial. Nenhuma migration foi executada em produção.
 
 ## 1. Fase 0 - Preconditions
 
@@ -32,16 +32,18 @@
 
 ## 3. Fase 2 - Audit writer canonicalization
 
-- **Status:** proxima fase recomendada; ainda nao implementada.
+- **Status:** `DUAL_WRITE_PARTIAL` - writer v2 criado e integração mínima versionada em cursos LMS.
 - **Objetivo:** centralizar escrita de eventos criticos no writer canonico com dual-write controlado.
-- **Arquivos provaveis:** `worker-airtrust/src/utils/auditoria.ts`, `worker-airtrust/src/utils/db.ts`, `worker-airtrust/src/lib/frms/db-service-shared.ts`, `worker-airtrust/src/lib/audit/context.ts`, call sites criticos em auth/admin/assets/FRMS.
+- **Arquivos implementados:** `worker-airtrust/src/lib/audit/audit-events-v2.ts` e helper de audit em `worker-airtrust/src/routes/lms-cursos.ts`.
+- **Controle de rollout:** `AUDIT_EVENTS_V2_DUAL_WRITE=true`; desabilitado por padrão enquanto `audit_events_v2` não estiver aplicado em ambiente aprovado.
 - **Migrations provaveis:** nenhuma nova obrigatoria alem da Fase 1.
-- **Testes obrigatorios:** parity tests writer novo vs legado; `request_id`; `correlation_id`; `support_reason`; `target_empresa_id`; negacoes auditadas; no PII.
+- **Testes implementados:** insert mínimo; defaults; tenant/ator/correlação; `support_reason`; falhas; allowlist de metadata; legado preservado; falha v2 sem quebrar resposta.
+- **Testes ainda obrigatorios:** paridade operacional em ambiente com schema aplicado; ampliação para eventos críticos; monitoramento de divergência.
 - **Rollback:** desligar dual-write por flag e manter apenas writer legado.
 - **Risco:** alto.
 - **Modelo recomendado:** `GPT-5.5 Altissimo`.
 - **Deploy:** sim.
-- **Criterio de aceite:** auth, admin, assets e FRMS gravando eventos v2 sem quebrar as trilhas legadas.
+- **Criterio de aceite:** ainda parcial; cursos LMS prontos para dual-write sem quebrar a trilha legada. Auth, admin, assets e FRMS continuam fora do escopo.
 
 ## 4. Fase 3 - Platform roles schema
 

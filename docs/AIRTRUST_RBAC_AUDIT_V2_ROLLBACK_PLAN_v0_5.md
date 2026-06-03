@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
-**Modo:** Plano de rollback com migration aditiva `0385_audit_events_v2.sql` versionada, ainda não executada em produção.
+**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
+**Modo:** Plano de rollback com migration aditiva e writer v2 versionados, ainda sem migration executada em produção.
 
 ## 1. Riscos por fase
 
@@ -24,7 +24,8 @@
 
 ## 3. Rollback para writer canonico
 
-- desligar dual-write por feature flag;
+- manter `AUDIT_EVENTS_V2_DUAL_WRITE` ausente ou diferente de `true` para impedir escrita v2;
+- desligar dual-write por feature flag ao primeiro sinal de regressão;
 - continuar somente com writers legados;
 - preservar eventos v2 ja gravados para analise, sem apaga-los;
 - bloquear qualquer cleanup de adapters enquanto houver incidentes abertos.

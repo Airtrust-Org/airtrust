@@ -1,9 +1,9 @@
 # AirTrust — Audit Trail/LGPD v2 Design
 
-**Data:** 2026-06-02
+**Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `e84c08d2c3979ed46026c171d3ca94f72b2e01fd`
-**Modo:** Design/documentação. Nenhuma migration criada, nenhum schema alterado, nenhum código runtime alterado, nenhum banco real consultado.
+**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
+**Modo:** Design atualizado após implementação do writer v2 e dual-write mínimo. Nenhuma migration remota ou alteração manual de dados reais.
 
 ## 1. Objetivo
 
@@ -55,7 +55,7 @@ O modelo v2 recomendado é um evento canônico de auditoria orientado a contexto
 - qual metadado mínimo é necessário para rastreabilidade.
 - qual classe de retenção e risco se aplica.
 
-O writer canônico futuro deve absorver os três padrões existentes (`auditoria`, `audit_logs`, `auditoria_avancada_v2`) por compatibilidade gradual, com adapter temporário para rotas legadas.
+O writer canônico `recordAuditEventV2()` foi criado para absorver gradualmente os três padrões existentes (`auditoria`, `audit_logs`, `auditoria_avancada_v2`), com adapters temporários e preservação integral dos writers legados.
 
 ## 5. Campos obrigatórios propostos
 
@@ -178,7 +178,19 @@ Além de persistir o evento, a implementação futura deve permitir:
 - alertas para `SUPPORT_ACCESS`, `IMPERSONATE`, `DATA_EXPORT`, falhas repetidas de autorização e auditoria de assets privados.
 - detecção de falha do próprio writer de auditoria sem expor dados sensíveis.
 
-## 14. Plano de implementação futura
+## 14. Estado da implementação
+
+- `recordAuditEventV2()` foi criado em `worker-airtrust/src/lib/audit/audit-events-v2.ts`.
+- o writer insere somente em `audit_events_v2`, usa bindings explícitos e não serializa o input completo.
+- metadata v2 usa allowlist de chaves e aceita apenas valores escalares mínimos.
+- valores semelhantes a CPF, e-mail, URL ou segredo são descartados mesmo em chaves permitidas.
+- `support_reason` é obrigatório quando `support_mode > 0`.
+- `failure_reason_code` é obrigatório quando `success = false`.
+- falhas de D1 retornam resultado controlado e não quebram o fluxo principal.
+- dual-write mínimo foi integrado no helper de auditoria de cursos LMS, sem copiar `oldValues` ou `newValues` para v2.
+- o dual-write depende de `AUDIT_EVENTS_V2_DUAL_WRITE=true` e permanece desabilitado por padrão enquanto o schema não estiver aplicado em ambiente aprovado.
+
+## 15. Plano de implementação futura
 
 Fase recomendada para sprint posterior:
 
@@ -190,11 +202,11 @@ Fase recomendada para sprint posterior:
 6. Adicionar índices e validações de data quality específicas de auditoria.
 7. Só então descontinuar uso amplo de payload legado nos três writers antigos.
 
-## 15. Fora do escopo desta fase
+## 16. Fora do escopo desta fase
 
-- criar migration real.
-- alterar schema atual.
-- alterar código runtime do worker ou frontend.
+- aplicar migration remota.
+- alterar schema além da migration já versionada.
+- ampliar dual-write para auth, assets, documentos, exports ou FRMS.
 - tocar banco real ou R2 real.
 - decidir obrigação legal definitiva de retenção.
 - alterar RBAC/tenant de produção.

@@ -11,6 +11,8 @@ import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { logAudit } from '../utils/db';
+import { getAuditContextSnapshot } from '../lib/audit/context';
+import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 import {
   ensureQualificacaoTipoForCurso,
   isEadCategoria,
@@ -91,6 +93,32 @@ async function logLmsCourseAudit(
     });
   } catch (error) {
     console.warn('[LMS] Falha ao registrar audit log de curso:', error);
+  }
+
+  const env = c.env as unknown as Record<string, unknown>;
+  if (env.AUDIT_EVENTS_V2_DUAL_WRITE !== 'true') return;
+
+  const context = getAuditContextSnapshot(c);
+  try {
+    await recordAuditEventV2(db, {
+      empresaId: getEmpresaIdSafe(c),
+      actorUserId: context.userId,
+      actorEmpresaId: context.empresaId,
+      actorRole: context.userRole,
+      requestId: context.requestId,
+      eventCategory: 'ADMIN_OPERATION',
+      eventAction: params.action,
+      entityType: 'lms_cursos',
+      entityId: params.cursoId,
+      riskLevel: 'high',
+      retentionClass: 'SECURITY_LONG',
+      metadata: {
+        module: 'lms',
+        resource_kind: 'course',
+      },
+    });
+  } catch {
+    console.warn('[LMS] Falha inesperada no audit v2 de curso');
   }
 }
 
