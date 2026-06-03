@@ -312,7 +312,7 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente:** DDL runtime remanescente: R04 (Documentos), R09 (shared.ts). R01 (SIGVOOS) = READINESS_MAPPED (Sprint Z0).
+- **Pendente:** DDL runtime remanescente: R04 (Documentos), R09 (shared.ts). R01 (SIGVOOS) = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL (Sprint Z1).
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
 
 ### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
@@ -331,6 +331,20 @@
 - **Migration necessária?:** Não nesta fase. Migration `0387` planejada para Sprint Z1.
 - **Pendente:** Sprint Z1 — criar migration `0387`, teste local e plano de aplicação controlada.
 - **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados).
+
+### Sprint Z1 — DDL Fase 2 R01 SIGVOOS Migration Local ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03 (HEAD `f2d0db6`).
+- **Objetivo:** versionar a migration `0387`, criar teste local e decidir se o fallback R01 podia sair do runtime sem aplicar D1 remoto.
+- **Entregue:**
+  - Migration `0387_integracoes_sigvoos_base_tables.sql` criada.
+  - Teste `sigvoos-base-tables-schema.test.ts` criado com cobertura de schema limpo, idempotência e cobertura combinada com `0352`.
+  - Guard arquitetural mantido com `services/sigvoos-frms.ts` documentado explicitamente como exceção temporária.
+  - Fallback `ensureSigvoosTables()` **preservado**.
+  - R01 = `MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL`.
+- **Decisão:** não remover o fallback nesta sprint, porque `0354_auditoria_critica_schema_hardening.sql` ainda referencia `integracoes_sigvoos_config` antes de `0387` numa cadeia limpa de migrations.
+- **Deploy necessário?:** Não.
+- **Migration remota?:** Não nesta sprint.
+- **Próxima fase:** planejar e executar apply controlado de `0387` em ambiente aprovado, com estratégia explícita para a dependência `0354 -> integracoes_sigvoos_config`; só depois remover o fallback R01.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.

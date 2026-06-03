@@ -66,7 +66,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 | **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; Sprint X.5 aplicou migration `0385` em produção | Ativar flag, validar paridade, ampliar cobertura dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED) | Executar em ambiente com schema completo para zerar SKIPPED |
-| **DDL Runtime** | 15 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Sprint Z0 mapeou integralmente R01 (SIGVOOS) — 5 tabelas, 8 índices, 10 call sites, 3 lacunas de migration confirmadas. R01 = READINESS_MAPPED. Restam 1 residual crítico no runtime (R04) e 1 caso dinâmico incerto (`shared.ts`) |
+| **DDL Runtime** | 15 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Sprint Z0 mapeou integralmente R01 (SIGVOOS) e Sprint Z1 criou `0387` + teste local, mas preservou o fallback por dependência com `0354`. R01 = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL. Restam 1 residual crítico no runtime (R04) e 1 caso dinâmico incerto (`shared.ts`) |
 | **Repository Pattern** | Piloto em 2 domínios (dashboard, LMS reports) | Expandir gradualmente para lms-cursos, qualificações |
 | **Scripts DB** | Wrapper seguro criado para scripts críticos | Scripts shell legados ainda sem wrapper |
 | **`escala_alocacoes`** | Tenant-scope por JOIN garantido e testado | Migration opcional P3 para coluna `empresa_id` própria + UNIQUE parcial |
@@ -85,7 +85,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 
 ### Não bloqueadores (para piloto interno)
 
-6. **DDL runtime residual** em SIGVOOS, documentos e `shared.ts`. R03 = RESOLVED (Sprint X.5: `0386` aplicada + deploy). R01 = READINESS_MAPPED (Sprint Z0: inventário completo, migration `0387` planejada). Restam 1 residual crítico no runtime (R04) + 1 caso dinâmico (R09).
+6. **DDL runtime residual** em SIGVOOS, documentos e `shared.ts`. R03 = RESOLVED (Sprint X.5: `0386` aplicada + deploy). R01 = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL (Sprint Z1: `0387` criada + teste local, fallback preservado por dependência com `0354`). Restam 1 residual crítico no runtime (R04) + 1 caso dinâmico (R09).
 7. **Status residual** em cron/alertas/EVD (bloqueia escala, não piloto).
 8. **R2 metadata** de tenant ausente (defense-in-depth, não critério de segurança).
 9. **Performance/bundle/N+1** sem auditoria (dívida estrutural).

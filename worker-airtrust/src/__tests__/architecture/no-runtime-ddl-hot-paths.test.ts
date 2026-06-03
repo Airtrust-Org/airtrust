@@ -28,6 +28,8 @@ const HOT_PATH_FILES = [
   ['utils/alert-whatsapp-templates-store.ts', new URL('../../utils/alert-whatsapp-templates-store.ts', import.meta.url)],
 ] as const;
 
+// R01 stays documented until 0387 is applied in every environment and the
+// earlier 0354 sequencing dependency is normalized.
 const DOCUMENTED_EXCEPTIONS = [
   'runtime/api-bootstrap.ts',
   'routes/qualificacoes/historico.ts',

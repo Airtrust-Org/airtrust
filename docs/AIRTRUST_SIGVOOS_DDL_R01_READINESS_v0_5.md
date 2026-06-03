@@ -1,10 +1,10 @@
 # AirTrust — SIGVOOS DDL R01 Readiness v0.5
 
 **Data:** 2026-06-03
-**Sprint:** Z0 — R01 SIGVOOS readiness
+**Sprint:** Z0 readiness + Z1 migration local
 **Branch:** `main`
-**HEAD:** `d65fc9eab2e8abe608c5f4820a6a23319ad1bb2c`
-**Modo:** Read-only / docs-only / test planning. Nenhuma migration criada, nenhum schema alterado, nenhum runtime alterado, nenhum deploy.
+**HEAD:** `f2d0db6276e0600e34716823645622b5001d8b02`
+**Modo:** Z0 foi read-only/docs-only. Z1 criou migration local + testes + atualização documental. Nenhum D1 remoto, nenhum banco real alterado, nenhum deploy.
 
 ---
 
@@ -26,7 +26,7 @@ Mapear integralmente o escopo de `ensureSigvoosTables()` (R01) para preparar sua
 | Call sites em rotas | 2 (`worker-airtrust/src/routes/integracoes_sigvoos.ts:374,600`) |
 | Call sites em serviços | 8 (`worker-airtrust/src/services/sigvoos-frms.ts:625,802,852,914,948,1045,2238,2500`) |
 | Status na matriz | DESIGN_READY |
-| Status nesta sprint | READINESS_MAPPED |
+| Status nesta sprint | MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL |
 
 ---
 
@@ -307,6 +307,17 @@ Mapear integralmente o escopo de `ensureSigvoosTables()` (R01) para preparar sua
 
 Inventário completo. Lacunas documentadas. Nenhuma ação de código.
 
+### Addendum Sprint Z1 (2026-06-03): migration criada, fallback preservado
+
+- Migration criada: `worker-airtrust/migrations/0387_integracoes_sigvoos_base_tables.sql`
+- Teste local criado: `worker-airtrust/src/__tests__/migrations/sigvoos-base-tables-schema.test.ts`
+- Cobertura local confirmada para as 3 tabelas base + 4 índices, e cobertura combinada com `0352` para as 5 tabelas/8 índices do runtime SIGVOOS.
+- **Fallback `ensureSigvoosTables()` preservado.**
+
+**Motivo da preservação do fallback:** a migration `0354_auditoria_critica_schema_hardening.sql` já existente faz `ALTER TABLE integracoes_sigvoos_config ADD COLUMN notificar_falha_email TEXT` antes do novo número `0387`. Em um ambiente limpo que aplique migrations em ordem numérica, `0354` continua dependendo da existência prévia de `integracoes_sigvoos_config`. Como esta sprint não podia reordenar nem reescrever `0354`, a criação da `0387` **não é suficiente para remover o fallback runtime com segurança**.
+
+**Status resultante:** `R01 = MIGRATION_VERSIONED_PENDING_RUNTIME_REMOVAL`.
+
 ### Próxima fase (Z1): Criar migration + teste local
 
 **Migration proposta:** `0387_integracoes_sigvoos_base_tables.sql`
@@ -324,7 +335,6 @@ CREATE TABLE IF NOT EXISTS integracoes_sigvoos_config (
   empresa_id INTEGER,
   chave TEXT NOT NULL,
   valor TEXT,
-  notificar_falha_email TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   deleted_at TEXT
@@ -369,12 +379,12 @@ CREATE INDEX IF NOT EXISTS idx_integracoes_sigvoos_mapeamentos_empresa_canac
   ON integracoes_sigvoos_mapeamentos(empresa_id, canac_sigvoos);
 ```
 
-**Nota:** A coluna `notificar_falha_email` (adicionada por 0354) já está incluída no CREATE TABLE. Isso resolve a dependência circular: se 0387 for aplicada antes de 0354, a coluna já existe; se 0354 já foi aplicada, `ALTER TABLE ADD COLUMN` é no-op (coluna já existe após 0387). Em ambos os casos, o `IF NOT EXISTS` garante idempotência.
+**Nota corrigida após Z1:** a `0387` foi deliberadamente criada com o schema que o runtime realmente garante hoje, sem tentar corrigir por si só a dependência da `0354`. Como `0387` vem numericamente depois de `0354`, ela **não resolve** um bootstrap limpo baseado apenas em migrations ordenadas. A normalização dessa sequência ficou para a próxima fase controlada.
 
 **Após aplicação da migration em todos os ambientes:**
-1. Reduzir escopo de `ensureSigvoosTables()` para manter apenas `sigvoos_mapeamento_manual` e `frms_jornada_pendente` (já cobertos por 0352)
-2. OU remover a função inteira e confiar em 0352 + 0387
-3. Remover/reduzir os 10 call sites
+1. Resolver explicitamente a dependência `0354 -> integracoes_sigvoos_config` em plano controlado
+2. Aplicar `0387` no ambiente-alvo aprovado
+3. Só então reduzir/remover `ensureSigvoosTables()` e limpar os 10 call sites
 
 ---
 
@@ -382,13 +392,13 @@ CREATE INDEX IF NOT EXISTS idx_integracoes_sigvoos_mapeamentos_empresa_canac
 
 | Passo | Ação | Ambiente | Risco | Pré-condição |
 |---|---|---|---|---|
-| 1 | Criar migration `0387` | Repositório | BAIXO | Schema validado contra runtime (esta fase) |
-| 2 | Aplicar `0387` em local | D1 local | BAIXO | Migration validada |
-| 3 | Testar rotas SIGVOOS/FRMS localmente | Local | BAIXO | Migration aplicada |
-| 4 | Aplicar `0387` em staging | D1 staging | BAIXO | Local validado |
-| 5 | Validar smoke SIGVOOS em staging | Staging | MÉDIO | Migration aplicada |
+| 1 | Criar migration `0387` | Repositório | CONCLUÍDO | Schema runtime validado contra o código |
+| 2 | Validar `0387` localmente + cobertura com `0352` | Local | CONCLUÍDO | Teste `sigvoos-base-tables-schema.test.ts` |
+| 3 | Definir correção operacional para a dependência `0354 -> integracoes_sigvoos_config` | Repositório/Runbook | MÉDIO | Sem isso, fallback R01 não sai com segurança |
+| 4 | Aplicar `0387` em staging/ambiente aprovado | D1 staging | BAIXO | Plano de sequência aprovado |
+| 5 | Validar smoke SIGVOOS/FRMS | Staging | MÉDIO | Migration aplicada |
 | 6 | Aplicar `0387` em produção | D1 produção | ALTO | Staging validado + autorização explícita |
-| 7 | Reduzir/remover `ensureSigvoosTables()` | Código | MÉDIO | Migration em todos os ambientes |
+| 7 | Reduzir/remover `ensureSigvoosTables()` | Código | MÉDIO | Migration aplicada em todos os ambientes |
 | 8 | Deploy Worker/API | Cloudflare | MÉDIO | Código atualizado |
 | 9 | Smoke pós-deploy | Produção | BAIXO | Deploy concluído |
 
@@ -398,10 +408,10 @@ CREATE INDEX IF NOT EXISTS idx_integracoes_sigvoos_mapeamentos_empresa_canac
 
 ### 10.1 Testes de migration (fase Z1)
 
-- [ ] Aplicar `0387` em D1 local limpo (sem as tabelas) → verificar que tabelas são criadas
-- [ ] Aplicar `0387` em D1 local com tabelas já existentes → verificar idempotência (sem erro)
-- [ ] Aplicar `0387` + `0354` em D1 local limpo → verificar que `notificar_falha_email` não causa conflito
-- [ ] Verificar que `0352` + `0387` juntos cobrem todas as 5 tabelas e 8+ índices
+- [x] Aplicar `0387` em SQLite local limpo → verificar que tabelas são criadas
+- [x] Reaplicar `0387` com tabelas runtime-shaped já existentes → verificar idempotência
+- [x] Verificar que `0352` + `0387` juntos cobrem todas as 5 tabelas e 8 índices do runtime SIGVOOS
+- [ ] Resolver e validar explicitamente a ordem `0354` + `0387` em ambiente limpo/controlado
 
 ### 10.2 Testes funcionais (fase Z1)
 
@@ -444,9 +454,9 @@ Reverter o commit que removeu/reduziu `ensureSigvoosTables()`. A função é ide
 
 ## 12. Fora do escopo desta fase
 
-- ❌ Criar migration `0387` — será feito na Sprint Z1
+- ✅ Criar migration `0387` — concluído na Sprint Z1
 - ❌ Aplicar migration em qualquer ambiente
-- ❌ Alterar `ensureSigvoosTables()` ou qualquer arquivo runtime
+- ✅ Preservar `ensureSigvoosTables()` até a aplicação controlada + resolução da dependência com `0354`
 - ❌ Remover call sites
 - ❌ Deploy Worker/API
 - ❌ Tocar banco real (local, staging ou produção)
@@ -457,4 +467,4 @@ Reverter o commit que removeu/reduziu `ensureSigvoosTables()`. A função é ide
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03 como parte do Sprint Z0 — DDL Fase 2 R01 SIGVOOS readiness.
+**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado no Sprint Z1 com a migration `0387`, teste local e decisão de manter o fallback R01 por segurança.
