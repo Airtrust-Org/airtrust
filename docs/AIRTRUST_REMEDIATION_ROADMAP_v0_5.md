@@ -178,15 +178,17 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint J (Supabase Preparation
 
 ### Item 11.5 — Tenant isolation documentos (NOVO, Sprint J)
 
+- Status Sprint K: 7 gaps criticos corrigidos e testados; altos locais GAP-001, GAP-002, GAP-006, GAP-008, GAP-009 e GAP-011 corrigidos. GAP-014 e gaps medios seguem pendentes para fase propria.
 - Objetivo: corrigir 14 gaps de tenant isolation em rotas de documentos, certificados e assets.
 - Risco: 7 gaps criticos permitem exfiltracao de documentos cross-tenant ou delecao sem verificacao de empresa_id.
 - Escopo: adicionar JOIN `funcionarios.empresa_id` em queries que acessam `documentos` diretamente.
 - Fora do escopo: alterar schema, migration, R2 metadata.
 - Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: sim, quando implementado.
+- Deploy necessario?: sim, executado quando implementado.
 - Migration necessaria?: nao.
 - Documento: `docs/AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`.
-- Criterio de aceite: todos os 14 gaps corrigidos e testados com tenant isolation verification.
+- Criterio de aceite Sprint K: gaps criticos corrigidos, cross-tenant nao chama R2 nem executa mutation, tenant correto mantem acesso.
+- Criterio restante: GAP-014 e gaps medios classificados/corrigidos em sprint dedicada.
 
 ## Pode esperar
 

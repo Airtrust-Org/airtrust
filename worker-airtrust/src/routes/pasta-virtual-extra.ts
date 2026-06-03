@@ -10,6 +10,7 @@ import { jsonOk, jsonError } from '../middleware/response';
 import { AppError } from '../utils/errors';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
+import { getEmpresaId } from '../middleware/tenant';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -22,6 +23,7 @@ app.get('/download-certificados/:funcionario_id', auth(), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
   const funcionarioId = parseInt(c.req.param('funcionario_id'));
+  const empresaId = getEmpresaId(c);
 
   if (isNaN(funcionarioId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -40,7 +42,9 @@ app.get('/download-certificados/:funcionario_id', auth(), async (c) => {
         d.r2_key,
         d.tamanho
       FROM documentos d
+      INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
       WHERE d.funcionario_id = ?
+        AND f.empresa_id = ?
         AND d.deleted_at IS NULL
         AND (
           d.nome_arquivo LIKE 'CERT-%'
@@ -50,7 +54,7 @@ app.get('/download-certificados/:funcionario_id', auth(), async (c) => {
       ORDER BY d.created_at DESC
     `;
 
-    const { results } = await db.prepare(query).bind(funcionarioId).all<{
+    const { results } = await db.prepare(query).bind(funcionarioId, empresaId).all<{
       id: number;
       nome_arquivo: string;
       r2_key: string;
@@ -107,8 +111,10 @@ app.get('/download-certificados/:funcionario_id', auth(), async (c) => {
 
     // Buscar nome do funcionário para o nome do arquivo
     const funcionario = await db
-      .prepare('SELECT nome, matricula FROM funcionarios WHERE id = ? AND deleted_at IS NULL')
-      .bind(funcionarioId)
+      .prepare(
+        'SELECT nome, matricula FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
+      .bind(funcionarioId, empresaId)
       .first<{ nome: string; matricula: string }>();
 
     const nomeArquivo = funcionario
@@ -146,13 +152,18 @@ app.get('/:id/documentos', auth(), async (c) => {
   try {
     const db = c.env.DB;
     const id = parseInt(c.req.param('id'));
+    const empresaId = getEmpresaId(c);
     if (isNaN(id)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
     const { results } = await db
       .prepare(
-        `SELECT id, uuid, funcionario_id, nome_arquivo as nome, tipo, tamanho, r2_key, created_at, updated_at
-         FROM documentos WHERE funcionario_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 100`,
+        `SELECT d.id, d.uuid, d.funcionario_id, d.nome_arquivo as nome, d.tipo, d.tamanho,
+                d.r2_key, d.created_at, d.updated_at
+         FROM documentos d
+         INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+         WHERE d.funcionario_id = ? AND f.empresa_id = ? AND d.deleted_at IS NULL
+         ORDER BY d.created_at DESC LIMIT 100`,
       )
-      .bind(id) // aqui usamos id como funcionario_id por compatibilidade
+      .bind(id, empresaId) // aqui usamos id como funcionario_id por compatibilidade
       .all();
     return jsonOk(c, results || []);
   } catch (e) {
@@ -166,7 +177,17 @@ app.post('/:id/upload', auth(), async (c) => {
     const db = c.env.DB;
     const bucket = c.env.BUCKET;
     const funcionarioId = parseInt(c.req.param('id'));
+    const empresaId = getEmpresaId(c);
     if (isNaN(funcionarioId)) return jsonError(c, 'ID inválido', 400, 'ID_INVALIDO');
+    const funcionario = await db
+      .prepare(
+        'SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
+      .bind(funcionarioId, empresaId)
+      .first<{ id: number }>();
+    if (!funcionario) {
+      return jsonError(c, 'Funcionário não encontrado', 404, 'FUNCIONARIO_NOT_FOUND');
+    }
     const contentType = c.req.header('Content-Type') || '';
     if (!contentType.toLowerCase().includes('multipart/form-data')) {
       // Auditoria envia POST sem corpo -> responder 400 para indicar validação ok

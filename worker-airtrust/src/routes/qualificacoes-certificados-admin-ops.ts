@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
+import { getEmpresaId } from '../middleware/tenant';
 
 const opsRouter = new Hono<{ Bindings: Env }>();
 
@@ -264,6 +265,7 @@ opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => 
 opsRouter.post('/historico/export-zip', auth(), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
+  const empresaId = getEmpresaId(c);
 
   // Obter filtros do body (para não poluir URL com muitos params)
   const body = await c.req.json();
@@ -285,8 +287,10 @@ opsRouter.post('/historico/export-zip', auth(), async (c) => {
       'qh.certificado_arquivo_id IS NOT NULL', // Só quem tem certificado
       'd.deleted_at IS NULL', // Documento válido
       'd.r2_key IS NOT NULL',
+      'f.empresa_id = ?',
+      'f.deleted_at IS NULL',
     ];
-    const params: unknown[] = [];
+    const params: unknown[] = [empresaId];
 
     // Se forneceu IDs específicos, ignorar outros filtros
     if (ids && ids.length > 0) {
@@ -346,7 +350,7 @@ opsRouter.post('/historico/export-zip', auth(), async (c) => {
         qt.codigo as qualif_codigo
       FROM qualificacoes_historico qh
       JOIN documentos d ON d.id = qh.certificado_arquivo_id
-      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+      INNER JOIN funcionarios f ON f.id = qh.funcionario_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
       WHERE ${whereClause}
       ORDER BY qh.data_vencimento DESC

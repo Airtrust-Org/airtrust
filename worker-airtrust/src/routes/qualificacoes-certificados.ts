@@ -159,16 +159,33 @@ app.route('/', certificadosWriteRoutes);
 app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
+  const historicoId = parseInt(c.req.param('id'));
   const certId = parseInt(c.req.param('certId'));
+  const empresaId = getEmpresaId(c);
 
-  if (isNaN(certId)) {
+  if (isNaN(historicoId) || isNaN(certId)) {
     return c.json({ success: false, error: 'ID de certificado inválido' }, 400);
   }
 
   try {
     const documento = await db
-      .prepare('SELECT * FROM documentos WHERE id = ?')
-      .bind(certId)
+      .prepare(
+        `SELECT d.*
+         FROM documentos d
+         INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+         LEFT JOIN qualificacoes_historico qh
+           ON qh.id = ?
+          AND qh.funcionario_id = d.funcionario_id
+          AND qh.certificado_arquivo_id = d.id
+          AND qh.deleted_at IS NULL
+         WHERE d.id = ?
+           AND f.empresa_id = ?
+           AND (qh.id IS NOT NULL OR NOT EXISTS (
+             SELECT 1 FROM qualificacoes_historico qh_check
+             WHERE qh_check.id = ? AND qh_check.deleted_at IS NULL
+           ))`,
+      )
+      .bind(historicoId, certId, empresaId, historicoId)
       .first<Documento>();
 
     if (!documento) {
@@ -318,6 +335,7 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
 app.get('/funcionario/:id', auth(), async (c) => {
   const db = c.env.DB;
   const funcionarioId = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
 
   if (isNaN(funcionarioId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -338,12 +356,14 @@ app.get('/funcionario/:id', auth(), async (c) => {
         d.tipo,
         'CERTIFICADO_QUALIFICACAO' as categoria
       FROM documentos d
-      WHERE d.funcionario_id = ? 
+      INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+      WHERE d.funcionario_id = ?
+        AND f.empresa_id = ?
         AND d.deleted_at IS NULL
       ORDER BY d.created_at DESC
     `;
 
-    const { results } = await db.prepare(query).bind(funcionarioId).all();
+    const { results } = await db.prepare(query).bind(funcionarioId, empresaId).all();
 
     const response: ApiResponse = {
       success: true,
@@ -384,6 +404,7 @@ app.get('/funcionario/:id', auth(), async (c) => {
 app.get('/download/:id', auth(), async (c) => {
   const db = c.env.DB;
   const docId = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
 
   if (isNaN(docId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -392,12 +413,13 @@ app.get('/download/:id', auth(), async (c) => {
   try {
     // Buscar documento
     const query = `
-      SELECT id, uuid, r2_key, nome_arquivo, funcionario_id
-      FROM documentos
-      WHERE id = ? AND deleted_at IS NULL
+      SELECT d.id, d.uuid, d.r2_key, d.nome_arquivo, d.funcionario_id
+      FROM documentos d
+      INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+      WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?
     `;
 
-    const doc = await db.prepare(query).bind(docId).first();
+    const doc = await db.prepare(query).bind(docId, empresaId).first();
 
     if (!doc) {
       return c.json({ success: false, error: 'Certificado não encontrado' }, 404);
