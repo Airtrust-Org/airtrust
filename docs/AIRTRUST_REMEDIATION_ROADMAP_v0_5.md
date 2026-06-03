@@ -100,10 +100,10 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** DESIGN_READY (Sprint V concluído — inventário, design e readiness prontos).
-- **Objetivo:** Executar em 4 fases: Pré-Fase (remover 6 `ensure*` já cobertos, zero migration), Fase 1 (M1 Treinamentos Link), Fase 2 (M2 SIGVOOS base), Fase 3 (M3 Documentos canônico).
+- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase).
+- **Objetivo:** Concluir as fases remanescentes: Fase 1 (M1 Treinamentos Link), Fase 2 (M2 SIGVOOS base), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`.
 - **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente.
-- **Escopo:** 3 migrations novas planejadas (`0386`-`0388`), 6 funções removíveis sem migration, 4 fases com riscos graduais (BAIXO → ALTO).
+- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Restam 3 migrations novas planejadas (`0386`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
 - **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 1-3: GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, quando implementado.
 - **Migration necessária?:** Sim (3 migrations para as Fases 1-3; Pré-Fase não requer).
@@ -196,7 +196,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 8 | Platform roles schema + RBAC dual-read foundation | Curto prazo, depois do staging flag test | Cliente externo | GPT-5.5 Altissimo |
 | 9 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
 | 10 | DDL runtime residual design ✅ | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
-| 11 | DDL Pré-Fase — remover 6 `ensure*` cobertos | Curto prazo | Limpeza | GPT-5.4 Alta |
+| 11 | DDL Pré-Fase — remover 6 `ensure*` cobertos ✅ | Concluído | Limpeza | GPT-5.4 Alta |
 | 12 | DDL Fase 1 — M1 Treinamentos Link | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 13 | DDL Fase 2 — M2 SIGVOOS base | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 14 | DDL Fase 3 — M3 Documentos canônico | Médio prazo | 5+ empresas | GPT-5.5 Alta |

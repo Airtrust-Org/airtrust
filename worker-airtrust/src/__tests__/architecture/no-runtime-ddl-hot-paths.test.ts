@@ -17,6 +17,9 @@ const HOT_PATH_FILES = [
   ['routes/matriz-treinamento.ts', new URL('../../routes/matriz-treinamento.ts', import.meta.url)],
   ['routes/notificacoes-convocacao.ts', new URL('../../routes/notificacoes-convocacao.ts', import.meta.url)],
   ['routes/preferencias.ts', new URL('../../routes/preferencias.ts', import.meta.url)],
+  ['routes/qualificacoes/historico-helpers.ts', new URL('../../routes/qualificacoes/historico-helpers.ts', import.meta.url)],
+  ['routes/qualificacoes/tipos.ts', new URL('../../routes/qualificacoes/tipos.ts', import.meta.url)],
+  ['routes/simuladores-modelos.ts', new URL('../../routes/simuladores-modelos.ts', import.meta.url)],
   ['routes/treinamentos-planejados.ts', new URL('../../routes/treinamentos-planejados.ts', import.meta.url)],
   ['utils/alert-whatsapp-templates-store.ts', new URL('../../utils/alert-whatsapp-templates-store.ts', import.meta.url)],
 ] as const;
@@ -25,8 +28,6 @@ const DOCUMENTED_EXCEPTIONS = [
   'runtime/api-bootstrap.ts',
   'routes/qualificacoes/historico.ts',
   'routes/qualificacoes/historico-write.ts',
-  'routes/qualificacoes/tipos.ts',
-  'routes/simuladores-modelos.ts',
   'services/sigvoos-frms.ts',
   'services/treinamentos-planejados-integration.ts',
 ] as const;
@@ -37,8 +38,6 @@ describe('runtime DDL hardening', () => {
       'runtime/api-bootstrap.ts',
       'routes/qualificacoes/historico.ts',
       'routes/qualificacoes/historico-write.ts',
-      'routes/qualificacoes/tipos.ts',
-      'routes/simuladores-modelos.ts',
       'services/sigvoos-frms.ts',
       'services/treinamentos-planejados-integration.ts',
     ]);

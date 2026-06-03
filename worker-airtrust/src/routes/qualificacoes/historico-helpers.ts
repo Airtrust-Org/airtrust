@@ -127,69 +127,11 @@ export async function invalidateMaterializedStats(db: D1Database) {
   histCache.cache = null;
 }
 
-export async function ensureHistoricoSchema(db: D1Database) {
-  try {
-    const col = await db.prepare('PRAGMA table_info(qualificacoes_historico)').all();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const columns = (col.results || []).map((r: any) => r.name);
-    const hasRenovada = columns.includes('renovada');
-    if (!hasRenovada) {
-      await db
-        .prepare('ALTER TABLE qualificacoes_historico ADD COLUMN renovada INTEGER DEFAULT 0')
-        .run();
-    }
+// Kept as a compatibility no-op while historico routes still import this helper.
+export const ensureHistoricoSchema = async (_db: D1Database) => {};
 
-    const hasStatus = columns.includes('status');
-    if (!hasStatus) {
-      await db.prepare('ALTER TABLE qualificacoes_historico ADD COLUMN status TEXT').run();
-    }
-
-    const hasDataConfirmacao = columns.includes('data_confirmacao');
-    if (!hasDataConfirmacao) {
-      await db
-        .prepare('ALTER TABLE qualificacoes_historico ADD COLUMN data_confirmacao TEXT')
-        .run();
-    }
-
-    const hasConfirmadaPor = columns.includes('confirmada_por');
-    if (!hasConfirmadaPor) {
-      await db
-        .prepare('ALTER TABLE qualificacoes_historico ADD COLUMN confirmada_por INTEGER')
-        .run();
-    }
-
-    const hasTipoTreinamento = columns.includes('tipo_treinamento');
-    if (!hasTipoTreinamento) {
-      await db
-        .prepare('ALTER TABLE qualificacoes_historico ADD COLUMN tipo_treinamento TEXT')
-        .run();
-    }
-  } catch (e) {
-    console.warn('[ensureHistoricoSchema] Falha:', (e as Error).message);
-  }
-}
-
-export async function ensureQualificacoesTiposTrainingSchema(db: D1Database) {
-  try {
-    const col = await db.prepare('PRAGMA table_info(qualificacoes_tipos)').all();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const columns = (col.results || []).map((r: any) => r.name);
-
-    if (!columns.includes('carga_horaria_inicial')) {
-      await db
-        .prepare('ALTER TABLE qualificacoes_tipos ADD COLUMN carga_horaria_inicial REAL')
-        .run();
-    }
-
-    if (!columns.includes('carga_horaria_recorrente')) {
-      await db
-        .prepare('ALTER TABLE qualificacoes_tipos ADD COLUMN carga_horaria_recorrente REAL')
-        .run();
-    }
-  } catch (e) {
-    console.warn('[ensureQualificacoesTiposTrainingSchema] Falha:', (e as Error).message);
-  }
-}
+// Kept as a compatibility no-op while historico routes still import this helper.
+export const ensureQualificacoesTiposTrainingSchema = async (_db: D1Database) => {};
 
 export type TipoTreinamento = 'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO';
 
@@ -296,26 +238,21 @@ export function resolveParametrosRenovacaoQualificacao(params: {
   };
 }
 
-export async function ensureModelosAeronaveModeloColumn(db: D1Database) {
+export const ensureModelosAeronaveModeloColumn = async (db: D1Database) => {
   try {
     const col = await db.prepare('PRAGMA table_info(modelos_aeronave)').all();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const hasModelo = (col.results || []).some((r: any) => r.name === 'modelo');
-    if (!hasModelo) {
-      await db.prepare('ALTER TABLE modelos_aeronave ADD COLUMN modelo TEXT').run();
-    }
+    if (!hasModelo) return;
     await db
       .prepare(
         "UPDATE modelos_aeronave SET modelo = COALESCE(modelo, codigo, nome) WHERE modelo IS NULL OR modelo = ''",
       )
       .run();
-    await db
-      .prepare('CREATE INDEX IF NOT EXISTS idx_modelos_aeronave_modelo ON modelos_aeronave(modelo)')
-      .run();
   } catch (e) {
     console.warn('[ensureModelosAeronaveModeloColumn] Falha:', (e as Error).message);
   }
-}
+};
 
 // Mapeamento de colunas para ordenação segura (evita SQL injection)
 export const MODELO_AERONAVE_EXPR = `COALESCE(

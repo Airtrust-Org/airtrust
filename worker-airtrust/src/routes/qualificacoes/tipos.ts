@@ -94,7 +94,7 @@ async function qualificacoesTiposHasIsCheck(db: D1Database): Promise<boolean> {
   }
 }
 
-async function ensureQualificacoesTiposExtendedSchema(
+async function loadQualificacoesTiposColumnsSupport(
   db: D1Database,
 ): Promise<TiposColumnsSupport> {
   const info = await db.prepare("PRAGMA table_info('qualificacoes_tipos')").all();
@@ -106,21 +106,11 @@ async function ensureQualificacoesTiposExtendedSchema(
   const hasConteudoProgramatico = hasColumn('conteudo_programatico');
   const hasIsCheck = hasColumn('is_check');
 
-  if (!hasCargaInicial) {
-    await db.prepare('ALTER TABLE qualificacoes_tipos ADD COLUMN carga_horaria_inicial REAL').run();
-  }
-
-  if (!hasCargaRecorrente) {
-    await db
-      .prepare('ALTER TABLE qualificacoes_tipos ADD COLUMN carga_horaria_recorrente REAL')
-      .run();
-  }
-
   return {
     hasIsCheck,
     hasConteudoProgramatico,
-    hasCargaInicial: true,
-    hasCargaRecorrente: true,
+    hasCargaInicial,
+    hasCargaRecorrente,
   };
 }
 
@@ -199,7 +189,7 @@ router.get(
   optionalAuth(),
   safe(async (c) => {
     const db = c.env.DB;
-    const columnsSupport = await ensureQualificacoesTiposExtendedSchema(db);
+    const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const limitRaw = c.req.query('limit');
     const limitParsed = parseInt(limitRaw || '200', 10);
@@ -239,7 +229,7 @@ router.get(
   optionalAuth(),
   safe(async (c) => {
     const db = c.env.DB;
-    const columnsSupport = await ensureQualificacoesTiposExtendedSchema(db);
+    const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const id = c.req.param('id');
 
@@ -283,7 +273,7 @@ router.post(
   requireRole('admin', 'manager'),
   safe(async (c) => {
     const db = c.env.DB;
-    const columnsSupport = await ensureQualificacoesTiposExtendedSchema(db);
+    const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const body = await c.req.json();
 
@@ -493,7 +483,7 @@ router.put(
   requireRole('admin', 'manager'),
   safe(async (c) => {
     const db = c.env.DB;
-    const columnsSupport = await ensureQualificacoesTiposExtendedSchema(db);
+    const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const id = c.req.param('id');
     const body = await c.req.json();

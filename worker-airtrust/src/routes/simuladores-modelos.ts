@@ -244,18 +244,15 @@ app.delete('/tipos-sessao/:id', async (c) => {
 // MODELOS DE SESSÃO - CRUD Completo
 // ========================================================================
 
-async function ensureModelosSessaoModeloAeronaveColumn(db: D1Database) {
+async function normalizeModelosSessaoModeloAeronave(db: D1Database) {
   try {
     const col = await db.prepare('PRAGMA table_info(modelos_sessao)').all();
     const columns = (col.results || []).map((r: any) => r.name);
-    let hasModeloAeronave = columns.includes('modelo_aeronave');
+    const hasModeloAeronave = columns.includes('modelo_aeronave');
     const hasCodigoAeronave = columns.includes('codigo_aeronave');
     const hasTipoAeronave = columns.includes('tipo_aeronave');
 
-    if (!hasModeloAeronave) {
-      await db.prepare('ALTER TABLE modelos_sessao ADD COLUMN modelo_aeronave TEXT').run();
-      hasModeloAeronave = true;
-    }
+    if (!hasModeloAeronave) return;
 
     const coalesceCols = [
       hasModeloAeronave ? 'modelo_aeronave' : null,
@@ -268,13 +265,8 @@ async function ensureModelosSessaoModeloAeronaveColumn(db: D1Database) {
         `UPDATE modelos_sessao SET modelo_aeronave = COALESCE(${coalesceCols.join(', ')}) WHERE (modelo_aeronave IS NULL OR modelo_aeronave = '')`,
       )
       .run();
-    await db
-      .prepare(
-        'CREATE INDEX IF NOT EXISTS idx_modelos_sessao_modelo_aeronave ON modelos_sessao(modelo_aeronave)',
-      )
-      .run();
   } catch (e: any) {
-    console.warn('[ensureModelosSessaoModeloAeronaveColumn] Falha:', e?.message || String(e));
+    console.warn('[normalizeModelosSessaoModeloAeronave] Falha:', e?.message || String(e));
   }
 }
 
@@ -303,7 +295,7 @@ app.get('/modelos-sessao', async (c) => {
     c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     c.header('Pragma', 'no-cache');
 
-    await ensureModelosSessaoModeloAeronaveColumn(c.env.DB);
+    await normalizeModelosSessaoModeloAeronave(c.env.DB);
 
     const col = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
     const columns = (col.results || []).map((r: any) => r.name);
@@ -586,7 +578,7 @@ app.delete('/modelos-sessao/:id/manobras/:manobraId', async (c) => {
 app.post('/modelos-sessao', async (c) => {
   console.log('🔍 [MODELOS] POST /modelos-sessao chamado');
   try {
-    await ensureModelosSessaoModeloAeronaveColumn(c.env.DB);
+    await normalizeModelosSessaoModeloAeronave(c.env.DB);
 
     const parsed = ModeloSessaoSchema.safeParse(await c.req.json());
     if (!parsed.success) {
@@ -920,7 +912,7 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
 // POST /api/simuladores/modelos-sessao/importar-relacoes - Importar relações modelo-manobra
 app.post('/modelos-sessao/importar-relacoes', async (c) => {
   try {
-    await ensureModelosSessaoModeloAeronaveColumn(c.env.DB);
+    await normalizeModelosSessaoModeloAeronave(c.env.DB);
 
     const body = await c.req.json();
     const dados = Array.isArray(body?.dados) ? body.dados : [];
@@ -1212,7 +1204,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
 app.put('/modelos-sessao/:id', async (c) => {
   console.log('🔍 [MODELOS] PUT /modelos-sessao/:id chamado');
   try {
-    await ensureModelosSessaoModeloAeronaveColumn(c.env.DB);
+    await normalizeModelosSessaoModeloAeronave(c.env.DB);
 
     const id = c.req.param('id');
     const body = await c.req.json();

@@ -3,7 +3,7 @@
 **Data:** 2026-06-03
 **Branch:** `main`
 **HEAD:** `78924b1ebdce474c7e38118f66db67b73afff94e`
-**Modo:** Documental/read-only. Este resumo consolida sprints de auditoria e remediação executados entre maio e junho de 2026, incluindo o Sprint V (DDL Runtime Residual Design).
+**Modo:** Consolidado. Este resumo inclui sprints documentais e sprints de implementação pontual, incluindo o Sprint V (design) e o Sprint W (remoção dos DDL runtime já cobertos por migration).
 
 ---
 
@@ -19,7 +19,7 @@ O AirTrust passou por um ciclo intenso de auditoria e remediação. Partimos de 
 - **Achados abertos remanescentes** continuam sem bloquear piloto interno controlado.
 - **Achados parciais** agora incluem os desenhos documentais concluídos do Audit Trail/LGPD v2 e do RBAC/Suporte v2, com readiness gate fechado e ordem de implementação definida, ainda sem runtime.
 
-O código em produção permanece estável; nesta fase o avanço foi documental, sem alteração de runtime, schema ou deploy.
+O código em produção permanece estável; o Sprint W removeu DDL runtime já coberto por migration e foi seguido de deploy do Worker/API.
 
 ---
 
@@ -66,7 +66,7 @@ O código em produção permanece estável; nesta fase o avanço foi documental,
 | **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first | Implementar contrato único dos 3 writers com colunas dedicadas, dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED) | Executar em ambiente com schema completo para zerar SKIPPED |
-| **DDL Runtime** | 8 hot paths limpos, funções órfãs removidas | Sprint V: inventário completo (20 ocorrências), 3 residuais críticos mapeados, 6 cobertos pendentes de remoção na Pré-Fase, design e readiness prontos |
+| **DDL Runtime** | 14 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10). Restam 3 residuais críticos (R01, R03, R04) e 1 caso dinâmico incerto (`shared.ts`) |
 | **Repository Pattern** | Piloto em 2 domínios (dashboard, LMS reports) | Expandir gradualmente para lms-cursos, qualificações |
 | **Scripts DB** | Wrapper seguro criado para scripts críticos | Scripts shell legados ainda sem wrapper |
 | **`escala_alocacoes`** | Tenant-scope por JOIN garantido e testado | Migration opcional P3 para coluna `empresa_id` própria + UNIQUE parcial |
@@ -85,7 +85,7 @@ O código em produção permanece estável; nesta fase o avanço foi documental,
 
 ### Não bloqueadores (para piloto interno)
 
-6. **DDL runtime residual** em SIGVOOS, treinamentos e documentos — DESIGN_READY (Sprint V concluiu inventário, design e readiness; 4 fases planejadas).
+6. **DDL runtime residual** em SIGVOOS, treinamentos link, documentos e `shared.ts` — PARTIAL (Sprint W concluiu a Pré-Fase; restam 3 residuais críticos + 1 caso dinâmico).
 7. **Status residual** em cron/alertas/EVD (bloqueia escala, não piloto).
 8. **R2 metadata** de tenant ausente (defense-in-depth, não critério de segurança).
 9. **Performance/bundle/N+1** sem auditoria (dívida estrutural).

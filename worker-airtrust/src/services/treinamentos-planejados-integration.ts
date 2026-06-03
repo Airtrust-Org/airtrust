@@ -131,73 +131,6 @@ async function tabelaExiste(db: D1Database, nomeTabela: string): Promise<boolean
   return Boolean(result?.name);
 }
 
-export async function ensureTreinamentosPlanejadosSchema(db: D1Database): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS treinamentos_planejados (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        empresa_id INTEGER NOT NULL,
-        qualificacao_tipo_id INTEGER NOT NULL,
-        data_prevista TEXT NOT NULL,
-        hora_inicio TEXT,
-        hora_fim TEXT,
-        status TEXT NOT NULL DEFAULT 'PLANEJADO' CHECK(status IN ('PLANEJADO', 'CONFIRMADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'CANCELADO')),
-        instrutor_id INTEGER,
-        simulador_id INTEGER,
-        aeronave_id INTEGER,
-        local TEXT,
-        carga_horaria_prevista INTEGER,
-        titulo TEXT,
-        descricao TEXT,
-        observacoes TEXT,
-        motivo_cancelamento TEXT,
-        efetivado_em TEXT,
-        efetivado_por INTEGER,
-        sessao_id INTEGER,
-        created_by INTEGER,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        deleted_at TEXT
-      )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS treinamentos_participantes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        treinamento_id INTEGER NOT NULL,
-        funcionario_id INTEGER NOT NULL,
-        confirmado INTEGER DEFAULT 0,
-        presente INTEGER,
-        aprovado INTEGER,
-        nota REAL,
-        observacoes TEXT,
-        qualificacao_historico_id INTEGER,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        UNIQUE(treinamento_id, funcionario_id)
-      )`,
-    )
-    .run();
-
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_treinamentos_planejados_empresa_data ON treinamentos_planejados(empresa_id, data_prevista, status) WHERE deleted_at IS NULL',
-    )
-    .run();
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_treinamentos_participantes_treinamento ON treinamentos_participantes(treinamento_id)',
-    )
-    .run();
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_treinamentos_participantes_funcionario ON treinamentos_participantes(funcionario_id)',
-    )
-    .run();
-}
-
 export async function ensureSolicitacoesTreinamentoLinkSchema(db: D1Database): Promise<void> {
   const exists = await tabelaExiste(db, 'solicitacoes_treinamento');
   if (!exists) return;
@@ -732,7 +665,6 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
   removedParticipants?: RemovedParticipantLink[];
 }): Promise<void> {
   const { db, empresaId, treinamentoId } = params;
-  await ensureTreinamentosPlanejadosSchema(db);
   await ensureSolicitacoesTreinamentoLinkSchema(db);
 
   const evento = await loadEventoContext(db, empresaId, treinamentoId);
@@ -816,7 +748,6 @@ export async function sincronizarSolicitacaoAgendadaComTreinamentoPlanejado(para
   dataPrevista: string | null;
 }): Promise<{ treinamentoPlanejadoId: number | null }> {
   const { db, empresaId, solicitacaoId, dataPrevista } = params;
-  await ensureTreinamentosPlanejadosSchema(db);
   await ensureSolicitacoesTreinamentoLinkSchema(db);
 
   if (!dataPrevista) {
@@ -938,7 +869,6 @@ export async function sincronizarSolicitacaoConcluidaComTreinamentoPlanejado(par
   dataRealizada: string;
 }): Promise<{ treinamentoPlanejadoId: number | null; qualificacaoHistoricoId: number | null }> {
   const { db, empresaId, solicitacaoId } = params;
-  await ensureTreinamentosPlanejadosSchema(db);
   await ensureSolicitacoesTreinamentoLinkSchema(db);
 
   const solicitacao = await db

@@ -335,6 +335,8 @@ DROP TABLE IF EXISTS documentos;
 
 ### 7.1 Testes de arquitetura
 
+**Sprint W executado:** `routes/qualificacoes/tipos.ts`, `routes/qualificacoes/historico-helpers.ts` e `routes/simuladores-modelos.ts` já saíram da allowlist implícita e entraram na lista de arquivos verificados pelo guard. `services/treinamentos-planejados-integration.ts` permanece exceção apenas por R03.
+
 Atualizar `worker-airtrust/src/__tests__/architecture/no-runtime-ddl-hot-paths.test.ts`:
 
 ```typescript
@@ -429,4 +431,6 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03. Nenhum código, schema, migration ou banco real alterado.
+**Addendum Sprint W:** a Pré-Fase foi executada sem migration nova. Restam apenas R01, R03, R04 e R09 para fases futuras.
+
+**Fim do readiness document.** Gerado em 2026-06-03. Nenhum schema ou migration foi alterado nesta fase; Sprint W removeu somente DDL runtime já coberto.

@@ -3,8 +3,10 @@
 **Data:** 2026-06-03
 **Branch:** `main`
 **HEAD:** `78924b1ebdce474c7e38118f66db67b73afff94e`
-**Sprint:** V — DDL Runtime Residual Design
-**Modo:** Read-only / docs-only. Nenhum código, schema, migration ou banco real alterado.
+**Sprint:** V/W — DDL Runtime Residual Design + Pré-Fase
+**Modo:** Sprint V read-only / docs-only. Sprint W removeu apenas DDL runtime já coberto por migrations existentes; nenhuma migration, schema ou banco real foi alterado manualmente.
+
+> **Addendum Sprint W (2026-06-03):** R02, R05, R06, R07, R08 e R10 foram removidos do runtime. Permanecem R01, R03, R04 e R09, além de casos legacy/test-only.
 
 ---
 
@@ -308,7 +310,7 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | Migrations existentes relacionadas | 10+ (`0172`, `0173`, `0183`, `0184`, `0280`, `0317`, `0345`, `0352`, `0354`, `0136`-`0138`, `0165`) |
 | Migrations novas necessárias | 3 |
 | Ordem recomendada | Fase 1 (cobertos) → Fase 2 (Treinamentos Link) → Fase 3 (SIGVOOS) → Fase 4 (Documentos) |
-| Status na matriz | DDL_RUNTIME = DESIGN_READY |
+| Status na matriz | DDL_RUNTIME = PARTIAL (Pré-Fase concluída; restam R01, R03, R04 e R09) |
 
 ---
 
