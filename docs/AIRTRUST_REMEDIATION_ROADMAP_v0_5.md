@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `78924b1ebdce474c7e38118f66db67b73afff94e`
-**Modo:** Roadmap atualizado após Sprint V (DDL Runtime Residual Design). Sem migration remota, backfill ou alteração manual de dados reais.
+**HEAD base:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
+**Modo:** Roadmap atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado). Sem migration manual ou alteração de dados reais.
 
 ---
 
@@ -73,11 +73,11 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 - **Migration necessária?:** Sim, na fase de implementação.
 - **Documentos de referência:** `AIRTRUST_RBAC_SUPPORT_V2_DESIGN_v0_5.md`, `AIRTRUST_PLATFORM_ROLES_MODEL_v0_5.md`, `AIRTRUST_SUPPORT_READ_ONLY_MODEL_v0_5.md`, `AIRTRUST_RBAC_V2_MIGRATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_INTEGRATION_PLAN_v0_5.md`.
 
-### Item 6 — Audit Trail/LGPD v2 writer/readiness ✅ READY_FOR_STAGING_FLAG_TEST
+### Item 6 — Audit Trail/LGPD v2 writer/readiness ✅ APPLIED_SCHEMA_READY_FOR_FLAG_PLAN
 
-- **Status:** Sprint R versionou `audit_events_v2`; Sprint S criou writer canônico e dual-write mínimo em cursos LMS atrás de flag; Sprint T documentou readiness; Sprint T.1 executou a validação local aprovada com `PASS`.
-- **Objetivo:** Aplicar schema em ambiente aprovado, ativar flag de forma controlada e validar paridade antes de ampliar cobertura.
-- **Risco:** Compliance e LGPD continuam parcialmente cobertos enquanto o runtime persistir em três writers não padronizados.
+- **Status:** Sprint R versionou `audit_events_v2`; Sprint S criou writer canônico e dual-write mínimo em cursos LMS atrás de flag; Sprint T documentou readiness; Sprint T.1 executou a validação local aprovada com `PASS`; Sprint X.5 aplicou migration `0385_audit_events_v2.sql` em produção.
+- **Objetivo:** Ativar flag de forma controlada e validar paridade antes de ampliar cobertura. Schema já aplicado em produção.
+- **Risco:** Compliance e LGPD continuam parcialmente cobertos enquanto o runtime persistir em três writers não padronizados. Schema existe mas flag ainda não ativada.
 - **Escopo consolidado até o Sprint T.1:** contrato v2, migration aditiva, writer com metadata allowlist, testes de schema/writer, integração LMS, phased plan, rollback plan, readiness doc, evidência sanitizada e runners locais PASS.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, em rollout futuro aprovado; não realizado no Sprint R.
@@ -100,13 +100,13 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente. R03 agora está em `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`).
-- **Objetivo:** Concluir as fases remanescentes: Fase 1 (M1 Treinamentos Link), Fase 2 (M2 SIGVOOS base), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`.
-- **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente.
-- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386_solicitacoes_treinamento_planejado_link.sql` e removeu `ensureSolicitacoesTreinamentoLinkSchema()` do runtime local. O próximo passo de R03 é exclusivamente operacional: aplicar a migration aprovada e só então deployar o Worker/API. Restam ainda 2 migrations novas planejadas (`0387`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
-- **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 1-3: GPT-5.5 Altissimo.
-- **Deploy necessário?:** Sim, quando implementado.
-- **Migration necessária?:** Sim (3 migrations para as Fases 1-3; Pré-Fase não requer).
+- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. **R03 = RESOLVED.**).
+- **Objetivo:** Concluir as fases remanescentes: Fase 2 (M2 SIGVOOS base), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`. Fase 1 (R03 Treinamentos Link) está concluída.
+- **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente (mitigado para R03; permanece para R01 e R04).
+- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386` e removeu o fallback runtime local. **Sprint X.5 aplicou `0386` em produção e deployou o Worker/API (APP_VERSION=2026-06-03T17:00:27Z-c12d8bf).** Restam 2 migrations novas planejadas (`0387`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
+- **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 2-3: GPT-5.5 Altissimo.
+- **Deploy necessário?:** Sim, quando implementado (Fase 1 deploy já feito).
+- **Migration necessária?:** Sim (2 migrations para as Fases 2-3).
 - **Documentos de referência:** `AIRTRUST_RUNTIME_DDL_REMOVAL_PLAN_v0_5.md`, `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
 
 ### Item 9 — Status enum central (expansão)
@@ -195,19 +195,19 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 7 | Staging flag test com schema aplicado + validar paridade | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
 | 8 | Platform roles schema + RBAC dual-read foundation | Curto prazo, depois do staging flag test | Cliente externo | GPT-5.5 Altissimo |
 | 9 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
-| 10 | DDL runtime residual design ✅ | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 10 | DDL runtime residual design ✅ | Concluído | 5+ empresas | GPT-5.5 Altissimo |
 | 11 | DDL Pré-Fase — remover 6 `ensure*` cobertos ✅ | Concluído | Limpeza | GPT-5.4 Alta |
-| 12 | DDL X.0 — Autorizar probe read-only de R03 em ambiente aprovado | Médio prazo | 5+ empresas | GPT-5.4 Alta |
-| 13 | DDL Fase 1 — M1 Treinamentos Link | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 12 | DDL X.0–X.4 — Probe, versionar, remover fallback R03 ✅ | Concluído | 5+ empresas | GPT-5.4/5.5 |
+| 13 | DDL X.5 — Apply 0385/0386 + Deploy Worker/API ✅ | Concluído | Resolução R03 | GPT-5.4 Alta |
 | 14 | DDL Fase 2 — M2 SIGVOOS base | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 15 | DDL Fase 3 — M3 Documentos canônico | Médio prazo | 5+ empresas | GPT-5.5 Alta |
-| 11 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
-| 12 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |
-| 13 | Performance/bundle/N+1 audit | Médio prazo | Escala | GPT-5.4 Alta |
-| 14 | Observabilidade multiempresa | Longo prazo | 5+ empresas | GPT-5.5 Alta |
-| 15 | R2 metadata novos uploads | Longo prazo | Defense-in-depth | GPT-5.4 Alta |
-| 16 | Cloudflare Queues dry-run | Longo prazo | Arquitetura | GPT-5.5 Alta |
+| 16 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
+| 17 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |
+| 18 | Performance/bundle/N+1 audit | Médio prazo | Escala | GPT-5.4 Alta |
+| 19 | Observabilidade multiempresa | Longo prazo | 5+ empresas | GPT-5.5 Alta |
+| 20 | R2 metadata novos uploads | Longo prazo | Defense-in-depth | GPT-5.4 Alta |
+| 21 | Cloudflare Queues dry-run | Longo prazo | Arquitetura | GPT-5.5 Alta |
 
 ---
 
-**Fim do roadmap.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados e no Sprint X.0 de probe estrutural read-only.
+**Fim do roadmap.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas, Worker/API deployado, R03 = RESOLVED, Audit v2 schema = APPLIED_SCHEMA_READY_FOR_FLAG_PLAN).

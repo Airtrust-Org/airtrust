@@ -2,9 +2,9 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `cf5866907d820fb085472f748243968c6d03510d`
-**Sprint:** V/W/X.0 — DDL Runtime Residual Design + Schema Probe
-**Modo:** Read-only / docs+runner-only. Nenhum runtime, schema, migration ou banco real alterado.
+**HEAD:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
+**Sprint:** V/W/X.0–X.5 — DDL Runtime Residual Design + Schema Probe + Apply/Deploy
+**Modo:** Read-only / docs+runner-only até Sprint X.4. Sprint X.5 executou apply de migrations + deploy do Worker/API.
 
 ---
 
@@ -37,7 +37,26 @@ Antes de remover qualquer DDL runtime, as seguintes condições devem ser satisf
 
 ## 2. Migrations necessárias
 
-### 2.1 Migration M1 — `solicitacoes_treinamento` link columns
+### 2.0 Migration M0 — `audit_events_v2` table ✅ APLICADA
+
+**Número:** 0385
+
+**Arquivo:** `0385_audit_events_v2.sql`
+
+**Objetivo:** Criar a tabela `audit_events_v2` com schema canônico (campos de auditoria, `empresa_id`, `usuario_id`, `request_id`, `support_reason`, `retention_class`, metadados).
+
+**Tabelas afetadas:** `audit_events_v2` (nova)
+**Tipo:** Aditivo (CREATE TABLE IF NOT EXISTS + índices)
+**Risco:** BAIXO — tabela nova, sem impacto em tabelas existentes
+**Rollback:** DROP TABLE IF EXISTS `audit_events_v2` (apenas se sem dados)
+
+**Status Sprint X.5:** `APPLIED_IN_PRODUCTION`
+- Migration aplicada em produção via Cloudflare D1 migrations apply.
+- Schema confirmado em produção após apply.
+- Writer canônico e flag `AUDIT_EVENTS_V2_DUAL_WRITE` permanecem desabilitados por padrão.
+- Próximo passo: staging flag test com schema aplicado e validação de paridade.
+
+### 2.1 Migration M1 — `solicitacoes_treinamento` link columns ✅ APLICADA
 
 **Número sugerido:** próximo disponível na sequência (atualmente ~0385)
 
@@ -67,6 +86,13 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 **Dependências:** Nenhuma — `solicitacoes_treinamento` já existe via `0280`
 
 **Status pós-Sprint X.4:** `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`
+
+**Status pós-Sprint X.5:** `APPLIED_IN_PRODUCTION_RESOLVED`
+- Migration `0386` aplicada em produção via Cloudflare D1 migrations apply.
+- Probe pós-migration confirmou `TREINAMENTO_PLANEJADO_ID_EXISTS=yes`, `STATUS_PRE_AGENDAMENTO_EXISTS=yes`, `IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS=yes`.
+- Worker/API deployado com sucesso (`APP_VERSION=2026-06-03T17:00:27Z-c12d8bf`).
+- Smoke pós-deploy: PASS (3/3 público, health OK).
+- R03 = RESOLVED.
 
 **Evidência Sprint X.0 (2026-06-03):**
 - Probe local read-only executado com `PASS` em snapshot D1 local: tabela existe, colunas ausentes, índice ausente.
@@ -471,4 +497,6 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 
 **Addendum Sprint X.4:** o probe aprovado em produção confirmou que a tabela existe e que as 2 colunas + o índice ainda estão ausentes. A migration simples `0386_solicitacoes_treinamento_planejado_link.sql` foi versionada e o fallback runtime foi removido localmente. O status atual passa a `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`.
 
-**Fim do readiness document.** Gerado em 2026-06-03. Nenhum schema ou migration foi alterado nesta fase; Sprint W removeu somente DDL runtime já coberto.
+**Addendum Sprint X.5:** as migrations `0385_audit_events_v2.sql` e `0386_solicitacoes_treinamento_planejado_link.sql` foram aplicadas em produção via Cloudflare D1 migrations apply. O probe pós-migration confirmou as colunas e índice em produção (`STATUS=PASS`). O Worker/API foi deployado com sucesso (`APP_VERSION=2026-06-03T17:00:27Z-c12d8bf`). Smoke pós-deploy: PASS (3/3). R03 = RESOLVED. Audit v2 schema = `APPLIED_SCHEMA_READY_FOR_FLAG_PLAN`. DDL runtime remanescente: R01, R04, R09. Observação: `/api/health stats.version` divergiu de `/api/version` — acompanhar em sprint de observabilidade.
+
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure em 2026-06-03.

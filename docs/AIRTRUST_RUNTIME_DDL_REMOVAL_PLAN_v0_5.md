@@ -27,7 +27,7 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 | `worker-airtrust/src/routes/notificacoes-convocacao.ts` | acesso a `notificacoes_convocacao_*` e `treinamentos_convocacoes_email*` via `ensureConvocacaoEmailSchema` | toda leitura/gravação da configuração e envio | `0320_treinamentos_convocacao_email.sql` e `0359_setores_gestores_many_to_many.sql` | A | removido |
 | `worker-airtrust/src/routes/treinamentos-planejados.ts` | `treinamentos_planejados`, `treinamentos_participantes`, chamadas de convocação | toda leitura/gravação da agenda | `0172_create_treinamentos_planejados.sql` e `0320_treinamentos_convocacao_email.sql` | A | removido no router |
 | `worker-airtrust/src/services/treinamentos-convocacao-email.ts` | definição de `ensureConvocacaoEmailSchema` | indiretamente chamada por rotas de convocação | `0320_treinamentos_convocacao_email.sql` | A | função removida |
-| `worker-airtrust/src/services/treinamentos-planejados-integration.ts` | `treinamentos_planejados`, `treinamentos_participantes`, `ALTER TABLE solicitacoes_treinamento ADD COLUMN treinamento_planejado_id`, `status_pre_agendamento`, índice `idx_solicitacoes_treinamento_planejado` | sync em writes de treinamento planejado | `0172_create_treinamentos_planejados.sql` cobre tabelas base; `0386_solicitacoes_treinamento_planejado_link.sql` agora cobre as colunas/índice de link em `solicitacoes_treinamento` | B/C | Sprint X.4 versionou `0386`, removeu `ensureSolicitacoesTreinamentoLinkSchema()` do runtime local e deixou o deploy condicionado à aplicação da migration no ambiente-alvo. Status: `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY` |
+| `worker-airtrust/src/services/treinamentos-planejados-integration.ts` | `treinamentos_planejados`, `treinamentos_participantes`, ~~`ALTER TABLE solicitacoes_treinamento ADD COLUMN treinamento_planejado_id`~~, ~~`status_pre_agendamento`~~, ~~índice `idx_solicitacoes_treinamento_planejado`~~ | sync em writes de treinamento planejado | `0172_create_treinamentos_planejados.sql` cobre tabelas base; `0386_solicitacoes_treinamento_planejado_link.sql` cobre as colunas/índice de link em `solicitacoes_treinamento` | A (RESOLVED) | Sprint X.5: migration `0386` aplicada em produção + Worker/API deployado. R03 = RESOLVED. |
 | `worker-airtrust/src/services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos`, `sigvoos_mapeamento_manual`, `frms_jornada_pendente` + índices | leitura/config/importação SIGVOOS e reconciliação FRMS | `0352_sigvoos_frms_pendencias_e_enriquecimento.sql` cobre apenas `sigvoos_mapeamento_manual` e `frms_jornada_pendente`; `0354_auditoria_critica_schema_hardening.sql` adiciona `notificar_falha_email`; nenhuma migration encontrada para criação das tabelas `integracoes_sigvoos_*` | B/C | mantido, requer migration futura |
 | `worker-airtrust/src/runtime/api-bootstrap.ts` + `worker-airtrust/src/utils/auto-migration-documentos.ts` | `documentos` + índices | bootstrap de runtime, não por request | cobertura legada/mista; há recriação e índices parciais em `0136_rebuild_all_funcionarios_old_refs.sql`, `0137_fix_certificados_completo.sql`, `0138_certificados_improvements.sql`, mas não há correspondência clara para todos os índices criados pelo helper | B/E | não tocado nesta fase |
 | `worker-airtrust/src/routes/qualificacoes/tipos.ts` | colunas `carga_horaria_inicial`, `carga_horaria_recorrente` | reads/writes de tipos de qualificação | `0317_split_carga_horaria_and_tipo_treinamento.sql` | A | removido no Sprint W |
@@ -59,8 +59,8 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 ## Não removido e motivo
 
 - `services/treinamentos-planejados-integration.ts` não faz mais DDL runtime para `solicitacoes_treinamento`.
-  A migration `0386_solicitacoes_treinamento_planejado_link.sql` foi versionada após probe aprovado em produção.
-  O risco restante é operacional: aplicar a migration aprovada no ambiente-alvo antes de deployar o Worker/API sem o fallback.
+  A migration `0386_solicitacoes_treinamento_planejado_link.sql` foi versionada, aplicada em produção e o Worker/API foi deployado.
+  ✅ R03 = RESOLVED. Nenhum risco restante.
 - `services/sigvoos-frms.ts` ainda cria as tabelas `integracoes_sigvoos_*` em runtime.
   A cobertura encontrada em migrations é apenas parcial.
 - `runtime/api-bootstrap.ts` / `auto-migration-documentos.ts` permanecem como bootstrap de runtime.
@@ -68,8 +68,8 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 
 ## Migrations futuras necessárias
 
-1. Aplicar `0386_solicitacoes_treinamento_planejado_link.sql` por procedimento aprovado no ambiente-alvo.
-2. Só depois deployar o Worker/API sem o fallback de R03.
+1. ~~Aplicar `0386_solicitacoes_treinamento_planejado_link.sql`~~ ✅ CONCLUÍDO (Sprint X.5).
+2. ~~Deployar o Worker/API sem o fallback de R03~~ ✅ CONCLUÍDO (Sprint X.5).
 3. Criar migration explícita para `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` e índices associados.
 4. Opcionalmente consolidar `documentos` em migration canônica única e aposentar `auto-migration-documentos.ts`.
 
@@ -81,8 +81,8 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 
 ## Ordem recomendada das próximas fases
 
-1. Aplicar `0386_solicitacoes_treinamento_planejado_link.sql` em ambiente aprovado.
-2. Deployar o Worker/API com segurança depois da aplicação da migration.
+1. ~~Aplicar `0386_solicitacoes_treinamento_planejado_link.sql`~~ ✅ CONCLUÍDO (Sprint X.5).
+2. ~~Deployar o Worker/API com segurança depois da aplicação da migration~~ ✅ CONCLUÍDO (Sprint X.5).
 3. Migrar todas as tabelas base de SIGVOOS e remover `ensureSigvoosTables` dos serviços e rotas.
 4. Canonicalizar `documentos` em migration única e remover `api-bootstrap`/`auto-migration-documentos`.
 5. Revisitar `qualificacoes` e `simuladores` para retirar os `ensure*` remanescentes já cobertos por migration.
@@ -91,7 +91,7 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 
 ## Sprint V — DDL Runtime Residual Design (2026-06-03)
 
-**Status:** PARTIAL. Sprint V executado em modo read-only/docs-only. Sprint X.0 adicionou probe estrutural fail-closed para R03, mas o ambiente aprovado continua sem autorização de consulta.
+**Status:** PARTIAL → R03 agora RESOLVED. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Restam R01 (SIGVOOS), R04 (Documentos) e R09 (shared.ts dinâmico).
 
 ### Inventário atualizado
 
@@ -141,4 +141,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = PARTIAL (R03 versionado e sem fallback local; pendem apply + deploy. Restam R01, R04 e R09 no runtime).
+DDL_RUNTIME = PARTIAL (R03 = RESOLVED após apply 0386 + deploy X.5; restam R01, R04 e R09 no runtime).
