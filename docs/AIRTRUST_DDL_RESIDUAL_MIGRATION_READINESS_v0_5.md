@@ -207,7 +207,7 @@ Isso significa que `0354` **assume que a tabela já existe**. Se M2 for aplicada
 
 **Nome sugerido:** `0388_documentos_canonical_schema.sql`
 
-**Conteúdo:** Baseado no probe estrutural remoto já executado em produção com `PRAGMA table_info(...)` e `PRAGMA index_list(...)`. O template inicial continua sendo:
+**Conteúdo:** Baseado no probe estrutural remoto já executado em produção com `PRAGMA table_info(...)` e `PRAGMA index_list(...)`. Após a Sprint R04.3, o desenho aprovado passou a ser conservador e limitado ao baseline real:
 
 ```sql
 -- Migration: Schema canônico da tabela documentos
@@ -218,29 +218,22 @@ CREATE TABLE IF NOT EXISTS documentos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uuid TEXT NOT NULL UNIQUE,
   funcionario_id INTEGER NOT NULL,
-  historico_id INTEGER,
   nome_arquivo TEXT NOT NULL,
   tipo TEXT NOT NULL,
   tamanho INTEGER NOT NULL,
   r2_key TEXT NOT NULL UNIQUE,
   descricao TEXT,
-  empresa_id INTEGER DEFAULT 1,              -- de 0165
-  sha256_hash TEXT,                            -- de 0137_add_integrity_checks
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   deleted_at TEXT,
-  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),
-  FOREIGN KEY (historico_id) REFERENCES qualificacoes_historico(id)
+  empresa_id INTEGER DEFAULT 1,
+  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)
 );
 
--- Índices do bootstrap + migrations
+-- Índices seguros aprovados para a 0388
 CREATE INDEX IF NOT EXISTS idx_documentos_funcionario ON documentos(funcionario_id);
-CREATE INDEX IF NOT EXISTS idx_documentos_historico ON documentos(historico_id);
 CREATE INDEX IF NOT EXISTS idx_documentos_deleted ON documentos(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_documentos_r2_key ON documentos(r2_key);
-CREATE INDEX IF NOT EXISTS idx_documentos_uuid ON documentos(uuid);
 CREATE INDEX IF NOT EXISTS idx_documentos_empresa ON documentos(empresa_id);
-CREATE INDEX IF NOT EXISTS idx_documentos_sha256 ON documentos(sha256_hash);
 CREATE INDEX IF NOT EXISTS idx_documentos_tipo ON documentos(tipo) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_documentos_funcionario_tipo ON documentos(funcionario_id, tipo) WHERE deleted_at IS NULL;
 ```
@@ -258,7 +251,7 @@ CREATE INDEX IF NOT EXISTS idx_documentos_funcionario_tipo ON documentos(funcion
 - `pasta_virtual.documento_id` não existe
 - `certificados_templates` existe em produção
 
-Portanto, a `0388` já pode ser especificada contra um baseline real, mas não pode ser `CREATE TABLE IF NOT EXISTS` puro. Ela deve ser canônica e idempotente sobre schema parcial/existente.
+Portanto, a `0388` já pode ser especificada contra um baseline real. A Sprint R04.3 fechou a decisão de escopo: incluir apenas a tabela `documentos` aderente ao baseline real e os índices seguros acima; deixar `historico_id`, `sha256_hash`, `pasta_virtual.documento_id`, `certificados_templates` e os índices problemáticos de `0200` fora desta migration.
 
 ---
 
@@ -357,7 +350,7 @@ wrangler d1 execute airtrust-db-staging --env staging --remote \
 |---|---|---|---|---|---|
 | **Fechada** | `0386` | R03 resolvido: migration aplicada e fallback removido | Nenhum trabalho adicional neste eixo | FECHADO | — |
 | **Fase A** | Nenhuma ou prova local | Verificar `R09` em `qualificacoes/shared.ts` e remover apenas se a cobertura de migrations fechar | `ensureHistoricoSchema()` + call sites | BAIXO/MEDIO | GPT-5.4 Alta |
-| **Fase B** | M3 — `0388_documentos_canonical_schema.sql` | Criar schema canonico de `documentos` com todos os indices | `ensureDocumentosTableExists()` + `api-bootstrap.ts` call | MEDIO | GPT-5.5 Alta |
+| **Fase B** | M3 — `0388_documentos_canonical_schema.sql` | Criar schema canônico conservador de `documentos` sobre baseline real + índices seguros | `ensureDocumentosTableExists()` + `api-bootstrap.ts` call | MEDIO | GPT-5.5 Alta |
 | **Fase C** | M2 — `0387_integracoes_sigvoos_base_tables.sql` + baseline/chain plan | Tratar a cadeia `0354 -> 0387` antes de qualquer apply/remocao do fallback | `ensureSigvoosTables()` (escopo total ou parcial) + 10 call sites | ALTO | GPT-5.5 Altissimo |
 
 ---
@@ -490,7 +483,7 @@ Fase 2 (M2 - SIGVOOS Base)
     │
 Fase 3 (M3 - Documentos Canônico)
     │
-    ├── requer extração de schema de produção
+    ├── baseline de produção já capturada e desenho fechado em docs
     ├── independente de M1 e M2
 ```
 
@@ -518,4 +511,6 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 
 **Addendum Sprint R04.2 (2026-06-03):** o probe estrutural remoto read-only de Documentos foi executado manualmente em `production` usando somente `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`. Resultado operacional registrado: `Total queries executed: 6`, `Rows read: 0`, `Rows written: 0`, sem DML, sem DDL e sem consulta de dados de linha. Evidência estrutural principal: `documentos` existe com `empresa_id DEFAULT 1`, mas sem `historico_id` e sem `sha256_hash`; `idx_documentos_uuid` nominal não existe; `pasta_virtual.documento_id` não existe; `certificados_templates` existe em produção. Novo status consolidado: **`R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE`**. Ordem restante atualizada: criar/testar/aplicar `0388` contra a baseline capturada → remover bootstrap → R04 closure. Depois disso, resta apenas `R01` (`MIGRATION_CHAIN_BLOCKED_BY_0354`).
 
-**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R09 closure, Sprint R04.1 readiness mapping e Sprint R04.2 probe baseline em 2026-06-03.
+**Addendum Sprint R04.3 (2026-06-03):** o desenho documental da futura `0388` foi concluído em `docs/AIRTRUST_DOCUMENTOS_0388_CANONICAL_SCHEMA_DESIGN_v0_5.md`, sem criar migration nem alterar runtime. Novo status consolidado: **`R04 = 0388_DESIGN_READY`**. Escopo aprovado para a `0388`: `CREATE TABLE IF NOT EXISTS documentos` aderente à baseline real de produção + índices seguros `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo` e `idx_documentos_funcionario_tipo`. Itens explicitamente adiados/não tocados: `historico_id`, `idx_documentos_historico`, `sha256_hash`, `idx_documentos_sha256`, `pasta_virtual.documento_id`, `certificados_templates` e índices de `0200` baseados em colunas fantasmas. Ordem restante atualizada: versionar/testar/aplicar `0388` → probe pós-migration → remover bootstrap → R04 closure. Depois disso, resta apenas `R01`.
+
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R09 closure, Sprint R04.1 readiness mapping, Sprint R04.2 probe baseline e Sprint R04.3 design closure em 2026-06-03.
