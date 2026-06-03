@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-02
 **Branch:** `main`
-**HEAD:** `c3328b59ab4d683d94a7fcbb4cfb30ceec77461f`
-**Modo:** Documental/read-only. Este resumo consolida 16 sprints de auditoria e remediação executados entre maio e junho de 2026, incluindo os Sprints O (Audit Trail/LGPD v2 design-only) e P (RBAC/Suporte v2 design-only).
+**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
+**Modo:** Documental/read-only. Este resumo consolida 17 sprints de auditoria e remediação executados entre maio e junho de 2026, incluindo os Sprints O, P e Q (implementation readiness gate de RBAC + Audit Trail v2).
 
 ---
 
@@ -17,7 +17,7 @@ O AirTrust passou por um ciclo intenso de auditoria e remediação. Partimos de 
 - **Nenhum P1 de código ativo.** Todos os P1 de runtime foram mitigados ou corrigidos.
 - **3 P2 residuais em scripts operacionais** (foot-guns que exigem invocação manual + credencial).
 - **Achados abertos remanescentes** continuam sem bloquear piloto interno controlado.
-- **Achados parciais** agora incluem os desenhos documentais concluídos do Audit Trail/LGPD v2 e do RBAC/Suporte v2, ainda sem implementação.
+- **Achados parciais** agora incluem os desenhos documentais concluídos do Audit Trail/LGPD v2 e do RBAC/Suporte v2, com readiness gate fechado e ordem de implementação definida, ainda sem runtime.
 
 O código em produção permanece estável; nesta fase o avanço foi documental, sem alteração de runtime, schema ou deploy.
 
@@ -62,8 +62,8 @@ O código em produção permanece estável; nesta fase o avanço foi documental,
 
 | Área | O que foi feito | O que falta |
 |---|---|---|
-| **RBAC/Suporte** | `userId===1` centralizado; Sprint P definiu `platform_admin`, `support_read_only`, integração com audit trail e plano de migração conceitual | Migration para `platform_admin` persistido, grants de suporte, enforcement runtime, dual-read e remoção do fallback legado |
-| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; camada `lib/audit`; Sprint O criou design v2, taxonomia, retenção draft e plano de migration | Implementar contrato único dos 3 writers com colunas dedicadas e validação jurídica de retenção |
+| **RBAC/Suporte** | `userId===1` centralizado; Sprint P definiu `platform_admin` e `support_read_only`; Sprint Q definiu dual-read, enforcement e rollback por fases | Migration para `platform_admin` persistido, grants de suporte, shadow dual-read, enforcement runtime e remocao do fallback legado |
+| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first | Implementar contrato único dos 3 writers com colunas dedicadas, dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED) | Executar em ambiente com schema completo para zerar SKIPPED |
 | **DDL Runtime** | 8 hot paths limpos, funções órfãs removidas | 3 residuais mantidos: SIGVOOS, treinamentos-planejados, documentos (exigem migrations) |
@@ -77,7 +77,7 @@ O código em produção permanece estável; nesta fase o avanço foi documental,
 
 ### Bloqueadores para cliente externo
 
-1. **RBAC de plataforma**: o design v2 agora existe, mas `userId===1` ainda é o fallback em runtime e os papéis persistidos de plataforma/suporte ainda não existem.
+1. **RBAC de plataforma**: o design e a readiness agora existem, mas `userId===1` ainda é o fallback em runtime e os papéis persistidos de plataforma/suporte ainda não existem.
 2. **Audit trail**: o desenho v2 já existe, mas os writers ainda não foram padronizados nem migrados; `support_reason` continua ausente no runtime/schema atual.
 3. **Data quality**: execução operacional completa pendente (5 checks SKIPPED).
 4. **Cobertura de testes beta**: EVD sem cobertura; Hospedagem, SGSO, LMS com cobertura mínima.
@@ -97,8 +97,8 @@ O código em produção permanece estável; nesta fase o avanço foi documental,
 
 **Sim, bloqueia.** Os seguintes itens precisam ser resolvidos antes de liberar acesso a um cliente externo real:
 
-1. **RBAC/Suporte formal** — sem `platform_admin` persistido e `support` read-only, não há governança para multiempresa.
-2. **Audit trail padronizado** — sem `empresa_id`, `request_id` e `support_reason` em todos os eventos, não há compliance.
+1. **Audit trail padronizado** — sem `empresa_id`, `request_id` e `support_reason` em todos os eventos, não há compliance nem base segura para ativar suporte auditável.
+2. **RBAC/Suporte formal** — sem `platform_admin` persistido e `support` read-only, não há governança para multiempresa.
 3. **Data quality executado** — sem validação operacional completa, não há garantia de integridade dos dados.
 4. **Smoke autenticado** — sem validação funcional, não há confirmação de que o tenant funciona ponta-a-ponta.
 5. **Aceite legal/compliance** — DPA, ToS, política de privacidade e retenção pendentes de definição.
@@ -138,9 +138,9 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 
 1. **Executar Data Quality completo** em ambiente staging aprovado com schema completo → zerar checks SKIPPED.
 2. **Configurar `AIRTRUST_EXPECTED_EMPRESA_ID`** e reexecutar smoke autenticado para fechar pendência de validação de empresa esperada.
-3. **Preparar a sprint de implementação segura do RBAC/Suporte v2** — migration, dual-read, rollback e migração do operador legado.
-4. **Obter revisão jurídica do draft de retenção** e fechar o contrato de `support_reason`/retenção antes da implementação.
-5. **Preparar a sprint de implementação segura do Audit Trail v2** — migration, dual-write controlado, rollback e data quality de auditoria.
+3. **Executar o Sprint R de implementação do Audit Trail v2** — schema backward-compatible + canonical writer foundation.
+4. **Executar o Sprint S de implementação do RBAC/Suporte v2** — platform roles schema + shadow dual-read, somente depois do writer v2.
+5. **Obter revisão jurídica do draft de retenção** e fechar o contrato de `support_reason`/retenção antes de ativar enforcement de suporte.
 
 ---
 
@@ -170,7 +170,7 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 
 O AirTrust está em um estado sólido para continuar operação e evolução. O ciclo de auditoria identificou e corrigiu os riscos mais graves. O caminho para cliente externo e multiempresa passa por investimento em governança (RBAC, audit trail, data quality) — itens que não exigem reescrita, mas sim disciplina de engenharia e decisões de produto.
 
-**Observação sobre contagem:** a matriz legacy consolidada mistura grupos históricos e subconjuntos resumidos. Após os Sprints O e P, usar a tabela detalhada da matriz mestre como fonte primária para status por achado.
+**Observação sobre contagem:** a matriz legacy consolidada mistura grupos históricos e subconjuntos resumidos. Após os Sprints O, P e Q, usar a tabela detalhada da matriz mestre como fonte primária para status por achado.
 
 ---
 
