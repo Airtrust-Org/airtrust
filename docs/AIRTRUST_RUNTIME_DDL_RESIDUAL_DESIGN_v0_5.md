@@ -2,9 +2,9 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
-**Sprint:** V/W/X.0–X.5 — DDL Runtime Residual Design + Pré-Fase + Schema Probe + Apply/Deploy
-**Modo:** Sprint V read-only / docs-only. Sprint W removeu apenas DDL runtime já coberto por migrations existentes; Sprint X.0 executou somente probe estrutural read-only. Sprint X.5 executou apply de migrations 0385/0386 + deploy Worker/API. Nenhuma migration, schema ou banco real foi alterado manualmente.
+**HEAD:** `d65fc9eab2e8abe608c5f4820a6a23319ad1bb2c`
+**Sprint:** V/W/X.0–X.5/Z0 — DDL Runtime Residual Design + Pré-Fase + Schema Probe + Apply/Deploy + SIGVOOS Readiness
+**Modo:** Sprint V read-only / docs-only. Sprint W removeu apenas DDL runtime já coberto por migrations existentes; Sprint X.0 executou somente probe estrutural read-only. Sprint X.5 executou apply de migrations 0385/0386 + deploy Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS) em modo read-only/docs-only. Nenhuma migration, schema ou banco real foi alterado manualmente.
 
 > **Addendum Sprint W (2026-06-03):** R02, R05, R06, R07, R08 e R10 foram removidos do runtime. Permanecem R01, R03, R04 e R09, além de casos legacy/test-only.
 >
@@ -19,6 +19,8 @@
 > **Addendum Sprint X.4 (2026-06-03):** o probe read-only aprovado em produção confirmou `TABLE_EXISTS=yes`, `TREINAMENTO_PLANEJADO_ID_EXISTS=no`, `STATUS_PRE_AGENDAMENTO_EXISTS=no` e `IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS=no`. Com isso, R03 foi reclassificado para `READY_FOR_SIMPLE_M1`, a migration `0386_solicitacoes_treinamento_planejado_link.sql` foi versionada e `ensureSolicitacoesTreinamentoLinkSchema()` saiu do runtime local. O novo estado é `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`: código pronto, aplicação remota + deploy ainda pendentes.
 >
 > **Addendum Sprint X.5 (2026-06-03):** as migrations `0385_audit_events_v2.sql` e `0386_solicitacoes_treinamento_planejado_link.sql` foram aplicadas em produção via Cloudflare D1 migrations apply. O probe pós-migration confirmou `STATUS=PASS` com as colunas e índice presentes em produção. O Worker/API foi deployado (`APP_VERSION=2026-06-03T17:00:27Z-c12d8bf`). Smoke pós-deploy: PASS (3/3). **R03 = RESOLVED.** O Audit v2 schema está `APPLIED_SCHEMA_READY_FOR_FLAG_PLAN`. Permanecem no runtime apenas R01 (SIGVOOS), R04 (Documentos bootstrap) e R09 (shared.ts dinâmico).
+
+**Addendum Sprint Z0 (2026-06-03):** fase read-only/docs-only de mapeamento do R01 (SIGVOOS). `ensureSigvoosTables()` foi integralmente inventariada: 5 tabelas, 8 índices, 10 call sites. Lacunas confirmadas: 3 tabelas base (`integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos`) + 4 índices sem migration. Migração `0352` cobre integralmente `sigvoos_mapeamento_manual` e `frms_jornada_pendente` (com FK + CHECK extras). Migração `0354` referencia `integracoes_sigvoos_config` mas não cria a tabela base — dependência circular documentada. **R01 = READINESS_MAPPED.** Próxima fase: Sprint Z1 — criar migration `0387`, teste local, plano de aplicação controlada. Documento detalhado: `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md`.
 
 ---
 
@@ -65,7 +67,7 @@ Fechar a pendência arquitetural de **DDL runtime residual** em modo inventário
 
 | ID | Arquivo | Função | Tipo de DDL | Tabela/Índice | Classificação | Risco | Migration existente | Lacuna |
 |---|---|---|---|---|---|---|---|---|
-| R01 | `services/sigvoos-frms.ts` | `ensureSigvoosTables()` | CREATE TABLE (5) + CREATE INDEX (6) | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos`, `sigvoos_mapeamento_manual`, `frms_jornada_pendente` + 6 índices | RUNTIME_HOT_PATH | ALTO | `0352` cobre `sigvoos_mapeamento_manual` + `frms_jornada_pendente`. `0354` referencia `integracoes_sigvoos_config` (adiciona coluna `notificar_falha_email`) mas NÃO cria a tabela base. | **3 tabelas base sem migration**: `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` + unique index `idx_integracoes_sigvoos_config_empresa_chave` |
+| R01 | `services/sigvoos-frms.ts` | `ensureSigvoosTables()` | CREATE TABLE (5) + CREATE INDEX (8) | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos`, `sigvoos_mapeamento_manual`, `frms_jornada_pendente` + 8 índices | RUNTIME_HOT_PATH | ALTO | `0352` cobre `sigvoos_mapeamento_manual` + `frms_jornada_pendente`. `0354` referencia `integracoes_sigvoos_config` (adiciona coluna `notificar_falha_email`) mas NÃO cria a tabela base. | **3 tabelas base sem migration**: `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` + 4 índices. **Status: READINESS_MAPPED (Sprint Z0).** Migration `0387` planejada para Sprint Z1. |
 | R02 | `services/treinamentos-planejados-integration.ts` | `ensureTreinamentosPlanejadosSchema()` | CREATE TABLE (2) + CREATE INDEX (3) | `treinamentos_planejados`, `treinamentos_participantes` + 3 índices | RUNTIME_HOT_PATH_COVERED | BAIXO | `0172_create_treinamentos_planejados.sql` — cobertura completa | Nenhuma — migration cobre schema integralmente |
 | R03 | `services/treinamentos-planejados-integration.ts` | ~~`ensureSolicitacoesTreinamentoLinkSchema()`~~ | ALTER TABLE (2) + CREATE INDEX (1) | `solicitacoes_treinamento.treinamento_planejado_id`, `solicitacoes_treinamento.status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` | RESOLVED | NENHUM | `0280` cria `solicitacoes_treinamento` base. `0345` adiciona `lms_matricula_id`. `0386` versiona as 2 colunas + o índice parcial, aplicada em produção. Fallback runtime removido. Worker/API deployado. | **RESOLVED. Migration 0386 aplicada + Worker deployado. Nenhum DDL runtime neste caminho.** |
 | R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `ensureDocumentosTableExists()` | CREATE TABLE (1) + CREATE INDEX (5) | `documentos` + 5 índices (`idx_documentos_funcionario`, `idx_documentos_historico`, `idx_documentos_deleted`, `idx_documentos_r2_key`, `idx_documentos_uuid`) | RUNTIME_BOOTSTRAP | MÉDIO | `0136` reconstrói `documentos` com schema antigo. `0137`/`0138` adicionam índices parciais. `0165` adiciona `empresa_id`. Nenhuma migration canônica única cobre o schema completo atual. | **Sem migration canônica** que crie `documentos` com todas as colunas atuais + 5 índices do bootstrap |
@@ -94,7 +96,7 @@ Fechar a pendência arquitetural de **DDL runtime residual** em modo inventário
 
 | # | Arquivo | O que faz | Tabelas/Colunas afetadas | Call sites | Migration necessária |
 |---|---|---|---|---|---|
-| **R01** | `services/sigvoos-frms.ts:690-794` | `ensureSigvoosTables()` — CREATE TABLE IF NOT EXISTS (5 tabelas) + CREATE INDEX (6 índices) a cada request SIGVOOS/FRMS | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` (3 tabelas base) + 1 unique index | 10 call sites: `routes/integracoes_sigvoos.ts` (3×), `services/sigvoos-frms.ts` (7×) | Criar migration com CREATE TABLE IF NOT EXISTS para as 3 tabelas base + unique index `idx_integracoes_sigvoos_config_empresa_chave` |
+| **R01** | `services/sigvoos-frms.ts:690-794` | `ensureSigvoosTables()` — CREATE TABLE IF NOT EXISTS (5 tabelas) + CREATE INDEX (8 índices) a cada request SIGVOOS/FRMS | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` (3 tabelas base) + 4 índices | 10 call sites: `routes/integracoes_sigvoos.ts` (2×), `services/sigvoos-frms.ts` (8×) | Criar migration com CREATE TABLE IF NOT EXISTS para as 3 tabelas base + 4 índices. **Status: READINESS_MAPPED (Sprint Z0).** Doc detalhado: `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md` |
 | R03 | `services/treinamentos-planejados-integration.ts:201-227` | ~~`ensureSolicitacoesTreinamentoLinkSchema()`~~ — ALTER TABLE (2 colunas) + CREATE INDEX (1 parcial) a cada sync de treinamento | `solicitacoes_treinamento.treinamento_planejado_id`, `solicitacoes_treinamento.status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` | 3 call sites (linhas 736, 820, 942) | ✅ RESOLVIDO. Migration `0386` aplicada em produção + Worker/API deployado. |
 | **R04** | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `ensureDocumentosTableExists()` — CREATE TABLE + 5 índices no startup | `documentos` (tabela completa + 5 índices) | 1 call site: `runApiBootstrap()` no startup do worker | Consolidar schema completo de `documentos` em migration canônica única |
 
@@ -327,8 +329,8 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 | Migrations existentes relacionadas | 10+ (`0172`, `0173`, `0183`, `0184`, `0280`, `0317`, `0345`, `0352`, `0354`, `0136`-`0138`, `0165`) |
 | Migrations novas necessárias | 3 |
 | Ordem recomendada | Fase 1 (cobertos) → Gate X.0 (probe aprovado para R03) → Fase 2 (Treinamentos Link) → Fase 3 (SIGVOOS) → Fase 4 (Documentos) |
-| Status na matriz | DDL_RUNTIME = PARTIAL (R03 = RESOLVED; restam R01, R04 e R09 no runtime) |
+| Status na matriz | DDL_RUNTIME = PARTIAL (R03 = RESOLVED; R01 = READINESS_MAPPED (Sprint Z0); restam R04 e R09 no runtime) |
 
 ---
 
-**Fim do design document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure (migrations 0385/0386 aplicadas, Worker/API deployado, R03 = RESOLVED).
+**Fim do design document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure (migrations 0385/0386 aplicadas, Worker/API deployado, R03 = RESOLVED) e Sprint Z0 readiness mapping (R01 = READINESS_MAPPED).

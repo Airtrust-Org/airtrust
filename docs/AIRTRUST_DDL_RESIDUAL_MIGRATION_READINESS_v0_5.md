@@ -350,7 +350,7 @@ wrangler d1 execute airtrust-db-staging --env staging --remote \
 |---|---|---|---|---|---|
 | **Pré-Fase** | Nenhuma | Remover `ensure*` já cobertos: R02, R05, R06, R07, R08, R10 | 6 funções + call sites | BAIXO | GPT-5.4 Alta |
 | **Fase 1** | M1 — `0386_solicitacoes_treinamento_planejado_link.sql` | Adicionar 2 colunas + 1 índice parcial em `solicitacoes_treinamento` | `ensureSolicitacoesTreinamentoLinkSchema()` + 3 call sites | MÉDIO | GPT-5.5 Altissimo |
-| **Fase 2** | M2 — `0387_integracoes_sigvoos_base_tables.sql` | Criar 3 tabelas base + 3 índices + 1 unique index | `ensureSigvoosTables()` (escopo total ou parcial) + 10 call sites | ALTO | GPT-5.5 Altissimo |
+| **Fase 2** | M2 — `0387_integracoes_sigvoos_base_tables.sql` | Criar 3 tabelas base + 4 índices + 1 unique index | `ensureSigvoosTables()` (escopo total ou parcial) + 10 call sites | ALTO | GPT-5.5 Altissimo | **Status: READINESS_MAPPED (Sprint Z0).** Próxima: Sprint Z1 criar migration + teste local. |
 | **Fase 3** | M3 — `0388_documentos_canonical_schema.sql` | Criar schema canônico de `documentos` com todos os índices | `ensureDocumentosTableExists()` + `api-bootstrap.ts` call | MÉDIO | GPT-5.5 Alta |
 
 ---

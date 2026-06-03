@@ -235,7 +235,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | LGPD-01/02 | Unificação de `auditoria` + `audit_logs` + `auditoria_avancada_v2` | Writer v2 e integração LMS versionados; ativação/cobertura ampla pendentes |
 | LGPD-03 | Coluna `support_reason` | Versionada e validada pelo writer; aplicação e enforcement ainda pendentes |
 | MULTI-04 | `escala_alocacoes.empresa_id` denormalizado + UNIQUE parcial | ALTER TABLE + CREATE UNIQUE INDEX |
-| DDL-02 | Tabelas `integracoes_sigvoos_*` | CREATE TABLE migrations para 3 tabelas + índices |
+| DDL-02 | Tabelas `integracoes_sigvoos_*` | CREATE TABLE migrations para 3 tabelas + 4 índices. **Status: READINESS_MAPPED (Sprint Z0).** Migration `0387` planejada para Sprint Z1. |
 | DDL-03 | Colunas `treinamento_planejado_id`, `status_pre_agendamento` em `solicitacoes_treinamento` | ALTER TABLE + CREATE INDEX |
 | DDL-04 | Consolidação de `documentos` em migration canônica | Migration única substituindo auto-bootstrap |
 
