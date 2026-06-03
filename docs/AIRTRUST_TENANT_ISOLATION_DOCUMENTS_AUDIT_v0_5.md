@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-02
 **Sprint:** J — Supabase Preparation
-**Status:** Auditoria concluída, correções planejadas para Sprint K (GPT-5.5)
+**Status:** Auditoria concluida; Sprint K corrigiu os 7 gaps criticos e parte dos altos
 
 ---
 
@@ -39,12 +39,12 @@ Auditoria de todas as rotas que servem documentos, certificados e assets (R2) no
 |---|---|---|---|---|
 | GET | `/by-category/:funcionario_id` | ✅ JOIN `funcionarios f ON f.id = d.funcionario_id AND f.empresa_id = ?` | Baixo | — |
 | GET | `/` (list) | ✅ JOIN `funcionarios f ON d.funcionario_id = f.id AND f.empresa_id = ?` | Baixo | — |
-| **GET** | **`/:id` (por funcionario)** | **❌ NÃO** — `WHERE d.funcionario_id = ?` sem JOIN em funcionarios | **ALTO** | GAP-001 |
-| **POST** | **`/upload`** | **❌ NÃO** — valida funcionario existe mas não verifica empresa_id | **ALTO** | GAP-002 |
-| **GET** | **`/download/:id`** | **❌ NÃO** — `SELECT * FROM documentos WHERE id = ?` sem empresa_id | **CRÍTICO** | GAP-003 |
-| **GET** | **`/stream/:id`** | **❌ NÃO** — mesmo query bare, transmite bytes do arquivo | **CRÍTICO** | GAP-004 |
-| **DELETE** | **`/delete/:id`** | **❌ NÃO** — deleta por ID sem verificação de empresa | **CRÍTICO** | GAP-005 |
-| DELETE | `/:id` (admin) | ❌ NÃO — `requireRole('admin')` mas sem empresa_id check | ALTO | GAP-006 |
+| **GET** | **`/:id` (por funcionario)** | ✅ Sprint K — JOIN `funcionarios.empresa_id` | **ALTO CORRIGIDO** | GAP-001 |
+| **POST** | **`/upload`** | ✅ Sprint K — funcionario validado por `empresa_id` antes de R2 | **ALTO CORRIGIDO** | GAP-002 |
+| **GET** | **`/download/:id`** | ✅ Sprint K — documento validado por tenant antes de R2 | **CRÍTICO CORRIGIDO** | GAP-003 |
+| **GET** | **`/stream/:id`** | ✅ Sprint K — documento validado por tenant antes de R2 | **CRÍTICO CORRIGIDO** | GAP-004 |
+| **DELETE** | **`/delete/:id`** | ✅ Sprint K — documento/pasta validado por tenant antes de cascata/R2 | **CRÍTICO CORRIGIDO** | GAP-005 |
+| DELETE | `/:id` (admin) | ✅ Sprint K — documento validado por tenant antes de soft-delete/R2 | ALTO CORRIGIDO | GAP-006 |
 
 **Gaps críticos:**
 - **GAP-003 (`GET /download/:id`):** Qualquer usuário autenticado de qualquer empresa pode obter a URL de download de qualquer documento do sistema.
@@ -58,9 +58,9 @@ Auditoria de todas as rotas que servem documentos, certificados e assets (R2) no
 
 | Método | Path | Tenant Check | Risco | Gap |
 |---|---|---|---|---|
-| **GET** | **`/download-certificados/:funcionario_id`** | **❌ NÃO** — query por funcionario_id sem empresa_id, gera ZIP de todos certificados | **CRÍTICO** | GAP-007 |
-| GET | `/:id/documentos` (legacy) | ❌ NÃO — `WHERE funcionario_id = ?` sem empresa filter | ALTO | GAP-008 |
-| POST | `/:id/upload` (legacy) | ❌ NÃO — upload para qualquer funcionario_id sem verificação | ALTO | GAP-009 |
+| **GET** | **`/download-certificados/:funcionario_id`** | ✅ Sprint K — funcionario/documentos filtrados por tenant antes de R2 | **CRÍTICO CORRIGIDO** | GAP-007 |
+| GET | `/:id/documentos` (legacy) | ✅ Sprint K — JOIN `funcionarios.empresa_id` | ALTO CORRIGIDO | GAP-008 |
+| POST | `/:id/upload` (legacy) | ✅ Sprint K — funcionario validado por tenant antes de R2 | ALTO CORRIGIDO | GAP-009 |
 
 ---
 
@@ -70,15 +70,15 @@ Auditoria de todas as rotas que servem documentos, certificados e assets (R2) no
 | Método | Path | Tenant Check | Risco | Gap |
 |---|---|---|---|---|
 | GET | `/historico/:id/certificados` | ✅ JOIN `funcionarios f ON f.id = qh.funcionario_id` com `f.empresa_id = ?` | Baixo | — |
-| **DELETE** | **`/historico/:id/certificados/:certId`** | **❌ NÃO** — busca documento por ID sem empresa_id, deleta em cascata (3 tabelas + R2) | **CRÍTICO** | GAP-010 |
-| GET | `/funcionario/:id` | ❌ NÃO — `WHERE d.funcionario_id = ?` sem JOIN em funcionarios | ALTO | GAP-011 |
-| **GET** | **`/download/:id`** | **❌ NÃO** — retorna URL de stream para qualquer documento por ID | **CRÍTICO** | GAP-012 |
+| **DELETE** | **`/historico/:id/certificados/:certId`** | ✅ Sprint K — documento validado por tenant e historico compatível antes de R2/cascata | **CRÍTICO CORRIGIDO** | GAP-010 |
+| GET | `/funcionario/:id` | ✅ Sprint K — JOIN `funcionarios.empresa_id` | ALTO CORRIGIDO | GAP-011 |
+| **GET** | **`/download/:id`** | ✅ Sprint K — documento validado por tenant antes de retornar stream URL | **CRÍTICO CORRIGIDO** | GAP-012 |
 | POST | `/historico/:id/certificados/gerar` | ✅ Usa `getEmpresaId(c)` + `AND f.empresa_id = ?` | Baixo | — |
 | POST | `/historico/:id/certificados/upload` | ✅ Usa `getEmpresaId(c)` + armazena empresa_id | Baixo | — |
-| **POST** | **`/historico/export-zip`** | **❌ NÃO — sem auth, sem role, sem empresa_id** — query cruza todas empresas, lê arquivos R2, gera ZIP | **CRÍTICO** | GAP-013 |
+| **POST** | **`/historico/export-zip`** | ✅ Sprint K — `auth()` confirmado e query filtrada por `funcionarios.empresa_id` antes de R2 | **CRÍTICO CORRIGIDO** | GAP-013 |
 | POST | `/recuperar-orfaos` | ❌ admin-only mas query cross-tenant sem boundary | ALTO | GAP-014 |
 
-**GAP-013 é o pior de todos:** `POST /historico/export-zip` não tem `auth()`, não tem `requireRole()`, não tem filtro `empresa_id`. Qualquer pessoa com acesso à API pode baixar um ZIP com certificados de qualquer funcionário de qualquer empresa.
+**Nota Sprint K sobre GAP-013:** a auditoria registrou ausência de auth, mas o código atual já tinha `auth()`. O gap real corrigido foi ausência de filtro `empresa_id`, que permitia export cross-empresa antes de ler objetos R2.
 
 ---
 
@@ -121,7 +121,7 @@ Auditoria de todas as rotas que servem documentos, certificados e assets (R2) no
 | GAP-007 | `GET /api/pasta-virtual-extra/download-certificados/:funcionario_id` | pasta-virtual-extra.ts | ZIP de certificados sem tenant check |
 | GAP-010 | `DELETE /api/certificados/historico/:id/certificados/:certId` | qualificacoes-certificados.ts | Deleção cross-tenant de certificado |
 | GAP-012 | `GET /api/certificados/download/:id` | qualificacoes-certificados.ts | Download sem tenant check |
-| GAP-013 | `POST /api/certificados/historico/export-zip` | qualificacoes-certificados-admin-ops.ts | Sem auth, sem tenant, export cross-empresa |
+| GAP-013 | `POST /api/certificados/historico/export-zip` | qualificacoes-certificados-admin-ops.ts | Sem tenant, export cross-empresa |
 
 ### Altos (5) — acesso indevido ou modificação cross-tenant
 
@@ -132,6 +132,19 @@ Auditoria de todas as rotas que servem documentos, certificados e assets (R2) no
 | GAP-006 | `DELETE /api/pasta-virtual/:id` (admin) | Admin deleta docs de outra empresa |
 | GAP-011 | `GET /api/certificados/funcionario/:id` | Lista certificados de qualquer funcionario |
 | GAP-014 | `POST /api/certificados/recuperar-orfaos` | Cross-link de docs entre tenants |
+
+### Status Sprint K (2026-06-02)
+
+| Grupo | Status |
+|---|---|
+| 7 gaps criticos | Corrigidos em runtime e cobertos por teste de regressao cross-tenant |
+| GAP-001, GAP-002, GAP-006, GAP-008, GAP-009, GAP-011 | Corrigidos junto com os criticos por serem locais e compartilharem o mesmo padrao |
+| GAP-014 | Pendente; rota administrativa de recuperacao de orfaos exige fase propria |
+| 2 medios citados no inventario Sprint J | Pendentes de classificacao explicita em documento separado |
+| `lmsRelatoriosRepository` | Nao integrado neste sprint para manter foco em documentos/R2 |
+
+Teste adicionado: `worker-airtrust/src/__tests__/routes/documentos-tenant-isolation.test.ts`.
+Garantias cobertas: cross-tenant nao chama `BUCKET.get()`, `BUCKET.put()`, `BUCKET.delete()` nem executa mutations; tenant correto mantem acesso em stream/export.
 
 ---
 
@@ -169,16 +182,17 @@ WHERE d.id = ? AND d.deleted_at IS NULL
 
 ## 6. Plano de correção (Sprint K, GPT-5.5)
 
-1. **Fase 1:** Corrigir GAP-004 (stream) e GAP-013 (export-zip sem auth) — os mais críticos
-2. **Fase 2:** Corrigir GAP-003, GAP-005, GAP-007, GAP-010, GAP-012 — downloads e deletes
-3. **Fase 3:** Corrigir GAP-001, GAP-002, GAP-006, GAP-008, GAP-009, GAP-011, GAP-014 — acessos e uploads
-4. **Validação:** Testes de tenant isolation para cada endpoint corrigido
+1. **Fase 1:** Corrigir GAP-004 e GAP-013 — concluido no Sprint K.
+2. **Fase 2:** Corrigir GAP-003, GAP-005, GAP-007, GAP-010, GAP-012 — concluido no Sprint K.
+3. **Fase 3:** Corrigir GAP-001, GAP-002, GAP-006, GAP-008, GAP-009, GAP-011 — concluido no Sprint K.
+4. **Pendente:** GAP-014 e gaps medios, para fase propria.
+5. **Validação:** Testes de tenant isolation adicionados para stream/download/export/delete.
 
 ---
 
 ## 7. O que NÃO foi feito neste sprint
 
-- **NÃO** foram aplicadas correções de runtime (exigem GPT-5.5)
+- **Foram aplicadas correções de runtime para os 7 gaps criticos e altos locais selecionados**
 - **NÃO** foram alterados objetos R2
 - **NÃO** foram alteradas políticas de assets
 - **NÃO** foi modificada a middleware de auth/tenant

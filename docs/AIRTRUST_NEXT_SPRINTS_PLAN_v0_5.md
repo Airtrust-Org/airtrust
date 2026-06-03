@@ -115,14 +115,26 @@ Modo: planejamento de sprints amplos atualizado apos Sprint J (Supabase Preparat
 - Documentos: 4 novos docs + 2 atualizados. ✅
 - Criterio de aceite: repository criado, auditoria concluida, planos documentados. ✅ CONCLUIDO.
 
-## Sprint K - Tenant Isolation Hardening (recomendado como proximo)
+## Sprint K - Tenant Isolation Hardening (2026-06-02)
 
-- Objetivo: corrigir os 14 gaps de tenant isolation identificados no Sprint J.
-- Escopo: adicionar JOIN `funcionarios.empresa_id` em queries de documentos/certificados. Atualizar `lms-relatorios.ts` para usar `lmsRelatoriosRepository`.
+- Status: criticos concluidos.
+- Objetivo: corrigir primeiro os 7 gaps criticos de tenant isolation identificados no Sprint J.
+- Escopo executado: adicionar JOIN `funcionarios.empresa_id` em queries de documentos/certificados antes de R2 ou mutation.
 - Fora do escopo: alterar schema, migration, auth/tenant middleware, R2 metadata, R2 objetos reais.
 - Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: sim, quando implementado e testado.
+- Deploy necessario?: sim, executado quando implementado e testado.
 - Migration necessaria?: nao.
 - Risco: alto (runtime sensivel — documentos, certificados, R2 access, cascading deletes).
 - Documento referencia: `docs/AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`.
-- Criterio de aceite: 14 gaps corrigidos, testes de tenant isolation por endpoint, sem regressao em upload/download/stream.
+- Criterio de aceite: 7 gaps criticos corrigidos, testes de tenant isolation para stream/download/export/delete, sem regressao em upload/download/stream.
+- Pendente: GAP-014, gaps medios e integracao de `lmsRelatoriosRepository`.
+
+## Sprint K.1 - Tenant Isolation Residuals (recomendado como proximo)
+
+- Objetivo: fechar GAP-014, classificar/corrigir os 2 gaps medios e decidir integracao de `lmsRelatoriosRepository`.
+- Escopo: rotas admin de recuperacao/limpeza de certificados orfaos e preparacao LMS read-only.
+- Fora do escopo: schema, migration, R2 metadata, objetos R2 reais, deploy Pages.
+- Modelo recomendado: GPT-5.5 Alta.
+- Deploy necessario?: sim, se runtime for alterado.
+- Migration necessaria?: nao.
+- Criterio de aceite: pendencias de Sprint K zeradas ou reclassificadas com evidencia.

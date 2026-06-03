@@ -273,6 +273,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
 app.get('/:id', auth(), async (c) => {
   const db = c.env.DB;
   const funcionarioId = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
 
   if (isNaN(funcionarioId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -292,11 +293,12 @@ app.get('/:id', auth(), async (c) => {
         d.descricao as data_vencimento,
         'ATIVO' as status
       FROM documentos d
-      WHERE d.funcionario_id = ? AND d.deleted_at IS NULL
+      INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+      WHERE d.funcionario_id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?
       ORDER BY d.created_at DESC
     `;
 
-    const { results } = await db.prepare(query).bind(funcionarioId).all();
+    const { results } = await db.prepare(query).bind(funcionarioId, empresaId).all();
 
     // Adicionar URL de streaming para cada documento
     const arquivosComUrl = (results || []).map((doc: any) => ({
@@ -329,6 +331,7 @@ app.delete('/delete/:id', auth(), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
   const id = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
 
   console.log(`[PASTA-VIRTUAL DELETE CASCATA] Iniciando delete do documento ID=${id}`);
 
@@ -339,8 +342,13 @@ app.delete('/delete/:id', auth(), async (c) => {
 
   // Primeiro, tentar buscar na tabela documentos
   const documento = await db
-    .prepare('SELECT * FROM documentos WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare(
+      `SELECT d.*
+       FROM documentos d
+       INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+       WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?`,
+    )
+    .bind(id, empresaId)
     .first<Documento>();
 
   let tabela = 'documentos';
@@ -350,9 +358,12 @@ app.delete('/delete/:id', auth(), async (c) => {
     // Se não encontrou em documentos, tentar na tabela pasta_virtual
     const pvDoc = await db
       .prepare(
-        'SELECT id, caminho_arquivo as r2_key FROM pasta_virtual WHERE id = ? AND deleted_at IS NULL',
+        `SELECT pv.id, pv.caminho_arquivo as r2_key
+         FROM pasta_virtual pv
+         INNER JOIN funcionarios f ON f.id = pv.funcionario_id AND f.deleted_at IS NULL
+         WHERE pv.id = ? AND pv.deleted_at IS NULL AND f.empresa_id = ?`,
       )
-      .bind(id)
+      .bind(id, empresaId)
       .first<{ id: number; r2_key: string }>();
 
     if (pvDoc) {
@@ -627,11 +638,11 @@ app.post('/upload', auth(), async (c) => {
       return c.json({ success: false, error: validacao.erro }, 400);
     }
 
-    // Buscar CPF do funcionário
+    // Buscar funcionário dentro do tenant antes de qualquer operação R2.
     const funcionario = await db
-      .prepare('SELECT cpf FROM funcionarios WHERE id = ? AND deleted_at IS NULL')
-      .bind(funcionarioId)
-      .first<{ cpf: string }>();
+      .prepare('SELECT cpf, nome FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(funcionarioId, getEmpresaId(c))
+      .first<{ cpf: string; nome: string }>();
 
     if (!funcionario) {
       return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
@@ -658,12 +669,7 @@ app.post('/upload', auth(), async (c) => {
     const { gerarNomeArquivoPadronizado, gerarChaveR2 } =
       await import('../utils/nomenclatura-padronizada');
 
-    // Buscar nome do funcionário
-    const funcionarioData = await db
-      .prepare('SELECT nome FROM funcionarios WHERE id = ? AND deleted_at IS NULL')
-      .bind(funcionarioId)
-      .first<{ nome: string }>();
-    const nomeFuncionario = funcionarioData?.nome || 'SEM_NOME';
+    const nomeFuncionario = funcionario.nome || 'SEM_NOME';
 
     const uuid = crypto.randomUUID();
     const nomeArquivoPadronizado = gerarNomeArquivoPadronizado({
@@ -861,6 +867,7 @@ app.get('/download/:id', auth(), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
   const id = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
 
   if (isNaN(id)) {
     badRequest('ID inválido');
@@ -868,8 +875,13 @@ app.get('/download/:id', auth(), async (c) => {
 
   // Buscar documento
   const documento = await db
-    .prepare('SELECT * FROM documentos WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare(
+      `SELECT d.*
+       FROM documentos d
+       INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+       WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?`,
+    )
+    .bind(id, empresaId)
     .first<Documento>();
 
   if (!documento) {
@@ -921,6 +933,7 @@ app.get('/stream/:id', auth(), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
   const id = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
 
   if (isNaN(id)) {
     badRequest('ID inválido');
@@ -928,8 +941,13 @@ app.get('/stream/:id', auth(), async (c) => {
 
   // Buscar documento
   const documento = await db
-    .prepare('SELECT * FROM documentos WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare(
+      `SELECT d.*
+       FROM documentos d
+       INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+       WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?`,
+    )
+    .bind(id, empresaId)
     .first<Documento>();
 
   if (!documento) {
@@ -1007,6 +1025,7 @@ app.delete('/:id', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
   const id = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
 
   if (isNaN(id)) {
     badRequest('ID inválido');
@@ -1014,8 +1033,13 @@ app.delete('/:id', auth(), requireRole('admin'), async (c) => {
 
   // Buscar documento antes de deletar
   const documento = await db
-    .prepare('SELECT * FROM documentos WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare(
+      `SELECT d.*
+       FROM documentos d
+       INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
+       WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?`,
+    )
+    .bind(id, empresaId)
     .first<Documento>();
 
   if (!documento) {
