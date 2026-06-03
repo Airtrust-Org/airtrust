@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
-**Modo:** Roadmap atualizado após Sprint S writer/dual-write mínimo. Sem migration remota, backfill ou alteração manual de dados reais.
+**HEAD base:** `78509f9ea40b2bf0a50d9be0f1923f1ea66f5bdd`
+**Modo:** Roadmap atualizado após Sprint T de readiness local/staging do Audit v2. Sem migration remota, backfill ou alteração manual de dados reais.
 
 ---
 
@@ -11,7 +11,7 @@
 
 Este roadmap reflete o estado real após 12 sprints de auditoria e remediação (A até L + reauditorias). A ordem foi revisada com base na matriz consolidada de 48 achados.
 
-**Estado atual:** sem P0/P1 ativos em código de produção; o Audit Trail/LGPD v2 está `DUAL_WRITE_PARTIAL`, com writer e integração LMS prontos, mas schema/flag/paridade operacional ainda pendentes.
+**Estado atual:** sem P0/P1 ativos em código de produção; o Audit Trail/LGPD v2 está entre `DUAL_WRITE_PARTIAL` e `ACTIVATION_READY_PARTIAL`, com writer e integração LMS prontos, runners locais seguros versionados, mas schema/flag/paridade operacional ainda pendentes.
 **Nenhum P0/P1 ativo em código de produção.**
 
 ---
@@ -73,12 +73,12 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 - **Migration necessária?:** Sim, na fase de implementação.
 - **Documentos de referência:** `AIRTRUST_RBAC_SUPPORT_V2_DESIGN_v0_5.md`, `AIRTRUST_PLATFORM_ROLES_MODEL_v0_5.md`, `AIRTRUST_SUPPORT_READ_ONLY_MODEL_v0_5.md`, `AIRTRUST_RBAC_V2_MIGRATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_INTEGRATION_PLAN_v0_5.md`.
 
-### Item 6 — Audit Trail/LGPD v2 writer ✅ DUAL_WRITE_PARTIAL
+### Item 6 — Audit Trail/LGPD v2 writer/readiness ✅ ACTIVATION_READY_PARTIAL
 
-- **Status:** Sprint R versionou `audit_events_v2`; Sprint S criou writer canônico e dual-write mínimo em cursos LMS atrás de flag.
+- **Status:** Sprint R versionou `audit_events_v2`; Sprint S criou writer canônico e dual-write mínimo em cursos LMS atrás de flag; Sprint T documentou readiness local/staging e runners seguros.
 - **Objetivo:** Aplicar schema em ambiente aprovado, ativar flag de forma controlada e validar paridade antes de ampliar cobertura.
 - **Risco:** Compliance e LGPD continuam parcialmente cobertos enquanto o runtime persistir em três writers não padronizados.
-- **Escopo consolidado até o Sprint S:** contrato v2, migration aditiva, writer com metadata allowlist, testes de schema/writer, integração LMS, phased plan e rollback plan.
+- **Escopo consolidado até o Sprint T:** contrato v2, migration aditiva, writer com metadata allowlist, testes de schema/writer, integração LMS, phased plan, rollback plan, readiness doc e evidência sanitizada.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, em rollout futuro aprovado; não realizado no Sprint R.
 - **Migration necessária?:** Já versionada; aplicação em ambiente aprovado continua pendente.
@@ -182,7 +182,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ---
 
-## Ordem de execução recomendada (atualizada após Sprint S)
+## Ordem de execução recomendada (atualizada após Sprint T)
 
 | # | Item | Prioridade | Bloqueia | Modelo |
 |---|---|---|---|---|
@@ -193,7 +193,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 5 | Sprint R - Audit Trail v2 schema backward-compatible ✅ | Concluído | Compliance e base de suporte | GPT-5.5 Altissimo |
 | 6 | Sprint S - Canonical writer + dual-write mínimo ✅ | Concluído | Compliance e base de suporte | GPT-5.5 Altissimo |
 | 7 | Aplicar schema + ativar flag + validar paridade | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
-| 8 | Platform roles schema + RBAC dual-read foundation | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
+| 8 | Platform roles schema + RBAC dual-read foundation | Curto prazo, depois da validação Audit v2 | Cliente externo | GPT-5.5 Altissimo |
 | 9 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
 | 10 | DDL runtime residual design | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 11 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
@@ -205,4 +205,4 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ---
 
-**Fim do roadmap.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados.
+**Fim do roadmap.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados e no Sprint T de readiness local/staging.

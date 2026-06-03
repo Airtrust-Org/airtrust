@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
-**Modo:** Matriz de testes com cobertura de schema, writer v2 e dual-write mínimo implementada localmente; RBAC continua futuro.
+**HEAD base:** `78509f9ea40b2bf0a50d9be0f1923f1ea66f5bdd`
+**Modo:** Matriz de testes com cobertura de schema, writer v2, dual-write mínimo e readiness local documentada; RBAC continua futuro.
 
 | Caso | Tipo | Pre-condicao | Acao | Esperado | Audit obrigatorio | Bloqueia release? |
 |---|---|---|---|---|---|---|
@@ -19,6 +19,10 @@
 | dual-write LMS mínimo | Regressao | flag v2 ativa em teste local | criar curso LMS sintético | writer legado e writer v2 são chamados; v2 não recebe payload legado | Legado + evento v2 | Sim |
 | falha isolada do writer v2 | Regressao | writer v2 falha inesperadamente | criar curso LMS sintético | resposta principal e writer legado permanecem funcionais | Legado | Sim |
 | dual-write desabilitado por padrão | Rollback | flag v2 ausente | criar curso LMS sintético | somente writer legado é chamado | Legado | Sim |
+| dual-write explicitamente false | Rollback | flag v2 = `false` | criar curso LMS sintético | somente writer legado é chamado | Legado | Sim |
+| activation readiness local | Operacional | `AIRTRUST_ALLOW_AUDIT_V2_LOCAL_CHECK=YES`, target `local` | rodar `audit-v2-local-activation-check.sh` | migration/local schema testados sem SQL destrutivo | Nao aplicavel | Sim |
+| dual-write readiness local | Operacional | `AIRTRUST_ALLOW_AUDIT_V2_LOCAL_CHECK=YES`, target `local` | rodar `audit-v2-dual-write-local-check.sh` | writer v2, legado e isolamento de falha validados localmente | Legado + evento v2 | Sim |
+| activation sem env aprovada | Operacional | env ausente ou target unset | rodar runners de readiness | `SKIPPED_*` sanitizado, sem tocar produção | Nao aplicavel | Sim |
 | `platform_admin` grant | Integracao | papel persistido habilitado | conceder `platform_admin` | grant persistido, sem impacto em tenant roles | `PLATFORM_ROLE_GRANTED` | Sim |
 | `platform_admin` revoke | Integracao | grant existente | revogar papel | acesso removido e trilha registrada | `PLATFORM_ROLE_REVOKED` | Sim |
 | `tenant_admin` != `platform_admin` | Autorizacao | usuario `tenant_admin` sem papel de plataforma | acessar rota de plataforma | negado fail-closed | negacao de `ROLE_PERMISSION` ou equivalente | Sim |

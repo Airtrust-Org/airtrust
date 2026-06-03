@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
-**Modo:** Plano de rollback com migration aditiva e writer v2 versionados, ainda sem migration executada em produção.
+**HEAD base:** `78509f9ea40b2bf0a50d9be0f1923f1ea66f5bdd`
+**Modo:** Plano de rollback com migration aditiva, writer v2 e readiness local/staging versionados, ainda sem migration executada em produção.
 
 ## 1. Riscos por fase
 
@@ -26,6 +26,7 @@
 
 - manter `AUDIT_EVENTS_V2_DUAL_WRITE` ausente ou diferente de `true` para impedir escrita v2;
 - desligar dual-write por feature flag ao primeiro sinal de regressão;
+- abortar qualquer validação se target `production` for informado;
 - continuar somente com writers legados;
 - preservar eventos v2 ja gravados para analise, sem apaga-los;
 - bloquear qualquer cleanup de adapters enquanto houver incidentes abertos.

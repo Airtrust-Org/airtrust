@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
-**Modo:** Migration de schema v2 versionada e writer canônico implementado. Nenhuma migration foi executada em produção.
+**HEAD base:** `78509f9ea40b2bf0a50d9be0f1923f1ea66f5bdd`
+**Modo:** Migration de schema v2 versionada, writer canônico implementado e readiness local/staging documentada. Nenhuma migration foi executada em produção.
 
 ## 1. Estado da implementação
 
@@ -13,6 +13,7 @@
 - Compatibilidade: `auditoria`, `audit_logs` e `auditoria_avancada_v2` permanecem intactas.
 - Runtime: `recordAuditEventV2()` foi criado e o dual-write mínimo foi integrado no helper de cursos LMS.
 - Rollout: `AUDIT_EVENTS_V2_DUAL_WRITE` permanece desabilitada por padrão enquanto o schema não estiver aplicado em ambiente aprovado.
+- Activation readiness: runners locais seguros versionados; execução real depende de `AIRTRUST_ALLOW_AUDIT_V2_LOCAL_CHECK=YES` e target aprovado.
 - Dados reais: nenhum dado foi criado, alterado ou migrado.
 - Produção: schema não aplicado e nenhum D1 remoto executado.
 
@@ -111,12 +112,14 @@ Antes de qualquer execução real:
 - testar dual-write em ambiente controlado.
 - medir impacto de índices e tamanho de metadata.
 - confirmar que nenhum dado proibido está entrando no writer novo.
+- recusar produção e staging sem runner aprovado.
 
 ## 7. Testes necessários
 
 - teste de migration/schema local em `worker-airtrust/src/__tests__/migrations/audit-events-v2-schema.test.ts`.
 - testes unitários do writer em `worker-airtrust/src/__tests__/audit/audit-events-v2-writer.test.ts`.
 - teste de dual-write mínimo e isolamento de falha em `worker-airtrust/src/__tests__/routes/lms-cursos-beta-contract.test.ts`.
+- teste de readiness/flag default off em `worker-airtrust/src/__tests__/audit/audit-events-v2-activation-readiness.test.ts`.
 - testes unitários do sanitizador e do builder de contexto.
 - testes de contrato por categoria crítica.
 - testes de tenant isolation para `empresa_id` e `target_empresa_id`.
