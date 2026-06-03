@@ -201,3 +201,147 @@ Será necessário ou (a) estender o script com um runner remoto read-only via `w
 - Nenhuma PII foi registrada.
 - Nenhum `git add .` foi usado.
 - Apenas arquivos `docs/` do escopo foram alterados.
+
+---
+
+## 11. Sprint X.2 — Runner remoto read-only (2026-06-03)
+
+### 11.1 Estado inicial
+
+- Branch: `main`
+- HEAD: `d775bea23bbd45d2c819d4f2ae1ed165a25fe490`
+- origin/main: `d775bea23bbd45d2c819d4f2ae1ed165a25fe490`
+- Divergência: 0 left, 0 right
+- preflight: PASS
+- ops:guard: PASS (2 warnings, não bloqueantes)
+- Tracked pendentes: nenhum
+
+### 11.2 Runner remoto read-only
+
+O script `scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh` foi estendido com suporte a execução remota.
+
+**Capacidades adicionadas:**
+
+| Funcionalidade | Detalhes |
+|---|---|
+| `run_remote_probe()` | Executa PRAGMA via `wrangler d1 execute --remote --json --command="..."` |
+| Target staging | `airtrust-db-staging` (ID: `b7f50907-...`) |
+| Target production | `airtrust-db` (ID: `7c8a788e-...`) |
+| SQL validado | Cada PRAGMA passa por `validate_readonly_sql` antes da execução |
+| Parse seguro | `grep -q` no JSON output do wrangler — busca apenas nomes de colunas e índices |
+| Output sanitizado | Apenas yes/no estruturais; nenhum dado de linha, nenhum valor de coluna, nenhum PII |
+| Fail-closed | Se wrangler falhar → FAIL com classificação (auth, network, other); erro bruto não é impresso |
+| Classificação de erro | `not_authenticated`, `network_error`, ou `generic` — para diagnóstico sem expor output |
+
+**SQL permitido (validado antes de execução):**
+- `PRAGMA table_info(solicitacoes_treinamento);`
+- `PRAGMA index_list(solicitacoes_treinamento);`
+- `PRAGMA index_info(idx_solicitacoes_treinamento_planejado);`
+
+**Guardas de validação testadas:**
+
+| Entrada | Resultado |
+|---|---|
+| `PRAGMA table_info(...)` | OK |
+| `PRAGMA index_list(...)` | OK |
+| `ALTER TABLE ... ADD COLUMN` | REJECT (non_readonly) |
+| `INSERT INTO ... VALUES` | REJECT (non_readonly) |
+| `SELECT * FROM ...` | REJECT (select_star) |
+| `UPDATE ... SET ...` | REJECT (non_readonly) |
+| `DELETE FROM ...` | REJECT (non_readonly) |
+| `DROP TABLE ...` | REJECT (non_readonly) |
+| `CREATE INDEX ...` | REJECT (non_readonly) |
+| `SELECT name FROM sqlite_master` | OK (structural only) |
+
+### 11.3 Autorização (Parte D)
+
+| Variável | Valor |
+|---|---|
+| `AIRTRUST_ALLOW_SCHEMA_PROBE` | UNSET |
+| `AIRTRUST_SCHEMA_PROBE_TARGET` | UNSET |
+| `AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE` | UNSET |
+| `AIRTRUST_CONFIRM_PRODUCTION_READ_ONLY` | UNSET |
+
+### 11.4 Resultado do probe (Parte E)
+
+```
+STATUS=SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED
+REASON=AIRTRUST_ALLOW_SCHEMA_PROBE_not_set
+```
+
+- target: nenhum (não autorizado)
+- table exists: não consultado
+- treinamento_planejado_id exists: não consultado
+- status_pre_agendamento exists: não consultado
+- idx_solicitacoes_treinamento_planejado exists: não consultado
+- run status: SKIPPED
+- DML/DDL executed: no
+- row data queried: no
+- PII: no
+- remote runner used: no (authorization blocked before runner selection)
+
+### 11.5 Testes de autorização (cenários adicionais)
+
+| Cenário | Env vars | Resultado |
+|---|---|---|
+| Sem autorização | Nenhuma definida | `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED` |
+| Staging sem `CONFIRM_READ_ONLY` | `ALLOW=YES`, `TARGET=staging` | `SKIPPED` |
+| Production sem `PRODUCTION_READ_ONLY` | `ALLOW=YES`, `TARGET=production`, `CONFIRM_READ_ONLY=YES` | `SKIPPED` |
+| Local autorizado | Todas staging vars + `TARGET=local` | `PASS` (table: yes, cols: no, idx: no) |
+| Staging autorizado (sem wrangler auth) | Todas staging vars | `FAIL: remote_wrangler_error` (esperado — sem token Cloudflare) |
+
+### 11.6 Interpretação
+
+A Sprint X.2 atingiu seu objetivo principal: **o runner remoto read-only está implementado, testado e fail-closed.** O script agora suporta 3 targets:
+
+1. **local** — continua funcionando via sqlite3 + snapshot (comprovado: `PASS`)
+2. **staging** — pronto, aguardando `wrangler login` + env vars
+3. **production** — pronto, aguardando `wrangler login` + todas as 4 env vars
+
+A barreira agora é dupla:
+- **Autorização de ambiente:** env vars ainda não definidas pelo operador.
+- **Autenticação Cloudflare:** `wrangler login` necessário para `d1 execute --remote`.
+
+Ambas são barreiras humanas/operacionais, não técnicas. O script está completo.
+
+### 11.7 Decisão para M1 (atualizada)
+
+Decisão atual: **não criar a migration M1 ainda.**
+
+Classificação aplicada ao R03: `BLOCKED_SCHEMA_PROBE_REQUIRED`.
+
+O estado do ambiente aprovado permanece desconhecido. O runner está pronto — assim que o operador definir as env vars e tiver `wrangler login` ativo, o probe remoto poderá ser executado em segundos.
+
+### 11.8 Próxima ação (Sprint X.3)
+
+Operador deve:
+
+```bash
+# 1. Autenticar na Cloudflare (se ainda não feito)
+npx wrangler login
+
+# 2. Definir variáveis de autorização
+export AIRTRUST_ALLOW_SCHEMA_PROBE=YES
+export AIRTRUST_SCHEMA_PROBE_TARGET=staging   # ou production
+export AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE=YES
+# Se production, também:
+export AIRTRUST_CONFIRM_PRODUCTION_READ_ONLY=YES
+
+# 3. Executar o probe
+bash scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh
+```
+
+Após a execução, a decisão da M1 será reclassificada automaticamente conforme o resultado estrutural.
+
+### 11.9 Confirmações de segurança (Sprint X.2)
+
+- Nenhuma migration foi criada.
+- Nenhum schema foi alterado.
+- Nenhum `ALTER/CREATE/DROP/INSERT/UPDATE/DELETE` foi executado.
+- Nenhum `wrangler d1 execute --remote` foi executado com sucesso contra staging ou produção (tentativa bloqueada por falta de autenticação Cloudflare).
+- Nenhum dado real foi consultado ou alterado.
+- Nenhum deploy foi executado.
+- Nenhum secret foi versionado.
+- Nenhuma PII foi registrada.
+- Nenhum `git add .` foi usado.
+- Apenas arquivos `scripts/validation/` e `docs/` do escopo foram alterados.

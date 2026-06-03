@@ -66,20 +66,24 @@ CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado
 **Rollback:** Remover colunas e índice (não destrutivo — dados existentes não são perdidos)
 **Dependências:** Nenhuma — `solicitacoes_treinamento` já existe via `0280`
 
-**Status pós-Sprint X.1:** `BLOCKED_SCHEMA_PROBE_REQUIRED`
+**Status pós-Sprint X.2:** `BLOCKED_SCHEMA_PROBE_REQUIRED`
 
 **Evidência Sprint X.0 (2026-06-03):**
-- Probe local read-only executado com `PASS` em snapshot D1 local.
-- Resultado local: `solicitacoes_treinamento` existe, `treinamento_planejado_id` ausente, `status_pre_agendamento` ausente, `idx_solicitacoes_treinamento_planejado` ausente.
-- Probe de staging/produção não foi executado porque `AIRTRUST_ALLOW_SCHEMA_PROBE`, `AIRTRUST_SCHEMA_PROBE_TARGET` e `AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE` não estavam definidos.
+- Probe local read-only executado com `PASS` em snapshot D1 local: tabela existe, colunas ausentes, índice ausente.
+- Probe de staging/produção: `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`.
 
 **Evidência Sprint X.1 (2026-06-03):**
-- HEAD: `c09c0cbf4eef01cf93943592761952df3af2c201`
-- Pré-condições: branch `main`, HEAD == origin/main, preflight PASS, ops:guard PASS
-- Script revalidado: somente PRAGMA/SELECT, fail-closed, sem DML/DDL
-- Autorização: todas as 4 variáveis UNSET → `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`
-- Nenhum dado de linha consultado. Nenhum DML/DDL executado.
-- Conclusão: o estado de staging/produção permanece desconhecido. A decisão da M1 segue bloqueada por falta de autorização do operador. O script está pronto e seguro; a barreira é exclusivamente humana.
+- HEAD: `c09c0cb`. Script revalidado como seguro (PRAGMA/SELECT, fail-closed, snapshot).
+- Autorização: 4 variáveis UNSET → `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`.
+- Barreira: exclusivamente humana (env vars não definidas).
+
+**Evidência Sprint X.2 (2026-06-03):**
+- HEAD: `d775bea`. Runner remoto read-only implementado no script.
+- Suporte a 3 targets: `local` (sqlite3 + snapshot), `staging` (wrangler d1 execute --remote), `production` (wrangler d1 execute --remote).
+- Guardas de validação testadas: 3 PRAGMA aceitos, 8 padrões DDL/DML rejeitados.
+- Testes de autorização: 5 cenários (no-auth, staging sem confirm, production sem production_read_only, local autorizado PASS, staging autorizado FAIL por falta de wrangler auth).
+- Autorização: 4 variáveis ainda UNSET → `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`.
+- Conclusão: o runner remoto está completo e fail-closed. A barreira agora é dupla: (a) env vars e (b) `wrangler login` ativo. Ambas são operacionais, não técnicas.
 
 ### 2.2 Migration M2 — `integracoes_sigvoos_*` base tables
 

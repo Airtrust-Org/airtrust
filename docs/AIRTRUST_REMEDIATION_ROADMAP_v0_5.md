@@ -100,10 +100,10 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.0+X.1 deixaram R03 em `BLOCKED_SCHEMA_PROBE_REQUIRED` — 2 tentativas de probe autorizado, ambas SKIPPED por falta de env vars).
+- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprints X.0/X.1/X.2 deixaram R03 em `BLOCKED_SCHEMA_PROBE_REQUIRED` — 3 tentativas, runner agora completo com suporte remoto, aguardando `wrangler login` + env vars).
 - **Objetivo:** Concluir as fases remanescentes: Fase 1 (M1 Treinamentos Link), Fase 2 (M2 SIGVOOS base), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`.
 - **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente.
-- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only para R03. Sprint X.1 revalidou o script (seguro, somente PRAGMA/SELECT) e tentou execução autorizada → `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`. O ambiente aprovado continua sem autorização de consulta. Restam 3 migrations novas planejadas (`0386`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
+- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.1 revalidou segurança. Sprint X.2 implementou runner remoto read-only com `wrangler d1 execute --remote --json` para staging e production, com validação reforçada de SQL (bloqueio de `SELECT *`, DDL, DML). Runner testado em 5 cenários de autorização, todos fail-closed. O ambiente aprovado continua sem consulta estrutural. Restam 3 migrations novas planejadas (`0386`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
 - **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 1-3: GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, quando implementado.
 - **Migration necessária?:** Sim (3 migrations para as Fases 1-3; Pré-Fase não requer).
