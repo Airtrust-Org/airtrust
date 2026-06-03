@@ -221,7 +221,7 @@
 - **Documentos:** `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
 - **Deploy:** Não (docs-only).
 - **Migration necessária:** Não nesta fase. 3 migrations planejadas para fases futuras.
-- **Pendente:** Fase 3 M3 (probe remoto → 0388 → remoção bootstrap R04) e Fase 2 M2 (baseline/chain plan R01). R09 = RESOLVED (Sprint R09). R04 = READINESS_MAPPED (Sprint R04.1, 2026-06-03).
+- **Pendente:** Fase 3 M3 (`0388` sobre baseline remota capturada → remoção bootstrap R04) e Fase 2 M2 (baseline/chain plan R01). R09 = RESOLVED (Sprint R09). R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE (Sprint R04.2, 2026-06-03).
 - **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados por fase).
 
 ### Sprint W — DDL Pré-Fase: Remover `ensure*` já cobertos
@@ -312,7 +312,7 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente:** DDL runtime remanescente: R04 (Documentos) = READINESS_MAPPED (Sprint R04.1). R01 (SIGVOOS) = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1). R09 = RESOLVED (Sprint R09).
+- **Pendente:** DDL runtime remanescente: R04 (Documentos) = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE (Sprint R04.2). R01 (SIGVOOS) = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1). R09 = RESOLVED (Sprint R09).
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
 
 ### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
@@ -363,9 +363,22 @@
 - **Objetivo:** reconciliar o estado real dos achados remanescentes sem abrir novas microfases desnecessarias.
 - **Entregue:**
   - plano consolidado em `AIRTRUST_AUDIT_REMAINING_FINDINGS_CLOSURE_PLAN_v0_5.md`;
-  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 probe remoto -> R04 0388 -> R01 chain plan` (R09 = RESOLVED Sprint R09; R04 = READINESS_MAPPED Sprint R04.1);
+  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 0388 -> R01 chain plan` (R09 = RESOLVED Sprint R09; R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE Sprint R04.2);
   - confirmacao de que esta rodada nao comporta alteracao segura de runtime, migration ou deploy.
 - **Decisao:** fechar esta sprint como docs-only. Nenhum schema remoto, nenhum deploy e nenhuma migration remota.
+
+### Sprint R04.2 — Documentos Probe Closure ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** registrar documentalmente o probe estrutural remoto read-only já executado em produção para Documentos e reclassificar o próximo passo de R04.
+- **Entregue:**
+  - baseline estrutural remoto registrada em `AIRTRUST_DOCUMENTOS_DDL_R04_READINESS_v0_5.md`;
+  - confirmação operacional do probe: `production`, `PRAGMA only`, `Total queries executed: 6`, `Rows read: 0`, `Rows written: 0`;
+  - `documentos` confirmado com `empresa_id DEFAULT 1`, sem `historico_id` e sem `sha256_hash`;
+  - `idx_documentos_uuid` nominal ausente, coberto por autoíndices SQLite;
+  - `pasta_virtual.documento_id` ausente;
+  - `certificados_templates` presente em produção;
+  - R04 reclassificado para `READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE`.
+- **Decisao:** não criar `0388` nesta sprint. Próxima fase: versionar/testar a migration canônica contra a baseline capturada.
 
 ### Sprint OP-1 — Readiness Operacional Consolidada ✅ CONCLUIDO
 - **Status:** CONCLUIDO em 2026-06-03.
@@ -468,7 +481,7 @@
 | OP-1 | Operational Readiness Evidence ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | OP-2 | Staging Operational Gate ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | R09 | ~~R09 Readiness / Verification~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | GPT-5.4 DeepSeek | Sim (DDL removido) | Nao (sem migration) |
-| Y | Documentos Canonical Schema (`0388`) | Medio prazo | GPT-5.5 | Sim | Sim |
+| Y | Documentos Canonical Schema (`0388`) sobre baseline remota capturada | Medio prazo | GPT-5.5 | Sim | Sim |
 | Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |

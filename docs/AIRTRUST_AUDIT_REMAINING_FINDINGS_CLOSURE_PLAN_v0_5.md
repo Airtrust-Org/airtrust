@@ -10,7 +10,7 @@
 O AirTrust entrou numa fase em que os achados remanescentes ja nao sao de correcao rapida de codigo em producao. O que resta se divide em tres grupos:
 
 1. governanca e rollout controlado (`Audit v2`, `RBAC/Suporte v2`, `Data Quality`, smoke com empresa esperada);
-2. DDL residual com dependencias estruturais (`R01`, `R04` — R09 = RESOLVED Sprint R09; R04 = READINESS_MAPPED Sprint R04.1);
+2. DDL residual com dependencias estruturais (`R01`, `R04` — R09 = RESOLVED Sprint R09; R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE Sprint R04.2);
 3. cobertura e higiene de engenharia (EVD/beta, status residual, observabilidade, R2 metadata).
 
 Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao de runtime ou migration**. O estado atual real pede documentacao mais precisa e uma ordem unica de fechamento, nao mais microfases paralelas.
@@ -34,7 +34,7 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | Achado | Status | Bloqueio | Proxima acao | Modelo recomendado |
 |---|---|---|---|---|
 | `R01` - SIGVOOS runtime DDL | MIGRATION_CHAIN_BLOCKED_BY_0354 | `0354` depende de `integracoes_sigvoos_config` antes da `0387` numa cadeia limpa | definir baseline/chain plan antes de qualquer apply/remocao | GPT-5.5 Altissimo |
-| `R04` - Documentos bootstrap DDL | READINESS_MAPPED (Sprint R04.1) | 9 lacunas confirmadas; coluna `historico_id` bootstrap-only; colunas `sha256_hash`/`empresa_id` migration-only; 0200 referencia colunas fantasmas; `certificados_templates` sem CREATE | executar probe estrutural remoto → criar `0388_documentos_canonical_schema.sql` | GPT-5.4 Alta |
+| `R04` - Documentos bootstrap DDL | READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE (Sprint R04.2) | probe remoto já executado; `documentos` sem `historico_id`/`sha256_hash`, com `empresa_id DEFAULT 1`; `pasta_virtual.documento_id` ausente; `certificados_templates` existe; origem histórica ainda precisa de reconciliação documental | criar `0388_documentos_canonical_schema.sql` idempotente sobre baseline capturada | GPT-5.4 Alta |
 | `R09` - `qualificacoes/shared.ts` dynamic DDL | ✅ RESOLVED (Sprint R09, 2026-06-03) | ALTER TABLE removido; `renovada`=0200+; `local`/`modalidade`=removidas por 0200; active path ja era no-op | Nenhuma | — |
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
 | RBAC/Suporte v2 | IMPLEMENTATION_READY | depende do foundation audit-first e de migration de papeis | implementar schema + dual-read depois do Audit v2 | GPT-5.5 Altissimo |
@@ -53,19 +53,20 @@ Conclusao:
 - nao e seguro reescrever `0354` cegamente, porque ela ja faz parte da historia aplicada;
 - a proxima acao correta e um **baseline/chain plan** para ambientes novos, nao uma migration remota imediata.
 
-## 5. R04 - Documentos — READINESS_MAPPED (Sprint R04.1, 2026-06-03)
+## 5. R04 - Documentos — READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE (Sprint R04.2, 2026-06-03)
 
 Estado real (mapeado):
 - `runApiBootstrap()` continua chamando `ensureDocumentosTableExists()` no startup — nao alterado nesta sprint.
 - O helper cria `documentos` (12 colunas) + 5 indices.
 - 9 lacunas confirmadas (L1-L9): `historico_id` bootstrap-only, `sha256_hash`/`empresa_id` migration-only, colunas fantasmas em 0200, `certificados_templates` sem CREATE, entre outras.
 - Schema canonico alvo definido com 15 colunas + 9 indices.
-- Probe estrutural remoto (`PRAGMA table_info(documentos)`) e OBRIGATORIO antes da criacao da migration 0388.
+- O probe estrutural remoto read-only ja foi executado em `production` com `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`.
+- Baseline capturada: `documentos` existe com `empresa_id DEFAULT 1`, sem `historico_id` e sem `sha256_hash`; `idx_documentos_uuid` nominal nao existe; `pasta_virtual.documento_id` nao existe; `certificados_templates` existe em producao.
 
 Conclusao:
-- `R04` = READINESS_MAPPED.
-- Proxima acao: probe estrutural remoto em producao → criar `0388_documentos_canonical_schema.sql` adaptada ao resultado do probe.
-- Ordem segura futura: probe → criar 0388 → testar local → staging → producao → remover bootstrap → deploy.
+- `R04` = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE.
+- Proxima acao: criar `0388_documentos_canonical_schema.sql` adaptada ao baseline remoto capturado.
+- Ordem segura futura: criar 0388 → testar local → staging → producao → remover bootstrap → deploy.
 - Documento detalhado: `docs/AIRTRUST_DOCUMENTOS_DDL_R04_READINESS_v0_5.md`.
 
 ## 6. R09 - Qualificacoes shared.ts ✅ RESOLVED (Sprint R09, 2026-06-03)
@@ -121,7 +122,7 @@ Conclusao:
 2. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
 3. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
 4. ~~`R09 Readiness/Verification Sprint`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
-5. Executar `R04 probe estrutural remoto` (`PRAGMA table_info(documentos)`) — READINESS_MAPPED (Sprint R04.1). Depois: criar/aplicar `0388`.
+5. Criar/aplicar `0388_documentos_canonical_schema.sql` contra a baseline remota de R04 — READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE (Sprint R04.2).
 6. Planejar `R01 SIGVOOS Baseline/Chain` antes de qualquer apply/remocao do fallback.
 7. Expandir `EVD/Beta`, `status residual`, `observabilidade` e `R2 metadata`.
 
@@ -132,7 +133,7 @@ Conclusao:
 - Smoke autenticado com empresa esperada.
 - Data Quality completo em staging/snapshot aprovado.
 - ~~Sprint curta de verificacao do `R09`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
-- R04 readiness mapping / probe estrutural remoto (Sprint R04.1 concluído — mapeamento; probe pendente).
+- R04 probe closure / baseline estrutural remota (Sprint R04.2 concluído — baseline capturada; `0388` pendente).
 - Cobertura de testes beta/EVD.
 - Expansao de `status-codes`.
 - Auditorias de performance, observabilidade e repository pattern read-only.
