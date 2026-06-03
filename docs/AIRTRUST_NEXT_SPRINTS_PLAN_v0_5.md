@@ -274,7 +274,19 @@
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não nesta fase.
 - **Risco:** Baixo nesta fase.
-- **Próxima fase:** Sprint X.3 — operador faz `wrangler login`, define env vars, executa o probe remoto.
+- **Próxima fase:** Sprint X.3 — executar o fluxo em worktree limpo separado do repositório principal.
+
+### Sprint X.3 — Worktree limpo + tentativa sem autorização ⚠️ SKIPPED
+- **Status:** SKIPPED em 2026-06-03 (HEAD `ed354f9`).
+- **Objetivo:** repetir o fluxo do R03 em worktree limpo para não tocar untracked fora do escopo no repositório principal.
+- **Entregue:** worktree `/Users/filipedaumas/SAAS/Airtrust-r03-probe`; branch `sprint-x3-r03-probe`; HEAD == `origin/main`; `git status` limpo no worktree; `ops:guard` PASS; runner revalidado como seguro.
+- **Resultado:** `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED` porque `AIRTRUST_ALLOW_SCHEMA_PROBE`, `AIRTRUST_SCHEMA_PROBE_TARGET`, `AIRTRUST_CONFIRM_READ_ONLY_SCHEMA_PROBE` e `AIRTRUST_CONFIRM_PRODUCTION_READ_ONLY` estavam `UNSET`.
+- **Nota operacional:** `preflight-clean-deploy.sh` falhou apenas pelo gate `deploy only from main`, incompatível com a própria exigência de worktree em branch separada. Como não houve deploy, runtime ou schema change, isso foi tratado como conflito de procedimento, não como falha técnica do probe.
+- **Decisão:** R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não nesta fase.
+- **Risco:** Baixo nesta fase.
+- **Próxima fase:** Sprint X.4 — operador faz `wrangler login`, define env vars, executa o probe remoto autorizado.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
