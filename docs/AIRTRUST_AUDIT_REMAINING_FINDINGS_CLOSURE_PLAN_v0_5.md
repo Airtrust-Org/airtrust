@@ -10,7 +10,7 @@
 O AirTrust entrou numa fase em que os achados remanescentes ja nao sao de correcao rapida de codigo em producao. O que resta se divide em tres grupos:
 
 1. governanca e rollout controlado (`Audit v2`, `RBAC/Suporte v2`, `Data Quality`, smoke com empresa esperada);
-2. DDL residual com dependencias estruturais (`R01`, `R04` — R09 = RESOLVED Sprint R09; R04 = 0388_DESIGN_READY Sprint R04.3);
+2. DDL residual com dependencias estruturais (`R01`, `R04` — R09 = RESOLVED Sprint R09; R04 = MIGRATION_VERSIONED_PENDING_APPLY Sprint R04.4);
 3. cobertura e higiene de engenharia (EVD/beta, status residual, observabilidade, R2 metadata).
 
 Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao de runtime ou migration**. O estado atual real pede documentacao mais precisa e uma ordem unica de fechamento, nao mais microfases paralelas.
@@ -34,7 +34,7 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | Achado | Status | Bloqueio | Proxima acao | Modelo recomendado |
 |---|---|---|---|---|
 | `R01` - SIGVOOS runtime DDL | MIGRATION_CHAIN_BLOCKED_BY_0354 | `0354` depende de `integracoes_sigvoos_config` antes da `0387` numa cadeia limpa | definir baseline/chain plan antes de qualquer apply/remocao | GPT-5.5 Altissimo |
-| `R04` - Documentos bootstrap DDL | 0388_DESIGN_READY (Sprint R04.3) | probe remoto já executado; baseline real de produção consolidada; desenho documental da `0388` fechado com escopo conservador; origem histórica de `certificados_templates` segue pendente | versionar/testar `0388_documentos_canonical_schema.sql` conforme o desenho aprovado | GPT-5.5 Alta |
+| `R04` - Documentos bootstrap DDL | MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4) | probe remoto já executado; baseline real consolidada; desenho documental fechado; migration e teste local já versionados; origem histórica de `certificados_templates` segue pendente | aplicar `0388_documentos_canonical_schema.sql` em ambiente aprovado e executar probe pós-apply | GPT-5.5 Alta |
 | `R09` - `qualificacoes/shared.ts` dynamic DDL | ✅ RESOLVED (Sprint R09, 2026-06-03) | ALTER TABLE removido; `renovada`=0200+; `local`/`modalidade`=removidas por 0200; active path ja era no-op | Nenhuma | — |
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
 | RBAC/Suporte v2 | IMPLEMENTATION_READY | depende do foundation audit-first e de migration de papeis | implementar schema + dual-read depois do Audit v2 | GPT-5.5 Altissimo |
@@ -53,7 +53,7 @@ Conclusao:
 - nao e seguro reescrever `0354` cegamente, porque ela ja faz parte da historia aplicada;
 - a proxima acao correta e um **baseline/chain plan** para ambientes novos, nao uma migration remota imediata.
 
-## 5. R04 - Documentos — 0388_DESIGN_READY (Sprint R04.3, 2026-06-03)
+## 5. R04 - Documentos — MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4, 2026-06-03)
 
 Estado real (mapeado):
 - `runApiBootstrap()` continua chamando `ensureDocumentosTableExists()` no startup — nao alterado nesta sprint.
@@ -62,12 +62,13 @@ Estado real (mapeado):
 - O probe estrutural remoto read-only ja foi executado em `production` com `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`.
 - Baseline capturada: `documentos` existe com `empresa_id DEFAULT 1`, sem `historico_id` e sem `sha256_hash`; `idx_documentos_uuid` nominal nao existe; `pasta_virtual.documento_id` nao existe; `certificados_templates` existe em producao.
 - A Sprint R04.3 fechou o desenho documental da futura `0388`: incluir apenas `documentos` aderente a essa baseline real + indices seguros `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo` e `idx_documentos_funcionario_tipo`.
+- A Sprint R04.4 versionou `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` e `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts`.
 - Itens explicitamente adiados/não tocados pela `0388`: `historico_id`, `idx_documentos_historico`, `sha256_hash`, `idx_documentos_sha256`, `pasta_virtual.documento_id`, qualquer DDL em `certificados_templates` e os indices de `0200` baseados em colunas fantasmas.
 
 Conclusao:
-- `R04` = 0388_DESIGN_READY.
-- Proxima acao: versionar/testar `0388_documentos_canonical_schema.sql` conforme o desenho aprovado.
-- Ordem segura futura: versionar 0388 → testar local → staging → producao → probe pos-migration → remover bootstrap → deploy.
+- `R04` = MIGRATION_VERSIONED_PENDING_APPLY.
+- Proxima acao: aplicar `0388_documentos_canonical_schema.sql` em ambiente aprovado e executar probe pos-apply.
+- Ordem segura futura: aplicar 0388 → probe pos-migration → staging/produção conforme gate aprovado → remover bootstrap → deploy.
 - Documentos detalhados: `docs/AIRTRUST_DOCUMENTOS_DDL_R04_READINESS_v0_5.md` e `docs/AIRTRUST_DOCUMENTOS_0388_CANONICAL_SCHEMA_DESIGN_v0_5.md`.
 
 ## 6. R09 - Qualificacoes shared.ts ✅ RESOLVED (Sprint R09, 2026-06-03)
@@ -123,7 +124,7 @@ Conclusao:
 2. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
 3. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
 4. ~~`R09 Readiness/Verification Sprint`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
-5. Versionar/testar/aplicar `0388_documentos_canonical_schema.sql` contra a baseline remota de R04 — 0388_DESIGN_READY (Sprint R04.3).
+5. Aplicar `0388_documentos_canonical_schema.sql` já versionada contra a baseline remota de R04 — MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4).
 6. Planejar `R01 SIGVOOS Baseline/Chain` antes de qualquer apply/remocao do fallback.
 7. Expandir `EVD/Beta`, `status residual`, `observabilidade` e `R2 metadata`.
 
@@ -134,7 +135,7 @@ Conclusao:
 - Smoke autenticado com empresa esperada.
 - Data Quality completo em staging/snapshot aprovado.
 - ~~Sprint curta de verificacao do `R09`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
-- R04 design closure / baseline estrutural remota (Sprint R04.3 concluído — baseline capturada e desenho aprovado; `0388` pendente de versionamento).
+- R04 migration versioned / baseline estrutural remota (Sprint R04.4 concluído — baseline capturada, desenho aprovado e `0388` versionada; apply pendente).
 - Cobertura de testes beta/EVD.
 - Expansao de `status-codes`.
 - Auditorias de performance, observabilidade e repository pattern read-only.
