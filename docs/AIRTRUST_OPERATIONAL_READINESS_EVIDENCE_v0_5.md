@@ -2,12 +2,12 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `0a92f6c1df57c682141b8217a578065551f59e90`
-**Modo:** Sprint OP-1 operacional consolidada. Sem migration, sem schema remoto, sem D1 remoto, sem deploy, sem alteracao de dados reais.
+**HEAD base:** `b094f97f45797ff3728f0bdb9915845090ac31e5`
+**Modo:** Sprint OP-2 staging operational gate. Sem migration, sem schema remoto, sem D1 remoto, sem deploy, sem alteracao de dados reais.
 
 ## 1. Objetivo
 
-Consolidar a evidencia operacional restante em tres frentes:
+Consolidar e revalidar a evidencia operacional restante em tres frentes:
 
 1. smoke autenticado com empresa esperada;
 2. data quality read-only em ambiente permitido;
@@ -16,12 +16,12 @@ Consolidar a evidencia operacional restante em tres frentes:
 ## 2. Estado inicial
 
 - branch: `main`
-- `HEAD == origin/main`: `0a92f6c1df57c682141b8217a578065551f59e90`
+- `HEAD == origin/main`: `b094f97f45797ff3728f0bdb9915845090ac31e5`
 - divergencia: `0 0`
 - tracked changes locais: nenhuma
 - `npm run ops:guard`: PASS
 - `bash scripts/preflight-clean-deploy.sh`: PASS
-- observacao: `git pull --ff-only origin main` retornou o erro conhecido `Cannot fast-forward to multiple branches`, mas sem divergencia real porque `HEAD` ja estava igual a `origin/main`
+- observacao: `git pull --ff-only origin main` voltou a retornar o erro conhecido `Cannot fast-forward to multiple branches`, mas sem divergencia real porque `HEAD` ja estava igual a `origin/main`
 
 ## 3. Smoke autenticado
 
@@ -33,6 +33,12 @@ Consolidar a evidencia operacional restante em tres frentes:
 | bloco autenticado | SKIPPED_AUTH_REQUIRED | sem `AIRTRUST_AUTH_TOKEN` ou `AIRTRUST_COOKIE` nesta sessao |
 | empresa esperada | NAO VALIDADA | `AIRTRUST_EXPECTED_EMPRESA_ID` e `AIRTRUST_EXPECTED_EMPRESA_CODIGO` ausentes |
 | writes | NO | nenhuma mutacao autorizada/executada |
+
+Observacao OP-2:
+
+- a sessao voltou a rodar somente o trecho public/read-only do smoke;
+- nenhuma credencial efemera/read-only estava presente no processo;
+- a tentativa de fechar empresa esperada continuou bloqueada por ausencia simultanea de auth material e `AIRTRUST_EXPECTED_EMPRESA_*`.
 
 ## 4. Data Quality
 
@@ -46,6 +52,12 @@ Consolidar a evidencia operacional restante em tres frentes:
 | FRMS | SKIPPED | tabela `frms_jornadas` ausente no snapshot local |
 | decisao do runner | SKIPPED | cobertura parcial de schema/snapshot |
 
+Observacao OP-2:
+
+- nao havia `AIRTRUST_DATA_QUALITY_TARGET`, `AIRTRUST_DATA_QUALITY_DB_PATH` nem `AIRTRUST_DATA_QUALITY_STAGING_DB_PATH` configurados no ambiente;
+- por isso, nao existia staging/snapshot completo aprovado nesta sessao;
+- a execucao segura possivel continuou sendo o runner local read-only, com o mesmo perfil agregado da OP-1.
+
 ## 5. Audit v2 readiness
 
 Estado confirmado nesta sprint:
@@ -58,6 +70,7 @@ Estado confirmado nesta sprint:
 - readiness local: concluida e documentada;
 - staging flag test: ainda pendente;
 - ativacao em producao: nao autorizada nesta sprint.
+- ativacao em staging: nao autorizada nesta sprint.
 
 Classificacao operacional:
 
@@ -86,20 +99,20 @@ O estado atual suporta piloto/controlado com guardrails ja conhecidos, mas nao f
 Motivos:
 
 - smoke autenticado real nao pode ser reproduzido nesta sessao por ausencia de credencial e de empresa esperada;
-- data quality rodou com sucesso tecnico em local, mas com `SKIPPED` relevantes por schema/snapshot incompleto;
+- data quality rodou com sucesso tecnico em local, mas com `SKIPPED` relevantes por schema/snapshot incompleto e sem target staging aprovado na sessao;
 - Audit v2 esta pronto para proxima etapa controlada, mas ainda sem validacao de staging flag/paridade;
 - os abertos estruturais (`R01`, `R04`, `R09`, RBAC v2) continuam fora do escopo desta sprint operacional.
 
 ## 9. Proxima sprint recomendada
 
-`OP-2 - staging operational gate`
+`U - Audit v2 staging flag test`
 
-Escopo unico recomendado:
+Pre-condicoes obrigatorias antes da proxima sprint:
 
 1. fornecer credencial efemera/read-only para reexecutar smoke autenticado;
 2. definir `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO`;
-3. executar Data Quality em staging/snapshot aprovado com schema completo;
-4. se o ambiente aprovado existir, preparar o Audit v2 staging flag test.
+3. fornecer staging/snapshot aprovado com schema completo para Data Quality;
+4. somente depois disso abrir o staging flag test do Audit v2.
 
 ## 10. Confirmacoes de seguranca
 

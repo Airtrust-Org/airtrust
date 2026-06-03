@@ -378,6 +378,18 @@
 - **Decisao:** `CONDITIONAL GO`.
 - **Pendente:** credencial efemera/read-only + empresa esperada, staging/schema completo para Data Quality e staging flag test do Audit v2.
 
+### Sprint OP-2 — Staging Operational Gate ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** tentar fechar smoke autenticado com empresa esperada, reduzir SKIPPED do Data Quality e revalidar Audit v2 sem ativar flag.
+- **Entregue:**
+  - estado inicial read-only reconfirmado em `main`, `HEAD == origin/main`, sem tracked changes;
+  - smoke do script repetido com o mesmo resultado sanitizado: `PASS=3 FAIL=0 SKIPPED=1`, ainda com `SKIPPED_AUTH_REQUIRED`;
+  - Data Quality local repetido com o mesmo resultado: `PASS=5 WARN=4 FAIL=0 SKIPPED=5`;
+  - ausencia de `AIRTRUST_EXPECTED_EMPRESA_*`, `AIRTRUST_AUTH_*` e `AIRTRUST_DATA_QUALITY_*` de staging confirmada na sessao;
+  - Audit v2 mantido em `READY_FOR_STAGING_FLAG_TEST`, sem ativacao de flag.
+- **Decisao:** `CONDITIONAL GO` mantido.
+- **Pendente:** credencial efemera/read-only, empresa esperada, staging/snapshot aprovado com schema completo e autorizacao separada para qualquer staging flag test.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -454,6 +466,7 @@
 | X.1–X.4 | DDL Probe Runner + M1 Versionada ✅ | Concluído | GPT-5.4/5.5 | Não | Versionada |
 | X.5 | DDL Apply 0385/0386 + Deploy Worker/API ✅ | Concluído | GPT-5.4 | Sim | Aplicadas |
 | OP-1 | Operational Readiness Evidence ✅ | Concluido | GPT-5.4 | Nao | Nao |
+| OP-2 | Staging Operational Gate ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | X.6 | R09 Readiness / Verification | Curto prazo | GPT-5.4 | Sim | Nao/Provar |
 | Y | Documentos Canonical Schema (`0388`) | Medio prazo | GPT-5.5 | Sim | Sim |
 | Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |

@@ -17,6 +17,8 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 
 **Addendum OP-1:** a sprint operacional consolidada foi executada em modo read-only. Resultado: smoke autenticado na sessao atual `SKIPPED_AUTH_REQUIRED`, empresa esperada nao validada, Data Quality local `PASS=5 WARN=4 FAIL=0 SKIPPED=5`, Audit v2 reconfirmado como `READY_FOR_STAGING_FLAG_TEST`. Decisao operacional atual: `CONDITIONAL GO`.
 
+**Addendum OP-2:** o staging operational gate foi reexecutado sem credencial efemera/read-only e sem target staging/snapshot completo configurado no ambiente do processo. Resultado: smoke autenticado continuou `SKIPPED_AUTH_REQUIRED`, empresa esperada permaneceu nao validada, Data Quality repetiu `PASS=5 WARN=4 FAIL=0 SKIPPED=5`, Audit v2 permaneceu `READY_FOR_STAGING_FLAG_TEST`. Decisao operacional atual: `CONDITIONAL GO`.
+
 ## 2. O que ja foi fechado
 
 | Achado | Status | Evidencia |
@@ -36,8 +38,8 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | `R09` - `qualificacoes/shared.ts` dynamic DDL | OPEN_VERIFICATION_REQUIRED | helper ainda faz `ALTER TABLE` dinamico em runtime | provar cobertura de migrations e so entao remover | GPT-5.4 Alta |
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
 | RBAC/Suporte v2 | IMPLEMENTATION_READY | depende do foundation audit-first e de migration de papeis | implementar schema + dual-read depois do Audit v2 | GPT-5.5 Altissimo |
-| Data Quality | PARTIAL/OPEN | checks ainda ficaram `SKIPPED` em snapshot incompleto | executar em staging/schema completo | GPT-5.4 Alta |
-| Smoke com empresa esperada | PARTIAL | sem credencial efemera/read-only e sem `AIRTRUST_EXPECTED_EMPRESA_*` nesta sessao | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
+| Data Quality | PARTIAL/OPEN | checks ainda ficaram `SKIPPED` e nao havia staging/snapshot completo configurado na OP-2 | executar em staging/schema completo | GPT-5.4 Alta |
+| Smoke com empresa esperada | PARTIAL | sem credencial efemera/read-only e sem `AIRTRUST_EXPECTED_EMPRESA_*` tambem na OP-2 | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
 
 ## 4. R01 - SIGVOOS
 
@@ -120,7 +122,7 @@ Conclusao:
 6. Planejar `R01 SIGVOOS Baseline/Chain` antes de qualquer apply/remocao do fallback.
 7. Expandir `EVD/Beta`, `status residual`, `observabilidade` e `R2 metadata`.
 
-**Estado operacional atual:** `CONDITIONAL GO` para piloto/controlado; nao e `GO` pleno enquanto empresa esperada, Data Quality completo e staging flag test do Audit v2 nao estiverem fechados.
+**Estado operacional atual:** `CONDITIONAL GO` para piloto/controlado; nao e `GO` pleno enquanto empresa esperada, Data Quality completo e staging flag test do Audit v2 nao estiverem fechados. A OP-2 nao alterou essa classificacao.
 
 ## 11. O que pode ser feito com 5.4/DeepSeek
 
