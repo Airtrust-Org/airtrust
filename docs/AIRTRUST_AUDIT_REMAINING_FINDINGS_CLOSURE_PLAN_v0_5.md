@@ -15,6 +15,8 @@ O AirTrust entrou numa fase em que os achados remanescentes ja nao sao de correc
 
 Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao de runtime ou migration**. O estado atual real pede documentacao mais precisa e uma ordem unica de fechamento, nao mais microfases paralelas.
 
+**Addendum OP-1:** a sprint operacional consolidada foi executada em modo read-only. Resultado: smoke autenticado na sessao atual `SKIPPED_AUTH_REQUIRED`, empresa esperada nao validada, Data Quality local `PASS=5 WARN=4 FAIL=0 SKIPPED=5`, Audit v2 reconfirmado como `READY_FOR_STAGING_FLAG_TEST`. Decisao operacional atual: `CONDITIONAL GO`.
+
 ## 2. O que ja foi fechado
 
 | Achado | Status | Evidencia |
@@ -35,7 +37,7 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
 | RBAC/Suporte v2 | IMPLEMENTATION_READY | depende do foundation audit-first e de migration de papeis | implementar schema + dual-read depois do Audit v2 | GPT-5.5 Altissimo |
 | Data Quality | PARTIAL/OPEN | checks ainda ficaram `SKIPPED` em snapshot incompleto | executar em staging/schema completo | GPT-5.4 Alta |
-| Smoke com empresa esperada | PARTIAL | env vars nao configuradas | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
+| Smoke com empresa esperada | PARTIAL | sem credencial efemera/read-only e sem `AIRTRUST_EXPECTED_EMPRESA_*` nesta sessao | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
 
 ## 4. R01 - SIGVOOS
 
@@ -117,6 +119,8 @@ Conclusao:
 5. Planejar `R04 Documentos Canonical Schema` (`0388`) com schema alvo validado.
 6. Planejar `R01 SIGVOOS Baseline/Chain` antes de qualquer apply/remocao do fallback.
 7. Expandir `EVD/Beta`, `status residual`, `observabilidade` e `R2 metadata`.
+
+**Estado operacional atual:** `CONDITIONAL GO` para piloto/controlado; nao e `GO` pleno enquanto empresa esperada, Data Quality completo e staging flag test do Audit v2 nao estiverem fechados.
 
 ## 11. O que pode ser feito com 5.4/DeepSeek
 
