@@ -367,6 +367,17 @@
   - confirmacao de que esta rodada nao comporta alteracao segura de runtime, migration ou deploy.
 - **Decisao:** fechar esta sprint como docs-only. Nenhum schema remoto, nenhum deploy e nenhuma migration remota.
 
+### Sprint OP-1 — Readiness Operacional Consolidada ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** consolidar smoke autenticado, Data Quality e Audit v2 readiness sem tocar schema ou producao.
+- **Entregue:**
+  - `AIRTRUST_OPERATIONAL_READINESS_EVIDENCE_v0_5.md`;
+  - smoke do script confirmado em modo sem credencial: `PASS=3 FAIL=0 SKIPPED=1`, com `SKIPPED_AUTH_REQUIRED`;
+  - Data Quality local reexecutado: `PASS=5 WARN=4 FAIL=0 SKIPPED=5`;
+  - Audit v2 reconfirmado como `READY_FOR_STAGING_FLAG_TEST`.
+- **Decisao:** `CONDITIONAL GO`.
+- **Pendente:** credencial efemera/read-only + empresa esperada, staging/schema completo para Data Quality e staging flag test do Audit v2.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -442,6 +453,7 @@
 | X.0 | DDL Schema Probe Read-only ✅ | Concluído | GPT-5.4 | Não | Não |
 | X.1–X.4 | DDL Probe Runner + M1 Versionada ✅ | Concluído | GPT-5.4/5.5 | Não | Versionada |
 | X.5 | DDL Apply 0385/0386 + Deploy Worker/API ✅ | Concluído | GPT-5.4 | Sim | Aplicadas |
+| OP-1 | Operational Readiness Evidence ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | X.6 | R09 Readiness / Verification | Curto prazo | GPT-5.4 | Sim | Nao/Provar |
 | Y | Documentos Canonical Schema (`0388`) | Medio prazo | GPT-5.5 | Sim | Sim |
 | Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |
