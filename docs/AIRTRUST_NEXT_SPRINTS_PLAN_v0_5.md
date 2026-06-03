@@ -107,7 +107,7 @@ Modo: planejamento de sprints amplos atualizado apos Sprint J (Supabase Preparat
 
 - **Status: CONCLUIDO em 2026-06-02.**
 - Objetivo: executar acoes preparatorias identificadas no Sprint I sem iniciar migracao.
-- **Repository pattern:** `lmsRelatoriosRepository` criado com 3 queries read-only + 8 testes. ✅
+- **Repository pattern:** `lmsRelatoriosRepository` criado com 3 queries read-only + testes de repository. ✅
 - **Tenant isolation audit:** 14 gaps identificados em documentos/assets (7 criticos). ✅ Plano de correcao pronto.
 - **Cloudflare Queues:** Plano de arquitetura e fases criado. Implementacao postergada para Sprint L+. ✅
 - **R2 metadata:** Plano de politica, call sites e backfill criado. Depende de Sprint K. ✅
@@ -141,3 +141,17 @@ Modo: planejamento de sprints amplos atualizado apos Sprint J (Supabase Preparat
 - Resultado: GAP-014 corrigido; MED-001 (`limpar-refs-orfas`) e MED-002 (`historico/:id/certificados`) classificados e corrigidos; testes de isolamento ampliados.
 - Decisao LMS: `lmsRelatoriosRepository` nao integrado no K.1 para nao competir com runtime sensivel de documentos/certificados; permanece como proxima opcao read-only.
 - Criterio de aceite: pendencias de Sprint K zeradas ou reclassificadas com evidencia.
+
+## Sprint L - LMS Reports Repository Integration (2026-06-02)
+
+- Status: concluido.
+- Objetivo: integrar `lmsRelatoriosRepository` na rota ativa de relatorios LMS sem alterar contrato publico.
+- Escopo executado: `GET /relatorios/conformidade`, `GET /relatorios/cursos-conformidade` e `GET /relatorios/expiracoes` passaram a chamar `getConformidadeRows`, `getCursosConformidadeRows` e `getExpiracaoRows`.
+- Contrato preservado: rota continua responsavel por `auth()`, `requireRole('admin', 'manager')`, `getEmpresaIdSafe(c)` e resposta `{ success: true, data }`.
+- Testes: repository mantido e contrato de rota criado para empresaId explicito, payload, Authorization, filtro `dias`, fail-closed e erro seguro.
+- Fora do escopo: auth/tenant/RBAC, schema, migration, DB remoto, Pages, R2 e frontend.
+- Deploy necessario?: sim, runtime worker alterado.
+- Migration necessaria?: nao.
+- Riscos remanescentes: repository pattern ainda cobre poucos pontos LMS; novas extracoes devem ser read-only, pequenas e protegidas por contrato.
+- Proximo candidato: leituras read-only de stats/listagens em `lms-cursos` ou painel de `qualificacoes`, evitando mutacoes e mudancas de payload.
+- Modelo recomendado proximo sprint: GPT-5.4 Alta se read-only e ate 5 arquivos runtime; GPT-5.5 se envolver rotas com mutation, R2, tenant isolation sensivel ou muitos arquivos.

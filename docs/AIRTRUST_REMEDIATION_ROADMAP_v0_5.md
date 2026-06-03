@@ -140,7 +140,7 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint J (Supabase Preparation
 
 ### Item 10 - Repository pilot em dominio critico
 
-- Status em 2026-06-02: piloto executado parcialmente em `dashboardService`, com repository read-only dedicado para taxa de conclusao mensal e utilizacao de simuladores; contrato publico preservado e sem migration.
+- Status em 2026-06-02: piloto executado em `dashboardService` e expandido no Sprint L para `lmsRelatoriosRepository`; contrato publico preservado e sem migration.
 - Objetivo: reduzir o acoplamento entre regra, SQL e HTTP onde o retorno e maior.
 - Risco: cada nova feature ampliar superficie de regressao em arquivos gigantes e SQL inline.
 - Escopo: escolher um dominio piloto, provavelmente `dashboard`, `escalas` ou `qualificacoes`.
@@ -152,6 +152,8 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint J (Supabase Preparation
 - Precisa GPT-5.5?: nao.
 - Documento de referencia: `docs/AIRTRUST_REPOSITORY_PILOT_DASHBOARD_v0_5.md`.
 - Criterio de aceite: um dominio passa a ter acesso a dados centralizado, com testes protegendo o contrato.
+- Resultado Sprint L: rota `lms-relatorios` passou a delegar `getConformidadeRows`, `getCursosConformidadeRows` e `getExpiracaoRows` ao repository read-only, mantendo `auth`, `requireRole`, `empresaId` explicito e payload `{ success, data }`.
+- Proximo candidato: extrair leituras read-only de `lms-cursos` stats/listagens ou `qualificacoes` dashboard, sem misturar mutation, auth/RBAC ou schema.
 
 ### Item 11 - Observabilidade multiempresa
 
@@ -170,7 +172,7 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint J (Supabase Preparation
 
 - **Status: CONCLUIDO.**
 - Objetivo: transformar a decisao do Sprint I em acoes preparatorias seguras, sem iniciar migracao.
-- **Repository pattern expandido:** `lmsRelatoriosRepository` (3 queries read-only, testes criados).
+- **Repository pattern expandido:** `lmsRelatoriosRepository` (3 queries read-only, testes criados e integrado no Sprint L).
 - **Tenant isolation documentos/assets auditado:** 14 gaps identificados (7 criticos, 5 altos, 2 medios). Correcoes planejadas para Sprint K com GPT-5.5.
 - **Cloudflare Queues planejado:** arquitetura, fases, tiers definidos. Implementacao postergada.
 - **R2 metadata planejado:** politica, call sites, backfill, validacao definidos. Depende de correcoes de tenant isolation.
@@ -189,7 +191,7 @@ Modo: roadmap tecnico-operacional atualizado apos Sprint J (Supabase Preparation
 - Documento: `docs/AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`.
 - Criterio de aceite Sprint K: gaps criticos corrigidos, cross-tenant nao chama R2 nem executa mutation, tenant correto mantem acesso.
 - Criterio Sprint K.1: GAP-014 fechado; MED-001 (`limpar-refs-orfas`) e MED-002 (`historico/:id/certificados`) corrigidos com evidencia de teste; sem migration, sem DB/R2 real e sem deploy Pages.
-- Criterio restante: `lmsRelatoriosRepository` permanece como integracao read-only opcional fora do escopo de tenant isolation residual.
+- Criterio restante: `lmsRelatoriosRepository` foi integrado no Sprint L; proximas extracoes devem continuar read-only e pequenas para evitar regressao em rotas LMS/EAD.
 
 ## Pode esperar
 
