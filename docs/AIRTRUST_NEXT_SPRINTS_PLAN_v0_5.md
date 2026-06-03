@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `78924b1ebdce474c7e38118f66db67b73afff94e`
-**Modo:** Planejamento atualizado após Sprint V (DDL Runtime Residual Design). Sem migration remota ou aplicação manual de dados reais.
+**HEAD base:** `cf5866907d820fb085472f748243968c6d03510d`
+**Modo:** Planejamento atualizado após Sprint X.0 (DDL schema probe read-only). Sem migration remota ou aplicação manual de dados reais.
 
 ---
 
@@ -234,6 +234,16 @@
 - **Migration necessária?:** Não.
 - **Risco:** Baixo.
 
+### Sprint X.0 — Read-only Schema Probe para M1 Treinamentos Link ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03.
+- **Objetivo:** descobrir, sem tocar schema nem dados, se `solicitacoes_treinamento` já possui `treinamento_planejado_id`, `status_pre_agendamento` e `idx_solicitacoes_treinamento_planejado`.
+- **Entregue:** runner `scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh`, fail-closed, somente com `PRAGMA`/`SELECT`; evidência sanitizada em `AIRTRUST_DDL_M1_SCHEMA_PROBE_EVIDENCE_20260603.md`.
+- **Resultado:** probe local `PASS` em snapshot D1 local com tabela existente e as 2 colunas + índice ausentes. Probe de staging/produção `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED`.
+- **Decisão:** R03 reclassificado para `BLOCKED_SCHEMA_PROBE_REQUIRED`; não criar M1 até existir probe read-only de ambiente aprovado.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não nesta fase.
+- **Risco:** Baixo nesta fase; risco de implementação permanece médio/alto sem evidência do ambiente aprovado.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -306,6 +316,7 @@
 | W | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
 | V | DDL Residual Design ✅ | Concluído | GPT-5.5 | Não | Planejadas (3) |
 | W | DDL Pré-Fase — Remover 6 `ensure*` cobertos | Curto prazo | GPT-5.4 | Sim | Não |
+| X.0 | DDL Schema Probe Read-only ✅ | Concluído | GPT-5.4 | Não | Não |
 | Y | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
 | Z | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
 | AA | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
@@ -316,4 +327,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados e no Sprint T.1 de execução local aprovada.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com base na matriz consolidada de 48 achados e no Sprint X.0 de probe estrutural read-only.
