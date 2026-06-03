@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `87a5b2b3e107b72a64fb9d79080ea21068145816`
-**Modo:** Roadmap atualizado após Sprint T.1 de execução local aprovada do Audit v2. Sem migration remota, backfill ou alteração manual de dados reais.
+**HEAD base:** `78924b1ebdce474c7e38118f66db67b73afff94e`
+**Modo:** Roadmap atualizado após Sprint V (DDL Runtime Residual Design). Sem migration remota, backfill ou alteração manual de dados reais.
 
 ---
 
@@ -100,14 +100,14 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** Parcial (8 hot paths limpos, 3 residuais mantidos).
-- **Objetivo:** Criar migrations para `sigvoos-frms.ts`, `treinamentos-planejados-integration.ts` e `auto-migration-documentos.ts`. **Sem executar as migrations.**
+- **Status:** DESIGN_READY (Sprint V concluído — inventário, design e readiness prontos).
+- **Objetivo:** Executar em 4 fases: Pré-Fase (remover 6 `ensure*` já cobertos, zero migration), Fase 1 (M1 Treinamentos Link), Fase 2 (M2 SIGVOOS base), Fase 3 (M3 Documentos canônico).
 - **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente.
-- **Escopo:** Planejar migrations explícitas, ordem segura de remoção, testes de regressão.
-- **Modelo recomendado:** GPT-5.5 Altissimo — migrations complexas.
+- **Escopo:** 3 migrations novas planejadas (`0386`-`0388`), 6 funções removíveis sem migration, 4 fases com riscos graduais (BAIXO → ALTO).
+- **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 1-3: GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, quando implementado.
-- **Migration necessária?:** Sim.
-- **Documento de referência:** `AIRTRUST_RUNTIME_DDL_REMOVAL_PLAN_v0_5.md`.
+- **Migration necessária?:** Sim (3 migrations para as Fases 1-3; Pré-Fase não requer).
+- **Documentos de referência:** `AIRTRUST_RUNTIME_DDL_REMOVAL_PLAN_v0_5.md`, `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
 
 ### Item 9 — Status enum central (expansão)
 
@@ -195,7 +195,11 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 7 | Staging flag test com schema aplicado + validar paridade | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
 | 8 | Platform roles schema + RBAC dual-read foundation | Curto prazo, depois do staging flag test | Cliente externo | GPT-5.5 Altissimo |
 | 9 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
-| 10 | DDL runtime residual design | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 10 | DDL runtime residual design ✅ | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 11 | DDL Pré-Fase — remover 6 `ensure*` cobertos | Curto prazo | Limpeza | GPT-5.4 Alta |
+| 12 | DDL Fase 1 — M1 Treinamentos Link | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 13 | DDL Fase 2 — M2 SIGVOOS base | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 14 | DDL Fase 3 — M3 Documentos canônico | Médio prazo | 5+ empresas | GPT-5.5 Alta |
 | 11 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
 | 12 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |
 | 13 | Performance/bundle/N+1 audit | Médio prazo | Escala | GPT-5.4 Alta |

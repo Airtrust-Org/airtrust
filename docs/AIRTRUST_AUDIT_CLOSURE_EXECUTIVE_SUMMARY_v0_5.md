@@ -1,9 +1,9 @@
 # AirTrust — Audit Closure Executive Summary v0.5
 
-**Data:** 2026-06-02
+**Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
-**Modo:** Documental/read-only. Este resumo consolida 17 sprints de auditoria e remediação executados entre maio e junho de 2026, incluindo os Sprints O, P e Q (implementation readiness gate de RBAC + Audit Trail v2).
+**HEAD:** `78924b1ebdce474c7e38118f66db67b73afff94e`
+**Modo:** Documental/read-only. Este resumo consolida sprints de auditoria e remediação executados entre maio e junho de 2026, incluindo o Sprint V (DDL Runtime Residual Design).
 
 ---
 
@@ -66,7 +66,7 @@ O código em produção permanece estável; nesta fase o avanço foi documental,
 | **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first | Implementar contrato único dos 3 writers com colunas dedicadas, dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED) | Executar em ambiente com schema completo para zerar SKIPPED |
-| **DDL Runtime** | 8 hot paths limpos, funções órfãs removidas | 3 residuais mantidos: SIGVOOS, treinamentos-planejados, documentos (exigem migrations) |
+| **DDL Runtime** | 8 hot paths limpos, funções órfãs removidas | Sprint V: inventário completo (20 ocorrências), 3 residuais críticos mapeados, 6 cobertos pendentes de remoção na Pré-Fase, design e readiness prontos |
 | **Repository Pattern** | Piloto em 2 domínios (dashboard, LMS reports) | Expandir gradualmente para lms-cursos, qualificações |
 | **Scripts DB** | Wrapper seguro criado para scripts críticos | Scripts shell legados ainda sem wrapper |
 | **`escala_alocacoes`** | Tenant-scope por JOIN garantido e testado | Migration opcional P3 para coluna `empresa_id` própria + UNIQUE parcial |
@@ -85,7 +85,7 @@ O código em produção permanece estável; nesta fase o avanço foi documental,
 
 ### Não bloqueadores (para piloto interno)
 
-6. **DDL runtime residual** em SIGVOOS, treinamentos e documentos (bloqueia 5+ empresas).
+6. **DDL runtime residual** em SIGVOOS, treinamentos e documentos — DESIGN_READY (Sprint V concluiu inventário, design e readiness; 4 fases planejadas).
 7. **Status residual** em cron/alertas/EVD (bloqueia escala, não piloto).
 8. **R2 metadata** de tenant ausente (defense-in-depth, não critério de segurança).
 9. **Performance/bundle/N+1** sem auditoria (dívida estrutural).

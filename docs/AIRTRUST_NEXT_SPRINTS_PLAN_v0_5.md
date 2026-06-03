@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `87a5b2b3e107b72a64fb9d79080ea21068145816`
-**Modo:** Planejamento atualizado após Sprint T.1 de execução local aprovada do Audit v2. Sem migration remota ou aplicação manual de dados reais.
+**HEAD base:** `78924b1ebdce474c7e38118f66db67b73afff94e`
+**Modo:** Planejamento atualizado após Sprint V (DDL Runtime Residual Design). Sem migration remota ou aplicação manual de dados reais.
 
 ---
 
@@ -214,14 +214,24 @@
 - **Migration necessária?:** Não.
 - **Risco:** Médio.
 
-### Sprint X — DDL Runtime Residual Design
-- **Prioridade:** Médio prazo.
+### Sprint V — DDL Runtime Residual Design ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03.
 - **Objetivo:** Planejar migrations para os 3 DDL residuais sem executar.
-- **Escopo:** Criar migration para `integracoes_sigvoos_*` (3 tabelas + índices); criar migration para `solicitacoes_treinamento` (colunas de link + índice); consolidar `documentos` em migration canônica; plano de remoção segura.
-- **Modelo recomendado:** GPT-5.5 Altissimo.
-- **Deploy necessário?:** Não nesta fase.
-- **Migration necessária?:** Sim, em fase futura de implementação.
-- **Risco:** Alto (schema complexo, dependências entre tabelas).
+- **Entregue:** Inventário completo de 20 ocorrências DDL em runtime; classificação (3 RUNTIME_HOT_PATH, 6 RUNTIME_HOT_PATH_COVERED, 4 LEGACY_QUARANTINED, 1 RUNTIME_BOOTSTRAP); 3 lacunas de migration confirmadas (SIGVOOS, Treinamentos Link, Documentos); design doc com ordem de 4 fases; migration readiness com pré-condições, validação, rollback. 6 funções `ensure*` identificadas como removíveis na Pré-Fase sem migration nova.
+- **Documentos:** `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
+- **Deploy:** Não (docs-only).
+- **Migration necessária:** Não nesta fase. 3 migrations planejadas para fases futuras.
+- **Pendente:** Pré-Fase (remover 6 `ensure*` cobertos, zero migration, risco BAIXO) + Fases 1-3 (migration + remoção dos 3 residuais críticos).
+- **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados por fase).
+
+### Sprint W — DDL Pré-Fase: Remover `ensure*` já cobertos
+- **Prioridade:** Curto prazo.
+- **Objetivo:** Remover 6 funções `ensure*` cujo schema já é coberto por migrations existentes — zero migration nova, risco BAIXO.
+- **Escopo:** Remover `ensureTreinamentosPlanejadosSchema` (R02), `ensureTiposSchema` (R05), `ensureHistoricoSchema` (R06), `ensureQualificacoesTiposTrainingSchema` (R07), modelo_aeronave DDL (R08), `ensureModelosSessaoModeloAeronaveColumn` (R10). Atualizar allowlist do teste de arquitetura. Atualizar call sites.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Sim.
+- **Migration necessária?:** Não.
+- **Risco:** Baixo.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
@@ -293,7 +303,8 @@
 | U | Audit v2 Staging Flag Test | Curto prazo | GPT-5.5 | Não/Controlado | Staging |
 | V | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
 | W | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
-| X | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |
+| V | DDL Residual Design ✅ | Concluído | GPT-5.5 | Não | Planejadas (3) |
+| W | DDL Pré-Fase — Remover 6 `ensure*` cobertos | Curto prazo | GPT-5.4 | Sim | Não |
 | Y | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
 | Z | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
 | AA | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
