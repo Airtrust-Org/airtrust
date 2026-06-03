@@ -10,7 +10,7 @@
 O AirTrust entrou numa fase em que os achados remanescentes ja nao sao de correcao rapida de codigo em producao. O que resta se divide em tres grupos:
 
 1. governanca e rollout controlado (`Audit v2`, `RBAC/Suporte v2`, `Data Quality`, smoke com empresa esperada);
-2. DDL residual com dependencias estruturais (`R01`, `R04`, `R09`);
+2. DDL residual com dependencias estruturais (`R01`, `R04` — R09 = RESOLVED Sprint R09; R04 = READINESS_MAPPED Sprint R04.1);
 3. cobertura e higiene de engenharia (EVD/beta, status residual, observabilidade, R2 metadata).
 
 Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao de runtime ou migration**. O estado atual real pede documentacao mais precisa e uma ordem unica de fechamento, nao mais microfases paralelas.
@@ -34,8 +34,8 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | Achado | Status | Bloqueio | Proxima acao | Modelo recomendado |
 |---|---|---|---|---|
 | `R01` - SIGVOOS runtime DDL | MIGRATION_CHAIN_BLOCKED_BY_0354 | `0354` depende de `integracoes_sigvoos_config` antes da `0387` numa cadeia limpa | definir baseline/chain plan antes de qualquer apply/remocao | GPT-5.5 Altissimo |
-| `R04` - Documentos bootstrap DDL | DESIGN_READY | nao existe migration canonica unica para `documentos` | extrair schema alvo e planejar `0388_documentos_canonical_schema.sql` | GPT-5.5 Alta |
-| `R09` - `qualificacoes/shared.ts` dynamic DDL | OPEN_VERIFICATION_REQUIRED | helper ainda faz `ALTER TABLE` dinamico em runtime | provar cobertura de migrations e so entao remover | GPT-5.4 Alta |
+| `R04` - Documentos bootstrap DDL | READINESS_MAPPED (Sprint R04.1) | 9 lacunas confirmadas; coluna `historico_id` bootstrap-only; colunas `sha256_hash`/`empresa_id` migration-only; 0200 referencia colunas fantasmas; `certificados_templates` sem CREATE | executar probe estrutural remoto → criar `0388_documentos_canonical_schema.sql` | GPT-5.4 Alta |
+| `R09` - `qualificacoes/shared.ts` dynamic DDL | ✅ RESOLVED (Sprint R09, 2026-06-03) | ALTER TABLE removido; `renovada`=0200+; `local`/`modalidade`=removidas por 0200; active path ja era no-op | Nenhuma | — |
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
 | RBAC/Suporte v2 | IMPLEMENTATION_READY | depende do foundation audit-first e de migration de papeis | implementar schema + dual-read depois do Audit v2 | GPT-5.5 Altissimo |
 | Data Quality | PARTIAL/OPEN | checks ainda ficaram `SKIPPED` e nao havia staging/snapshot completo configurado na OP-2 | executar em staging/schema completo | GPT-5.4 Alta |
@@ -53,28 +53,31 @@ Conclusao:
 - nao e seguro reescrever `0354` cegamente, porque ela ja faz parte da historia aplicada;
 - a proxima acao correta e um **baseline/chain plan** para ambientes novos, nao uma migration remota imediata.
 
-## 5. R04 - Documentos
+## 5. R04 - Documentos — READINESS_MAPPED (Sprint R04.1, 2026-06-03)
 
-Estado real:
-- `runApiBootstrap()` continua chamando `ensureDocumentosTableExists()`;
-- o helper cria `documentos` e 5 indices no startup;
-- as migrations historicas (`0136`, `0137`, `0138`, `0165`) nao equivalem a um schema canonico unico.
-
-Conclusao:
-- `R04` continua aberto, mas nao deve ser atacado nesta sprint sem extracao segura do schema alvo;
-- a proxima acao correta e definir o schema canonico final e preparar a `0388`.
-
-## 6. R09 - Qualificacoes shared.ts
-
-Estado real:
-- `worker-airtrust/src/routes/qualificacoes/shared.ts` ainda executa `ensureHistoricoSchema()`;
-- o helper tenta adicionar `renovada`, `local` e `modalidade`;
-- as migrations historicas mostram que essas colunas aparecem em varios pontos da cadeia (`0032`, `0075`, `0097`, `0107`, `0113`, `0139`, `0176`, `0200`, `0325`), mas a historia nao e linear o suficiente para remover o helper sem prova dedicada.
+Estado real (mapeado):
+- `runApiBootstrap()` continua chamando `ensureDocumentosTableExists()` no startup — nao alterado nesta sprint.
+- O helper cria `documentos` (12 colunas) + 5 indices.
+- 9 lacunas confirmadas (L1-L9): `historico_id` bootstrap-only, `sha256_hash`/`empresa_id` migration-only, colunas fantasmas em 0200, `certificados_templates` sem CREATE, entre outras.
+- Schema canonico alvo definido com 15 colunas + 9 indices.
+- Probe estrutural remoto (`PRAGMA table_info(documentos)`) e OBRIGATORIO antes da criacao da migration 0388.
 
 Conclusao:
-- `R09` nao esta pronto para ser marcado como resolvido;
-- tambem nao exige GPT-5.5 por padrao nesta fase;
-- a proxima acao correta e uma sprint curta de verificacao/readiness e, se a prova fechar, remocao local com teste.
+- `R04` = READINESS_MAPPED.
+- Proxima acao: probe estrutural remoto em producao → criar `0388_documentos_canonical_schema.sql` adaptada ao resultado do probe.
+- Ordem segura futura: probe → criar 0388 → testar local → staging → producao → remover bootstrap → deploy.
+- Documento detalhado: `docs/AIRTRUST_DOCUMENTOS_DDL_R04_READINESS_v0_5.md`.
+
+## 6. R09 - Qualificacoes shared.ts ✅ RESOLVED (Sprint R09, 2026-06-03)
+
+Estado real (pos-Sprint R09):
+- `shared.ts` era dead code — nunca importado; o active path em `historico-helpers.ts:131` ja era no-op.
+- O ALTER TABLE foi removido e substituido por no-op documentado com comentario `R09-RESOLVED`.
+- Colunas: `renovada` = presente no schema final via migrations 0107/0200/0325; `local`/`modalidade` = intencionalmente removidas pela migration 0200.
+- O DDL removido era anti-migration — adicionaria de volta colunas removidas.
+- Teste dedicado: `qualificacoes-historico-shared-schema.test.ts`.
+
+**R09 = RESOLVED. Nenhuma acao pendente.**
 
 ## 7. Audit v2
 
@@ -117,8 +120,8 @@ Conclusao:
 1. Fechar `Smoke + Data Quality` em ambiente aprovado.
 2. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
 3. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
-4. Executar `R09 Readiness/Verification Sprint` e remover o helper se a prova fechar.
-5. Planejar `R04 Documentos Canonical Schema` (`0388`) com schema alvo validado.
+4. ~~`R09 Readiness/Verification Sprint`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
+5. Executar `R04 probe estrutural remoto` (`PRAGMA table_info(documentos)`) — READINESS_MAPPED (Sprint R04.1). Depois: criar/aplicar `0388`.
 6. Planejar `R01 SIGVOOS Baseline/Chain` antes de qualquer apply/remocao do fallback.
 7. Expandir `EVD/Beta`, `status residual`, `observabilidade` e `R2 metadata`.
 
@@ -128,7 +131,8 @@ Conclusao:
 
 - Smoke autenticado com empresa esperada.
 - Data Quality completo em staging/snapshot aprovado.
-- Sprint curta de verificacao do `R09`.
+- ~~Sprint curta de verificacao do `R09`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
+- R04 readiness mapping / probe estrutural remoto (Sprint R04.1 concluído — mapeamento; probe pendente).
 - Cobertura de testes beta/EVD.
 - Expansao de `status-codes`.
 - Auditorias de performance, observabilidade e repository pattern read-only.
@@ -147,5 +151,5 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 1. Audit v2 tiver schema aplicado, flag validada e rollout/paridade aprovados.
 2. RBAC/Suporte v2 estiver persistido, auditavel e sem dependencia do fallback legado.
 3. Data Quality estiver sem `SKIPPED` relevantes em ambiente aprovado.
-4. `R01`, `R04` e `R09` nao dependerem mais de DDL runtime.
+4. `R01` e `R04` nao dependerem mais de DDL runtime. `R09` = RESOLVED (Sprint R09, 2026-06-03).
 5. Smoke autenticado com empresa esperada estiver documentado como `PASS`.
