@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
-**Modo:** Migration de schema v2 versionada localmente. Nenhuma migration foi executada em produção.
+**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
+**Modo:** Migration de schema v2 versionada e writer canônico implementado. Nenhuma migration foi executada em produção.
 
 ## 1. Estado da implementação
 
@@ -11,7 +11,8 @@
 - Tabela canônica nova: `audit_events_v2`.
 - Estratégia: estrutura aditiva, sem `ALTER`, `DROP`, `RENAME`, trigger ou backfill.
 - Compatibilidade: `auditoria`, `audit_logs` e `auditoria_avancada_v2` permanecem intactas.
-- Runtime: writer principal não foi alterado; nenhum dual-write está ativo.
+- Runtime: `recordAuditEventV2()` foi criado e o dual-write mínimo foi integrado no helper de cursos LMS.
+- Rollout: `AUDIT_EVENTS_V2_DUAL_WRITE` permanece desabilitada por padrão enquanto o schema não estiver aplicado em ambiente aprovado.
 - Dados reais: nenhum dado foi criado, alterado ou migrado.
 - Produção: schema não aplicado e nenhum D1 remoto executado.
 
@@ -77,10 +78,11 @@ Objetivo: evitar big-bang e permitir rollback por feature flag/dual-write contro
 - validar tabela, campos, índices, defaults e coexistência com `audit_logs` localmente.
 - não aplicar em produção nesta sprint.
 
-### Fase 2 — Writer central + dual-write
+### Fase 2 — Writer central + dual-write ⚠️ PARCIAL
 
-- introduzir writer central ainda sem retirar os antigos.
-- ativar dual-write de forma controlada e reversível.
+- writer central criado sem retirar os antigos.
+- dual-write mínimo integrado em cursos LMS, controlado por flag e sem payload legado.
+- ativação operacional depende de aplicação aprovada do schema e monitoramento de paridade.
 - auth/impersonação.
 - admin operations.
 - assets privados.
@@ -113,6 +115,8 @@ Antes de qualquer execução real:
 ## 7. Testes necessários
 
 - teste de migration/schema local em `worker-airtrust/src/__tests__/migrations/audit-events-v2-schema.test.ts`.
+- testes unitários do writer em `worker-airtrust/src/__tests__/audit/audit-events-v2-writer.test.ts`.
+- teste de dual-write mínimo e isolamento de falha em `worker-airtrust/src/__tests__/routes/lms-cursos-beta-contract.test.ts`.
 - testes unitários do sanitizador e do builder de contexto.
 - testes de contrato por categoria crítica.
 - testes de tenant isolation para `empresa_id` e `target_empresa_id`.
@@ -150,4 +154,4 @@ A sprint de implementação só deve começar quando todos os itens abaixo estiv
 
 ## Conclusão
 
-O schema canônico do Audit Trail v2 está versionado e localmente testado, mas ainda não está aplicado em produção e não possui writer integrado. A próxima fase recomendada é implementar o canonical writer com dual-write seguro, mantendo todas as trilhas legadas.
+O schema canônico e o writer v2 estão versionados e testados. O dual-write mínimo está integrado, mas desabilitado por padrão até a aplicação do schema em ambiente aprovado. A próxima fase recomendada é ativar a flag de forma controlada, validar paridade e só então ampliar a cobertura.

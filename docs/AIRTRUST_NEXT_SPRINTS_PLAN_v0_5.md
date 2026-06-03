@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
-**Modo:** Planejamento atualizado após Sprint R schema-only. Migration v2 versionada localmente, sem deploy ou aplicação em produção.
+**HEAD base:** `477f13686a83878008de38a5e8e34ff7c503cf02`
+**Modo:** Planejamento atualizado após Sprint S writer/dual-write mínimo. Sem migration remota ou aplicação manual de dados reais.
 
 ---
 
@@ -144,7 +144,7 @@
 - **Deploy:** Não (documental).
 - **Entregue:** ordem clara de implementação; phased implementation plan; test matrix; rollback plan; definição explícita de `audit-first`; recomendação de Sprint R antes de Sprint S.
 - **Documentos:** `AIRTRUST_RBAC_AUDIT_V2_IMPLEMENTATION_READINESS_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_PHASED_IMPLEMENTATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_TEST_MATRIX_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_ROLLBACK_PLAN_v0_5.md`.
-- **Pendente:** writer de audit, schema de platform roles, dual-read, enforcement e remocao do fallback legado.
+- **Pendente:** ativação/paridade do writer de audit, schema de platform roles, dual-read, enforcement e remocao do fallback legado.
 
 ### Sprint R — Audit Trail v2 Schema Backward-Compatible ✅ CONCLUÍDO
 - **Status:** CONCLUÍDO em 2026-06-03.
@@ -152,22 +152,24 @@
 - **Entregue:** migration `0385_audit_events_v2.sql`; tabela `audit_events_v2`; campos canônicos; índices mínimos; teste local de schema/migration.
 - **Compatibilidade:** `auditoria`, `audit_logs` e `auditoria_avancada_v2` preservadas; nenhum writer, auth, tenant ou RBAC alterado.
 - **Deploy:** Não. Nenhuma migration remota ou aplicação em produção.
-- **Pendente:** canonical writer, dual-write seguro, rollout em ambiente aprovado e retenção operacional.
+- **Pendente:** ativação do dual-write, paridade em ambiente aprovado e retenção operacional.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Risco:** Alto, mitigado por schema aditivo e ausência de runtime.
 
-### Sprint S — Audit Trail v2 Canonical Writer + Dual-Write
-- **Prioridade:** Curto prazo.
-- **Objetivo:** Integrar o canonical writer ao schema v2 com dual-write controlado, mantendo writers legados.
-- **Escopo:** adapters centrais; feature flag; parity tests; eventos críticos de auth/admin/assets/exports/FRMS; rollback para writer legado.
+### Sprint S — Audit Trail v2 Canonical Writer + Dual-Write ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03.
+- **Objetivo:** Integrar o canonical writer ao schema v2 com dual-write mínimo e controlado, mantendo writers legados.
+- **Entregue:** `recordAuditEventV2()`; metadata por allowlist; validações de suporte/falha; integração no helper de cursos LMS; testes de isolamento de falha.
+- **Rollout:** `AUDIT_EVENTS_V2_DUAL_WRITE` desabilitada por padrão enquanto o schema não estiver aplicado em ambiente aprovado.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim.
-- **Migration necessária?:** Aplicar a migration v2 em ambiente aprovado antes do writer.
-- **Risco:** Altissimo.
+- **Migration necessária?:** Aplicar a migration v2 em ambiente aprovado antes de ativar a flag.
+- **Pendente:** ativação, paridade operacional, observabilidade e ampliação para eventos críticos.
+- **Risco:** Alto/Altissimo.
 
 ### Sprint T — RBAC/Suporte v2 Implementation Foundation
 - **Prioridade:** Curto prazo.
-- **Objetivo:** Implementar platform roles schema e shadow dual-read de RBAC somente depois do writer v2 estar operacional.
+- **Objetivo:** Implementar platform roles schema e shadow dual-read de RBAC somente depois do writer v2 estar operacional e com paridade validada.
 - **Escopo:** `platform_admin`; grants persistidos; sessoes de suporte; shadow dual-read; logs de divergencia; rollback simples.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim.
@@ -256,7 +258,7 @@
 | P | RBAC/Suporte v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
 | Q | Readiness Gate RBAC + Audit ✅ | Concluído | GPT-5.4/5.5 | Não | Não |
 | R | Audit Trail v2 Schema Backward-Compatible ✅ | Concluído | GPT-5.5 | Não | Versionada, não aplicada |
-| S | Audit Trail v2 Canonical Writer + Dual-Write | Curto prazo | GPT-5.5 | Sim | Aplicar v2 |
+| S | Audit Trail v2 Canonical Writer + Dual-Write ✅ | Concluído | GPT-5.5 | Sim | Aplicar v2 antes da flag |
 | T | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
 | U | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
 | V | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |

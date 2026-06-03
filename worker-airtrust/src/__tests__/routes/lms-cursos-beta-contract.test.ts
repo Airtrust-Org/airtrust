@@ -3,12 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Env } from '../../types';
 
-const { logAuditMock } = vi.hoisted(() => ({
+const { logAuditMock, recordAuditEventV2Mock } = vi.hoisted(() => ({
   logAuditMock: vi.fn(),
+  recordAuditEventV2Mock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (_c: unknown, next: () => Promise<void>) => {
+  auth: () => async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
+    c.set('userId', 42);
+    c.set('userRole', 'admin');
+    c.set('empresaId', 77);
+    c.set('requestId', 'req-lms-123');
     await next();
   },
 }));
@@ -25,6 +30,10 @@ vi.mock('../../routes/escalas-shared', () => ({
 
 vi.mock('../../utils/db', () => ({
   logAudit: logAuditMock,
+}));
+
+vi.mock('../../lib/audit/audit-events-v2', () => ({
+  recordAuditEventV2: recordAuditEventV2Mock,
 }));
 
 import lmsCursosRoutes from '../../routes/lms-cursos';
@@ -82,6 +91,7 @@ describe('lms cursos beta contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     logAuditMock.mockResolvedValue(undefined);
+    recordAuditEventV2Mock.mockResolvedValue({ ok: true, id: 'audit-v2-lms-1' });
   });
 
   it('lista cursos publicados filtrando por empresa do tenant', async () => {
@@ -175,7 +185,7 @@ describe('lms cursos beta contract', () => {
           idioma: 'pt-BR',
         }),
       },
-      { DB: db } as Env,
+      { DB: db, AUDIT_EVENTS_V2_DUAL_WRITE: 'true' } as unknown as Env,
     );
 
     expect(response.status).toBe(201);
@@ -198,5 +208,118 @@ describe('lms cursos beta contract', () => {
         entityId: 21,
       }),
     );
+    expect(recordAuditEventV2Mock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        empresaId: 77,
+        actorUserId: 42,
+        actorEmpresaId: 77,
+        actorRole: 'admin',
+        requestId: 'req-lms-123',
+        eventCategory: 'ADMIN_OPERATION',
+        eventAction: 'LMS_CURSO_CRIADO',
+        entityType: 'lms_cursos',
+        entityId: 21,
+        metadata: {
+          module: 'lms',
+          resource_kind: 'course',
+        },
+      }),
+    );
+    expect(recordAuditEventV2Mock.mock.calls[0][1]).not.toHaveProperty('oldValues');
+    expect(recordAuditEventV2Mock.mock.calls[0][1]).not.toHaveProperty('newValues');
+  });
+
+  it('preserva a resposta principal quando o writer v2 falha inesperadamente', async () => {
+    recordAuditEventV2Mock.mockRejectedValue(new Error('synthetic v2 failure'));
+    const { db } = createMockDb([
+      [
+        'INSERT INTO lms_cursos',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 21 } }),
+        },
+      ],
+      [
+        'FROM lms_cursos WHERE id = ?',
+        {
+          first: () => ({
+            id: 21,
+            empresa_id: 77,
+            titulo: 'CRM Recorrente',
+            tipo_conteudo: 'video',
+            publicado: 1,
+          }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/cursos', lmsCursosRoutes);
+
+    const response = await app.request(
+      '/cursos',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titulo: 'CRM Recorrente',
+          tipo_conteudo: 'video',
+          publicado: 1,
+          carga_horaria_minutos: 30,
+          idioma: 'pt-BR',
+        }),
+      },
+      { DB: db, AUDIT_EVENTS_V2_DUAL_WRITE: 'true' } as unknown as Env,
+    );
+
+    expect(response.status).toBe(201);
+    expect(logAuditMock).toHaveBeenCalledTimes(1);
+    expect(recordAuditEventV2Mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('mantem apenas o writer legado quando a flag v2 nao esta ativa', async () => {
+    const { db } = createMockDb([
+      [
+        'INSERT INTO lms_cursos',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 21 } }),
+        },
+      ],
+      [
+        'FROM lms_cursos WHERE id = ?',
+        {
+          first: () => ({
+            id: 21,
+            empresa_id: 77,
+            titulo: 'CRM Recorrente',
+            tipo_conteudo: 'video',
+            publicado: 1,
+          }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/cursos', lmsCursosRoutes);
+
+    const response = await app.request(
+      '/cursos',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titulo: 'CRM Recorrente',
+          tipo_conteudo: 'video',
+          publicado: 1,
+          carga_horaria_minutos: 30,
+          idioma: 'pt-BR',
+        }),
+      },
+      { DB: db } as Env,
+    );
+
+    expect(response.status).toBe(201);
+    expect(logAuditMock).toHaveBeenCalledTimes(1);
+    expect(recordAuditEventV2Mock).not.toHaveBeenCalled();
   });
 });
