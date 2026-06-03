@@ -97,20 +97,20 @@
 
 ## Próximos sprints (planejados)
 
-### Sprint M — Data Quality Completo + Smoke Autenticado
+### Sprint M — Data Quality Completo + Smoke Empresa Esperada
 - **Prioridade:** Imediata.
-- **Objetivo:** Zerar checks SKIPPED executando em staging com schema completo; executar smoke autenticado com token dedicado.
-- **Escopo:** Apontar staging aprovado → executar runner → classificar resultados → documentar. Fornecer credencial → executar smoke → documentar.
+- **Objetivo:** Zerar checks SKIPPED executando em staging com schema completo; configurar `AIRTRUST_EXPECTED_EMPRESA_ID` e reexecutar smoke para fechar validação pendente.
+- **Escopo:** Apontar staging aprovado → executar runner → classificar resultados → documentar. ~~Fornecer credencial → executar smoke~~ (smoke já executado com PASS=11). Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` → reexecutar smoke → documentar empresa validada.
 - **Modelo recomendado:** GPT-5.4 Alta.
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não.
 - **Risco:** Baixo (read-only, scripts existentes).
-- **Critério de aceite:** 0 SKIPPED; smoke autenticado PASS documentado.
+- **Critério de aceite:** 0 SKIPPED; smoke autenticado com empresa esperada validada PASS documentado.
 
 ### Sprint N — Blindagem Operacional (P2 residuais)
 - **Prioridade:** Imediata.
-- **Objetivo:** Mover scripts destrutivos para wrapper seguro; remover `--commit-dirty=true` dos 2 scripts restantes.
-- **Escopo:** Identificar todos os scripts shell com `wrangler d1 execute --remote` sem wrapper → mover para `scripts/legacy/` ou adaptar. Remover flag dirty de `build-and-deploy.sh:48` e `deploy-full-automated.sh:79`.
+- **Objetivo:** Mover scripts destrutivos para wrapper seguro. ~~Remover `--commit-dirty=true` dos 2 scripts restantes~~ — **já resolvido no Sprint Z.1**.
+- **Escopo:** Identificar todos os scripts shell com `wrangler d1 execute --remote` sem wrapper → mover para `scripts/legacy/` ou adaptar. ~~Remover flag dirty de `build-and-deploy.sh:48` e `deploy-full-automated.sh:79`.~~
 - **Modelo recomendado:** GPT-5.4 Média.
 - **Deploy necessário?:** Não (scripts apenas).
 - **Migration necessária?:** Não.
