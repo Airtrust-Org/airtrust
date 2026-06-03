@@ -1,228 +1,204 @@
 # AirTrust Remediation Roadmap v0.5
 
-Data: 2026-06-02
-Branch auditada: `main`
-HEAD auditado: `871a140e47ec8eb53a21b169956c7fdd5d149179` → Sprint J em execucao sobre `bdbc200`
-Modo: roadmap tecnico-operacional atualizado apos Sprint J (Supabase Preparation) sem migration, sem dados reais e sem deploy.
+**Data:** 2026-06-02
+**Branch:** `main`
+**HEAD:** `59e601f0a25cbbbe7e842dd83844af4ce91279ab`
+**Modo:** Roadmap técnico-operacional atualizado após consolidação final do Sprint Z. Sem migration, sem dados reais, sem deploy.
+
+---
+
+## Visão geral
+
+Este roadmap reflete o estado real após 12 sprints de auditoria e remediação (A até L + reauditorias). A ordem foi revisada com base na matriz consolidada de 48 achados.
+
+**Estado atual:** 21 RESOLVED, 8 PARTIAL, 12 OPEN, 5 DEFERRED, 2 BACKLOG.
+**Nenhum P0/P1 ativo em código de produção.**
+
+---
 
 ## Agora, antes de qualquer novo cliente externo
 
-### Item 1 - RBAC de plataforma e suporte
+### Item 1 — Smoke autenticado funcional
 
-- Status em 2026-06-02: Sprint A executado parcialmente em codigo, sem migration.
-- Objetivo: remover a dependencia operacional de `userId === 1` e desenhar suporte read-only por tenant.
-- Risco: acesso amplo demais para suporte e operacao multiempresa.
-- Escopo: contrato de `platform_admin`, `support`, matriz minima de leitura e eventos auditados.
-- Fora do escopo: criar empresa, criar usuario real, aplicar migration em producao.
-- Resultado atual: fallback legado centralizado em `middleware/tenant.ts`; rotas deixam de comparar `userId === 1` diretamente; `support` permanece inativo.
-- Documento de referencia: `docs/AIRTRUST_RBAC_SUPPORT_MODEL_v0_5.md`.
-- Modelo recomendado para etapa final: GPT-5.5 Altissimo.
-- Deploy necessario?: sim apenas quando a etapa final for implementada e aprovada.
-- Migration necessaria?: sim para persistir `platform_admin`/`support`, escopo e auditoria.
-- Pode ser GPT-5.4?: nao para implementacao sensivel.
-- Precisa GPT-5.5?: sim.
-- Criterio de aceite final: papel persistido, suporte read-only por tenant, trilha auditada, operador legado migrado e `LEGACY_PLATFORM_ADMIN_USER_ID` removido.
+- **Status:** Pendente por credencial.
+- **Objetivo:** Executar validação funcional ponta-a-ponta com token dedicado read-only.
+- **Risco:** Sem validação, não há confirmação de que o tenant funciona corretamente.
+- **Escopo:** Fornecer `AIRTRUST_AUTH_TOKEN`/`AIRTRUST_COOKIE` para conta de serviço; rodar `smoke-authenticated-operational.sh` uma vez; documentar resultado.
+- **Modelo recomendado:** GPT-5.4 Baixa — execução de script existente.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não.
 
-### Item 2 - Audit trail minimo por tenant
+### Item 2 — Data Quality operacional completo
 
-- Objetivo: definir writer canonico com `empresa_id`, `request_id`, ator e sanitizacao.
-- Risco: trilha atual inconsistente e potencialmente inadequada para LGPD/compliance.
-- Escopo: comparar `auditoria`, `audit_logs`, `auditoria_avancada_v2`, mapear eventos criticos e padrao de payload seguro.
-- Fora do escopo: migration executada, purge real, alteracao em dados reais.
-- Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: nao nesta fase documental.
-- Migration necessaria?: nao para o endurecimento minimo desta fase; sim para consolidacao final futura.
-- Pode ser GPT-5.4?: somente para documentacao auxiliar.
-- Precisa GPT-5.5?: sim.
-- Resultado atual em 2026-06-02: camada `lib/audit` criada para sanitizacao conservadora; `auth`, `admin`, `assets` e `empresas` passaram a carregar contexto minimizado sem schema novo; `auditoria_avancada_v2` e call sites legados seguem como backlog.
-- Criterio de aceite: writer canonico escolhido, campos minimos definidos, eventos criticos priorizados e lacunas sem schema separadas das que exigem schema.
+- **Status:** Parcial (5 PASS, 4 WARN, 5 SKIPPED).
+- **Objetivo:** Executar todos os checks em ambiente staging com schema completo para zerar SKIPPED.
+- **Risco:** Onboarding externo com dados inconsistentes ou métricas erradas.
+- **Escopo:** Apontar staging aprovado com schema completo; executar runner; classificar blocker/warn/info; registrar sumário sem PII.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não.
 
-### Item 3 - Data quality operacional
+### Item 3 — Blindagem operacional de scripts legados (P2)
 
-- Status em 2026-06-02: SQL read-only validado, runner local seguro criado e run executado apenas em snapshot local aprovado; alguns checks permaneceram `SKIPPED` por ausencia de tabelas no snapshot local atual.
-- Objetivo: sair de SQL validado estaticamente para execucao controlada e evidenciada.
-- Risco: onboarding externo com tenant errado, dados orfaos ou metricas inconsistentes.
-- Escopo: checklist de execucao local/staging, classificacao blocker/warn/info, registro sem PII.
-- Fora do escopo: rodar via Codex em producao, seed, importacao ou mutacao de dados.
-- Modelo recomendado: GPT-5.4 Alta.
-- Deploy necessario?: nao.
-- Migration necessaria?: nao.
-- Pode ser GPT-5.4?: sim.
-- Precisa GPT-5.5?: nao.
-- Criterio de aceite: operador autorizado consegue executar o pacote read-only em ambiente aprovado e registrar sumario sem PII.
+- **Status:** Parcial (wrapper existe, scripts legados sem proteção).
+- **Objetivo:** Mover scripts destrutivos para o wrapper seguro ou para `scripts/legacy/`.
+- **Risco:** Execução acidental de DDL/DML destrutivo em produção.
+- **Escopo:** `purge-qualificacoes-cascade.sh`, `aplicar-correcoes-db.sh`, `apply-seed-data.sh`, `cleanup-backup-tables.sh` e similares.
+- **Modelo recomendado:** GPT-5.4 Média — scripts shell, sem runtime.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não.
 
-### Item 4 - Blindagem operacional de modulos beta
+### Item 4 — Fechar dirty-deploy residual (P2)
 
-- Objetivo: garantir que beta continue oculto/inativo para cliente externo ate cobertura e readiness suficientes.
-- Risco: cliente acessar modulo incompleto, com fluxo confuso ou dados sensiveis mal contextualizados.
-- Escopo: matriz de liberacao, revisao de superficies demo e verificacao de textos como `em breve` e `dados de teste`.
-- Fora do escopo: redesenho amplo de UI ou liberacao comercial desses modulos.
-- Modelo recomendado: GPT-5.4 Alta.
-- Deploy necessario?: nao nesta fase documental.
-- Migration necessaria?: nao.
-- Pode ser GPT-5.4?: sim.
-- Precisa GPT-5.5?: nao.
-- Criterio de aceite: modulos beta/bloqueados seguem explicitamente fora do caminho de cliente externo.
+- **Status:** Aberto (2 scripts).
+- **Objetivo:** Remover `--commit-dirty=true` de `build-and-deploy.sh:48` e `legacy/deploy-full-automated.sh:79`.
+- **Risco:** Deploy de build não versionado.
+- **Modelo recomendado:** GPT-5.4 Baixa — remoção de flag.
+- **Deploy necessário?:** Não (alteração de script).
 
-## Antes de operar 2 empresas com cliente usando
+---
 
-### Item 5 - Smoke autenticado com empresa esperada
+## Antes de 2 empresas com cliente usando
 
-- Objetivo: fechar a validacao funcional ponta-a-ponta do tenant esperado.
-- Risco: operar tenant errado ou liberar cliente sem contrato funcional minimo.
-- Escopo: validar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO`, manter writes bloqueados.
-- Fora do escopo: onboarding real, deploy, alteracao de dados.
-- Modelo recomendado: GPT-5.4 Alta.
-- Deploy necessario?: nao.
-- Migration necessaria?: nao.
-- Pode ser GPT-5.4?: sim.
-- Precisa GPT-5.5?: nao.
-- Criterio de aceite: smoke autenticado read-only executado com evidencia sanitizada e empresa esperada confirmada.
+### Item 5 — RBAC de plataforma e suporte (v2 design)
 
-### Item 6 - Readiness de suporte/diagnostico por tenant
+- **Status:** Parcial (fallback centralizado, helpers canônicos, mas migration pendente).
+- **Objetivo:** Desenhar schema para `platform_admin` persistido, `support` read-only com escopo, expiração e eventos auditados. **Sem executar migration.**
+- **Risco:** Sem RBAC formal, multiempresa opera sem governança adequada.
+- **Escopo:** Modelo de dados, permissões, eventos, política de expiração/revogação, plano de rollback.
+- **Modelo recomendado:** GPT-5.5 Altissimo — schema sensível de auth.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Sim, na fase de implementação.
+- **Documento de referência:** `AIRTRUST_RBAC_SUPPORT_MODEL_v0_5.md`.
 
-- Objetivo: ter roteiro de diagnostico sem depender de acesso amplo informal.
-- Risco: suporte operar no tenant errado ou sem trilha minima.
-- Escopo: runbook de suporte, sinais minimos por tenant, consultas/read models operacionais.
-- Fora do escopo: painel final de suporte em producao.
-- Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: nao nesta fase documental.
-- Migration necessaria?: possivelmente.
-- Pode ser GPT-5.4?: nao para o desenho sensivel.
-- Precisa GPT-5.5?: sim.
-- Criterio de aceite: suporte consegue diagnosticar tenant sem ambiguidade de escopo e com acao auditavel.
+### Item 6 — Audit Trail/LGPD v2 design
 
-## Antes de 5 empresas
+- **Status:** Parcial (sanitização aplicada, writers legados sem contrato único).
+- **Objetivo:** Definir contrato único de auditoria com colunas dedicadas (`empresa_id`, `request_id`, `support_reason`, `actor`). **Sem executar migration.**
+- **Risco:** Compliance e LGPD sem trilha padronizada.
+- **Escopo:** Comparar `auditoria`, `audit_logs`, `auditoria_avancada_v2`; escolher writer canônico; definir schema alvo; mapear call sites; plano de migração.
+- **Modelo recomendado:** GPT-5.5 Alta.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Sim, na fase de implementação.
+- **Documento de referência:** `AIRTRUST_AUDIT_TRAIL_LGPD_HARDENING_PLAN_v0_5.md`.
 
-### Item 7 - Remocao do DDL runtime residual
+### Item 7 — Cobertura de testes dos módulos beta
 
-- Objetivo: remover `ensure*` residuais de SIGVOOS, treinamentos planejados, documentos e legados de qualificacoes.
-- Risco: drift de schema, lock operacional e comportamento divergente por ambiente/tenant.
-- Escopo: plano de migrations explicitas, ordem segura de remocao e testes de regressao.
-- Fora do escopo: executar migration nesta fase.
-- Modelo recomendado: GPT-5.5 Altissimo.
-- Deploy necessario?: sim, quando implementado.
-- Migration necessaria?: sim.
-- Pode ser GPT-5.4?: nao para implementacao real.
-- Precisa GPT-5.5?: sim.
-- Criterio de aceite: cada ensure residual tem migration correspondente planejada, call sites mapeados e sequencia de corte aprovada.
+- **Status:** Parcial (Hospedagem, SGSO, LMS com contratos mínimos; EVD sem cobertura).
+- **Objetivo:** Expandir cobertura de EVD e complementar contratos de update/checkout em Hospedagem.
+- **Risco:** Regressão silenciosa em módulos com dados operacionais sensíveis.
+- **Escopo:** Testes de tenant-scope, leitura/escrita crítica, contratos de erro.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Não.
 
-### Item 8 - Status enum central
+---
 
-- Objetivo: centralizar status criticos e reduzir risco de contagem/filtro divergente.
-- Risco: metricas incorretas e regras diferentes entre worker e frontend.
-- Escopo: enum compartilhado por dominio, migracao incremental das queries de metrica e contagem.
-- Fora do escopo: normalizacao total de todos os status historicos no banco.
-- Modelo recomendado: GPT-5.4 Alta.
-- Resultado atual em 2026-06-02: Sprint C executado sem migration na camada critica do worker; `dashboardService`, simuladores, qualificacoes e treinamentos planejados passaram a consumir helpers centrais de compatibilidade; leitura aceita `CONCLUIDA/CONCLUIDO`, `CANCELADA/CANCELADO`, `PLANEJADA/PLANEJADO`, `AGENDADO/AGENDADA` e `PENDENTE/PENDING` nos pontos cobertos.
-- Deploy necessario?: sim, apenas quando houver decisao explicita de publicar runtime alterado apos validacao final completa.
-- Migration necessaria?: nao para a primeira etapa.
-- Pode ser GPT-5.4?: sim.
-- Precisa GPT-5.5?: nao.
-- Documento de referencia: `docs/AIRTRUST_STATUS_ENUM_COMPATIBILITY_v0_5.md`.
-- Criterio de aceite: caminhos criticos deixam de usar strings literais soltas e passam a referenciar um contrato central.
+## Antes de 5+ empresas
 
-### Item 9 - Testes dos modulos beta/ocultos
+### Item 8 — Remoção do DDL runtime residual
 
-- Objetivo: subir a cobertura minima de Hospedagem, SGSO, LMS/EAD e EVD.
-- Risco: regressao silenciosa em dominios hoje pouco observados.
-- Escopo: tenant-scope, leitura/escrita critica, contratos de erro e estados de negocio principais.
-- Fora do escopo: cobertura exaustiva de UI e2e ampla.
-- Modelo recomendado: GPT-5.4 Alta.
-- Deploy necessario?: sim, quando implementado.
-- Migration necessaria?: nao.
-- Pode ser GPT-5.4?: sim.
-- Precisa GPT-5.5?: nao.
-- Resultado parcial em 2026-06-02: Hospedagem e LMS/EAD ganharam contratos funcionais minimos de listagem/criacao; SGSO ja possuia cobertura funcional em relatos, auditorias e workflow tenant-scoped e foi consolidado no inventario de cobertura.
-- Criterio de aceite: Hospedagem deixa de ter 0 testes e os demais modulos ganham cobertura minima dos fluxos criticos, sem liberar nenhum beta para cliente externo.
+- **Status:** Parcial (8 hot paths limpos, 3 residuais mantidos).
+- **Objetivo:** Criar migrations para `sigvoos-frms.ts`, `treinamentos-planejados-integration.ts` e `auto-migration-documentos.ts`. **Sem executar as migrations.**
+- **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente.
+- **Escopo:** Planejar migrations explícitas, ordem segura de remoção, testes de regressão.
+- **Modelo recomendado:** GPT-5.5 Altissimo — migrations complexas.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Sim.
+- **Documento de referência:** `AIRTRUST_RUNTIME_DDL_REMOVAL_PLAN_v0_5.md`.
 
-## Antes de 10 empresas
+### Item 9 — Status enum central (expansão)
 
-### Item 10 - Repository pilot em dominio critico
+- **Status:** Parcial (camada crítica coberta, cron/alertas/EVD pendentes).
+- **Objetivo:** Expandir helpers de compatibilidade para cron jobs, alertas e EVD.
+- **Risco:** Contagens/filtros divergentes em caminhos batch.
+- **Modelo recomendado:** GPT-5.4 Alta — expansão de helpers existentes.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Não.
 
-- Status em 2026-06-02: piloto executado em `dashboardService` e expandido no Sprint L para `lmsRelatoriosRepository`; contrato publico preservado e sem migration.
-- Objetivo: reduzir o acoplamento entre regra, SQL e HTTP onde o retorno e maior.
-- Risco: cada nova feature ampliar superficie de regressao em arquivos gigantes e SQL inline.
-- Escopo: escolher um dominio piloto, provavelmente `dashboard`, `escalas` ou `qualificacoes`.
-- Fora do escopo: refatoracao total do worker.
-- Modelo recomendado: GPT-5.4 Alta.
-- Deploy necessario?: sim, quando implementado.
-- Migration necessaria?: nao.
-- Pode ser GPT-5.4?: sim.
-- Precisa GPT-5.5?: nao.
-- Documento de referencia: `docs/AIRTRUST_REPOSITORY_PILOT_DASHBOARD_v0_5.md`.
-- Criterio de aceite: um dominio passa a ter acesso a dados centralizado, com testes protegendo o contrato.
-- Resultado Sprint L: rota `lms-relatorios` passou a delegar `getConformidadeRows`, `getCursosConformidadeRows` e `getExpiracaoRows` ao repository read-only, mantendo `auth`, `requireRole`, `empresaId` explicito e payload `{ success, data }`.
-- Proximo candidato: extrair leituras read-only de `lms-cursos` stats/listagens ou `qualificacoes` dashboard, sem misturar mutation, auth/RBAC ou schema.
+### Item 10 — Repository pattern (expansão gradual)
 
-### Item 11 - Observabilidade multiempresa
+- **Status:** Parcial (2 domínios: dashboard + LMS reports).
+- **Objetivo:** Extrair queries read-only de `lms-cursos` stats/listagens e `qualificações` dashboard.
+- **Risco:** SQL espalhado dificulta manutenção e testes.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Não.
 
-- Objetivo: criar diagnostico operacional por tenant e trilhas de suporte consistentes.
-- Risco: expansao sem visibilidade de degradacao por empresa.
-- Escopo: sinais por tenant, request correlation, falhas por modulo, limites operacionais.
-- Fora do escopo: plataforma completa de observabilidade externa.
-- Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: sim, quando implementado.
-- Migration necessaria?: possivelmente.
-- Pode ser GPT-5.4?: somente para docs auxiliares.
-- Precisa GPT-5.5?: sim.
-- Criterio de aceite: equipe consegue responder "qual tenant, qual request, qual modulo, qual ator" sem ambiguidade.
+### Item 11 — Observabilidade multiempresa
 
-## Sprint J — Supabase Preparation (2026-06-02)
+- **Status:** Aberto.
+- **Objetivo:** Criar diagnóstico operacional por tenant e trilhas de suporte consistentes.
+- **Risco:** Expansão sem visibilidade de degradação por empresa.
+- **Escopo:** Sinais por tenant, request correlation, falhas por módulo.
+- **Modelo recomendado:** GPT-5.5 Alta.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Possivelmente.
 
-- **Status: CONCLUIDO.**
-- Objetivo: transformar a decisao do Sprint I em acoes preparatorias seguras, sem iniciar migracao.
-- **Repository pattern expandido:** `lmsRelatoriosRepository` (3 queries read-only, testes criados e integrado no Sprint L).
-- **Tenant isolation documentos/assets auditado:** 14 gaps identificados (7 criticos, 5 altos, 2 medios). Correcoes planejadas para Sprint K com GPT-5.5.
-- **Cloudflare Queues planejado:** arquitetura, fases, tiers definidos. Implementacao postergada.
-- **R2 metadata planejado:** politica, call sites, backfill, validacao definidos. Depende de correcoes de tenant isolation.
-- Documentos: `AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`, `AIRTRUST_DOMAIN_EVENTS_QUEUE_PLAN_v0_5.md`, `AIRTRUST_R2_METADATA_TENANT_PLAN_v0_5.md`, `AIRTRUST_SUPABASE_PREPARATION_PLAN_v0_5.md`.
+### Item 12 — Performance/bundle/N+1 audit
 
-### Item 11.5 — Tenant isolation documentos (NOVO, Sprint J)
+- **Status:** Aberto.
+- **Objetivo:** Auditoria de bundle size, chunks duplicados, N+1 queries, rotas grandes.
+- **Risco:** Degradação com escala; dívida estrutural.
+- **Modelo recomendado:** GPT-5.4 Alta — auditoria read-only.
 
-- Status Sprint K/K.1: 7 gaps criticos corrigidos e testados; altos locais GAP-001, GAP-002, GAP-006, GAP-008, GAP-009, GAP-011 e GAP-014 corrigidos; 2 residuais medios classificados e corrigidos.
-- Objetivo: corrigir 14 gaps de tenant isolation em rotas de documentos, certificados e assets.
-- Risco: 7 gaps criticos permitem exfiltracao de documentos cross-tenant ou delecao sem verificacao de empresa_id.
-- Escopo: adicionar JOIN `funcionarios.empresa_id` em queries que acessam `documentos` diretamente.
-- Fora do escopo: alterar schema, migration, R2 metadata.
-- Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: sim, executado quando implementado.
-- Migration necessaria?: nao.
-- Documento: `docs/AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`.
-- Criterio de aceite Sprint K: gaps criticos corrigidos, cross-tenant nao chama R2 nem executa mutation, tenant correto mantem acesso.
-- Criterio Sprint K.1: GAP-014 fechado; MED-001 (`limpar-refs-orfas`) e MED-002 (`historico/:id/certificados`) corrigidos com evidencia de teste; sem migration, sem DB/R2 real e sem deploy Pages.
-- Criterio restante: `lmsRelatoriosRepository` foi integrado no Sprint L; proximas extracoes devem continuar read-only e pequenas para evitar regressao em rotas LMS/EAD.
+---
 
 ## Pode esperar
 
-### Item 12 - Refatoracao estrutural ampla
+### Item 13 — R2 metadata para novos uploads (defense-in-depth)
 
-- Objetivo: quebrar arquivos gigantes e reduzir sprawl tecnico.
-- Risco: manutencao cara, mas sem bloquear piloto atual isoladamente.
-- Escopo: FRMS, SGSO, dashboard, empresas-usuarios e outros hotspots.
-- Fora do escopo: freeze de produto.
-- Modelo recomendado: GPT-5.4 Alta.
-- Deploy necessario?: sim, quando implementado.
-- Migration necessaria?: nao.
-- Pode ser GPT-5.4?: sim.
-- Precisa GPT-5.5?: nao.
-- Criterio de aceite: dominios prioritarios ficam menores e com responsabilidades mais claras.
+- **Status:** Plano criado no Sprint J.
+- **Objetivo:** Adicionar `empresa_id` como custom metadata em novos uploads R2.
+- **Dependência:** Correções de tenant isolation já concluídas.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Não.
 
-## Nao fazer agora
+### Item 14 — Cloudflare Queues (domain_events)
 
-### Item 13 - Cutover Supabase
+- **Status:** Plano criado no Sprint J, implementação postergada.
+- **Objetivo:** Substituir D1 como message queue.
+- **Modelo recomendado:** GPT-5.5 Alta.
 
-- Objetivo: adiar migracao de plataforma ate fechar auth, audit trail, DDL residual e readiness multiempresa.
-- Risco: iniciar agora multiplica mudanca estrutural antes de estabilizar o contrato atual.
-- Escopo: somente feasibility audit e ordem futura de migracao.
-- Fora do escopo: mover schema, dados reais, auth ou storage para Supabase.
-- Modelo recomendado: GPT-5.5 Altissimo.
-- Deploy necessario?: nao agora.
-- Migration necessaria?: sim, em eventual projeto futuro.
-- Pode ser GPT-5.4?: nao para cutover; sim para analise documental leve.
-- Precisa GPT-5.5?: sim.
-- **Status em 2026-06-02:** Sprint I — Supabase Feasibility Audit concluido. Decisao: NAO MIGRAR AGORA / HIBRIDO FUTURO.
-- **Documentos:** `docs/AIRTRUST_SUPABASE_FEASIBILITY_AUDIT_v0_5.md`, `docs/AIRTRUST_SUPABASE_MIGRATION_DECISION_RECORD_v0_5.md`, `docs/AIRTRUST_SUPABASE_RISK_MATRIX_v0_5.md`.
-- **Decisao:** Workers + D1 + R2 mantidos. Auth custom mantido. Supabase Postgres como caminho futuro quando gatilhos de escala forem atingidos. Repository pattern, auditoria tenant isolation, e Cloudflare Queues como acoes preparatorias.
-- **Gatilhos para reavaliar:** D1 atingir 80% de limite (5GB ou 1M statements/dia), incidente de tenant isolation, ou 2027-06-02 (12 meses).
-- Criterio de aceite: existe apenas um plano futuro de avaliacao, nao uma migracao em andamento. ✅ CONCLUIDO.
+### Item 15 — Refatoração estrutural ampla
+
+- **Objetivo:** Quebrar arquivos gigantes (FRMS, SGSO, dashboard).
+- **Risco:** Sem bloqueio para piloto atual.
+- **Modelo recomendado:** GPT-5.4 Alta.
+
+---
+
+## Não fazer agora
+
+### Item 16 — Cutover Supabase
+
+- **Decisão:** NÃO MIGRAR AGORA. HÍBRIDO FUTURO.
+- **Gatilhos:** D1 80% limite, incidente tenant isolation, ou 2027-06-02.
+- **Ações preparatórias:** Repository pattern, tenant isolation audit, Cloudflare Queues — todas concluídas ou planejadas.
+- **Status:** DEFERRED.
+
+---
+
+## Ordem de execução recomendada (atualizada após Sprint Z)
+
+| # | Item | Prioridade | Bloqueia | Modelo |
+|---|---|---|---|---|
+| 1 | Smoke autenticado funcional | Imediata | Cliente externo | GPT-5.4 Baixa |
+| 2 | Data Quality completo (staging) | Imediata | GO pleno | GPT-5.4 Alta |
+| 3 | Blindar scripts legados (P2) | Imediata | Segurança operacional | GPT-5.4 Média |
+| 4 | Fechar dirty-deploy residual (P2) | Imediata | Integridade de deploy | GPT-5.4 Baixa |
+| 5 | RBAC/Suporte v2 design | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
+| 6 | Audit Trail/LGPD v2 design | Curto prazo | Compliance | GPT-5.5 Alta |
+| 7 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
+| 8 | DDL runtime residual design | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 9 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
+| 10 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |
+| 11 | Performance/bundle/N+1 audit | Médio prazo | Escala | GPT-5.4 Alta |
+| 12 | Observabilidade multiempresa | Longo prazo | 5+ empresas | GPT-5.5 Alta |
+| 13 | R2 metadata novos uploads | Longo prazo | Defense-in-depth | GPT-5.4 Alta |
+| 14 | Cloudflare Queues dry-run | Longo prazo | Arquitetura | GPT-5.5 Alta |
+
+---
+
+**Fim do roadmap.** Documento atualizado em 2026-06-02 com base na matriz consolidada de 48 achados.

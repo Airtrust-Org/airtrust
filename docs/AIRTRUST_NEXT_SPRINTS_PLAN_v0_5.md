@@ -1,157 +1,229 @@
 # AirTrust Next Sprints Plan v0.5
 
-Data: 2026-06-02
-Branch auditada: `main`
-HEAD auditado: `871a140e47ec8eb53a21b169956c7fdd5d149179` → Sprint J em execucao sobre `bdbc200`
-Modo: planejamento de sprints amplos atualizado apos Sprint J (Supabase Preparation).
+**Data:** 2026-06-02
+**Branch:** `main`
+**HEAD:** `59e601f0a25cbbbe7e842dd83844af4ce91279ab`
+**Modo:** Planejamento de sprints atualizado após consolidação final do Sprint Z. Baseado na matriz de 48 achados.
 
-## Sprint A - RBAC/Suporte
+---
 
-- Status: concluido na camada sem-migration em 2026-06-02.
-- Objetivo: reduzir a dependencia operacional de `userId === 1` e desenhar `support` read-only por tenant.
-- Escopo entregue: inventario dos call sites, centralizacao do fallback legado, testes de fronteira plataforma, teste de `support` ainda inativo e documento de modelo.
-- Fora do escopo: criar empresa, criar usuario, executar migration, aplicar permissao em producao.
-- Arquivos alterados: `worker-airtrust/src/routes/auth.ts`, `worker-airtrust/src/routes/empresas.ts`, `worker-airtrust/src/middleware/tenant.ts`, testes e `docs/AIRTRUST_RBAC_SUPPORT_MODEL_v0_5.md`.
-- Validacoes: guard arquitetural sem novos atalhos diretos, testes de fronteira RBAC e contrato de suporte documentado.
-- Modelo recomendado para remover fallback via migration: GPT-5.5 Altissimo.
-- Risco: alto, porque auth/tenant e sensivel.
-- Criterio de aceite restante: migration para `platform_admin`/`support`, eventos auditados e remocao de `LEGACY_PLATFORM_ADMIN_USER_ID`.
+## Sprints concluídos (A–L)
 
-## Sprint B - Audit Trail/LGPD
+### Sprint A — RBAC/Suporte
+- **Status:** CONCLUÍDO (camada sem migration).
+- **Commit principal:** `13dd828`
+- **Deploy:** Sim (Worker).
+- **Entregue:** Centralização do fallback `userId===1`, helpers canônicos, testes de fronteira RBAC, guard arquitetural.
+- **Pendente:** Migration para `platform_admin`/`support` com remoção do fallback legado.
 
-- Objetivo: padronizar `empresa_id`, `request_id`, sanitizacao e retencao minima do audit trail.
-- Escopo: comparar `auditoria`, `audit_logs`, `auditoria_avancada_v2`, definir writer canonico e eventos criticos.
-- Fora do escopo: migration executada, purge real ou alteracao em dados reais.
-- Arquivos efetivamente usados nesta fase: `worker-airtrust/src/lib/audit/*`, `worker-airtrust/src/routes/auth.ts`, `worker-airtrust/src/routes/admin.ts`, `worker-airtrust/src/routes/assets.ts`, `worker-airtrust/src/routes/empresas.ts`, testes e docs LGPD/auditoria.
-- Validacoes: tabela de eventos criticos, contrato minimo do writer, testes de sanitizacao e evidencia de request correlation via metadata sem schema novo.
-- Modelo recomendado: GPT-5.5 Alta.
-- Risco: alto por compliance e dados sensiveis.
-- Estado apos esta fase: `audit_logs` e `admin_actions` ganharam sanitizacao/minimizacao no perimetro tocado; `auditoria` ficou encapsulada apenas em rotas de `empresas`; FRMS e demais call sites seguem classificados como adaptar em sprint proprio.
-- Criterio de aceite: cada writer existente fica classificado como manter, adaptar ou aposentar.
+### Sprint B — Audit Trail/LGPD
+- **Status:** CONCLUÍDO (camada sem migration).
+- **Commit principal:** `300ecb9`
+- **Deploy:** Sim (Worker).
+- **Entregue:** Camada `lib/audit` com sanitização; `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts` sanitizados; eventos de acesso a assets privados.
+- **Pendente:** Unificação dos 3 writers em contrato único com colunas dedicadas.
 
-## Sprint C - Status Enum
+### Sprint C — Status Enum
+- **Status:** CONCLUÍDO (camada crítica do worker).
+- **Commits principais:** `c747b18`, `3a775a8`
+- **Deploy:** Sim (Worker).
+- **Entregue:** Módulo `status-codes.ts`, compatibilidade em dashboard, simuladores, qualificações e treinamentos planejados.
+- **Pendente:** Cron jobs, alertas, EVD.
 
-- Status: concluido parcialmente em 2026-06-02 na camada critica do worker, sem migration.
-- Objetivo: centralizar status criticos e migrar primeiro metrica/contagem.
-- Escopo entregue nesta fase: modulo central `worker-airtrust/src/lib/status/status-codes.ts`, compatibilidade aplicada em `dashboardService`, simuladores, qualificacoes e treinamentos planejados, mais testes focados de compatibilidade.
-- Fora do escopo: normalizacao completa do banco e de todos os modulos em uma vez.
-- Arquivos efetivamente tocados: `worker-airtrust/src/lib/status/status-codes.ts`, `worker-airtrust/src/services/dashboardService.ts`, `worker-airtrust/src/routes/simuladores-*`, `worker-airtrust/src/routes/qualificacoes/*`, `worker-airtrust/src/services/qualificacoes-historico-ficha.ts`, `worker-airtrust/src/services/treinamentos-planejados-integration.ts`, testes e `docs/AIRTRUST_STATUS_ENUM_COMPATIBILITY_v0_5.md`.
-- Validacoes: testes de compatibilidade de status, suites existentes de dashboard/simuladores/qualificacoes/treinamentos planejados e inventario dos status magicos remanescentes.
-- Modelo recomendado: GPT-5.4 Alta.
-- Risco: medio.
-- Criterio de aceite restante: expandir a mesma disciplina para cron jobs, alertas e demais modulos que ainda usam strings soltas fora da camada critica atual.
+### Sprint D — Testes dos Módulos Beta
+- **Status:** CONCLUÍDO (contratos mínimos).
+- **Commits principais:** `7be3d50`, `11b9d44`
+- **Deploy:** Sim (Worker).
+- **Entregue:** Contratos funcionais mínimos para Hospedagem, SGSO, LMS/EAD; module gating testado.
+- **Pendente:** EVD sem cobertura; complementos de update/checkout em Hospedagem.
 
-## Sprint D - Testes dos modulos beta
+### Sprint E — DDL Runtime Residual
+- **Status:** CONCLUÍDO (hot paths).
+- **Commit principal:** `01f0902`
+- **Deploy:** Sim (Worker).
+- **Entregue:** 8 funções `ensure*` removidas; funções órfãs removidas; teste de arquitetura.
+- **Pendente:** 3 residuais (SIGVOOS, treinamentos, documentos) — exigem migrations.
 
-- Objetivo: elevar a cobertura minima de Hospedagem, SGSO, LMS e EVD.
-- Escopo: tenant-scope, caminhos criticos, contratos de leitura/escrita e erros controlados.
-- Fora do escopo: suite e2e completa ou redesign desses modulos.
-- Arquivos provaveis: `worker-airtrust/src/routes/hospedagem.ts`, `worker-airtrust/src/routes/sgso-*`, `worker-airtrust/src/routes/lms-*`, `worker-airtrust/src/routes/escalas-*`, testes correspondentes.
-- Validacoes: `npm run test:worker`, novos testes de tenant-scope e erro.
-- Modelo recomendado: GPT-5.4 Alta.
-- Risco: medio.
-- Progresso em 2026-06-02: Hospedagem, SGSO e LMS/EAD ganharam contratos minimos de tenant-scope e fluxo simples; EVD permanece fora desta rodada.
-- Criterio de aceite: Hospedagem deixa de ter 0 testes e os demais modulos cobrem o fluxo minimo acordado sem liberar beta para cliente externo.
+### Sprint F — Data Quality
+- **Status:** CONCLUÍDO (parcial — SQL validado, runner criado).
+- **Commit principal:** `1a9722c`
+- **Deploy:** Não (scripts apenas).
+- **Entregue:** SQL read-only validado, runner local seguro, 10 checks (5 PASS, 4 WARN, 5 SKIPPED).
+- **Pendente:** Execução completa em ambiente com schema completo.
 
-## Sprint E - DDL residual
+### Sprint G — Data Quality Runner
+- **Status:** CONCLUÍDO.
+- **Entregue:** Runner local, npm scripts, validação estática.
 
-- Objetivo: preparar a remocao segura do DDL runtime residual.
-- Escopo: SIGVOOS, treinamentos planejados, documentos e schemas legados de qualificacoes.
-- Fora do escopo: executar migrations ou deployar a remocao.
-- Arquivos provaveis: `worker-airtrust/src/services/sigvoos-frms.ts`, `worker-airtrust/src/services/treinamentos-planejados-integration.ts`, `worker-airtrust/src/utils/auto-migration-documentos.ts`, `worker-airtrust/src/routes/qualificacoes/*`, docs de plano DDL.
-- Validacoes: mapa de call sites, dependencia por tabela/indice, ordem segura de corte.
-- Modelo recomendado: GPT-5.5 Altissimo.
-- Risco: alto.
-- Criterio de aceite: cada ensure residual tem migration alvo, risco conhecido e ordem de remocao definida.
+### Sprint H — Repository Pilot Dashboard
+- **Status:** CONCLUÍDO.
+- **Commit principal:** `871a140`
+- **Deploy:** Sim (Worker).
+- **Entregue:** `dashboardMetricsRepository` com 2 queries read-only, testes de contrato.
+- **Pendente:** Expandir para outras queries do dashboard e segundo domínio.
 
-## Sprint F - Data Quality
+### Sprint I — Supabase Feasibility Audit
+- **Status:** CONCLUÍDO.
+- **Commit principal:** `bdbc200`
+- **Deploy:** Não (documental).
+- **Entregue:** 3 docs de análise; decisão NÃO MIGRAR AGORA / HÍBRIDO FUTURO.
 
-- Status: executado parcialmente em 2026-06-02, com SQL validado, runner local seguro criado, documento de execucao atualizado e evidencia sanitizada preparada; a execucao local mostrou cobertura parcial por ausencia de algumas tabelas no snapshot local atual.
-- Objetivo: transformar checks read-only em rotina operacional executavel fora do Codex.
-- Escopo: runner local/staging, classificacao blocker/warn/info, registro sem PII.
-- Fora do escopo: execucao em producao por Codex, automacao destrutiva, qualquer mutacao de dados.
-- Arquivos provaveis: `docs/AIRTRUST_DATA_QUALITY_CHECKS_v0_5.md`, `docs/AIRTRUST_DATA_QUALITY_EXECUTION_GUIDE_v0_5.md`, `docs/AIRTRUST_DATA_QUALITY_RUNBOOK_v0_5.md`, `scripts/validation/data-quality-checks-readonly.sql`, `scripts/validation/run-data-quality-local.sh`.
-- Validacoes: `bash scripts/validation/validate-data-quality-sql.sh`, `npm run validate:data-quality-sql`, `npm run data-quality:local`, checklist operacional aprovado.
-- Modelo recomendado: GPT-5.4 Alta.
-- Risco: medio.
-- Criterio de aceite: operador autorizado consegue executar e registrar o pacote sem violar guard rails.
+### Sprint J — Supabase Preparation
+- **Status:** CONCLUÍDO.
+- **Commit principal:** `2733722`
+- **Deploy:** Parcial.
+- **Entregue:** `lmsRelatoriosRepository` criado (3 queries); tenant isolation audit (14 gaps); Cloudflare Queues plano; R2 metadata plano.
 
-## Sprint H - Repository pilot
+### Sprint K — Tenant Isolation Hardening
+- **Status:** CONCLUÍDO.
+- **Commit principal:** `7702467`
+- **Deploy:** Sim (Worker).
+- **Entregue:** 7 gaps críticos e 5 altos corrigidos; JOIN `funcionarios.empresa_id` em todas as queries de documentos/certificados.
 
-- Status: executado parcialmente em 2026-06-02 com piloto em `dashboardService`; as metricas `taxaConclusaoMensal` e `utilizacaoSimuladores` passaram a usar repository read-only com contrato publico preservado.
-- Objetivo: testar o ganho real de uma camada de repository em um dominio critico.
-- Escopo: escolher um dominio com alta densidade de SQL e risco claro.
-- Fora do escopo: reescrever o worker inteiro.
-- Arquivos efetivamente tocados nesta fase: `worker-airtrust/src/repositories/dashboardMetricsRepository.ts`, `worker-airtrust/src/services/dashboardService.ts`, testes de repository/service e `docs/AIRTRUST_REPOSITORY_PILOT_DASHBOARD_v0_5.md`.
-- Validacoes: diff controlado, testes existentes verdes, queda de SQL inline na area piloto e tenant-scope preservado nas metricas extraidas.
-- Modelo recomendado: GPT-5.4 Alta.
-- Risco: medio.
-- Criterio de aceite restante: expandir o piloto apenas para outras queries read-only do dashboard ou para um segundo dominio quando houver cobertura equivalente.
+### Sprint K.1 — Tenant Isolation Residuals
+- **Status:** CONCLUÍDO.
+- **Commit principal:** `8dfc14e`
+- **Deploy:** Sim (Worker).
+- **Entregue:** GAP-014 corrigido; MED-001 e MED-002 classificados e corrigidos; testes ampliados.
 
-## Sprint I - Supabase feasibility audit
+### Sprint L — LMS Reports Repository Integration
+- **Status:** CONCLUÍDO.
+- **Commit principal:** `59e601f`
+- **Deploy:** Sim (Worker).
+- **Entregue:** `lmsRelatoriosRepository` integrado em 3 rotas LMS; contrato preservado; testes de contrato.
+- **APP_VERSION:** `2026-06-03T01:04:30Z-59e601f`.
 
-- **Status: CONCLUIDO em 2026-06-02.**
-- Objetivo: avaliar o que pode ser reaproveitado e o que deve ficar fora de uma eventual migracao futura.
-- Escopo: auth, tenant, storage, audit trail, FRMS, escalas e modulos com DDL residual.
-- Fora do escopo: iniciar migracao, criar schema paralelo, mover dados reais.
-- Arquivos produzidos: `docs/AIRTRUST_SUPABASE_FEASIBILITY_AUDIT_v0_5.md`, `docs/AIRTRUST_SUPABASE_MIGRATION_DECISION_RECORD_v0_5.md`, `docs/AIRTRUST_SUPABASE_RISK_MATRIX_v0_5.md`.
-- Validacoes: mapa de reaproveitamento, riscos de cutover, ordem segura por dominio.
-- Modelo utilizado: Claude Code DeepSeek v4 Pro + exploracao automatizada do codebase.
-- Risco: alto se virar escopo de implementacao.
-- **Decisao: NAO MIGRAR AGORA / HIBRIDO FUTURO.** Workers + D1 + R2 mantidos. Auth custom mantido. Supabase Postgres como caminho futuro.
-- **Acoes preparatorias imediatas:** Repository pattern, auditoria tenant isolation, Cloudflare Queues (domain_events).
-- **Gatilhos de reavaliacao:** D1 80% limite, incidente tenant isolation, ou 2027-06-02.
-- Criterio de aceite: existe apenas um feasibility audit claro, sem trabalho de migracao prematuro. ✅ CONCLUIDO.
+---
 
-## Sprint J - Supabase Preparation
+## Próximos sprints (planejados)
 
-- **Status: CONCLUIDO em 2026-06-02.**
-- Objetivo: executar acoes preparatorias identificadas no Sprint I sem iniciar migracao.
-- **Repository pattern:** `lmsRelatoriosRepository` criado com 3 queries read-only + testes de repository. ✅
-- **Tenant isolation audit:** 14 gaps identificados em documentos/assets (7 criticos). ✅ Plano de correcao pronto.
-- **Cloudflare Queues:** Plano de arquitetura e fases criado. Implementacao postergada para Sprint L+. ✅
-- **R2 metadata:** Plano de politica, call sites e backfill criado. Depende de Sprint K. ✅
-- Fora do escopo: criar projeto Supabase, migrar schema, alterar auth, alterar storage. ✅ Respeitado.
-- Documentos: 4 novos docs + 2 atualizados. ✅
-- Criterio de aceite: repository criado, auditoria concluida, planos documentados. ✅ CONCLUIDO.
+### Sprint M — Data Quality Completo + Smoke Autenticado
+- **Prioridade:** Imediata.
+- **Objetivo:** Zerar checks SKIPPED executando em staging com schema completo; executar smoke autenticado com token dedicado.
+- **Escopo:** Apontar staging aprovado → executar runner → classificar resultados → documentar. Fornecer credencial → executar smoke → documentar.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não.
+- **Risco:** Baixo (read-only, scripts existentes).
+- **Critério de aceite:** 0 SKIPPED; smoke autenticado PASS documentado.
 
-## Sprint K - Tenant Isolation Hardening (2026-06-02)
+### Sprint N — Blindagem Operacional (P2 residuais)
+- **Prioridade:** Imediata.
+- **Objetivo:** Mover scripts destrutivos para wrapper seguro; remover `--commit-dirty=true` dos 2 scripts restantes.
+- **Escopo:** Identificar todos os scripts shell com `wrangler d1 execute --remote` sem wrapper → mover para `scripts/legacy/` ou adaptar. Remover flag dirty de `build-and-deploy.sh:48` e `deploy-full-automated.sh:79`.
+- **Modelo recomendado:** GPT-5.4 Média.
+- **Deploy necessário?:** Não (scripts apenas).
+- **Migration necessária?:** Não.
+- **Risco:** Baixo (scripts shell, sem runtime).
 
-- Status: criticos concluidos.
-- Objetivo: corrigir primeiro os 7 gaps criticos de tenant isolation identificados no Sprint J.
-- Escopo executado: adicionar JOIN `funcionarios.empresa_id` em queries de documentos/certificados antes de R2 ou mutation.
-- Fora do escopo: alterar schema, migration, auth/tenant middleware, R2 metadata, R2 objetos reais.
-- Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: sim, executado quando implementado e testado.
-- Migration necessaria?: nao.
-- Risco: alto (runtime sensivel — documentos, certificados, R2 access, cascading deletes).
-- Documento referencia: `docs/AIRTRUST_TENANT_ISOLATION_DOCUMENTS_AUDIT_v0_5.md`.
-- Criterio de aceite: 7 gaps criticos corrigidos, testes de tenant isolation para stream/download/export/delete, sem regressao em upload/download/stream.
-- Pendente apos Sprint K: GAP-014, gaps medios e decisao de integracao de `lmsRelatoriosRepository`.
+### Sprint O — Audit Trail/LGPD v2 Design
+- **Prioridade:** Curto prazo.
+- **Objetivo:** Desenhar contrato único de auditoria sem executar migration.
+- **Escopo:** Comparar `auditoria`, `audit_logs`, `auditoria_avancada_v2`; mapear call sites; definir schema alvo com colunas `empresa_id`, `request_id`, `support_reason`, `actor`; classificar eventos críticos; plano de migração.
+- **Modelo recomendado:** GPT-5.5 Alta.
+- **Deploy necessário?:** Não nesta fase documental.
+- **Migration necessária?:** Sim, em fase futura de implementação.
+- **Risco:** Alto (compliance, dados sensíveis).
 
-## Sprint K.1 - Tenant Isolation Residuals (2026-06-02)
+### Sprint P — RBAC/Suporte v2 Design
+- **Prioridade:** Curto prazo.
+- **Objetivo:** Desenhar schema para `platform_admin` e `support` sem executar migration.
+- **Escopo:** Modelo de dados para papéis de plataforma; permissões de `support` (leitura de diagnóstico, escopo por tenant, expiração); eventos auditados; política de revogação; plano de migração do operador legado (userId===1) para papel explícito.
+- **Modelo recomendado:** GPT-5.5 Altissimo.
+- **Deploy necessário?:** Não nesta fase documental.
+- **Migration necessária?:** Sim, em fase futura de implementação.
+- **Risco:** Alto (auth/tenant sensível, schema com dados de plataforma).
 
-- Status: concluido.
-- Objetivo: fechar GAP-014, classificar/corrigir os 2 gaps medios e decidir integracao de `lmsRelatoriosRepository`.
-- Escopo executado: rotas admin de recuperacao/limpeza de certificados orfaos e guard adicional na listagem de metadado de certificado por historico.
-- Fora do escopo: schema, migration, R2 metadata, objetos R2 reais, deploy Pages.
-- Modelo recomendado: GPT-5.5 Alta.
-- Deploy necessario?: sim, se runtime for alterado.
-- Migration necessaria?: nao.
-- Resultado: GAP-014 corrigido; MED-001 (`limpar-refs-orfas`) e MED-002 (`historico/:id/certificados`) classificados e corrigidos; testes de isolamento ampliados.
-- Decisao LMS: `lmsRelatoriosRepository` nao integrado no K.1 para nao competir com runtime sensivel de documentos/certificados; permanece como proxima opcao read-only.
-- Criterio de aceite: pendencias de Sprint K zeradas ou reclassificadas com evidencia.
+### Sprint Q — Cobertura Beta (EVD + Complementos)
+- **Prioridade:** Curto prazo.
+- **Objetivo:** Criar cobertura de teste para EVD e complementar Hospedagem (update/checkout).
+- **Escopo:** Testes de tenant-scope para EVD; contratos de update/checkout em Hospedagem; revisão de cobertura SGSO e LMS.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Não.
+- **Risco:** Médio.
 
-## Sprint L - LMS Reports Repository Integration (2026-06-02)
+### Sprint R — DDL Runtime Residual Design
+- **Prioridade:** Médio prazo.
+- **Objetivo:** Planejar migrations para os 3 DDL residuais sem executar.
+- **Escopo:** Criar migration para `integracoes_sigvoos_*` (3 tabelas + índices); criar migration para `solicitacoes_treinamento` (colunas de link + índice); consolidar `documentos` em migration canônica; plano de remoção segura.
+- **Modelo recomendado:** GPT-5.5 Altissimo.
+- **Deploy necessário?:** Não nesta fase.
+- **Migration necessária?:** Sim, em fase futura de implementação.
+- **Risco:** Alto (schema complexo, dependências entre tabelas).
 
-- Status: concluido.
-- Objetivo: integrar `lmsRelatoriosRepository` na rota ativa de relatorios LMS sem alterar contrato publico.
-- Escopo executado: `GET /relatorios/conformidade`, `GET /relatorios/cursos-conformidade` e `GET /relatorios/expiracoes` passaram a chamar `getConformidadeRows`, `getCursosConformidadeRows` e `getExpiracaoRows`.
-- Contrato preservado: rota continua responsavel por `auth()`, `requireRole('admin', 'manager')`, `getEmpresaIdSafe(c)` e resposta `{ success: true, data }`.
-- Testes: repository mantido e contrato de rota criado para empresaId explicito, payload, Authorization, filtro `dias`, fail-closed e erro seguro.
-- Fora do escopo: auth/tenant/RBAC, schema, migration, DB remoto, Pages, R2 e frontend.
-- Deploy necessario?: sim, runtime worker alterado.
-- Migration necessaria?: nao.
-- Riscos remanescentes: repository pattern ainda cobre poucos pontos LMS; novas extracoes devem ser read-only, pequenas e protegidas por contrato.
-- Proximo candidato: leituras read-only de stats/listagens em `lms-cursos` ou painel de `qualificacoes`, evitando mutacoes e mudancas de payload.
-- Modelo recomendado proximo sprint: GPT-5.4 Alta se read-only e ate 5 arquivos runtime; GPT-5.5 se envolver rotas com mutation, R2, tenant isolation sensivel ou muitos arquivos.
+### Sprint S — Status Enum Expansão
+- **Prioridade:** Médio prazo.
+- **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
+- **Escopo:** Auditar queries batch; aplicar helpers `status-codes.ts` onde usam strings soltas; testes de compatibilidade.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Sim, quando implementado.
+- **Migration necessária?:** Não.
+- **Risco:** Médio.
+
+### Sprint T — Performance/Bundle Audit
+- **Prioridade:** Médio prazo.
+- **Objetivo:** Auditoria de bundle size, chunks duplicados, N+1 queries, rotas grandes.
+- **Escopo:** Análise de bundle com `vite build` + análise; identificação de chunks PDF duplicados; revisão de queries em rotas grandes (FRMS, SGSO, dashboard); documentar achados sem corrigir.
+- **Modelo recomendado:** GPT-5.4 Alta.
+- **Deploy necessário?:** Não (auditoria read-only).
+- **Migration necessária?:** Não.
+- **Risco:** Baixo (documental).
+
+---
+
+## Backlog (longo prazo)
+
+### Sprint U — Repository Pattern Expansão
+- **Objetivo:** Extrair queries read-only de `lms-cursos` e `qualificações` dashboard.
+- **Modelo:** GPT-5.4 Alta.
+
+### Sprint V — R2 Metadata Novos Uploads
+- **Objetivo:** Adicionar `empresa_id` como custom metadata em novos uploads R2.
+- **Dependência:** Correções de tenant isolation já concluídas.
+- **Modelo:** GPT-5.4 Alta.
+
+### Sprint W — Cloudflare Queues Dry-Run
+- **Objetivo:** Implementar fila de domain_events substituindo D1.
+- **Modelo:** GPT-5.5 Alta.
+
+### Sprint X — Observabilidade Multiempresa
+- **Objetivo:** Sinais por tenant, request correlation, falhas por módulo.
+- **Modelo:** GPT-5.5 Alta.
+
+### Sprint Y — Refatoração Estrutural Ampla
+- **Objetivo:** Quebrar arquivos gigantes (FRMS, SGSO, dashboard).
+- **Modelo:** GPT-5.4 Alta.
+
+---
+
+## Não planejado (gatilho futuro)
+
+### Supabase Cutover
+- **Decisão:** NÃO MIGRAR AGORA.
+- **Gatilhos:** D1 80% limite, incidente tenant isolation, ou 2027-06-02.
+- **Modelo:** GPT-5.5 Altissimo.
+
+---
+
+## Resumo da sequência
+
+| # | Sprint | Prioridade | Modelo | Deploy | Migration |
+|---|---|---|---|---|---|
+| M | Data Quality + Smoke | Imediata | GPT-5.4 | Não | Não |
+| N | Blindagem Operacional P2 | Imediata | GPT-5.4 | Não | Não |
+| O | Audit Trail/LGPD v2 Design | Curto prazo | GPT-5.5 | Não | Futura |
+| P | RBAC/Suporte v2 Design | Curto prazo | GPT-5.5 | Não | Futura |
+| Q | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
+| R | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |
+| S | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
+| T | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
+| U | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
+| V | R2 Metadata Uploads | Longo prazo | GPT-5.4 | Sim | Não |
+| W | Cloudflare Queues | Longo prazo | GPT-5.5 | Sim | Não |
+| X | Observabilidade | Longo prazo | GPT-5.5 | Sim | Possível |
+| Y | Refatoração Estrutural | Longo prazo | GPT-5.4 | Sim | Não |
+
+---
+
+**Fim do plano de sprints.** Documento atualizado em 2026-06-02 com base na matriz consolidada de 48 achados do Sprint Z.
