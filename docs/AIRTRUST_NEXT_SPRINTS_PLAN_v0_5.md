@@ -2,8 +2,8 @@
 
 Data: 2026-06-02
 Branch auditada: `main`
-HEAD auditado: `300ecb9b036d153c0da5fa654e7083f09fee412b`
-Modo: planejamento de sprints amplos atualizado apos Sprint A.
+HEAD auditado: `871a140e47ec8eb53a21b169956c7fdd5d149179`
+Modo: planejamento de sprints amplos atualizado apos Sprint I (Supabase Feasibility Audit).
 
 ## Sprint A - RBAC/Suporte
 
@@ -90,11 +90,26 @@ Modo: planejamento de sprints amplos atualizado apos Sprint A.
 
 ## Sprint I - Supabase feasibility audit
 
+- **Status: CONCLUIDO em 2026-06-02.**
 - Objetivo: avaliar o que pode ser reaproveitado e o que deve ficar fora de uma eventual migracao futura.
 - Escopo: auth, tenant, storage, audit trail, FRMS, escalas e modulos com DDL residual.
 - Fora do escopo: iniciar migracao, criar schema paralelo, mover dados reais.
-- Arquivos provaveis: docs de arquitetura, inventario de schema, planos de rollout futuro.
+- Arquivos produzidos: `docs/AIRTRUST_SUPABASE_FEASIBILITY_AUDIT_v0_5.md`, `docs/AIRTRUST_SUPABASE_MIGRATION_DECISION_RECORD_v0_5.md`, `docs/AIRTRUST_SUPABASE_RISK_MATRIX_v0_5.md`.
 - Validacoes: mapa de reaproveitamento, riscos de cutover, ordem segura por dominio.
-- Modelo recomendado: GPT-5.5 Altissimo.
+- Modelo utilizado: Claude Code DeepSeek v4 Pro + exploracao automatizada do codebase.
 - Risco: alto se virar escopo de implementacao.
-- Criterio de aceite: existe apenas um feasibility audit claro, sem trabalho de migracao prematuro.
+- **Decisao: NAO MIGRAR AGORA / HIBRIDO FUTURO.** Workers + D1 + R2 mantidos. Auth custom mantido. Supabase Postgres como caminho futuro.
+- **Acoes preparatorias imediatas:** Repository pattern, auditoria tenant isolation, Cloudflare Queues (domain_events).
+- **Gatilhos de reavaliacao:** D1 80% limite, incidente tenant isolation, ou 2027-06-02.
+- Criterio de aceite: existe apenas um feasibility audit claro, sem trabalho de migracao prematuro. ✅ CONCLUIDO.
+
+## Sprint J - Supabase Preparation (recomendado como proximo)
+
+- Objetivo: executar acoes preparatorias identificadas no Sprint I sem iniciar migracao.
+- Escopo: Repository pattern em 1-2 modulos piloto adicionais, auditoria de tenant isolation (fechar ~5 gaps em endpoints de documentos), migrar `domain_events` para Cloudflare Queues, adicionar `empresa_id` como metadata R2.
+- Fora do escopo: criar projeto Supabase, migrar schema, alterar auth, alterar storage.
+- Modelo recomendado: GPT-5.4 Alta.
+- Deploy necessario?: sim, quando implementado e testado.
+- Migration necessaria?: nao (Cloudflare Queues e configuracao, sem schema novo).
+- Risco: medio (Queues e mexe em storage metadata, mas sem alteracao de dados).
+- Criterio de aceite: 1-2 repositorios criados e testados, gaps de tenant isolation fechados, domain_events operando em Queues, metadata R2 com empresa_id.
