@@ -2,7 +2,7 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `78509f9ea40b2bf0a50d9be0f1923f1ea66f5bdd`
+**HEAD base:** `87a5b2b3e107b72a64fb9d79080ea21068145816`
 **Modo:** Readiness de ativação local/staging do Audit v2 sem ativação em produção, sem D1 remoto e sem alteração de dados reais.
 
 ## 1. Estado atual
@@ -12,6 +12,7 @@
 - O dual-write mínimo existe apenas no helper de cursos LMS.
 - `AUDIT_EVENTS_V2_DUAL_WRITE` continua opt-in e desabilitada por padrão.
 - Produção segue sem schema aplicado, sem flag ativa e sem backfill.
+- A execução local aprovada com `AIRTRUST_ALLOW_AUDIT_V2_LOCAL_CHECK=YES` e `AIRTRUST_AUDIT_V2_TARGET=local` passou.
 
 ## 2. Pré-condições para ativar Audit v2
 
@@ -35,6 +36,17 @@
 - validar primeiro o ponto LMS já coberto por teste;
 - não ampliar para auth, assets, documentos, exports, FRMS ou suporte antes da paridade mínima.
 
+## 4.1 Resultado da validação local
+
+- activation check local: `PASS`
+- dual-write local check: `PASS`
+- schema local e índices v2: validados
+- writer legado: preservado
+- writer v2: chamado sob flag local
+- falha do writer v2: isolada do fluxo principal
+- produção: não tocada
+- D1 remoto: não executado
+
 ## 5. Pré-condições de rollback
 
 - desligar a flag ao primeiro sinal de divergência;
@@ -49,6 +61,7 @@
 - `audit-v2-local-activation-check.sh` e `audit-v2-dual-write-local-check.sh` com `PASS`;
 - paridade mínima entre legado e v2 no fluxo LMS;
 - falha do writer v2 confirmadamente isolada do fluxo principal.
+- decisão operacional desta fase: `READY_FOR_STAGING_FLAG_TEST`.
 
 ## 7. Critérios para futura produção
 

@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-03
 **Branch:** `main`
-**HEAD base:** `78509f9ea40b2bf0a50d9be0f1923f1ea66f5bdd`
-**Modo:** Matriz atualizada após o Sprint T de readiness local/staging do Audit v2. Sem migration remota, backfill ou alteração manual de dados reais.
+**HEAD base:** `87a5b2b3e107b72a64fb9d79080ea21068145816`
+**Modo:** Matriz atualizada após o Sprint T.1 de execução local aprovada do Audit v2. Sem migration remota, backfill ou alteração manual de dados reais.
 **Sprints de origem consolidados:** A (RBAC), B (Audit Trail/LGPD), C (Status Enum), D (Testes Beta), E (DDL), F (Data Quality), G (Runner), H (Repository Dashboard), I (Supabase Feasibility), J (Supabase Preparation), K (Tenant Isolation Docs), K.1 (Tenant Residuals), L (LMS Reports Integration), Reauditoria Opus v2, General Audit Opus.
 
 ---
@@ -12,7 +12,7 @@
 
 Este documento consolida **todos os achados de auditoria** do AirTrust identificados entre 2026-05 e 2026-06, cobrindo 12 sprints e 2 auditorias gerais independentes (Opus). O objetivo é fornecer uma matriz única que permita leitura rápida do estado de cada achado: o que foi corrigido, o que permanece aberto, e o que exige condições especiais (migration, staging, GPT-5.5) para ser tratado.
 
-**Estado geral do AirTrust em 2026-06-03 após o Sprint T (Audit v2 activation readiness/local-staging validation):**
+**Estado geral do AirTrust em 2026-06-03 após o Sprint T.1 (Audit v2 local activation run):**
 
 - **Nenhum P0 ativo.** O único P0 da auditoria original (reset admin cross-tenant) foi mitigado e testado.
 - **Nenhum P1 de código ativo.** FRMS fail-open, `escala_alocacoes` sem `empresa_id`, e scripts destrutivos foram mitigados — com residuais P2 operacionais e P3 estruturais.
@@ -20,7 +20,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 - **Pronto para cliente externo amplo:** Não ainda. Bloqueadores: dual-write v2 ainda não ativado/validado em ambiente aprovado, RBAC/suporte v2 ainda nao implementado, data quality nao executado operacionalmente, cobertura de testes beta insuficiente.
 - **Pronto para 5+ empresas:** Não. Requer remoção de `userId===1`, DDL runtime residual, status enum central, e observabilidade multiempresa.
 
-**Status consolidado:** O Sprint S criou `recordAuditEventV2()` e integrou dual-write mínimo em cursos LMS atrás de flag, preservando `logAudit()` legado. O Sprint T adicionou readiness local/staging, runners seguros e evidência sanitizada sem ativar produção. Os itens de Audit/LGPD permanecem em `DUAL_WRITE_PARTIAL` / `ACTIVATION_READY_PARTIAL`.
+**Status consolidado:** O Sprint S criou `recordAuditEventV2()` e integrou dual-write mínimo em cursos LMS atrás de flag, preservando `logAudit()` legado. O Sprint T adicionou readiness local/staging e o Sprint T.1 executou a validação local aprovada com `PASS` nos dois runners, sem ativar produção. Os itens de Audit/LGPD avançaram para `READY_FOR_STAGING_FLAG_TEST`.
 
 ---
 
@@ -34,6 +34,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | SCHEMA_READY | Schema aditivo e testes locais versionados; ainda sem aplicação em produção ou integração runtime |
 | DUAL_WRITE_PARTIAL | Writer canônico e integração mínima versionados; ativação/paridade operacional e cobertura ampla ainda pendentes |
 | ACTIVATION_READY_PARTIAL | Readiness local/staging documentada e runners seguros prontos; execução aprovada ainda pendente |
+| READY_FOR_STAGING_FLAG_TEST | Validação local aprovada concluída; próximo passo é staging aprovado com schema/flag controlados |
 | OPEN | Ainda não corrigido |
 | DEFERRED | Conscientemente adiado (ex: Supabase cutover) |
 | BACKLOG | Futuro estratégico, sem urgência imediata |
@@ -82,8 +83,8 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | LGPD-01 | AUDIT_LGPD | `registrarAuditoria()` grava em `auditoria` sem `empresa_id`, sem `request_id` e sem sanitização | S1 | DUAL_WRITE_PARTIAL | Camada `lib/audit`, schema v2 e writer canônico criados; writers legados preservados | `300ecb9`, Sprint R, Sprint S | Sim para runtime legado; v2 depende de flag/schema | Testes de sanitização, schema e `audit-events-v2-writer.test.ts` | Call sites legados fora do escopo ainda podem gravar payload amplo | Ativar/paridade e ampliar dual-write | GPT-5.5 Altissimo |
 | LGPD-02 | AUDIT_LGPD | `logAudit()` usa `audit_logs` mas sem `empresa_id`, `usuario_id` canônico nem `request_id` | S2 | DUAL_WRITE_PARTIAL | Cursos LMS mantêm `logAudit()` e passam contexto dedicado ao writer v2 sem copiar payload legado | `300ecb9`, Sprint R, Sprint S | V2 desabilitado por padrão | Testes de request correlation, schema, writer e dual-write LMS | Ativação operacional e cobertura além de LMS ainda pendentes | Ativar/paridade e ampliar dual-write | GPT-5.5 Altissimo |
-| LGPD-03 | AUDIT_LGPD | `support_reason` ausente em todas as tabelas de auditoria | S2 | ACTIVATION_READY_PARTIAL | `support_reason` está no schema, o writer recusa `support_mode > 0` sem justificativa e a readiness local foi documentada | Sprint R, Sprint S, Sprint T | Não aplicado em produção | `audit-events-v2-writer.test.ts`, readiness docs e rollback plan | Eventos reais de suporte e enforcement continuam pendentes | Aplicar schema; depois suporte | GPT-5.5 Altissimo |
-| LGPD-04 | AUDIT_LGPD | Retenção/audit trail v2 pendente (política de purge, índices, compliance) | S2 | ACTIVATION_READY_PARTIAL | Writer normaliza `retention_class`, metadata por allowlist e falhas controladas; Sprint T confirmou flag default off e runners locais seguros | Sprint R, Sprint S, Sprint T | V2 desabilitado por padrão | Schema tests, writer tests, readiness docs, migration plan e rollback plan | Validacao juridica, ativação, rollout e purge continuam abertos | Ativar/paridade e retenção operacional | GPT-5.5 Altissimo |
+| LGPD-03 | AUDIT_LGPD | `support_reason` ausente em todas as tabelas de auditoria | S2 | READY_FOR_STAGING_FLAG_TEST | `support_reason` está no schema, o writer recusa `support_mode > 0` sem justificativa e a validação local aprovada passou | Sprint R, Sprint S, Sprint T, Sprint T.1 | Não aplicado em produção | `audit-events-v2-writer.test.ts`, runners locais PASS, readiness docs e rollback plan | Eventos reais de suporte e enforcement continuam pendentes | Aplicar schema em staging; depois suporte | GPT-5.5 Altissimo |
+| LGPD-04 | AUDIT_LGPD | Retenção/audit trail v2 pendente (política de purge, índices, compliance) | S2 | READY_FOR_STAGING_FLAG_TEST | Writer normaliza `retention_class`, metadata por allowlist e falhas controladas; T/T.1 confirmaram flag default off e validação local PASS | Sprint R, Sprint S, Sprint T, Sprint T.1 | V2 desabilitado por padrão | Schema tests, writer tests, runners locais PASS, readiness docs, migration plan e rollback plan | Validacao juridica, ativação, rollout e purge continuam abertos | Aplicar schema em staging e validar paridade | GPT-5.5 Altissimo |
 
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -186,8 +187,8 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | RBAC-04 | RBAC_SUPORTE | Integracao RBAC/audit desenhada e readiness fechada com ordem audit-first | Implementar role persistida, writer, enforcement e revisoes operacionais |
 | LGPD-01 | AUDIT_LGPD | Writer v2 e dual-write mínimo existem, mas writers legados continuam ativos | Ativar/paridade em ambiente aprovado e ampliar cobertura |
 | LGPD-02 | AUDIT_LGPD | Cursos LMS passam colunas dedicadas ao writer v2 sem remover `audit_logs` | Aplicar schema, ativar flag e expandir integração |
-| LGPD-03 | AUDIT_LGPD | Writer exige `support_reason` para suporte e readiness local foi preparada | Aplicar schema e integrar eventos reais de suporte/sensiveis |
-| LGPD-04 | AUDIT_LGPD | Schema, writer, índices mínimos, taxonomia, readiness local e rollback concluídos | Validação jurídica, ativação, rollout e purge policy operacional |
+| LGPD-03 | AUDIT_LGPD | Writer exige `support_reason` para suporte e a validação local foi aprovada | Aplicar schema e integrar eventos reais de suporte/sensiveis |
+| LGPD-04 | AUDIT_LGPD | Schema, writer, índices mínimos, taxonomia, readiness local e rollback concluídos | Validação jurídica, staging flag test, rollout e purge policy operacional |
 | STATUS-01 | STATUS_ENUM | Status central aplicado em camada crítica mas não em cron/alertas/EVD | Expandir helpers para caminhos batch e operacionais |
 | DQ-01 | DATA_QUALITY | Runner funcional mas com 5 checks SKIPPED | Executar em ambiente com schema completo |
 | OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado executado com PASS=11 mas empresa esperada não validada | Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` e reexecutar |
@@ -293,7 +294,8 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 3. **Sprint R - Audit Trail v2 schema backward-compatible** ✅ — GPT-5.5 Altissimo
 4. **Sprint S - Canonical writer com dual-write mínimo** ✅ — GPT-5.5 Altissimo
 5. **Sprint T - Activation readiness / local-staging validation** ✅ — GPT-5.5 Altissimo
-6. **Próxima fase - aplicar schema em ambiente aprovado, ativar flag e validar paridade** — GPT-5.5 Altissimo
+6. **Sprint T.1 - Local activation run** ✅ — GPT-5.4 Alta
+7. **Próxima fase - staging flag test com schema aplicado e rollback por flag** — GPT-5.5 Altissimo
 6. **Cobertura beta (EVD + complementos)** — GPT-5.4 Alta
 7. **DDL runtime residual design-only** (planejar migrations sem executar) — GPT-5.5 Altissimo
 8. **R2 metadata para novos uploads** (defense-in-depth) — GPT-5.4 Alta
