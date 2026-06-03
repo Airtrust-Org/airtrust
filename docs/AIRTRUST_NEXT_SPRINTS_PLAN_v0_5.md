@@ -256,7 +256,25 @@
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não nesta fase.
 - **Risco:** Baixo nesta fase.
-- **Próxima fase:** Sprint X.2 — operador define env vars e reexecuta a Sprint X.1. Se target=staging/production, será necessário estender o script com runner remoto read-only (atualmente o script só implementa runner local; staging/production caem em `SKIPPED_NO_APPROVED_SCHEMA_PROBE_RUNNER`).
+- **Próxima fase:** Sprint X.2 — estender o script com runner remoto read-only.
+
+### Sprint X.2 — Runner Remoto Read-only para Schema Probe ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03 (HEAD `d775bea`).
+- **Objetivo:** estender o script de probe com runner remoto read-only para staging e production, usando `wrangler d1 execute --remote --json --command="PRAGMA ..."`.
+- **Entregue:** runner remoto em `scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh` com:
+  - Suporte a 3 targets: `local` (sqlite3), `staging` (wrangler remote), `production` (wrangler remote).
+  - Validação SQL reforçada: bloqueio de `SELECT *`, `FROM` em tabelas de usuário, DDL, DML.
+  - 3 PRAGMA validados (table_info, index_list, index_info).
+  - Classificação de erro remoto: auth, network, generic.
+  - Output sanitizado: apenas yes/no estruturais, sem dados de linha, sem PII.
+- **Testes:** 5 cenários de autorização testados. Guardas de validação: 3 PRAGMA aceitos, 8 padrões DDL/DML rejeitados.
+- **Resultado:** local `PASS`. Staging autorizado: `FAIL: remote_wrangler_error` (esperado — sem `wrangler login`).
+- **Decisão:** R03 permanece `BLOCKED_SCHEMA_PROBE_REQUIRED`. Runner completo e fail-closed.
+- **Bloqueio:** duplo — (a) env vars de autorização não definidas, (b) `wrangler login` necessário para `d1 execute --remote`.
+- **Deploy necessário?:** Não.
+- **Migration necessária?:** Não nesta fase.
+- **Risco:** Baixo nesta fase.
+- **Próxima fase:** Sprint X.3 — operador faz `wrangler login`, define env vars, executa o probe remoto.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.

@@ -76,6 +76,7 @@ readonly_remote_files=(
   "scripts/test-performance-diagnostic.sh"
   "scripts/validate-data-consistency.sh"
   "scripts/validate-schema-parity.py"
+  "scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh"
 )
 
 # Scripts com proteção própria forte (env var obrigatória + confirmação)
