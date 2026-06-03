@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-02
 **Branch:** `main`
-**HEAD:** `59e601f0a25cbbbe7e842dd83844af4ce91279ab`
-**Modo:** Roadmap técnico-operacional atualizado após consolidação final do Sprint Z. Sem migration, sem dados reais, sem deploy.
+**HEAD:** `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
+**Modo:** Roadmap técnico-operacional atualizado após Sprint M (Data Quality + Smoke). Sem migration, sem dados reais, sem deploy.
 
 ---
 
@@ -11,32 +11,34 @@
 
 Este roadmap reflete o estado real após 12 sprints de auditoria e remediação (A até L + reauditorias). A ordem foi revisada com base na matriz consolidada de 48 achados.
 
-**Estado atual:** 21 RESOLVED, 8 PARTIAL, 12 OPEN, 5 DEFERRED, 2 BACKLOG.
+**Estado atual:** 22 RESOLVED, 9 PARTIAL, 10 OPEN, 5 DEFERRED, 2 BACKLOG.
 **Nenhum P0/P1 ativo em código de produção.**
 
 ---
 
 ## Agora, antes de qualquer novo cliente externo
 
-### Item 1 — Smoke autenticado funcional
+### Item 1 — Smoke autenticado funcional (Sprint M executado)
 
-- **Status:** Pendente por credencial.
-- **Objetivo:** Executar validação funcional ponta-a-ponta com token dedicado read-only.
-- **Risco:** Sem validação, não há confirmação de que o tenant funciona corretamente.
-- **Escopo:** Fornecer `AIRTRUST_AUTH_TOKEN`/`AIRTRUST_COOKIE` para conta de serviço; rodar `smoke-authenticated-operational.sh` uma vez; documentar resultado.
-- **Modelo recomendado:** GPT-5.4 Baixa — execução de script existente.
+- **Status:** PARTIAL. Smoke autenticado executado (Z.1: PASS=11). Empresa esperada: SKIPPED (variáveis não configuradas no Sprint M).
+- **Objetivo:** Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `AIRTRUST_EXPECTED_EMPRESA_CODIGO` e reexecutar `npm run smoke:auth:login` para validar empresa esperada.
+- **Risco:** Sem validação de empresa esperada, não há confirmação de que o tenant correto foi acessado.
+- **Escopo:** Operador configura variável de empresa esperada → executa login interativo → documenta resultado sanitizado.
+- **Modelo recomendado:** GPT-5.4 Baixa — execução de script existente + configuração de env var.
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não.
+- **Evidência Sprint M:** Smoke público PASS=3. Smoke autenticado SKIPPED (`AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO` não configurados).
 
-### Item 2 — Data Quality operacional completo
+### Item 2 — Data Quality operacional completo (Sprint M executado)
 
-- **Status:** Parcial (5 PASS, 4 WARN, 5 SKIPPED).
+- **Status:** PARTIAL. Runner local executado no Sprint M: PASS=5, WARN=4, FAIL=0, SKIPPED=5.
 - **Objetivo:** Executar todos os checks em ambiente staging com schema completo para zerar SKIPPED.
-- **Risco:** Onboarding externo com dados inconsistentes ou métricas erradas.
+- **Risco:** Onboarding externo com dados inconsistentes ou métricas erradas. 5 checks SKIPPED por schema local incompleto — staging necessário.
 - **Escopo:** Apontar staging aprovado com schema completo; executar runner; classificar blocker/warn/info; registrar sumário sem PII.
 - **Modelo recomendado:** GPT-5.4 Alta.
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não.
+- **Evidência Sprint M:** 15 checks executados, 0 FAIL. 5 SKIPPED por ausência de colunas/tabelas no snapshot local (não são erros de SQL).
 
 ### Item 3 — Blindagem operacional de scripts legados (P2)
 

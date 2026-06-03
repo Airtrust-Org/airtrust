@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-02
 **Branch:** `main`
-**HEAD:** `59e601f0a25cbbbe7e842dd83844af4ce91279ab`
-**Modo:** Planejamento de sprints atualizado após consolidação final do Sprint Z. Baseado na matriz de 48 achados.
+**HEAD:** `1b496afc1f7e9e1e001c5d734710dbdaf94f22d8`
+**Modo:** Planejamento de sprints atualizado após Sprint M (Data Quality + Smoke). Baseado na matriz de 48 achados.
 
 ---
 
@@ -93,19 +93,30 @@
 - **Entregue:** `lmsRelatoriosRepository` integrado em 3 rotas LMS; contrato preservado; testes de contrato.
 - **APP_VERSION:** `2026-06-03T01:04:30Z-59e601f`.
 
+### Sprint M — Data Quality + Smoke com Empresa Esperada
+- **Status:** CONCLUÍDO (parcial — executado, pendências documentadas).
+- **Commit principal:** `1b496af`
+- **Deploy:** Não (documental/operacional).
+- **Entregue:** Data Quality local executado (PASS=5, WARN=4, FAIL=0, SKIPPED=5). Smoke público baseline PASS=3. Evidências atualizadas.
+- **Pendente:** Smoke com empresa esperada — SKIPPED (`AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO` não configurados). Data Quality staging com schema completo — SKIPPED (target staging não configurado).
+- **Documentos:** `AIRTRUST_AUTHENTICATED_SMOKE_EVIDENCE_20260602.md`, `AIRTRUST_DATA_QUALITY_EVIDENCE_20260602.md`.
+
+### Sprint Z.1 — Audit Matrix Consistency Review
+- **Status:** CONCLUÍDO.
+- **Commit principal:** `1b496af`
+- **Deploy:** Não (documental).
+- **Entregue:** Matriz reconciliada — 2 reclassificações (OPS-03→RESOLVED, OPS-05→PARTIAL). Documento de revisão de consistência. Roadmap e planos atualizados.
+- **Pendente:** Nenhum.
+
 ---
 
 ## Próximos sprints (planejados)
 
-### Sprint M — Data Quality Completo + Smoke Empresa Esperada
-- **Prioridade:** Imediata.
-- **Objetivo:** Zerar checks SKIPPED executando em staging com schema completo; configurar `AIRTRUST_EXPECTED_EMPRESA_ID` e reexecutar smoke para fechar validação pendente.
-- **Escopo:** Apontar staging aprovado → executar runner → classificar resultados → documentar. ~~Fornecer credencial → executar smoke~~ (smoke já executado com PASS=11). Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` → reexecutar smoke → documentar empresa validada.
-- **Modelo recomendado:** GPT-5.4 Alta.
-- **Deploy necessário?:** Não.
-- **Migration necessária?:** Não.
-- **Risco:** Baixo (read-only, scripts existentes).
-- **Critério de aceite:** 0 SKIPPED; smoke autenticado com empresa esperada validada PASS documentado.
+### Sprint M — ~~Data Quality Completo + Smoke Empresa Esperada~~ ✅ EXECUTADO (parcial)
+
+- **Status:** Executado em 2026-06-02. Data Quality local: PASS=5, WARN=4, FAIL=0, SKIPPED=5. Smoke público: PASS=3. Smoke empresa esperada: SKIPPED (env var não configurada).
+- **Pendências:** (1) Configurar `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO` e reexecutar smoke. (2) Executar Data Quality em staging com schema completo para zerar SKIPPED.
+- **Commit:** `1b496af`
 
 ### Sprint N — Blindagem Operacional (P2 residuais)
 - **Prioridade:** Imediata.
