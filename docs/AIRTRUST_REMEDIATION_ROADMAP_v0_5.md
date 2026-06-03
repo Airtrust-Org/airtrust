@@ -40,12 +40,13 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 - **Migration necessária?:** Não.
 - **Evidência Sprint M:** 15 checks executados, 0 FAIL. 5 SKIPPED por ausência de colunas/tabelas no snapshot local (não são erros de SQL).
 
-### Item 3 — Blindagem operacional de scripts legados (P2)
+### Item 3 — Blindagem operacional de scripts legados (P2) ✅ RESOLVIDO
 
-- **Status:** Parcial (wrapper existe, scripts legados sem proteção).
+- **Status:** Resolvido (confirmado em 2026-06-02, Sprint N).
 - **Objetivo:** Mover scripts destrutivos para o wrapper seguro ou para `scripts/legacy/`.
-- **Risco:** Execução acidental de DDL/DML destrutivo em produção.
-- **Escopo:** `purge-qualificacoes-cascade.sh`, `aplicar-correcoes-db.sh`, `apply-seed-data.sh`, `cleanup-backup-tables.sh` e similares.
+- **Risco:** ~~Execução acidental de DDL/DML destrutivo em produção.~~ Mitigado.
+- **Escopo:** 12 scripts bloqueados com banner+exit. 22 scripts read-only na allowlist. Guard reforçado com 5 checks. Inventário completo em `AIRTRUST_D1_SCRIPT_HARDENING_AUDIT_v0_5.md`.
+- **Evidência:** `ops:guard` PASS. Nenhum `DANGEROUS_DIRECT` executável fora do wrapper/guard.
 - **Modelo recomendado:** GPT-5.4 Média — scripts shell, sem runtime.
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não.
@@ -187,7 +188,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 |---|---|---|---|---|
 | 1 | Smoke autenticado funcional | Imediata | Cliente externo | GPT-5.4 Baixa |
 | 2 | Data Quality completo (staging) | Imediata | GO pleno | GPT-5.4 Alta |
-| 3 | Blindar scripts legados (P2) | Imediata | Segurança operacional | GPT-5.4 Média |
+| 3 | Blindar scripts legados (P2) ✅ RESOLVIDO | — | — | — |
 | 4 | ~~Fechar dirty-deploy residual (P2)~~ ✅ RESOLVIDO | — | — | — |
 | 5 | RBAC/Suporte v2 design | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
 | 6 | Audit Trail/LGPD v2 design | Curto prazo | Compliance | GPT-5.5 Alta |

@@ -103,7 +103,10 @@ bash scripts/audit-dangerous-ops.sh
 O guard:
 
 - falha se encontrar `--commit-dirty=true`;
-- falha se encontrar `wrangler d1 execute --remote` fora do wrapper seguro ou da allowlist explícita de leitura/diagnóstico;
+- avisa se encontrar `git add .` ou `git add -A` em scripts operacionais;
+- falha se encontrar `wrangler d1 execute --remote` (literal ou via `${WRANGLER}`) fora do wrapper seguro ou da allowlist explícita de leitura/diagnóstico;
+- avisa se encontrar DDL/DML colocado com `--remote` em scripts da allowlist;
+- avisa se scripts em `scripts/legacy/` têm `wrangler d1 execute --remote` sem banner de proteção;
 - não executa deploy;
 - não executa D1 remoto;
 - imprime as ocorrências que causam falha.
