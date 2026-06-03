@@ -2,8 +2,8 @@
 
 **Data:** 2026-06-02
 **Branch:** `main`
-**HEAD:** `c3328b59ab4d683d94a7fcbb4cfb30ceec77461f`
-**Modo:** Roadmap técnico-operacional atualizado após Sprint P (RBAC/Suporte v2 design). Sem migration, sem dados reais, sem deploy.
+**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
+**Modo:** Roadmap técnico-operacional atualizado após Sprint Q (RBAC + Audit Trail v2 implementation readiness gate). Sem migration, sem dados reais, sem deploy.
 
 ---
 
@@ -11,7 +11,7 @@
 
 Este roadmap reflete o estado real após 12 sprints de auditoria e remediação (A até L + reauditorias). A ordem foi revisada com base na matriz consolidada de 48 achados.
 
-**Estado atual:** sem P0/P1 ativos em código de produção; itens de Audit Trail/LGPD v2 e RBAC/Suporte v2 avançaram de backlog puramente aberto para design documental concluído, ainda sem implementação.
+**Estado atual:** sem P0/P1 ativos em código de produção; itens de Audit Trail/LGPD v2 e RBAC/Suporte v2 avançaram de backlog puramente aberto para implementation readiness documental concluída, ainda sem implementação.
 **Nenhum P0/P1 ativo em código de produção.**
 
 ---
@@ -62,23 +62,23 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ## Antes de 2 empresas com cliente usando
 
-### Item 5 — RBAC de plataforma e suporte (v2 design) ✅ DESIGN CONCLUÍDO
+### Item 5 — RBAC de plataforma e suporte (v2 design + readiness) ✅ PRONTO PARA IMPLEMENTAÇÃO
 
-- **Status:** Design concluído documentalmente no Sprint P. Implementação, migration e enforcement continuam pendentes.
-- **Objetivo:** Converter o design produzido no Sprint P em sprint autorizada de implementação com migration, dual-read, rollback e remoção segura do operador legado.
+- **Status:** Design concluído no Sprint P e readiness gate concluído no Sprint Q. Implementação, migration e enforcement continuam pendentes.
+- **Objetivo:** Entrar depois do foundation do Audit Trail v2, com platform roles schema, shadow dual-read, rollback e remoção segura do operador legado.
 - **Risco:** Sem RBAC formal, multiempresa opera sem governança adequada.
-- **Escopo entregue no Sprint P:** modelo de papéis de plataforma; `support_read_only` tenant-scoped e fail-closed; separação entre papel de plataforma e papel de tenant; integração RBAC/audit; plano conceitual de migração do `userId===1`.
+- **Escopo consolidado até o Sprint Q:** modelo de papéis de plataforma; `support_read_only` tenant-scoped e fail-closed; separação entre papel de plataforma e papel de tenant; integração RBAC/audit; phased plan, test matrix e rollback plan.
 - **Modelo recomendado:** GPT-5.5 Altissimo — schema sensível de auth.
 - **Deploy necessário?:** Sim, quando implementado.
 - **Migration necessária?:** Sim, na fase de implementação.
 - **Documentos de referência:** `AIRTRUST_RBAC_SUPPORT_V2_DESIGN_v0_5.md`, `AIRTRUST_PLATFORM_ROLES_MODEL_v0_5.md`, `AIRTRUST_SUPPORT_READ_ONLY_MODEL_v0_5.md`, `AIRTRUST_RBAC_V2_MIGRATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_INTEGRATION_PLAN_v0_5.md`.
 
-### Item 6 — Audit Trail/LGPD v2 design
+### Item 6 — Audit Trail/LGPD v2 design + readiness ✅ PRIMEIRA IMPLEMENTAÇÃO RECOMENDADA
 
-- **Status:** Design concluído nesta fase documental. Implementação/migration continuam abertas.
-- **Objetivo:** Converter o design produzido no Sprint O em sprint autorizada de implementação com migration, rollout e rollback seguros.
+- **Status:** Design concluído no Sprint O e readiness gate concluído no Sprint Q. Implementação/migration continuam abertas.
+- **Objetivo:** Começar por esta trilha na primeira sprint técnica de implementação, com schema aditivo e canonical writer antes de qualquer enforcement de suporte.
 - **Risco:** Compliance e LGPD continuam parcialmente cobertos enquanto o runtime persistir em três writers não padronizados.
-- **Escopo entregue no Sprint O:** contrato conceitual v2, campos obrigatórios/proibidos, taxonomia de eventos, modelo auditável de suporte, retenção draft e plano de migration futura.
+- **Escopo consolidado até o Sprint Q:** contrato conceitual v2, campos obrigatórios/proibidos, taxonomia de eventos, modelo auditável de suporte, retenção draft, phased plan e rollback plan.
 - **Modelo recomendado:** GPT-5.5 Alta.
 - **Deploy necessário?:** Sim, quando implementado.
 - **Migration necessária?:** Sim, na fase de implementação.
@@ -190,8 +190,8 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 2 | Data Quality completo (staging) | Imediata | GO pleno | GPT-5.4 Alta |
 | 3 | Blindar scripts legados (P2) ✅ RESOLVIDO | — | — | — |
 | 4 | ~~Fechar dirty-deploy residual (P2)~~ ✅ RESOLVIDO | — | — | — |
-| 5 | Implementação planejada do RBAC/Suporte v2 | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
-| 6 | Implementação planejada do Audit Trail/LGPD v2 | Curto prazo | Compliance | GPT-5.5 Altissimo |
+| 5 | Sprint R - Audit Trail v2 schema + canonical writer foundation | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
+| 6 | Sprint S - Platform roles schema + RBAC dual-read foundation | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
 | 7 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
 | 8 | DDL runtime residual design | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
 | 9 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |

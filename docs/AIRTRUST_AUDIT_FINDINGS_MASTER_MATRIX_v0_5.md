@@ -2,7 +2,7 @@
 
 **Data:** 2026-06-02
 **Branch:** `main`
-**HEAD:** `c3328b59ab4d683d94a7fcbb4cfb30ceec77461f`
+**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
 **Modo:** Documental/read-only. Nenhum código alterado, nenhum deploy, nenhuma migration, nenhum acesso a banco remoto.
 **Sprints de origem consolidados:** A (RBAC), B (Audit Trail/LGPD), C (Status Enum), D (Testes Beta), E (DDL), F (Data Quality), G (Runner), H (Repository Dashboard), I (Supabase Feasibility), J (Supabase Preparation), K (Tenant Isolation Docs), K.1 (Tenant Residuals), L (LMS Reports Integration), Reauditoria Opus v2, General Audit Opus.
 
@@ -12,15 +12,15 @@
 
 Este documento consolida **todos os achados de auditoria** do AirTrust identificados entre 2026-05 e 2026-06, cobrindo 12 sprints e 2 auditorias gerais independentes (Opus). O objetivo é fornecer uma matriz única que permita leitura rápida do estado de cada achado: o que foi corrigido, o que permanece aberto, e o que exige condições especiais (migration, staging, GPT-5.5) para ser tratado.
 
-**Estado geral do AirTrust em 2026-06-02 após o Sprint P (design-only):**
+**Estado geral do AirTrust em 2026-06-02 após o Sprint Q (implementation-readiness-only):**
 
 - **Nenhum P0 ativo.** O único P0 da auditoria original (reset admin cross-tenant) foi mitigado e testado.
 - **Nenhum P1 de código ativo.** FRMS fail-open, `escala_alocacoes` sem `empresa_id`, e scripts destrutivos foram mitigados — com residuais P2 operacionais e P3 estruturais.
 - **Pronto para piloto interno/controlado:** Sim, com condições (CONDITIONAL GO).
-- **Pronto para cliente externo amplo:** Não ainda. Bloqueadores: RBAC/suporte v2 ainda não implementado, audit trail v2 ainda não implementado, data quality não executado operacionalmente, cobertura de testes beta insuficiente.
+- **Pronto para cliente externo amplo:** Não ainda. Bloqueadores: Audit Trail v2 ainda nao implementado, RBAC/suporte v2 ainda nao implementado, data quality nao executado operacionalmente, cobertura de testes beta insuficiente.
 - **Pronto para 5+ empresas:** Não. Requer remoção de `userId===1`, DDL runtime residual, status enum central, e observabilidade multiempresa.
 
-**Status consolidado:** Os Sprints O e P moveram os itens de design `RBAC-02`, `RBAC-03`, `RBAC-04`, `LGPD-03` e `LGPD-04` de estado puramente aberto para estado parcial/documentado. A contagem histórica consolidada permanece dependente da convenção adotada na matriz legacy; usar a tabela detalhada abaixo como fonte primária.
+**Status consolidado:** Os Sprints O, P e Q fecharam design + readiness dos itens `RBAC-02`, `RBAC-03`, `RBAC-04`, `LGPD-03` e `LGPD-04`. Eles continuam sem runtime, mas agora estao em estado `IMPLEMENTATION_READY`, com ordem recomendada de rollout definida: Audit Trail v2 primeiro, RBAC/Suporte v2 depois.
 
 ---
 
@@ -30,6 +30,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 |---|---|
 | RESOLVED | Corrigido, testado e, se runtime, deployado |
 | PARTIAL | Mitigado, mas ainda com dívida residual ou cobertura parcial |
+| IMPLEMENTATION_READY | Design + readiness gate concluídos; pronto para sprint de implementação, sem runtime ainda |
 | OPEN | Ainda não corrigido |
 | DEFERRED | Conscientemente adiado (ex: Supabase cutover) |
 | BACKLOG | Futuro estratégico, sem urgência imediata |
@@ -70,16 +71,16 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | RBAC-01 | RBAC_SUPORTE | `userId === 1` como platform admin implícito em `auth.ts` e `empresas.ts` | S1 | PARTIAL | Centralizado em `middleware/tenant.ts` com helpers nomeados (`isLegacyPlatformAdminUserId`, `isPlatformAdminContext`). Guard arquitetural contra novos atalhos diretos. | `13dd828` | Sim | `no-direct-platform-admin-user-id.test.ts`, `rbac-platform-admin-boundaries.test.ts` | Fallback legado ainda existe; remoção real exige migration com `platform_admin` persistido | Sprint futuro: migration RBAC v2 | GPT-5.5 Altissimo |
-| RBAC-02 | RBAC_SUPORTE | Role `support` read-only por tenant inexistente | S1 | PARTIAL | Sprint P definiu `support_read_only` tenant-scoped, sem mutação, com `support_reason`, fail-closed, expiração e trilha auditável, mas sem ativação em runtime | — | — | Docs `AIRTRUST_RBAC_SUPPORT_V2_DESIGN_v0_5.md`, `AIRTRUST_SUPPORT_READ_ONLY_MODEL_v0_5.md` e `support-role-not-yet-active.test.ts` | Exige persistência de papel, escopo, trilha auditável e política de expiração em runtime | Sprint futuro: implementação RBAC v2 | GPT-5.5 Altissimo |
-| RBAC-03 | RBAC_SUPORTE | `platform_admin` persistido ausente | S1 | PARTIAL | Sprint P definiu o modelo conceitual de `platform_admin`, separação entre papel de plataforma e papel de tenant, e plano de migração do operador legado | — | — | Docs `AIRTRUST_PLATFORM_ROLES_MODEL_v0_5.md` e `AIRTRUST_RBAC_V2_MIGRATION_PLAN_v0_5.md` | Migration necessária para papel, escopo, dual-read e eventos auditados | Sprint futuro: implementação RBAC v2 | GPT-5.5 Altissimo |
-| RBAC-04 | RBAC_SUPORTE | Suporte sem audit trail formal próprio | S2 | PARTIAL | Sprint O documentou `SUPPORT_ACCESS` com `support_mode`, `support_reason`, `target_empresa_id`; Sprint P integrou eventos RBAC/suporte ao plano de auditoria v2 | — | — | Docs `AIRTRUST_SUPPORT_ACCESS_AUDIT_MODEL_v0_5.md`, `AIRTRUST_AUDIT_EVENT_TAXONOMY_v0_5.md` e `AIRTRUST_RBAC_AUDIT_INTEGRATION_PLAN_v0_5.md` | Implementação real, role persistida, writer canônico e enforcement RBAC continuam pendentes | Sprint futuro: RBAC v2 + Audit Trail v2 | GPT-5.5 Altissimo |
+| RBAC-02 | RBAC_SUPORTE | Role `support` read-only por tenant inexistente | S1 | IMPLEMENTATION_READY | Sprint P definiu `support_read_only`; Sprint Q fechou a readiness e a ordem segura: so ativar apos schema + writer canonico de audit e shadow dual-read de RBAC | — | — | Docs `AIRTRUST_RBAC_SUPPORT_V2_DESIGN_v0_5.md`, `AIRTRUST_SUPPORT_READ_ONLY_MODEL_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_IMPLEMENTATION_READINESS_v0_5.md` e `AIRTRUST_RBAC_AUDIT_V2_TEST_MATRIX_v0_5.md` | Exige persistencia de papel, grants, sessao auditavel, enforcement runtime e rollout controlado | Sprint S/T: RBAC dual-read e suporte enforcement | GPT-5.5 Altissimo |
+| RBAC-03 | RBAC_SUPORTE | `platform_admin` persistido ausente | S1 | IMPLEMENTATION_READY | Sprint P definiu o modelo conceitual; Sprint Q definiu que o schema de platform roles entra somente depois do foundation do Audit Trail v2 | — | — | Docs `AIRTRUST_PLATFORM_ROLES_MODEL_v0_5.md`, `AIRTRUST_RBAC_V2_MIGRATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_PHASED_IMPLEMENTATION_PLAN_v0_5.md` e `AIRTRUST_RBAC_AUDIT_V2_ROLLBACK_PLAN_v0_5.md` | Migration de papéis, dual-read, monitoramento de divergencia e rollback ainda pendentes | Sprint S: platform roles + RBAC dual-read | GPT-5.5 Altissimo |
+| RBAC-04 | RBAC_SUPORTE | Suporte sem audit trail formal próprio | S2 | IMPLEMENTATION_READY | Sprint O documentou `SUPPORT_ACCESS`; Sprint P integrou eventos RBAC/audit; Sprint Q definiu rollout audit-first para que suporte ja nasca auditado | — | — | Docs `AIRTRUST_SUPPORT_ACCESS_AUDIT_MODEL_v0_5.md`, `AIRTRUST_AUDIT_EVENT_TAXONOMY_v0_5.md`, `AIRTRUST_RBAC_AUDIT_INTEGRATION_PLAN_v0_5.md` e `AIRTRUST_RBAC_AUDIT_V2_IMPLEMENTATION_READINESS_v0_5.md` | Implementação real, writer canonico, grants de suporte e enforcement continuam pendentes | Sprint R/S/T: audit foundation, dual-read e suporte enforcement | GPT-5.5 Altissimo |
 
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | LGPD-01 | AUDIT_LGPD | `registrarAuditoria()` grava em `auditoria` sem `empresa_id`, sem `request_id` e sem sanitização | S1 | PARTIAL | Camada `lib/audit` criada com sanitização conservadora; `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts` passaram a sanitizar payloads | `300ecb9` | Sim | Testes de sanitização, `audit-trail-hardening.test.ts` | `auditoria`, `audit_logs` e `auditoria_avancada_v2` continuam sem contrato único de colunas; call sites legados fora do escopo ainda podem gravar payload amplo | Sprint futuro: Audit Trail v2 | GPT-5.5 Alta |
 | LGPD-02 | AUDIT_LGPD | `logAudit()` usa `audit_logs` mas sem `empresa_id`, `usuario_id` canônico nem `request_id` | S2 | PARTIAL | `request_id` e `empresa_id` passaram a ser injetados em metadata quando disponíveis; `admin_actions` sanitizado | `300ecb9` | Sim | Testes de request correlation | Campos não são colunas dedicadas — são injetados em metadata JSON | Sprint futuro: unificar contrato de auditoria | GPT-5.5 Alta |
-| LGPD-03 | AUDIT_LGPD | `support_reason` ausente em todas as tabelas de auditoria | S2 | PARTIAL | Sprint O definiu `support_reason` como campo obrigatório do modelo v2 e do fluxo de suporte auditável | — | — | Docs `AIRTRUST_AUDIT_TRAIL_LGPD_V2_DESIGN_v0_5.md` e `AIRTRUST_SUPPORT_ACCESS_AUDIT_MODEL_v0_5.md` | Continua ausente no schema/runtime atual; exige migration e enforcement | Sprint futuro: implementação Audit/RBAC v2 | GPT-5.5 Altissimo |
-| LGPD-04 | AUDIT_LGPD | Retenção/audit trail v2 pendente (política de purge, índices, compliance) | S2 | PARTIAL | Sprint O concluiu o design do Audit Trail v2, criou taxonomia, draft técnico de retenção e plano de migration futura | — | — | Docs `AIRTRUST_AUDIT_TRAIL_LGPD_V2_DESIGN_v0_5.md`, `AIRTRUST_AUDIT_EVENT_TAXONOMY_v0_5.md`, `AIRTRUST_AUDIT_RETENTION_POLICY_DRAFT_v0_5.md`, `AIRTRUST_AUDIT_TRAIL_V2_MIGRATION_PLAN_v0_5.md` | Validação jurídica, migration real, rollout e purge continuam abertos | Sprint futuro: implementação Audit Trail v2 | GPT-5.5 Altissimo |
+| LGPD-03 | AUDIT_LGPD | `support_reason` ausente em todas as tabelas de auditoria | S2 | IMPLEMENTATION_READY | Sprint O definiu `support_reason`; Sprint Q definiu que ele entra primeiro no contrato canonico de audit antes de qualquer enforcement de suporte | — | — | Docs `AIRTRUST_AUDIT_TRAIL_LGPD_V2_DESIGN_v0_5.md`, `AIRTRUST_SUPPORT_ACCESS_AUDIT_MODEL_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_IMPLEMENTATION_READINESS_v0_5.md` e `AIRTRUST_RBAC_AUDIT_V2_PHASED_IMPLEMENTATION_PLAN_v0_5.md` | Continua ausente no schema/runtime atual; exige migration e canonical writer | Sprint R: Audit schema + canonical writer | GPT-5.5 Altissimo |
+| LGPD-04 | AUDIT_LGPD | Retenção/audit trail v2 pendente (política de purge, índices, compliance) | S2 | IMPLEMENTATION_READY | Sprint O concluiu o design do Audit Trail v2; Sprint Q fechou a readiness, rollout em fases e rollback plan | — | — | Docs `AIRTRUST_AUDIT_TRAIL_LGPD_V2_DESIGN_v0_5.md`, `AIRTRUST_AUDIT_EVENT_TAXONOMY_v0_5.md`, `AIRTRUST_AUDIT_RETENTION_POLICY_DRAFT_v0_5.md`, `AIRTRUST_AUDIT_TRAIL_V2_MIGRATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_ROLLBACK_PLAN_v0_5.md` | Validacao juridica, migration real, rollout e purge continuam abertos | Sprint R: Audit schema + canonical writer | GPT-5.5 Altissimo |
 
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -177,13 +178,13 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 |---|---|---|---|
 | MULTI-04 | MULTIEMPRESA_TENANT | `escala_alocacoes` com tenant-scope por JOIN mas sem coluna própria | Migration P3 opcional para `empresa_id` denormalizado + UNIQUE parcial |
 | RBAC-01 | RBAC_SUPORTE | `userId===1` centralizado mas fallback legado ainda existe | Migration para `platform_admin` persistido e remoção do fallback |
-| RBAC-02 | RBAC_SUPORTE | Modelo `support_read_only` desenhado no Sprint P com escopo, expiração e fail-closed | Implementar persistência de papel, grants, enforcement runtime e testes end-to-end |
-| RBAC-03 | RBAC_SUPORTE | Modelo `platform_admin` desenhado no Sprint P com separação explícita de papéis | Implementar migration, dual-read, remoção segura do fallback `userId===1` e rollback |
-| RBAC-04 | RBAC_SUPORTE | Modelo de audit trail de suporte e integração RBAC/audit desenhados nos Sprints O e P | Implementar role persistida, writer, enforcement e revisões operacionais |
+| RBAC-02 | RBAC_SUPORTE | `support_read_only` desenhado e com readiness gate concluido no Sprint Q | Implementar grants, sessao auditavel, enforcement runtime e testes end-to-end somente apos writer canonico |
+| RBAC-03 | RBAC_SUPORTE | `platform_admin` desenhado e com readiness gate concluido no Sprint Q | Implementar migration, dual-read, remocao segura do fallback `userId===1` e rollback |
+| RBAC-04 | RBAC_SUPORTE | Integracao RBAC/audit desenhada e readiness fechada com ordem audit-first | Implementar role persistida, writer, enforcement e revisoes operacionais |
 | LGPD-01 | AUDIT_LGPD | Sanitização aplicada em pontos críticos mas writers legados sem contrato único | Unificar contrato de auditoria entre `auditoria`, `audit_logs`, `auditoria_avancada_v2` |
 | LGPD-02 | AUDIT_LGPD | `request_id` e `empresa_id` injetados em metadata mas não como colunas dedicadas | Migration de tabela padronizada com colunas dedicadas |
-| LGPD-03 | AUDIT_LGPD | `support_reason` desenhado no Sprint O e integrado ao RBAC/Suporte v2 no Sprint P, mas ausente no runtime/schema | Migration e enforcement do campo em eventos de suporte/sensíveis |
-| LGPD-04 | AUDIT_LGPD | Design v2, taxonomia, retenção draft e plano de migration concluídos | Implementação real, validação jurídica e purge policy operacional |
+| LGPD-03 | AUDIT_LGPD | `support_reason` desenhado e com readiness concluida para entrar primeiro no schema canonico | Migration e enforcement do campo em eventos de suporte/sensiveis |
+| LGPD-04 | AUDIT_LGPD | Design v2, taxonomia, retencao draft, phased plan e rollback plan concluidos | Implementacao real, validacao juridica e purge policy operacional |
 | STATUS-01 | STATUS_ENUM | Status central aplicado em camada crítica mas não em cron/alertas/EVD | Expandir helpers para caminhos batch e operacionais |
 | DQ-01 | DATA_QUALITY | Runner funcional mas com 5 checks SKIPPED | Executar em ambiente com schema completo |
 | OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado executado com PASS=11 mas empresa esperada não validada | Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` e reexecutar |
@@ -286,12 +287,12 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 1. **Reauditoria read-only de documentos/assets tenant isolation** (confirmação de correções) — GPT-5.4 Alta
 2. **Data Quality com snapshot/staging completo** (executar checks pendentes) — GPT-5.4 Alta
-3. **DDL runtime residual design-only** (planejar migrations sem executar) — GPT-5.5 Altissimo
-4. **Performance/bundle/N+1 audit** (auditoria read-only) — GPT-5.4 Alta
-5. **Implementação planejada do RBAC/Suporte v2** (migration + dual-read + enforcement seguro) — GPT-5.5 Altissimo
-6. **Implementação planejada do Audit Trail/LGPD v2** (migration + rollout seguro após revisão jurídica) — GPT-5.5 Altissimo
-7. **R2 metadata para novos uploads** (defense-in-depth) — GPT-5.4 Alta
-8. **Cloudflare Queues dry-run** (substituir D1 como fila) — GPT-5.5 Alta
+3. **Sprint R - Audit Trail v2 schema backward-compatible + canonical writer foundation** — GPT-5.5 Altissimo
+4. **Sprint S - Platform roles schema + RBAC dual-read shadow mode** — GPT-5.5 Altissimo
+5. **Sprint T - support_read_only enforcement + rollout monitorado** — GPT-5.5 Altissimo
+6. **Cobertura beta (EVD + complementos)** — GPT-5.4 Alta
+7. **DDL runtime residual design-only** (planejar migrations sem executar) — GPT-5.5 Altissimo
+8. **R2 metadata para novos uploads** (defense-in-depth) — GPT-5.4 Alta
 9. **Segunda empresa apenas depois das condições mínimas** (CONDITIONAL GO)
 
 ---
