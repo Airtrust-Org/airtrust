@@ -27,12 +27,12 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
 | `worker-airtrust/src/routes/notificacoes-convocacao.ts` | acesso a `notificacoes_convocacao_*` e `treinamentos_convocacoes_email*` via `ensureConvocacaoEmailSchema` | toda leitura/gravação da configuração e envio | `0320_treinamentos_convocacao_email.sql` e `0359_setores_gestores_many_to_many.sql` | A | removido |
 | `worker-airtrust/src/routes/treinamentos-planejados.ts` | `treinamentos_planejados`, `treinamentos_participantes`, chamadas de convocação | toda leitura/gravação da agenda | `0172_create_treinamentos_planejados.sql` e `0320_treinamentos_convocacao_email.sql` | A | removido no router |
 | `worker-airtrust/src/services/treinamentos-convocacao-email.ts` | definição de `ensureConvocacaoEmailSchema` | indiretamente chamada por rotas de convocação | `0320_treinamentos_convocacao_email.sql` | A | função removida |
-| `worker-airtrust/src/services/treinamentos-planejados-integration.ts` | `treinamentos_planejados`, `treinamentos_participantes`, `ALTER TABLE solicitacoes_treinamento ADD COLUMN treinamento_planejado_id`, `status_pre_agendamento`, índice `idx_solicitacoes_treinamento_planejado` | sync em writes de treinamento planejado | `0172_create_treinamentos_planejados.sql` cobre tabelas base; nenhuma migration encontrada para as colunas/índice de link em `solicitacoes_treinamento` | B/C | mantido, requer migration futura |
+| `worker-airtrust/src/services/treinamentos-planejados-integration.ts` | `treinamentos_planejados`, `treinamentos_participantes`, `ALTER TABLE solicitacoes_treinamento ADD COLUMN treinamento_planejado_id`, `status_pre_agendamento`, índice `idx_solicitacoes_treinamento_planejado` | sync em writes de treinamento planejado | `0172_create_treinamentos_planejados.sql` cobre tabelas base; nenhuma migration encontrada para as colunas/índice de link em `solicitacoes_treinamento` | B/C | Sprint W removeu o DDL das tabelas base; link DDL mantido, requer migration futura |
 | `worker-airtrust/src/services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos`, `sigvoos_mapeamento_manual`, `frms_jornada_pendente` + índices | leitura/config/importação SIGVOOS e reconciliação FRMS | `0352_sigvoos_frms_pendencias_e_enriquecimento.sql` cobre apenas `sigvoos_mapeamento_manual` e `frms_jornada_pendente`; `0354_auditoria_critica_schema_hardening.sql` adiciona `notificar_falha_email`; nenhuma migration encontrada para criação das tabelas `integracoes_sigvoos_*` | B/C | mantido, requer migration futura |
 | `worker-airtrust/src/runtime/api-bootstrap.ts` + `worker-airtrust/src/utils/auto-migration-documentos.ts` | `documentos` + índices | bootstrap de runtime, não por request | cobertura legada/mista; há recriação e índices parciais em `0136_rebuild_all_funcionarios_old_refs.sql`, `0137_fix_certificados_completo.sql`, `0138_certificados_improvements.sql`, mas não há correspondência clara para todos os índices criados pelo helper | B/E | não tocado nesta fase |
-| `worker-airtrust/src/routes/qualificacoes/tipos.ts` | colunas `carga_horaria_inicial`, `carga_horaria_recorrente` | reads/writes de tipos de qualificação | `0317_split_carga_horaria_and_tipo_treinamento.sql` | A | fora do escopo desta fase |
-| `worker-airtrust/src/routes/qualificacoes/historico.ts` e `historico-write.ts` + helpers | colunas em `qualificacoes_historico`, `qualificacoes_tipos`, `modelos_aeronave` | writes/read de histórico | `0173_add_status_to_qualificacoes.sql`, `0317_split_carga_horaria_and_tipo_treinamento.sql`, `0183_add_modelo_to_modelos_aeronave.sql` | A | fora do escopo desta fase |
-| `worker-airtrust/src/routes/simuladores-modelos.ts` | coluna `modelo_aeronave` em `modelos_sessao` + índice | CRUD de modelos de simulador | `0184_add_modelo_aeronave_to_modelos_sessao.sql` | A | fora do escopo desta fase |
+| `worker-airtrust/src/routes/qualificacoes/tipos.ts` | colunas `carga_horaria_inicial`, `carga_horaria_recorrente` | reads/writes de tipos de qualificação | `0317_split_carga_horaria_and_tipo_treinamento.sql` | A | removido no Sprint W |
+| `worker-airtrust/src/routes/qualificacoes/historico.ts` e `historico-write.ts` + helpers | colunas em `qualificacoes_historico`, `qualificacoes_tipos`, `modelos_aeronave` | writes/read de histórico | `0173_add_status_to_qualificacoes.sql`, `0317_split_carga_horaria_and_tipo_treinamento.sql`, `0183_add_modelo_to_modelos_aeronave.sql` | A | DDL removido dos helpers no Sprint W; call sites mantidos via no-op/backfill por compatibilidade |
+| `worker-airtrust/src/routes/simuladores-modelos.ts` | coluna `modelo_aeronave` em `modelos_sessao` + índice | CRUD de modelos de simulador | `0184_add_modelo_aeronave_to_modelos_sessao.sql` | A | removido no Sprint W |
 
 ## Removido nesta fase
 
@@ -125,7 +125,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 | Fase | Migration | Remoção | Risco |
 |---|---|---|---|
-| Pré-Fase | Nenhuma | Remover R02, R05, R06, R07, R08, R10 — 6 funções `ensure*` já cobertas | BAIXO |
+| Pré-Fase | Nenhuma | Concluída no Sprint W — removidos R02, R05, R06, R07, R08, R10 | BAIXO |
 | Fase 1 | M1 — `0386` (link Treinamentos) | Remover R03 | MÉDIO |
 | Fase 2 | M2 — `0387` (SIGVOOS base) | Remover R01 | ALTO |
 | Fase 3 | M3 — `0388` (Documentos canônico) | Remover R04 | MÉDIO |
@@ -137,4 +137,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = DESIGN_READY (antes: PARTIAL para DDL-01, OPEN para DDL-02/03/04).
+DDL_RUNTIME = PARTIAL (Pré-Fase concluída; restam R01, R03, R04 e R09).

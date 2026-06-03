@@ -221,13 +221,14 @@
 - **Documentos:** `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
 - **Deploy:** Não (docs-only).
 - **Migration necessária:** Não nesta fase. 3 migrations planejadas para fases futuras.
-- **Pendente:** Pré-Fase (remover 6 `ensure*` cobertos, zero migration, risco BAIXO) + Fases 1-3 (migration + remoção dos 3 residuais críticos).
+- **Pendente:** Fases 1-3 (migration + remoção dos 3 residuais críticos) + revisão do R09 em `qualificacoes/shared.ts`.
 - **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados por fase).
 
 ### Sprint W — DDL Pré-Fase: Remover `ensure*` já cobertos
 - **Prioridade:** Curto prazo.
+- **Status:** Entregue em 2026-06-03.
 - **Objetivo:** Remover 6 funções `ensure*` cujo schema já é coberto por migrations existentes — zero migration nova, risco BAIXO.
-- **Escopo:** Remover `ensureTreinamentosPlanejadosSchema` (R02), `ensureTiposSchema` (R05), `ensureHistoricoSchema` (R06), `ensureQualificacoesTiposTrainingSchema` (R07), modelo_aeronave DDL (R08), `ensureModelosSessaoModeloAeronaveColumn` (R10). Atualizar allowlist do teste de arquitetura. Atualizar call sites.
+- **Escopo entregue:** removidos `ensureTreinamentosPlanejadosSchema` (R02), DDL de `tipos.ts` (R05), DDL de `historico-helpers.ts` (R06/R07/R08) e `ensureModelosSessaoModeloAeronaveColumn` (R10). O guard arquitetural foi atualizado. Os call sites de `historico.ts`/`historico-write.ts` ficaram como compatibilidade via no-op/backfill porque esses arquivos ficaram fora do escopo autorizado.
 - **Modelo recomendado:** GPT-5.4 Alta.
 - **Deploy necessário?:** Sim.
 - **Migration necessária?:** Não.
