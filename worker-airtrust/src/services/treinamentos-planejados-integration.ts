@@ -130,35 +130,6 @@ async function tabelaExiste(db: D1Database, nomeTabela: string): Promise<boolean
 
   return Boolean(result?.name);
 }
-
-export async function ensureSolicitacoesTreinamentoLinkSchema(db: D1Database): Promise<void> {
-  const exists = await tabelaExiste(db, 'solicitacoes_treinamento');
-  if (!exists) return;
-
-  const columns = await db
-    .prepare(`PRAGMA table_info('solicitacoes_treinamento')`)
-    .all<{ name: string }>();
-  const names = new Set((columns.results || []).map((column) => String(column.name || '')));
-
-  if (!names.has('treinamento_planejado_id')) {
-    await db
-      .prepare('ALTER TABLE solicitacoes_treinamento ADD COLUMN treinamento_planejado_id INTEGER')
-      .run();
-  }
-
-  if (!names.has('status_pre_agendamento')) {
-    await db
-      .prepare('ALTER TABLE solicitacoes_treinamento ADD COLUMN status_pre_agendamento TEXT')
-      .run();
-  }
-
-  await db
-    .prepare(
-      'CREATE INDEX IF NOT EXISTS idx_solicitacoes_treinamento_planejado ON solicitacoes_treinamento(treinamento_planejado_id) WHERE treinamento_planejado_id IS NOT NULL AND deleted_at IS NULL',
-    )
-    .run();
-}
-
 async function loadEventoContext(
   db: D1Database,
   empresaId: number,
@@ -665,7 +636,6 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
   removedParticipants?: RemovedParticipantLink[];
 }): Promise<void> {
   const { db, empresaId, treinamentoId } = params;
-  await ensureSolicitacoesTreinamentoLinkSchema(db);
 
   const evento = await loadEventoContext(db, empresaId, treinamentoId);
   if (!evento) return;
@@ -748,7 +718,6 @@ export async function sincronizarSolicitacaoAgendadaComTreinamentoPlanejado(para
   dataPrevista: string | null;
 }): Promise<{ treinamentoPlanejadoId: number | null }> {
   const { db, empresaId, solicitacaoId, dataPrevista } = params;
-  await ensureSolicitacoesTreinamentoLinkSchema(db);
 
   if (!dataPrevista) {
     return { treinamentoPlanejadoId: null };
@@ -869,7 +838,6 @@ export async function sincronizarSolicitacaoConcluidaComTreinamentoPlanejado(par
   dataRealizada: string;
 }): Promise<{ treinamentoPlanejadoId: number | null; qualificacaoHistoricoId: number | null }> {
   const { db, empresaId, solicitacaoId } = params;
-  await ensureSolicitacoesTreinamentoLinkSchema(db);
 
   const solicitacao = await db
     .prepare(

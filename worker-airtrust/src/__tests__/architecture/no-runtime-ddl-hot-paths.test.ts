@@ -21,6 +21,10 @@ const HOT_PATH_FILES = [
   ['routes/qualificacoes/tipos.ts', new URL('../../routes/qualificacoes/tipos.ts', import.meta.url)],
   ['routes/simuladores-modelos.ts', new URL('../../routes/simuladores-modelos.ts', import.meta.url)],
   ['routes/treinamentos-planejados.ts', new URL('../../routes/treinamentos-planejados.ts', import.meta.url)],
+  [
+    'services/treinamentos-planejados-integration.ts',
+    new URL('../../services/treinamentos-planejados-integration.ts', import.meta.url),
+  ],
   ['utils/alert-whatsapp-templates-store.ts', new URL('../../utils/alert-whatsapp-templates-store.ts', import.meta.url)],
 ] as const;
 
@@ -29,7 +33,6 @@ const DOCUMENTED_EXCEPTIONS = [
   'routes/qualificacoes/historico.ts',
   'routes/qualificacoes/historico-write.ts',
   'services/sigvoos-frms.ts',
-  'services/treinamentos-planejados-integration.ts',
 ] as const;
 
 describe('runtime DDL hardening', () => {
@@ -39,7 +42,6 @@ describe('runtime DDL hardening', () => {
       'routes/qualificacoes/historico.ts',
       'routes/qualificacoes/historico-write.ts',
       'services/sigvoos-frms.ts',
-      'services/treinamentos-planejados-integration.ts',
     ]);
   });
 

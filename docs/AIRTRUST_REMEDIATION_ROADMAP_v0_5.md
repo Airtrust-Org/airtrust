@@ -100,10 +100,10 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ### Item 8 — Remoção do DDL runtime residual
 
-- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprints X.0/X.1/X.2/X.3 deixaram R03 em `BLOCKED_SCHEMA_PROBE_REQUIRED` — 4 tentativas, runner remoto completo, ainda aguardando `wrangler login` + env vars).
+- **Status:** PARTIAL (Sprint V concluído; Sprint W executou a Pré-Fase; Sprint X.4 versionou a M1 de R03 e removeu o fallback runtime localmente. R03 agora está em `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`).
 - **Objetivo:** Concluir as fases remanescentes: Fase 1 (M1 Treinamentos Link), Fase 2 (M2 SIGVOOS base), Fase 3 (M3 Documentos canônico) e revisão do R09 em `shared.ts`.
 - **Risco:** Drift de schema, lock operacional, comportamento divergente por ambiente.
-- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.1 revalidou segurança. Sprint X.2 implementou runner remoto read-only com `wrangler d1 execute --remote --json` para staging e production, com validação reforçada de SQL (bloqueio de `SELECT *`, DDL, DML). Sprint X.3 repetiu a execução em worktree limpo para isolar untracked fora do escopo no repositório principal e confirmou novo `SKIPPED_SCHEMA_PROBE_NOT_AUTHORIZED` com as 4 env vars `UNSET`. O ambiente aprovado continua sem consulta estrutural. Restam 3 migrations novas planejadas (`0386`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
+- **Escopo:** Sprint W removeu 6 caminhos cobertos sem migration. Sprint X.0 criou o probe estrutural read-only. Sprint X.2 completou o runner remoto read-only. Sprint X.4 registrou probe aprovado em produção para R03, versionou `0386_solicitacoes_treinamento_planejado_link.sql` e removeu `ensureSolicitacoesTreinamentoLinkSchema()` do runtime local. O próximo passo de R03 é exclusivamente operacional: aplicar a migration aprovada e só então deployar o Worker/API. Restam ainda 2 migrations novas planejadas (`0387`-`0388`) e 1 verificação adicional para o DDL dinâmico de `shared.ts`.
 - **Modelo recomendado:** Pré-Fase: GPT-5.4 Alta. Fases 1-3: GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim, quando implementado.
 - **Migration necessária?:** Sim (3 migrations para as Fases 1-3; Pré-Fase não requer).

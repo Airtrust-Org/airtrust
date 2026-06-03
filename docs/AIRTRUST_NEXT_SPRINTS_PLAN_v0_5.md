@@ -286,7 +286,18 @@
 - **Deploy necessário?:** Não.
 - **Migration necessária?:** Não nesta fase.
 - **Risco:** Baixo nesta fase.
-- **Próxima fase:** Sprint X.4 — operador faz `wrangler login`, define env vars, executa o probe remoto autorizado.
+- **Próxima fase:** Sprint X.4 — registrar o probe aprovado, versionar a M1 simples e remover o fallback runtime localmente.
+
+### Sprint X.4 — M1 simples + remoção do fallback local ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03 (base `7bee415`).
+- **Objetivo:** registrar o probe aprovado em produção para R03, criar a migration simples `0386`, remover `ensureSolicitacoesTreinamentoLinkSchema()` do runtime local e atualizar o guard arquitetural.
+- **Entregue:** evidência de probe em `production` com `TABLE_EXISTS=yes`, `TREINAMENTO_PLANEJADO_ID_EXISTS=no`, `STATUS_PRE_AGENDAMENTO_EXISTS=no`, `IDX_SOLICITACOES_TREINAMENTO_PLANEJADO_EXISTS=no`; migration `0386_solicitacoes_treinamento_planejado_link.sql`; teste `solicitacoes-treinamento-planejado-link-schema.test.ts`; remoção do fallback runtime; atualização do `no-runtime-ddl-hot-paths.test.ts`.
+- **Decisão:** `SIMPLE_M1` e status de R03 = `MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`.
+- **Deploy necessário?:** Não nesta sprint.
+- **Motivo do não deploy:** a migration ainda não foi aplicada no ambiente-alvo; deployar o Worker/API antes da aplicação pode quebrar o runtime.
+- **Migration necessária?:** Já versionada; aplicação remota permanece pendente.
+- **Risco:** Médio/alto se deployar sem aplicar a migration; controlado enquanto o deploy permanecer bloqueado.
+- **Próxima fase:** aplicar `0386` por procedimento aprovado no ambiente-alvo e só depois deployar o Worker/API.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
