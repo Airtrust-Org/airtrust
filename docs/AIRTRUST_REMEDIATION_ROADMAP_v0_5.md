@@ -1,9 +1,9 @@
 # AirTrust Remediation Roadmap v0.5
 
-**Data:** 2026-06-02
+**Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
-**Modo:** Roadmap técnico-operacional atualizado após Sprint Q (RBAC + Audit Trail v2 implementation readiness gate). Sem migration, sem dados reais, sem deploy.
+**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
+**Modo:** Roadmap atualizado após Sprint R schema-only. Migration v2 versionada localmente, sem dados reais, sem deploy e sem aplicação em produção.
 
 ---
 
@@ -11,7 +11,7 @@
 
 Este roadmap reflete o estado real após 12 sprints de auditoria e remediação (A até L + reauditorias). A ordem foi revisada com base na matriz consolidada de 48 achados.
 
-**Estado atual:** sem P0/P1 ativos em código de produção; itens de Audit Trail/LGPD v2 e RBAC/Suporte v2 avançaram de backlog puramente aberto para implementation readiness documental concluída, ainda sem implementação.
+**Estado atual:** sem P0/P1 ativos em código de produção; o schema do Audit Trail/LGPD v2 está `SCHEMA_READY`, enquanto writer, dual-write e RBAC/Suporte v2 ainda não foram implementados.
 **Nenhum P0/P1 ativo em código de produção.**
 
 ---
@@ -73,15 +73,15 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 - **Migration necessária?:** Sim, na fase de implementação.
 - **Documentos de referência:** `AIRTRUST_RBAC_SUPPORT_V2_DESIGN_v0_5.md`, `AIRTRUST_PLATFORM_ROLES_MODEL_v0_5.md`, `AIRTRUST_SUPPORT_READ_ONLY_MODEL_v0_5.md`, `AIRTRUST_RBAC_V2_MIGRATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_INTEGRATION_PLAN_v0_5.md`.
 
-### Item 6 — Audit Trail/LGPD v2 design + readiness ✅ PRIMEIRA IMPLEMENTAÇÃO RECOMENDADA
+### Item 6 — Audit Trail/LGPD v2 schema ✅ SCHEMA_READY
 
-- **Status:** Design concluído no Sprint O e readiness gate concluído no Sprint Q. Implementação/migration continuam abertas.
-- **Objetivo:** Começar por esta trilha na primeira sprint técnica de implementação, com schema aditivo e canonical writer antes de qualquer enforcement de suporte.
+- **Status:** Design e readiness concluídos; Sprint R versionou `audit_events_v2` e testes locais. Writer e aplicação em produção continuam pendentes.
+- **Objetivo:** Seguir para canonical writer com dual-write seguro antes de qualquer enforcement de suporte.
 - **Risco:** Compliance e LGPD continuam parcialmente cobertos enquanto o runtime persistir em três writers não padronizados.
-- **Escopo consolidado até o Sprint Q:** contrato conceitual v2, campos obrigatórios/proibidos, taxonomia de eventos, modelo auditável de suporte, retenção draft, phased plan e rollback plan.
-- **Modelo recomendado:** GPT-5.5 Alta.
-- **Deploy necessário?:** Sim, quando implementado.
-- **Migration necessária?:** Sim, na fase de implementação.
+- **Escopo consolidado até o Sprint R:** contrato conceitual v2, campos obrigatórios/proibidos, taxonomia, retenção draft, migration aditiva `0385_audit_events_v2.sql`, testes de schema, phased plan e rollback plan.
+- **Modelo recomendado:** GPT-5.5 Altissimo.
+- **Deploy necessário?:** Sim, em rollout futuro aprovado; não realizado no Sprint R.
+- **Migration necessária?:** Já versionada; aplicação em ambiente aprovado continua pendente.
 - **Documentos de referência:** `AIRTRUST_AUDIT_TRAIL_LGPD_HARDENING_PLAN_v0_5.md`, `AIRTRUST_AUDIT_TRAIL_LGPD_V2_DESIGN_v0_5.md`, `AIRTRUST_AUDIT_EVENT_TAXONOMY_v0_5.md`, `AIRTRUST_AUDIT_RETENTION_POLICY_DRAFT_v0_5.md`, `AIRTRUST_AUDIT_TRAIL_V2_MIGRATION_PLAN_v0_5.md`.
 
 ### Item 7 — Cobertura de testes dos módulos beta
@@ -182,7 +182,7 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 
 ---
 
-## Ordem de execução recomendada (atualizada após Sprint P)
+## Ordem de execução recomendada (atualizada após Sprint R)
 
 | # | Item | Prioridade | Bloqueia | Modelo |
 |---|---|---|---|---|
@@ -190,16 +190,17 @@ Este roadmap reflete o estado real após 12 sprints de auditoria e remediação 
 | 2 | Data Quality completo (staging) | Imediata | GO pleno | GPT-5.4 Alta |
 | 3 | Blindar scripts legados (P2) ✅ RESOLVIDO | — | — | — |
 | 4 | ~~Fechar dirty-deploy residual (P2)~~ ✅ RESOLVIDO | — | — | — |
-| 5 | Sprint R - Audit Trail v2 schema + canonical writer foundation | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
-| 6 | Sprint S - Platform roles schema + RBAC dual-read foundation | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
-| 7 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
-| 8 | DDL runtime residual design | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
-| 9 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
-| 10 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |
-| 11 | Performance/bundle/N+1 audit | Médio prazo | Escala | GPT-5.4 Alta |
-| 12 | Observabilidade multiempresa | Longo prazo | 5+ empresas | GPT-5.5 Alta |
-| 13 | R2 metadata novos uploads | Longo prazo | Defense-in-depth | GPT-5.4 Alta |
-| 14 | Cloudflare Queues dry-run | Longo prazo | Arquitetura | GPT-5.5 Alta |
+| 5 | Sprint R - Audit Trail v2 schema backward-compatible ✅ | Concluído | Compliance e base de suporte | GPT-5.5 Altissimo |
+| 6 | Canonical writer + dual-write seguro | Curto prazo | Compliance e base de suporte | GPT-5.5 Altissimo |
+| 7 | Platform roles schema + RBAC dual-read foundation | Curto prazo | Cliente externo | GPT-5.5 Altissimo |
+| 8 | Cobertura testes beta (EVD + complementos) | Curto prazo | Qualidade | GPT-5.4 Alta |
+| 9 | DDL runtime residual design | Médio prazo | 5+ empresas | GPT-5.5 Altissimo |
+| 10 | Status enum expansão | Médio prazo | Escala | GPT-5.4 Alta |
+| 11 | Repository pattern expansão | Médio prazo | Manutenibilidade | GPT-5.4 Alta |
+| 12 | Performance/bundle/N+1 audit | Médio prazo | Escala | GPT-5.4 Alta |
+| 13 | Observabilidade multiempresa | Longo prazo | 5+ empresas | GPT-5.5 Alta |
+| 14 | R2 metadata novos uploads | Longo prazo | Defense-in-depth | GPT-5.4 Alta |
+| 15 | Cloudflare Queues dry-run | Longo prazo | Arquitetura | GPT-5.5 Alta |
 
 ---
 

@@ -1,9 +1,9 @@
 # AirTrust - RBAC + Audit Trail v2 Rollback Plan
 
-**Data:** 2026-06-02
+**Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
-**Modo:** Plano conceitual de rollback. Nenhuma migration real foi criada.
+**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
+**Modo:** Plano de rollback com migration aditiva `0385_audit_events_v2.sql` versionada, ainda não executada em produção.
 
 ## 1. Riscos por fase
 
@@ -16,9 +16,11 @@
 
 ## 2. Rollback para migration audit
 
+- antes de qualquer aplicacao, o rollback e nao executar a migration;
 - manter schema legado intacto;
 - nao remover `auditoria`, `audit_logs` ou `auditoria_avancada_v2`;
-- se a tabela v2 falhar, desabilitar writer novo e preservar apenas o schema aditivo sem uso.
+- nao executar `DROP`, `RENAME`, backfill ou reversao destrutiva;
+- se `audit_events_v2` falhar apos aplicacao futura, desabilitar writer novo e preservar apenas o schema aditivo sem uso.
 
 ## 3. Rollback para writer canonico
 
@@ -76,7 +78,7 @@ Remove-lo antes do dual-read estavel transforma uma fase de observacao em uma mu
 - `auditoria`
 - `audit_logs`
 - `auditoria_avancada_v2`
-- nova tabela canonica de audit trail
+- `audit_events_v2`
 - grants persistidos de plataforma
 - sessoes de suporte
 - logs de divergencia do dual-read

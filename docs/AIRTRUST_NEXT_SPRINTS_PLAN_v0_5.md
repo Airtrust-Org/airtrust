@@ -1,9 +1,9 @@
 # AirTrust Next Sprints Plan v0.5
 
-**Data:** 2026-06-02
+**Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `32ca1f278a81a610fbc3c9821eddf0c5518dbb69`
-**Modo:** Planejamento de sprints atualizado após Sprint Q (RBAC + Audit Trail v2 implementation readiness gate). Baseado na matriz de 48 achados.
+**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
+**Modo:** Planejamento atualizado após Sprint R schema-only. Migration v2 versionada localmente, sem deploy ou aplicação em produção.
 
 ---
 
@@ -144,18 +144,28 @@
 - **Deploy:** Não (documental).
 - **Entregue:** ordem clara de implementação; phased implementation plan; test matrix; rollback plan; definição explícita de `audit-first`; recomendação de Sprint R antes de Sprint S.
 - **Documentos:** `AIRTRUST_RBAC_AUDIT_V2_IMPLEMENTATION_READINESS_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_PHASED_IMPLEMENTATION_PLAN_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_TEST_MATRIX_v0_5.md`, `AIRTRUST_RBAC_AUDIT_V2_ROLLBACK_PLAN_v0_5.md`.
-- **Pendente:** implementação real do schema/writer de audit, schema de platform roles, dual-read, enforcement e remocao do fallback legado.
+- **Pendente:** writer de audit, schema de platform roles, dual-read, enforcement e remocao do fallback legado.
 
-### Sprint R — Audit Trail v2 Implementation Foundation
+### Sprint R — Audit Trail v2 Schema Backward-Compatible ✅ CONCLUÍDO
+- **Status:** CONCLUÍDO em 2026-06-03.
+- **Objetivo:** Versionar somente o schema backward-compatible do Audit Trail v2.
+- **Entregue:** migration `0385_audit_events_v2.sql`; tabela `audit_events_v2`; campos canônicos; índices mínimos; teste local de schema/migration.
+- **Compatibilidade:** `auditoria`, `audit_logs` e `auditoria_avancada_v2` preservadas; nenhum writer, auth, tenant ou RBAC alterado.
+- **Deploy:** Não. Nenhuma migration remota ou aplicação em produção.
+- **Pendente:** canonical writer, dual-write seguro, rollout em ambiente aprovado e retenção operacional.
+- **Modelo recomendado:** GPT-5.5 Altissimo.
+- **Risco:** Alto, mitigado por schema aditivo e ausência de runtime.
+
+### Sprint S — Audit Trail v2 Canonical Writer + Dual-Write
 - **Prioridade:** Curto prazo.
-- **Objetivo:** Implementar primeiro o schema backward-compatible e o canonical writer foundation do Audit Trail v2.
-- **Escopo:** tabela/contrato canonico; indices principais; adapters centrais; dual-write controlado; eventos criticos de auth/admin/assets/exports/FRMS.
+- **Objetivo:** Integrar o canonical writer ao schema v2 com dual-write controlado, mantendo writers legados.
+- **Escopo:** adapters centrais; feature flag; parity tests; eventos críticos de auth/admin/assets/exports/FRMS; rollback para writer legado.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim.
-- **Migration necessária?:** Sim.
-- **Risco:** Alto/Altissimo.
+- **Migration necessária?:** Aplicar a migration v2 em ambiente aprovado antes do writer.
+- **Risco:** Altissimo.
 
-### Sprint S — RBAC/Suporte v2 Implementation Foundation
+### Sprint T — RBAC/Suporte v2 Implementation Foundation
 - **Prioridade:** Curto prazo.
 - **Objetivo:** Implementar platform roles schema e shadow dual-read de RBAC somente depois do writer v2 estar operacional.
 - **Escopo:** `platform_admin`; grants persistidos; sessoes de suporte; shadow dual-read; logs de divergencia; rollback simples.
@@ -164,7 +174,7 @@
 - **Migration necessária?:** Sim.
 - **Risco:** Altissimo.
 
-### Sprint T — Cobertura Beta (EVD + Complementos)
+### Sprint U — Cobertura Beta (EVD + Complementos)
 - **Prioridade:** Curto prazo.
 - **Objetivo:** Criar cobertura de teste para EVD e complementar Hospedagem (update/checkout).
 - **Escopo:** Testes de tenant-scope para EVD; contratos de update/checkout em Hospedagem; revisão de cobertura SGSO e LMS.
@@ -173,7 +183,7 @@
 - **Migration necessária?:** Não.
 - **Risco:** Médio.
 
-### Sprint U — DDL Runtime Residual Design
+### Sprint V — DDL Runtime Residual Design
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Planejar migrations para os 3 DDL residuais sem executar.
 - **Escopo:** Criar migration para `integracoes_sigvoos_*` (3 tabelas + índices); criar migration para `solicitacoes_treinamento` (colunas de link + índice); consolidar `documentos` em migration canônica; plano de remoção segura.
@@ -182,7 +192,7 @@
 - **Migration necessária?:** Sim, em fase futura de implementação.
 - **Risco:** Alto (schema complexo, dependências entre tabelas).
 
-### Sprint V — Status Enum Expansão
+### Sprint W — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
 - **Escopo:** Auditar queries batch; aplicar helpers `status-codes.ts` onde usam strings soltas; testes de compatibilidade.
@@ -191,7 +201,7 @@
 - **Migration necessária?:** Não.
 - **Risco:** Médio.
 
-### Sprint W — Performance/Bundle Audit
+### Sprint X — Performance/Bundle Audit
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Auditoria de bundle size, chunks duplicados, N+1 queries, rotas grandes.
 - **Escopo:** Análise de bundle com `vite build` + análise; identificação de chunks PDF duplicados; revisão de queries em rotas grandes (FRMS, SGSO, dashboard); documentar achados sem corrigir.
@@ -204,24 +214,24 @@
 
 ## Backlog (longo prazo)
 
-### Sprint X — Repository Pattern Expansão
+### Sprint Y — Repository Pattern Expansão
 - **Objetivo:** Extrair queries read-only de `lms-cursos` e `qualificações` dashboard.
 - **Modelo:** GPT-5.4 Alta.
 
-### Sprint Y — R2 Metadata Novos Uploads
+### Sprint Z — R2 Metadata Novos Uploads
 - **Objetivo:** Adicionar `empresa_id` como custom metadata em novos uploads R2.
 - **Dependência:** Correções de tenant isolation já concluídas.
 - **Modelo:** GPT-5.4 Alta.
 
-### Sprint Z — Cloudflare Queues Dry-Run
+### Sprint AA — Cloudflare Queues Dry-Run
 - **Objetivo:** Implementar fila de domain_events substituindo D1.
 - **Modelo:** GPT-5.5 Alta.
 
-### Sprint AA — Observabilidade Multiempresa
+### Sprint AB — Observabilidade Multiempresa
 - **Objetivo:** Sinais por tenant, request correlation, falhas por módulo.
 - **Modelo:** GPT-5.5 Alta.
 
-### Sprint AB — Refatoração Estrutural Ampla
+### Sprint AC — Refatoração Estrutural Ampla
 - **Objetivo:** Quebrar arquivos gigantes (FRMS, SGSO, dashboard).
 - **Modelo:** GPT-5.4 Alta.
 
@@ -245,17 +255,18 @@
 | O | Audit Trail/LGPD v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
 | P | RBAC/Suporte v2 Design ✅ | Concluído | GPT-5.5 | Não | Futura |
 | Q | Readiness Gate RBAC + Audit ✅ | Concluído | GPT-5.4/5.5 | Não | Não |
-| R | Audit Trail v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
-| S | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
-| T | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
-| U | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |
-| V | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
-| W | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
-| X | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
-| Y | R2 Metadata Uploads | Longo prazo | GPT-5.4 | Sim | Não |
-| Z | Cloudflare Queues | Longo prazo | GPT-5.5 | Sim | Não |
-| AA | Observabilidade | Longo prazo | GPT-5.5 | Sim | Possível |
-| AB | Refatoração Estrutural | Longo prazo | GPT-5.4 | Sim | Não |
+| R | Audit Trail v2 Schema Backward-Compatible ✅ | Concluído | GPT-5.5 | Não | Versionada, não aplicada |
+| S | Audit Trail v2 Canonical Writer + Dual-Write | Curto prazo | GPT-5.5 | Sim | Aplicar v2 |
+| T | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
+| U | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Não |
+| V | DDL Residual Design | Médio prazo | GPT-5.5 | Não | Futura |
+| W | Status Enum Expansão | Médio prazo | GPT-5.4 | Sim | Não |
+| X | Performance/Bundle Audit | Médio prazo | GPT-5.4 | Não | Não |
+| Y | Repository Pattern Expansão | Longo prazo | GPT-5.4 | Sim | Não |
+| Z | R2 Metadata Uploads | Longo prazo | GPT-5.4 | Sim | Não |
+| AA | Cloudflare Queues | Longo prazo | GPT-5.5 | Sim | Não |
+| AB | Observabilidade | Longo prazo | GPT-5.5 | Sim | Possível |
+| AC | Refatoração Estrutural | Longo prazo | GPT-5.4 | Sim | Não |
 
 ---
 

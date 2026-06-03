@@ -1,13 +1,21 @@
 # AirTrust — Audit Trail v2 Migration Plan v0.5
 
-**Data:** 2026-06-02
+**Data:** 2026-06-03
 **Branch:** `main`
-**HEAD:** `e84c08d2c3979ed46026c171d3ca94f72b2e01fd`
-**Modo:** Plano de migration futura. Nenhuma migration foi criada neste sprint. Nenhum schema foi alterado.
+**HEAD base:** `f4640b3eb79707e2f7a377f7c78692a9aa55f575`
+**Modo:** Migration de schema v2 versionada localmente. Nenhuma migration foi executada em produção.
 
-## 1. Objetivo da migration futura
+## 1. Estado da implementação
 
-Criar um contrato canônico de Audit Trail v2 capaz de substituir gradualmente o uso disperso de `auditoria`, `audit_logs` e `auditoria_avancada_v2`, preservando rastreabilidade, LGPD e operação multiempresa.
+- Migration criada: `worker-airtrust/migrations/0385_audit_events_v2.sql`.
+- Tabela canônica nova: `audit_events_v2`.
+- Estratégia: estrutura aditiva, sem `ALTER`, `DROP`, `RENAME`, trigger ou backfill.
+- Compatibilidade: `auditoria`, `audit_logs` e `auditoria_avancada_v2` permanecem intactas.
+- Runtime: writer principal não foi alterado; nenhum dual-write está ativo.
+- Dados reais: nenhum dado foi criado, alterado ou migrado.
+- Produção: schema não aplicado e nenhum D1 remoto executado.
+
+O objetivo permanece substituir gradualmente o uso disperso das trilhas legadas, preservando rastreabilidade, LGPD e operação multiempresa.
 
 ## 2. Campos novos necessários
 
@@ -37,29 +45,24 @@ Campos mínimos propostos para a tabela/contrato canônico:
 - `metadata_sanitized_json`
 - `retention_class`
 
-## 3. Índices prováveis
+## 3. Índices versionados
 
-Índices recomendados para a fase de implementação:
+Índices mínimos incluídos na migration:
 
-- `created_at`
-- `empresa_id, created_at`
-- `target_empresa_id, created_at`
-- `actor_user_id, created_at`
-- `request_id`
-- `correlation_id`
-- `event_category, event_action, created_at`
-- `entity_type, entity_id, created_at`
-- `support_mode, support_reason, created_at`
-- `success, risk_level, created_at`
+- `idx_audit_events_v2_empresa_created` em `empresa_id, created_at`
+- `idx_audit_events_v2_target_empresa_created` em `target_empresa_id, created_at`
+- `idx_audit_events_v2_actor_created` em `actor_user_id, created_at`
+- `idx_audit_events_v2_request` em `request_id`
+- `idx_audit_events_v2_category_created` em `event_category, created_at`
 
-O desenho final deve evitar over-indexing em D1 e ser validado com volume estimado.
+Índices adicionais para `correlation_id`, entidade, suporte ou risco ficam condicionados a queries reais e volume estimado, evitando over-indexing em D1.
 
 ## 4. Estratégia backward-compatible
 
-Estratégia sugerida:
+Estratégia adotada:
 
-1. criar a nova estrutura canônica.
-2. manter os writers legados ativos temporariamente.
+1. criar a nova estrutura canônica em tabela separada.
+2. manter os writers legados ativos.
 3. introduzir adapter/bridge central para novos call sites críticos.
 4. migrar readers e consultas operacionais aos poucos.
 5. só então reduzir dependência dos writers antigos.
@@ -68,13 +71,16 @@ Objetivo: evitar big-bang e permitir rollback por feature flag/dual-write contro
 
 ## 5. Rollout por fases
 
-### Fase 1 — Schema + writer central
+### Fase 1 — Schema aditivo ✅ VERSIONADO
 
-- adicionar a estrutura canônica.
+- adicionar a estrutura canônica `audit_events_v2`.
+- validar tabela, campos, índices, defaults e coexistência com `audit_logs` localmente.
+- não aplicar em produção nesta sprint.
+
+### Fase 2 — Writer central + dual-write
+
 - introduzir writer central ainda sem retirar os antigos.
-
-### Fase 2 — Call sites críticos
-
+- ativar dual-write de forma controlada e reversível.
 - auth/impersonação.
 - admin operations.
 - assets privados.
@@ -106,6 +112,7 @@ Antes de qualquer execução real:
 
 ## 7. Testes necessários
 
+- teste de migration/schema local em `worker-airtrust/src/__tests__/migrations/audit-events-v2-schema.test.ts`.
 - testes unitários do sanitizador e do builder de contexto.
 - testes de contrato por categoria crítica.
 - testes de tenant isolation para `empresa_id` e `target_empresa_id`.
@@ -116,6 +123,8 @@ Antes de qualquer execução real:
 
 ## 8. Plano de rollback
 
+- enquanto a migration não for aplicada, rollback é a não execução do schema.
+- após aplicação futura, preservar `audit_events_v2` sem uso se o rollout for abortado.
 - manter readers legados funcionais durante rollout inicial.
 - permitir desligar dual-write e voltar ao writer legado se houver regressão.
 - não remover colunas/tabelas antigas na primeira entrega.
@@ -141,4 +150,4 @@ A sprint de implementação só deve começar quando todos os itens abaixo estiv
 
 ## Conclusão
 
-Este documento é um plano para sprint futura com modelo de raciocínio alto/altíssimo. Nenhuma migration foi criada neste sprint. Nenhum schema foi alterado.
+O schema canônico do Audit Trail v2 está versionado e localmente testado, mas ainda não está aplicado em produção e não possui writer integrado. A próxima fase recomendada é implementar o canonical writer com dual-write seguro, mantendo todas as trilhas legadas.
