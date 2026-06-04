@@ -12,7 +12,7 @@
 | Stream | Status | Motivo |
 |---|---|---|
 | `MIG-01` | `READY_FOR_CONTROLLED_REBASELINE` | a cadeia histórica não foi curada nem reescrita, mas a estratégia de corte, validação, rollback e rebaseline controlado agora está explicitamente documentada |
-| `DQ-01` | `READY_FOR_CONTROLLED_BACKFILL` | nenhum dado real foi saneado, mas os riscos, as regras de integridade, os critérios de detecção e a ordem de backfill controlado agora estão documentados |
+| `DQ-01` | `BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS` | os riscos e o lote controlado estão documentados, mas a sessão atual não trouxe staging aprovado, snapshot, rollback nem autorização explícita para tocar banco alvo |
 
 ---
 
@@ -86,7 +86,7 @@ Os seguintes pontos permanecem como evidência de governança legada e exigem re
 | Simuladores checks | fallback de checks não pode puxar `qualificacoes_tipos` de outro tenant | sessão era lida sem tenant e o fallback não filtrava `qt.empresa_id` | sessão e fallback tenant-scoped | `simuladores-sessoes-data-quality.test.ts` |
 | Data Quality operacional | runner ainda precisa de ambiente com schema completo | `PASS=5 WARN=4 FAIL=0 SKIPPED=5` continua sendo a melhor evidência operacional local | nenhuma escrita real feita; backlog mantido | `validate-data-quality-sql.sh`, `data-quality:local` histórico |
 
-**Conclusão DQ-01:** os caminhos críticos corrigidos nesta fase deixam de depender de integridade “implícita” entre sessão, participante, instrutor e tipo de check. A trilha continua sem saneamento real, mas já está pronta para um backfill controlado em snapshot/staging aprovado.
+**Conclusão DQ-01:** os caminhos críticos corrigidos nesta fase deixam de depender de integridade “implícita” entre sessão, participante, instrutor e tipo de check. A trilha de execução agora tem gate fail-closed, mas a sessão atual permaneceu bloqueada por ausência de staging/snapshot/rollback/autorização.
 
 ---
 
@@ -109,12 +109,13 @@ Os seguintes pontos permanecem como evidência de governança legada e exigem re
 ## 7. Riscos residuais
 
 - `MIG-01` continua exigindo uma execução controlada separada antes de ser tratado como encerrado.
-- `DQ-01` continua exigindo snapshot aprovado e lote de saneamento explícito antes de ser tratado como encerrado.
+- `DQ-01` continua bloqueado até existir snapshot aprovado, rollback explícito e autorização operacional para um lote de saneamento.
 - Nenhuma dessas pendências foi mascarada com apply remoto, migration nova ou limpeza manual de dados.
 
 ---
 
 ## 8. Próxima etapa grande recomendada
 
-1. Executar o backfill controlado de `DQ-01` em snapshot/staging aprovado, começando pelos domínios bloqueadores.
-2. Executar a sprint separada de `MIG-01 controlled rebaseline`, com corte, rollback e validação estrutural explícitos.
+1. Provisionar staging, snapshot e rollback explícito para `DQ-01`, depois rerodar o gate fail-closed.
+2. Executar o backfill controlado de `DQ-01` em snapshot/staging aprovado, começando pelos domínios bloqueadores.
+3. Executar a sprint separada de `MIG-01 controlled rebaseline`, com corte, rollback e validação estrutural explícitos.

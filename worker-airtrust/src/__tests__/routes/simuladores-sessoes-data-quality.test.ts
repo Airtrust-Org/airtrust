@@ -417,6 +417,27 @@ describe('simuladores sessoes data-quality guards', () => {
     expect(logs.some((log) => log.sql.includes('INSERT INTO sessoes_participantes'))).toBe(false);
   });
 
+  it('rejects participant creation when sessao does not exist and avoids orphan inserts', async () => {
+    const { db, logs } = createSimuladoresDb();
+
+    const response = await simuladoresSessoesRoutes.fetch(
+      new Request('http://localhost/sessoes/sess-missing/participantes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-empresa-id': '1' },
+        body: JSON.stringify({ funcionario_id: 11, funcao: 'ALUNO' }),
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Sessão não encontrada',
+    });
+    expect(logs.some((log) => log.sql.includes('INSERT INTO sessoes_participantes'))).toBe(false);
+  });
+
   it('blocks cross-tenant participant update and delete by id', async () => {
     const { db } = createSimuladoresDb();
 

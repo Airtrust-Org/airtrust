@@ -149,3 +149,4 @@ Os critérios agora atendidos são:
 
 Executar uma sprint separada de **controlled backfill execution** em snapshot/staging aprovado, começando pelos domínios bloqueadores (`usuarios/tenant`, `funcionarios`, `qualificacoes`, `simuladores`, `escalas`, `FRMS`) e deixando dashboards apenas como validação derivada pós-saneamento.
 
+**Atualização Sprint AJ (2026-06-04):** a tentativa de sair desta readiness para execução real ficou bloqueada por falta de staging aprovado, snapshot, rollback e autorização explícita na sessão atual. Ver `docs/AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md`.
