@@ -11,8 +11,8 @@
 
 | Stream | Status | Motivo |
 |---|---|---|
-| `MIG-01` | `PARTIAL_REQUIRES_FUTURE_REBASELINE` | a cadeia canônica segue com 30 prefixos duplicados, 3 nomes fora do padrão, exceções históricas de replay e construtos hostis ao runner do D1; a fase fechou a governança local e a documentação, mas não corrige a história já aplicada |
-| `DQ-01` | `PARTIAL_REQUIRES_MIGRATION_OR_BACKFILL` | os caminhos críticos de simuladores foram endurecidos no runtime e testados, porém o runner de Data Quality continua parcial (`SKIPPED`) e nenhum dado real foi saneado nesta etapa |
+| `MIG-01` | `READY_FOR_CONTROLLED_REBASELINE` | a cadeia histórica não foi curada nem reescrita, mas a estratégia de corte, validação, rollback e rebaseline controlado agora está explicitamente documentada |
+| `DQ-01` | `READY_FOR_CONTROLLED_BACKFILL` | nenhum dado real foi saneado, mas os riscos, as regras de integridade, os critérios de detecção e a ordem de backfill controlado agora estão documentados |
 
 ---
 
@@ -71,7 +71,7 @@ Os seguintes pontos permanecem como evidência de governança legada e exigem re
 - `worker-airtrust/scripts/aplicar-migration-0091-seguro.sh`
 - `scripts/validation/audit-deploy-scripts.sh` como inventário/auditoria de uso de `migrations apply`
 
-**Conclusão MIG-01:** a fase fechou o monitoramento local e congelou as exceções históricas, mas a cadeia não está “curada”. O passo estrutural correto continua sendo uma sprint dedicada de rebaseline/squash ou outra estratégia equivalente de reconstrução governada.
+**Conclusão MIG-01:** a cadeia não está “curada”, mas o projeto agora tem material suficiente para uma execução controlada de rebaseline em sprint separada, sem editar retrospectivamente a história aplicada.
 
 ---
 
@@ -86,11 +86,7 @@ Os seguintes pontos permanecem como evidência de governança legada e exigem re
 | Simuladores checks | fallback de checks não pode puxar `qualificacoes_tipos` de outro tenant | sessão era lida sem tenant e o fallback não filtrava `qt.empresa_id` | sessão e fallback tenant-scoped | `simuladores-sessoes-data-quality.test.ts` |
 | Data Quality operacional | runner ainda precisa de ambiente com schema completo | `PASS=5 WARN=4 FAIL=0 SKIPPED=5` continua sendo a melhor evidência operacional local | nenhuma escrita real feita; backlog mantido | `validate-data-quality-sql.sh`, `data-quality:local` histórico |
 
-**Conclusão DQ-01:** os caminhos críticos corrigidos nesta fase deixam de depender de integridade “implícita” entre sessão, participante, instrutor e tipo de check. Mesmo assim, a trilha não fecha totalmente porque:
-
-- o runner operacional ainda tem `SKIPPED` em ambiente local;
-- nenhum dado real foi auditado/saneado nesta etapa;
-- qualquer inconsistência histórica já persistida continua exigindo snapshot aprovado e possível backfill futuro.
+**Conclusão DQ-01:** os caminhos críticos corrigidos nesta fase deixam de depender de integridade “implícita” entre sessão, participante, instrutor e tipo de check. A trilha continua sem saneamento real, mas já está pronta para um backfill controlado em snapshot/staging aprovado.
 
 ---
 
@@ -112,13 +108,13 @@ Os seguintes pontos permanecem como evidência de governança legada e exigem re
 
 ## 7. Riscos residuais
 
-- `MIG-01` continua impedindo confiança plena em replay limpo de toda a história sem baseline governado.
-- `DQ-01` continua sem evidência completa em snapshot aprovado e sem saneamento de dados já persistidos.
+- `MIG-01` continua exigindo uma execução controlada separada antes de ser tratado como encerrado.
+- `DQ-01` continua exigindo snapshot aprovado e lote de saneamento explícito antes de ser tratado como encerrado.
 - Nenhuma dessas pendências foi mascarada com apply remoto, migration nova ou limpeza manual de dados.
 
 ---
 
 ## 8. Próxima etapa grande recomendada
 
-1. Executar `Data Quality` completo em snapshot/staging aprovado para remover `SKIPPED` relevantes e separar o que é apenas regra de aplicação do que já virou dívida de dados.
-2. Depois disso, abrir uma sprint específica de `MIG-01 rebaseline/governance`, com estratégia explícita para cadeia nova de ambientes sem tocar retrospectivamente nas migrations históricas já aplicadas.
+1. Executar o backfill controlado de `DQ-01` em snapshot/staging aprovado, começando pelos domínios bloqueadores.
+2. Executar a sprint separada de `MIG-01 controlled rebaseline`, com corte, rollback e validação estrutural explícitos.

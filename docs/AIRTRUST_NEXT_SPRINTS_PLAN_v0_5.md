@@ -530,6 +530,19 @@
 - **Status final desta sprint:** `MIG-01 = PARTIAL_REQUIRES_FUTURE_REBASELINE`; `DQ-01 = PARTIAL_REQUIRES_MIGRATION_OR_BACKFILL`.
 - **Próxima fase:** executar Data Quality completo em snapshot/staging aprovado e depois abrir a sprint estrutural de rebaseline/governança de migrations.
 
+### Sprint AI — Migration Rebaseline + Data Quality Backfill Readiness ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** preparar readiness formal de rebaseline e backfill sem executar apply real, sem D1 remoto e sem tocar dados reais.
+- **Entregue:**
+  - `docs/AIRTRUST_MIGRATION_REBASELINE_READINESS_v0_5.md`;
+  - `docs/AIRTRUST_DATA_QUALITY_BACKFILL_READINESS_v0_5.md`;
+  - scripts dry-run locais `scripts/audit-migration-chain-readiness.sh` e `scripts/audit-data-quality-readiness.sh`;
+  - teste `readiness-audit-scripts.test.ts` para bloquear regressão dos scripts;
+  - matriz/plano/resumo reclassificados para readiness controlada.
+- **Sem:** migration nova, D1 remoto, deploy, backfill real, edição de migration histórica.
+- **Status final desta sprint:** `MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`.
+- **Próxima fase:** executar a janela controlada de backfill e a janela controlada de rebaseline em ambiente aprovado.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -613,6 +626,7 @@
 | Z | SIGVOOS Runtime Fallback Removal + Final Audit Closure ✅ | Concluído | GPT-5.5 | Não | Não |
 | Z.1 | Reauditoria Independente do Fechamento DDL Residual | Curto prazo | GPT-5.5/Opus | Não | Não |
 | AH | Data Quality + Migration Integrity ✅ | Concluído | GPT-5 / Sonnet 4.6 | Não | Não |
+| AI | Migration Rebaseline + Data Quality Backfill Readiness ✅ | Concluído | GPT-5 / Sonnet 4.6 | Não | Não |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
 | AC | Repository Pattern Expansao | Longo prazo | GPT-5.4 | Sim | Nao |
@@ -623,4 +637,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)**, **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado)**, **Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (`ensureSigvoosTables()` removido, 10 call sites eliminados, teste de ausência de DDL/runtime criado, `R01 = RESOLVED`)** e **Sprint AH (Data Quality + Migration Integrity: `MIG-01` parcial com guard local permanente; `DQ-01` parcial com hardening crítico de simuladores)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)**, **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado)**, **Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (`ensureSigvoosTables()` removido, 10 call sites eliminados, teste de ausência de DDL/runtime criado, `R01 = RESOLVED`)**, **Sprint AH (Data Quality + Migration Integrity: `MIG-01` parcial com guard local permanente; `DQ-01` parcial com hardening crítico de simuladores)** e **Sprint AI (`MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`; docs + dry-run scripts + readiness tests criados)**.

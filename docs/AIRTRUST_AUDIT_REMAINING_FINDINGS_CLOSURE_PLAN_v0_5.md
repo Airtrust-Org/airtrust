@@ -10,7 +10,7 @@
 O AirTrust entrou numa fase em que os achados remanescentes ja nao sao de correcao rapida de codigo em producao. O que resta se divide em tres grupos:
 
 1. governanca e rollout controlado (`Audit v2`, `RBAC/Suporte v2`, `Data Quality`, smoke com empresa esperada);
-2. integridade historica de migrations (`MIG-01`), agora mapeada com guard local e excecoes documentadas, mas ainda sem rebaseline;
+2. integridade historica de migrations (`MIG-01`), agora com readiness formal de rebaseline controlado, ainda sem execucao real;
 3. DDL residual com dependencias estruturais (R01 = RESOLVED; R09 = RESOLVED; R04 = RESOLVED; stream DDL runtime encerrado para SIGVOOS/Documentos/Qualificacoes);
 4. cobertura e higiene de engenharia (EVD/beta, status residual, observabilidade, R2 metadata).
 
@@ -37,10 +37,10 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | `R01` - SIGVOOS runtime DDL | RESOLVED | fallback runtime removido; bootstrap preservado; replay/bootstrap tests e ausência de DDL/runtime PASS | nenhuma — seguir apenas com reauditoria independente opcional | GPT-5.5 Altissimo |
 | `R04` - Documentos bootstrap DDL | ✅ RESOLVED (Sprint R04.7, 2026-06-04) | `0388` já aplicada e probe pós-apply PASS desde R04.5; bootstrap runtime removido na Sprint R04.6; deploy Worker/API executado na R04.7 (APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9), smoke pós-deploy PASS (3/3 público, read-only PASS). R04 = RESOLVED. | Nenhuma — concluído | — |
 | `R09` - `qualificacoes/shared.ts` dynamic DDL | ✅ RESOLVED (Sprint R09, 2026-06-03) | ALTER TABLE removido; `renovada`=0200+; `local`/`modalidade`=removidas por 0200; active path ja era no-op | Nenhuma | — |
-| `MIG-01` - Migration Integrity | PARTIAL | diretorio canonico segue com 30 prefixos duplicados, 3 nomes fora do padrao e excecoes historicas de replay; o guard local agora impede regressao silenciosa | manter governanca local e planejar sprint dedicada de rebaseline/squash | GPT-5.5 Altissimo |
+| `MIG-01` - Migration Integrity | READY_FOR_CONTROLLED_REBASELINE | diretorio canonico segue com 30 prefixos duplicados, 3 nomes fora do padrao e excecoes historicas de replay, mas agora existe estrategia formal de corte, rollback e staging | executar a janela controlada de rebaseline em ambiente aprovado | GPT-5.5 Altissimo |
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
 | RBAC/Suporte v2 | IMPLEMENTATION_READY | depende do foundation audit-first e de migration de papeis | implementar schema + dual-read depois do Audit v2 | GPT-5.5 Altissimo |
-| Data Quality | PARTIAL/OPEN | checks ainda ficaram `SKIPPED`, nenhum dado real foi saneado e a fase atual apenas endureceu caminhos criticos de simuladores | executar em staging/schema completo e separar eventual backfill futuro | GPT-5.4 Alta |
+| Data Quality | READY_FOR_CONTROLLED_BACKFILL | checks continuam sem saneamento real, mas os riscos, a ordem de detecção e a trilha de decisão manual já estão definidos | executar o backfill controlado em snapshot/staging aprovado | GPT-5.4 Alta |
 | Smoke com empresa esperada | PARTIAL | sem credencial efemera/read-only e sem `AIRTRUST_EXPECTED_EMPRESA_*` tambem na OP-2 | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
 
 ## 4. R01 - SIGVOOS
@@ -120,9 +120,9 @@ Estado real:
 - a sprint atual criou o guard `migration-governance.test.ts`, pinando duplicatas, nomes fora do padrao, `CREATE TEMP TABLE` e `PRAGMA foreign_keys = OFF`.
 
 Conclusao:
-- o stream DDL runtime esta fechado, mas isso nao fecha `MIG-01`;
-- `MIG-01` agora tem governanca local e documentacao suficientes para evitar regressao silenciosa;
-- o fechamento estrutural real ainda pede uma sprint separada de rebaseline/squash ou baseline governado para ambientes novos.
+- o stream DDL runtime esta fechado e `MIG-01` agora já tem readiness suficiente para uma execucao controlada;
+- a cadeia historica continua exigindo uma sprint separada de execucao, nao mais de definicao;
+- a governanca local segue impedindo regressao silenciosa ate a janela real de rebaseline.
 
 ## 10. Data Quality
 
@@ -135,14 +135,14 @@ Estado real:
 
 Conclusao:
 - este e o grupo de pendencias mais adequado para DeepSeek/GPT-5.4;
-- tambem e o grupo mais barato de fechar antes de mexer novamente em schema/governanca.
+- ele agora ja pode sair da fase de desenho e entrar em execucao controlada quando houver snapshot aprovado.
 
 ## 11. Ordem final recomendada
 
-1. Fechar `Smoke + Data Quality` em ambiente aprovado.
-2. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
-3. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
-4. Planejar a sprint estrutural de `MIG-01` (rebaseline/governanca da cadeia historica) sem tocar retrospectivamente nas migrations aplicadas.
+1. Fechar `Smoke + Data Quality` em ambiente aprovado, agora na forma de backfill controlado.
+2. Executar a janela controlada de `MIG-01 rebaseline`.
+3. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
+4. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
 5. ~~`R09 Readiness/Verification Sprint`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
 6. ~~Remover o bootstrap de Documentos~~ ✅ CONCLUÍDO (Sprint R04.6 + R04.7). A `0388` já estava aplicada e sondada; o bootstrap foi removido (R04.6: `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado). Deploy Worker/API executado (R04.7: APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3). **R04 = RESOLVED.**
 7. `R01 SIGVOOS Runtime Fallback Removal` — **CONCLUÍDO** na Sprint R01.4. O bootstrap/runbook foi preservado e o runtime DDL saiu integralmente do código.
@@ -154,7 +154,7 @@ Conclusao:
 
 - Smoke autenticado com empresa esperada.
 - Data Quality completo em staging/snapshot aprovado.
-- Planejamento de rebaseline/governanca de migrations sem editar o historico aplicado.
+- Execucao controlada de rebaseline/governanca de migrations usando a estrategia ja aprovada.
 - ~~Sprint curta de verificacao do `R09`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
 - ~~R04 migration aplicada / bootstrap removido~~ ✅ CONCLUÍDO (Sprint R04.5: `0388` aplicada + probe pós-apply PASS; Sprint R04.6: bootstrap removido, `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo; Sprint R04.7: deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3. R04 = RESOLVED.)
 - Cobertura de testes beta/EVD.
@@ -165,7 +165,7 @@ Conclusao:
 
 - Audit v2 staging flag test/paridade controlada.
 - RBAC/Suporte v2 com migration de papeis e dual-read.
-- `MIG-01` enquanto depender de baseline/rebaseline estrutural da cadeia historica.
+- `MIG-01` enquanto depender da execucao controlada do baseline/rebaseline estrutural da cadeia historica.
 - ~~`R04` se envolver deploy do Worker/API e smoke pós-deploy~~ ✅ CONCLUÍDO (Sprint R04.7, 2026-06-04). Deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS (3/3). R04 = RESOLVED.
 - `R01` enquanto depender de baseline, cadeia historica e possivel estrategia de rebuild para ambientes novos.
 
@@ -175,10 +175,10 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 
 1. Audit v2 tiver schema aplicado, flag validada e rollout/paridade aprovados.
 2. RBAC/Suporte v2 estiver persistido, auditavel e sem dependencia do fallback legado.
-3. Data Quality estiver sem `SKIPPED` relevantes em ambiente aprovado.
+3. Data Quality tiver backfill aprovado e estiver sem `SKIPPED` relevantes em ambiente aprovado.
 4. `R01` nao depender mais de DDL runtime. Isso foi atingido na Sprint R01.4: `ensureSigvoosTables()` e os 10 call sites sairam do runtime, o bootstrap local permaneceu preservado e **`R01 = RESOLVED`**. `R04` = RESOLVED (Sprint R04.6 + R04.7: bootstrap removido, deploy + smoke PASS). `R09` = RESOLVED (Sprint R09, 2026-06-03).
 5. Smoke autenticado com empresa esperada estiver documentado como `PASS`.
-6. `MIG-01` sair do estado de excecoes historicas documentadas para uma estrategia estrutural aprovada de baseline/rebaseline.
+6. `MIG-01` sair do estado de readiness para uma execucao controlada concluida e validada.
 
 **Addendum Sprint R04.6 (2026-06-03):** o bootstrap runtime de Documentos foi removido, fechando o ciclo R04 iniciado no Sprint R04.1. Ações executadas: `auto-migration-documentos.ts` deletado; `api-bootstrap.ts` limpo (import + call); guard test atualizado com R04 documentado como RESOLVED nos comentários; 3 suites de teste PASS (8/8, 13/13, 12/12). **R04 = RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY.** Nenhuma migration nova, nenhum schema remoto alterado, nenhum backfill, nenhum dado tocado. Naquele momento, R01 permanecia o único resíduo runtime ativo (`0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`). Próximo passo da época: deploy do Worker/API + smoke pós-deploy → R04 = RESOLVED.
 
@@ -195,3 +195,5 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 **Addendum Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (2026-06-04):** `ensureSigvoosTables()` foi removido de `sigvoos-frms.ts`, os 10 call sites foram eliminados de runtime, o bootstrap `scripts/bootstrap-new-environment.sql` foi preservado e o teste dedicado `sigvoos-no-runtime-ddl.test.ts` passou a garantir ausência de DDL/runtime SIGVOOS. Nenhuma migration histórica foi editada, nenhuma migration nova foi criada, nenhum D1 remoto foi acessado e nenhum deploy foi executado. **`R01 = RESOLVED`**. `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual. Próxima etapa recomendada: reauditoria independente com Opus.
 
 **Addendum Sprint AH Data Quality + Migration Integrity (2026-06-04):** `MIG-01` foi reclassificado para **`PARTIAL_REQUIRES_FUTURE_REBASELINE`**. A sprint criou `migration-governance.test.ts`, congelando 30 prefixos duplicados, 3 nomes fora do padrao e os principais construtos historicos hostis ao runner do D1, sem editar migrations aplicadas. `DQ-01` permaneceu parcial, mas os caminhos criticos de simuladores agora validam tenant e referencias antes de ler/escrever: `GET /instrutores`, participantes de sessao e fallback de checks foram endurecidos e cobertos por `simuladores-sessoes-data-quality.test.ts`. Nenhum D1 remoto, deploy, migration nova, backfill ou saneamento de dados reais foi executado.
+
+**Addendum Sprint AI Migration Rebaseline + Data Quality Backfill Readiness (2026-06-04):** `MIG-01` avancou para **`READY_FOR_CONTROLLED_REBASELINE`**. A sprint criou `AIRTRUST_MIGRATION_REBASELINE_READINESS_v0_5.md` e `audit-migration-chain-readiness.sh`, explicitando corte, validacao local, staging e rollback sem tocar migrations historicas. `DQ-01` avancou para **`READY_FOR_CONTROLLED_BACKFILL`** com `AIRTRUST_DATA_QUALITY_BACKFILL_READINESS_v0_5.md` e `audit-data-quality-readiness.sh`, separando risco, deteccao, migration eventual, backfill e decisao manual. Nenhum D1 remoto, deploy, migration nova ou backfill real foi executado.
