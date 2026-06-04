@@ -26,6 +26,25 @@ const HIGH_SQL_LIMIT_CAPS = {
   'services/sigvoos-frms.ts': 5000,
 } as const;
 
+const CRITICAL_SELECT_STAR_CAPS = {
+  'routes/aeronaves.ts': 1,
+  'routes/escalas-alocacoes.ts': 1,
+  'routes/escalas-padroes.ts': 1,
+  'routes/escalas-shared.ts': 2,
+  'routes/escalas-tripulacoes.ts': 4,
+  'routes/frms-fadiga-checkin.ts': 3,
+  'routes/funcionarios-mutations.ts': 4,
+  'routes/lms-matriculas.ts': 5,
+  'routes/simuladores-catalogo.ts': 6,
+  'routes/simuladores-equipamentos.ts': 6,
+  'routes/simuladores-fichas-acoes.ts': 3,
+  'routes/simuladores-fichas-edicoes.ts': 3,
+  'routes/simuladores-fichas-simulador.ts': 6,
+  'routes/simuladores-fichas.ts': 4,
+  'routes/simuladores-modelos.ts': 8,
+  'routes/simuladores-sessoes-update.ts': 4,
+} as const;
+
 function listRuntimeSourceFiles(dir: string): string[] {
   const entries = readdirSync(dir, { withFileTypes: true });
   const files: string[] = [];
@@ -60,6 +79,10 @@ function listHighSqlLimits(source: string) {
   return [...source.matchAll(/LIMIT\s+(\d+)/gi)]
     .map((match) => Number(match[1]))
     .filter((limit) => limit > 1000);
+}
+
+function countSelectStar(source: string) {
+  return source.match(/SELECT\s+\*/gi)?.length ?? 0;
 }
 
 describe('architecture and performance guardrails', () => {
@@ -115,6 +138,41 @@ describe('architecture and performance guardrails', () => {
     for (const { file, limits } of offenders) {
       expect(Math.max(...limits)).toBeLessThanOrEqual(
         HIGH_SQL_LIMIT_CAPS[file as keyof typeof HIGH_SQL_LIMIT_CAPS],
+      );
+    }
+  });
+
+  it('keeps SELECT * usage explicit in critical product routes only', () => {
+    const criticalScope = runtimeFiles
+      .map((file) => {
+        const rel = relPath(file);
+        if (!rel.startsWith('routes/')) return null;
+
+        const criticalPrefixes = [
+          'routes/aeronaves',
+          'routes/dashboard',
+          'routes/escalas',
+          'routes/frms',
+          'routes/funcionarios',
+          'routes/lms',
+          'routes/qualificacoes',
+          'routes/simuladores',
+        ];
+
+        if (!criticalPrefixes.some((prefix) => rel.startsWith(prefix))) return null;
+
+        const source = readFileSync(file, 'utf8');
+        return { file: rel, selectStarCount: countSelectStar(source) };
+      })
+      .filter((item): item is { file: string; selectStarCount: number } => Boolean(item))
+      .filter(({ selectStarCount }) => selectStarCount > 0)
+      .sort((a, b) => a.file.localeCompare(b.file));
+
+    expect(criticalScope.map(({ file }) => file)).toEqual(Object.keys(CRITICAL_SELECT_STAR_CAPS).sort());
+
+    for (const { file, selectStarCount } of criticalScope) {
+      expect(selectStarCount).toBeLessThanOrEqual(
+        CRITICAL_SELECT_STAR_CAPS[file as keyof typeof CRITICAL_SELECT_STAR_CAPS],
       );
     }
   });

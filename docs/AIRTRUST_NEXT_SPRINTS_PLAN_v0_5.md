@@ -8,6 +8,8 @@
 > **Addendum 2026-06-04:** antes dos próximos blocos grandes, o repositório passou por uma etapa ampla de cleanup/governança/superfície pública. O resultado e os residuais aceitos estão em `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`.
 >
 > **Addendum 2026-06-04 — Schema Readiness:** a fundação local para `Audit v2` + `RBAC/Suporte v2` foi versionada em `0389_platform_roles_support_access_foundation.sql`, com helper de dual-read de plataforma/suporte e helper pequeno de dual-audit legado + v2. Próximo bloco correto: apply controlado + validação de dual-read, sem ativar enforcement amplo nesta etapa.
+>
+> **Addendum 2026-06-04 — Product/Performance/Scale Hardening:** houve uma passada local de hardening sem D1 remoto, sem deploy e sem mutation. Resultado: clamp seguro de `limit` em simuladores, smoke local adicional para dashboard/EVD e guard arquitetural ampliado para `SELECT *` em rotas críticas. Próximo passo correto para este stream: medição em staging dos hotspots herdados de FRMS/SGSO/LMS/escalas antes de qualquer conclusão de escala.
 
 ---
 

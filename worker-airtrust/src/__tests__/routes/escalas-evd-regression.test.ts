@@ -90,6 +90,48 @@ function createApp() {
 }
 
 describe('EVD operational regression coverage', () => {
+  it('lista GET /evd por data com tenant binding explicito', async () => {
+    const { db, calls } = createMockDb([
+      {
+        match: (q) =>
+          q.includes('FROM escala_voo_diaria e') &&
+          q.includes('WHERE e.empresa_id = ? AND e.data = ? AND e.deleted_at IS NULL') &&
+          q.includes('ORDER BY e.hora_apresentacao ASC'),
+        all: () => ({
+          results: [
+            {
+              id: 'evd-1',
+              data: '2026-07-09',
+              pic_nome: 'PIC A',
+              sic_nome: 'SIC B',
+            },
+          ],
+        }),
+      },
+    ]);
+
+    const app = createApp();
+    const response = await app.fetch(
+      new Request('http://localhost/evd?data=2026-07-09', {
+        headers: { 'x-empresa-id': '33' },
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: [{ id: 'evd-1', data: '2026-07-09', pic_nome: 'PIC A', sic_nome: 'SIC B' }],
+    });
+    const listCall = calls.find(
+      (call) =>
+        call.method === 'all' &&
+        call.query.includes('WHERE e.empresa_id = ? AND e.data = ? AND e.deleted_at IS NULL'),
+    );
+    expect(listCall?.args).toEqual([33, '2026-07-09']);
+  });
+
   it('bloqueia POST /evd/publicacoes com conflito operacional crítico de tripulação', async () => {
     const dailyRows = [
       {
