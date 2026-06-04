@@ -7,6 +7,8 @@
 **Sprints de origem consolidados:** A (RBAC), B (Audit Trail/LGPD), C (Status Enum), D (Testes Beta), E (DDL), F (Data Quality), G (Runner), H (Repository Dashboard), I (Supabase Feasibility), J (Supabase Preparation), K (Tenant Isolation Docs), K.1 (Tenant Residuals), L (LMS Reports Integration), Reauditoria Opus v2, General Audit Opus, V (DDL Residual Design), W (DDL Pré-Fase), X.0-X.5 (DDL Schema Probe + Apply/Deploy), R/S/T/T.1 (Audit v2), OP-1 (Readiness operacional consolidada), OP-2 (Staging operational gate), AH (Data Quality + Migration Integrity), AI (Migration Rebaseline + Data Quality Backfill Readiness), AJ (DQ-01 Controlled Backfill Gate), AK (Controlled Execution Environment Contract), Audit Cycle Final Closure.
 
 > **Addendum 2026-06-04:** esta matriz continua sendo a fonte mestre dos streams principais do ciclo. Para higiene residual de repositório, governança documental e superfície pública remanescente, usar como fonte canônica complementar `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`.
+>
+> **Addendum 2026-06-04 — Block 4 Controlled Closure:** `0385_audit_events_v2.sql` foi aplicada com sucesso em `staging` sob gate, snapshot e rollback dedicados, enquanto o enforcement gradual de `RBAC/Suporte v2` entrou em escopo controlado nas rotas sensíveis de certificados/admin. Status canônicos correntes: `RBAC_SUPPORT_V2 = GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE` e `AUDIT_V2 = PARITY_VALIDATED_FOR_CONTROLLED_SCOPE`.
 
 ---
 
@@ -14,15 +16,15 @@
 
 Este documento consolida **todos os achados de auditoria** do AirTrust identificados entre 2026-05 e 2026-06, cobrindo 12 sprints e 2 auditorias gerais independentes (Opus). O objetivo é fornecer uma matriz única que permita leitura rápida do estado de cada achado: o que foi corrigido, o que permanece aberto, e o que exige condições especiais (migration, staging, GPT-5.5) para ser tratado.
 
-**Estado geral do AirTrust em 2026-06-03 após o Sprint T.1 (Audit v2 local activation run):**
+**Estado geral do AirTrust em 2026-06-04 após o fechamento controlado do Bloco 4:**
 
 - **Nenhum P0 ativo.** O único P0 da auditoria original (reset admin cross-tenant) foi mitigado e testado.
 - **Nenhum P1 de código ativo.** FRMS fail-open, `escala_alocacoes` sem `empresa_id`, e scripts destrutivos foram mitigados — com residuais P2 operacionais e P3 estruturais.
 - **Pronto para piloto interno/controlado:** Sim, com condições (CONDITIONAL GO).
-- **Pronto para cliente externo amplo:** Não ainda. Bloqueadores: dual-write v2 ainda não ativado/validado em ambiente aprovado, RBAC/suporte v2 ainda nao implementado, data quality nao executado operacionalmente, cobertura de testes beta insuficiente.
+- **Pronto para cliente externo amplo:** Não ainda. O escopo atual de `Audit v2` e `RBAC/Suporte v2` continua controlado e não amplo.
 - **Pronto para 5+ empresas:** Não. Requer remoção de `userId===1`, DDL runtime residual, status enum central, e observabilidade multiempresa.
 
-**Status consolidado:** O Sprint S criou `recordAuditEventV2()` e integrou dual-write mínimo em cursos LMS atrás de flag, preservando `logAudit()` legado. O Sprint T adicionou readiness local/staging e o Sprint T.1 executou a validação local aprovada com `PASS` nos dois runners, sem ativar produção. Os itens de Audit/LGPD avançaram para `READY_FOR_STAGING_FLAG_TEST`.
+**Status consolidado:** o writer canônico `recordAuditEventV2()` segue preservando o legado via helper dual-write. Após as janelas controladas de `0389` e `0385` em `staging`, `Audit v2` já tem schema/paridade validados para escopo controlado e `RBAC/Suporte v2` já tem enforcement gradual ativo apenas nas rotas sensíveis selecionadas.
 
 ---
 

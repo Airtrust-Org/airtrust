@@ -26,8 +26,8 @@
 | `CLN-03` | `MITIGATED_BY_GITIGNORE` |
 | `OPS-01` | `MITIGATED_WITH_GUARDS` |
 | `VALIDATION_BASELINE` | `PASS` |
-| `RBAC_SUPPORT_V2` | `SCHEMA_APPLIED_READY_FOR_GRADUAL_ENFORCEMENT` |
-| `AUDIT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
+| `RBAC_SUPPORT_V2` | `GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE` |
+| `AUDIT_V2` | `PARITY_VALIDATED_FOR_CONTROLLED_SCOPE` |
 | `PRODUCT_PERFORMANCE_SCALE` | `MITIGATED_WITH_LOCAL_GUARDS_AND_SMOKE` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 
@@ -50,6 +50,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md` | resultado da execução controlada em `staging` e handoff para `MIG-01` |
 | `docs/AIRTRUST_MIG01_CONTROLLED_REBASELINE_EXECUTION_RESULT_AND_0389_HANDOFF_v0_5.md` | resultado do rebaseline controlado de `MIG-01` e handoff para a `0389` |
 | `docs/AIRTRUST_0389_AUDIT_V2_RBAC_SCHEMA_EXECUTION_RESULT_AND_ENFORCEMENT_HANDOFF_v0_5.md` | resultado da janela controlada da `0389` e handoff para enforcement gradual |
+| `docs/AIRTRUST_AUDIT_V2_RBAC_GRADUAL_ENFORCEMENT_RESULT_AND_PRODUCT_HANDOFF_v0_5.md` | fechamento do bloco 4 com apply da `0385`, paridade controlada de `Audit v2` e enforcement gradual de RBAC/Suporte |
 | `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md` | cleanup residual, governança e superfície pública |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_GOVERNANCE_v0_5.md` | matriz de RBAC/suporte/admin/maintenance/debug/audit da passada atual |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_SCHEMA_READINESS_v0_5.md` | fundação de schema/readiness para `Audit v2` + `RBAC/Suporte v2` |
@@ -78,6 +79,8 @@ Usar para `DQ-01`, `MIG-01` e trilhas controladas:
 | `docs/controlled-execution/mig01-staging-schema-baseline-20260604.sql` | baseline SQL de schema gerado a partir do snapshot `staging` |
 | `docs/controlled-execution/0389-staging-target-evidence-20260604.md` | evidência do target `staging` para a `0389` |
 | `docs/controlled-execution/0389-staging-rollback-plan-20260604.md` | rollback testável da janela `0389` em `staging` |
+| `docs/controlled-execution/audit-v2-staging-target-evidence-20260604.md` | evidência do target `staging` para a `0385` / `Audit v2` |
+| `docs/controlled-execution/audit-v2-staging-rollback-plan-20260604.md` | rollback testável da janela `Audit v2` em `staging` |
 
 ## 4. Documentos históricos/encerrados
 
@@ -104,6 +107,6 @@ Estes documentos continuam úteis como trilha de auditoria, mas não devem ser u
 
 ## 6. Próximos blocos grandes
 
-1. Enforcement runtime gradual de `RBAC/Suporte v2`.
-2. Fechar a paridade/schema operacional de `Audit v2` em `staging`, dado `audit_events_v2` ainda ausente no target.
-3. Product/performance/scale em `staging`.
+1. Product/performance/scale em `staging`.
+2. Ampliar o enforcement gradual de `RBAC/Suporte v2` somente após nova validação operacional controlada.
+3. Release/deploy gate final pós-bloco de performance/scale.

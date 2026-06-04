@@ -67,6 +67,12 @@ command_matches_mode() {
       contains_pattern '(^|[^a-z])rebaseline([^a-z]|$)' || return 1
       ! contains_pattern '(^|[^a-z])backfill([^a-z]|$)'
       ;;
+    audit-v2-schema)
+      contains_pattern '(^|[^a-z])(audit-v2|audit_v2)([^a-z]|$)' || return 1
+      contains_pattern '(^|[^a-z])schema([^a-z]|$)' || return 1
+      ! contains_pattern '(^|[^a-z])backfill([^a-z]|$)'
+      ! contains_pattern '(^|[^a-z])rebaseline([^a-z]|$)'
+      ;;
     0389-schema)
       contains_pattern '(^|[^a-z])0389([^a-z]|$)' || return 1
       contains_pattern '(^|[^a-z])schema([^a-z]|$)' || return 1

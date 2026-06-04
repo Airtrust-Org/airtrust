@@ -18,17 +18,21 @@ vi.mock('../../middleware/auth', () => ({
     },
 }));
 
-vi.mock('../../middleware/tenant', () => ({
-  getTenantContext: (c: any) => ({
-    empresaId: Number(c.get('empresaId') || 0),
-    empresaCodigo: `empresa-${Number(c.get('empresaId') || 0)}`,
-    empresaNome: 'Empresa Teste',
-    role: 'admin',
-    plano: 'pro',
-    permissions: ['read', 'write'],
-  }),
-  getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
-}));
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  return {
+    ...actual,
+    getTenantContext: (c: any) => ({
+      empresaId: Number(c.get('empresaId') || 0),
+      empresaCodigo: `empresa-${Number(c.get('empresaId') || 0)}`,
+      empresaNome: 'Empresa Teste',
+      role: 'admin',
+      plano: 'pro',
+      permissions: ['read', 'write'],
+    }),
+    getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
+  };
+});
 
 vi.mock('../../middleware/rbac', () => ({
   requireRole:

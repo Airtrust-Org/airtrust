@@ -66,6 +66,7 @@ readonly_remote_files=(
   "scripts/extract-essencial.sh"
   "scripts/fase31_diagnostico.sh"
   "scripts/inspect_ssot.sh"
+  "scripts/run-audit-rbac-v2-staging-readonly.sh"
   "scripts/run-validate-ssot-final.sh"
   "scripts/run-0389-staging-schema-readonly.sh"
   "scripts/setup_local_dev_mirror.sh"
@@ -83,6 +84,7 @@ readonly_remote_files=(
 # Scripts com proteção própria forte (env var obrigatória + confirmação)
 self_protected_files=(
   "scripts/sync-d1-production-sanitized.sh"
+  "scripts/run-audit-v2-staging-schema-apply.sh"
   "scripts/run-dq01-staging-backfill-apply.sh"
   "scripts/run-0389-staging-schema-apply.sh"
 )
