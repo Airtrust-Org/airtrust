@@ -22,8 +22,10 @@
 | `CLN-03` | `MITIGATED_BY_GITIGNORE` |
 | `OPS-01` | `MITIGATED_WITH_GUARDS` |
 | `VALIDATION_BASELINE` | `PASS` |
-| `RBAC_SUPPORT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
-| `AUDIT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
+| `RBAC_SUPPORT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
+| `AUDIT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
+| `DQ-01` | `LOCAL_READINESS_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
+| `MIG-01` | `LOCAL_READINESS_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 
 ## 2. Documentos canônicos atuais
@@ -33,6 +35,7 @@ Use estes documentos como fonte primária para status atual:
 | Documento | Uso |
 |---|---|
 | `docs/AIRTRUST_AUDIT_CYCLE_FINAL_CLOSURE_v0_5.md` | fechamento do ciclo principal |
+| `docs/AIRTRUST_MAXIMUM_LOCAL_CLOSURE_REPORT_v0_5.md` | relatorio final unico da passada atual de fechamento local maximo |
 | `docs/AIRTRUST_AUDIT_FINDINGS_MASTER_MATRIX_v0_5.md` | matriz mestre dos achados e streams |
 | `docs/AIRTRUST_AUDIT_REMAINING_FINDINGS_CLOSURE_PLAN_v0_5.md` | plano dos remanescentes de alto impacto |
 | `docs/AIRTRUST_AUDIT_CLOSURE_EXECUTIVE_SUMMARY_v0_5.md` | resumo executivo do ciclo |

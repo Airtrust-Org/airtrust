@@ -111,8 +111,8 @@ Campos mínimos:
 
 Com a migration local versionada, helpers de dual-read/dual-audit e testes locais:
 
-- `RBAC_SUPPORT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`
-- `AUDIT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`
+- `RBAC_SUPPORT_V2 = LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT`
+- `AUDIT_V2 = LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT`
 
 Esses streams **não** estão resolvidos. O que existe agora é uma base segura para aplicação controlada futura.
 

@@ -20,6 +20,12 @@ const SQL_PREPARE_CAPS = {
   'routes/lms-cursos.ts': 44,
 } as const;
 
+const HIGH_SQL_LIMIT_CAPS = {
+  'lib/frms/fira-service.ts': 5000,
+  'routes/compliance.ts': 2000,
+  'services/sigvoos-frms.ts': 5000,
+} as const;
+
 function listRuntimeSourceFiles(dir: string): string[] {
   const entries = readdirSync(dir, { withFileTypes: true });
   const files: string[] = [];
@@ -48,6 +54,12 @@ function countLines(source: string) {
 
 function countSqlPrepareCalls(source: string) {
   return source.match(/\.prepare\s*\(/g)?.length ?? 0;
+}
+
+function listHighSqlLimits(source: string) {
+  return [...source.matchAll(/LIMIT\s+(\d+)/gi)]
+    .map((match) => Number(match[1]))
+    .filter((limit) => limit > 1000);
 }
 
 describe('architecture and performance guardrails', () => {
@@ -85,6 +97,24 @@ describe('architecture and performance guardrails', () => {
     for (const { file, prepareCount } of offenders) {
       expect(prepareCount).toBeLessThanOrEqual(
         SQL_PREPARE_CAPS[file as keyof typeof SQL_PREPARE_CAPS],
+      );
+    }
+  });
+
+  it('keeps very high SQL LIMIT baselines explicit', () => {
+    const offenders = runtimeFiles
+      .map((file) => {
+        const source = readFileSync(file, 'utf8');
+        return { file: relPath(file), limits: listHighSqlLimits(source) };
+      })
+      .filter(({ limits }) => limits.length > 0)
+      .sort((a, b) => a.file.localeCompare(b.file));
+
+    expect(offenders.map(({ file }) => file)).toEqual(Object.keys(HIGH_SQL_LIMIT_CAPS).sort());
+
+    for (const { file, limits } of offenders) {
+      expect(Math.max(...limits)).toBeLessThanOrEqual(
+        HIGH_SQL_LIMIT_CAPS[file as keyof typeof HIGH_SQL_LIMIT_CAPS],
       );
     }
   });
