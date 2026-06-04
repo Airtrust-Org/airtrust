@@ -9,6 +9,8 @@
 >
 > **Addendum 2026-06-04 — Schema Readiness:** a fundação local para `Audit v2` + `RBAC/Suporte v2` foi versionada em `0389_platform_roles_support_access_foundation.sql`, com helper de dual-read de plataforma/suporte e helper pequeno de dual-audit legado + v2. Próximo bloco correto: apply controlado + validação de dual-read, sem ativar enforcement amplo nesta etapa.
 >
+> **Addendum 2026-06-04 — 0389 Applied In Staging:** a `0389` foi aplicada com sucesso em `staging` via wrappers controlados, sem deploy e sem enforcement amplo. `RBAC_SUPPORT_V2 = SCHEMA_APPLIED_READY_FOR_GRADUAL_ENFORCEMENT`. `AUDIT_V2` permanece em `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` porque `audit_events_v2` ainda nao existe no target `staging`.
+>
 > **Addendum 2026-06-04 — Product/Performance/Scale Hardening:** houve uma passada local de hardening sem D1 remoto, sem deploy e sem mutation. Resultado: clamp seguro de `limit` em simuladores, smoke local adicional para dashboard/EVD e guard arquitetural ampliado para `SELECT *` em rotas críticas. Próximo passo correto para este stream: medição em staging dos hotspots herdados de FRMS/SGSO/LMS/escalas antes de qualquer conclusão de escala.
 
 ---
@@ -193,19 +195,19 @@
 - **Pendente:** staging com schema aplicado, rollback por flag e validação de paridade.
 - **Risco:** Médio.
 
-### Sprint U — Audit v2 Staging Flag Test
+### Sprint U — Audit v2 Staging Parity / Flag Prerequisite
 - **Prioridade:** Curto prazo.
-- **Objetivo:** aplicar schema em ambiente staging aprovado, ativar a flag de forma controlada e validar paridade mínima.
+- **Objetivo:** fechar o gap de schema operacional do Audit v2 em `staging`, depois ativar a flag de forma controlada e validar paridade mínima.
 - **Escopo:** schema aprovado; dual-write em LMS; rollback por flag; comparação mínima entre legado e v2; evidência sanitizada.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Deploy necessário?:** Não necessariamente, depende do ambiente aprovado e do método de validação.
 - **Migration necessária?:** Sim, em staging aprovado.
 - **Risco:** Alto.
 
-### Sprint V — RBAC/Suporte v2 Implementation Foundation
+### Sprint V — RBAC/Suporte v2 Gradual Enforcement
 - **Prioridade:** Curto prazo.
-- **Objetivo:** Implementar platform roles schema e shadow dual-read de RBAC somente depois do writer v2 estar operacional e com paridade validada.
-- **Escopo:** `platform_admin`; grants persistidos; sessoes de suporte; shadow dual-read; logs de divergencia; rollback simples.
+- **Objetivo:** ligar enforcement runtime gradual sobre o schema `0389` ja aplicado em `staging`, sem remover fallback legado nesta etapa.
+- **Escopo:** grants persistidos; sessoes de suporte; shadow dual-read; logs de divergencia; rollback por flag; fallback `userId===1` preservado.
 - **Modelo recomendado:** GPT-5.5 Altissimo.
 - **Deploy necessário?:** Sim.
 - **Migration necessária?:** Sim.
@@ -658,7 +660,7 @@
 - **Resultado:** baseline de schema replayavel em SQLite limpo, `225` tabelas, `585` indices, `21` triggers, `10` views, `d1_migrations=0` e `0389_objects=0`.
 - **Sem:** D1 remoto, deploy, producao, DQ novo, apply da `0389`, migration nova aplicada, edicao de migration historica.
 - **Status final:** `MIG-01 = RESOLVED_FOR_CONTROLLED_SCOPE`; `RBAC_SUPPORT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`; `AUDIT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`.
-- **Próxima fase:** Bloco 3 — aplicar `0389` / schema `Audit v2` + `RBAC/Suporte v2` em janela controlada propria.
+- **Próxima fase:** Bloco 4 — enforcement runtime gradual de `RBAC/Suporte v2` e fechamento do gap de `Audit v2` em `staging`.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
@@ -727,8 +729,8 @@
 | S | Audit Trail v2 Canonical Writer + Dual-Write ✅ | Concluído | GPT-5.5 | Sim (X.5) | Aplicada (X.5); flag off |
 | T | Audit v2 Activation Readiness / Local-Staging Validation ✅ | Concluído | GPT-5.5 | Não | Não |
 | T.1 | Audit v2 Local Activation Run ✅ | Concluído | GPT-5.4 | Não | Não |
-| U | Audit v2 Staging Flag Test | Curto prazo | GPT-5.5 | Nao/Controlado | Staging |
-| V | RBAC/Suporte v2 Implementation Foundation | Curto prazo | GPT-5.5 | Sim | Sim |
+| U | Audit v2 Staging Parity / Flag Prerequisite | Curto prazo | GPT-5.5 | Nao/Controlado | Staging |
+| V | RBAC/Suporte v2 Gradual Enforcement | Curto prazo | GPT-5.5 | Sim | Ja aplicada em `staging` via `0389` |
 | W | Cobertura Beta (EVD + Complementos) | Curto prazo | GPT-5.4 | Sim | Nao |
 | V | DDL Residual Design ✅ | Concluído | GPT-5.5 | Não | Planejadas (3→2) |
 | W | DDL Pré-Fase — Remover 6 `ensure*` cobertos ✅ | Concluído | GPT-5.4 | Sim | Não |

@@ -6,6 +6,8 @@
 **Modo:** Sprint consolidada de fechamento documental dos achados remanescentes. Sem migration remota, sem schema remoto, sem deploy, sem alteracao de dados reais.
 
 > **Addendum 2026-06-04:** após o fechamento principal, a etapa ampla de cleanup/governança/superfície pública foi consolidada em `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`. Este plano continua válido para `DQ-01`, `MIG-01`, Audit v2 e RBAC/Suporte v2.
+>
+> **Addendum 2026-06-04 — 0389 Controlled Schema Execution:** a `0389` foi aplicada com sucesso em `staging` sob gate, snapshot schema-only, rollback explícito e wrappers dedicados. `RBAC_SUPPORT_V2` avança para `SCHEMA_APPLIED_READY_FOR_GRADUAL_ENFORCEMENT`. `AUDIT_V2` permanece conservador em `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` porque `audit_events_v2` nao existe nesse target no estado atual.
 
 ## 1. Resumo executivo
 
@@ -40,8 +42,8 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | `R04` - Documentos bootstrap DDL | ✅ RESOLVED (Sprint R04.7, 2026-06-04) | `0388` já aplicada e probe pós-apply PASS desde R04.5; bootstrap runtime removido na Sprint R04.6; deploy Worker/API executado na R04.7 (APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9), smoke pós-deploy PASS (3/3 público, read-only PASS). R04 = RESOLVED. | Nenhuma — concluído | — |
 | `R09` - `qualificacoes/shared.ts` dynamic DDL | ✅ RESOLVED (Sprint R09, 2026-06-03) | ALTER TABLE removido; `renovada`=0200+; `local`/`modalidade`=removidas por 0200; active path ja era no-op | Nenhuma | — |
 | `MIG-01` - Migration Integrity | RESOLVED_FOR_CONTROLLED_SCOPE | baseline SQL de schema gerado a partir do snapshot `staging`, replayado em SQLite limpo, sem `d1_migrations`, sem `0389`, sem D1 remoto e sem edicao historica | nenhuma para o escopo controlado; proximo bloco e aplicar `0389` | — |
-| Audit v2 | READY_FOR_CONTROLLED_SCHEMA_MIGRATION | schema `0385` ja existe e a fundacao `0389` local foi versionada com dual-audit helper; `MIG-01` agora deixou baseline controlado validado para o apply | aplicar `0389` em ambiente aprovado e validar dual-write/sessao de suporte | GPT-5.5 Altissimo |
-| RBAC/Suporte v2 | READY_FOR_CONTROLLED_SCHEMA_MIGRATION | migration local `0389` + dual-read helper existem; `MIG-01` agora deixou baseline controlado validado para o apply | aplicar `0389`, validar dual-read e so depois ligar enforcement runtime | GPT-5.5 Altissimo |
+| Audit v2 | READY_FOR_CONTROLLED_SCHEMA_MIGRATION | helper legado + canônico validado localmente, mas `audit_events_v2` continua ausente em `staging` mesmo após a janela da `0389` | fechar o gap de schema/paridade de `Audit v2` em `staging` antes do rollout operacional | GPT-5.5 Altissimo |
+| RBAC/Suporte v2 | SCHEMA_APPLIED_READY_FOR_GRADUAL_ENFORCEMENT | `0389` aplicada em `staging`; tabelas, indices e FKs confirmados; dual-read e fallback legado preservados | iniciar enforcement runtime gradual com rollback por flag, sem remover o fallback ainda | GPT-5.5 Altissimo |
 | Data Quality | RESOLVED_FOR_CONTROLLED_SCOPE | `staging` foi materializado com snapshot/rollback/approval; gates PASS; diagnóstico pré/pós ficou `PASS=9 WARN=0 FAIL=0 SKIPPED=5`; apply remoto autorizado em `funcionarios` concluiu com `changed=0` e `remaining=0` | manter `DQ-02` separado para cobertura futura de schema completo, sem reabrir `DQ-01` | GPT-5.4 Alta |
 | Smoke com empresa esperada | PARTIAL | sem credencial efemera/read-only e sem `AIRTRUST_EXPECTED_EMPRESA_*` tambem na OP-2 | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
 | Auth/tenant residual final | RESOLVED | `AUTH-RESIDUAL-01` e `AUTH-RESIDUAL-02` fechados localmente; `AUTH_TENANT = CONFIRMED_CLOSED` | nenhuma acao local pendente | — |
