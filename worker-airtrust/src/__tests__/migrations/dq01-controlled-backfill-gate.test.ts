@@ -37,6 +37,7 @@ describe('dq01 controlled backfill gate', () => {
 
     expect(result.status).toBe(2);
     expect(result.stdout).toContain('DQ01_BACKFILL_GATE=BLOCKED_BY_ENVIRONMENT_READINESS');
+    expect(result.stdout).toContain('CONTROLLED_EXECUTION_GATE=BLOCKED_BY_ENVIRONMENT_CONTRACT');
     expect(result.stdout).toContain('REASONS=');
   });
 
@@ -54,12 +55,14 @@ describe('dq01 controlled backfill gate', () => {
         AIRTRUST_DQ01_DB_PATH: dbPath,
         AIRTRUST_DQ01_SNAPSHOT_PATH: snapshotPath,
         AIRTRUST_DQ01_ROLLBACK_PLAN_PATH: rollbackPath,
+        AIRTRUST_DQ01_SAFE_COMMAND: 'bash scripts/run-dq01-staging-backfill.sh --mode backfill --target staging',
         AIRTRUST_DQ01_SAFE_COMMAND_REVIEWED: 'YES',
       },
     });
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain('DQ01_BACKFILL_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION');
+    expect(result.stdout).toContain('CONTROLLED_EXECUTION_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION');
     expect(result.stdout).toContain('TARGET=staging');
     expect(result.stdout).toContain('SNAPSHOT_EVIDENCE=YES');
     expect(result.stdout).toContain('ROLLBACK_EVIDENCE=YES');

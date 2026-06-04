@@ -10,10 +10,10 @@
 ## 1. Veredito
 
 ```text
-DQ-01 = READY_FOR_CONTROLLED_BACKFILL
+DQ-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT
 ```
 
-O status acima significa somente que os riscos, os critérios de detecção e a ordem segura de uma futura execução controlada estão documentados. Nenhum backfill foi executado nesta etapa.
+O status acima significa que os riscos, os critérios de detecção e a ordem segura de uma futura execução controlada estão documentados, e que agora também existe contrato operacional compartilhado, gate genérico fail-closed e runbook versionado para a janela futura. Nenhum backfill foi executado nesta etapa.
 
 ---
 
@@ -119,7 +119,9 @@ Pré-condições de entrada:
 3. janela sem deploy funcional acoplado;
 4. plano de rollback do snapshot;
 5. checklist por domínio com responsável nomeado;
-6. evidência de `tsc`, `ops:guard`, `test:worker` e guards DQ PASS.
+6. evidência de `tsc`, `ops:guard`, `test:worker` e guards DQ PASS;
+7. contrato `AIRTRUST_CONTROLLED_*` preenchido e revisado;
+8. gate genérico `controlled-execution-gate.sh` em PASS antes de qualquer mutation.
 
 Ordem recomendada:
 1. detectar;
@@ -132,7 +134,7 @@ Ordem recomendada:
 
 ---
 
-## 9. Critérios para `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`
+## 9. Critérios para `DQ-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`
 
 Os critérios agora atendidos são:
 1. riscos mapeados por domínio;
@@ -141,7 +143,9 @@ Os critérios agora atendidos são:
 4. separação entre migration, backfill e decisão manual;
 5. runner e SQL read-only preservados;
 6. guards críticos de simuladores continuam ativos e testados;
-7. nenhum dado real foi tocado.
+7. contrato de ambiente controlado e runbook compartilhado versionados;
+8. gate genérico fail-closed pronto para local-copy/staging/production com travas extras para produção;
+9. nenhum dado real foi tocado.
 
 ---
 
@@ -150,3 +154,5 @@ Os critérios agora atendidos são:
 Executar uma sprint separada de **controlled backfill execution** em snapshot/staging aprovado, começando pelos domínios bloqueadores (`usuarios/tenant`, `funcionarios`, `qualificacoes`, `simuladores`, `escalas`, `FRMS`) e deixando dashboards apenas como validação derivada pós-saneamento.
 
 **Atualização Sprint AJ (2026-06-04):** a tentativa de sair desta readiness para execução real ficou bloqueada por falta de staging aprovado, snapshot, rollback e autorização explícita na sessão atual. Ver `docs/AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md`.
+
+**Atualização Sprint AK (2026-06-04):** a trilha agora também tem contrato operacional compartilhado em `AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md`, runbook em `AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md` e gate genérico `scripts/controlled-execution-gate.sh`. O stream sobe de bloqueio operacional circunstancial para `READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`, ainda sem target real aprovado nesta sessão.

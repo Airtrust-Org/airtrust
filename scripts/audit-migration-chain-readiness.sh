@@ -5,6 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIGRATIONS_DIR="$ROOT_DIR/worker-airtrust/migrations"
 BOOTSTRAP_SQL="$ROOT_DIR/scripts/bootstrap-new-environment.sql"
 READINESS_DOC="$ROOT_DIR/docs/AIRTRUST_MIGRATION_REBASELINE_READINESS_v0_5.md"
+CONTRACT_DOC="$ROOT_DIR/docs/AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md"
+RUNBOOK_DOC="$ROOT_DIR/docs/AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md"
+GENERIC_GATE="$ROOT_DIR/scripts/controlled-execution-gate.sh"
+MIG_GATE="$ROOT_DIR/scripts/mig01-controlled-rebaseline-gate.sh"
 GOVERNANCE_TEST="$ROOT_DIR/worker-airtrust/src/__tests__/migrations/migration-governance.test.ts"
 SIGVOOS_TEST="$ROOT_DIR/worker-airtrust/src/__tests__/migrations/sigvoos-base-tables-schema.test.ts"
 
@@ -16,6 +20,10 @@ fail() {
 [[ -d "$MIGRATIONS_DIR" ]] || fail "canonical migrations directory not found"
 [[ -f "$BOOTSTRAP_SQL" ]] || fail "bootstrap SQL not found"
 [[ -f "$READINESS_DOC" ]] || fail "migration readiness doc not found"
+[[ -f "$CONTRACT_DOC" ]] || fail "controlled execution contract doc not found"
+[[ -f "$RUNBOOK_DOC" ]] || fail "controlled execution runbook doc not found"
+[[ -f "$GENERIC_GATE" ]] || fail "generic controlled execution gate not found"
+[[ -f "$MIG_GATE" ]] || fail "MIG controlled gate not found"
 [[ -f "$GOVERNANCE_TEST" ]] || fail "migration governance test not found"
 [[ -f "$SIGVOOS_TEST" ]] || fail "SIGVOOS replay test not found"
 
@@ -62,6 +70,6 @@ print(
     f"non_standard_files={len(non_standard)}",
     f"regular_max_prefix={regular_max}",
     f"sentinel_count={len(sentinels)}",
+    "controlled_execution_package=YES",
 )
 PY
-

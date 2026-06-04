@@ -15,6 +15,8 @@ DQ-01 = BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS
 
 Esta etapa não executou backfill real porque o gate de ambiente falhou fechado.
 
+**Nota de status posterior:** o stream geral de DQ avançou depois para `READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT` quando o contrato operacional compartilhado, o runbook e o gate genérico foram versionados na Sprint AK. Este documento continua sendo o registro histórico da tentativa bloqueada.
+
 ---
 
 ## 2. Ambiente usado
@@ -148,4 +150,3 @@ Escopo somente diagnóstico/read-only:
 3. preencher os artefatos de gate (`AIRTRUST_DQ01_*`);
 4. rerodar `scripts/dq01-controlled-backfill-gate.sh`;
 5. só então executar um lote pequeno e isolado de backfill controlado.
-

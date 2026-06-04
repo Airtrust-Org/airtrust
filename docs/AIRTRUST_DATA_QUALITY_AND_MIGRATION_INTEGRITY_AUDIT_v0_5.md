@@ -11,8 +11,8 @@
 
 | Stream | Status | Motivo |
 |---|---|---|
-| `MIG-01` | `READY_FOR_CONTROLLED_REBASELINE` | a cadeia histórica não foi curada nem reescrita, mas a estratégia de corte, validação, rollback e rebaseline controlado agora está explicitamente documentada |
-| `DQ-01` | `BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS` | os riscos e o lote controlado estão documentados, mas a sessão atual não trouxe staging aprovado, snapshot, rollback nem autorização explícita para tocar banco alvo |
+| `MIG-01` | `READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT` | a cadeia histórica não foi curada nem reescrita, mas agora existe estratégia de corte, validação, rollback, contrato de ambiente controlado e gate compartilhado para uma janela futura |
+| `DQ-01` | `READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT` | os riscos, o lote controlado, o contrato de ambiente e o gate compartilhado estão documentados; a sessão atual segue sem target real aprovado, mas a camada operacional já está pronta |
 
 ---
 
