@@ -6,6 +6,8 @@
 **Modo:** Planejamento atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado), Sprint Z0 (R01 SIGVOOS readiness mapped), Sprint R04.5/R01 pós-apply oficial da fila pendente `0387` + `0388` e **Sprint R04.6 (bootstrap runtime de Documentos removido)**. Sem migration manual ou aplicação manual de dados reais.
 
 > **Addendum 2026-06-04:** antes dos próximos blocos grandes, o repositório passou por uma etapa ampla de cleanup/governança/superfície pública. O resultado e os residuais aceitos estão em `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`.
+>
+> **Addendum 2026-06-04 — Schema Readiness:** a fundação local para `Audit v2` + `RBAC/Suporte v2` foi versionada em `0389_platform_roles_support_access_foundation.sql`, com helper de dual-read de plataforma/suporte e helper pequeno de dual-audit legado + v2. Próximo bloco correto: apply controlado + validação de dual-read, sem ativar enforcement amplo nesta etapa.
 
 ---
 

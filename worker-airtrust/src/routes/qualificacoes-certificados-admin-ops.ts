@@ -10,13 +10,12 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
-import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 import {
   buildAuditMetadata,
   buildLegacyAuditoriaActor,
   buildLegacyAuditPayload,
 } from '../lib/audit/context';
-import { registrarAuditoria } from '../utils/auditoria';
+import { recordLegacyAndCanonicalAudit } from '../lib/audit/record-legacy-and-canonical-audit';
 
 const opsRouter = new Hono<{ Bindings: Env }>();
 
@@ -44,41 +43,42 @@ async function recordCertificadosAdminOperationAudit(
     ...params.metadata,
   });
 
-  await registrarAuditoria({
+  await recordLegacyAndCanonicalAudit({
     db: c.env.DB,
-    tabela: 'certificados_admin_ops',
-    acao: 'BULK_UPDATE',
-    registro_id: params.entityId ?? params.action,
-    dados_novos: buildLegacyAuditPayload(c, params.legacyPayload || {}, metadata),
-    ...buildLegacyAuditoriaActor(c),
-  });
-
-  await recordAuditEventV2(c.env.DB, {
-    empresaId,
-    targetEmpresaId: empresaId,
-    actorUserId,
-    actorEmpresaId,
-    actorRole,
-    eventCategory: 'ADMIN_OPERATION',
-    eventAction: params.action,
-    entityType: 'certificados_admin_ops',
-    entityId: params.entityId ?? params.action,
-    riskLevel: 'high',
-    metadata: {
-      module: 'qualificacoes_certificados',
-      source: 'certificados_admin_ops',
-      operation: params.action,
-      request_path: c.req.path,
-      http_method: c.req.method,
-      scope: 'tenant',
-      result: 'success',
-      approximate_count:
-        typeof params.metadata?.approximate_count === 'number'
-          ? params.metadata.approximate_count
-          : undefined,
-      count: typeof params.metadata?.count === 'number' ? params.metadata.count : undefined,
+    legacyAuditoria: {
+      tabela: 'certificados_admin_ops',
+      acao: 'BULK_UPDATE',
+      registro_id: params.entityId ?? params.action,
+      dados_novos: buildLegacyAuditPayload(c, params.legacyPayload || {}, metadata),
+      ...buildLegacyAuditoriaActor(c),
     },
-    retentionClass: 'SECURITY_LONG',
+    canonicalEvent: {
+      empresaId,
+      targetEmpresaId: empresaId,
+      actorUserId,
+      actorEmpresaId,
+      actorRole,
+      eventCategory: 'ADMIN_OPERATION',
+      eventAction: params.action,
+      entityType: 'certificados_admin_ops',
+      entityId: params.entityId ?? params.action,
+      riskLevel: 'high',
+      metadata: {
+        module: 'qualificacoes_certificados',
+        source: 'certificados_admin_ops',
+        operation: params.action,
+        request_path: c.req.path,
+        http_method: c.req.method,
+        scope: 'tenant',
+        result: 'success',
+        approximate_count:
+          typeof params.metadata?.approximate_count === 'number'
+            ? params.metadata.approximate_count
+            : undefined,
+        count: typeof params.metadata?.count === 'number' ? params.metadata.count : undefined,
+      },
+      retentionClass: 'SECURITY_LONG',
+    },
   });
 }
 
