@@ -66,7 +66,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 | **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; Sprint X.5 aplicou migration `0385` em produção | Ativar flag, validar paridade, ampliar cobertura dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Migration Integrity** | Sprint AH congelou a governança local e Sprint AI fechou a estratégia de rebaseline controlado com doc, rollback e dry-run local | Falta apenas a execução controlada da janela de rebaseline |
-| **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED); Sprint AH endureceu caminhos críticos de simuladores e Sprint AI fechou o mapa de backfill controlado | Falta apenas a execução controlada do backfill em snapshot/staging aprovado |
+| **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED); Sprint AH endureceu caminhos críticos de simuladores, Sprint AI fechou o mapa de backfill e Sprint AJ adicionou gate fail-closed de execução | A execução real segue bloqueada até existir staging/snapshot/rollback/autorização explícita |
 | **DDL Runtime** | Stream residual fechado: R01, R03, R04 e R09 resolvidos | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Sprint Z0 mapeou integralmente R01 (SIGVOOS), Sprint Z1 criou `0387` e Sprint Z1.1 provou a falha da cadeia limpa na `0354`. Sprint R01.2 criou `scripts/bootstrap-new-environment.sql`; Sprint R01.3 fechou a readiness; Sprint R01.4 removeu `ensureSigvoosTables()`, eliminou 10 call sites e adicionou teste dedicado de ausência de DDL/runtime SIGVOOS. R01 = RESOLVED. Sprint R04.6 removeu o bootstrap runtime de Documentos e Sprint R04.7 executou o deploy/smoke pós-deploy. R04 = RESOLVED. Sprint R09 removeu o ALTER TABLE de `shared.ts`; R09 = RESOLVED. |
 | **Repository Pattern** | Piloto em 2 domínios (dashboard, LMS reports) | Expandir gradualmente para lms-cursos, qualificações |
 | **Scripts DB** | Wrapper seguro criado para scripts críticos | Scripts shell legados ainda sem wrapper |
@@ -139,10 +139,10 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 ## 8. Proximas 5 acoes recomendadas
 
 1. **Fornecer credencial efemera/read-only + `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO`** e reexecutar o smoke autenticado.
-2. **Executar o backfill controlado de Data Quality** em ambiente staging/snapshot aprovado para zerar checks `SKIPPED`.
-3. **Executar o rebaseline controlado de MIG-01** com rollback e comparação estrutural.
-4. **Executar o Audit v2 staging flag test** com schema ja aplicado, rollback por flag e validacao de paridade minima.
-5. **Executar a foundation de RBAC/Suporte v2** somente depois do Audit v2 staging flag test aprovado.
+2. **Provisionar staging/snapshot/rollback de DQ-01** e rerodar o gate fail-closed.
+3. **Executar o backfill controlado de Data Quality** em ambiente staging/snapshot aprovado para zerar checks `SKIPPED`.
+4. **Executar o rebaseline controlado de MIG-01** com rollback e comparação estrutural.
+5. **Executar o Audit v2 staging flag test** com schema ja aplicado, rollback por flag e validacao de paridade minima.
 
 **Decisao operacional OP-1/OP-2:** `CONDITIONAL GO`.
 
@@ -192,4 +192,6 @@ O AirTrust está em um estado sólido para continuar operação e evolução. O 
 
 **Addendum Sprint AI Migration Rebaseline + Data Quality Backfill Readiness (2026-06-04):** a sprint atual elevou os dois trilhos de engenharia local para readiness controlada, ainda sem execucao real. `MIG-01` passou para **`READY_FOR_CONTROLLED_REBASELINE`** com `AIRTRUST_MIGRATION_REBASELINE_READINESS_v0_5.md`, `audit-migration-chain-readiness.sh` e `readiness-audit-scripts.test.ts`. `DQ-01` passou para **`READY_FOR_CONTROLLED_BACKFILL`** com `AIRTRUST_DATA_QUALITY_BACKFILL_READINESS_v0_5.md`, `audit-data-quality-readiness.sh` e os guards criticos de simuladores preservados.
 
-**Fim do resumo executivo.** Gerado em 2026-06-02. Atualizado com Sprint X.5 closure (R03 = RESOLVED), Sprint R04.7 (**R04 = RESOLVED**), Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy, Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness, Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (**R01 = RESOLVED**; `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual), Sprint AH (`MIG-01`/`DQ-01` auditados com guards permanentes e hardening crítico de simuladores) e Sprint AI (`MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`).
+**Addendum Sprint AJ DQ-01 Controlled Backfill Gate (2026-06-04):** a sprint atual não executou mutation e não tocou banco real. O gate de DQ-01 falhou fechado por ausência de staging aprovado, snapshot, rollback e autorização explícita na sessão. `DQ-01` foi reclassificado para **`BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS`**. Novos artefatos: `AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md`, `dq01-controlled-backfill-gate.sh` e `dq01-controlled-backfill-gate.test.ts`.
+
+**Fim do resumo executivo.** Gerado em 2026-06-02. Atualizado com Sprint X.5 closure (R03 = RESOLVED), Sprint R04.7 (**R04 = RESOLVED**), Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy, Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness, Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (**R01 = RESOLVED**; `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual), Sprint AH (`MIG-01`/`DQ-01` auditados com guards permanentes e hardening crítico de simuladores), Sprint AI (`MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`) e Sprint AJ (`DQ-01 = BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS`).

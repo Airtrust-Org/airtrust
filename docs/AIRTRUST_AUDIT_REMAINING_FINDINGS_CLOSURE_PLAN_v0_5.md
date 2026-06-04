@@ -40,7 +40,7 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | `MIG-01` - Migration Integrity | READY_FOR_CONTROLLED_REBASELINE | diretorio canonico segue com 30 prefixos duplicados, 3 nomes fora do padrao e excecoes historicas de replay, mas agora existe estrategia formal de corte, rollback e staging | executar a janela controlada de rebaseline em ambiente aprovado | GPT-5.5 Altissimo |
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
 | RBAC/Suporte v2 | IMPLEMENTATION_READY | depende do foundation audit-first e de migration de papeis | implementar schema + dual-read depois do Audit v2 | GPT-5.5 Altissimo |
-| Data Quality | READY_FOR_CONTROLLED_BACKFILL | checks continuam sem saneamento real, mas os riscos, a ordem de detecção e a trilha de decisão manual já estão definidos | executar o backfill controlado em snapshot/staging aprovado | GPT-5.4 Alta |
+| Data Quality | BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS | checks continuam sem saneamento real e a fase de execução foi corretamente bloqueada por falta de staging/snapshot/rollback/autorização explícita | provisionar ambiente aprovado e rerodar o gate de backfill | GPT-5.4 Alta |
 | Smoke com empresa esperada | PARTIAL | sem credencial efemera/read-only e sem `AIRTRUST_EXPECTED_EMPRESA_*` tambem na OP-2 | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
 
 ## 4. R01 - SIGVOOS
@@ -135,14 +135,15 @@ Estado real:
 
 Conclusao:
 - este e o grupo de pendencias mais adequado para DeepSeek/GPT-5.4;
-- ele agora ja pode sair da fase de desenho e entrar em execucao controlada quando houver snapshot aprovado.
+- ele ja tem gate de execucao versionado, mas a execucao real segue bloqueada ate existir snapshot/staging aprovado com rollback explicito.
 
 ## 11. Ordem final recomendada
 
-1. Fechar `Smoke + Data Quality` em ambiente aprovado, agora na forma de backfill controlado.
-2. Executar a janela controlada de `MIG-01 rebaseline`.
-3. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
-4. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
+1. Provisionar staging/snapshot/rollback e liberar o gate de `DQ-01`.
+2. Fechar `Smoke + Data Quality` em ambiente aprovado, agora na forma de backfill controlado.
+3. Executar a janela controlada de `MIG-01 rebaseline`.
+4. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
+5. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
 5. ~~`R09 Readiness/Verification Sprint`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
 6. ~~Remover o bootstrap de Documentos~~ ✅ CONCLUÍDO (Sprint R04.6 + R04.7). A `0388` já estava aplicada e sondada; o bootstrap foi removido (R04.6: `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado). Deploy Worker/API executado (R04.7: APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3). **R04 = RESOLVED.**
 7. `R01 SIGVOOS Runtime Fallback Removal` — **CONCLUÍDO** na Sprint R01.4. O bootstrap/runbook foi preservado e o runtime DDL saiu integralmente do código.
@@ -175,7 +176,7 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 
 1. Audit v2 tiver schema aplicado, flag validada e rollout/paridade aprovados.
 2. RBAC/Suporte v2 estiver persistido, auditavel e sem dependencia do fallback legado.
-3. Data Quality tiver backfill aprovado e estiver sem `SKIPPED` relevantes em ambiente aprovado.
+3. Data Quality tiver ambiente aprovado, backfill executado e estiver sem `SKIPPED` relevantes em ambiente aprovado.
 4. `R01` nao depender mais de DDL runtime. Isso foi atingido na Sprint R01.4: `ensureSigvoosTables()` e os 10 call sites sairam do runtime, o bootstrap local permaneceu preservado e **`R01 = RESOLVED`**. `R04` = RESOLVED (Sprint R04.6 + R04.7: bootstrap removido, deploy + smoke PASS). `R09` = RESOLVED (Sprint R09, 2026-06-03).
 5. Smoke autenticado com empresa esperada estiver documentado como `PASS`.
 6. `MIG-01` sair do estado de readiness para uma execucao controlada concluida e validada.
@@ -197,3 +198,5 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 **Addendum Sprint AH Data Quality + Migration Integrity (2026-06-04):** `MIG-01` foi reclassificado para **`PARTIAL_REQUIRES_FUTURE_REBASELINE`**. A sprint criou `migration-governance.test.ts`, congelando 30 prefixos duplicados, 3 nomes fora do padrao e os principais construtos historicos hostis ao runner do D1, sem editar migrations aplicadas. `DQ-01` permaneceu parcial, mas os caminhos criticos de simuladores agora validam tenant e referencias antes de ler/escrever: `GET /instrutores`, participantes de sessao e fallback de checks foram endurecidos e cobertos por `simuladores-sessoes-data-quality.test.ts`. Nenhum D1 remoto, deploy, migration nova, backfill ou saneamento de dados reais foi executado.
 
 **Addendum Sprint AI Migration Rebaseline + Data Quality Backfill Readiness (2026-06-04):** `MIG-01` avancou para **`READY_FOR_CONTROLLED_REBASELINE`**. A sprint criou `AIRTRUST_MIGRATION_REBASELINE_READINESS_v0_5.md` e `audit-migration-chain-readiness.sh`, explicitando corte, validacao local, staging e rollback sem tocar migrations historicas. `DQ-01` avancou para **`READY_FOR_CONTROLLED_BACKFILL`** com `AIRTRUST_DATA_QUALITY_BACKFILL_READINESS_v0_5.md` e `audit-data-quality-readiness.sh`, separando risco, deteccao, migration eventual, backfill e decisao manual. Nenhum D1 remoto, deploy, migration nova ou backfill real foi executado.
+
+**Addendum Sprint AJ DQ-01 Controlled Backfill Gate (2026-06-04):** a etapa atual tentou avançar da readiness para a execução, mas parou corretamente no gate de ambiente. Não havia `AIRTRUST_DQ01_*` configurado para staging aprovado, nenhum snapshot/rollback foi fornecido à sessão e não houve autorização explícita para tocar banco alvo. A sprint criou `AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md`, `dq01-controlled-backfill-gate.sh` e `dq01-controlled-backfill-gate.test.ts`. **`DQ-01 = BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS`**.
