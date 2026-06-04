@@ -373,7 +373,7 @@ tripulacoes.post('/:id/tripulacoes', auth(), requireRole('admin', 'manager'), as
             `SELECT modelo FROM aeronaves
              WHERE prefixo = ?
                AND deleted_at IS NULL
-               AND (empresa_id IS NULL OR empresa_id = ?)
+               AND empresa_id = ?
              LIMIT 1`,
           )
           .bind(prefixoAeronave, empresaId)
@@ -384,7 +384,7 @@ tripulacoes.post('/:id/tripulacoes', auth(), requireRole('admin', 'manager'), as
               `SELECT modelo_aeronave_id FROM funcionarios
                WHERE id = ?
                  AND deleted_at IS NULL
-                 AND (empresa_id IS NULL OR empresa_id = ?)
+                 AND empresa_id = ?
                LIMIT 1`,
             )
             .bind(picId, empresaId)

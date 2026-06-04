@@ -44,6 +44,7 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | RBAC/Suporte v2 | LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT | migration local `0389` + dual-read helper existem; falta apply controlado e enforcement gradual no alvo | aplicar `0389`, validar dual-read e so depois ligar enforcement runtime | GPT-5.5 Altissimo |
 | Data Quality | LOCAL_READINESS_COMPLETE_BLOCKED_BY_ENVIRONMENT | checks continuam sem saneamento real; o gate de backfill foi executado e bloqueou por falta de target/snapshot/rollback/aprovacao/comando revisado | provisionar ambiente aprovado real antes de qualquer backfill | GPT-5.4 Alta |
 | Smoke com empresa esperada | PARTIAL | sem credencial efemera/read-only e sem `AIRTRUST_EXPECTED_EMPRESA_*` tambem na OP-2 | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
+| Auth/tenant residual final | RESOLVED | `AUTH-RESIDUAL-01` e `AUTH-RESIDUAL-02` fechados localmente; `AUTH_TENANT = CONFIRMED_CLOSED` | nenhuma acao local pendente | — |
 
 ## 4. R01 - SIGVOOS
 
@@ -206,3 +207,5 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 **Addendum Sprint AK Controlled Execution Environment Contract (2026-06-04):** a sprint atual consolidou o pacote operacional compartilhado dos dois streams. Foram adicionados `AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md`, `AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md`, `controlled-execution-gate.sh`, `mig01-controlled-rebaseline-gate.sh` e os testes de contrato do gate. O bloqueio operacional circunstancial de DQ deixou de ser o status mestre do stream e tanto `DQ-01` quanto `MIG-01` passam a **`READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`**, ainda sem target real aprovado na sessão.
 
 **Addendum Audit Cycle Final Closure (2026-06-04):** os gates existentes foram executados sem env de ambiente controlado e bloquearam corretamente. Nenhum backfill, rebaseline, D1 remoto, deploy, migration nova ou edição de migration histórica foi executado. `DQ-01` e `MIG-01` passam a **`BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`**. `ARCH-01` passa a **`MITIGATED_WITH_GUARDS`** com `architecture-performance-guard.test.ts`.
+
+**Addendum Final Local Residual Closure + Controlled Execution Bridge (2026-06-04):** a auditoria residual Opus apontou dois padrões finais de auth/tenant. `AUTH-RESIDUAL-01` foi resolvido em `syncEscalaEventosExternos.ts` com remoção de `f.empresa_id IS NULL`. `AUTH-RESIDUAL-02` foi resolvido em `escalas-tripulacoes.ts` com `empresa_id = ?` nos lookups operacionais de aeronave/PIC. A busca local também levou ao hardening de `sgso-next-gen-extra.ts`. `AUTH_TENANT = CONFIRMED_CLOSED`; `LOCAL_AUDIT_CLOSURE = COMPLETE_WITH_ENVIRONMENT_BLOCKERS`.

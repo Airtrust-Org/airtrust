@@ -526,7 +526,7 @@ extra.get('/compliance/rbac121/checklist', async (c) => {
             AND latest.max_data = cs.data_avaliacao
            JOIN funcionarios f ON f.id = cs.funcionario_id
            WHERE f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
-             AND (f.empresa_id = ? OR f.empresa_id IS NULL)
+             AND f.empresa_id = ?
              AND cs.status <> 'COMPLIANT'`,
         )
         .bind(empresaId)

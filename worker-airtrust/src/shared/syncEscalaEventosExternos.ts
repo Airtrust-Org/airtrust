@@ -235,7 +235,7 @@ export async function syncFuncionarioFeriasForMonth(
        JOIN funcionarios f ON f.id = ff.funcionario_id AND f.deleted_at IS NULL
        WHERE ff.deleted_at IS NULL
          AND NOT (ff.data_fim < ? OR ff.data_inicio > ?)
-         AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)`,
+         AND (? IS NULL OR f.empresa_id = ?)`,
     )
     .bind(dataInicioMes, dataFimMes, empresaId ?? null, empresaId ?? null)
     .all<{

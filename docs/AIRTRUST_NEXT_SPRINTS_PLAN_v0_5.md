@@ -584,6 +584,19 @@
 - **Status final:** `DQ-01 = BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`; `MIG-01 = BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`; `ARCH-01 = MITIGATED_WITH_GUARDS`.
 - **Próxima fase:** auditoria independente Opus pós-ciclo antes de nova execução controlada real.
 
+### Final Local Residual Closure + Controlled Execution Bridge ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** fechar os residuos finais de auth/tenant apontados pela auditoria Opus e confirmar a ponte para execucao controlada.
+- **Entregue:**
+  - relatorio [AIRTRUST_FINAL_LOCAL_RESIDUAL_CLOSURE_AND_CONTROLLED_EXECUTION_BRIDGE_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_FINAL_LOCAL_RESIDUAL_CLOSURE_AND_CONTROLLED_EXECUTION_BRIDGE_v0_5.md);
+  - `AUTH-RESIDUAL-01 = RESOLVED`;
+  - `AUTH-RESIDUAL-02 = RESOLVED`;
+  - `AUTH_TENANT = CONFIRMED_CLOSED`;
+  - guard `sec02-null-empresa-scope.test.ts` ampliado.
+- **Sem:** D1 remoto, deploy, backfill real, rebaseline real, apply da `0389`.
+- **Status final:** `LOCAL_AUDIT_CLOSURE = COMPLETE_WITH_ENVIRONMENT_BLOCKERS`.
+- **Próxima fase:** ambiente controlado real para DQ primeiro, MIG depois, `0389`/Audit/RBAC em seguida.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
