@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
+import { getTenantContext } from '../middleware/tenant';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -14,6 +15,7 @@ app.use('*', auth(), requireRole('admin'));
 app.get('/', async (c) => {
   try {
     const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
     const schemaInfo = await db.prepare("PRAGMA table_info('qualificacoes_historico')").all();
     const schemaColumns = new Set(
       (schemaInfo.results || []).map((row) => String((row as { name?: string }).name || '')),
@@ -29,7 +31,7 @@ app.get('/', async (c) => {
     // 1. DUPLICATAS - Com nomes completos
     const duplicatasQuery = `
       WITH duplicatas_grouped AS (
-        SELECT 
+        SELECT
           f.cpf,
           f.nome as funcionario_nome,
           q.codigo,
@@ -41,12 +43,13 @@ app.get('/', async (c) => {
         JOIN qualificacoes q ON q.id = qh.qualificacao_id
         WHERE qh.deleted_at IS NULL
           AND f.deleted_at IS NULL
+          AND f.empresa_id = ?
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
           AND q.deleted_at IS NULL
         GROUP BY f.cpf, f.nome, q.codigo, q.nome, qh.data_vencimento
         HAVING COUNT(*) > 1
       )
-      SELECT 
+      SELECT
         cpf as funcionario_cpf,
         funcionario_nome,
         codigo as qualificacao_codigo,
@@ -59,7 +62,7 @@ app.get('/', async (c) => {
 
     // 2. VENCIDOS - Com nomes completos
     const vencidosQuery = `
-      SELECT 
+      SELECT
         f.cpf as funcionario_cpf,
         f.nome as funcionario_nome,
         q.codigo as qualificacao_codigo,
@@ -72,6 +75,7 @@ app.get('/', async (c) => {
       JOIN qualificacoes q ON q.id = qh.qualificacao_id
       WHERE qh.deleted_at IS NULL
         AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND q.deleted_at IS NULL
         AND qh.data_vencimento < date('now')
@@ -81,7 +85,7 @@ app.get('/', async (c) => {
     // 3. CANDIDATOS RENOVAÇÃO - Com nomes completos
     const candidatosQuery = `
       WITH registros_por_qualif AS (
-        SELECT 
+        SELECT
           f.cpf,
           f.nome as funcionario_nome,
           q.codigo,
@@ -93,12 +97,13 @@ app.get('/', async (c) => {
         JOIN qualificacoes q ON q.id = qh.qualificacao_id
         WHERE qh.deleted_at IS NULL
           AND f.deleted_at IS NULL
+          AND f.empresa_id = ?
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
           AND q.deleted_at IS NULL
         GROUP BY f.cpf, f.nome, q.codigo, q.nome
         HAVING COUNT(*) > 1
       )
-      SELECT 
+      SELECT
         cpf as funcionario_cpf,
         funcionario_nome,
         codigo as qualificacao_codigo,
@@ -111,9 +116,9 @@ app.get('/', async (c) => {
     `;
 
     const [duplicatas, vencidos, candidatos] = await Promise.all([
-      db.prepare(duplicatasQuery).all(),
-      db.prepare(vencidosQuery).all(),
-      db.prepare(candidatosQuery).all(),
+      db.prepare(duplicatasQuery).bind(empresaId).all(),
+      db.prepare(vencidosQuery).bind(empresaId).all(),
+      db.prepare(candidatosQuery).bind(empresaId).all(),
     ]);
 
     return c.json({

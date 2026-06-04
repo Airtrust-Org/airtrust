@@ -71,6 +71,9 @@ export interface Env {
 
   // Maintenance routes secret (wrangler secret put MAINTENANCE_SECRET)
   MAINTENANCE_SECRET?: string;
+
+  // Gate for historical one-off admin migration endpoints (never set in production/staging)
+  ENABLE_MANUAL_MIGRATIONS?: string;
 }
 
 // ===== API RESPONSE TYPES =====
