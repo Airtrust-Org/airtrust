@@ -145,3 +145,5 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 DDL_RUNTIME = PARTIAL (R03 = RESOLVED; R09 = RESOLVED Sprint R09; R04 = RESOLVED Sprint R04.7 2026-06-04; R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED).
 
 **Addendum Sprint R01 Chain Reconciliation (2026-06-03):** achado de bloqueio de replay limpo formalizado. `0354` falha em cadeia limpa (`no such table: integracoes_sigvoos_config`); `0387` aplicada em produção não resolve cadeia. Testes locais 8/8 PASS. `ensureSigvoosTables()` preservado. DDL runtime remanescente: apenas R01. Doc de decisão: `docs/AIRTRUST_SIGVOOS_MIGRATION_CHAIN_RECONCILIATION_v0_5.md`.
+
+**Addendum Sprint R01 Baseline Strategy (2026-06-03):** estratégia de resolução definida. Editar `0354` rejeitado; `0389` isolada insuficiente. Curto prazo: `scripts/bootstrap-new-environment.sql`. Longo prazo: squash/rebaseline. `ensureSigvoosTables()` preservado. Próxima fase: R01-bootstrap. Doc de estratégia: `docs/AIRTRUST_SIGVOOS_R01_BASELINE_STRATEGY_v0_5.md`.

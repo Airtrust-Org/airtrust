@@ -463,6 +463,21 @@
 - **Próxima fase:** R01-baseline — criar migration de bootstrap idempotente para `integracoes_sigvoos_config` antes de `0354` e reconciliar cadeia limpa.
 - **Modelo recomendado:** Sonnet 4.6 (docs/analysis-only); Opus para a fase de baseline design.
 
+### Sprint R01.1 — SIGVOOS Baseline Strategy ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** Definir estratégia segura de baseline/replay limpo para R01 sem alterar migrations históricas.
+- **Entregue:**
+  - Opção A (editar `0354`) rejeitada formalmente — migration histórica aplicada em produção.
+  - Opção B (`0389` isolada) avaliada como insuficiente — não corrige replay limpo.
+  - Estratégia recomendada curto prazo: `scripts/bootstrap-new-environment.sql` com tabelas SIGVOOS base.
+  - Estratégia recomendada longo prazo: squash/rebaseline em sprint arquitetural dedicada.
+  - `ensureSigvoosTables()` preservado — condições de remoção documentadas na Seção 9 do strategy doc.
+  - Doc de estratégia criado: `docs/AIRTRUST_SIGVOOS_R01_BASELINE_STRATEGY_v0_5.md`.
+  - 9 docs de readiness/design/plan/matrix atualizados com addendum.
+- **Sem:** migration nova, D1 remoto, deploy, alteração de runtime, alteração de schema, backfill, dados reais.
+- **Próxima fase:** R01-bootstrap — criar `scripts/bootstrap-new-environment.sql` e documentar processo de novo ambiente.
+- **Modelo recomendado:** Sonnet 4.6 (docs/bootstrap script); Opus 4.x para staging gate e remoção do fallback.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -554,4 +569,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, R03=RESOLVED, Audit v2=APPLIED_SCHEMA_READY_FOR_FLAG_PLAN), Sprint R04.5 (apply oficial `0387`+`0388`), **Sprint R04.6 (bootstrap documentos removido)**, **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)** e **Sprint R01 Chain Reconciliation (2026-06-03: achado de bloqueio de replay limpo formalizado, testes 8/8 PASS, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED, `ensureSigvoosTables()` preservado)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)** e **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo, `ensureSigvoosTables()` preservado, próxima fase: R01-bootstrap)**.
