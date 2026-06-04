@@ -4,7 +4,7 @@
 **Branch:** `main`
 **HEAD:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
 **Sprint:** V/W/X.0–X.5 — DDL Runtime Residual Design + Schema Probe + Apply/Deploy
-**Modo:** Read-only / docs+runner-only até Sprint X.4. Sprint X.5 executou apply de migrations + deploy do Worker/API.
+**Modo:** Read-only / docs+runner-only até Sprint X.4. Sprint X.5 executou apply de migrations + deploy do Worker/API. Sprint R04.5 registrou o apply oficial da fila pendente `0387` + `0388`, sem SQL manual e sem deploy adicional.
 
 ---
 
@@ -515,4 +515,6 @@ As fases podem ser executadas em paralelo (por times diferentes) já que afetam 
 
 **Addendum Sprint R04.4 (2026-06-03):** a migration `0388_documentos_canonical_schema.sql` foi versionada em `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` e recebeu teste local dedicado em `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts`. Nenhum apply remoto foi executado. Novo status consolidado: **`R04 = MIGRATION_VERSIONED_PENDING_APPLY`**. Ordem restante atualizada: aplicar `0388` em ambiente aprovado → probe pós-apply → só então avaliar remoção do bootstrap → R04 closure.
 
-**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R09 closure, Sprint R04.1 readiness mapping, Sprint R04.2 probe baseline, Sprint R04.3 design closure e Sprint R04.4 versionamento da `0388` em 2026-06-03.
+**Addendum Sprint R04.5 / R01 pós-apply (2026-06-03):** ao executar o mecanismo oficial `Cloudflare D1 migrations apply` com a intenção de aplicar a `0388`, o D1 consumiu a fila pendente completa e aplicou `0387_integracoes_sigvoos_base_tables.sql` + `0388_documentos_canonical_schema.sql` em `production`. Registrar como **`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`**. Não houve SQL manual, não houve backfill, não houve consulta de dados de linha, não houve alteração de runtime e não houve deploy. Probe pós-apply: `documentos` com 12 colunas esperadas; índices `idx_documentos_funcionario_tipo`, `idx_documentos_tipo`, `idx_documentos_deleted`, `idx_documentos_funcionario`, `idx_documentos_empresa` e autoíndices SQLite; `pasta_virtual` segue sem `documento_id`; `certificados_templates` sem mudança estrutural observada; fila pós-apply = `No migrations to apply`. Estados consolidados: **`R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL`** e **`R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`**.
+
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R09 closure, Sprint R04.1 readiness mapping, Sprint R04.2 probe baseline, Sprint R04.3 design closure, Sprint R04.4 versionamento da `0388` e Sprint R04.5/R01 pós-apply oficial em produção.

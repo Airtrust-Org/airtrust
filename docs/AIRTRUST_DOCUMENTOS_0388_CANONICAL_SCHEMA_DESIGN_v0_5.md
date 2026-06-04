@@ -5,6 +5,8 @@
 Definir o desenho lógico da futura migration `0388_documentos_canonical_schema.sql` usando a baseline estrutural real de produção capturada na Sprint R04.2, sem aplicar migration, sem alterar schema remoto e sem remover o bootstrap runtime nesta fase.
 
 > **Addendum Sprint R04.4 (2026-06-03):** o arquivo `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` foi versionado localmente a partir deste desenho, junto com o teste `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts`. Nenhuma migration remota foi aplicada, o bootstrap runtime não foi removido e o status consolidado passou a **`R04 = MIGRATION_VERSIONED_PENDING_APPLY`**.
+>
+> **Addendum Sprint R04.5 (2026-06-03):** durante a tentativa de aplicar apenas `0388_documentos_canonical_schema.sql`, o mecanismo oficial `Cloudflare D1 migrations apply` consumiu a fila pendente completa em `production` e aplicou `0387_integracoes_sigvoos_base_tables.sql` + `0388_documentos_canonical_schema.sql`. Registrar o desvio documental como **`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`**. Não houve SQL manual, não houve backfill, não houve consulta de dados de linha, não houve alteração de runtime e não houve deploy. Probe pós-apply: `documentos` permaneceu com 12 colunas (`id`, `uuid`, `funcionario_id`, `nome_arquivo`, `tipo`, `tamanho`, `r2_key`, `descricao`, `created_at`, `updated_at`, `deleted_at`, `empresa_id`) e expôs os índices `idx_documentos_funcionario_tipo`, `idx_documentos_tipo`, `idx_documentos_deleted`, `idx_documentos_funcionario`, `idx_documentos_empresa`, `sqlite_autoindex_documentos_2`, `sqlite_autoindex_documentos_1`; `pasta_virtual` segue sem `documento_id`; `certificados_templates` permaneceu estruturalmente inalterada no probe. Estado da fila após o apply: `No migrations to apply`. Novo status consolidado: **`R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL`**.
 
 Objetivo prático da `0388`:
 
@@ -159,17 +161,16 @@ Após a Sprint R04.4:
    - índices `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo`, `idx_documentos_funcionario_tipo`.
 5. Teste estático garantindo que a migration não toca `pasta_virtual` nem `certificados_templates`.
 6. Teste de regressão do bootstrap: o runtime ainda não deve ser removido nesta fase.
-7. Após apply futuro: probe pós-migration em produção e smoke das rotas de certificados/pasta virtual.
+7. Probe pós-migration já executado na Sprint R04.5 com `STATUS=PASS` estrutural para `documentos`; pendente apenas o smoke funcional da fase de remoção do bootstrap.
 
 ## 9. Ordem segura futura
 
 1. Validar a `0388` versionada em ambiente limpo local.
 2. Revisar se `historico_id` e `sha256_hash` realmente merecem migration separada ou abandono explícito.
-3. Aplicar a `0388` em staging aprovado.
-4. Validar smoke funcional de certificados e pasta virtual.
-5. Aplicar em produção via fluxo oficial de migrations.
-6. Executar probe pós-migration.
-7. Só então discutir remoção de `ensureDocumentosTableExists()`.
+3. Aplicar em produção via fluxo oficial de migrations.
+4. Registrar o desvio `APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE` porque a fila oficial também continha a `0387`.
+5. Executar probe pós-migration.
+6. Só então discutir remoção de `ensureDocumentosTableExists()` em sprint separada.
 
 ## 10. Critérios para remover bootstrap runtime
 
