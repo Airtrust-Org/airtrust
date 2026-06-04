@@ -599,6 +599,20 @@
 - **Status final:** `LOCAL_AUDIT_CLOSURE = COMPLETE_WITH_ENVIRONMENT_BLOCKERS`.
 - **Próxima fase:** ambiente controlado real para DQ primeiro, MIG depois, `0389`/Audit/RBAC em seguida.
 
+### Sprint AL — DQ01 Controlled Environment Package ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** materializar um pacote operacional rastreável para `DQ-01`, sem executar backfill, sem D1 remoto e sem tocar produção.
+- **Entregue:**
+  - documento [AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md);
+  - evidência de target [dq01-target-evidence-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/dq01-target-evidence-20260604.md);
+  - plano de rollback [dq01-rollback-plan-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/dq01-rollback-plan-20260604.md);
+  - wrapper read-only `scripts/run-dq01-local-copy-backfill-readonly.sh`;
+  - snapshot local pré-janela não rastreado em `.wrangler/state/v3/d1/controlled-execution-snapshots/`.
+- **Gates:** `controlled-execution-gate.sh = READY_FOR_MANUAL_CONTROLLED_EXECUTION`; `dq01-controlled-backfill-gate.sh = READY_FOR_MANUAL_CONTROLLED_EXECUTION`; `audit-data-quality-readiness.sh = PASS`.
+- **Sem:** backfill real, D1 remoto, deploy, `MIG-01`, apply da `0389`, mutation de dados reais.
+- **Status final desta sprint:** `DQ-01 = READY_FOR_CONTROLLED_BACKFILL_EXECUTION`.
+- **Próxima fase:** aprovar o comando mutante por lote e executar a janela controlada em `local-copy`, ou promover pacote equivalente para `staging`.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
