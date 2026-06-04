@@ -66,6 +66,18 @@ function buildWhatsAppManualLink(telefone: string, mensagem?: string): string {
   return `${baseUrl}?text=${encodeURIComponent(mensagem)}`;
 }
 
+async function getSimuladorAgendamentosSchema(
+  db: D1Database,
+): Promise<{ hasTipoDispositivo: boolean; hasAeronaveId: boolean }> {
+  const colInfo = await db.prepare('PRAGMA table_info(simulador_agendamentos)').bind().all();
+  const colNames = new Set((colInfo.results || []).map((row: any) => row.name));
+
+  return {
+    hasTipoDispositivo: colNames.has('tipo_dispositivo'),
+    hasAeronaveId: colNames.has('aeronave_id'),
+  };
+}
+
 async function enviarEmailSessao(
   env: Env,
   destinatarios: string[],
@@ -290,8 +302,22 @@ app.get('/sessoes', async (c) => {
     const maxLimit = !isFullAccessRole(role) ? 500 : 200;
     const limit = parseLimit(c.req.query('limit'), defaultLimit, maxLimit);
     const offset = parseOffset(c.req.query('offset'));
+    const { hasTipoDispositivo, hasAeronaveId } = await getSimuladorAgendamentosSchema(c.env.DB);
 
     const tipoDispo = c.req.query('tipo_dispositivo'); // SIMULADOR | AERONAVE
+    const tipoDispositivoSelect = hasTipoDispositivo
+      ? "COALESCE(sa.tipo_dispositivo, 'SIMULADOR') as tipo_dispositivo,"
+      : "NULL as tipo_dispositivo,";
+    const aeronaveSelect = hasAeronaveId
+      ? `sa.aeronave_id,
+        ae.prefixo as aeronave_prefixo,
+        ae.modelo as aeronave_modelo,`
+      : `NULL as aeronave_id,
+        NULL as aeronave_prefixo,
+        NULL as aeronave_modelo,`;
+    const aeronaveJoin = hasAeronaveId
+      ? 'LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL'
+      : '';
 
     // Modo default mantém payload completo (participantes + fichas) para compatibilidade.
     // Modo summary evita agregações JSON pesadas para leitura mais leve.
@@ -305,10 +331,8 @@ app.get('/sessoes', async (c) => {
         s.nome as simulador_nome,
         s.modelo as simulador_modelo,
         s.tipo as simulador_tipo,
-        COALESCE(sa.tipo_dispositivo, 'SIMULADOR') as tipo_dispositivo,
-        sa.aeronave_id,
-        ae.prefixo as aeronave_prefixo,
-        ae.modelo as aeronave_modelo,
+        ${tipoDispositivoSelect}
+        ${aeronaveSelect}
         sa.data,
         sa.hora_inicio as horario_inicio,
         sa.hora_fim as horario_fim,
@@ -325,7 +349,7 @@ app.get('/sessoes', async (c) => {
         sa.updated_at
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
-      LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
+      ${aeronaveJoin}
       INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
       WHERE sa.deleted_at IS NULL
@@ -339,10 +363,8 @@ app.get('/sessoes', async (c) => {
         s.nome as simulador_nome,
         s.modelo as simulador_modelo,
         s.tipo as simulador_tipo,
-        COALESCE(sa.tipo_dispositivo, 'SIMULADOR') as tipo_dispositivo,
-        sa.aeronave_id,
-        ae.prefixo as aeronave_prefixo,
-        ae.modelo as aeronave_modelo,
+        ${tipoDispositivoSelect}
+        ${aeronaveSelect}
         sa.data,
         sa.hora_inicio as horario_inicio,
         sa.hora_fim as horario_fim,
@@ -385,7 +407,7 @@ app.get('/sessoes', async (c) => {
         ) as fichas_json
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
-      LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
+      ${aeronaveJoin}
       INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
       -- LEFT JOIN participantes
@@ -414,7 +436,7 @@ app.get('/sessoes', async (c) => {
       query += ` AND UPPER(COALESCE(sa.status, '')) IN (${normalizedStatusList.map(() => '?').join(',')})`;
       params.push(...normalizedStatusList);
     }
-    if (tipoDispo && (tipoDispo === 'SIMULADOR' || tipoDispo === 'AERONAVE')) {
+    if (hasTipoDispositivo && tipoDispo && (tipoDispo === 'SIMULADOR' || tipoDispo === 'AERONAVE')) {
       query += " AND COALESCE(sa.tipo_dispositivo, 'SIMULADOR') = ?";
       params.push(tipoDispo);
     }
@@ -646,10 +668,7 @@ app.post('/sessoes', async (c) => {
     }
 
     // Verificar se as colunas tipo_dispositivo e aeronave_id já existem (migration 0364)
-    const colInfoSessao = await c.env.DB.prepare('PRAGMA table_info(simulador_agendamentos)').all();
-    const colNomes = new Set((colInfoSessao.results || []).map((r: any) => r.name));
-    const hasTipoDispositivo = colNomes.has('tipo_dispositivo');
-    const hasAeronaveId = colNomes.has('aeronave_id');
+    const { hasTipoDispositivo, hasAeronaveId } = await getSimuladorAgendamentosSchema(c.env.DB);
 
     let insertSql: string;
     let insertBinds: any[];
