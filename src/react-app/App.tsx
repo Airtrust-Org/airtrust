@@ -1,5 +1,5 @@
 import { Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
@@ -8,6 +8,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginSimple from './pages/LoginSimple';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { lazyWithRetry } from './utils/lazyWithRetry';
+import { buildPasta360Url } from './utils/pasta360';
 // RequestMonitor removed
 const FrmsDashboard = lazyWithRetry(() => import('./pages/frms/FrmsDashboard'), 'FrmsDashboard');
 import { applySystemSettingsToDocument, getSystemSettings } from './config/systemSettings';
@@ -21,7 +22,6 @@ import { ThemeProvider } from './theme/ThemeProvider';
 const HomePerfil = lazyWithRetry(() => import('./pages/HomePerfil'), 'HomePerfil');
 const TrocarSenhaPage = lazyWithRetry(() => import('./pages/TrocarSenhaPage'), 'TrocarSenhaPage');
 const Funcionarios = lazyWithRetry(() => import('./pages/Funcionarios'), 'Funcionarios');
-const PastaVirtual = lazyWithRetry(() => import('./pages/PastaVirtual'), 'PastaVirtual');
 const Qualificacoes = lazyWithRetry(() => import('./pages/Qualificacoes'), 'Qualificacoes');
 const DashboardQualificacoes = lazyWithRetry(
   () => import('./pages/DashboardQualificacoes'),
@@ -71,6 +71,15 @@ const CrudManobras = lazyWithRetry(
   () => import('./pages/simuladores/cadastros/manobras'),
   'CrudManobras',
 );
+
+function LegacyPastaVirtualRedirect() {
+  const { funcionarioId } = useParams<{ funcionarioId: string }>();
+  const path = buildPasta360Url(funcionarioId, {
+    tab: 'pasta',
+    origem: 'rota-legada-pasta-virtual',
+  });
+  return <Navigate to={path || '/funcionarios'} replace />;
+}
 const CrudModelos = lazyWithRetry(
   () => import('./pages/simuladores/cadastros/modelos'),
   'CrudModelos',
@@ -376,7 +385,7 @@ export default function App() {
                         path="/pasta-virtual/:funcionarioId"
                         element={
                           <ProtectedRoute>
-                            <PastaVirtual />
+                            <LegacyPastaVirtualRedirect />
                           </ProtectedRoute>
                         }
                       />

@@ -27,6 +27,7 @@ import { formatarDataExibicao } from '../../utils/dateUtils';
 import { formatarCPF, formatarTelefone, formatarMatricula } from '../../utils/formatters';
 import { useDebounce } from '@/react-app/hooks/useDebounce';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
 interface Coluna {
   id: string;
@@ -208,6 +209,21 @@ export function ListaFuncionarios({
   const recarregar = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
   }, []);
+
+  const openPasta360 = useCallback(
+    (funcionarioId: number | string | null | undefined) => {
+      const pasta360Url = buildPasta360Url(funcionarioId, {
+        tab: 'pasta',
+        origem: 'lista-funcionarios',
+      });
+      if (!pasta360Url) {
+        toast.error('Não foi possível abrir a Pasta 360: funcionário inválido.');
+        return;
+      }
+      navigate(pasta360Url);
+    },
+    [navigate],
+  );
 
   const setoresDiscoverCallbackRef = useRef(onSetoresDiscover);
   useEffect(() => {
@@ -683,9 +699,9 @@ export function ListaFuncionarios({
                       <td className="px-2 py-3 text-sm">
                         <div className="flex items-center justify-center gap-1">
                           <button
-                            onClick={() => navigate(`/funcionarios/${func.id}/ficha`)}
+                            onClick={() => openPasta360(func.id)}
                             className={tableActionButtonClass}
-                            title="Ficha 360°"
+                            title="Pasta 360"
                           >
                             <FolderOpen className="w-4 h-4" />
                           </button>

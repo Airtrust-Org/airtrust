@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMemo } from 'react';
 import { FolderOpen, Award, GraduationCap, Search } from 'lucide-react';
 import Button from '@/react-app/components/Button';
+import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
 export interface FuncionarioBasico {
   id: number;
@@ -26,6 +27,15 @@ export default function TabelaFuncionarios({
   const navigate = useNavigate();
 
   const rows = useMemo(() => (Array.isArray(funcionarios) ? funcionarios : []), [funcionarios]);
+
+  const openPasta360 = (funcionarioId: number | string | null | undefined) => {
+    const pasta360Url = buildPasta360Url(funcionarioId, {
+      tab: 'pasta',
+      origem: 'tabela-funcionarios',
+    });
+    if (!pasta360Url) return;
+    navigate(pasta360Url);
+  };
 
   return (
     <div className="space-y-4">
@@ -104,10 +114,10 @@ export default function TabelaFuncionarios({
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => navigate(`/funcionarios/${f.id}/ficha`)}
+                        onClick={() => openPasta360(f.id)}
                         className="flex items-center gap-1"
                       >
-                        <FolderOpen className="h-4 w-4" /> Ficha 360
+                        <FolderOpen className="h-4 w-4" /> Pasta 360
                       </Button>
                       <Button
                         size="sm"

@@ -28,6 +28,7 @@ import {
   openMonthlyAgendaPrint,
   openCalendarGridPrint,
   openWeeklyAgendaPrint,
+  openDailyAgendaPrint,
   openAgendaListPrint,
   type MonthlyAgendaPrintSession,
   type WeeklyPrintOptions,
@@ -714,6 +715,23 @@ export default function CalendarioAgendamentos() {
       toast.error('Não foi possível abrir a impressão.');
   };
 
+  const handleImprimirDiario = () => {
+    const instrutorSelecionado = instrutores.find((i) => i.id === Number(filtroInstrutor));
+    if (
+      !openDailyAgendaPrint({
+        date: currentDate,
+        sessions: buildSessions(),
+        filters: {
+          instrutor: instrutorSelecionado?.nome,
+          status: filtroStatus || undefined,
+          busca: filtroBusca || undefined,
+        },
+      })
+    ) {
+      toast.error('Não foi possível abrir a impressão.');
+    }
+  };
+
   // ==================== EVENT CARD ====================
 
   const EventCard = ({
@@ -1193,6 +1211,14 @@ export default function CalendarioAgendamentos() {
               {t('sim.calendar.today')}
             </button>
             {/* Botões de impressão — ocultos em mobile (não aplicáveis) */}
+            <button
+              onClick={handleImprimirDiario}
+              className="hidden items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:inline-flex"
+              title="Imprimir o dia em foco (A4 retrato)"
+            >
+              <Printer className="w-4 h-4" />
+              Dia
+            </button>
             {/* Mensal: Lista + Calendário */}
             {viewMode === 'monthly' && (
               <>
