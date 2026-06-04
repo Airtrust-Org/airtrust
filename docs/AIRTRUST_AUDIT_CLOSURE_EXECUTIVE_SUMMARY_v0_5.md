@@ -65,8 +65,8 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 | **RBAC/Suporte** | `userId===1` centralizado; Sprint P definiu `platform_admin` e `support_read_only`; Sprint Q definiu dual-read, enforcement e rollback por fases | Migration para `platform_admin` persistido, grants de suporte, shadow dual-read, enforcement runtime e remocao do fallback legado |
 | **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; Sprint X.5 aplicou migration `0385` em produção | Ativar flag, validar paridade, ampliar cobertura dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
-| **Migration Integrity** | Sprint AH congelou a governança local: 30 prefixos duplicados, 3 nomes fora do padrão e construtos históricos de replay/D1 agora estão pinados por teste | Continua faltando uma estratégia estrutural de rebaseline/squash; o histórico não foi reescrito |
-| **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED); OP-1 e OP-2 repetiram a evidencia local com o mesmo perfil agregado; Sprint AH endureceu caminhos críticos de simuladores | Executar em ambiente com schema completo para zerar SKIPPED e separar eventual backfill |
+| **Migration Integrity** | Sprint AH congelou a governança local e Sprint AI fechou a estratégia de rebaseline controlado com doc, rollback e dry-run local | Falta apenas a execução controlada da janela de rebaseline |
+| **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED); Sprint AH endureceu caminhos críticos de simuladores e Sprint AI fechou o mapa de backfill controlado | Falta apenas a execução controlada do backfill em snapshot/staging aprovado |
 | **DDL Runtime** | Stream residual fechado: R01, R03, R04 e R09 resolvidos | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Sprint Z0 mapeou integralmente R01 (SIGVOOS), Sprint Z1 criou `0387` e Sprint Z1.1 provou a falha da cadeia limpa na `0354`. Sprint R01.2 criou `scripts/bootstrap-new-environment.sql`; Sprint R01.3 fechou a readiness; Sprint R01.4 removeu `ensureSigvoosTables()`, eliminou 10 call sites e adicionou teste dedicado de ausência de DDL/runtime SIGVOOS. R01 = RESOLVED. Sprint R04.6 removeu o bootstrap runtime de Documentos e Sprint R04.7 executou o deploy/smoke pós-deploy. R04 = RESOLVED. Sprint R09 removeu o ALTER TABLE de `shared.ts`; R09 = RESOLVED. |
 | **Repository Pattern** | Piloto em 2 domínios (dashboard, LMS reports) | Expandir gradualmente para lms-cursos, qualificações |
 | **Scripts DB** | Wrapper seguro criado para scripts críticos | Scripts shell legados ainda sem wrapper |
@@ -89,7 +89,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 6. **DDL runtime residual** em SIGVOOS e documentos: **fechado**. R03 = RESOLVED (Sprint X.5), R09 = RESOLVED (Sprint R09), R04 = RESOLVED (Sprint R04.7) e R01 = RESOLVED (Sprint R01.4).
 7. **Status residual** em cron/alertas/EVD (bloqueia escala, não piloto).
 8. **R2 metadata** de tenant ausente (defense-in-depth, não critério de segurança).
-9. **Migration Integrity histórica**: produção atual segue estável, mas a cadeia canônica continua com duplicatas e replay frágil para ambientes novos sem baseline governado.
+9. **Migration Integrity histórica**: produção atual segue estável, mas o rebaseline ainda precisa ser executado de forma controlada antes que ambientes novos dependam do baseline novo.
 10. **Performance/bundle/N+1** sem auditoria (dívida estrutural).
 11. **Admin backfill** sem tenant-scope (admin-gated, idempotente, P3).
 
@@ -139,10 +139,10 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 ## 8. Proximas 5 acoes recomendadas
 
 1. **Fornecer credencial efemera/read-only + `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO`** e reexecutar o smoke autenticado.
-2. **Executar Data Quality completo** em ambiente staging aprovado com schema completo para zerar checks `SKIPPED`.
-3. **Executar o Audit v2 staging flag test** com schema ja aplicado, rollback por flag e validacao de paridade minima.
-4. **Executar a foundation de RBAC/Suporte v2** somente depois do Audit v2 staging flag test aprovado.
-5. **Abrir a sprint estrutural de MIG-01**, agora que a governança local está pinada: decidir baseline/rebaseline para replay limpo de ambientes novos sem tocar retrospectivamente nas migrations já aplicadas.
+2. **Executar o backfill controlado de Data Quality** em ambiente staging/snapshot aprovado para zerar checks `SKIPPED`.
+3. **Executar o rebaseline controlado de MIG-01** com rollback e comparação estrutural.
+4. **Executar o Audit v2 staging flag test** com schema ja aplicado, rollback por flag e validacao de paridade minima.
+5. **Executar a foundation de RBAC/Suporte v2** somente depois do Audit v2 staging flag test aprovado.
 
 **Decisao operacional OP-1/OP-2:** `CONDITIONAL GO`.
 
@@ -190,4 +190,6 @@ O AirTrust está em um estado sólido para continuar operação e evolução. O 
 
 **Addendum Sprint AH Data Quality + Migration Integrity (2026-06-04):** a camada de produção nao recebeu deploy nem migration nova, mas a auditoria remanescente ganhou dois fechamentos importantes de engenharia local. `MIG-01` passou a ter um guard permanente (`migration-governance.test.ts`) que pina duplicatas historicas, nomes fora do padrao e construtos de replay mais hostis ao D1; o status correto ficou **`PARTIAL_REQUIRES_FUTURE_REBASELINE`**, nao `RESOLVED`. `DQ-01` permaneceu parcial, mas os caminhos criticos de simuladores agora validam tenant e referencias antes de ler/escrever (`GET /instrutores`, participantes e fallback de checks), com regressao coberta por `simuladores-sessoes-data-quality.test.ts`.
 
-**Fim do resumo executivo.** Gerado em 2026-06-02. Atualizado com Sprint X.5 closure (R03 = RESOLVED), Sprint R04.7 (**R04 = RESOLVED**), Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy, Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness, Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (**R01 = RESOLVED**; `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual) e Sprint AH (`MIG-01`/`DQ-01` auditados com guards permanentes e hardening crítico de simuladores).
+**Addendum Sprint AI Migration Rebaseline + Data Quality Backfill Readiness (2026-06-04):** a sprint atual elevou os dois trilhos de engenharia local para readiness controlada, ainda sem execucao real. `MIG-01` passou para **`READY_FOR_CONTROLLED_REBASELINE`** com `AIRTRUST_MIGRATION_REBASELINE_READINESS_v0_5.md`, `audit-migration-chain-readiness.sh` e `readiness-audit-scripts.test.ts`. `DQ-01` passou para **`READY_FOR_CONTROLLED_BACKFILL`** com `AIRTRUST_DATA_QUALITY_BACKFILL_READINESS_v0_5.md`, `audit-data-quality-readiness.sh` e os guards criticos de simuladores preservados.
+
+**Fim do resumo executivo.** Gerado em 2026-06-02. Atualizado com Sprint X.5 closure (R03 = RESOLVED), Sprint R04.7 (**R04 = RESOLVED**), Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy, Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness, Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (**R01 = RESOLVED**; `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual), Sprint AH (`MIG-01`/`DQ-01` auditados com guards permanentes e hardening crítico de simuladores) e Sprint AI (`MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`).

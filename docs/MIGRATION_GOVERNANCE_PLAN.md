@@ -56,6 +56,16 @@ The `find`-based search (1,022 files across all directories) revealed many numer
 
 **Historical note (Fase 6):** 3 duplicate prefixes (0332, 0347, 0367) were identified in the Fase 6 audit. These were resolved by applying schema export rather than the migration runner for staging.
 
+### 2.1 Current Readiness Artifacts
+
+The repository now has explicit local readiness artifacts for the historical-chain problem:
+
+- `docs/AIRTRUST_MIGRATION_REBASELINE_READINESS_v0_5.md`
+- `scripts/audit-migration-chain-readiness.sh`
+- `worker-airtrust/src/__tests__/migrations/readiness-audit-scripts.test.ts`
+
+These artifacts do not perform a rebaseline. They only document and validate readiness for a future controlled execution.
+
 ---
 
 ## 3. Migration Freeze Strategy
@@ -191,6 +201,8 @@ Add to `package.json`:
 
 Add to CI pipeline (GitHub Actions or equivalent) before any deploy step.
 
+**Current local equivalent:** `migration-governance.test.ts` plus `audit-migration-chain-readiness.sh` already provide a repository-local guardrail for the documented historical exceptions and readiness artifacts.
+
 ---
 
 ## 7. Known Technical Debt
@@ -201,3 +213,4 @@ Add to CI pipeline (GitHub Actions or equivalent) before any deploy step.
 | `9999_` sentinel migration | `worker-airtrust/migrations/` | Low (intentional workaround) | Document intent |
 | `purge-soft-deleted-qualificacoes.sql` no prefix | `worker-airtrust/migrations/` | Low (ignored by wrangler) | Move to scripts/ or delete |
 | Staging not tracking migration state | D1 staging | Medium (can't test migration runner) | Rebuild staging via runner after next cleanup |
+| Historical replay debt (`0058 -> 0059`, `0354 -> 0387`) | canonical chain | Medium/High for new environments | Use controlled rebaseline strategy, not raw clean replay |
