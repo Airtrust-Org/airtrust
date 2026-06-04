@@ -305,4 +305,6 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 **Addendum Sprint R01 Chain Reconciliation (2026-06-03):** achado de bloqueio de replay limpo formalizado. DDL-02 / R01 reclassificado para `MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED`. Nenhuma migration anterior à `0354` cria `integracoes_sigvoos_config`. Testes locais 8/8 PASS. `ensureSigvoosTables()` preservado. Doc de decisão: `docs/AIRTRUST_SIGVOOS_MIGRATION_CHAIN_RECONCILIATION_v0_5.md`.
 
-**Fim da matriz.** Documento gerado em 2026-06-02. Atualizado com Sprint X.5 closure em 2026-06-03 (migrations 0385/0386 aplicadas, Worker/API deployado, R03 = RESOLVED, Audit v2 schema = APPLIED_SCHEMA_READY_FOR_FLAG_PLAN). Sprint R04.7 (2026-06-04): deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS (3/3 público, read-only PASS), **R04 = RESOLVED**. Sprint R01 Chain Reconciliation (2026-06-03): **R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED**.
+**Addendum Sprint R01 Baseline Strategy (2026-06-03):** estratégia definida. Editar `0354` rejeitado. Curto prazo: `scripts/bootstrap-new-environment.sql`. Longo prazo: squash/rebaseline. `ensureSigvoosTables()` preservado. Doc de estratégia: `docs/AIRTRUST_SIGVOOS_R01_BASELINE_STRATEGY_v0_5.md`.
+
+**Fim da matriz.** Documento gerado em 2026-06-02. Atualizado com Sprint X.5 closure (R03 = RESOLVED), Sprint R04.7 (**R04 = RESOLVED**), Sprint R01 Chain Reconciliation e Sprint R01 Baseline Strategy (R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED; próxima fase: R01-bootstrap).
