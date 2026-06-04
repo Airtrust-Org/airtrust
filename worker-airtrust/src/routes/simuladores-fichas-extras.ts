@@ -17,6 +17,15 @@ import { createLogger, toError } from '../utils/logger';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 
+function parseHistoricoLimit(raw: string | undefined): number {
+  const parsed = Number.parseInt(raw || '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 100;
+  }
+
+  return Math.min(parsed, 200);
+}
+
 // ==========================================================================
 // HISTÓRICO DE NOTAS
 // ==========================================================================
@@ -222,7 +231,7 @@ app.get('/historico-notas/ultima/:funcionarioId/:codigoManobra', async (c) => {
 app.get('/historico-notas/:funcionarioId', async (c) => {
   try {
     const funcionarioId = c.req.param('funcionarioId');
-    const limit = parseInt(c.req.query('limit') || '100');
+    const limit = parseHistoricoLimit(c.req.query('limit'));
 
     const historico = await c.env.DB.prepare(
       `SELECT

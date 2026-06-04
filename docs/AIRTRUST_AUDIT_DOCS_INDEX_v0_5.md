@@ -28,6 +28,7 @@
 | `VALIDATION_BASELINE` | `PASS` |
 | `RBAC_SUPPORT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
 | `AUDIT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
+| `PRODUCT_PERFORMANCE_SCALE` | `MITIGATED_WITH_LOCAL_GUARDS_AND_SMOKE` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 
 ## 2. Documentos canônicos atuais
@@ -43,6 +44,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_AUDIT_REMAINING_FINDINGS_CLOSURE_PLAN_v0_5.md` | plano dos remanescentes de alto impacto |
 | `docs/AIRTRUST_AUDIT_CLOSURE_EXECUTIVE_SUMMARY_v0_5.md` | resumo executivo do ciclo |
 | `docs/AIRTRUST_NEXT_SPRINTS_PLAN_v0_5.md` | próximos blocos grandes |
+| `docs/AIRTRUST_PRODUCT_PERFORMANCE_SCALE_HARDENING_v0_5.md` | hardening local de produto/performance/scale com smoke e guards |
 | `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md` | cleanup residual, governança e superfície pública |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_GOVERNANCE_v0_5.md` | matriz de RBAC/suporte/admin/maintenance/debug/audit da passada atual |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_SCHEMA_READINESS_v0_5.md` | fundação de schema/readiness para `Audit v2` + `RBAC/Suporte v2` |
