@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { ApiError } from '../middleware/error-handler';
-import { auth, optionalAuth } from '../middleware/auth';
+import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
@@ -10,8 +10,9 @@ import { desalocarAeronaveInativa } from './escalas-alocacoes';
 const aeronaves = new Hono<{ Bindings: Env }>();
 
 // ===== GET /api/aeronaves =====
-aeronaves.get('/', optionalAuth(), async (c) => {
+aeronaves.get('/', auth(), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaIdSafe(c);
   const somenteAtivas = ['1', 'true', 'sim'].includes(
     String(c.req.query('somente_ativas') || '')
       .trim()
@@ -19,7 +20,7 @@ aeronaves.get('/', optionalAuth(), async (c) => {
   );
 
   try {
-    const filters = ['deleted_at IS NULL'];
+    const filters = ['deleted_at IS NULL', 'empresa_id = ?'];
     if (somenteAtivas) {
       filters.push("UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'");
     }
@@ -33,6 +34,7 @@ aeronaves.get('/', optionalAuth(), async (c) => {
         ORDER BY modelo ASC
         `,
       )
+      .bind(empresaId)
       .all();
 
     return c.json({
@@ -46,9 +48,10 @@ aeronaves.get('/', optionalAuth(), async (c) => {
 });
 
 // ===== GET /api/aeronaves/:id =====
-aeronaves.get('/:id', optionalAuth(), async (c) => {
+aeronaves.get('/:id', auth(), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
+  const empresaId = getEmpresaIdSafe(c);
 
   try {
     const { results } = await db
@@ -56,10 +59,10 @@ aeronaves.get('/:id', optionalAuth(), async (c) => {
         `
         SELECT id, modelo, prefixo, ano_fabricacao, status, observacoes, created_at, updated_at
         FROM aeronaves
-        WHERE id = ? AND deleted_at IS NULL
+        WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
         `,
       )
-      .bind(id)
+      .bind(id, empresaId)
       .all();
 
     if (!results || results.length === 0) {

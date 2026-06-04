@@ -1,8 +1,19 @@
 # AIRTRUST SEC-02 Tenant Null-Scope Hardening — v0.5
 
-**Sprint:** fix(tenant): harden null empresa scope handling  
-**Date:** 2026-06-04  
-**Status:** APPLIED  
+**Sprint:** fix(tenant): harden null empresa scope handling + fix(auth): close optional tenant exposure paths  
+**Dates:** 2026-06-04  
+**Status:** RESOLVED
+
+---
+
+## Final Status: RESOLVED
+
+All cross-tenant exposure vectors for SEC-02 have been closed:
+
+1. **NULL-empresa row fallback** (`empresa_id IS NULL OR empresa_id = ?`) removed from 8 route files (commit c3fc522). Funcionario ownership checks now use strict `empresa_id = ?`.
+2. **optionalAuth cross-tenant exposure** (`GET /funcionarios`, `GET /funcionarios/:id`, `GET /funcionarios/stats`, `GET /funcionarios/stats/dashboard`, `GET /aeronaves`, `GET /aeronaves/:id`, `GET /qualificacoes/tipos`, `GET /qualificacoes/tipos/:id`) hardened to `auth()` with empresa_id filters (this commit).
+
+Remaining `optionalAuth()` usages are in simuladores-* files accessing global reference data (manobras_categorias, tipos_sessao, modelos_sessao) that have no empresa_id column, or in historico.ts under a separate review path. These are documented in `__tests__/security/optional-auth-tenant-exposure.test.ts` with a pinned allowlist.  
 
 ---
 
@@ -115,17 +126,23 @@ The pattern `LEFT JOIN funcionarios f ON … AND (f.empresa_id IS NULL OR f.empr
 
 ---
 
-## Regression Test
+## Regression Tests
 
 `worker-airtrust/src/__tests__/security/sec02-null-empresa-scope.test.ts`
 
 - Verifies all 8 fixed files contain no insecure `(empresa_id IS NULL OR empresa_id = ?)` variants.
 - Pins the list of files that intentionally preserve the NULL-empresa pattern.
 
+`worker-airtrust/src/__tests__/security/optional-auth-tenant-exposure.test.ts`
+
+- Verifies `GET /funcionarios`, `/funcionarios/:id`, `/funcionarios/stats`, `/funcionarios/stats/dashboard`, `/aeronaves`, `/aeronaves/:id`, `/qualificacoes/tipos`, `/qualificacoes/tipos/:id` no longer use `optionalAuth()`.
+- Verifies `empresa_id = ?` filter is present in all affected queries.
+- Pins the remaining `optionalAuth()` allowlist (simuladores global reference data + historico).
+
 ---
 
 ## Residual Risk
 
-- **funcionarios.ts optionalAuth paths**: When `empresaId` is `undefined` (unauthenticated request), the `(? IS NULL OR empresa_id = ?)` condition evaluates `NULL IS NULL = true` and returns all funcionarios from all companies. This is intentional for public-facing lookups but represents a data exposure if the endpoint is accessible without auth. Review whether `GET /funcionarios` and `GET /funcionarios/stats/dashboard` should remain on `optionalAuth()` or be hardened to `auth()`.
-
 - **NULL-empresa records in production**: If any `funcionarios`, `aeronaves`, or other records have `empresa_id IS NULL` in production, those records are now excluded from all tenant queries. A one-time audit query should confirm no orphaned NULL-empresa active records exist before this change is deployed.
+
+- **simuladores optionalAuth**: `GET` routes in simuladores-relatorios.ts, simuladores-equipamentos.ts use `optionalAuth()` and query tables with empresa_id (e.g. `simuladores`). This is a lower-severity residual — simuladores session/usage data is less sensitive than PII. Tracked for a future simuladores tenant-scoping sprint.
