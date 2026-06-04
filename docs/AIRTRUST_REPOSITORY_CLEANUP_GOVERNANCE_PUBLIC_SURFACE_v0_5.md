@@ -30,7 +30,7 @@ Resultado:
 | `OPS-01` | Medium | ops/dev/deploy | `deploy-worker-only.sh` aplicava `wrangler d1 migrations apply --remote` implicitamente; `deploy-production.sh` era um caminho legado destrutivo; `ops:guard` não congelava esse padrão | `scripts/deploy-worker-only.sh`, `scripts/deploy-production.sh`, `scripts/audit-dangerous-ops.sh` | exigir gate explícito por env/confirm text e bloquear caminho legado | `npm run ops:guard` | `MITIGATED_WITH_GUARDS` |
 | `RES-01` | Low | dead imports | imports de debug no `index.ts` permaneceram mesmo sendo superfície residual | `worker-airtrust/src/index.ts` | remover imports e mounts mortos | `no-temporary-production-endpoints` | `RESOLVED` |
 | `RES-02` | Low | defensive fallbacks | nenhum novo vetor público foi encontrado; os fallbacks defensivos de `LEFT JOIN` já classificados como baixo risco permanecem fora do escopo operacional desta sprint | docs de fechamento/matriz | manter classificado como dívida baixa sem refatoração cega | documentação | `ACCEPTED_LOW_RISK` |
-| `RES-03` | Low | script warnings | ainda existem utilitários antigos com `git add -A` e outros atalhos fora do fluxo operacional principal | `scripts/remove-confirm-dialogs.sh`, `scripts/fix-all-select-star.sh`, `scripts/fix-urls.sh`, `scripts/fix-auditoria-columns.sh`, `scripts/00-checkpoint-inicial.sh` | manter inventário explícito; não promover esses scripts a caminhos operacionais | `ops:guard` + relatório | `NOT_CLOSED` |
+| `RES-03` | Low | script warnings | ainda existem utilitários antigos com `git add -A` e outros atalhos fora do fluxo operacional principal | `scripts/remove-confirm-dialogs.sh`, `scripts/fix-all-select-star.sh`, `scripts/fix-urls.sh`, `scripts/fix-auditoria-columns.sh`, `scripts/00-checkpoint-inicial.sh` | manter inventário explícito; não promover esses scripts a caminhos operacionais | `ops:guard` + relatório | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 | `RES-04` | Low | stale doc headers/status | docs-base do ciclo não apontavam explicitamente para a limpeza residual pós-fechamento | docs canônicos do ciclo | adicionar addenda curtos e criar índice canônico | índice + addenda | `RESOLVED` |
 
 ## 3. Superfície pública/debug/admin tratada
@@ -119,6 +119,7 @@ Motivo: continuam sob guard explícito `ENABLE_MANUAL_MIGRATIONS`, `auth()` e `r
 
 - ainda existe raiz tracked historicamente poluída; esta sprint não fez arquivo-por-arquivo sem evidência;
 - utilitários antigos com `git add -A` seguem como risco baixo/documentado;
+- `ops:guard` permanece `PASS`, com esses warnings inventariados e fora do fluxo operacional aprovado;
 - `MAINTENANCE_SECRET` continua exigindo rotação operacional controlada, mas o código já permanece fail-closed.
 
 ## 9. Próximos blocos grandes recomendados
