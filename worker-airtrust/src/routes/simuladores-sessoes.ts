@@ -229,6 +229,7 @@ app.get('/agendamentos', async (c) => {
 // GET /api/simuladores/instrutores - Listar instrutores
 app.get('/instrutores', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const limit = parseLimit(c.req.query('limit'), 100, 200);
     const offset = parseOffset(c.req.query('offset'));
 
@@ -242,11 +243,12 @@ app.get('/instrutores', async (c) => {
       WHERE deleted_at IS NULL 
         AND ativo = 1
         AND is_instrutor = 1
+        AND empresa_id = ?
       ORDER BY nome
       LIMIT ?
       OFFSET ?`,
     )
-      .bind(limit, offset)
+      .bind(empresaId, limit, offset)
       .all();
 
     const rows = result.results || [];
