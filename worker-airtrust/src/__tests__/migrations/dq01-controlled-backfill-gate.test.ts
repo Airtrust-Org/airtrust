@@ -55,7 +55,7 @@ describe('dq01 controlled backfill gate', () => {
         AIRTRUST_DQ01_DB_PATH: dbPath,
         AIRTRUST_DQ01_SNAPSHOT_PATH: snapshotPath,
         AIRTRUST_DQ01_ROLLBACK_PLAN_PATH: rollbackPath,
-        AIRTRUST_DQ01_SAFE_COMMAND: 'bash scripts/run-dq01-staging-backfill.sh --mode backfill --target staging',
+        AIRTRUST_DQ01_SAFE_COMMAND: 'bash scripts/run-dq01-staging-backfill-apply.sh',
         AIRTRUST_DQ01_SAFE_COMMAND_REVIEWED: 'YES',
       },
     });

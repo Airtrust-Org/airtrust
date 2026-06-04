@@ -82,6 +82,7 @@ readonly_remote_files=(
 # Scripts com proteção própria forte (env var obrigatória + confirmação)
 self_protected_files=(
   "scripts/sync-d1-production-sanitized.sh"
+  "scripts/run-dq01-staging-backfill-apply.sh"
 )
 
 # Scripts legados já bloqueados com banner + exit 1 (verificação relaxada)

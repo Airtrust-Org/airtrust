@@ -627,6 +627,22 @@
 - **Status final:** `DQ-01 = LOCAL_COPY_BACKFILL_VALIDATED_READY_FOR_STAGING`; `MIG-01 = WAITING_FOR_DQ_STAGING_OR_CONTROLLED_DECISION`.
 - **Próxima fase:** staging real de DQ-01 ou decisão formal antes de iniciar `MIG-01`.
 
+### DQ01 Staging Controlled Backfill Execution ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** materializar `staging` como ambiente controlado canônico de `DQ-01`, capturar snapshot/rollback, passar nos gates e executar o lote autorizado sem deploy, sem `MIG-01` e sem `0389`.
+- **Entregue:**
+  - resultado [AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md);
+  - evidência de target [dq01-staging-target-evidence-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/dq01-staging-target-evidence-20260604.md);
+  - plano de rollback [dq01-staging-rollback-plan-20260604.md](/Users/filipedaumas/SAAS/Airtrust/docs/controlled-execution/dq01-staging-rollback-plan-20260604.md);
+  - wrappers `scripts/run-dq01-staging-backfill-readonly.sh` e `scripts/run-dq01-staging-backfill-apply.sh`;
+  - teste `dq01-staging-backfill-apply.test.ts`;
+  - snapshot pré-janela e pós-janela não rastreados em `.wrangler/state/v3/d1/controlled-execution-snapshots/staging/`.
+- **Gates:** `controlled-execution-gate.sh = READY_FOR_MANUAL_CONTROLLED_EXECUTION`; `dq01-controlled-backfill-gate.sh = READY_FOR_MANUAL_CONTROLLED_EXECUTION`; `audit-data-quality-readiness.sh = PASS`.
+- **Resultado:** diagnóstico pré/pós em `staging` ficou `PASS=9 WARN=0 FAIL=0 SKIPPED=5`; o apply remoto em `funcionarios` encontrou `0` candidatos, executou `changed=0` e preservou `remaining=0`.
+- **Sem:** deploy, produção, `MIG-01`, apply da `0389`, migration nova, edição de migration histórica.
+- **Status final:** `DQ-01 = RESOLVED_FOR_CONTROLLED_SCOPE`; `MIG-01 = READY_FOR_CONTROLLED_REBASELINE_AFTER_DQ`.
+- **Próxima fase:** materializar pacote próprio de `MIG-01` e executar o rebaseline controlado em janela separada.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -723,4 +739,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)**, **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado)**, **Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (`ensureSigvoosTables()` removido, 10 call sites eliminados, teste de ausência de DDL/runtime criado, `R01 = RESOLVED`)**, **Sprint AH (Data Quality + Migration Integrity: `MIG-01` parcial com guard local permanente; `DQ-01` parcial com hardening crítico de simuladores)**, **Sprint AI (`MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`; docs + dry-run scripts + readiness tests criados)**, **Sprint AJ (`DQ-01 = BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS`; gate fail-closed + documento de execução bloqueada versionados)**, **Sprint AK (`MIG-01`/`DQ-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`; contrato/runbook/gates compartilhados versionados)** e **Audit Cycle Final Closure (`DQ-01`/`MIG-01 = BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`; `ARCH-01 = MITIGATED_WITH_GUARDS`)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)**, **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado)**, **Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (`ensureSigvoosTables()` removido, 10 call sites eliminados, teste de ausência de DDL/runtime criado, `R01 = RESOLVED`)**, **Sprint AH (Data Quality + Migration Integrity: `MIG-01` parcial com guard local permanente; `DQ-01` parcial com hardening crítico de simuladores)**, **Sprint AI (`MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`; docs + dry-run scripts + readiness tests criados)**, **Sprint AJ (`DQ-01 = BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS`; gate fail-closed + documento de execução bloqueada versionados)**, **Sprint AK (`MIG-01`/`DQ-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`; contrato/runbook/gates compartilhados versionados)**, **Audit Cycle Final Closure (`DQ-01`/`MIG-01 = BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`; `ARCH-01 = MITIGATED_WITH_GUARDS`)** e **DQ01 Staging Controlled Backfill Execution (`DQ-01 = RESOLVED_FOR_CONTROLLED_SCOPE`; `MIG-01 = READY_FOR_CONTROLLED_REBASELINE_AFTER_DQ`)**.
