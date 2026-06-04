@@ -5,6 +5,8 @@
 **HEAD base:** `12b9127d94eb851d1520fce1f827436428346028`
 **Modo:** fechamento local/read-only. Sem D1 remoto. Sem deploy. Sem backfill real. Sem rebaseline real. Sem migration nova.
 
+> **Addendum 2026-06-04 — Repository Cleanup + Governance + Public Surface Hygiene:** o fechamento do ciclo continua válido. O status canônico dos achados residuais `CLN-*`, `SEC-04`, `MNT-01`, `OPS-01` e `RES-*` passou a ser mantido em `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md` e no índice `docs/AIRTRUST_AUDIT_DOCS_INDEX_v0_5.md`.
+
 ---
 
 ## 1. Veredito final do ciclo atual

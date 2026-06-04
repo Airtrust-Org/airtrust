@@ -74,6 +74,8 @@ export interface Env {
 
   // Gate for historical one-off admin migration endpoints (never set in production/staging)
   ENABLE_MANUAL_MIGRATIONS?: string;
+  // Gate for certificate/admin debug endpoints (never set in production/staging)
+  ENABLE_ADMIN_DEBUG_ROUTES?: string;
 }
 
 // ===== API RESPONSE TYPES =====

@@ -5,6 +5,8 @@
 **HEAD:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
 **Modo:** Consolidado. Este resumo inclui sprints documentais e sprints de implementação pontual, incluindo o Sprint V (design), Sprint W (remoção dos DDL runtime já cobertos por migration), Sprint X.5 (apply 0385/0386 + deploy Worker/API), Sprint R04.6 (bootstrap runtime de Documentos removido) e Sprint R04.7 (deploy Worker/API + smoke + R04 = RESOLVED).
 
+> **Addendum 2026-06-04:** o resumo acima permanece válido para o ciclo principal. Os residuais de cleanup de repositório, `.gitignore`, scripts ops e superfície debug/admin foram consolidados separadamente em `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`.
+
 ---
 
 ## 1. Estado geral

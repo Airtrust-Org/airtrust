@@ -201,6 +201,28 @@ if [[ -n "$ddl_remote_hits" ]]; then
   warn_count=$((warn_count + 1))
 fi
 
+# ── Guard 4b: remote production migrations apply must be explicitly gated ───
+
+remote_migration_apply_files="$(
+  rg -l 'd1[[:space:]]+migrations[[:space:]]+apply.*--remote' scripts package.json \
+    --glob '!scripts/legacy/**' 2>/dev/null | grep -v '^scripts/audit-dangerous-ops\.sh$' || true
+)"
+
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+
+  if [[ "$file" == "scripts/deploy-worker-only.sh" ]]; then
+    if rg -q 'AIRTRUST_ALLOW_PROD_MIGRATIONS_APPLY' "$file" && \
+      rg -q 'AIRTRUST_CONFIRM_PROD_MIGRATIONS_APPLY' "$file"; then
+      continue
+    fi
+  fi
+
+  hits="$(rg -n 'd1[[:space:]]+migrations[[:space:]]+apply|AIRTRUST_ALLOW_PROD_MIGRATIONS_APPLY|AIRTRUST_CONFIRM_PROD_MIGRATIONS_APPLY' "$file" || true)"
+  print_block "remote D1 migrations apply without explicit env gate: $file" "$hits"
+  fail=1
+done <<< "$remote_migration_apply_files"
+
 # ── Guard 5: legacy directory audit ────────────────────────────────────────
 
 legacy_sh_files="$(find scripts/legacy -name '*.sh' -type f 2>/dev/null || true)"

@@ -76,16 +76,11 @@ describe('runtime DDL hardening', () => {
 // Files with DDL that are explicitly accounted for.
 // - admin-manual-migrations.ts / migrations.ts: historical one-off migration runners,
 //   gated by ENABLE_MANUAL_MIGRATIONS; never run unless explicitly enabled in .dev.vars.
-// - admin-migrate.ts / admin-migration.ts: dead code — not imported or mounted in index.ts.
 // - qualificacoes/shared.ts: "ALTER TABLE" appears only inside a JSDoc comment (no-op, R09 RESOLVED).
-// - admin-apply-migration.ts: dead code — not mounted; uses db.exec() with arbitrary request SQL.
 const KNOWN_DDL_FILES = new Set([
   'routes/admin-manual-migrations.ts',
-  'routes/admin-migrate.ts',
-  'routes/admin-migration.ts',
   'routes/migrations.ts',
   'routes/qualificacoes/shared.ts',
-  'routes/admin-apply-migration.ts',
 ]);
 
 const BROAD_DDL_PATTERNS = [
@@ -137,10 +132,7 @@ describe('broad runtime DDL guard', () => {
 
   it('pins the known-DDL-files allowlist — changes here require explicit justification', () => {
     expect([...KNOWN_DDL_FILES].sort()).toEqual([
-      'routes/admin-apply-migration.ts',
       'routes/admin-manual-migrations.ts',
-      'routes/admin-migrate.ts',
-      'routes/admin-migration.ts',
       'routes/migrations.ts',
       'routes/qualificacoes/shared.ts',
     ]);

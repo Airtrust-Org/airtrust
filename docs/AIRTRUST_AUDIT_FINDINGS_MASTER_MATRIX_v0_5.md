@@ -6,6 +6,8 @@
 **Modo:** Matriz atualizada após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado) e Sprint R04.5/R01 pós-apply oficial da fila pendente `0387` + `0388`. Sem migration manual ou alteração de dados reais.
 **Sprints de origem consolidados:** A (RBAC), B (Audit Trail/LGPD), C (Status Enum), D (Testes Beta), E (DDL), F (Data Quality), G (Runner), H (Repository Dashboard), I (Supabase Feasibility), J (Supabase Preparation), K (Tenant Isolation Docs), K.1 (Tenant Residuals), L (LMS Reports Integration), Reauditoria Opus v2, General Audit Opus, V (DDL Residual Design), W (DDL Pré-Fase), X.0-X.5 (DDL Schema Probe + Apply/Deploy), R/S/T/T.1 (Audit v2), OP-1 (Readiness operacional consolidada), OP-2 (Staging operational gate), AH (Data Quality + Migration Integrity), AI (Migration Rebaseline + Data Quality Backfill Readiness), AJ (DQ-01 Controlled Backfill Gate), AK (Controlled Execution Environment Contract), Audit Cycle Final Closure.
 
+> **Addendum 2026-06-04:** esta matriz continua sendo a fonte mestre dos streams principais do ciclo. Para higiene residual de repositório, governança documental e superfície pública remanescente, usar como fonte canônica complementar `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`.
+
 ---
 
 ## 1. Sumário executivo
