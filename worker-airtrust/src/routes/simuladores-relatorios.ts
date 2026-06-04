@@ -6,7 +6,8 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { auth, optionalAuth } from '../middleware/auth';
+import { auth } from '../middleware/auth';
+import { getTenantContext } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -14,16 +15,12 @@ function reportsErrorResponse(c: any, error: string, code: string) {
   return c.json({ success: false, error, code }, 500);
 }
 
-app.use('*', async (c, next) => {
-  if (c.req.method === 'GET') {
-    return optionalAuth()(c, next);
-  }
-  return auth()(c, next);
-});
+app.use('*', auth());
 
 app.get('/uso', async (c) => {
   const logger = createLogger(c, 'SimuladoresRelatorios.uso');
   try {
+    const { empresaId } = getTenantContext(c);
     const di = c.req.query('data_inicio') || null;
     const df = c.req.query('data_fim') || null;
     const diSql = di || '2000-01-01';
@@ -40,12 +37,14 @@ app.get('/uso', async (c) => {
       FROM simuladores s
       LEFT JOIN simulador_agendamentos sa ON s.id = sa.simulador_id
         AND sa.deleted_at IS NULL
+        AND sa.empresa_id = ?
         AND sa.data BETWEEN ? AND ?
       WHERE s.deleted_at IS NULL
+        AND s.empresa_id = ?
       GROUP BY s.id, s.nome, s.tipo
       ORDER BY horas DESC`,
     )
-      .bind(diSql, dfSql)
+      .bind(empresaId, diSql, dfSql, empresaId)
       .all();
 
     // 2. Uso por tipo de sessão
@@ -56,11 +55,12 @@ app.get('/uso', async (c) => {
         COALESCE(SUM(sa.duracao_minutos), 0) / 60.0 as horas
       FROM simulador_agendamentos sa
       WHERE sa.deleted_at IS NULL
+        AND sa.empresa_id = ?
         AND sa.data BETWEEN ? AND ?
       GROUP BY sa.tipo_sessao
       ORDER BY sessoes DESC`,
     )
-      .bind(diSql, dfSql)
+      .bind(empresaId, diSql, dfSql)
       .all();
 
     // 3. Uso por status
@@ -70,11 +70,12 @@ app.get('/uso', async (c) => {
         COUNT(sa.id) as sessoes
       FROM simulador_agendamentos sa
       WHERE sa.deleted_at IS NULL
+        AND sa.empresa_id = ?
         AND sa.data BETWEEN ? AND ?
       GROUP BY sa.status
       ORDER BY sessoes DESC`,
     )
-      .bind(diSql, dfSql)
+      .bind(empresaId, diSql, dfSql)
       .all();
 
     // 4. Total de horas
@@ -82,9 +83,10 @@ app.get('/uso', async (c) => {
       `SELECT COALESCE(SUM(duracao_minutos), 0) / 60.0 as total_horas
       FROM simulador_agendamentos
       WHERE deleted_at IS NULL
+        AND empresa_id = ?
         AND data BETWEEN ? AND ?`,
     )
-      .bind(diSql, dfSql)
+      .bind(empresaId, diSql, dfSql)
       .first<{ total_horas: number }>();
 
     return c.json({
@@ -110,6 +112,7 @@ app.get('/uso', async (c) => {
 app.get('/tripulantes', async (c) => {
   const logger = createLogger(c, 'SimuladoresRelatorios.tripulantes');
   try {
+    const { empresaId } = getTenantContext(c);
     const lim = parseInt(c.req.query('limit') || '50');
     const di = c.req.query('data_inicio') || '2000-01-01';
     const df = c.req.query('data_fim') || '2099-12-31';
@@ -126,15 +129,21 @@ app.get('/tripulantes', async (c) => {
         SUM(CASE WHEN fs.resultado_final = 'FALTA' THEN 1 ELSE 0 END) as faltas
       FROM funcionarios f
       INNER JOIN fichas_sessao fs ON f.id = fs.colaborador_id_aluno
-      LEFT JOIN simulador_agendamentos sa ON fs.agendamento_slot_id = sa.id
+      LEFT JOIN simulador_agendamentos sa
+        ON fs.agendamento_slot_id = sa.id
+       AND sa.deleted_at IS NULL
+       AND sa.empresa_id = ?
       WHERE fs.deleted_at IS NULL
-        AND (sa.data BETWEEN ? AND ? OR sa.data IS NULL)
+        AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
+        AND fs.empresa_id = ?
+        AND (sa.data BETWEEN ? AND ? OR sa.id IS NULL)
       GROUP BY f.id, f.nome, f.matricula, f.funcao
       HAVING sessoes_totais > 0
       ORDER BY horas DESC
       LIMIT ?`,
     )
-      .bind(di, df, lim)
+      .bind(empresaId, empresaId, empresaId, di, df, lim)
       .all();
     return c.json({ success: true, data: r.results || [] });
   } catch (e: unknown) {
@@ -150,6 +159,7 @@ app.get('/tripulantes', async (c) => {
 app.get('/desempenho', async (c) => {
   const logger = createLogger(c, 'SimuladoresRelatorios.desempenho');
   try {
+    const { empresaId } = getTenantContext(c);
     const di = c.req.query('data_inicio') || '2000-01-01';
     const df = c.req.query('data_fim') || '2099-12-31';
     const r = await c.env.DB.prepare(
@@ -165,13 +175,17 @@ app.get('/desempenho', async (c) => {
           END, 2
         ) as aprovacao_percent
       FROM fichas_sessao fs
-      LEFT JOIN simulador_agendamentos sa ON fs.agendamento_slot_id = sa.id
+      LEFT JOIN simulador_agendamentos sa
+        ON fs.agendamento_slot_id = sa.id
+       AND sa.deleted_at IS NULL
+       AND sa.empresa_id = ?
       WHERE fs.deleted_at IS NULL
-        AND (sa.data BETWEEN ? AND ? OR sa.data IS NULL)
+        AND fs.empresa_id = ?
+        AND (sa.data BETWEEN ? AND ? OR sa.id IS NULL)
       GROUP BY COALESCE(fs.tipo_sessao, sa.tipo_sessao, 'SEM_TIPO')
       ORDER BY sessoes DESC`,
     )
-      .bind(di, df)
+      .bind(empresaId, empresaId, di, df)
       .all();
     return c.json({ success: true, data: r.results || [] });
   } catch (e: unknown) {

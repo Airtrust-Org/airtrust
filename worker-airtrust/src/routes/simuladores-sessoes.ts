@@ -9,7 +9,7 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { auth, optionalAuth } from '../middleware/auth';
+import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';

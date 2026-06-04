@@ -10,7 +10,8 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { auth, optionalAuth } from '../middleware/auth';
+import { auth } from '../middleware/auth';
+import { getTenantContext } from '../middleware/tenant';
 import { requireAdminForDelete, audit } from './simuladores-shared';
 import { createLogger, toError } from '../utils/logger';
 
@@ -28,8 +29,8 @@ function simuladoresErrorResponse(
   return c.json({ success: false, error: message, code }, status);
 }
 app.use('*', async (c, next) => {
-  if (c.req.method === 'GET') {
-    return optionalAuth()(c, next);
+  if (c.req.method === 'GET' && c.req.path.endsWith('/health')) {
+    return next();
   }
   return auth()(c, next);
 });
@@ -54,6 +55,7 @@ app.get('/health', async (c) => {
 // GET /api/simuladores/alertas - Listar todos alertas ativos (para instrutores/gestores)
 app.get('/alertas', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const status = c.req.query('status') || 'ATIVO';
 
     const alertas = await c.env.DB.prepare(
@@ -64,13 +66,19 @@ app.get('/alertas', async (c) => {
         f.matricula as funcionario_matricula,
         i.nome as instrutor_nome
        FROM alertas_reforco ar
-       LEFT JOIN funcionarios f ON ar.funcionario_id = f.id
-       LEFT JOIN funcionarios i ON ar.instrutor_id_notificado = i.id
+       INNER JOIN funcionarios f
+         ON ar.funcionario_id = f.id
+        AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
+       LEFT JOIN funcionarios i
+         ON ar.instrutor_id_notificado = i.id
+        AND i.deleted_at IS NULL
+        AND i.empresa_id = ?
        WHERE ar.status = ?
          AND ar.deleted_at IS NULL
        ORDER BY ar.created_at DESC`,
     )
-      .bind(status)
+      .bind(empresaId, empresaId, status)
       .all();
 
     return c.json({ success: true, data: alertas.results });
@@ -87,14 +95,21 @@ app.get('/alertas', async (c) => {
 // PUT /api/simuladores/alertas/:id/resolver - Marcar alerta como resolvido
 app.put('/alertas/:id/resolver', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const alertaId = c.req.param('id');
     const body = await c.req.json();
     const { nota_resolucao, ficha_id_resolucao, observacoes_resolucao } = body;
 
     const anterior = await c.env.DB.prepare(
-      'SELECT * FROM alertas_reforco WHERE id = ? AND deleted_at IS NULL',
+      `SELECT ar.*
+       FROM alertas_reforco ar
+       INNER JOIN funcionarios f
+         ON ar.funcionario_id = f.id
+        AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
+       WHERE ar.id = ? AND ar.deleted_at IS NULL`,
     )
-      .bind(alertaId)
+      .bind(empresaId, alertaId)
       .first();
 
     if (!anterior) {
@@ -112,13 +127,21 @@ app.put('/alertas/:id/resolver', async (c) => {
            ficha_id_resolucao = ?,
            observacoes_resolucao = ?,
            updated_at = datetime('now')
-       WHERE id = ?`,
+       WHERE id = ?
+         AND EXISTS (
+           SELECT 1
+           FROM funcionarios f
+           WHERE f.id = alertas_reforco.funcionario_id
+             AND f.deleted_at IS NULL
+             AND f.empresa_id = ?
+         )`,
     )
       .bind(
         nota_resolucao || null,
         ficha_id_resolucao || null,
         observacoes_resolucao || '',
         alertaId,
+        empresaId,
       )
       .run();
 
@@ -132,9 +155,15 @@ app.put('/alertas/:id/resolver', async (c) => {
 
     // Busca o alerta atualizado
     const alertaAtualizado = await c.env.DB.prepare(
-      'SELECT * FROM alertas_reforco WHERE id = ? AND deleted_at IS NULL',
+      `SELECT ar.*
+       FROM alertas_reforco ar
+       INNER JOIN funcionarios f
+         ON ar.funcionario_id = f.id
+        AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
+       WHERE ar.id = ? AND ar.deleted_at IS NULL`,
     )
-      .bind(alertaId)
+      .bind(empresaId, alertaId)
       .first();
 
     return c.json({ success: true, data: alertaAtualizado || null });
@@ -152,6 +181,7 @@ app.put('/alertas/:id/resolver', async (c) => {
 
 app.get('/tipos-check', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const modelo = (c.req.query('modelo') || '').toUpperCase();
 
     const tipos = await c.env.DB.prepare(
@@ -167,10 +197,13 @@ app.get('/tipos-check', async (c) => {
         is_check
       FROM qualificacoes_tipos
       WHERE deleted_at IS NULL
+        AND empresa_id = ?
         AND UPPER(COALESCE(categoria, '')) = 'CHECK'
         AND ativo = 1
       ORDER BY codigo ASC`,
-    ).all();
+    )
+      .bind(empresaId)
+      .all();
 
     let data: any[] = tipos.results || [];
 
@@ -207,6 +240,7 @@ app.get('/tipos-check', async (c) => {
 
 app.get('/', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const page = Math.max(parseInt(c.req.query('page') || '1', 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '100', 10) || 100, 1), 500);
     const offset = (page - 1) * limit;
@@ -224,10 +258,12 @@ app.get('/', async (c) => {
       created_at,
       updated_at
     FROM simuladores
-    WHERE deleted_at IS NULL`;
-    let countQuery = 'SELECT COUNT(*) as total FROM simuladores WHERE deleted_at IS NULL';
-    const ps: any[] = [];
-    const countParams: any[] = [];
+    WHERE deleted_at IS NULL
+      AND empresa_id = ?`;
+    let countQuery =
+      'SELECT COUNT(*) as total FROM simuladores WHERE deleted_at IS NULL AND empresa_id = ?';
+    const ps: any[] = [empresaId];
+    const countParams: any[] = [empresaId];
     if (search) {
       q +=
         ' AND (nome LIKE ? OR modelo LIKE ? OR tipo LIKE ? OR fabricante LIKE ? OR localizacao LIKE ?)';
@@ -280,6 +316,7 @@ app.get('/', async (c) => {
 
 app.post('/', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const b = await c.req.json();
     if (!b.nome || !b.tipo) {
       return c.json(
@@ -291,22 +328,41 @@ app.post('/', async (c) => {
         400,
       );
     }
-    const r = await c.env.DB.prepare(
-      'INSERT INTO simuladores(nome,modelo,tipo,fabricante,localizacao,status,observacoes)VALUES(?,?,?,?,?,?,?)',
-    )
-      .bind(
-        b.nome,
-        b.modelo || b.tipo || null,
-        b.tipo,
-        b.fabricante || null,
-        b.localizacao || null,
-        b.status || 'ATIVO',
-        b.observacoes || null,
-      )
+    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
+    const hasEmpresaId = (tableInfo.results || []).some((row: Record<string, unknown>) =>
+      String(row.name || '') === 'empresa_id',
+    );
+    const insertSql = hasEmpresaId
+      ? 'INSERT INTO simuladores(nome,modelo,tipo,fabricante,localizacao,status,observacoes,empresa_id)VALUES(?,?,?,?,?,?,?,?)'
+      : 'INSERT INTO simuladores(nome,modelo,tipo,fabricante,localizacao,status,observacoes)VALUES(?,?,?,?,?,?,?)';
+    const insertParams = hasEmpresaId
+      ? [
+          b.nome,
+          b.modelo || b.tipo || null,
+          b.tipo,
+          b.fabricante || null,
+          b.localizacao || null,
+          b.status || 'ATIVO',
+          b.observacoes || null,
+          empresaId,
+        ]
+      : [
+          b.nome,
+          b.modelo || b.tipo || null,
+          b.tipo,
+          b.fabricante || null,
+          b.localizacao || null,
+          b.status || 'ATIVO',
+          b.observacoes || null,
+        ];
+    const r = await c.env.DB.prepare(insertSql)
+      .bind(...insertParams)
       .run();
     const id = r.meta.last_row_id;
-    const cr = await c.env.DB.prepare('SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL')
-      .bind(id)
+    const cr = await c.env.DB.prepare(
+      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
+    )
+      .bind(id, empresaId)
       .first();
     await audit(c.env.DB, {
       tabela: 'simuladores',
@@ -326,9 +382,12 @@ app.post('/', async (c) => {
 
 app.get('/:id', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
-    const s = await c.env.DB.prepare('SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL')
-      .bind(id)
+    const s = await c.env.DB.prepare(
+      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
+    )
+      .bind(id, empresaId)
       .first();
     if (!s) {
       return c.json({ success: false, error: 'Não encontrado', code: 'SIMULADOR_NOT_FOUND' }, 404);
@@ -344,10 +403,13 @@ app.get('/:id', async (c) => {
 
 app.put('/:id', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
     const b = await c.req.json();
-    const a = await c.env.DB.prepare('SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL')
-      .bind(id)
+    const a = await c.env.DB.prepare(
+      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
+    )
+      .bind(id, empresaId)
       .first();
     if (!a) {
       return c.json({ success: false, error: 'Não encontrado', code: 'SIMULADOR_NOT_FOUND' }, 404);
@@ -388,11 +450,15 @@ app.put('/:id', async (c) => {
     updates.push("updated_at=datetime('now')");
     params.push(id);
 
-    await c.env.DB.prepare(`UPDATE simuladores SET ${updates.join(',')} WHERE id=?`)
-      .bind(...params)
+    await c.env.DB.prepare(
+      `UPDATE simuladores SET ${updates.join(',')} WHERE id=? AND empresa_id = ?`,
+    )
+      .bind(...params, empresaId)
       .run();
-    const u = await c.env.DB.prepare('SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL')
-      .bind(id)
+    const u = await c.env.DB.prepare(
+      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
+    )
+      .bind(id, empresaId)
       .first();
     await audit(c.env.DB, {
       tabela: 'simuladores',
@@ -414,24 +480,29 @@ app.put('/:id', async (c) => {
 
 app.delete('/:id', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const denied = requireAdminForDelete(c);
     if (denied) return denied;
 
     const id = c.req.param('id');
-    const a = await c.env.DB.prepare('SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL')
-      .bind(id)
+    const a = await c.env.DB.prepare(
+      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
+    )
+      .bind(id, empresaId)
       .first();
     if (!a) {
-      const deleted = await c.env.DB.prepare('SELECT * FROM simuladores WHERE id=?')
-        .bind(id)
+      const deleted = await c.env.DB.prepare('SELECT * FROM simuladores WHERE id=? AND empresa_id = ?')
+        .bind(id, empresaId)
         .first();
       if (deleted) {
         return c.json({ success: true, message: 'Simulador já excluído' });
       }
       return c.json({ success: false, error: 'Não encontrado', code: 'SIMULADOR_NOT_FOUND' }, 404);
     }
-    await c.env.DB.prepare("UPDATE simuladores SET deleted_at=datetime('now')WHERE id=?")
-      .bind(id)
+    await c.env.DB.prepare(
+      "UPDATE simuladores SET deleted_at=datetime('now')WHERE id=? AND empresa_id = ?",
+    )
+      .bind(id, empresaId)
       .run();
     await audit(c.env.DB, {
       tabela: 'simuladores',

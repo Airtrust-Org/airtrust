@@ -8,7 +8,8 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { auth, optionalAuth } from '../middleware/auth';
+import { auth } from '../middleware/auth';
+import { getTenantContext } from '../middleware/tenant';
 import {
   TipoSessaoSchema,
   ModeloSessaoSchema,
@@ -20,22 +21,22 @@ import {
 } from './simuladores-shared';
 
 const app = new Hono<{ Bindings: Env }>();
-app.use('*', async (c, next) => {
-  if (c.req.method === 'GET') {
-    return optionalAuth()(c, next);
-  }
-  return auth()(c, next);
-});
+app.use('*', auth());
+
+function getEmpresaIdFromRequest(c: Parameters<typeof getTenantContext>[0]): number {
+  return getTenantContext(c).empresaId;
+}
 
 async function normalizeChecksIdsModelo(
   db: D1Database,
+  empresaId: number,
   checksIds: number[],
   modeloAeronave: string | null | undefined,
 ) {
   const idsUnicos = Array.from(
     new Set(checksIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
   );
-  const checksEncontrados = await listarTiposCheckPorIds(db, idsUnicos);
+  const checksEncontrados = await listarTiposCheckPorIds(db, idsUnicos, empresaId);
 
   if (checksEncontrados.length !== idsUnicos.length) {
     const idsValidos = new Set(checksEncontrados.map((check) => Number(check.id)));
@@ -67,9 +68,12 @@ function buildModeloAeronaveSqlMatchExpression(expr: string): string {
 app.get('/tipos-sessao', async (c) => {
   console.log('🔍 [TIPOS] GET /tipos-sessao chamado');
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const result = await c.env.DB.prepare(
-      'SELECT * FROM tipos_sessao WHERE deleted_at IS NULL ORDER BY codigo',
-    ).all();
+      'SELECT * FROM tipos_sessao WHERE deleted_at IS NULL AND empresa_id = ? ORDER BY codigo',
+    )
+      .bind(empresaId)
+      .all();
 
     console.log('✅ [TIPOS] Retornando', result.results.length, 'registros');
     return c.json({ success: true, data: result.results });
@@ -82,11 +86,12 @@ app.get('/tipos-sessao', async (c) => {
 // GET /api/simuladores/tipos-sessao/:id - Buscar tipo específico
 app.get('/tipos-sessao/:id', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
     const result = await c.env.DB.prepare(
-      'SELECT * FROM tipos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT * FROM tipos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!result) {
@@ -102,6 +107,7 @@ app.get('/tipos-sessao/:id', async (c) => {
 // POST /api/simuladores/tipos-sessao - Criar tipo de sessão
 app.post('/tipos-sessao', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const parsed = TipoSessaoSchema.safeParse(await c.req.json());
     if (!parsed.success) {
       return c.json(
@@ -113,9 +119,9 @@ app.post('/tipos-sessao', async (c) => {
 
     // Verificar duplicidade
     const existe = await c.env.DB.prepare(
-      'SELECT id FROM tipos_sessao WHERE codigo = ? AND deleted_at IS NULL',
+      'SELECT id FROM tipos_sessao WHERE codigo = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(codigo)
+      .bind(codigo, empresaId)
       .first();
 
     if (existe) {
@@ -124,9 +130,9 @@ app.post('/tipos-sessao', async (c) => {
 
     // Inserir
     const result = await c.env.DB.prepare(
-      "INSERT INTO tipos_sessao (codigo, nome, descricao, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))",
+      "INSERT INTO tipos_sessao (codigo, nome, descricao, empresa_id, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
     )
-      .bind(codigo, nome, descricao || null)
+      .bind(codigo, nome, descricao || null, empresaId)
       .run();
 
     await audit(c.env.DB, {
@@ -148,6 +154,7 @@ app.post('/tipos-sessao', async (c) => {
 // PUT /api/simuladores/tipos-sessao/:id - Atualizar tipo de sessão
 app.put('/tipos-sessao/:id', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
     const parsed = TipoSessaoSchema.safeParse(await c.req.json());
     if (!parsed.success) {
@@ -160,9 +167,9 @@ app.put('/tipos-sessao/:id', async (c) => {
 
     // Buscar dados anteriores
     const anterior = await c.env.DB.prepare(
-      'SELECT * FROM tipos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT * FROM tipos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!anterior) {
@@ -171,9 +178,9 @@ app.put('/tipos-sessao/:id', async (c) => {
 
     // Verificar duplicidade (exceto próprio registro)
     const existe = await c.env.DB.prepare(
-      'SELECT id FROM tipos_sessao WHERE codigo = ? AND id != ? AND deleted_at IS NULL',
+      'SELECT id FROM tipos_sessao WHERE codigo = ? AND id != ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(codigo, id)
+      .bind(codigo, id, empresaId)
       .first();
 
     if (existe) {
@@ -182,9 +189,9 @@ app.put('/tipos-sessao/:id', async (c) => {
 
     // Atualizar
     await c.env.DB.prepare(
-      "UPDATE tipos_sessao SET codigo = ?, nome = ?, descricao = ?, updated_at = datetime('now') WHERE id = ?",
+      "UPDATE tipos_sessao SET codigo = ?, nome = ?, descricao = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
     )
-      .bind(codigo, nome, descricao || null, id)
+      .bind(codigo, nome, descricao || null, id, empresaId)
       .run();
 
     await audit(c.env.DB, {
@@ -204,6 +211,7 @@ app.put('/tipos-sessao/:id', async (c) => {
 // DELETE /api/simuladores/tipos-sessao/:id - Excluir tipo de sessão (soft delete)
 app.delete('/tipos-sessao/:id', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const denied = requireAdminForDelete(c);
     if (denied) return denied;
 
@@ -211,9 +219,9 @@ app.delete('/tipos-sessao/:id', async (c) => {
 
     // Buscar dados anteriores
     const anterior = await c.env.DB.prepare(
-      'SELECT * FROM tipos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT * FROM tipos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!anterior) {
@@ -222,9 +230,9 @@ app.delete('/tipos-sessao/:id', async (c) => {
 
     // Soft delete
     await c.env.DB.prepare(
-      "UPDATE tipos_sessao SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      "UPDATE tipos_sessao SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
     )
-      .bind(id)
+      .bind(id, empresaId)
       .run();
 
     await audit(c.env.DB, {
@@ -244,7 +252,7 @@ app.delete('/tipos-sessao/:id', async (c) => {
 // MODELOS DE SESSÃO - CRUD Completo
 // ========================================================================
 
-async function normalizeModelosSessaoModeloAeronave(db: D1Database) {
+async function normalizeModelosSessaoModeloAeronave(db: D1Database, empresaId: number) {
   try {
     const col = await db.prepare('PRAGMA table_info(modelos_sessao)').all();
     const columns = (col.results || []).map((r: any) => r.name);
@@ -262,20 +270,25 @@ async function normalizeModelosSessaoModeloAeronave(db: D1Database) {
 
     await db
       .prepare(
-        `UPDATE modelos_sessao SET modelo_aeronave = COALESCE(${coalesceCols.join(', ')}) WHERE (modelo_aeronave IS NULL OR modelo_aeronave = '')`,
+        `UPDATE modelos_sessao
+         SET modelo_aeronave = COALESCE(${coalesceCols.join(', ')})
+         WHERE empresa_id = ?
+           AND (modelo_aeronave IS NULL OR modelo_aeronave = '')`,
       )
+      .bind(empresaId)
       .run();
   } catch (e: any) {
     console.warn('[normalizeModelosSessaoModeloAeronave] Falha:', e?.message || String(e));
   }
 }
 
-async function getTipoSessaoPadraoId(db: D1Database): Promise<number | null> {
+async function getTipoSessaoPadraoId(db: D1Database, empresaId: number): Promise<number | null> {
   const tipoSessao = await db
     .prepare(
       `SELECT id
        FROM tipos_sessao
        WHERE deleted_at IS NULL
+         AND empresa_id = ?
        ORDER BY CASE
          WHEN UPPER(COALESCE(codigo, '')) LIKE '%RECOR%' THEN 2
          ELSE 1
@@ -283,19 +296,56 @@ async function getTipoSessaoPadraoId(db: D1Database): Promise<number | null> {
        id ASC
        LIMIT 1`,
     )
+    .bind(empresaId)
     .first<{ id: number }>();
 
   return tipoSessao?.id ? Number(tipoSessao.id) : null;
+}
+
+async function ensureTipoSessaoBelongsToEmpresa(
+  db: D1Database,
+  tipoSessaoId: number | null | undefined,
+  empresaId: number,
+): Promise<boolean> {
+  if (!tipoSessaoId) return true;
+  const result = await db
+    .prepare(
+      'SELECT id FROM tipos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ? LIMIT 1',
+    )
+    .bind(tipoSessaoId, empresaId)
+    .first();
+  return Boolean(result);
+}
+
+async function ensureQualificacaoTipoBelongsToEmpresa(
+  db: D1Database,
+  qualificacaoTipoId: number | null | undefined,
+  empresaId: number,
+): Promise<boolean> {
+  if (!qualificacaoTipoId) return true;
+  const result = await db
+    .prepare(
+      `SELECT id
+       FROM qualificacoes_tipos
+       WHERE id = ?
+         AND deleted_at IS NULL
+         AND empresa_id = ?
+       LIMIT 1`,
+    )
+    .bind(qualificacaoTipoId, empresaId)
+    .first();
+  return Boolean(result);
 }
 
 // GET /api/simuladores/modelos-sessao - Listar modelos de sessão
 app.get('/modelos-sessao', async (c) => {
   console.log('🔍 [MODELOS] GET /modelos-sessao chamado');
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     c.header('Pragma', 'no-cache');
 
-    await normalizeModelosSessaoModeloAeronave(c.env.DB);
+    await normalizeModelosSessaoModeloAeronave(c.env.DB, empresaId);
 
     const col = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
     const columns = (col.results || []).map((r: any) => r.name);
@@ -332,11 +382,12 @@ app.get('/modelos-sessao', async (c) => {
         (SELECT COUNT(*) FROM modelos_sessao_manobras
          WHERE modelo_id = ms.id AND deleted_at IS NULL) as total_manobras
       FROM modelos_sessao ms
-      LEFT JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
-      LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id
+      LEFT JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id AND ts.empresa_id = ?
+      LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id AND qt.empresa_id = ?
       WHERE ms.deleted_at IS NULL
+        AND ms.empresa_id = ?
     `;
-    const params: any[] = [];
+    const params: any[] = [empresaId, empresaId, empresaId];
 
     if (tipo_sessao_id || tipoSessaoCodigo || tipoSessaoNome) {
       const tipoClauses: string[] = [];
@@ -394,6 +445,7 @@ app.get('/modelos-sessao', async (c) => {
 app.get('/modelos-sessao/:id', async (c) => {
   console.log('🔍 [MODELOS] GET /modelos-sessao/:id chamado');
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
     const result = await c.env.DB.prepare(
       `SELECT 
@@ -403,11 +455,11 @@ app.get('/modelos-sessao/:id', async (c) => {
         qt.nome as qualificacao_tipo_nome,
         qt.codigo as qualificacao_tipo_codigo
       FROM modelos_sessao ms
-      LEFT JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
-      LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id
-      WHERE ms.id = ? AND ms.deleted_at IS NULL`,
+      LEFT JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id AND ts.empresa_id = ?
+      LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id AND qt.empresa_id = ?
+      WHERE ms.id = ? AND ms.deleted_at IS NULL AND ms.empresa_id = ?`,
     )
-      .bind(id)
+      .bind(empresaId, empresaId, id, empresaId)
       .first();
 
     if (!result) {
@@ -418,11 +470,18 @@ app.get('/modelos-sessao/:id', async (c) => {
     const checksResult = await c.env.DB.prepare(
       `SELECT msc.qualificacao_tipo_id, qt.codigo, qt.nome, qt.descricao
        FROM modelos_sessao_checks msc
+       INNER JOIN modelos_sessao ms
+         ON ms.id = msc.modelo_id
+        AND ms.deleted_at IS NULL
+        AND ms.empresa_id = ?
        INNER JOIN qualificacoes_tipos qt ON msc.qualificacao_tipo_id = qt.id
-       WHERE msc.modelo_id = ? AND msc.deleted_at IS NULL
+       WHERE msc.modelo_id = ?
+         AND msc.deleted_at IS NULL
+         AND qt.deleted_at IS NULL
+         AND qt.empresa_id = ?
        ORDER BY qt.codigo`,
     )
-      .bind(id)
+      .bind(empresaId, id, empresaId)
       .all();
 
     return c.json({ success: true, data: { ...result, checks: checksResult.results || [] } });
@@ -435,15 +494,23 @@ app.get('/modelos-sessao/:id', async (c) => {
 // GET /api/simuladores/modelos-sessao/:id/checks - Listar checks FAP padrão do modelo
 app.get('/modelos-sessao/:id/checks', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
     const result = await c.env.DB.prepare(
       `SELECT msc.qualificacao_tipo_id as id, qt.codigo, qt.nome, qt.descricao
        FROM modelos_sessao_checks msc
+       INNER JOIN modelos_sessao ms
+         ON ms.id = msc.modelo_id
+        AND ms.deleted_at IS NULL
+        AND ms.empresa_id = ?
        INNER JOIN qualificacoes_tipos qt ON msc.qualificacao_tipo_id = qt.id
-       WHERE msc.modelo_id = ? AND msc.deleted_at IS NULL
+       WHERE msc.modelo_id = ?
+         AND msc.deleted_at IS NULL
+         AND qt.deleted_at IS NULL
+         AND qt.empresa_id = ?
        ORDER BY qt.codigo`,
     )
-      .bind(id)
+      .bind(empresaId, id, empresaId)
       .all();
     return c.json({ success: true, data: result.results || [] });
   } catch (e: any) {
@@ -455,6 +522,7 @@ app.get('/modelos-sessao/:id/checks', async (c) => {
 app.get('/modelos-sessao/:id/manobras', async (c) => {
   console.log('🔍 [MODELOS] GET /modelos-sessao/:id/manobras chamado');
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
     const result = await c.env.DB.prepare(
       `SELECT 
@@ -471,11 +539,15 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
         m.nivel_dificuldade,
         m.tempo_estimado
       FROM modelos_sessao_manobras msm
+      INNER JOIN modelos_sessao ms
+        ON ms.id = msm.modelo_id
+       AND ms.deleted_at IS NULL
+       AND ms.empresa_id = ?
       INNER JOIN manobras m ON msm.manobra_id = m.id
       WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL
       ORDER BY msm.ordem ASC`,
     )
-      .bind(id)
+      .bind(empresaId, id)
       .all();
 
     return c.json({ success: true, data: result.results });
@@ -488,6 +560,7 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
 // PUT /api/simuladores/modelos-sessao/:id/manobras/reordenar - Reordenar manobras do modelo
 app.put('/modelos-sessao/:id/manobras/reordenar', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
     const body = await c.req.json();
     const manobras = Array.isArray(body?.manobras) ? body.manobras : [];
@@ -497,9 +570,9 @@ app.put('/modelos-sessao/:id/manobras/reordenar', async (c) => {
     }
 
     const modelo = await c.env.DB.prepare(
-      'SELECT id FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT id FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!modelo) {
@@ -545,8 +618,19 @@ app.put('/modelos-sessao/:id/manobras/reordenar', async (c) => {
 // DELETE /api/simuladores/modelos-sessao/:id/manobras/:manobraId - Remover vínculo de manobra
 app.delete('/modelos-sessao/:id/manobras/:manobraId', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
     const manobraId = c.req.param('manobraId');
+
+    const modelo = await c.env.DB.prepare(
+      'SELECT id FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
+    )
+      .bind(id, empresaId)
+      .first();
+
+    if (!modelo) {
+      return c.json({ success: false, error: 'Modelo não encontrado' }, 404);
+    }
 
     const result = await c.env.DB.prepare(
       `UPDATE modelos_sessao_manobras
@@ -578,7 +662,8 @@ app.delete('/modelos-sessao/:id/manobras/:manobraId', async (c) => {
 app.post('/modelos-sessao', async (c) => {
   console.log('🔍 [MODELOS] POST /modelos-sessao chamado');
   try {
-    await normalizeModelosSessaoModeloAeronave(c.env.DB);
+    const empresaId = getEmpresaIdFromRequest(c);
+    await normalizeModelosSessaoModeloAeronave(c.env.DB, empresaId);
 
     const parsed = ModeloSessaoSchema.safeParse(await c.req.json());
     if (!parsed.success) {
@@ -602,16 +687,38 @@ app.post('/modelos-sessao', async (c) => {
     } = parsed.data;
     let checksIdsNormalizados: number[] = [];
     try {
-      checksIdsNormalizados = await normalizeChecksIdsModelo(c.env.DB, checks_ids, modelo_aeronave);
+      checksIdsNormalizados = await normalizeChecksIdsModelo(
+        c.env.DB,
+        empresaId,
+        checks_ids,
+        modelo_aeronave,
+      );
     } catch (error: any) {
       return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
 
+    if (!(await ensureTipoSessaoBelongsToEmpresa(c.env.DB, tipo_sessao_id, empresaId))) {
+      return c.json({ success: false, error: 'Tipo de sessão inválido para a empresa' }, 400);
+    }
+
+    if (
+      !(await ensureQualificacaoTipoBelongsToEmpresa(
+        c.env.DB,
+        qualificacao_tipo_id,
+        empresaId,
+      ))
+    ) {
+      return c.json(
+        { success: false, error: 'Tipo de qualificação inválido para a empresa' },
+        400,
+      );
+    }
+
     // Verificar duplicidade de código
     const existe = await c.env.DB.prepare(
-      'SELECT id FROM modelos_sessao WHERE codigo = ? AND deleted_at IS NULL',
+      'SELECT id FROM modelos_sessao WHERE codigo = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(codigo)
+      .bind(codigo, empresaId)
       .first();
 
     if (existe) {
@@ -625,15 +732,36 @@ app.post('/modelos-sessao', async (c) => {
     // Inserir modelo
     const insertSql = hasTipoCol
       ? `INSERT INTO modelos_sessao
-         (codigo, nome, tipo_sessao_id, tipo, modelo_aeronave, descricao, duracao_estimada, gera_qualificacao, qualificacao_tipo_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
+         (codigo, nome, tipo_sessao_id, tipo, modelo_aeronave, descricao, duracao_estimada, gera_qualificacao, qualificacao_tipo_id, empresa_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
       : `INSERT INTO modelos_sessao
-         (codigo, nome, tipo_sessao_id, modelo_aeronave, descricao, duracao_estimada, gera_qualificacao, qualificacao_tipo_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
+         (codigo, nome, tipo_sessao_id, modelo_aeronave, descricao, duracao_estimada, gera_qualificacao, qualificacao_tipo_id, empresa_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
 
     const insertBinds = hasTipoCol
-      ? [codigo, nome, tipo_sessao_id, tipo || 'SIMULADOR', modelo_aeronave, descricao || null, duracao_estimada || 120, gera_qualificacao || 0, qualificacao_tipo_id || null]
-      : [codigo, nome, tipo_sessao_id, modelo_aeronave, descricao || null, duracao_estimada || 120, gera_qualificacao || 0, qualificacao_tipo_id || null];
+      ? [
+          codigo,
+          nome,
+          tipo_sessao_id,
+          tipo || 'SIMULADOR',
+          modelo_aeronave,
+          descricao || null,
+          duracao_estimada || 120,
+          gera_qualificacao || 0,
+          qualificacao_tipo_id || null,
+          empresaId,
+        ]
+      : [
+          codigo,
+          nome,
+          tipo_sessao_id,
+          modelo_aeronave,
+          descricao || null,
+          duracao_estimada || 120,
+          gera_qualificacao || 0,
+          qualificacao_tipo_id || null,
+          empresaId,
+        ];
 
     const result = await c.env.DB.prepare(insertSql)
       .bind(...insertBinds)
@@ -691,6 +819,7 @@ app.post('/modelos-sessao', async (c) => {
 app.post('/modelos-sessao/:id/manobras', async (c) => {
   console.log('🔍 [MODELOS] POST /modelos-sessao/:id/manobras chamado');
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
     const body = await c.req.json();
     const { manobras, substituir } = body;
@@ -701,9 +830,9 @@ app.post('/modelos-sessao/:id/manobras', async (c) => {
 
     // Verificar se modelo existe
     const modelo = await c.env.DB.prepare(
-      'SELECT id FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT id FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!modelo) {
@@ -777,12 +906,13 @@ app.post('/modelos-sessao/:id/manobras', async (c) => {
 // POST /api/simuladores/modelos-sessao/:id/clonar - Clonar modelo com checks e manobras
 app.post('/modelos-sessao/:id/clonar', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const id = c.req.param('id');
 
     const modeloOriginal = await c.env.DB.prepare(
-      'SELECT * FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT * FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first<any>();
 
     if (!modeloOriginal) {
@@ -795,9 +925,9 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
 
     while (
       await c.env.DB.prepare(
-        'SELECT id FROM modelos_sessao WHERE codigo = ? AND deleted_at IS NULL LIMIT 1',
+        'SELECT id FROM modelos_sessao WHERE codigo = ? AND deleted_at IS NULL AND empresa_id = ? LIMIT 1',
       )
-        .bind(cloneCodigo)
+        .bind(cloneCodigo, empresaId)
         .first()
     ) {
       cloneCodigo = `${cloneCodigoBase}-${suffix}`;
@@ -812,12 +942,12 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
     const cloneSql = hasTipoColClone
       ? `INSERT INTO modelos_sessao (
            codigo, nome, tipo_sessao_id, tipo, modelo_aeronave, descricao,
-           duracao_estimada, gera_qualificacao, qualificacao_tipo_id, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
+           duracao_estimada, gera_qualificacao, qualificacao_tipo_id, empresa_id, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
       : `INSERT INTO modelos_sessao (
            codigo, nome, tipo_sessao_id, modelo_aeronave, descricao,
-           duracao_estimada, gera_qualificacao, qualificacao_tipo_id, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
+           duracao_estimada, gera_qualificacao, qualificacao_tipo_id, empresa_id, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
 
     const cloneBinds = hasTipoColClone
       ? [
@@ -830,6 +960,7 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
           modeloOriginal.duracao_estimada || 120,
           modeloOriginal.gera_qualificacao || 0,
           modeloOriginal.qualificacao_tipo_id || null,
+          empresaId,
         ]
       : [
           cloneCodigo,
@@ -840,6 +971,7 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
           modeloOriginal.duracao_estimada || 120,
           modeloOriginal.gera_qualificacao || 0,
           modeloOriginal.qualificacao_tipo_id || null,
+          empresaId,
         ];
 
     const cloneResult = await c.env.DB.prepare(cloneSql)
@@ -912,7 +1044,8 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
 // POST /api/simuladores/modelos-sessao/importar-relacoes - Importar relações modelo-manobra
 app.post('/modelos-sessao/importar-relacoes', async (c) => {
   try {
-    await normalizeModelosSessaoModeloAeronave(c.env.DB);
+    const empresaId = getEmpresaIdFromRequest(c);
+    await normalizeModelosSessaoModeloAeronave(c.env.DB, empresaId);
 
     const body = await c.req.json();
     const dados = Array.isArray(body?.dados) ? body.dados : [];
@@ -939,7 +1072,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
       );
     }
 
-    const tipoSessaoPadraoId = await getTipoSessaoPadraoId(c.env.DB);
+    const tipoSessaoPadraoId = await getTipoSessaoPadraoId(c.env.DB, empresaId);
 
     const resultado = {
       sucesso: true,
@@ -1001,10 +1134,10 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
       let modelo = await c.env.DB.prepare(
         `SELECT id, codigo, nome
          FROM modelos_sessao
-         WHERE UPPER(TRIM(codigo)) = ? AND deleted_at IS NULL
+         WHERE UPPER(TRIM(codigo)) = ? AND deleted_at IS NULL AND empresa_id = ?
          LIMIT 1`,
       )
-        .bind(modeloCodigo)
+        .bind(modeloCodigo, empresaId)
         .first<any>();
 
       if (!modelo) {
@@ -1024,8 +1157,8 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         const insertModelo = await c.env.DB.prepare(
           `INSERT INTO modelos_sessao (
             codigo, nome, tipo_sessao_id, modelo_aeronave, descricao,
-            duracao_estimada, gera_qualificacao, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))`,
+            duracao_estimada, gera_qualificacao, empresa_id, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, datetime('now'), datetime('now'))`,
         )
           .bind(
             modeloCodigo,
@@ -1034,6 +1167,7 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
             modeloAeronave,
             'Importado automaticamente via planilha de relações modelo-manobra',
             Number.isFinite(duracaoEstimada) && duracaoEstimada > 0 ? duracaoEstimada : 120,
+            empresaId,
           )
           .run();
 
@@ -1204,7 +1338,8 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
 app.put('/modelos-sessao/:id', async (c) => {
   console.log('🔍 [MODELOS] PUT /modelos-sessao/:id chamado');
   try {
-    await normalizeModelosSessaoModeloAeronave(c.env.DB);
+    const empresaId = getEmpresaIdFromRequest(c);
+    await normalizeModelosSessaoModeloAeronave(c.env.DB, empresaId);
 
     const id = c.req.param('id');
     const body = await c.req.json();
@@ -1223,9 +1358,9 @@ app.put('/modelos-sessao/:id', async (c) => {
 
     // Buscar modelo atual
     const anterior = await c.env.DB.prepare(
-      'SELECT * FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT * FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!anterior) {
@@ -1235,9 +1370,9 @@ app.put('/modelos-sessao/:id', async (c) => {
     // Verificar duplicidade de código (se mudou)
     if (codigo && codigo !== anterior.codigo) {
       const existe = await c.env.DB.prepare(
-        'SELECT id FROM modelos_sessao WHERE codigo = ? AND id != ? AND deleted_at IS NULL',
+        'SELECT id FROM modelos_sessao WHERE codigo = ? AND id != ? AND deleted_at IS NULL AND empresa_id = ?',
       )
-        .bind(codigo, id)
+        .bind(codigo, id, empresaId)
         .first();
 
       if (existe) {
@@ -1255,6 +1390,7 @@ app.put('/modelos-sessao/:id', async (c) => {
       try {
         checksIdsNormalizados = await normalizeChecksIdsModelo(
           c.env.DB,
+          empresaId,
           checks_ids,
           modeloAeronaveFinal,
         );
@@ -1267,6 +1403,17 @@ app.put('/modelos-sessao/:id', async (c) => {
         ? qualificacao_tipo_id
         : (anterior as any).qualificacao_tipo_id;
 
+    if (!(await ensureTipoSessaoBelongsToEmpresa(c.env.DB, tipo_sessao_id, empresaId))) {
+      return c.json({ success: false, error: 'Tipo de sessão inválido para a empresa' }, 400);
+    }
+
+    if (!(await ensureQualificacaoTipoBelongsToEmpresa(c.env.DB, newQualifTipoId, empresaId))) {
+      return c.json(
+        { success: false, error: 'Tipo de qualificação inválido para a empresa' },
+        400,
+      );
+    }
+
     // Verificar se a coluna tipo já existe (adicionada pela migration 0363)
     const colInfoPut = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
     const hasTipoColPut = (colInfoPut.results || []).some((r: any) => r.name === 'tipo');
@@ -1276,11 +1423,11 @@ app.put('/modelos-sessao/:id', async (c) => {
       ? `UPDATE modelos_sessao
          SET codigo = ?, nome = ?, tipo_sessao_id = ?, tipo = ?, modelo_aeronave = ?, descricao = ?,
              duracao_estimada = ?, gera_qualificacao = ?, qualificacao_tipo_id = ?, updated_at = datetime('now')
-         WHERE id = ?`
+         WHERE id = ? AND empresa_id = ?`
       : `UPDATE modelos_sessao
          SET codigo = ?, nome = ?, tipo_sessao_id = ?, modelo_aeronave = ?, descricao = ?,
              duracao_estimada = ?, gera_qualificacao = ?, qualificacao_tipo_id = ?, updated_at = datetime('now')
-         WHERE id = ?`;
+         WHERE id = ? AND empresa_id = ?`;
 
     const tipoFinal =
       tipo !== undefined
@@ -1299,6 +1446,7 @@ app.put('/modelos-sessao/:id', async (c) => {
           gera_qualificacao !== undefined ? gera_qualificacao : (anterior as any).gera_qualificacao || 0,
           newQualifTipoId || null,
           id,
+          empresaId,
         ]
       : [
           codigo || anterior.codigo,
@@ -1310,6 +1458,7 @@ app.put('/modelos-sessao/:id', async (c) => {
           gera_qualificacao !== undefined ? gera_qualificacao : (anterior as any).gera_qualificacao || 0,
           newQualifTipoId || null,
           id,
+          empresaId,
         ];
 
     await c.env.DB.prepare(updateSql)
@@ -1346,9 +1495,9 @@ app.put('/modelos-sessao/:id', async (c) => {
 
     // Busca o registro atualizado
     const { results: atualizado } = await c.env.DB.prepare(
-      'SELECT * FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT * FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .all();
 
     return c.json({
@@ -1365,6 +1514,7 @@ app.put('/modelos-sessao/:id', async (c) => {
 app.delete('/modelos-sessao/:id', async (c) => {
   console.log('🔍 [MODELOS] DELETE /modelos-sessao/:id chamado');
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     const denied = requireAdminForDelete(c);
     if (denied) return denied;
 
@@ -1372,9 +1522,9 @@ app.delete('/modelos-sessao/:id', async (c) => {
 
     // Verificar se existe
     const modelo = await c.env.DB.prepare(
-      'SELECT * FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL',
+      'SELECT * FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!modelo) {
@@ -1382,8 +1532,10 @@ app.delete('/modelos-sessao/:id', async (c) => {
     }
 
     // Soft delete
-    await c.env.DB.prepare(`UPDATE modelos_sessao SET deleted_at = datetime('now') WHERE id = ?`)
-      .bind(id)
+    await c.env.DB.prepare(
+      `UPDATE modelos_sessao SET deleted_at = datetime('now') WHERE id = ? AND empresa_id = ?`,
+    )
+      .bind(id, empresaId)
       .run();
 
     // Soft delete das manobras associadas
@@ -1417,6 +1569,7 @@ app.delete('/modelos-sessao/:id', async (c) => {
 // POST /api/simuladores/fix/modelos-periodicos - Repair: Atualizar modelo_aeronave
 app.post('/fix/modelos-periodicos', async (c) => {
   try {
+    const empresaId = getEmpresaIdFromRequest(c);
     console.log('🔧 [FIX] Iniciando reparo de modelos periódicos...');
 
     // 1. Atualizar modelos periódicos AW139 SEM modelo_aeronave
@@ -1424,19 +1577,25 @@ app.post('/fix/modelos-periodicos', async (c) => {
       `UPDATE modelos_sessao 
        SET modelo_aeronave = 'AW139'
        WHERE tipo_sessao_id = 9
+         AND empresa_id = ?
          AND tipo_aeronave = 'AW139'
          AND (modelo_aeronave IS NULL OR modelo_aeronave = '')
          AND deleted_at IS NULL`,
-    ).run();
+    )
+      .bind(empresaId)
+      .run();
 
     // 2. Atualizar modelos periódicos SEM tipo_aeronave (CHECK FINAL) - defaultar para AW139
     const result2 = await c.env.DB.prepare(
       `UPDATE modelos_sessao 
        SET modelo_aeronave = 'AW139', tipo_aeronave = 'AW139'
        WHERE tipo_sessao_id = 9
+         AND empresa_id = ?
          AND (tipo_aeronave IS NULL OR tipo_aeronave = '')
          AND deleted_at IS NULL`,
-    ).run();
+    )
+      .bind(empresaId)
+      .run();
 
     console.log(`✅ [FIX] Atualizado batch 1: ${result1.meta.changes} registros`);
     console.log(`✅ [FIX] Atualizado batch 2: ${result2.meta.changes} registros`);
@@ -1447,8 +1606,11 @@ app.post('/fix/modelos-periodicos', async (c) => {
               COUNT(CASE WHEN modelo_aeronave = 'AW139' THEN 1 END) as com_codigo
        FROM modelos_sessao
        WHERE tipo_sessao_id = 9
+         AND empresa_id = ?
          AND deleted_at IS NULL`,
-    ).first();
+    )
+      .bind(empresaId)
+      .first();
 
     return c.json({
       success: true,
