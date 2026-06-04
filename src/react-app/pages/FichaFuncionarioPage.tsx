@@ -433,18 +433,23 @@ export default function FichaFuncionarioPage() {
         setLoading(true);
         setError('');
 
-        // ✅ CORRIGIDO: Remover /api duplicado (API_BASE_URL já contém /api)
-        const [fichaRes, matrizRes] = await Promise.all([
-          fetchWithAuth(`${API_BASE_URL}/funcionarios/${id}/ficha-360`),
-          fetchWithAuth(`${API_BASE_URL}/matriz-treinamento/requisitos/${id}`),
-        ]);
-
-        if (!fichaRes.ok || !matrizRes.ok) {
+        const fichaRes = await fetchWithAuth(`${API_BASE_URL}/funcionarios/${id}/ficha-360`);
+        if (!fichaRes.ok) {
           throw new Error('Erro ao carregar dados');
         }
 
         const fichaJson = await fichaRes.json();
-        const matrizJson = await matrizRes.json();
+        const matrizRes = await fetchWithAuth(`${API_BASE_URL}/matriz-treinamento/requisitos/${id}`);
+        let matrizJson: { data?: MatrizRequisito[] } = {};
+
+        if (!matrizRes.ok) {
+          console.warn('[FichaFuncionarioPage] Falha ao carregar matriz de treinamento', {
+            funcionarioId: id,
+            status: matrizRes.status,
+          });
+        } else {
+          matrizJson = await matrizRes.json();
+        }
 
         setFicha(fichaJson.data);
         setRequisitosFuncao((matrizJson.data || []) as MatrizRequisito[]);

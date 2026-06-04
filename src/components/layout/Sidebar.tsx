@@ -16,7 +16,7 @@ const menuItems: MenuItem[] = [
   { icon: 'person', label: 'Funcionários', path: '/funcionarios' },
   { icon: 'badge', label: 'Qualificações', path: '/qualificacoes' },
   { icon: 'flight_takeoff', label: 'Simuladores & Voo', path: '/simuladores' },
-  { icon: 'folder', label: 'Pasta Virtual', path: '/pasta-virtual' },
+  { icon: 'folder', label: 'Pasta 360', path: '/pasta-virtual' },
   { icon: 'settings', label: 'Configurações', path: '/configuracoes' },
 ];
 

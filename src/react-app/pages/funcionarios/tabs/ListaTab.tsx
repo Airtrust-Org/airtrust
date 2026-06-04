@@ -23,6 +23,7 @@ import { DetalhesModal } from './DetalhesModal';
 import { useDebounce } from '@/react-app/hooks/useDebounce';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
 interface Funcionario {
   id: number;
@@ -69,6 +70,18 @@ export const ListaTab: React.FC<ListaTabProps> = ({ funcionarios = [], loading =
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [cargoFilter, setCargoFilter] = useState<string>('all');
   const [selectedFuncionario, setSelectedFuncionario] = useState<Funcionario | null>(null);
+
+  const openPasta360 = (funcionarioId: number | string | null | undefined) => {
+    const pasta360Url = buildPasta360Url(funcionarioId, {
+      tab: 'pasta',
+      origem: 'funcionarios-lista-tab',
+    });
+    if (!pasta360Url) {
+      toast.error('Não foi possível abrir a Pasta 360: funcionário inválido.');
+      return;
+    }
+    navigate(pasta360Url);
+  };
 
   // ✅ Debounce na busca (300ms)
   const debouncedBusca = useDebounce(busca, 300);
@@ -355,8 +368,8 @@ export const ListaTab: React.FC<ListaTabProps> = ({ funcionarios = [], loading =
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/funcionarios/${func.id}/ficha`)}
-                          title="Ficha 360°"
+                          onClick={() => openPasta360(func.id)}
+                          title="Pasta 360"
                         >
                           <FolderOpen size={16} className="text-blue-600" />
                         </Button>

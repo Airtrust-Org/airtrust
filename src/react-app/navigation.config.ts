@@ -79,7 +79,7 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
         },
         {
           id: 'pasta-virtual',
-          label: 'Pasta Virtual',
+          label: 'Pasta 360',
           path: '/pasta-virtual',
         },
       ],

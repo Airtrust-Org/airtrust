@@ -652,7 +652,7 @@ export function openMonthlyAgendaPrint(options: MonthlyAgendaPrintOptions): bool
 // IMPRESSÃO EM GRADE DE CALENDÁRIO (visual, estilo calendário mensal)
 // =====================================================================
 
-function buildCalendarGridHtml(options: MonthlyAgendaPrintOptions): string {
+export function buildCalendarGridHtml(options: MonthlyAgendaPrintOptions): string {
   const { monthDate, generatedAt = new Date(), sessions, filters } = options;
 
   // Mapeia sessões por data (YYYY-MM-DD)
@@ -740,7 +740,7 @@ function buildCalendarGridHtml(options: MonthlyAgendaPrintOptions): string {
     <meta charset="UTF-8" />
     <title>Calendário – ${escapeHtml(getMonthLabel(monthDate))}</title>
     <style>
-      @page { size: A4 portrait; margin: 0; }
+      @page { size: A4 portrait; margin: 10mm; }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
@@ -825,6 +825,13 @@ function buildCalendarGridHtml(options: MonthlyAgendaPrintOptions): string {
         font-size: 7px; color: #94a3b8;
       }
       .cal-footer strong { color: #475569; }
+
+      @media print {
+        td {
+          min-height: 18mm;
+          padding: 3px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -945,7 +952,12 @@ function formatShortDate(dateStr: string): string {
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(d);
 }
 
-function buildWeeklyHtml({ weekStart, sessions, generatedAt = new Date(), filters }: WeeklyPrintOptions): string {
+export function buildWeeklyAgendaPrintHtml({
+  weekStart,
+  sessions,
+  generatedAt = new Date(),
+  filters,
+}: WeeklyPrintOptions): string {
   // Gera os 7 dias da semana a partir de weekStart
   const days: string[] = [];
   for (let i = 0; i < 7; i++) {
@@ -1014,7 +1026,7 @@ function buildWeeklyHtml({ weekStart, sessions, generatedAt = new Date(), filter
   <meta charset="UTF-8"/>
   <title>Semana – ${escapeHtml(getWeekLabel(weekStart))}</title>
   <style>
-    @page { size: A4 landscape; margin: 0; }
+    @page { size: A4 landscape; margin: 10mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Segoe UI','Helvetica Neue',Arial,sans-serif;
@@ -1074,10 +1086,10 @@ function buildWeeklyHtml({ weekStart, sessions, generatedAt = new Date(), filter
     .sc-time  { font-size:8px; font-weight:800; color:#1e293b; }
     .sc-dur   { font-size:7px; color:#64748b; font-weight:400; }
     .sc-name  { font-size:8px; font-weight:700; color:#1e293b; margin-top:1px; }
-    .sc-sim   { font-size:7px; color:#475569; }
+    .sc-sim   { font-size:7px; color:#475569; overflow-wrap:anywhere; }
     .sc-instr { font-size:7px; color:#0891b2; }
     .sc-exam  { font-size:7px; color:#7c3aed; }
-    .sc-crew  { font-size:7px; color:#64748b; margin-top:1px; }
+    .sc-crew  { font-size:7px; color:#64748b; margin-top:1px; overflow-wrap:anywhere; }
     .sc-status {
       display:inline-block; margin-top:2px;
       font-size:6.5px; font-weight:700; border-radius:99px; padding:0px 5px;
@@ -1094,6 +1106,11 @@ function buildWeeklyHtml({ weekStart, sessions, generatedAt = new Date(), filter
       font-size:7px; color:#94a3b8;
     }
     .wk-footer strong { color:#475569; }
+
+    @media print {
+      td { padding: 3px; }
+      .session-card { margin-bottom: 3px; }
+    }
   </style>
 </head>
 <body>
@@ -1135,14 +1152,22 @@ function buildWeeklyHtml({ weekStart, sessions, generatedAt = new Date(), filter
 }
 
 export function openWeeklyAgendaPrint(options: WeeklyPrintOptions): boolean {
-  return printHtmlViaIframe(buildWeeklyHtml(options));
+  return printHtmlViaIframe(buildWeeklyAgendaPrintHtml(options));
 }
 
 // =====================================================================
 // IMPRESSÃO DA VIEW AGENDA (lista cronológica compacta)
 // =====================================================================
 
-function buildAgendaListHtml({ sessions, generatedAt = new Date(), filters }: { sessions: MonthlyAgendaPrintSession[]; generatedAt?: Date; filters?: MonthlyAgendaPrintOptions['filters'] }): string {
+export function buildAgendaListPrintHtml({
+  sessions,
+  generatedAt = new Date(),
+  filters,
+}: {
+  sessions: MonthlyAgendaPrintSession[];
+  generatedAt?: Date;
+  filters?: MonthlyAgendaPrintOptions['filters'];
+}): string {
   const sorted = [...sessions].sort((a, b) => {
     const dc = a.data.localeCompare(b.data);
     return dc !== 0 ? dc : normalizeTime(a.hora_inicio).localeCompare(normalizeTime(b.hora_inicio));
@@ -1195,7 +1220,7 @@ function buildAgendaListHtml({ sessions, generatedAt = new Date(), filters }: { 
   <meta charset="UTF-8"/>
   <title>Agenda – ${escapeHtml(formatGeneratedAt(generatedAt))}</title>
   <style>
-    @page { size: A4 portrait; margin: 0; }
+    @page { size: A4 portrait; margin: 10mm; }
     * { box-sizing: border-box; margin:0; padding:0; }
     body {
       font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
@@ -1229,7 +1254,7 @@ function buildAgendaListHtml({ sessions, generatedAt = new Date(), filters }: { 
 
     /* TABLE */
     .ag-wrap { padding:10px 14px; }
-    table { width:100%; border-collapse:collapse; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; }
 
     .ag-day-header td {
       background:linear-gradient(90deg,#1e3a5f,#1e40af);
@@ -1257,8 +1282,8 @@ function buildAgendaListHtml({ sessions, generatedAt = new Date(), filters }: { 
     .ag-time { display:inline-block; background:#1e40af; color:#fff; border-radius:5px; padding:2px 6px; font-size:9px; font-weight:800; margin-right:4px; }
     .ag-dur  { font-size:8px; color:#64748b; }
     .ag-primary { font-weight:700; color:#1e293b; font-size:9px; }
-    .ag-sec     { font-size:8px; color:#64748b; }
-    .ag-part    { font-size:8.5px; color:#334155; }
+    .ag-sec     { font-size:8px; color:#64748b; overflow-wrap:anywhere; }
+    .ag-part    { font-size:8.5px; color:#334155; overflow-wrap:anywhere; }
     .ag-muted   { color:#94a3b8; }
     .ag-badge   { display:inline-block; font-size:7px; font-weight:700; text-transform:uppercase; border-radius:3px; padding:0 4px; color:#fff; margin-right:3px; }
     .ag-instr   { background:#0891b2; }
@@ -1274,6 +1299,12 @@ function buildAgendaListHtml({ sessions, generatedAt = new Date(), filters }: { 
     /* FOOTER */
     .ag-footer { background:#f8fafc; border-top:1px solid #e2e8f0; padding:6px 14px; display:flex; justify-content:space-between; font-size:8px; color:#94a3b8; }
     .ag-footer strong { color:#475569; }
+
+    @media print {
+      tbody tr:not(.ag-day-header) td {
+        padding: 5px 6px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1324,5 +1355,157 @@ function buildAgendaListHtml({ sessions, generatedAt = new Date(), filters }: { 
 }
 
 export function openAgendaListPrint(options: { sessions: MonthlyAgendaPrintSession[]; generatedAt?: Date; filters?: MonthlyAgendaPrintOptions['filters'] }): boolean {
-  return printHtmlViaIframe(buildAgendaListHtml(options));
+  return printHtmlViaIframe(buildAgendaListPrintHtml(options));
+}
+
+export interface DailyPrintOptions {
+  date: Date;
+  sessions: MonthlyAgendaPrintSession[];
+  generatedAt?: Date;
+  filters?: MonthlyAgendaPrintOptions['filters'];
+}
+
+function formatDateIso(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+export function buildDailyAgendaPrintHtml({
+  date,
+  sessions,
+  generatedAt = new Date(),
+  filters,
+}: DailyPrintOptions): string {
+  const dateKey = formatDateIso(date);
+  const daySessions = sessions
+    .filter((session) => session.data.slice(0, 10) === dateKey)
+    .sort((a, b) => normalizeTime(a.hora_inicio).localeCompare(normalizeTime(b.hora_inicio)));
+  const totalMinutes = daySessions.reduce(
+    (sum, session) => sum + calculateDurationMinutes(session.hora_inicio, session.hora_fim),
+    0,
+  );
+  const checks = daySessions.filter((session) => session.examinador_nome).length;
+
+  const rows =
+    daySessions
+      .map((session) => {
+        const duration = calculateDurationMinutes(session.hora_inicio, session.hora_fim);
+        const title = session.tema_sessao || session.tipo_sessao || 'Sessão sem tema';
+        return `<tr>
+          <td><span class="dy-time">${escapeHtml(normalizeTime(session.hora_inicio))}–${escapeHtml(normalizeTime(session.hora_fim))}</span><div class="dy-dur">${escapeHtml(formatDurationLabel(duration))}</div></td>
+          <td><div class="dy-primary">${escapeHtml(session.simulador_nome)}</div><div class="dy-secondary">${escapeHtml(session.simulador_modelo || session.simulador_tipo || '')}</div></td>
+          <td><div class="dy-primary">${escapeHtml(title)}</div><div class="dy-secondary">${escapeHtml(session.tipo_sessao || '')}</div></td>
+          <td>${buildParticipantsList(session.participantes)}</td>
+          <td><div><span class="dy-badge dy-instr">Instr</span>${escapeHtml(session.instrutor_nome || '—')}</div>${session.examinador_nome ? `<div><span class="dy-badge dy-exam">Exam</span>${escapeHtml(session.examinador_nome)}</div>` : '<div class="dy-muted">Sem examinador</div>'}</td>
+          <td><span class="dy-status ${getStatusClass(session.status)}">${escapeHtml(getStatusLabel(session.status))}</span></td>
+          <td>${session.observacoes ? `<span class="dy-secondary">${escapeHtml(session.observacoes)}</span>` : '<span class="dy-muted">—</span>'}</td>
+        </tr>`;
+      })
+      .join('') ||
+    `<tr><td colspan="7" class="dy-empty">Nenhuma sessão encontrada para a data selecionada.</td></tr>`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Agenda diária – ${escapeHtml(formatDateLong(dateKey))}</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; margin:0; padding:0; }
+    body {
+      font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+      font-size:9px; color:#0f172a; background:#fff;
+      print-color-adjust:exact; -webkit-print-color-adjust:exact;
+    }
+    .dy-header {
+      background:linear-gradient(135deg,#1e3a5f 0%,#1e40af 60%,#2563eb 100%);
+      color:#fff; padding:14px 16px 12px;
+      display:flex; justify-content:space-between; align-items:flex-end;
+    }
+    .dy-eyebrow { font-size:8px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#93c5fd; margin-bottom:4px; }
+    .dy-title { font-size:20px; font-weight:800; line-height:1.1; text-transform:capitalize; }
+    .dy-meta { text-align:right; font-size:8px; color:#bfdbfe; line-height:1.8; }
+    .dy-meta strong { color:#fff; }
+    .dy-stats { display:grid; grid-template-columns:repeat(4,1fr); background:#f0f7ff; border-bottom:2px solid #bfdbfe; }
+    .dy-stat { padding:7px 10px; border-right:1px solid #bfdbfe; }
+    .dy-stat:last-child { border-right:none; }
+    .dy-label { font-size:7px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    .dy-value { font-size:16px; font-weight:800; line-height:1.2; }
+    .dy-chips { display:flex; gap:4px; flex-wrap:wrap; padding:6px 14px; background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+    .chip { background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; border-radius:99px; padding:1px 7px; font-size:7px; font-weight:700; }
+    .chip.muted { background:#f1f5f9; color:#64748b; border-color:#e2e8f0; }
+    .dy-wrap { padding:10px 14px; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    thead th {
+      background:#f8fafc; border-bottom:2px solid #e2e8f0;
+      text-align:left; padding:5px 6px;
+      font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#475569;
+    }
+    tbody tr { break-inside: avoid; page-break-inside: avoid; }
+    tbody td { padding:5px 6px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
+    tbody tr:nth-child(even) td { background:#fafbff; }
+    .dy-time { display:inline-block; background:#1e40af; color:#fff; border-radius:5px; padding:2px 6px; font-size:9px; font-weight:800; }
+    .dy-dur { font-size:8px; color:#64748b; margin-top:3px; }
+    .dy-primary { font-weight:700; color:#1e293b; overflow-wrap:anywhere; }
+    .dy-secondary { font-size:8px; color:#64748b; overflow-wrap:anywhere; }
+    .dy-muted { color:#94a3b8; font-size:8px; }
+    .dy-badge { display:inline-block; font-size:7px; font-weight:700; text-transform:uppercase; border-radius:3px; padding:0 4px; color:#fff; margin-right:3px; }
+    .dy-instr { background:#0891b2; }
+    .dy-exam { background:#7c3aed; }
+    .dy-status { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:999px; font-weight:700; font-size:8px; }
+    .dy-status::before { content:'●'; font-size:6px; }
+    .status-default   { background:#fef9c3; color:#92400e; }
+    .status-live      { background:#dbeafe; color:#1d4ed8; }
+    .status-completed { background:#dcfce7; color:#166534; }
+    .status-cancelled { background:#fee2e2; color:#991b1b; }
+    .dy-empty { text-align:center; color:#64748b; padding:20px 8px; }
+    .dy-footer { background:#f8fafc; border-top:1px solid #e2e8f0; padding:6px 14px; display:flex; justify-content:space-between; font-size:8px; color:#94a3b8; }
+    .dy-footer strong { color:#475569; }
+  </style>
+</head>
+<body>
+  <div class="dy-header">
+    <div>
+      <div class="dy-eyebrow">✈ AirTrust · Agenda Diária de Simuladores</div>
+      <div class="dy-title">${escapeHtml(formatDateLong(dateKey))}</div>
+    </div>
+    <div class="dy-meta">
+      <div><strong>Emitido</strong> ${escapeHtml(formatGeneratedAt(generatedAt))}</div>
+      <div><strong>${daySessions.length}</strong> ${daySessions.length === 1 ? 'sessão' : 'sessões'}</div>
+    </div>
+  </div>
+  <div class="dy-stats">
+    <div class="dy-stat"><div class="dy-label">Sessões</div><div class="dy-value">${daySessions.length}</div></div>
+    <div class="dy-stat"><div class="dy-label">Carga horária</div><div class="dy-value">${escapeHtml(formatDurationLabel(totalMinutes))}</div></div>
+    <div class="dy-stat"><div class="dy-label">Checks</div><div class="dy-value">${checks}</div></div>
+    <div class="dy-stat"><div class="dy-label">Simuladores</div><div class="dy-value">${new Set(daySessions.map((session) => session.simulador_nome)).size}</div></div>
+  </div>
+  <div class="dy-chips">${buildFilterChips(filters)}</div>
+  <div class="dy-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:82px">Horário</th>
+          <th>Simulador</th>
+          <th>Sessão / Tema</th>
+          <th>Tripulantes</th>
+          <th>Equipe</th>
+          <th style="width:78px">Status</th>
+          <th>Obs.</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>
+  <div class="dy-footer">
+    <div><strong>AirTrust</strong> — Documento gerado automaticamente</div>
+    <div>Impresso em ${escapeHtml(formatGeneratedAt(generatedAt))}</div>
+  </div>
+</body>
+</html>`;
+}
+
+export function openDailyAgendaPrint(options: DailyPrintOptions): boolean {
+  return printHtmlViaIframe(buildDailyAgendaPrintHtml(options));
 }
