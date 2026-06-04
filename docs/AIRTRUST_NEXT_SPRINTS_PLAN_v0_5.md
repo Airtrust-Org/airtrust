@@ -491,6 +491,18 @@
 - **Status final de R01 nesta sprint:** `BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`.
 - **Próxima fase:** R01-staging/new-environment gate — executar o bootstrap + cadeia histórica em ambiente novo aprovado antes de propor a remoção do fallback runtime.
 
+### Sprint R01.3 — SIGVOOS Staging/New Environment Gate + Fallback Removal Readiness ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** validar o pacote de bootstrap em condição local-isolada realista de novo ambiente e decidir se a próxima etapa já pode remover o fallback runtime.
+- **Entregue:**
+  - gate local-isolado explicitado no teste de migrations com sequência por etapas: banco limpo -> bootstrap -> `0352` -> `0354` -> `0387`;
+  - auditoria adicional do bootstrap confirmando escopo apenas DDL, sem seeds, sem secrets, sem tenant real e sem substituição das migrations históricas de `0352`;
+  - inventário fechado do fallback runtime SIGVOOS: 10 call sites, concentrados em `sigvoos-frms.ts` e `integracoes_sigvoos.ts`;
+  - documento de readiness criado: `docs/AIRTRUST_SIGVOOS_R01_STAGING_GATE_AND_FALLBACK_REMOVAL_READINESS_v0_5.md`.
+- **Sem:** migration nova, D1 remoto, deploy, remoção de runtime, alteração de auth/RBAC/tenant/R2.
+- **Status final de R01 nesta sprint:** `READY_FOR_RUNTIME_FALLBACK_REMOVAL`.
+- **Próxima fase:** `Runtime Fallback Removal + Final Audit Closure`.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -571,7 +583,7 @@
 | R09 | ~~R09 Readiness / Verification~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | GPT-5.4 DeepSeek | Sim (DDL removido) | Nao (sem migration) |
 | R04.6 | Documentos Bootstrap Removal ✅ | Concluído (2026-06-03) | GPT-5.5 | Pendente (deploy + smoke) | Nao (0388 ja aplicada) |
 | R04.7 | Deploy Worker/API + Smoke ✅ | Concluído (2026-06-04) | GPT-5.5 | Sim (APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9) | Nao |
-| Z | SIGVOOS Staging / New Environment Gate | Medio prazo | GPT-5.5 | Nao ate gate aprovado | Nao |
+| Z | SIGVOOS Runtime Fallback Removal + Final Audit Closure | Medio prazo | GPT-5.5 | Sim | Nao |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
 | AC | Repository Pattern Expansao | Longo prazo | GPT-5.4 | Sim | Nao |
@@ -582,4 +594,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo, `ensureSigvoosTables()` preservado)** e **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente, R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE, próxima fase: R01-staging/new-environment gate)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo, `ensureSigvoosTables()` preservado)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)** e **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado, R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL, próxima fase: Runtime Fallback Removal + Final Audit Closure)**.

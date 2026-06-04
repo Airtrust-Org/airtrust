@@ -25,6 +25,16 @@ const prohibitedPatterns = [
   /\bUPSERT\b/i,
 ];
 
+const secretOrSeedPatterns = [
+  /AIRTRUST_/,
+  /\bSECRET\s*=/i,
+  /\bTOKEN\s*=/i,
+  /\bAPI[_-]?KEY\s*=/i,
+  /\bBEARER\s+[A-Z0-9._-]+/i,
+  /@/,
+  /https?:\/\//i,
+];
+
 function normalizeSql(sql: string) {
   return sql
     .replace(/--.*$/gm, '')
@@ -78,6 +88,19 @@ describe('migration 0387 sigvoos base tables schema', () => {
       deleted_at TEXT
     );
   `;
+
+  const expectedBootstrapTables = [
+    'integracoes_sigvoos_config',
+    'integracoes_sigvoos_eventos',
+    'integracoes_sigvoos_mapeamentos',
+  ] as const;
+
+  const expectedBootstrapIndexes = [
+    'idx_integracoes_sigvoos_config_empresa_chave',
+    'idx_integracoes_sigvoos_eventos_empresa_created',
+    'idx_integracoes_sigvoos_mapeamentos_empresa_nome',
+    'idx_integracoes_sigvoos_mapeamentos_empresa_canac',
+  ] as const;
 
   function createDb() {
     const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-sigvoos-base-'));
@@ -326,6 +349,22 @@ describe('migration 0387 sigvoos base tables schema', () => {
     expect(normalizeSql(bootstrapSql)).toBe(normalizeSql(migrationSql));
   });
 
+  it('keeps the bootstrap scoped to pre-0354 DDL only, without seeds, secrets or replacement of historical migrations', () => {
+    const normalizedBootstrap = normalizeSql(bootstrapSql);
+
+    for (const pattern of prohibitedPatterns) {
+      expect(bootstrapSql).not.toMatch(pattern);
+    }
+
+    for (const pattern of secretOrSeedPatterns) {
+      expect(bootstrapSql).not.toMatch(pattern);
+    }
+
+    expect(bootstrapSql).not.toContain('sigvoos_mapeamento_manual');
+    expect(bootstrapSql).not.toContain('frms_jornada_pendente');
+    expect(normalizedBootstrap).not.toContain('notificar_falha_email');
+  });
+
   it('lets 0354 pass when the bootstrap runs before historical migrations', () => {
     const { sqlite, queryJson } = createDb();
 
@@ -389,6 +428,86 @@ describe('migration 0387 sigvoos base tables schema', () => {
     expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_config;')).toBe('0');
     expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_eventos;')).toBe('0');
     expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_mapeamentos;')).toBe('0');
+  });
+
+  it('passes the local-isolated new-environment gate when bootstrap runs before the historical chain', () => {
+    const { sqlite, queryJson } = createDb();
+
+    sqlite(migrationChainPrereqSql);
+    sqlite(bootstrapSql);
+
+    const bootstrapTables = queryJson<TableRow>(
+      `SELECT name
+         FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN (
+            'integracoes_sigvoos_config',
+            'integracoes_sigvoos_eventos',
+            'integracoes_sigvoos_mapeamentos'
+          )
+        ORDER BY name;`,
+    ).map(({ name }) => name);
+
+    expect(bootstrapTables).toEqual([...expectedBootstrapTables]);
+
+    const bootstrapIndexes = queryJson<TableRow>(
+      `SELECT name
+         FROM sqlite_master
+        WHERE type = 'index'
+          AND name IN (
+            'idx_integracoes_sigvoos_config_empresa_chave',
+            'idx_integracoes_sigvoos_eventos_empresa_created',
+            'idx_integracoes_sigvoos_mapeamentos_empresa_nome',
+            'idx_integracoes_sigvoos_mapeamentos_empresa_canac'
+          )
+        ORDER BY name;`,
+    ).map(({ name }) => name);
+
+    expect(bootstrapIndexes).toEqual([...expectedBootstrapIndexes].sort());
+    expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_config;')).toBe('0');
+    expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_eventos;')).toBe('0');
+    expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_mapeamentos;')).toBe('0');
+
+    sqlite(enrichmentSql);
+    sqlite(hardeningSql);
+    sqlite(migrationSql);
+
+    expect(
+      queryJson<TableColumn>('PRAGMA table_info(integracoes_sigvoos_config);').map(({ name }) => name),
+    ).toEqual(
+      expect.arrayContaining([
+        'id',
+        'empresa_id',
+        'chave',
+        'valor',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+        'notificar_falha_email',
+      ]),
+    );
+
+    const finalTables = queryJson<TableRow>(
+      `SELECT name
+         FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN (
+            'integracoes_sigvoos_config',
+            'integracoes_sigvoos_eventos',
+            'integracoes_sigvoos_mapeamentos',
+            'sigvoos_mapeamento_manual',
+            'frms_jornada_pendente'
+          )
+        ORDER BY name;`,
+    ).map(({ name }) => name);
+
+    expect(finalTables).toEqual([
+      'frms_jornada_pendente',
+      'integracoes_sigvoos_config',
+      'integracoes_sigvoos_eventos',
+      'integracoes_sigvoos_mapeamentos',
+      'sigvoos_mapeamento_manual',
+    ]);
   });
 
   it('is idempotent when the bootstrap script runs twice before the historical chain', () => {

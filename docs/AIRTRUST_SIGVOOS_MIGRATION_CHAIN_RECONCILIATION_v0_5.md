@@ -25,7 +25,7 @@ O resultado desta sprint é um documento de decisão que:
 | Métrica | Valor |
 |---|---|
 | 0387 aplicada em produção | Sim (Sprint R04.5, via fila pendente) |
-| Status R01 | `BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE` |
+| Status R01 | `READY_FOR_RUNTIME_FALLBACK_REMOVAL` |
 | Fallback runtime | `ensureSigvoosTables()` preservado |
 | Teste de prova local | 8/8 PASS (`sigvoos-base-tables-schema.test.ts`) |
 | Migration nova criada nesta sprint | Não |
@@ -100,6 +100,8 @@ Prova local (dois testes em `sigvoos-base-tables-schema.test.ts`):
 **Conclusão:** o fallback permanece necessário enquanto a cadeia limpa não estiver reconciliada.
 
 > **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** a reconciliação local da cadeia ganhou um bootstrap operacional explícito para ambiente novo: `scripts/bootstrap-new-environment.sql`. O replay sem bootstrap continua falhando em `0354`, mas o replay com bootstrap agora atravessa `0354` localmente e mantém `0387` idempotente depois. `ensureSigvoosTables()` continua preservado. Novo status consolidado: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
+>
+> **Addendum Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness (2026-06-04):** o pacote de bootstrap foi reaudidado e o teste local passou a incluir um gate explícito por etapas em banco limpo temporário. O inventário do fallback runtime foi fechado em 10 call sites e 2 arquivos. `ensureSigvoosTables()` continua preservado nesta etapa. Novo status consolidado: **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
 
 ---
 
@@ -122,7 +124,7 @@ Prova local (dois testes em `sigvoos-base-tables-schema.test.ts`):
 ## 9. Decisão recomendada
 
 ```
-R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE
+R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL
 ```
 
 **Classificação consolidada:**
@@ -136,9 +138,8 @@ R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE
 
 ## 10. Próximos passos
 
-1. Validar o bootstrap já criado (`scripts/bootstrap-new-environment.sql`) em ambiente aprovado para provisionamento de ambiente novo.
-2. Confirmar que a cadeia nova passa em ambiente limpo (teste local já existe).
-3. Só então planejar remoção de `ensureSigvoosTables()`.
+1. Usar o gate local-isolado já validado (`scripts/bootstrap-new-environment.sql` + teste de migrations) como base da remoção do fallback.
+2. Planejar a remoção de `ensureSigvoosTables()` em sprint separada.
 4. Não editar `0354` sem análise de impacto operacional e validação em staging.
 5. Não remover `ensureSigvoosTables()` sem cadeia reconciliada.
 
@@ -159,4 +160,4 @@ R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE
 
 ---
 
-**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure — bootstrap local implementado e status avançado para **`BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
+**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure e Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness — bootstrap local revalidado e status avançado para **`READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
