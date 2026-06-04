@@ -10,7 +10,7 @@
 O AirTrust entrou numa fase em que os achados remanescentes ja nao sao de correcao rapida de codigo em producao. O que resta se divide em tres grupos:
 
 1. governanca e rollout controlado (`Audit v2`, `RBAC/Suporte v2`, `Data Quality`, smoke com empresa esperada);
-2. DDL residual com dependencias estruturais (`R01`, `R04` — R09 = RESOLVED Sprint R09; R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL Sprint R04.5);
+2. DDL residual com dependencias estruturais (`R01` — R09 = RESOLVED; R04 = RESOLVED Sprint R04.6; bootstrap de Documentos já removido do runtime);
 3. cobertura e higiene de engenharia (EVD/beta, status residual, observabilidade, R2 metadata).
 
 Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao de runtime ou migration**. O estado atual real pede documentacao mais precisa e uma ordem unica de fechamento, nao mais microfases paralelas.
@@ -34,7 +34,7 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | Achado | Status | Bloqueio | Proxima acao | Modelo recomendado |
 |---|---|---|---|---|
 | `R01` - SIGVOOS runtime DDL | 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION | `0387` já foi aplicada em produção, mas `0354` continua historicamente anterior à migration base numa cadeia limpa | definir baseline/chain plan antes de qualquer remoção do fallback | GPT-5.5 Altissimo |
-| `R04` - Documentos bootstrap DDL | MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5) | apply oficial já executado; probe pós-apply confirmou `documentos`; bootstrap runtime ainda presente; `certificados_templates` segue pendente historicamente | planejar remoção de `ensureDocumentosTableExists()` + deploy em sprint separada | GPT-5.5 Alta |
+| `R04` - Documentos bootstrap DDL | RESOLVED (Sprint R04.6) | `0388` já aplicada e probe pós-apply PASS desde R04.5; bootstrap runtime removido na Sprint R04.6 (`auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado). Pendente: deploy + smoke → RESOLVED. `certificados_templates` segue pendente historicamente. | executar deploy + smoke pós-deploy | GPT-5.5 Alta |
 | `R09` - `qualificacoes/shared.ts` dynamic DDL | ✅ RESOLVED (Sprint R09, 2026-06-03) | ALTER TABLE removido; `renovada`=0200+; `local`/`modalidade`=removidas por 0200; active path ja era no-op | Nenhuma | — |
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
 | RBAC/Suporte v2 | IMPLEMENTATION_READY | depende do foundation audit-first e de migration de papeis | implementar schema + dual-read depois do Audit v2 | GPT-5.5 Altissimo |
@@ -53,25 +53,23 @@ Conclusao:
 - nao e seguro reescrever `0354` cegamente, porque ela ja faz parte da historia aplicada;
 - a proxima acao correta e um **baseline/chain plan** para ambientes novos, nao uma migration remota imediata.
 
-## 5. R04 - Documentos — MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5, 2026-06-03)
+## 5. R04 - Documentos — RESOLVED (Sprint R04.6, 2026-06-03)
 
-Estado real (mapeado):
-- `runApiBootstrap()` continua chamando `ensureDocumentosTableExists()` no startup — nao alterado nesta sprint.
-- O helper cria `documentos` (12 colunas) + 5 indices.
-- 9 lacunas confirmadas (L1-L9): `historico_id` bootstrap-only, `sha256_hash` migration-only parcial, colunas fantasmas em 0200, `certificados_templates` sem CREATE, entre outras.
-- O probe estrutural remoto read-only ja foi executado em `production` com `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`.
-- Baseline capturada: `documentos` existe com `empresa_id DEFAULT 1`, sem `historico_id` e sem `sha256_hash`; `idx_documentos_uuid` nominal nao existe; `pasta_virtual.documento_id` nao existe; `certificados_templates` existe em producao.
-- A Sprint R04.3 fechou o desenho documental da futura `0388`: incluir apenas `documentos` aderente a essa baseline real + indices seguros `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo` e `idx_documentos_funcionario_tipo`.
-- A Sprint R04.4 versionou `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` e `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts`.
-- A Sprint R04.5 executou o mecanismo oficial `Cloudflare D1 migrations apply`; a intenção era aplicar apenas `0388`, mas a fila pendente continha também `0387`. Registrar o desvio como `APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`.
-- Não houve SQL manual, não houve backfill, não houve consulta de dados de linha, não houve alteração de runtime e não houve deploy.
-- Probe pós-apply: `documentos` com 12 colunas esperadas; índices `idx_documentos_funcionario_tipo`, `idx_documentos_tipo`, `idx_documentos_deleted`, `idx_documentos_funcionario`, `idx_documentos_empresa` e autoíndices SQLite; `pasta_virtual` segue sem `documento_id`; `certificados_templates` sem mudança estrutural observada.
-- Itens explicitamente adiados/não tocados pela `0388`: `historico_id`, `idx_documentos_historico`, `sha256_hash`, `idx_documentos_sha256`, `pasta_virtual.documento_id`, qualquer DDL em `certificados_templates` e os indices de `0200` baseados em colunas fantasmas.
+Estado real (pós-Sprint R04.6):
+- ~~`runApiBootstrap()` continua chamando `ensureDocumentosTableExists()` no startup~~ **BOOTSTRAP REMOVIDO NA SPRINT R04.6.**
+- `auto-migration-documentos.ts` deletado do runtime (`git rm src/utils/auto-migration-documentos.ts`).
+- `api-bootstrap.ts` limpo — `import { ensureDocumentosTableExists }` e `await ensureDocumentosTableExists(db)` removidos.
+- Guard test `no-runtime-ddl-hot-paths.test.ts` atualizado — `api-bootstrap.ts` removido de `DOCUMENTED_EXCEPTIONS`, R04 documentado como `RESOLVED` nos comentários.
+- Testes: `documentos-canonical-schema` (8/8), `no-runtime-ddl-hot-paths` (13/13), `tenant-isolation` (12/12) todos PASS.
+- 9 lacunas originais (L1-L9) — a `0388` e o probe estrutural remoto já mitigaram as lacunas estruturais de `documentos`; bootstrap removido sem impacto porque a migration `0388` já garante o schema canônico nos ambientes novos.
+- Histórico mantido como referência: o probe estrutural confirmou baseline parcial/legada, a Sprint R04.3 fechou o desenho, a Sprint R04.4 versionou a migration, a Sprint R04.5 executou o apply oficial (`0387` + `0388` via fila pendente) com probe pós-apply PASS.
 
 Conclusao:
-- `R04` = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL.
-- Proxima acao: remover o bootstrap `ensureDocumentosTableExists()`/`runApiBootstrap` em sprint separada e só então deployar.
-- Ordem segura futura: apply 0388 já registrado → probe pos-migration já registrado → remover bootstrap → deploy.
+- **`R04` = RESOLVED.**
+- Bootstrap removido com segurança: migration `0388` já aplicada em produção (R04.5), probe pós-apply PASS, código morto eliminado (R04.6).
+- Proxima acao: deploy do Worker/API → smoke pós-deploy → R04 = RESOLVED.
+- Ordem segura executada: apply 0388 (R04.5) → probe pos-migration PASS (R04.5) → remover bootstrap (R04.6) → deploy + smoke (pendente).
+- Itens explicitamente adiados/não tocados pela `0388`: `historico_id`, `idx_documentos_historico`, `sha256_hash`, `idx_documentos_sha256`, `pasta_virtual.documento_id`, qualquer DDL em `certificados_templates` e os indices de `0200` baseados em colunas fantasmas.
 - Documentos detalhados: `docs/AIRTRUST_DOCUMENTOS_DDL_R04_READINESS_v0_5.md` e `docs/AIRTRUST_DOCUMENTOS_0388_CANONICAL_SCHEMA_DESIGN_v0_5.md`.
 
 ## 6. R09 - Qualificacoes shared.ts ✅ RESOLVED (Sprint R09, 2026-06-03)
@@ -127,8 +125,8 @@ Conclusao:
 2. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
 3. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
 4. ~~`R09 Readiness/Verification Sprint`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
-5. Planejar a remoção do bootstrap de Documentos agora que a `0388` já foi aplicada e sondada em produção.
-6. Planejar `R01 SIGVOOS Baseline/Chain` antes de qualquer remocao do fallback, apesar da `0387` já estar aplicada em produção.
+5. ~~Remover o bootstrap de Documentos~~ ✅ CONCLUÍDO (Sprint R04.6). A `0388` já estava aplicada e sondada; o bootstrap foi removido (`auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado). Pendente: deploy + smoke → R04 = RESOLVED.
+6. `R01 SIGVOOS Baseline/Chain` — único resíduo runtime ativo. Planejar baseline/chain plan para ambientes novos antes de remover o fallback R01. A `0387` já está aplicada em produção.
 7. Expandir `EVD/Beta`, `status residual`, `observabilidade` e `R2 metadata`.
 
 **Estado operacional atual:** `CONDITIONAL GO` para piloto/controlado; nao e `GO` pleno enquanto empresa esperada, Data Quality completo e staging flag test do Audit v2 nao estiverem fechados. A OP-2 nao alterou essa classificacao.
@@ -138,7 +136,7 @@ Conclusao:
 - Smoke autenticado com empresa esperada.
 - Data Quality completo em staging/snapshot aprovado.
 - ~~Sprint curta de verificacao do `R09`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
-- R04 migration aplicada / baseline estrutural remota (Sprint R04.5 concluído — baseline capturada, desenho aprovado, `0388` aplicada e probe pós-apply registrado; remoção de bootstrap pendente).
+- R04 migration aplicada / bootstrap removido (Sprint R04.5: `0388` aplicada + probe pós-apply PASS; Sprint R04.6: bootstrap removido, `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo. Pendente: deploy + smoke).
 - Cobertura de testes beta/EVD.
 - Expansao de `status-codes`.
 - Auditorias de performance, observabilidade e repository pattern read-only.
@@ -147,7 +145,7 @@ Conclusao:
 
 - Audit v2 staging flag test/paridade controlada.
 - RBAC/Suporte v2 com migration de papeis e dual-read.
-- `R04` se envolver remoção do bootstrap runtime de `documentos` e deploy subsequente.
+- `R04` se envolver deploy do Worker/API e smoke pós-deploy para fechar R04 como RESOLVED (bootstrap já removido na Sprint R04.6).
 - `R01` enquanto depender de baseline, cadeia historica e possivel estrategia de rebuild para ambientes novos.
 
 ## 13. Criterio de encerramento das auditorias
@@ -157,5 +155,7 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 1. Audit v2 tiver schema aplicado, flag validada e rollout/paridade aprovados.
 2. RBAC/Suporte v2 estiver persistido, auditavel e sem dependencia do fallback legado.
 3. Data Quality estiver sem `SKIPPED` relevantes em ambiente aprovado.
-4. `R01` e `R04` nao dependerem mais de DDL runtime. `R09` = RESOLVED (Sprint R09, 2026-06-03).
+4. `R01` nao depender mais de DDL runtime (único resíduo runtime ativo). `R04` bootstrap já removido (Sprint R04.6), pendente deploy + smoke → RESOLVED. `R09` = RESOLVED (Sprint R09, 2026-06-03).
 5. Smoke autenticado com empresa esperada estiver documentado como `PASS`.
+
+**Addendum Sprint R04.6 (2026-06-03):** o bootstrap runtime de Documentos foi removido, fechando o ciclo R04 iniciado no Sprint R04.1. Ações executadas: `auto-migration-documentos.ts` deletado; `api-bootstrap.ts` limpo (import + call); guard test atualizado com R04 documentado como RESOLVED nos comentários; 3 suites de teste PASS (8/8, 13/13, 12/12). **R04 = RESOLVED.** Nenhuma migration nova, nenhum schema remoto alterado, nenhum backfill, nenhum dado tocado. R01 permanece o único resíduo runtime ativo (`0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`). Próximo passo: deploy do Worker/API + smoke pós-deploy → R04 = RESOLVED.
