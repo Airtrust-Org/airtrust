@@ -37,6 +37,10 @@ Consequencia correta desta etapa:
 | `AUDIT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
 | `ARCH-01` | `MITIGATED_WITH_GUARDS` |
 | `VALIDATION_BASELINE` | `PASS` |
+| `AUTH-RESIDUAL-01` | `RESOLVED` |
+| `AUTH-RESIDUAL-02` | `RESOLVED` |
+| `AUTH_TENANT` | `CONFIRMED_CLOSED` |
+| `LOCAL_AUDIT_CLOSURE` | `COMPLETE_WITH_ENVIRONMENT_BLOCKERS` |
 
 ## 3. Fechamento local realmente entregue
 
@@ -92,3 +96,16 @@ Isso nao muda comportamento operacional e impede crescimento silencioso de hotsp
 1. Provisionar um ambiente controlado real e executar `DQ-01`.
 2. Executar `MIG-01` somente depois de `DQ-01`, em janela separada.
 3. Aplicar `0389` em ambiente aprovado e validar `Audit v2` + `RBAC/Suporte v2` antes de qualquer enforcement amplo.
+
+## 6. Addendum final de residuos locais
+
+Relatorio ponte:
+- `docs/AIRTRUST_FINAL_LOCAL_RESIDUAL_CLOSURE_AND_CONTROLLED_EXECUTION_BRIDGE_v0_5.md`
+
+Fechado nesta passada:
+- `AUTH-RESIDUAL-01 = RESOLVED` em `syncEscalaEventosExternos.ts`;
+- `AUTH-RESIDUAL-02 = RESOLVED` em `escalas-tripulacoes.ts`;
+- hardening adicional do filtro tenant-scoped em `sgso-next-gen-extra.ts`;
+- `AUTH_TENANT = CONFIRMED_CLOSED`.
+
+O status de ambiente nao mudou: DQ, MIG, `0389`, Audit v2 e RBAC/Suporte v2 continuam bloqueados por falta de target/snapshot/rollback/aprovacao/comando revisado.

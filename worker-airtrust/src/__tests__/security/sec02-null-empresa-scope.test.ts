@@ -37,6 +37,8 @@ describe('SEC-02: funcionario ownership checks use strict empresa_id = ?', () =>
     'routes/frms-fadiga-acumulada.ts',
     'routes/escalas-pilotos.ts',
     'routes/escalas-cobertura.ts',
+    'routes/sgso-next-gen-extra.ts',
+    'shared/syncEscalaEventosExternos.ts',
   ] as const;
 
   for (const file of FILES_HARDENED) {
@@ -60,6 +62,28 @@ describe('SEC-02: funcionario ownership checks use strict empresa_id = ?', () =>
   it('funcionarios.ts does not use the insecure triple-null pattern', () => {
     const source = src('routes/funcionarios.ts');
     expect(source).not.toMatch(INSECURE_TRIPLE_NULL_PATTERN);
+  });
+
+  it('syncEscalaEventosExternos.ts keeps optional empresaId without null-empresa funcionario fallback', () => {
+    const source = src('shared/syncEscalaEventosExternos.ts');
+    expect(source).not.toMatch(INSECURE_TRIPLE_NULL_PATTERN);
+    expect(source).toContain('AND (? IS NULL OR f.empresa_id = ?)');
+  });
+
+  it('escalas-tripulacoes.ts hardens operational aircraft and pilot ownership lookups', () => {
+    const source = src('routes/escalas-tripulacoes.ts');
+    expect(source).not.toMatch(
+      /FROM\s+aeronaves[\s\S]{0,180}\(\s*empresa_id\s+IS\s+NULL\s+OR\s+empresa_id\s*=\s*\?\s*\)/i,
+    );
+    expect(source).not.toMatch(
+      /FROM\s+funcionarios[\s\S]{0,180}\(\s*empresa_id\s+IS\s+NULL\s+OR\s+empresa_id\s*=\s*\?\s*\)/i,
+    );
+    expect(source).toMatch(
+      /FROM\s+aeronaves[\s\S]{0,180}AND\s+empresa_id\s*=\s*\?[\s\S]{0,40}LIMIT\s+1/i,
+    );
+    expect(source).toMatch(
+      /FROM\s+funcionarios[\s\S]{0,180}AND\s+empresa_id\s*=\s*\?[\s\S]{0,40}LIMIT\s+1/i,
+    );
   });
 });
 

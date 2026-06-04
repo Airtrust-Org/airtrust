@@ -10,7 +10,7 @@
 
 All cross-tenant exposure vectors for SEC-02 have been closed:
 
-1. **NULL-empresa row fallback** (`empresa_id IS NULL OR empresa_id = ?`) removed from 8 route files (commit c3fc522). Funcionario ownership checks now use strict `empresa_id = ?`.
+1. **NULL-empresa row fallback** (`empresa_id IS NULL OR empresa_id = ?`) removed from the hardened ownership filters. Funcionario/aeronave ownership checks now use strict `empresa_id = ?`.
 2. **optionalAuth cross-tenant exposure** (`GET /funcionarios`, `GET /funcionarios/:id`, `GET /funcionarios/stats`, `GET /funcionarios/stats/dashboard`, `GET /aeronaves`, `GET /aeronaves/:id`, `GET /qualificacoes/tipos`, `GET /qualificacoes/tipos/:id`) hardened to `auth()` with empresa_id filters (this commit).
 
 Remaining `optionalAuth()` usages are in simuladores-* files accessing global reference data (manobras_categorias, tipos_sessao, modelos_sessao) that have no empresa_id column, or in historico.ts under a separate review path. These are documented in `__tests__/security/optional-auth-tenant-exposure.test.ts` with a pinned allowlist.  
@@ -86,6 +86,21 @@ All changes replace `(empresa_id IS NULL OR empresa_id = ?)` with the strict `em
 - List filter: `(f.empresa_id IS NULL OR f.empresa_id = ?)` → `f.empresa_id = ?`  
 - Triple-null: `(? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)` → `(? IS NULL OR f.empresa_id = ?)` — preserves the optional-auth bypass (`? IS NULL` when empresaId is null) but removes the NULL-empresa row fallback.
 
+### syncEscalaEventosExternos.ts
+**Line fixed:** ferias sync query.
+**Context:** `syncFuncionarioFeriasForMonth` used the triple-null variant while syncing employee vacations into escala events.
+**Fix:** `(? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)` → `(? IS NULL OR f.empresa_id = ?)`
+
+### escalas-tripulacoes.ts
+**Lines fixed:** operational aircraft and PIC model validation lookups.
+**Context:** the route validates the escala aircraft and PIC habilitation inside a tenant-scoped mutation path.
+**Fix:** `(empresa_id IS NULL OR empresa_id = ?)` → `empresa_id = ?`
+
+### sgso-next-gen-extra.ts
+**Line fixed:** compliance status metric.
+**Context:** SGSO compliance metric counted active funcionarios for the current tenant.
+**Fix:** `(f.empresa_id = ? OR f.empresa_id IS NULL)` → `f.empresa_id = ?`
+
 ---
 
 ## Preserved Patterns (intentional — documented)
@@ -130,7 +145,8 @@ The pattern `LEFT JOIN funcionarios f ON … AND (f.empresa_id IS NULL OR f.empr
 
 `worker-airtrust/src/__tests__/security/sec02-null-empresa-scope.test.ts`
 
-- Verifies all 8 fixed files contain no insecure `(empresa_id IS NULL OR empresa_id = ?)` variants.
+- Verifies the hardened files contain no insecure `(empresa_id IS NULL OR empresa_id = ?)` variants.
+- Verifies the residual Opus findings in `syncEscalaEventosExternos.ts` and `escalas-tripulacoes.ts` stay closed.
 - Pins the list of files that intentionally preserve the NULL-empresa pattern.
 
 `worker-airtrust/src/__tests__/security/optional-auth-tenant-exposure.test.ts`
