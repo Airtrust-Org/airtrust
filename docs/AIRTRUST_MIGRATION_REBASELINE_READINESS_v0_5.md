@@ -10,10 +10,10 @@
 ## 1. Veredito
 
 ```text
-MIG-01 = READY_FOR_CONTROLLED_REBASELINE
+MIG-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT
 ```
 
-O status acima significa somente que a estratégia, os guardrails e a trilha de validação ficaram suficientemente explícitos para uma execução futura controlada. Nenhum rebaseline real foi executado nesta etapa.
+O status acima significa que a estratégia, os guardrails e a trilha de validação ficaram suficientemente explícitos para uma execução futura controlada, e que agora também existe contrato operacional compartilhado, gate genérico fail-closed e runbook versionado para a janela futura. Nenhum rebaseline real foi executado nesta etapa.
 
 ---
 
@@ -124,6 +124,8 @@ Critérios de entrada:
 - janela aprovada;
 - snapshot disponível;
 - rollback ensaiado;
+- contrato `AIRTRUST_CONTROLLED_*` completo;
+- gate de execução controlada em PASS;
 - nenhum deploy acoplado à mesma janela sem necessidade explícita.
 
 ---
@@ -158,7 +160,7 @@ Nenhum rollback foi necessário nesta etapa porque nada foi aplicado.
 
 ---
 
-## 12. Critérios para `MIG-01 = READY_FOR_CONTROLLED_REBASELINE`
+## 12. Critérios para `MIG-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`
 
 Os critérios agora atendidos são:
 1. problemas históricos inventariados;
@@ -167,12 +169,13 @@ Os critérios agora atendidos são:
 4. bootstrap de ambiente novo já comprovado localmente;
 5. guardrails permanentes de governança ativos;
 6. plano local, plano de staging e rollback definidos;
-7. nenhuma migration histórica editada;
-8. nenhum rebaseline real executado prematuramente.
+7. contrato de ambiente controlado e runbook compartilhado versionados;
+8. gate genérico fail-closed pronto para local-copy/staging/production com travas extras para produção;
+9. nenhuma migration histórica editada;
+10. nenhum rebaseline real executado prematuramente.
 
 ---
 
 ## 13. Próxima etapa recomendada
 
-Executar uma sprint separada de **controlled rebaseline execution** em ambiente isolado/staging aprovado, usando este documento como gate de entrada e sem misturar a janela com backfill real ou mudanças funcionais de runtime.
-
+Executar uma sprint separada de **controlled rebaseline execution** em ambiente isolado/staging aprovado, usando este documento, `AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md`, `AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md` e `scripts/mig01-controlled-rebaseline-gate.sh` como gates de entrada, sem misturar a janela com backfill real ou mudanças funcionais de runtime.

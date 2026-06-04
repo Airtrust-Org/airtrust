@@ -3,16 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 READINESS_AUDIT="$ROOT_DIR/scripts/audit-data-quality-readiness.sh"
+GENERIC_GATE="$ROOT_DIR/scripts/controlled-execution-gate.sh"
 EXECUTION_DOC="$ROOT_DIR/docs/AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md"
-
-target="${AIRTRUST_DQ01_TARGET:-}"
-approval="${AIRTRUST_DQ01_APPROVED_BY:-}"
-db_path="${AIRTRUST_DQ01_DB_PATH:-}"
-snapshot_path="${AIRTRUST_DQ01_SNAPSHOT_PATH:-}"
-snapshot_ref="${AIRTRUST_DQ01_SNAPSHOT_REF:-}"
-rollback_path="${AIRTRUST_DQ01_ROLLBACK_PLAN_PATH:-}"
-rollback_ref="${AIRTRUST_DQ01_ROLLBACK_REF:-}"
-safe_command_ack="${AIRTRUST_DQ01_SAFE_COMMAND_REVIEWED:-}"
+CONTRACT_DOC="$ROOT_DIR/docs/AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md"
+RUNBOOK_DOC="$ROOT_DIR/docs/AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md"
 
 fail_reasons=()
 
@@ -20,44 +14,53 @@ add_reason() {
   fail_reasons+=("$1")
 }
 
-has_snapshot_evidence() {
-  [[ -n "$snapshot_ref" ]] || [[ -n "$snapshot_path" && -f "$snapshot_path" ]]
-}
-
-has_rollback_evidence() {
-  [[ -n "$rollback_ref" ]] || [[ -n "$rollback_path" && -f "$rollback_path" ]]
-}
-
 bash "$READINESS_AUDIT" >/dev/null
+[[ -f "$GENERIC_GATE" ]] || add_reason "controlled_execution_gate_missing"
 [[ -f "$EXECUTION_DOC" ]] || add_reason "execution_doc_missing"
-
-if [[ -z "$target" ]]; then
-  add_reason "target_not_declared"
-elif [[ "$target" != "staging" ]]; then
-  add_reason "target_must_be_staging"
-fi
-
-[[ -n "$approval" ]] || add_reason "approval_missing"
-[[ -n "$db_path" && -f "$db_path" ]] || add_reason "db_path_missing_or_unreadable"
-has_snapshot_evidence || add_reason "snapshot_missing"
-has_rollback_evidence || add_reason "rollback_missing"
-[[ "$safe_command_ack" == "YES" ]] || add_reason "safe_command_not_reviewed"
+[[ -f "$CONTRACT_DOC" ]] || add_reason "environment_contract_doc_missing"
+[[ -f "$RUNBOOK_DOC" ]] || add_reason "controlled_execution_runbook_missing"
 
 if (( ${#fail_reasons[@]} > 0 )); then
   echo "DQ01_BACKFILL_GATE=BLOCKED_BY_ENVIRONMENT_READINESS"
-  echo "TARGET=${target:-UNSET}"
-  echo "APPROVED_BY=${approval:-UNSET}"
-  echo "DB_PATH=${db_path:-UNSET}"
   echo "REASONS=$(IFS=,; printf '%s' "${fail_reasons[*]}")"
   exit 2
 fi
 
-echo "DQ01_BACKFILL_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION"
-echo "TARGET=$target"
-echo "APPROVED_BY=$approval"
-echo "DB_PATH=$db_path"
-echo "SNAPSHOT_EVIDENCE=YES"
-echo "ROLLBACK_EVIDENCE=YES"
-echo "SAFE_COMMAND_REVIEWED=YES"
-echo "NOTE=Gate passed. No backfill was executed by this script."
+target="${AIRTRUST_CONTROLLED_TARGET:-${AIRTRUST_DQ01_TARGET:-}}"
+approval="${AIRTRUST_CONTROLLED_APPROVAL:-${AIRTRUST_DQ01_APPROVED_BY:-}}"
+db_path="${AIRTRUST_DB_PATH:-${AIRTRUST_DQ01_DB_PATH:-}}"
+target_ref="${AIRTRUST_CONTROLLED_TARGET_REF:-${AIRTRUST_DQ01_TARGET_REF:-}}"
+snapshot_path="${AIRTRUST_CONTROLLED_SNAPSHOT_PATH:-${AIRTRUST_DQ01_SNAPSHOT_PATH:-}}"
+snapshot_ref="${AIRTRUST_CONTROLLED_SNAPSHOT_REF:-${AIRTRUST_DQ01_SNAPSHOT_REF:-}}"
+rollback_path="${AIRTRUST_CONTROLLED_ROLLBACK_PATH:-${AIRTRUST_DQ01_ROLLBACK_PLAN_PATH:-}}"
+rollback_ref="${AIRTRUST_CONTROLLED_ROLLBACK_REF:-${AIRTRUST_DQ01_ROLLBACK_REF:-}}"
+safe_command="${AIRTRUST_CONTROLLED_SAFE_COMMAND:-${AIRTRUST_DQ01_SAFE_COMMAND:-}}"
+safe_command_reviewed="${AIRTRUST_CONTROLLED_SAFE_COMMAND_REVIEWED:-${AIRTRUST_DQ01_SAFE_COMMAND_REVIEWED:-}}"
+allow_production="${AIRTRUST_CONTROLLED_PRODUCTION_APPROVED:-${AIRTRUST_DQ01_PRODUCTION_APPROVED:-}}"
+allow_remote_d1="${AIRTRUST_CONTROLLED_ALLOW_REMOTE_D1:-${AIRTRUST_DQ01_ALLOW_REMOTE_D1:-NO}}"
 
+if output="$(
+  AIRTRUST_CONTROLLED_MODE="dq01-backfill" \
+  AIRTRUST_CONTROLLED_TARGET="$target" \
+  AIRTRUST_CONTROLLED_APPROVAL="$approval" \
+  AIRTRUST_DB_PATH="$db_path" \
+  AIRTRUST_CONTROLLED_TARGET_REF="$target_ref" \
+  AIRTRUST_CONTROLLED_SNAPSHOT_PATH="$snapshot_path" \
+  AIRTRUST_CONTROLLED_SNAPSHOT_REF="$snapshot_ref" \
+  AIRTRUST_CONTROLLED_ROLLBACK_PATH="$rollback_path" \
+  AIRTRUST_CONTROLLED_ROLLBACK_REF="$rollback_ref" \
+  AIRTRUST_CONTROLLED_SAFE_COMMAND="$safe_command" \
+  AIRTRUST_CONTROLLED_SAFE_COMMAND_REVIEWED="$safe_command_reviewed" \
+  AIRTRUST_CONTROLLED_PRODUCTION_APPROVED="$allow_production" \
+  AIRTRUST_CONTROLLED_ALLOW_REMOTE_D1="$allow_remote_d1" \
+  bash "$GENERIC_GATE"
+)"; then
+  echo "DQ01_BACKFILL_GATE=READY_FOR_MANUAL_CONTROLLED_EXECUTION"
+  printf '%s\n' "$output"
+  echo "NOTE=DQ01 gate passed. No backfill was executed by this script."
+else
+  status=$?
+  echo "DQ01_BACKFILL_GATE=BLOCKED_BY_ENVIRONMENT_READINESS"
+  printf '%s\n' "$output"
+  exit "$status"
+fi
