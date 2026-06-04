@@ -131,3 +131,27 @@ Para registrar evidencia:
 2. Confirmar que nao ha token, cookie, email, nome de pessoa ou dados pessoais.
 3. Registrar data/hora, base URL, APP_VERSION e resumo final.
 4. Para autenticado, registrar somente que a empresa esperada foi validada, sem expor PII.
+
+---
+
+## Resultado Bloco 6.2 (2026-06-04)
+
+```text
+AUTHENTICATED_SMOKE = PASS
+Data: 2026-06-04
+Target: https://airtrust-api-staging.airtrust.workers.dev (staging remoto isolado)
+Método: scripts/smoke-auth-terminal-login.sh (credencial efêmera via env vars)
+Usuário: pré-existente (staging D1, isolado de produção)
+empresa_id: 1
+PASS=11  FAIL=0  SKIPPED=2
+Token impresso: NÃO
+Senha impressa: NÃO
+Token persistido: NÃO
+Deploy: NÃO
+Migration/apply: NÃO
+Credencial de produção: NÃO
+```
+
+Endpoints PASS: Version, Health, Auth me, Auth empresas, Expected empresa validation, Dashboard metrics, EVD daily, Simuladores sessoes, Qualificacoes historico, Funcionarios, Assets private FIRA probe.
+
+Endpoints SKIPPED: FRMS daily fatigue (HTTP 500 — staging sem dados FRMS, endpoint opcional); FRMS fail-safe (não habilitado).

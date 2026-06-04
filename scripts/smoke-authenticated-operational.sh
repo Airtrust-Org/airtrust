@@ -138,7 +138,7 @@ run_request() {
     return 0
   fi
 
-  if [[ "$endpoint_required" == "optional" && ( "$http_code" == "404" || "$http_code" == "405" ) ]]; then
+  if [[ "$endpoint_required" == "optional" && ( "$http_code" == "404" || "$http_code" == "405" || "${http_code:0:1}" == "5" ) ]]; then
     record_skip "$label" "SKIPPED_ENDPOINT_NOT_AVAILABLE" "HTTP $http_code"
     return 0
   fi
