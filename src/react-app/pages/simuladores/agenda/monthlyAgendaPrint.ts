@@ -437,7 +437,7 @@ export function buildMonthlyAgendaPrintHtml({
       .day-section {
         break-inside: auto;
         page-break-inside: auto;
-        border-radius: 10px; overflow: hidden;
+        border-radius: 10px;
         border: 1px solid #e2e8f0;
         box-shadow: 0 1px 2px rgba(0,0,0,.05);
       }
@@ -556,6 +556,8 @@ export function buildMonthlyAgendaPrintHtml({
       .page-footer strong { color: #475569; }
 
       @media print {
+        .content { display: block; }
+        .day-section { margin-bottom: 8px; border-radius: 0; }
         .day-section,
         .sim-card {
           box-shadow: none;
@@ -787,7 +789,7 @@ function buildCalendarGridHtml(options: MonthlyAgendaPrintOptions): string {
 
       td {
         border: 1px solid #e2e8f0; vertical-align: top;
-        padding: 4px; height: 26mm;
+        padding: 4px; min-height: 22mm; height: auto;
       }
       td.empty { background: #f8fafc; }
       td.weekend-col { background: #fafbff; }
@@ -1053,7 +1055,7 @@ function buildWeeklyHtml({ weekStart, sessions, generatedAt = new Date(), filter
     .dh-label { font-size:8.5px; font-weight:700; text-transform:capitalize; }
     .dh-count { font-size:7px; color:#bfdbfe; margin-top:2px; }
 
-    td { border:1px solid #e2e8f0; vertical-align:top; padding:4px; min-height:30mm; }
+    td { border:1px solid #e2e8f0; vertical-align:top; padding:4px; }
     td.empty      { background:#f8fafc; }
     td.weekend-empty { background:#f1f5f9; }
     td.weekend    { background:#fafbff; }
@@ -1232,6 +1234,8 @@ function buildAgendaListHtml({ sessions, generatedAt = new Date(), filters }: { 
     .ag-day-header td {
       background:linear-gradient(90deg,#1e3a5f,#1e40af);
       padding:6px 10px; border-radius:0;
+      break-after: avoid;
+      page-break-after: avoid;
     }
     .ag-date { font-size:11px; font-weight:700; color:#fff; text-transform:capitalize; margin-right:10px; }
     .ag-day-meta { font-size:9px; color:#bfdbfe; }
@@ -1240,6 +1244,10 @@ function buildAgendaListHtml({ sessions, generatedAt = new Date(), filters }: { 
       background:#f8fafc; border-bottom:2px solid #e2e8f0;
       text-align:left; padding:5px 8px;
       font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#475569;
+    }
+    tbody tr:not(.ag-day-header) {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     tbody tr:not(.ag-day-header) td {
       padding:6px 8px; border-bottom:1px solid #f1f5f9; vertical-align:top;
