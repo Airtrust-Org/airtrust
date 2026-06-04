@@ -15,8 +15,8 @@
 | `AUTH_TENANT` | `CONFIRMED_CLOSED` |
 | `LOCAL_AUDIT_CLOSURE` | `COMPLETE_WITH_ENVIRONMENT_BLOCKERS` |
 | `SIMULADORES_OPTIONAL_AUTH_SCOPE` | `RESOLVED` |
-| `DQ-01` | `READY_FOR_CONTROLLED_BACKFILL_EXECUTION` |
-| `MIG-01` | `LOCAL_READINESS_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
+| `DQ-01` | `LOCAL_COPY_BACKFILL_VALIDATED_READY_FOR_STAGING` |
+| `MIG-01` | `WAITING_FOR_DQ_STAGING_OR_CONTROLLED_DECISION` |
 | `ARCH-01` | `MITIGATED_WITH_GUARDS` |
 | `CLN-01` | `RESOLVED` |
 | `SEC-04` | `MITIGATED_BY_FLAG` |
@@ -46,6 +46,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_NEXT_SPRINTS_PLAN_v0_5.md` | próximos blocos grandes |
 | `docs/AIRTRUST_PRODUCT_PERFORMANCE_SCALE_HARDENING_v0_5.md` | hardening local de produto/performance/scale com smoke e guards |
 | `docs/AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md` | pacote operacional rastreável de ambiente controlado para `DQ-01` |
+| `docs/AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md` | resultado da execução controlada local-copy de `DQ-01` |
 | `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md` | cleanup residual, governança e superfície pública |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_GOVERNANCE_v0_5.md` | matriz de RBAC/suporte/admin/maintenance/debug/audit da passada atual |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_SCHEMA_READINESS_v0_5.md` | fundação de schema/readiness para `Audit v2` + `RBAC/Suporte v2` |
@@ -61,6 +62,7 @@ Usar para `DQ-01`, `MIG-01` e trilhas controladas:
 | `docs/AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md` | canônico |
 | `docs/AIRTRUST_DQ01_CONTROLLED_BACKFILL_EXECUTION_v0_5.md` | canônico |
 | `docs/AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md` | canônico |
+| `docs/AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md` | canônico |
 | `docs/AIRTRUST_DATA_QUALITY_BACKFILL_READINESS_v0_5.md` | canônico |
 | `docs/AIRTRUST_MIGRATION_REBASELINE_READINESS_v0_5.md` | canônico |
 | `docs/controlled-execution/dq01-target-evidence-20260604.md` | evidência do target `local-copy` |

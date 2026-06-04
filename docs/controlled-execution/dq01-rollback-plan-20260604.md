@@ -2,7 +2,7 @@
 
 **Data:** 2026-06-04  
 **Branch:** `main`  
-**HEAD base:** `6df87e5`  
+**HEAD base:** `c3f11d5`
 **Approval id:** `DQ01-LOCALCOPY-20260604-FILIPE`
 
 ## 1. Escopo
@@ -12,14 +12,14 @@ Plano de rollback testável para uma futura janela `DQ-01` em `local-copy`, sem 
 ## 2. Artefatos
 
 - **DB alvo:** `worker-airtrust/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/a36f84ea60804f30bb0c7f7cad9f5336a6cca0165abdab8b9241d93dbf0b6006.sqlite`
-- **Snapshot pré-janela:** `worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/dq01-local-copy-pre-window-20260604T171817Z.sqlite`
+- **Snapshot pré-janela:** `worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/dq01-local-copy-pre-window-20260604T172927Z.sqlite`
 - **Hash SHA-256 do snapshot:** `51ed357a365c420ff05e18a5bb37c4cde7a96a86c5c9376ff9dc923557b67a3d`
 
 ## 3. Como restaurar o snapshot
 
 1. Garantir que nenhum processo local esteja escrevendo no arquivo alvo.
 2. Copiar o snapshot pré-janela sobre o DB alvo:
-   `cp worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/dq01-local-copy-pre-window-20260604T171817Z.sqlite worker-airtrust/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/a36f84ea60804f30bb0c7f7cad9f5336a6cca0165abdab8b9241d93dbf0b6006.sqlite`
+   `cp worker-airtrust/.wrangler/state/v3/d1/controlled-execution-snapshots/dq01-local-copy-pre-window-20260604T172927Z.sqlite worker-airtrust/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/a36f84ea60804f30bb0c7f7cad9f5336a6cca0165abdab8b9241d93dbf0b6006.sqlite`
 3. Verificar integridade estrutural:
    `sqlite3 worker-airtrust/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/a36f84ea60804f30bb0c7f7cad9f5336a6cca0165abdab8b9241d93dbf0b6006.sqlite "PRAGMA integrity_check;"`
 4. Rerodar validações mínimas:
@@ -45,6 +45,7 @@ Plano de rollback testável para uma futura janela `DQ-01` em `local-copy`, sem 
 - gates/readiness continuam em `PASS`
 - nenhuma evidência de PII ou secrets em logs
 - status final da janela marcado como `ABORTED_AND_RESTORED` se houver execução real futura
+- teste desta janela: cópia separada do snapshot retornou `PRAGMA integrity_check = ok` e preservou `17` candidatos pré-backfill para `soft_delete_status_alignment`
 
 ## 7. Higiene de dados
 
