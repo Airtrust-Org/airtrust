@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const SRC_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const SRC_ROOT = resolve(join(dirname(fileURLToPath(import.meta.url)), '../..'));
 const ALLOWED_LEGACY_HELPER_FILES = new Set([
   'middleware/tenant.ts',
   'lib/rbac/platform-access.ts',

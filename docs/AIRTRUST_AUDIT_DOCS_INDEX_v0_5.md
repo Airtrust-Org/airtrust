@@ -28,7 +28,7 @@
 | `VALIDATION_BASELINE` | `PASS` |
 | `RBAC_SUPPORT_V2` | `GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE` |
 | `AUDIT_V2` | `PARITY_VALIDATED_FOR_CONTROLLED_SCOPE` |
-| `PRODUCT_PERFORMANCE_SCALE` | `MITIGATED_WITH_LOCAL_GUARDS_AND_SMOKE` |
+| `PRODUCT_PERFORMANCE_SCALE` | `VALIDATED_IN_STAGING_FOR_CONTROLLED_SCOPE` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 
 ## 2. Documentos canônicos atuais
@@ -45,6 +45,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_AUDIT_CLOSURE_EXECUTIVE_SUMMARY_v0_5.md` | resumo executivo do ciclo |
 | `docs/AIRTRUST_NEXT_SPRINTS_PLAN_v0_5.md` | próximos blocos grandes |
 | `docs/AIRTRUST_PRODUCT_PERFORMANCE_SCALE_HARDENING_v0_5.md` | hardening local de produto/performance/scale com smoke e guards |
+| `docs/AIRTRUST_PRODUCT_PERFORMANCE_SCALE_STAGING_VALIDATION_AND_FINAL_OPUS_HANDOFF_v0_5.md` | validacao staging read-only do bloco 5, reconciliacao `tsc` global e handoff final |
 | `docs/AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md` | pacote operacional rastreável de ambiente controlado para `DQ-01` |
 | `docs/AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md` | resultado da execução controlada local-copy de `DQ-01` |
 | `docs/AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md` | resultado da execução controlada em `staging` e handoff para `MIG-01` |
@@ -107,6 +108,6 @@ Estes documentos continuam úteis como trilha de auditoria, mas não devem ser u
 
 ## 6. Próximos blocos grandes
 
-1. Product/performance/scale em `staging`.
-2. Ampliar o enforcement gradual de `RBAC/Suporte v2` somente após nova validação operacional controlada.
-3. Release/deploy gate final pós-bloco de performance/scale.
+1. Reauditoria final Opus / release gate do ciclo sem alterar schema.
+2. Smoke autenticado com credencial efemera/read-only, se o gate de release exigir.
+3. Ampliar o enforcement gradual de `RBAC/Suporte v2` somente apos nova validacao operacional controlada.

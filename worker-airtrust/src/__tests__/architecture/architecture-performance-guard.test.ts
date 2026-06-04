@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const srcRoot = fileURLToPath(new URL('../../', import.meta.url));
+const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const LARGE_FILE_LINE_CAPS = {
   'routes/frms.ts': 3644,

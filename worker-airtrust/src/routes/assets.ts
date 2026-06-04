@@ -61,14 +61,14 @@ export function classifyAssetAccess(key: string): AssetAccessPolicy {
 
 async function authorizeTenantAsset(c: Parameters<typeof getTenantContext>[0], empresaId: number) {
   let tenantAuthorized = false;
-  let tenantMiddlewareResponse: Response | void = undefined;
+  let tenantMiddlewareResponse: Response | undefined;
 
-  const authResponse = await auth()(c, async () => {
-    tenantMiddlewareResponse = await tenantMiddleware()(c, async () => {
+  const authResponse = (await auth()(c, async () => {
+    tenantMiddlewareResponse = (await tenantMiddleware()(c, async () => {
       const tenantContext = getTenantContext(c);
       tenantAuthorized = tenantContext.empresaId === empresaId;
-    });
-  });
+    })) as Response | undefined;
+  })) as Response | undefined;
 
   if (authResponse) return authResponse;
   if (tenantMiddlewareResponse) return tenantMiddlewareResponse;

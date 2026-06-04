@@ -35,6 +35,22 @@ interface MockLink {
   is_primary: number;
 }
 
+type EmpresasResponse = {
+  data: {
+    empresas: Array<{
+      id: number;
+      nome: string;
+      codigo: string;
+      logo_url: string | null;
+      role: string;
+      is_primary: number;
+      is_current: number;
+      modulos_ativos: string[] | null;
+    }>;
+    empresaAtualId: number;
+  };
+};
+
 function createAuthApp() {
   const app = new Hono<{ Bindings: Env }>();
   app.route('/api/auth', authRoutes);
@@ -151,7 +167,7 @@ describe('GET /api/auth/empresas modulos_ativos contract', () => {
     );
 
     const response = await getEmpresas(db);
-    const json = await response.json();
+    const json = (await response.json()) as EmpresasResponse;
 
     expect(response.status).toBe(200);
     expect(json.data.empresas[0].modulos_ativos).toEqual(['dashboard', 'funcionarios', 'lms']);
@@ -164,7 +180,7 @@ describe('GET /api/auth/empresas modulos_ativos contract', () => {
     );
 
     const response = await getEmpresas(db);
-    const json = await response.json();
+    const json = (await response.json()) as EmpresasResponse;
 
     expect(response.status).toBe(200);
     expect(json.data.empresas[0].modulos_ativos).toBeNull();
@@ -177,7 +193,7 @@ describe('GET /api/auth/empresas modulos_ativos contract', () => {
     );
 
     const response = await getEmpresas(db);
-    const json = await response.json();
+    const json = (await response.json()) as EmpresasResponse;
     const empresa = json.data.empresas[0];
 
     expect(empresa).toMatchObject({
@@ -203,11 +219,10 @@ describe('GET /api/auth/empresas modulos_ativos contract', () => {
     );
 
     const response = await getEmpresas(db);
-    const json = await response.json();
+    const json = (await response.json()) as EmpresasResponse;
 
     expect(response.status).toBe(200);
     expect(json.data.empresas).toHaveLength(1);
     expect(json.data.empresas[0].codigo).toBe('empresa-a');
   });
 });
-

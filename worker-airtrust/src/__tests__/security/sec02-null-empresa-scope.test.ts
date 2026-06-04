@@ -10,6 +10,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -24,8 +25,10 @@ const INSECURE_NULL_EMPRESA_PATTERN =
 const INSECURE_TRIPLE_NULL_PATTERN =
   /\(\s*\?\s+IS\s+NULL\s+OR\s+(?:\w+\.)?empresa_id\s+IS\s+NULL\s+OR\s+(?:\w+\.)?empresa_id\s*=\s*\?/i;
 
+const testDir = dirname(fileURLToPath(import.meta.url));
+
 function src(relPath: string): string {
-  return readFileSync(fileURLToPath(new URL(`../../${relPath}`, import.meta.url)), 'utf8');
+  return readFileSync(join(testDir, '../../', relPath), 'utf8');
 }
 
 describe('SEC-02: funcionario ownership checks use strict empresa_id = ?', () => {

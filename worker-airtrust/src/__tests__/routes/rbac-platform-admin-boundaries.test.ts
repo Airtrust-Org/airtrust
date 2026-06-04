@@ -15,7 +15,7 @@ function buildPlatformProbeApp(params: {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
   app.use('*', async (c, next) => {
-    c.set('userId', params.userId);
+    c.set('userId', Number(params.userId));
     c.set('tenantContext', {
       empresaId: params.empresaCodigo === 'airtrust' ? 1 : 44,
       empresaCodigo: params.empresaCodigo,
@@ -42,7 +42,7 @@ async function hitPlatformProbe(params: {
   role?: 'admin' | 'manager' | 'viewer';
 }) {
   const app = buildPlatformProbeApp(params);
-  const response = await app.request('/platform-probe', {}, { ENVIRONMENT: 'test' } as Env);
+  const response = await app.request('/platform-probe', {}, { ENVIRONMENT: 'test' } as unknown as Env);
   return response.json() as Promise<{ platform: boolean }>;
 }
 

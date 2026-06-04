@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const migrationsDir = fileURLToPath(new URL('../../../migrations/', import.meta.url));
+const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), '../../../migrations');
 
 const EXPECTED_DUPLICATE_PREFIXES = {
   '0049': ['0049_create_integrated_view.sql', '0049_qualificacoes_view_integrada.sql'],

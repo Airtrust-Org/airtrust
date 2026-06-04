@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 type TableColumn = {
@@ -16,7 +17,10 @@ describe('migration 0389 platform roles + support access foundation schema', () 
   const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-platform-access-'));
   const databasePath = join(tempDir, 'schema.sqlite');
   const migrationSql = readFileSync(
-    new URL('../../../migrations/0389_platform_roles_support_access_foundation.sql', import.meta.url),
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../../migrations/0389_platform_roles_support_access_foundation.sql',
+    ),
     'utf8',
   );
 

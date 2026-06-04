@@ -3,6 +3,36 @@ import { Hono } from 'hono';
 import type { Env, Variables } from '../../types';
 import { registerSystemRoutes } from '../../routes/system';
 
+type HealthBody = {
+  success: boolean;
+  status: string;
+  checks: {
+    database: { status: string };
+    storage?: { status: string };
+  };
+  stats: {
+    environment?: string;
+    version: string;
+  };
+};
+
+type VersionBody = {
+  success: boolean;
+  data: {
+    version: string;
+    environment?: string;
+    builtAt?: string;
+    deploymentId?: string;
+  };
+};
+
+type StatusBody = {
+  success: boolean;
+  backend_version: string;
+  frontend_version: string | null;
+  environment?: string;
+};
+
 function createSystemApp() {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
   registerSystemRoutes(app);
@@ -48,7 +78,7 @@ describe('system routes extraction', () => {
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = (await response.json()) as HealthBody;
     expect(body.stats.version).toBe('2026-06-03T17:00:27Z-c12d8bf');
   });
 
@@ -101,7 +131,7 @@ describe('system routes extraction', () => {
     const response = await app.request('/api/status', {}, {} as Env);
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = (await response.json()) as StatusBody;
     expect(body.backend_version).toBe('dev-local');
     expect(body.frontend_version).toBeNull();
   });
@@ -120,8 +150,8 @@ describe('system routes extraction', () => {
       app.request('/api/health', {}, env),
     ]);
 
-    const versionBody = await versionRes.json();
-    const healthBody = await healthRes.json();
+    const versionBody = (await versionRes.json()) as VersionBody;
+    const healthBody = (await healthRes.json()) as HealthBody;
 
     expect(versionBody.data.version).toBe('2026-06-03T17:00:27Z-c12d8bf');
     expect(healthBody.stats.version).toBe('2026-06-03T17:00:27Z-c12d8bf');
@@ -143,10 +173,10 @@ describe('system routes extraction', () => {
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = (await response.json()) as HealthBody;
     expect(body.status).toBe('healthy');
     expect(body.checks.database.status).toBe('ok');
-    expect(body.checks.storage.status).toBe('ok');
+    expect(body.checks.storage?.status).toBe('ok');
     expect(body.stats.version).toBe('v-prod-abc');
   });
 
@@ -163,8 +193,8 @@ describe('system routes extraction', () => {
       app.request('/api/health', {}, env),
     ]);
 
-    const versionBody = await versionRes.json();
-    const healthBody = await healthRes.json();
+    const versionBody = (await versionRes.json()) as VersionBody;
+    const healthBody = (await healthRes.json()) as HealthBody;
 
     expect(versionBody.data.version).toBe('cf-deploy-999');
     expect(healthBody.stats.version).toBe('cf-deploy-999');
@@ -180,8 +210,8 @@ describe('system routes extraction', () => {
       app.request('/api/health', {}, env),
     ]);
 
-    const versionBody = await versionRes.json();
-    const healthBody = await healthRes.json();
+    const versionBody = (await versionRes.json()) as VersionBody;
+    const healthBody = (await healthRes.json()) as HealthBody;
 
     expect(versionBody.data.version).toBe('dev-local');
     expect(healthBody.stats.version).toBe('dev-local');

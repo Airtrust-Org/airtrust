@@ -14,6 +14,8 @@
 > **Addendum 2026-06-04 — Block 4 Closed:** a `0385_audit_events_v2.sql` foi aplicada com sucesso em `staging` sob gate/snapshot/rollback dedicados, e o enforcement gradual de `RBAC/Suporte v2` foi ativado em escopo controlado nas rotas sensíveis de certificados/admin. Status canônicos: `RBAC_SUPPORT_V2 = GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE` e `AUDIT_V2 = PARITY_VALIDATED_FOR_CONTROLLED_SCOPE`. Próximo bloco correto: `Product / performance / scale em staging`.
 >
 > **Addendum 2026-06-04 — Product/Performance/Scale Hardening:** houve uma passada local de hardening sem D1 remoto, sem deploy e sem mutation. Resultado: clamp seguro de `limit` em simuladores, smoke local adicional para dashboard/EVD e guard arquitetural ampliado para `SELECT *` em rotas críticas. Próximo passo correto para este stream: medição em staging dos hotspots herdados de FRMS/SGSO/LMS/escalas antes de qualquer conclusão de escala.
+>
+> **Addendum 2026-06-04 — Block 5 Product/Performance/Scale Staging Validation:** o stream foi validado em `staging` apenas no escopo controlado/read-only. `VALIDATION_BASELINE = PASS`; `PRODUCT_PERFORMANCE_SCALE = VALIDATED_IN_STAGING_FOR_CONTROLLED_SCOPE`; `test:worker` passou com `133` arquivos e `874` testes; smoke publico staging passou `PASS=3 FAIL=0 SKIPPED=0`; diagnostico D1 staging read-only passou. Proximo bloco correto: reauditoria final Opus / release gate, sem deploy ou schema change automaticos.
 
 ---
 
@@ -121,6 +123,13 @@
 ---
 
 ## Próximos sprints (planejados)
+
+### Bloco 6 — Reauditoria final Opus / Release Gate
+
+- **Status:** Proximo bloco.
+- **Escopo:** reconciliar resultado final do ciclo, validar se release gate exige smoke autenticado com credencial efemera, e decidir se ha condicao de deploy.
+- **Nao fazer por padrao:** deploy, producao, migrations/apply, DQ-01, MIG-01 ou ampliacao de RBAC/Suporte sem nova janela controlada.
+- **Dependencias:** se smoke autenticado for obrigatorio, configurar `AIRTRUST_AUTH_TOKEN` ou `AIRTRUST_COOKIE` e `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO`.
 
 ### Sprint M — ~~Data Quality Completo + Smoke Empresa Esperada~~ ✅ EXECUTADO (parcial)
 

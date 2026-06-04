@@ -30,7 +30,7 @@ describe('support role not yet active', () => {
           'x-user-id': '44',
         },
       },
-      { ENVIRONMENT: 'test', ENABLE_DEV_AUTH_BYPASS: 'false' } as Env,
+      { ENVIRONMENT: 'test', ENABLE_DEV_AUTH_BYPASS: 'false' } as unknown as Env,
     );
 
     const payload = (await response.json()) as { code?: string };

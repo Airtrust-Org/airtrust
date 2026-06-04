@@ -8,13 +8,13 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const auditoriaPath = fileURLToPath(new URL('../../routes/auditoria.ts', import.meta.url));
-const auditoriaDetalhadaPath = fileURLToPath(
-  new URL('../../routes/auditoria-detalhada.ts', import.meta.url),
-);
+const testDir = dirname(fileURLToPath(import.meta.url));
+const auditoriaPath = join(testDir, '../../routes/auditoria.ts');
+const auditoriaDetalhadaPath = join(testDir, '../../routes/auditoria-detalhada.ts');
 
 describe('auditoria routes — tenant isolation (SEC-01)', () => {
   describe('routes/auditoria.ts', () => {

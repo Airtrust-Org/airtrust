@@ -1,16 +1,13 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const genericGateScript = fileURLToPath(
-  new URL('../../../../scripts/controlled-execution-gate.sh', import.meta.url),
-);
-const migGateScript = fileURLToPath(
-  new URL('../../../../scripts/mig01-controlled-rebaseline-gate.sh', import.meta.url),
-);
+const testDir = dirname(fileURLToPath(import.meta.url));
+const genericGateScript = join(testDir, '../../../../scripts/controlled-execution-gate.sh');
+const migGateScript = join(testDir, '../../../../scripts/mig01-controlled-rebaseline-gate.sh');
 
 const tempDirs: string[] = [];
 
@@ -62,7 +59,7 @@ describe('controlled execution gate', () => {
 
   it('blocks when target is missing', () => {
     const env = baseEnv();
-    delete env.AIRTRUST_CONTROLLED_TARGET;
+    env.AIRTRUST_CONTROLLED_TARGET = '';
 
     const result = runGenericGate(env);
 
@@ -73,7 +70,7 @@ describe('controlled execution gate', () => {
 
   it('blocks when approval is missing', () => {
     const env = baseEnv();
-    delete env.AIRTRUST_CONTROLLED_APPROVAL;
+    env.AIRTRUST_CONTROLLED_APPROVAL = '';
 
     const result = runGenericGate(env);
 
@@ -83,7 +80,7 @@ describe('controlled execution gate', () => {
 
   it('blocks when snapshot evidence is missing', () => {
     const env = baseEnv();
-    delete env.AIRTRUST_CONTROLLED_SNAPSHOT_PATH;
+    env.AIRTRUST_CONTROLLED_SNAPSHOT_PATH = '';
 
     const result = runGenericGate(env);
 
@@ -93,7 +90,7 @@ describe('controlled execution gate', () => {
 
   it('blocks when rollback evidence is missing', () => {
     const env = baseEnv();
-    delete env.AIRTRUST_CONTROLLED_ROLLBACK_PATH;
+    env.AIRTRUST_CONTROLLED_ROLLBACK_PATH = '';
 
     const result = runGenericGate(env);
 
@@ -107,7 +104,7 @@ describe('controlled execution gate', () => {
       AIRTRUST_CONTROLLED_TARGET_REF: 'cluster://production/db',
       AIRTRUST_CONTROLLED_SAFE_COMMAND: 'bash scripts/run-dq01-backfill.sh --mode backfill --target production',
     });
-    delete env.AIRTRUST_DB_PATH;
+    env.AIRTRUST_DB_PATH = '';
 
     const result = runGenericGate(env);
 

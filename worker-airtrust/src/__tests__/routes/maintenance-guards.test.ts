@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { timingSafeEqual as nodeTimingSafeEqual } from 'node:crypto';
+import { timingSafeEqual as nodeTimingSafeEqual, webcrypto } from 'node:crypto';
 import type { Env } from '../../types';
 
-const subtleCrypto = globalThis.crypto.subtle as SubtleCrypto & {
+const subtleCrypto = webcrypto.subtle as unknown as SubtleCrypto & {
   timingSafeEqual?: (a: ArrayBuffer, b: ArrayBuffer) => boolean;
 };
 

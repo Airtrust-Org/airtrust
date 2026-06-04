@@ -1,11 +1,14 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const gateScript = fileURLToPath(new URL('../../../../scripts/dq01-controlled-backfill-gate.sh', import.meta.url));
+const gateScript = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../scripts/dq01-controlled-backfill-gate.sh',
+);
 
 const tempDirs: string[] = [];
 

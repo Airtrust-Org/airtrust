@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+
+const testDir = dirname(fileURLToPath(import.meta.url));
 
 const FORBIDDEN_PATTERNS = [
   /\bCREATE TABLE\b/i,
@@ -12,23 +14,23 @@ const FORBIDDEN_PATTERNS = [
 ];
 
 const HOT_PATH_FILES = [
-  ['routes/alertas.ts', new URL('../../routes/alertas.ts', import.meta.url)],
-  ['routes/escalas-preferencias.ts', new URL('../../routes/escalas-preferencias.ts', import.meta.url)],
-  ['routes/frms-fira.ts', new URL('../../routes/frms-fira.ts', import.meta.url)],
-  ['routes/matriz-treinamento.ts', new URL('../../routes/matriz-treinamento.ts', import.meta.url)],
-  ['routes/notificacoes-convocacao.ts', new URL('../../routes/notificacoes-convocacao.ts', import.meta.url)],
-  ['routes/preferencias.ts', new URL('../../routes/preferencias.ts', import.meta.url)],
-  ['routes/integracoes_sigvoos.ts', new URL('../../routes/integracoes_sigvoos.ts', import.meta.url)],
-  ['routes/qualificacoes/historico-helpers.ts', new URL('../../routes/qualificacoes/historico-helpers.ts', import.meta.url)],
-  ['routes/qualificacoes/tipos.ts', new URL('../../routes/qualificacoes/tipos.ts', import.meta.url)],
-  ['routes/simuladores-modelos.ts', new URL('../../routes/simuladores-modelos.ts', import.meta.url)],
-  ['services/sigvoos-frms.ts', new URL('../../services/sigvoos-frms.ts', import.meta.url)],
-  ['routes/treinamentos-planejados.ts', new URL('../../routes/treinamentos-planejados.ts', import.meta.url)],
+  ['routes/alertas.ts', join(testDir, '../../routes/alertas.ts')],
+  ['routes/escalas-preferencias.ts', join(testDir, '../../routes/escalas-preferencias.ts')],
+  ['routes/frms-fira.ts', join(testDir, '../../routes/frms-fira.ts')],
+  ['routes/matriz-treinamento.ts', join(testDir, '../../routes/matriz-treinamento.ts')],
+  ['routes/notificacoes-convocacao.ts', join(testDir, '../../routes/notificacoes-convocacao.ts')],
+  ['routes/preferencias.ts', join(testDir, '../../routes/preferencias.ts')],
+  ['routes/integracoes_sigvoos.ts', join(testDir, '../../routes/integracoes_sigvoos.ts')],
+  ['routes/qualificacoes/historico-helpers.ts', join(testDir, '../../routes/qualificacoes/historico-helpers.ts')],
+  ['routes/qualificacoes/tipos.ts', join(testDir, '../../routes/qualificacoes/tipos.ts')],
+  ['routes/simuladores-modelos.ts', join(testDir, '../../routes/simuladores-modelos.ts')],
+  ['services/sigvoos-frms.ts', join(testDir, '../../services/sigvoos-frms.ts')],
+  ['routes/treinamentos-planejados.ts', join(testDir, '../../routes/treinamentos-planejados.ts')],
   [
     'services/treinamentos-planejados-integration.ts',
-    new URL('../../services/treinamentos-planejados-integration.ts', import.meta.url),
+    join(testDir, '../../services/treinamentos-planejados-integration.ts'),
   ],
-  ['utils/alert-whatsapp-templates-store.ts', new URL('../../utils/alert-whatsapp-templates-store.ts', import.meta.url)],
+  ['utils/alert-whatsapp-templates-store.ts', join(testDir, '../../utils/alert-whatsapp-templates-store.ts')],
 ] as const;
 
 // historico.ts and historico-write.ts call ensureHistoricoSchema(db) (a no-op
@@ -58,7 +60,7 @@ describe('runtime DDL hardening', () => {
 
   for (const [label, ref] of HOT_PATH_FILES) {
     it(`blocks runtime DDL in ${label}`, () => {
-      const source = readFileSync(fileURLToPath(ref), 'utf8');
+      const source = readFileSync(ref, 'utf8');
 
       for (const pattern of FORBIDDEN_PATTERNS) {
         expect(source).not.toMatch(pattern);
@@ -105,7 +107,7 @@ function listAllRuntimeSourceFiles(dir: string): string[] {
   return files;
 }
 
-const srcRoot = fileURLToPath(new URL('../../', import.meta.url));
+const srcRoot = join(testDir, '../..');
 
 describe('broad runtime DDL guard', () => {
   it('scans every runtime source file and rejects DDL outside the known-files allowlist', () => {
