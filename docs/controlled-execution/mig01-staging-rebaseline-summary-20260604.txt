@@ -1,0 +1,17 @@
+MIG01_STAGING_REBASELINE=COMPLETED
+target=staging
+approval=MIG01-STAGING-20260604-FILIPE
+snapshot_integrity=ok
+tables=225
+indexes=585
+triggers=21
+views=10
+schema_objects=841
+baseline_output=docs/controlled-execution/mig01-staging-schema-baseline-20260604.sql
+baseline_sha256=1e18e9271a8ada1b49a6d97921d07b43c5372a80ad541e94b0f2d08a53f4659c
+d1_migrations_excluded=YES
+objects_0389_included=NO
+remote_d1=NO
+deploy=NO
+production=NO
+historical_migrations_edited=NO
