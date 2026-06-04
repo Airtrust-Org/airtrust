@@ -447,6 +447,22 @@
   - R04 reclassificado para `RESOLVED`.
 - **Risco:** Nenhum. Migration `0388` já aplicada em produção, bootstrap já removido (R04.6), deploy apenas removeu código morto.
 
+### Sprint R01 — SIGVOOS Chain Reconciliation ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** Formalizar o achado de bloqueio de replay limpo da cadeia `0354 → 0387` e criar documento de decisão.
+- **Entregue:**
+  - Auditoria confirmou que nenhuma migration anterior à `0354` cria `integracoes_sigvoos_config`.
+  - `0354` falha em cadeia limpa com `no such table: integracoes_sigvoos_config`.
+  - Concatenar `0387` depois de `0354` não resgata a execução — o bloqueio ocorre antes.
+  - Testes locais 8/8 PASS (`sigvoos-base-tables-schema.test.ts`) — dois testes de prova do bloqueio já existentes e confirmados.
+  - `ensureSigvoosTables()` preservado — necessário para ambientes novos.
+  - R01 reclassificado para `MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED`.
+  - Doc de decisão criado: `docs/AIRTRUST_SIGVOOS_MIGRATION_CHAIN_RECONCILIATION_v0_5.md`.
+  - 10 docs de readiness/design/plan/matrix atualizados com addendum.
+- **Sem:** migration nova, D1 remoto, deploy, alteração de runtime, alteração de schema, backfill, dados reais.
+- **Próxima fase:** R01-baseline — criar migration de bootstrap idempotente para `integracoes_sigvoos_config` antes de `0354` e reconciliar cadeia limpa.
+- **Modelo recomendado:** Sonnet 4.6 (docs/analysis-only); Opus para a fase de baseline design.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -538,4 +554,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, R03=RESOLVED, Audit v2=APPLIED_SCHEMA_READY_FOR_FLAG_PLAN), Sprint R04.5 (apply oficial `0387`+`0388`), **Sprint R04.6 (bootstrap documentos removido)** e **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, R03=RESOLVED, Audit v2=APPLIED_SCHEMA_READY_FOR_FLAG_PLAN), Sprint R04.5 (apply oficial `0387`+`0388`), **Sprint R04.6 (bootstrap documentos removido)**, **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)** e **Sprint R01 Chain Reconciliation (2026-06-03: achado de bloqueio de replay limpo formalizado, testes 8/8 PASS, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED, `ensureSigvoosTables()` preservado)**.

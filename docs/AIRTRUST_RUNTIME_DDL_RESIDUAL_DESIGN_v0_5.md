@@ -353,4 +353,6 @@ A ordem recomendada prioriza **menor risco primeiro** e **independência entre a
 
 ---
 
-**Fim do design document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure, Sprint Z0 readiness mapping, Sprint Z1 (`0387` criada), Sprint Z1.1 (cadeia bloqueada pela `0354`), Sprint R04.2 (baseline estrutural remota de Documentos), Sprint R04.3 (desenho documental da `0388`), Sprint R04.5 (apply oficial), Sprint R04.6 (bootstrap removido) e Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3). **R04 = RESOLVED.**
+**Addendum Sprint R01 Chain Reconciliation (2026-06-03):** formalização do achado de bloqueio de replay limpo para R01. Nenhuma migration anterior à `0354` cria `integracoes_sigvoos_config`. Testes locais 8/8 PASS. `ensureSigvoosTables()` preservado. **R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED.** DDL runtime remanescente: apenas R01. Doc de decisão: `docs/AIRTRUST_SIGVOOS_MIGRATION_CHAIN_RECONCILIATION_v0_5.md`.
+
+**Fim do design document.** Gerado em 2026-06-03. Atualizado com Sprint X.5 closure, Sprint Z0 readiness mapping, Sprint Z1 (`0387` criada), Sprint Z1.1 (cadeia bloqueada pela `0354`), Sprint R04.2, Sprint R04.3, Sprint R04.4, Sprint R04.5 (apply oficial), Sprint R04.6 (bootstrap removido), Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3; **R04 = RESOLVED**) e Sprint R01 Chain Reconciliation (**R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED**; `ensureSigvoosTables()` preservado).

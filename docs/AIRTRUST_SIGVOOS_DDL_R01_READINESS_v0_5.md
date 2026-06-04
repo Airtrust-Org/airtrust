@@ -482,4 +482,6 @@ Reverter o commit que removeu/reduziu `ensureSigvoosTables()`. A função é ide
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1, Z1.1 e no registro pós-apply em produção, com a `0387` aplicada via fila oficial pendente, mas ainda exigindo reconciliação explícita da cadeia `0354 -> 0387` antes de qualquer remoção do fallback R01.
+**Addendum Sprint R01 Chain Reconciliation (2026-06-03):** formalização do achado de bloqueio de replay limpo. Confirmado que nenhuma migration anterior à `0354` cria `integracoes_sigvoos_config`. Testes locais 8/8 PASS (`sigvoos-base-tables-schema.test.ts`): prova que `0354` falha em cadeia limpa e que concatenar `0387` depois não resgata a execução. Decisão conservadora: **R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED**. `ensureSigvoosTables()` preservado. Sem migration nova, sem D1 remoto, sem deploy, sem alteração de runtime. Documento de decisão criado: `docs/AIRTRUST_SIGVOOS_MIGRATION_CHAIN_RECONCILIATION_v0_5.md`.
+
+**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1, Z1.1, pós-apply oficial em produção e Sprint R01 Chain Reconciliation (2026-06-03). Status final: R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED. `ensureSigvoosTables()` preservado até baseline/plano de cadeia segura.
