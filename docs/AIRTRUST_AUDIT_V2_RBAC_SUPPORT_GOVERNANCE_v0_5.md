@@ -3,19 +3,19 @@
 **Data:** 2026-06-04  
 **Branch:** `main`  
 **HEAD base:** `7a19ffccfa0640cd5a4d2055d704ff0d27c6fd37`  
-**Modo:** local-only. Sem D1 remoto. Sem deploy. Sem migration nova. Sem backfill. Sem rebaseline.
+**Modo:** local-only. Sem D1 remoto. Sem deploy. Sem migration remota. Sem backfill. Sem rebaseline.
 
 ## 1. Resumo executivo
 
 Esta etapa reavaliou a superfície sensível ligada a `admin`, `support`, `maintenance`, `debug`, `certificados` e `audit`.
 
-Resultado real desta passada:
+Resultado consolidado até esta passada:
 
 - o fallback legado `userId===1` continua restrito ao helper central de compatibilidade e **não foi reespalhado**;
 - `support` continua **não ativo** no runtime atual e não recebeu permissão implícita de escrita nem de admin;
 - a exportação em massa de certificados (`POST /api/certificados/historico/export-zip`) foi endurecida para **admin only**;
 - operações sensíveis de certificados (`recuperar-orfaos`, `limpar-refs-orfas`, `export-zip`) agora registram trilha de auditoria em **writer legado** e tentam também o **writer canônico v2**;
-- não houve alteração de schema, então `RBAC/Suporte v2` e o rollout pleno de `Audit v2` **não podem** ser marcados como resolvidos.
+- a fundação mínima de schema/readiness agora está versionada localmente em `0389_platform_roles_support_access_foundation.sql`, sem apply remoto.
 
 ## 2. Matriz de superfícies auditadas
 
@@ -41,11 +41,14 @@ Resultado real desta passada:
   - `RBAC_SUPPORT_V2` **não** pode ser `RESOLVED_FOR_CURRENT_SCHEMA`.
   - status correto: `PARTIAL_BLOCKED_BY_SCHEMA`.
 
-### Support
+### Support / schema readiness
 
 - O guard `support-role-not-yet-active.test.ts` continua provando que `support` não recebe acesso `admin`.
-- Não existe `support_read_only` persistido nem sessão auditável de suporte no schema atual.
-- Decisão correta: manter `support` fora do runtime ativo e não forçar pseudo-RBAC sem base persistida.
+- A partir desta passada, existe um modelo mínimo versionado para:
+  - `user_platform_roles`
+  - `support_access_grants`
+  - `support_access_sessions`
+- Decisão correta: manter `support` fora do runtime ativo até apply controlado da migration `0389`.
 
 ### Audit trail
 
@@ -55,9 +58,9 @@ Resultado real desta passada:
   - `CERTIFICADOS_LIMPAR_REFS_ORFAS`
   - `CERTIFICADOS_EXPORT_ZIP`
 - O writer legado (`registrarAuditoria`) foi mantido em paralelo para não depender de ativação plena do stream v2.
-- Como não houve ativação por flag, paridade operacional nem schema novo nesta etapa:
+- Como não houve apply remoto da fundação de suporte nem ativação operacional por flag:
   - `AUDIT_V2` **não** pode ser `RESOLVED`.
-  - status correto: `MITIGATED_WITH_EXISTING_AUDIT_HELPERS`.
+  - status desta etapa passa a `READY_FOR_CONTROLLED_SCHEMA_MIGRATION`.
 
 ## 4. Testes e evidências desta passada
 
@@ -71,9 +74,19 @@ Resultado real desta passada:
   - confirmou fail-closed `503` sem `MAINTENANCE_SECRET`;
   - confirmou `403` com token ausente/inválido mesmo em localhost;
   - confirmou que FRMS e SIGVOOS só executam o fluxo de maintenance com secret explícito válido.
+- `platform-roles-support-access-schema.test.ts`
+  - confirmou a migration `0389` como aditiva e idempotente;
+  - confirmou tabelas, índices e inserts mínimos de fundação.
+- `platform-access.test.ts`
+  - congelou dual-read entre papel persistido e fallback legado;
+  - provou negação de suporte sem grant/justificativa;
+  - provou mutação somente para `support_elevated` com grant `elevated`.
+- `record-legacy-and-canonical-audit.test.ts`
+  - congelou o helper pequeno de writer legado + writer v2;
+  - confirmou preservação da trilha legada quando o writer v2 falha controladamente.
 - validações de baseline na raiz
   - `npx tsc --noEmit` -> `PASS`;
-  - `npm run test:worker` -> `PASS` (`123` arquivos, `830` testes);
+  - `npm run test:worker` -> `PASS` (`127` arquivos, `843` testes);
   - `npm run ops:guard` -> `PASS` com warnings históricos inventariados;
   - `npm run preflight` -> `NOT_AVAILABLE`;
   - `git diff --check` -> `PASS`.
@@ -82,20 +95,20 @@ Resultado real desta passada:
 
 | Stream | Status |
 |---|---|
-| `RBAC_SUPPORT_V2` | `PARTIAL_BLOCKED_BY_SCHEMA` |
-| `AUDIT_V2` | `MITIGATED_WITH_EXISTING_AUDIT_HELPERS` |
+| `RBAC_SUPPORT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
+| `AUDIT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
 | `MNT-01` | `DOCUMENTED_ROTATION_REQUIRED` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 
 ## 6. Riscos residuais
 
-- `support` read-only continua sem persistência de papel, grants e sessão auditável.
+- `support` read-only continua sem apply controlado do schema no ambiente-alvo.
 - o fallback `userId===1` ainda existe por compatibilidade e só pode sair com migration/dual-read.
 - o `ops:guard` segue emitindo warnings por utilitários históricos fora do fluxo operacional aprovado.
 - `preflight` continua sem script canônico no `package.json` da raiz.
 
 ## 7. Próximos blocos recomendados
 
-1. Fechar `Audit v2` em ambiente aprovado com flag/paridade reais.
-2. Implementar `RBAC/Suporte v2` somente depois do `audit-first`.
-3. Rodar uma limpeza dedicada dos utilitários históricos ainda detectados pelo `ops:guard`.
+1. Aplicar `0389` apenas em ambiente controlado aprovado.
+2. Validar dual-read + sessão auditável de suporte antes de enforcement amplo.
+3. Só depois ligar rollout audit-first e enforcement runtime de `support_read_only`.

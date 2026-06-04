@@ -21,9 +21,9 @@
 | `MNT-01` | `DOCUMENTED_ROTATION_REQUIRED` |
 | `CLN-03` | `MITIGATED_BY_GITIGNORE` |
 | `OPS-01` | `MITIGATED_WITH_GUARDS` |
-| `VALIDATION_BASELINE` | `PASS_WITH_PRECHECK_SCRIPT_NOT_AVAILABLE` |
-| `RBAC_SUPPORT_V2` | `PARTIAL_BLOCKED_BY_SCHEMA` |
-| `AUDIT_V2` | `MITIGATED_WITH_EXISTING_AUDIT_HELPERS` |
+| `VALIDATION_BASELINE` | `PASS` |
+| `RBAC_SUPPORT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
+| `AUDIT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 
 ## 2. Documentos canônicos atuais
@@ -39,6 +39,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_NEXT_SPRINTS_PLAN_v0_5.md` | próximos blocos grandes |
 | `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md` | cleanup residual, governança e superfície pública |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_GOVERNANCE_v0_5.md` | matriz de RBAC/suporte/admin/maintenance/debug/audit da passada atual |
+| `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_SCHEMA_READINESS_v0_5.md` | fundação de schema/readiness para `Audit v2` + `RBAC/Suporte v2` |
 | `docs/AIRTRUST_AUDIT_DOCS_INDEX_v0_5.md` | este índice |
 
 ## 3. Documentos de readiness e execution gates
