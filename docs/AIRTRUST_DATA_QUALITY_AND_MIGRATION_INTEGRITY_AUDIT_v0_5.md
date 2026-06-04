@@ -11,8 +11,8 @@
 
 | Stream | Status | Motivo |
 |---|---|---|
-| `MIG-01` | `READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT` | a cadeia histórica não foi curada nem reescrita, mas agora existe estratégia de corte, validação, rollback, contrato de ambiente controlado e gate compartilhado para uma janela futura |
-| `DQ-01` | `READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT` | os riscos, o lote controlado, o contrato de ambiente e o gate compartilhado estão documentados; a sessão atual segue sem target real aprovado, mas a camada operacional já está pronta |
+| `MIG-01` | `BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE` | a cadeia histórica não foi curada nem reescrita; existe estratégia e gate, mas o gate de execução bloqueou por falta de target, snapshot, rollback, aprovação e comando revisado |
+| `DQ-01` | `BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE` | os riscos, o lote controlado, o contrato e o gate existem; o gate de execução bloqueou por falta de ambiente controlado real |
 
 ---
 
@@ -26,6 +26,7 @@
 | Simuladores `GET /instrutores` | consulta passou a exigir `empresa_id = ?` | `worker-airtrust/src/routes/simuladores-sessoes.ts`, `worker-airtrust/src/__tests__/routes/simuladores-sessoes-data-quality.test.ts` |
 | Simuladores participantes | leitura, criação, update e delete agora validam sessão e funcionário no tenant atual antes de escrever | `worker-airtrust/src/routes/simuladores-sessoes-participantes.ts`, `worker-airtrust/src/__tests__/routes/simuladores-sessoes-data-quality.test.ts` |
 | Simuladores checks | lookup da sessão e fallback de `qualificacoes_tipos` passaram a respeitar `empresa_id` | `worker-airtrust/src/routes/simuladores-sessoes-participantes.ts`, `worker-airtrust/src/__tests__/routes/simuladores-sessoes-data-quality.test.ts` |
+| Arquitetura/performance | crescimento de God files e concentração de `.prepare(` agora ficam pinados por guard | `worker-airtrust/src/__tests__/architecture/architecture-performance-guard.test.ts` |
 
 ---
 
@@ -71,7 +72,7 @@ Os seguintes pontos permanecem como evidência de governança legada e exigem re
 - `worker-airtrust/scripts/aplicar-migration-0091-seguro.sh`
 - `scripts/validation/audit-deploy-scripts.sh` como inventário/auditoria de uso de `migrations apply`
 
-**Conclusão MIG-01:** a cadeia não está “curada”, mas o projeto agora tem material suficiente para uma execução controlada de rebaseline em sprint separada, sem editar retrospectivamente a história aplicada.
+**Conclusão MIG-01:** a cadeia não está “curada”. O projeto tem material suficiente para execução controlada, mas a etapa final rodou o gate e confirmou ausência de ambiente aprovado. Status atual: `BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`.
 
 ---
 
@@ -86,7 +87,7 @@ Os seguintes pontos permanecem como evidência de governança legada e exigem re
 | Simuladores checks | fallback de checks não pode puxar `qualificacoes_tipos` de outro tenant | sessão era lida sem tenant e o fallback não filtrava `qt.empresa_id` | sessão e fallback tenant-scoped | `simuladores-sessoes-data-quality.test.ts` |
 | Data Quality operacional | runner ainda precisa de ambiente com schema completo | `PASS=5 WARN=4 FAIL=0 SKIPPED=5` continua sendo a melhor evidência operacional local | nenhuma escrita real feita; backlog mantido | `validate-data-quality-sql.sh`, `data-quality:local` histórico |
 
-**Conclusão DQ-01:** os caminhos críticos corrigidos nesta fase deixam de depender de integridade “implícita” entre sessão, participante, instrutor e tipo de check. A trilha de execução agora tem gate fail-closed, mas a sessão atual permaneceu bloqueada por ausência de staging/snapshot/rollback/autorização.
+**Conclusão DQ-01:** os caminhos críticos corrigidos nesta fase deixam de depender de integridade “implícita” entre sessão, participante, instrutor e tipo de check. A trilha de execução tem gate fail-closed, mas a etapa final confirmou ausência de ambiente aprovado. Status atual: `BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`.
 
 ---
 
@@ -110,12 +111,13 @@ Os seguintes pontos permanecem como evidência de governança legada e exigem re
 
 - `MIG-01` continua exigindo uma execução controlada separada antes de ser tratado como encerrado.
 - `DQ-01` continua bloqueado até existir snapshot aprovado, rollback explícito e autorização operacional para um lote de saneamento.
+- `ARCH-01` agora está mitigado por guard, mas ainda exige refatoração gradual para reduzir a concentração real de SQL e tamanho dos módulos.
 - Nenhuma dessas pendências foi mascarada com apply remoto, migration nova ou limpeza manual de dados.
 
 ---
 
 ## 8. Próxima etapa grande recomendada
 
-1. Provisionar staging, snapshot e rollback explícito para `DQ-01`, depois rerodar o gate fail-closed.
-2. Executar o backfill controlado de `DQ-01` em snapshot/staging aprovado, começando pelos domínios bloqueadores.
-3. Executar a sprint separada de `MIG-01 controlled rebaseline`, com corte, rollback e validação estrutural explícitos.
+1. Executar auditoria independente Opus pós-ciclo sobre a matriz, os gates e o relatório final.
+2. Provisionar staging, snapshot e rollback explícito para `DQ-01`, depois rerodar o gate fail-closed.
+3. Executar `DQ-01` primeiro e `MIG-01` apenas depois, em janela separada de rebaseline controlado com corte, rollback e validação estrutural explícitos.
