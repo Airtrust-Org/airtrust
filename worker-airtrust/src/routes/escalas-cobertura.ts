@@ -371,7 +371,7 @@ cobertura.get('/:id/cobertura/tripulantes', auth(), async (c) => {
   }
 
   if (hasEmpresaId && empresaId !== undefined) {
-    tripulantesWhere.push('(f.empresa_id IS NULL OR f.empresa_id = ?)');
+    tripulantesWhere.push('f.empresa_id = ?');
     tripulantesBinds.push(empresaId);
   }
 

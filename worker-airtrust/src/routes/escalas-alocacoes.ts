@@ -530,7 +530,7 @@ alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), a
               AND deleted_at IS NULL
               AND COALESCE(ativo, 1) = 1
               AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-              AND (empresa_id IS NULL OR empresa_id = ?)
+              AND empresa_id = ?
             LIMIT 1`,
         )
         .bind(item.funcionario_id, empresaId)
@@ -1289,7 +1289,7 @@ alocacoes.post('/:id/alocacoes', auth(), requireRole('admin', 'manager'), async 
             AND deleted_at IS NULL
             AND COALESCE(ativo, 1) = 1
             AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-            AND (empresa_id IS NULL OR empresa_id = ?)
+            AND empresa_id = ?
           LIMIT 1`,
       )
       .bind(d.funcionario_id, empresaId)
@@ -1804,7 +1804,7 @@ alocacoes.put('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'), as
               AND deleted_at IS NULL
               AND COALESCE(ativo, 1) = 1
               AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-              AND (empresa_id IS NULL OR empresa_id = ?)
+              AND empresa_id = ?
             LIMIT 1`,
         )
         .bind(d.funcionario_id, empresaId)

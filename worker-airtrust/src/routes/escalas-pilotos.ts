@@ -53,7 +53,7 @@ pilotos.get('/', auth(), async (c) => {
   const baseBinds: unknown[] = [];
 
   if (hasEmpresaId && empresaId !== undefined) {
-    baseWhere.push('(empresa_id IS NULL OR empresa_id = ?)');
+    baseWhere.push('empresa_id = ?');
     baseBinds.push(empresaId);
   }
 
@@ -75,7 +75,7 @@ pilotos.get('/', auth(), async (c) => {
             `SELECT modelo FROM aeronaves
              WHERE id = ?
                AND deleted_at IS NULL
-               AND (empresa_id IS NULL OR empresa_id = ?)`,
+               AND empresa_id = ?`,
           )
           .bind(aeronave_id, empresaId)
           .first<{ modelo: string }>();
@@ -198,7 +198,7 @@ pilotos.get('/', auth(), async (c) => {
     const fallbackBinds: unknown[] = [];
 
     if (hasEmpresaId && empresaId !== undefined) {
-      fallbackWhere.push('(empresa_id IS NULL OR empresa_id = ?)');
+      fallbackWhere.push('empresa_id = ?');
       fallbackBinds.push(empresaId);
     }
 

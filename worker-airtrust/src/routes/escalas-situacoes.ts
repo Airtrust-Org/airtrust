@@ -102,7 +102,7 @@ situacoes.post('/:id/situacoes', auth(), requireRole('admin', 'manager'), async 
            FROM funcionarios
           WHERE id = ?
             AND deleted_at IS NULL
-            AND (empresa_id IS NULL OR empresa_id = ?)
+            AND empresa_id = ?
           LIMIT 1`,
       )
       .bind(d.funcionario_id, empresaId)
@@ -346,7 +346,7 @@ situacoes.put('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'), as
     const funcionario = await db
       .prepare(
         `SELECT id, nome FROM funcionarios
-          WHERE id = ? AND deleted_at IS NULL AND (empresa_id IS NULL OR empresa_id = ?)
+          WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
           LIMIT 1`,
       )
       .bind(funcionarioId, empresaId)

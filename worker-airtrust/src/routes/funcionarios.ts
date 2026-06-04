@@ -157,8 +157,8 @@ app.get('/', optionalAuth(), async (c) => {
   // Filtro por empresa (multi-tenant)
   const empresaId = getEmpresaIdSafe(c);
   if (empresaId !== undefined) {
-    whereClausesQuery.push('(f.empresa_id IS NULL OR f.empresa_id = ?)');
-    whereClausesCount.push('(empresa_id IS NULL OR empresa_id = ?)');
+    whereClausesQuery.push('f.empresa_id = ?');
+    whereClausesCount.push('empresa_id = ?');
     bindings.push(empresaId);
   }
 
@@ -435,7 +435,7 @@ app.get('/stats/dashboard', optionalAuth(), async (c) => {
         SUM(CASE WHEN NOT (${ativoExpr}) THEN 1 ELSE 0 END) as inativos
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
-        AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+        AND (? IS NULL OR f.empresa_id = ?)
     `,
       )
       .bind(empresaId ?? null, empresaId ?? null)
@@ -468,7 +468,7 @@ app.get('/stats/dashboard', optionalAuth(), async (c) => {
          AND instr(',' || REPLACE(COALESCE(f.modelo_aeronave_id, ''), ' ', '') || ',', ',' || CAST(ma.id AS TEXT) || ',') > 0
         WHERE f.deleted_at IS NULL
           AND ${ativoExpr}
-          AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+          AND (? IS NULL OR f.empresa_id = ?)
 
         UNION ALL
 
@@ -481,7 +481,7 @@ app.get('/stats/dashboard', optionalAuth(), async (c) => {
         FROM funcionarios f
         WHERE f.deleted_at IS NULL
           AND ${ativoExpr}
-          AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+          AND (? IS NULL OR f.empresa_id = ?)
           AND NULLIF(TRIM(COALESCE(f.aeronave, '')), '') IS NOT NULL
           AND NOT EXISTS (
             SELECT 1
@@ -510,7 +510,7 @@ app.get('/stats/dashboard', optionalAuth(), async (c) => {
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
         AND ${ativoExpr}
-        AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+        AND (? IS NULL OR f.empresa_id = ?)
       GROUP BY UPPER(TRIM(COALESCE(f.funcao, '')))
       ORDER BY total DESC
       LIMIT 10
@@ -530,7 +530,7 @@ app.get('/stats/dashboard', optionalAuth(), async (c) => {
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
         AND ${ativoExpr}
-        AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+        AND (? IS NULL OR f.empresa_id = ?)
       GROUP BY UPPER(TRIM(COALESCE(f.setor, '')))
       ORDER BY total DESC
       LIMIT 10
@@ -548,7 +548,7 @@ app.get('/stats/dashboard', optionalAuth(), async (c) => {
         COUNT(*) as total
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
-        AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+        AND (? IS NULL OR f.empresa_id = ?)
       GROUP BY ${buildNormalizedFuncionarioStatusExpr('f')}
       ORDER BY total DESC
     `,
@@ -583,7 +583,7 @@ app.get('/stats/dashboard', optionalAuth(), async (c) => {
         WHERE qh.deleted_at IS NULL
           AND COALESCE(qh.renovada, 0) = 0
           AND ${ativoExpr}
-          AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+          AND (? IS NULL OR f.empresa_id = ?)
           AND qh.id IN (
             SELECT MAX(sub.id)
             FROM qualificacoes_historico sub
@@ -689,7 +689,7 @@ app.get('/:fid/ferias', auth(), async (c) => {
        LEFT JOIN escalas_mensais em ON em.id = ea.escala_id AND em.deleted_at IS NULL
        WHERE ff.funcionario_id = ?
          AND ff.deleted_at IS NULL
-         AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+         AND (? IS NULL OR f.empresa_id = ?)
        ORDER BY ff.data_inicio DESC`,
     )
     .bind(funcionarioId, empresaId ?? null, empresaId ?? null)
@@ -744,7 +744,7 @@ app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
   const funcionario = await db
     .prepare(
       `SELECT id FROM funcionarios
-        WHERE id = ? AND deleted_at IS NULL AND (? IS NULL OR empresa_id IS NULL OR empresa_id = ?)
+        WHERE id = ? AND deleted_at IS NULL AND (? IS NULL OR empresa_id = ?)
         LIMIT 1`,
     )
     .bind(funcionarioId, empresaId ?? null, empresaId ?? null)
@@ -845,7 +845,7 @@ app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), as
        WHERE ff.id = ?
          AND ff.funcionario_id = ?
          AND ff.deleted_at IS NULL
-         AND (? IS NULL OR f.empresa_id IS NULL OR f.empresa_id = ?)
+         AND (? IS NULL OR f.empresa_id = ?)
        LIMIT 1`,
     )
     .bind(feriasId, funcionarioId, empresaId ?? null, empresaId ?? null)
@@ -949,7 +949,7 @@ app.get('/:id', optionalAuth(), async (c) => {
       created_at, updated_at
     FROM funcionarios
     WHERE id = ? AND deleted_at IS NULL
-      AND (empresa_id IS NULL OR empresa_id = ? OR ? IS NULL)
+      AND (? IS NULL OR empresa_id = ?)
   `,
     )
     .bind(id, getEmpresaIdSafe(c) ?? null, getEmpresaIdSafe(c) ?? null)

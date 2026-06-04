@@ -552,7 +552,7 @@ export async function verificarHabilitacaoModelo(
           AND deleted_at IS NULL
           AND COALESCE(ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-          AND (empresa_id IS NULL OR empresa_id = ?)
+          AND empresa_id = ?
         LIMIT 1`,
     )
     .bind(funcionarioId, empresaId)
