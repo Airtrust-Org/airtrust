@@ -13,7 +13,7 @@
 | `AUTH-RESIDUAL-01` | `RESOLVED` |
 | `AUTH-RESIDUAL-02` | `RESOLVED` |
 | `AUTH_TENANT` | `CONFIRMED_CLOSED` |
-| `LOCAL_AUDIT_CLOSURE` | `COMPLETE_WITH_ENVIRONMENT_BLOCKERS` |
+| `LOCAL_AUDIT_CLOSURE` | `CYCLE_CLOSED_FOR_CONTROLLED_SCOPE_PENDING_RELEASE_GATE` |
 | `SIMULADORES_OPTIONAL_AUTH_SCOPE` | `RESOLVED` |
 | `DQ-01` | `RESOLVED_FOR_CONTROLLED_SCOPE` |
 | `MIG-01` | `RESOLVED_FOR_CONTROLLED_SCOPE` |
@@ -30,6 +30,9 @@
 | `AUDIT_V2` | `PARITY_VALIDATED_FOR_CONTROLLED_SCOPE` |
 | `PRODUCT_PERFORMANCE_SCALE` | `VALIDATED_IN_STAGING_FOR_CONTROLLED_SCOPE` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
+| `PRODUCTION_SCHEMA_STATE` | `VERIFIED_MISSING_AUDIT_RBAC_SCHEMA` |
+| `AUTHENTICATED_SMOKE` | `BLOCKED_BY_MISSING_EPHEMERAL_CREDENTIAL` |
+| `RELEASE_GATE` | `READY_WITH_CONDITIONS` |
 
 ## 2. Documentos canônicos atuais
 
@@ -56,6 +59,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_GOVERNANCE_v0_5.md` | matriz de RBAC/suporte/admin/maintenance/debug/audit da passada atual |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_SCHEMA_READINESS_v0_5.md` | fundação de schema/readiness para `Audit v2` + `RBAC/Suporte v2` |
 | `docs/AIRTRUST_AUDIT_DOCS_INDEX_v0_5.md` | este índice |
+| `docs/AIRTRUST_RELEASE_GATE_RESIDUAL_RECONCILIATION_v0_5.md` | reconciliação do release gate: schema de produção verificado, residuais LOW aceitos, condições para deploy controlado |
 
 ## 3. Documentos de readiness e execution gates
 
