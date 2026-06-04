@@ -17,9 +17,11 @@ const HOT_PATH_FILES = [
   ['routes/matriz-treinamento.ts', new URL('../../routes/matriz-treinamento.ts', import.meta.url)],
   ['routes/notificacoes-convocacao.ts', new URL('../../routes/notificacoes-convocacao.ts', import.meta.url)],
   ['routes/preferencias.ts', new URL('../../routes/preferencias.ts', import.meta.url)],
+  ['routes/integracoes_sigvoos.ts', new URL('../../routes/integracoes_sigvoos.ts', import.meta.url)],
   ['routes/qualificacoes/historico-helpers.ts', new URL('../../routes/qualificacoes/historico-helpers.ts', import.meta.url)],
   ['routes/qualificacoes/tipos.ts', new URL('../../routes/qualificacoes/tipos.ts', import.meta.url)],
   ['routes/simuladores-modelos.ts', new URL('../../routes/simuladores-modelos.ts', import.meta.url)],
+  ['services/sigvoos-frms.ts', new URL('../../services/sigvoos-frms.ts', import.meta.url)],
   ['routes/treinamentos-planejados.ts', new URL('../../routes/treinamentos-planejados.ts', import.meta.url)],
   [
     'services/treinamentos-planejados-integration.ts',
@@ -28,9 +30,6 @@ const HOT_PATH_FILES = [
   ['utils/alert-whatsapp-templates-store.ts', new URL('../../utils/alert-whatsapp-templates-store.ts', import.meta.url)],
 ] as const;
 
-// R01 stays documented until 0387 is applied in every environment and the
-// earlier 0354 sequencing dependency is normalized.
-//
 // historico.ts and historico-write.ts call ensureHistoricoSchema(db) (a no-op
 // stub from historico-helpers.ts:131 since R09). The call-site pattern matches
 // the ensure*Schema guard regex; these are safe no-op invocations.
@@ -46,7 +45,6 @@ const HOT_PATH_FILES = [
 const DOCUMENTED_EXCEPTIONS = [
   'routes/qualificacoes/historico.ts',
   'routes/qualificacoes/historico-write.ts',
-  'services/sigvoos-frms.ts',
 ] as const;
 
 describe('runtime DDL hardening', () => {
@@ -54,7 +52,6 @@ describe('runtime DDL hardening', () => {
     expect([...DOCUMENTED_EXCEPTIONS]).toEqual([
       'routes/qualificacoes/historico.ts',
       'routes/qualificacoes/historico-write.ts',
-      'services/sigvoos-frms.ts',
     ]);
   });
 

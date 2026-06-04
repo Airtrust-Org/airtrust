@@ -10,7 +10,7 @@
 O AirTrust entrou numa fase em que os achados remanescentes ja nao sao de correcao rapida de codigo em producao. O que resta se divide em tres grupos:
 
 1. governanca e rollout controlado (`Audit v2`, `RBAC/Suporte v2`, `Data Quality`, smoke com empresa esperada);
-2. DDL residual com dependencias estruturais (`R01` — R09 = RESOLVED; R04 = RESOLVED Sprint R04.6; bootstrap de Documentos já removido do runtime);
+2. DDL residual com dependencias estruturais (R01 = RESOLVED; R09 = RESOLVED; R04 = RESOLVED; stream DDL runtime encerrado para SIGVOOS/Documentos/Qualificacoes);
 3. cobertura e higiene de engenharia (EVD/beta, status residual, observabilidade, R2 metadata).
 
 Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao de runtime ou migration**. O estado atual real pede documentacao mais precisa e uma ordem unica de fechamento, nao mais microfases paralelas.
@@ -33,7 +33,7 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 
 | Achado | Status | Bloqueio | Proxima acao | Modelo recomendado |
 |---|---|---|---|---|
-| `R01` - SIGVOOS runtime DDL | READY_FOR_RUNTIME_FALLBACK_REMOVAL | `0387` já foi aplicada em produção, o bootstrap local foi auditado/validado e o gate local-isolado de novo ambiente passou | executar a remoção final do fallback runtime em sprint separada | GPT-5.5 Altissimo |
+| `R01` - SIGVOOS runtime DDL | RESOLVED | fallback runtime removido; bootstrap preservado; replay/bootstrap tests e ausência de DDL/runtime PASS | nenhuma — seguir apenas com reauditoria independente opcional | GPT-5.5 Altissimo |
 | `R04` - Documentos bootstrap DDL | ✅ RESOLVED (Sprint R04.7, 2026-06-04) | `0388` já aplicada e probe pós-apply PASS desde R04.5; bootstrap runtime removido na Sprint R04.6; deploy Worker/API executado na R04.7 (APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9), smoke pós-deploy PASS (3/3 público, read-only PASS). R04 = RESOLVED. | Nenhuma — concluído | — |
 | `R09` - `qualificacoes/shared.ts` dynamic DDL | ✅ RESOLVED (Sprint R09, 2026-06-03) | ALTER TABLE removido; `renovada`=0200+; `local`/`modalidade`=removidas por 0200; active path ja era no-op | Nenhuma | — |
 | Audit v2 | READY_FOR_STAGING_FLAG_TEST | schema aplicado, mas flag/paridade ainda nao validadas em staging aprovado | executar staging flag test + rollback por flag | GPT-5.5 Altissimo |
@@ -126,7 +126,7 @@ Conclusao:
 3. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
 4. ~~`R09 Readiness/Verification Sprint`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
 5. ~~Remover o bootstrap de Documentos~~ ✅ CONCLUÍDO (Sprint R04.6 + R04.7). A `0388` já estava aplicada e sondada; o bootstrap foi removido (R04.6: `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado). Deploy Worker/API executado (R04.7: APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3). **R04 = RESOLVED.**
-6. `R01 SIGVOOS Runtime Fallback Removal` — único resíduo runtime ativo. O bootstrap/runbook já foi validado localmente em gate isolado; a próxima fase pode remover o fallback R01 em sprint separada.
+6. `R01 SIGVOOS Runtime Fallback Removal` — **CONCLUÍDO** na Sprint R01.4. O bootstrap/runbook foi preservado e o runtime DDL saiu integralmente do código.
 7. Expandir `EVD/Beta`, `status residual`, `observabilidade` e `R2 metadata`.
 
 **Estado operacional atual:** `CONDITIONAL GO` para piloto/controlado; nao e `GO` pleno enquanto empresa esperada, Data Quality completo e staging flag test do Audit v2 nao estiverem fechados. A OP-2 nao alterou essa classificacao.
@@ -155,7 +155,7 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 1. Audit v2 tiver schema aplicado, flag validada e rollout/paridade aprovados.
 2. RBAC/Suporte v2 estiver persistido, auditavel e sem dependencia do fallback legado.
 3. Data Quality estiver sem `SKIPPED` relevantes em ambiente aprovado.
-4. `R01` nao depender mais de DDL runtime (único resíduo runtime ativo). Nesta fase, o status correto avancou para `READY_FOR_RUNTIME_FALLBACK_REMOVAL`: o bootstrap local foi auditado/validado e o gate local-isolado passou, embora `ensureSigvoosTables()` siga preservado até a etapa final. `R04` = RESOLVED (Sprint R04.6 + R04.7: bootstrap removido, deploy + smoke PASS). `R09` = RESOLVED (Sprint R09, 2026-06-03).
+4. `R01` nao depender mais de DDL runtime. Isso foi atingido na Sprint R01.4: `ensureSigvoosTables()` e os 10 call sites sairam do runtime, o bootstrap local permaneceu preservado e **`R01 = RESOLVED`**. `R04` = RESOLVED (Sprint R04.6 + R04.7: bootstrap removido, deploy + smoke PASS). `R09` = RESOLVED (Sprint R09, 2026-06-03).
 5. Smoke autenticado com empresa esperada estiver documentado como `PASS`.
 
 **Addendum Sprint R04.6 (2026-06-03):** o bootstrap runtime de Documentos foi removido, fechando o ciclo R04 iniciado no Sprint R04.1. Ações executadas: `auto-migration-documentos.ts` deletado; `api-bootstrap.ts` limpo (import + call); guard test atualizado com R04 documentado como RESOLVED nos comentários; 3 suites de teste PASS (8/8, 13/13, 12/12). **R04 = RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY.** Nenhuma migration nova, nenhum schema remoto alterado, nenhum backfill, nenhum dado tocado. Naquele momento, R01 permanecia o único resíduo runtime ativo (`0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`). Próximo passo da época: deploy do Worker/API + smoke pós-deploy → R04 = RESOLVED.
@@ -169,3 +169,5 @@ As auditorias remanescentes so podem ser consideradas encerradas quando:
 **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** `scripts/bootstrap-new-environment.sql` foi criado com DDL puro das tabelas base SIGVOOS exigidas antes da `0354`, sem dados reais, sem backfill, sem tenant real e sem dependência de D1 remoto. O teste local agora prova explicitamente que: sem bootstrap, o replay limpo falha na `0354`; com bootstrap, a cadeia atravessa `0354`; o bootstrap é idempotente; e o fluxo não depende de dados reais nem de D1 remoto. `ensureSigvoosTables()` foi preservado. **R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE.** Próximo passo: executar o runbook em ambiente novo/staging aprovado antes de propor a remoção do fallback.
 
 **Addendum Sprint R01 Staging/New Environment Gate + Runtime Fallback Removal Readiness (2026-06-04):** o bootstrap foi reaudidado, a prova negativa sem bootstrap foi preservada, a prova positiva com bootstrap permaneceu PASS e o gate local-isolado de novo ambiente passou. O inventário do fallback runtime foi fechado em 10 call sites concentrados em 2 arquivos. `ensureSigvoosTables()` continua preservado nesta etapa, mas a conclusão mudou para **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**. Próximo passo: sprint final de remoção do fallback + auditoria final.
+
+**Addendum Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (2026-06-04):** `ensureSigvoosTables()` foi removido de `sigvoos-frms.ts`, os 10 call sites foram eliminados de runtime, o bootstrap `scripts/bootstrap-new-environment.sql` foi preservado e o teste dedicado `sigvoos-no-runtime-ddl.test.ts` passou a garantir ausência de DDL/runtime SIGVOOS. Nenhuma migration histórica foi editada, nenhuma migration nova foi criada, nenhum D1 remoto foi acessado e nenhum deploy foi executado. **`R01 = RESOLVED`**. `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual. Próxima etapa recomendada: reauditoria independente com Opus.

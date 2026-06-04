@@ -503,6 +503,20 @@
 - **Status final de R01 nesta sprint:** `READY_FOR_RUNTIME_FALLBACK_REMOVAL`.
 - **Próxima fase:** `Runtime Fallback Removal + Final Audit Closure`.
 
+### Sprint R01.4 — SIGVOOS Runtime Fallback Removal + Final Audit Closure ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** remover `ensureSigvoosTables()` e fechar o stream documental/técnico de R01 sem tocar migrations históricas.
+- **Entregue:**
+  - `ensureSigvoosTables()` removido de `sigvoos-frms.ts`;
+  - 10 call sites removidos de `sigvoos-frms.ts` e `integracoes_sigvoos.ts`;
+  - guard arquitetural atualizado;
+  - teste novo `sigvoos-no-runtime-ddl.test.ts` criado para bloquear regressões;
+  - bootstrap `scripts/bootstrap-new-environment.sql` preservado;
+  - documento final criado: `docs/AIRTRUST_SIGVOOS_R01_RUNTIME_FALLBACK_REMOVAL_AND_AUDIT_CLOSURE_v0_5.md`.
+- **Sem:** migration nova, D1 remoto, deploy, backfill, alteração de auth/RBAC/tenant/R2.
+- **Status final de R01 nesta sprint:** `RESOLVED`.
+- **Próxima fase:** reauditoria independente do stream DDL residual e realocação de foco para Audit v2, RBAC/Suporte v2 e Data Quality.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -583,7 +597,8 @@
 | R09 | ~~R09 Readiness / Verification~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | GPT-5.4 DeepSeek | Sim (DDL removido) | Nao (sem migration) |
 | R04.6 | Documentos Bootstrap Removal ✅ | Concluído (2026-06-03) | GPT-5.5 | Pendente (deploy + smoke) | Nao (0388 ja aplicada) |
 | R04.7 | Deploy Worker/API + Smoke ✅ | Concluído (2026-06-04) | GPT-5.5 | Sim (APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9) | Nao |
-| Z | SIGVOOS Runtime Fallback Removal + Final Audit Closure | Medio prazo | GPT-5.5 | Sim | Nao |
+| Z | SIGVOOS Runtime Fallback Removal + Final Audit Closure ✅ | Concluído | GPT-5.5 | Não | Não |
+| Z.1 | Reauditoria Independente do Fechamento DDL Residual | Curto prazo | GPT-5.5/Opus | Não | Não |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
 | AC | Repository Pattern Expansao | Longo prazo | GPT-5.4 | Sim | Nao |
@@ -594,4 +609,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo, `ensureSigvoosTables()` preservado)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)** e **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado, R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL, próxima fase: Runtime Fallback Removal + Final Audit Closure)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)**, **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado)** e **Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (`ensureSigvoosTables()` removido, 10 call sites eliminados, teste de ausência de DDL/runtime criado, `R01 = RESOLVED`)**.

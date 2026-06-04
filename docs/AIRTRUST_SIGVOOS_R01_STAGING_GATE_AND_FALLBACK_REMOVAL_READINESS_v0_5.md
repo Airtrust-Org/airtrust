@@ -9,6 +9,8 @@
 
 ## 1. Estado antes da etapa
 
+> **Addendum Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (2026-06-04):** esta readiness foi consumida integralmente na etapa seguinte. O fallback runtime foi removido, o bootstrap foi preservado e o fechamento final ficou registrado em `docs/AIRTRUST_SIGVOOS_R01_RUNTIME_FALLBACK_REMOVAL_AND_AUDIT_CLOSURE_v0_5.md`. Status consolidado posterior: **`R01 = RESOLVED`**.
+
 Estado de entrada confirmado:
 - `main`
 - `HEAD == origin/main == 73acf6f`
@@ -255,4 +257,4 @@ Escopo da remoção final:
 
 ---
 
-**Fim do documento.** Gerado em 2026-06-04. Decisão desta etapa: **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**, com fallback ainda preservado até a etapa final.
+**Fim do documento.** Gerado em 2026-06-04. Decisão desta etapa: **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**, depois consumida pela Sprint R01.4, que removeu o fallback e consolidou **`R01 = RESOLVED`**.

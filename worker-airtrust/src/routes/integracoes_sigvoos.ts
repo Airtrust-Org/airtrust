@@ -5,7 +5,6 @@ import type { Env } from '../types';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
-  ensureSigvoosTables,
   getSigvoosConfig,
   listSigvoosPendencias,
   listSigvoosManualMappings,
@@ -371,7 +370,6 @@ function formatSigvoosSyncError(error: unknown): {
 }
 
 sigvoosRouter.get('/ping', async (c) => {
-  await ensureSigvoosTables(c.env.DB);
   return c.json({ success: true, data: { provider: 'sigvoos', status: 'ready' } });
 });
 
@@ -447,7 +445,6 @@ sigvoosRouter.get('/historico', async (c) => {
 
 sigvoosRouter.get('/mapeamento-manual', async (c) => {
   const empresaId = getEmpresaIdSafe(c);
-  // Sequential to avoid concurrent DDL locks (ensureSigvoosTables in each)
   try {
     const mapeamentos = await listSigvoosManualMappings(c.env.DB, empresaId);
     const naoMapeados = await listSigvoosUnmappedTripulantes(c.env.DB, empresaId);
@@ -597,7 +594,6 @@ sigvoosRouter.post('/sincronizar-frms', async (c) => {
 sigvoosRouter.post('/reprocessar-previews', async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const operadorId = String(c.get('userId') || '0');
-  await ensureSigvoosTables(c.env.DB);
   const result = await reprocessarPreviewsSigvoosSemTripulante(c.env.DB, empresaId, operadorId);
   return c.json({ success: true, data: result });
 });
