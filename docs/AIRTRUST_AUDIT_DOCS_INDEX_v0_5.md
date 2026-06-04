@@ -32,7 +32,8 @@
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 | `PRODUCTION_SCHEMA_STATE` | `VERIFIED_MISSING_AUDIT_RBAC_SCHEMA` |
 | `AUTHENTICATED_SMOKE` | `BLOCKED_BY_MISSING_EPHEMERAL_CREDENTIAL` |
-| `RELEASE_GATE` | `READY_WITH_CONDITIONS` |
+| `PRE_RELEASE_PRODUCT_FIXES` | `COMPLETE` |
+| `RELEASE_GATE` | `READY_FOR_CONTROLLED_RELEASE_PENDING_FINAL_SMOKE_RECHECK` |
 
 ## 2. Documentos canônicos atuais
 
@@ -60,6 +61,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_SCHEMA_READINESS_v0_5.md` | fundação de schema/readiness para `Audit v2` + `RBAC/Suporte v2` |
 | `docs/AIRTRUST_AUDIT_DOCS_INDEX_v0_5.md` | este índice |
 | `docs/AIRTRUST_RELEASE_GATE_RESIDUAL_RECONCILIATION_v0_5.md` | reconciliação do release gate: schema de produção verificado, residuais LOW aceitos, condições para deploy controlado |
+| `docs/AIRTRUST_PRE_RELEASE_PRODUCT_FIX_PACK_v0_5.md` | fix pack funcional pré-release: e-mail de sessão, agenda semanal, fadiga diária, impressão A4 e Pasta 360 |
 
 ## 3. Documentos de readiness e execution gates
 
@@ -114,5 +116,6 @@ Estes documentos continuam úteis como trilha de auditoria, mas não devem ser u
 
 1. ✅ Reauditoria final Opus / release gate do ciclo — `RELEASE_GATE = READY_FOR_CONTROLLED_RELEASE` (2026-06-04).
 2. ✅ Smoke autenticado com credencial efêmera — `AUTHENTICATED_SMOKE = PASS` (PASS=11, FAIL=0, SKIPPED=2, 2026-06-04 Bloco 6.2).
-3. **Controlled Release / Deploy Gate Execution** — próximo bloco: snapshot pré-deploy, approval nominal, deploy Worker, smoke pós-deploy.
-4. Ampliar o enforcement gradual de `RBAC/Suporte v2` somente após nova validação operacional controlada (post-release).
+3. ✅ Product Fix Pack pré-release — `PRE_RELEASE_PRODUCT_FIXES = COMPLETE` (2026-06-04).
+4. **Controlled Release / Deploy Gate Execution** — próximo bloco: snapshot pré-deploy, approval nominal, deploy Worker, smoke final público + autenticado read-only e smoke pós-deploy.
+5. Ampliar o enforcement gradual de `RBAC/Suporte v2` somente após nova validação operacional controlada (post-release).

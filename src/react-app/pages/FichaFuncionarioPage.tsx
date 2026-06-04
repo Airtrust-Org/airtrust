@@ -2,7 +2,7 @@
 // AIRTRUST - FASE 4: FICHA 360° DO FUNCIONÁRIO
 // ============================================================
 // Componente React de tela completa com todas as informações do funcionário:
-//  - Abas: Resumo, Qualificações, Licenças, Pasta Virtual, Auditoria
+//  - Abas: Resumo, Qualificações, Licenças, Pasta 360, Auditoria
 //  - Badge de status de compliance
 //  - Integração com APIs de ficha-360 e matriz de treinamento
 // ============================================================
@@ -15,6 +15,7 @@ import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import AppLayout from '@/react-app/components/AppLayout';
 import PastaVirtualCompleta from '@/react-app/components/funcionarios/PastaVirtualCompleta';
 import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo';
+import { buildPasta360Url } from '@/react-app/utils/pasta360';
 import {
   ArrowLeft,
   User,
@@ -354,7 +355,7 @@ function labelTabelaAuditoria(tabela: string) {
     licencas: 'Licenças',
     lms_matriculas: 'Treinamentos LMS',
     fichas_sessao: 'Fichas de simulador',
-    pasta_virtual: 'Pasta Virtual',
+    pasta_virtual: 'Pasta 360',
     documentos: 'Documentos',
   };
 
@@ -657,7 +658,7 @@ export default function FichaFuncionarioPage() {
               className={tabButtonClass('pasta')}
             >
               <FolderOpen className="h-4 w-4" />
-              Pasta Virtual
+              Pasta 360
             </button>
             <button
               type="button"
@@ -1548,12 +1549,12 @@ export default function FichaFuncionarioPage() {
           </div>
         )}
 
-        {/* === ABA PASTA VIRTUAL === */}
+        {/* === ABA PASTA 360 === */}
         {tab === 'pasta' && (
           <div className="space-y-4 rounded-lg bg-white p-6 shadow">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="text-base font-semibold text-gray-800">Pasta Virtual Consolidada</h3>
+                <h3 className="text-base font-semibold text-gray-800">Pasta 360 Consolidada</h3>
                 <p className="text-sm text-gray-600">
                   Todos os certificados e documentos do funcionário ficam acessíveis nesta aba sem
                   sair da ficha.
@@ -1561,10 +1562,13 @@ export default function FichaFuncionarioPage() {
               </div>
               <button
                 type="button"
-                onClick={() => navigate(`/pasta-virtual/${f.id}`)}
+                onClick={() => {
+                  const pasta360Url = buildPasta360Url(f.id, { tab: 'pasta', origem: 'ficha-funcionario' });
+                  if (pasta360Url) navigate(pasta360Url);
+                }}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                Abrir tela dedicada
+                Abrir Pasta 360
               </button>
             </div>
 

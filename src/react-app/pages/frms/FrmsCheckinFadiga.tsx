@@ -22,6 +22,7 @@ import {
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { toast } from 'sonner';
+import { resolveFadigaPostSavePath } from './frmsPostSaveNavigation';
 
 function getTodayLocalKey(): string {
   const now = new Date();
@@ -383,7 +384,7 @@ function TriStateButtons({
 export default function FrmsCheckinFadiga() {
   const navigate = useNavigate();
   const today = getTodayLocalKey();
-  const { isAdmin, isGestor } = usePermissions();
+  const { isAdmin, isGestor, role } = usePermissions();
   const canViewTeam = isAdmin || isGestor;
 
   type TabType = 'form' | 'historico' | 'gestor';
@@ -436,6 +437,8 @@ export default function FrmsCheckinFadiga() {
   if (!aceitePrivacidade) missingItems.push('Aceite da política de privacidade');
 
   const submit = async () => {
+    if (submitMutation.isPending) return;
+
     setSubmitAttempted(true);
     if (!canSubmit) {
       toast.error(
@@ -482,8 +485,9 @@ export default function FrmsCheckinFadiga() {
 
       if ((result as { data?: { requires_frat_review?: number } })?.data?.requires_frat_review) {
         toast.warning('Check-in indica revisão FRAT recomendada');
-        navigate(`/sgso/frat?prefill=fadiga&date=${today}`);
       }
+
+      navigate(resolveFadigaPostSavePath(role), { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Erro ao registrar check-in');
     }
@@ -883,7 +887,7 @@ export default function FrmsCheckinFadiga() {
                 id="submit-checkin-fadiga"
                 onClick={submit}
                 loading={submitMutation.isPending}
-                disabled={!canSubmit}
+                disabled={!canSubmit || submitMutation.isPending}
                 className="min-h-12 w-full text-base"
               >
                 Confirmar Check-in Diário

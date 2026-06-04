@@ -33,6 +33,7 @@ import participantesRoutes from './simuladores-sessoes-participantes';
 import sessoesUpdateRoutes from './simuladores-sessoes-update';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
+import { sendSimulatorSessionEmailNotifications } from '../services/simuladores-session-notifications';
 
 const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de sessões requerem autenticação
@@ -1004,6 +1005,28 @@ app.post('/sessoes', async (c) => {
     } catch (error) {
       console.error('domain_event_error', error);
     }
+
+    const notificationEmpresaId = Number((c as any).get('empresaId') || 0);
+    c.executionCtx?.waitUntil(
+      sendSimulatorSessionEmailNotifications(c.env, c.env.DB, Number(sessao_id), {
+        reason: 'created',
+        empresaId: notificationEmpresaId || undefined,
+      })
+        .then((results) => {
+          const sent = results.filter((item) => item.status === 'sent').length;
+          const skipped = results.filter((item) => item.status === 'skipped').length;
+          const failed = results.filter((item) => item.status === 'failed').length;
+          console.log('[simuladores] session email notification queued', {
+            sessao_id,
+            sent,
+            skipped,
+            failed,
+          });
+        })
+        .catch((error) => {
+          console.error('[simuladores] session email notification failed', error);
+        }),
+    );
 
     return c.json(
       {

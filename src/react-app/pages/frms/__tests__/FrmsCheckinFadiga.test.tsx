@@ -7,12 +7,15 @@ import FrmsCheckinFadiga, {
   normalizeWakeTimeInput,
   optionalBinaryResponseToPayload,
 } from '../FrmsCheckinFadiga';
+import { resolveFadigaPostSavePath } from '../frmsPostSaveNavigation';
 
 const mutateAsyncMock = vi.fn();
 const refetchMock = vi.fn();
 const navigateMock = vi.fn();
 const useFadigaHistoricoMock = vi.fn();
 const useFadigaPainelMock = vi.fn();
+const usePermissionsMock = vi.fn();
+let submitPending = false;
 
 vi.mock('react-router-dom', () => ({
   Link: ({ to, children }: { to: string; children: any }) => <a href={to}>{children}</a>,
@@ -33,12 +36,12 @@ vi.mock('@/react-app/components/PageHeader', () => ({
 }));
 
 vi.mock('@/react-app/hooks/usePermissions', () => ({
-  usePermissions: () => ({ isAdmin: false, isGestor: false }),
+  usePermissions: () => usePermissionsMock(),
 }));
 
 vi.mock('@/react-app/hooks/useFadigaCheckin', () => ({
   useCheckinHoje: () => ({ data: null, refetch: refetchMock }),
-  useSubmitCheckin: () => ({ mutateAsync: mutateAsyncMock, isPending: false }),
+  useSubmitCheckin: () => ({ mutateAsync: mutateAsyncMock, isPending: submitPending }),
   useFadigaHistorico: (...args: unknown[]) => useFadigaHistoricoMock(...args),
   useFadigaPainel: (...args: unknown[]) => useFadigaPainelMock(...args),
 }));
@@ -139,6 +142,14 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(isValidWakeTime('25:61')).toBe(false);
     expect(isValidWakeTime('6')).toBe(false);
   });
+
+  it('resolve home correta apos salvar fadiga por perfil', () => {
+    expect(resolveFadigaPostSavePath('INSTRUTOR')).toBe('/home');
+    expect(resolveFadigaPostSavePath('ALUNO')).toBe('/home');
+    expect(resolveFadigaPostSavePath('TRIPULANTE')).toBe('/home');
+    expect(resolveFadigaPostSavePath('GESTOR')).toBe('/');
+    expect(resolveFadigaPostSavePath('ADMINISTRADOR')).toBe('/');
+  });
 });
 
 describe('FrmsCheckinFadiga UI', () => {
@@ -148,11 +159,24 @@ describe('FrmsCheckinFadiga UI', () => {
     navigateMock.mockReset();
     useFadigaHistoricoMock.mockReset();
     useFadigaPainelMock.mockReset();
+    usePermissionsMock.mockReset();
+    submitPending = false;
     mutateAsyncMock.mockResolvedValue({ data: { requires_frat_review: 0 } });
     refetchMock.mockResolvedValue(undefined);
     useFadigaHistoricoMock.mockReturnValue({ data: { data: [] }, isLoading: false });
     useFadigaPainelMock.mockReturnValue({ data: [], isLoading: false });
+    usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, role: 'INSTRUTOR' });
   });
+
+  function preencherFormularioValido() {
+    fireEvent.click(screen.getByRole('radio', { name: '6-8h' }));
+    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
+    fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
+    fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
+    fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
+  }
 
   it('renderiza KSS com titulo claro e descritores', () => {
     render(<FrmsCheckinFadiga />);
@@ -225,6 +249,48 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload).not.toHaveProperty('sintomas');
     expect(payload).not.toHaveProperty('horas_sono_48h');
     expect(payload.motivo_inaptidao).toBeUndefined();
+  });
+
+  it('sucesso de instrutor fecha formulario e volta para home correta', async () => {
+    render(<FrmsCheckinFadiga />);
+
+    preencherFormularioValido();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
+  });
+
+  it('sucesso de aluno/tripulante volta para home correta', async () => {
+    usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, role: 'ALUNO' });
+    render(<FrmsCheckinFadiga />);
+
+    preencherFormularioValido();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
+  });
+
+  it('erro de envio permanece no formulario sem redirecionar', async () => {
+    mutateAsyncMock.mockRejectedValueOnce(new Error('Falha segura'));
+    render(<FrmsCheckinFadiga />);
+
+    preencherFormularioValido();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('evita double submit quando mutation esta pendente', () => {
+    submitPending = true;
+    render(<FrmsCheckinFadiga />);
+
+    preencherFormularioValido();
+    const submitButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
+    expect(submitButton).toBeDisabled();
+    fireEvent.click(submitButton);
+
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
   });
 
   it('mantem observacao obrigatoria para resposta nao apto', () => {

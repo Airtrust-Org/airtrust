@@ -159,7 +159,7 @@ function buildParticipantsList(
     .join('');
 }
 
-function buildHtml({
+export function buildMonthlyAgendaPrintHtml({
   monthDate,
   generatedAt = new Date(),
   sessions,
@@ -306,14 +306,14 @@ function buildHtml({
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agenda mensal de simuladores - ${escapeHtml(getMonthLabel(monthDate))}</title>
     <style>
-      @page { size: A4 portrait; margin: 0; }
+      @page { size: A4 landscape; margin: 10mm; }
       * { box-sizing: border-box; margin: 0; padding: 0; }
 
       body {
         font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
         color: #0f172a;
         background: #fff;
-        font-size: 10.5px;
+        font-size: 9.2px;
         line-height: 1.45;
         print-color-adjust: exact;
         -webkit-print-color-adjust: exact;
@@ -323,68 +323,72 @@ function buildHtml({
       .header-banner {
         background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 60%, #2563eb 100%);
         color: #fff;
-        padding: 18px 20px 16px;
+        padding: 10px 12px 9px;
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
         gap: 12px;
+        break-after: avoid;
+        page-break-after: avoid;
       }
       .header-eyebrow {
-        font-size: 9px;
+        font-size: 7.5px;
         font-weight: 700;
         letter-spacing: .14em;
         text-transform: uppercase;
         color: #93c5fd;
-        margin-bottom: 5px;
+        margin-bottom: 4px;
       }
       .header-title {
-        font-size: 26px;
+        font-size: 20px;
         font-weight: 800;
         line-height: 1;
         text-transform: capitalize;
         color: #fff;
       }
       .header-sub {
-        font-size: 11px;
+        font-size: 8.5px;
         color: #bfdbfe;
-        margin-top: 4px;
+        margin-top: 3px;
       }
       .header-meta {
         text-align: right;
-        font-size: 9.5px;
+        font-size: 8px;
         color: #bfdbfe;
-        line-height: 1.8;
+        line-height: 1.5;
       }
-      .header-meta strong { color: #fff; font-size: 10px; }
+      .header-meta strong { color: #fff; font-size: 8.5px; }
 
       /* ── STATS BAR ── */
       .stats-bar {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
         background: #f0f7ff;
-        border-bottom: 2px solid #bfdbfe;
+        border-bottom: 1px solid #bfdbfe;
+        break-after: avoid;
+        page-break-after: avoid;
       }
       .stat-item {
-        padding: 10px 14px;
+        padding: 6px 10px;
         border-right: 1px solid #bfdbfe;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 1px;
       }
       .stat-item:last-child { border-right: none; }
       .stat-dot {
         width: 8px; height: 8px; border-radius: 50%;
         display: inline-block; margin-right: 4px; vertical-align: middle;
       }
-      .stat-label { font-size: 9px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
-      .stat-value { font-size: 20px; font-weight: 800; line-height: 1; }
+      .stat-label { font-size: 7.5px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+      .stat-value { font-size: 15px; font-weight: 800; line-height: 1; }
       .stat-blue  { color: #1d4ed8; }
       .stat-green { color: #059669; }
       .stat-amber { color: #d97706; }
       .stat-purple{ color: #7c3aed; }
 
       /* ── CONTENT WRAPPER ── */
-      .content { padding: 12px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+      .content { padding: 8px 0 10px; display: flex; flex-direction: column; gap: 8px; }
 
       /* ── CHIPS ── */
       .chips-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -393,31 +397,35 @@ function buildHtml({
         display: inline-flex; align-items: center; gap: 4px;
         padding: 3px 9px; border-radius: 999px;
         background: #dbeafe; color: #1e40af;
-        font-size: 9px; font-weight: 700; border: 1px solid #bfdbfe;
+        font-size: 7.5px; font-weight: 700; border: 1px solid #bfdbfe;
       }
       .chip.muted { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
 
       /* ── SIMULATOR DISTRIBUTION ── */
-      .sim-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .sim-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
       .sim-card {
-        border-radius: 10px; padding: 10px 12px;
+        border-radius: 8px; padding: 7px 9px;
         border-left: 4px solid #3b82f6;
         background: #f8fafc; border-top: 1px solid #e2e8f0;
         border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
-      .sim-name { font-size: 11px; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
-      .sim-meta { font-size: 9.5px; color: #64748b; }
+      .sim-name { font-size: 9px; font-weight: 700; color: #1e293b; margin-bottom: 2px; }
+      .sim-meta { font-size: 7.8px; color: #64748b; }
       .sim-pill {
         display: inline-block; padding: 1px 7px; border-radius: 999px;
         background: #dbeafe; color: #1e40af; font-size: 9px; font-weight: 700;
-        margin-right: 4px;
+        margin-right: 3px;
       }
 
       /* ── SECTION TITLES ── */
       .section-title {
         font-size: 10px; font-weight: 700; text-transform: uppercase;
         letter-spacing: .1em; color: #64748b;
-        display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+        display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
+        break-after: avoid;
+        page-break-after: avoid;
       }
       .section-title::before {
         content: ''; display: inline-block;
@@ -427,63 +435,75 @@ function buildHtml({
 
       /* ── DAY SECTION ── */
       .day-section {
-        break-inside: avoid;
-        border-radius: 12px; overflow: hidden;
+        break-inside: auto;
+        page-break-inside: auto;
+        border-radius: 10px; overflow: hidden;
         border: 1px solid #e2e8f0;
-        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        box-shadow: 0 1px 2px rgba(0,0,0,.05);
       }
       .day-header {
-        padding: 9px 14px;
+        padding: 6px 10px;
         background: linear-gradient(90deg, #1e3a5f 0%, #1e40af 100%);
         display: flex; justify-content: space-between; align-items: center;
+        break-after: avoid;
+        page-break-after: avoid;
       }
-      .day-header h2 { font-size: 13px; font-weight: 700; text-transform: capitalize; color: #fff; }
-      .day-header .day-meta { font-size: 9.5px; color: #bfdbfe; }
+      .day-header h2 { font-size: 10px; font-weight: 700; text-transform: capitalize; color: #fff; }
+      .day-header .day-meta { font-size: 8px; color: #bfdbfe; }
       .day-badge {
         background: rgba(255,255,255,.2); color: #fff;
-        padding: 2px 10px; border-radius: 999px; font-size: 9px; font-weight: 700;
+        padding: 2px 8px; border-radius: 999px; font-size: 7.5px; font-weight: 700;
       }
 
       /* ── SCHEDULE TABLE ── */
-      .schedule-table { width: 100%; border-collapse: collapse; }
+      .schedule-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        page-break-inside: auto;
+      }
+      .schedule-table thead { display: table-header-group; }
+      .schedule-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
       .schedule-table th {
-        text-align: left; font-size: 9px; font-weight: 700;
+        text-align: left; font-size: 7.4px; font-weight: 700;
         text-transform: uppercase; letter-spacing: .07em; color: #475569;
-        background: #f8fafc; padding: 6px 10px;
-        border-bottom: 2px solid #e2e8f0;
+        background: #f8fafc; padding: 4px 6px;
+        border-bottom: 1px solid #e2e8f0;
       }
       .schedule-table td {
-        vertical-align: top; padding: 8px 10px;
+        vertical-align: top; padding: 5px 6px;
         border-bottom: 1px solid #f1f5f9;
       }
       .schedule-table tbody tr:last-child td { border-bottom: none; }
       .schedule-table tbody tr:nth-child(even) td { background: #fafbff; }
-      .schedule-table tbody tr:hover td { background: #f0f7ff; }
 
       /* time cell */
       .time-badge {
         display: inline-block;
         background: #1e40af; color: #fff;
-        padding: 3px 8px; border-radius: 6px;
-        font-size: 11px; font-weight: 800; letter-spacing: .02em;
+        padding: 2px 6px; border-radius: 5px;
+        font-size: 8.5px; font-weight: 800; letter-spacing: .02em;
         white-space: nowrap;
       }
       .duration-badge {
-        display: inline-block; margin-top: 4px;
+        display: inline-block; margin-top: 3px;
         background: #dbeafe; color: #1e40af;
-        padding: 1px 6px; border-radius: 999px;
-        font-size: 9px; font-weight: 700;
+        padding: 1px 5px; border-radius: 999px;
+        font-size: 7.4px; font-weight: 700;
       }
 
       /* primary / secondary */
       .primary-text { font-weight: 700; color: #1e293b; }
-      .secondary-text { color: #64748b; font-size: 9.5px; margin-top: 1px; }
-      .muted { color: #94a3b8; font-size: 9.5px; }
+      .secondary-text { color: #64748b; font-size: 7.8px; margin-top: 1px; }
+      .muted { color: #94a3b8; font-size: 7.8px; }
 
       /* participants */
       .participant-name {
         display: flex; align-items: center; gap: 4px;
-        font-size: 10px; padding: 1px 0;
+        font-size: 8.2px; padding: 1px 0;
       }
       .participant-dot {
         width: 6px; height: 6px; border-radius: 50%;
@@ -491,9 +511,9 @@ function buildHtml({
       }
 
       /* instructor / examiner */
-      .crew-row { font-size: 10px; padding: 1px 0; }
+      .crew-row { font-size: 8.2px; padding: 1px 0; }
       .crew-label {
-        display: inline-block; font-size: 8.5px; font-weight: 700;
+        display: inline-block; font-size: 6.8px; font-weight: 700;
         text-transform: uppercase; letter-spacing: .06em;
         color: #fff; border-radius: 3px; padding: 0 4px; margin-right: 4px;
       }
@@ -503,8 +523,8 @@ function buildHtml({
       /* status pills */
       .status-pill {
         display: inline-flex; align-items: center; gap: 4px;
-        padding: 3px 10px; border-radius: 999px;
-        font-weight: 700; font-size: 9.5px; white-space: nowrap;
+        padding: 2px 7px; border-radius: 999px;
+        font-weight: 700; font-size: 7.8px; white-space: nowrap;
       }
       .status-pill::before { content: '●'; font-size: 7px; }
       .status-default   { background: #fef9c3; color: #92400e; }
@@ -513,23 +533,34 @@ function buildHtml({
       .status-cancelled { background: #fee2e2; color: #991b1b; }
 
       /* obs cell */
-      .obs-text { font-size: 9.5px; color: #475569; font-style: italic; }
+      .obs-text { font-size: 7.8px; color: #475569; font-style: italic; }
 
       /* empty state */
       .empty-state {
         border: 2px dashed #cbd5e1; border-radius: 12px;
         padding: 32px; text-align: center; color: #94a3b8;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       .empty-state h2 { font-size: 14px; color: #64748b; margin-bottom: 6px; }
 
       /* ── FOOTER ── */
       .page-footer {
         background: #f8fafc; border-top: 1px solid #e2e8f0;
-        padding: 8px 20px;
+        padding: 5px 0 0;
         display: flex; justify-content: space-between;
-        font-size: 9px; color: #94a3b8;
+        font-size: 7.5px; color: #94a3b8;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       .page-footer strong { color: #475569; }
+
+      @media print {
+        .day-section,
+        .sim-card {
+          box-shadow: none;
+        }
+      }
     </style>
   </head>
   <body>
@@ -612,7 +643,7 @@ function buildHtml({
 }
 
 export function openMonthlyAgendaPrint(options: MonthlyAgendaPrintOptions): boolean {
-  return printHtmlViaIframe(buildHtml(options));
+  return printHtmlViaIframe(buildMonthlyAgendaPrintHtml(options));
 }
 
 // =====================================================================

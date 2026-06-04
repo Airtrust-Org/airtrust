@@ -32,6 +32,11 @@ import {
   type MonthlyAgendaPrintSession,
   type WeeklyPrintOptions,
 } from './monthlyAgendaPrint';
+import {
+  parseStoredCalendarViewMode,
+  SIMULADORES_CALENDAR_VIEW_MODE_STORAGE_KEY,
+  type SimuladoresCalendarViewMode,
+} from './calendarViewState';
 
 // ==================== TYPES ====================
 
@@ -74,7 +79,7 @@ interface Instrutor {
   nome: string;
 }
 
-type ViewMode = 'monthly' | 'weekly' | 'agenda';
+type ViewMode = SimuladoresCalendarViewMode;
 
 /**
  * Ordena participantes por função: PIC primeiro, depois SIC, depois demais
@@ -221,7 +226,9 @@ export default function CalendarioAgendamentos() {
   const [loading, setLoading] = useState(true);
 
   // View state
-  const [viewMode, setViewMode] = useState<ViewMode>('monthly');
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    parseStoredCalendarViewMode(localStorage.getItem(SIMULADORES_CALENDAR_VIEW_MODE_STORAGE_KEY)),
+  );
 
   // Restaurar data salva do localStorage ou usar hoje
   const [currentDate, setCurrentDate] = useState(() => {
@@ -263,6 +270,11 @@ export default function CalendarioAgendamentos() {
       setViewMode('agenda');
     }
   }, [readOnly]);
+
+  // Persistir visualização para preservar semanal/mensal após salvar e remontar a tela.
+  useEffect(() => {
+    localStorage.setItem(SIMULADORES_CALENDAR_VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode]);
 
   // Persistir data ao mudar
   useEffect(() => {

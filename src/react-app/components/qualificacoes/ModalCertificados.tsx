@@ -7,6 +7,7 @@ import { showToast } from '@/react-app/utils/toast';
 import { apiClient } from '@/react-app/services/apiClient';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
+import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
 interface ModalCertificadosProps {
   isOpen: boolean;
@@ -311,13 +312,22 @@ export function ModalCertificados({
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => {
-                  navigate(`/pasta-virtual/${funcionarioId}`);
+                  const pasta360Url = buildPasta360Url(funcionarioId, {
+                    tab: 'pasta',
+                    origem: 'modal-certificados',
+                    historicoId,
+                  });
+                  if (!pasta360Url) {
+                    showToast.error('Não foi possível abrir a Pasta 360: funcionário inválido.');
+                    return;
+                  }
+                  navigate(pasta360Url);
                   onClose();
                 }}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
               >
                 <FolderOpen className="w-4 h-4" />
-                <span>Pasta Virtual</span>
+                <span>Pasta 360</span>
               </button>
               <button
                 onClick={handleGerar}

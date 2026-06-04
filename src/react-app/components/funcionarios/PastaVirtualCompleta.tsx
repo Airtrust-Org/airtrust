@@ -147,7 +147,7 @@ export default function PastaVirtualCompleta({ funcionarioId }: PastaVirtualComp
     <div className="space-y-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Pasta Virtual</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Pasta 360</h2>
         <p className="text-gray-600">{totalDocumentos} documento(s) organizados por categoria</p>
       </div>
 

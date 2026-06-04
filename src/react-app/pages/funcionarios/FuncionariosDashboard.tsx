@@ -23,7 +23,7 @@ export default function FuncionariosDashboard() {
         <div className="container mx-auto px-4 md:px-8 py-6">
           <PageHeader
             title="Funcionários"
-            description="Licenças, Treinamentos e Pasta Virtual"
+            description="Licenças, Treinamentos e Pasta 360"
             action={
               <UIButton>
                 <Plus size={16} className="mr-2" />
