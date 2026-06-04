@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
 interface ModalCertificadoProps {
   isOpen: boolean;
@@ -225,7 +226,16 @@ export function ModalCertificado({
   }, [isOpen, carregarCertificados]);
 
   const handlePastaVirtual = () => {
-    navigate(`/pasta-virtual/${qualificacao.funcionario_id}`);
+    const pasta360Url = buildPasta360Url(qualificacao.funcionario_id, {
+      tab: 'pasta',
+      origem: 'modal-certificado',
+      historicoId: qualificacao.id,
+    });
+    if (!pasta360Url) {
+      toast.error('Não foi possível abrir a Pasta 360: funcionário inválido.');
+      return;
+    }
+    navigate(pasta360Url);
     onClose();
   };
 
@@ -575,13 +585,13 @@ export function ModalCertificado({
             <div
               className={`grid grid-cols-1 gap-3 ${instrutorNome ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}
             >
-              {/* Pasta Virtual */}
+              {/* Pasta 360 */}
               <button
                 onClick={handlePastaVirtual}
                 className="px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition flex items-center justify-center gap-2"
               >
                 <FolderOpen size={18} />
-                Pasta Virtual
+                Pasta 360
               </button>
 
               {/* Gerar Certificado */}

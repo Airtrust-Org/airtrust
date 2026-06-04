@@ -18,6 +18,10 @@ import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
 import {
+  sendSimulatorSessionEmailNotifications,
+  shouldNotifySimulatorSessionUpdate,
+} from '../services/simuladores-session-notifications';
+import {
   requireAdminForDelete,
   timeToMinutes,
   syncSessaoEscalaEventos,
@@ -51,6 +55,7 @@ app.put('/sessoes/:id', async (c) => {
       .bind(id)
       .first();
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
+    let participantesParaNotificacaoAlterados = false;
     const modeloAeronaveSessao =
       normalizeModeloAeronave(b.tipo_aeronave) ||
       (await getSimuladorModeloAeronave(c.env.DB, (a as any).simulador_id));
@@ -607,7 +612,7 @@ app.put('/sessoes/:id', async (c) => {
 
       // IDs dos participantes que estão na sessão atualmente
       const partAntigosRows = await c.env.DB.prepare(
-        'SELECT funcionario_id FROM sessoes_participantes WHERE sessao_id=? AND deleted_at IS NULL',
+        'SELECT funcionario_id, funcao FROM sessoes_participantes WHERE sessao_id=? AND deleted_at IS NULL',
       )
         .bind(id)
         .all();
@@ -618,6 +623,18 @@ app.put('/sessoes/:id', async (c) => {
       // IDs novos enviados pelo frontend
       const novosValidos = b.participantes.filter((p: any) => p.funcionario_id);
       const idsNovos = new Set(novosValidos.map((p: any) => Number(p.funcionario_id)));
+      const assinaturaAntiga = (partAntigosRows.results || [])
+        .map((p: any) => `${Number(p.funcionario_id)}:${String(p.funcao || '').toUpperCase()}`)
+        .sort()
+        .join('|');
+      const assinaturaNova = novosValidos
+        .map((p: any, index: number) => {
+          const funcao = p.funcao || (index === 0 ? 'PIC' : 'SIC');
+          return `${Number(p.funcionario_id)}:${String(funcao || '').toUpperCase()}`;
+        })
+        .sort()
+        .join('|');
+      participantesParaNotificacaoAlterados = assinaturaAntiga !== assinaturaNova;
 
       // Participantes removidos = estavam antes, não estão mais
       const removidos = [...idsAntigos].filter((fid) => !idsNovos.has(fid));
@@ -908,6 +925,30 @@ app.put('/sessoes/:id', async (c) => {
       }
     } catch (error) {
       console.error('domain_event_error', error);
+    }
+
+    if (shouldNotifySimulatorSessionUpdate(a as any, u as any, participantesParaNotificacaoAlterados)) {
+      const notificationEmpresaId = Number((c as any).get('empresaId') || (u as any)?.empresa_id || 0);
+      c.executionCtx?.waitUntil(
+        sendSimulatorSessionEmailNotifications(c.env, c.env.DB, Number(id), {
+          reason: 'updated',
+          empresaId: notificationEmpresaId || undefined,
+        })
+          .then((results) => {
+            const sent = results.filter((item) => item.status === 'sent').length;
+            const skipped = results.filter((item) => item.status === 'skipped').length;
+            const failed = results.filter((item) => item.status === 'failed').length;
+            console.log('[simuladores] session update email notification queued', {
+              sessao_id: id,
+              sent,
+              skipped,
+              failed,
+            });
+          })
+          .catch((error) => {
+            console.error('[simuladores] session update email notification failed', error);
+          }),
+      );
     }
 
     // Email: when session transitions to CONCLUIDA and fichas are in AVALIACAO_PENDENTE,

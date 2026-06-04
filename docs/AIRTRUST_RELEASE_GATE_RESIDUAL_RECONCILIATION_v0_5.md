@@ -241,3 +241,5 @@ Sequência exata:
 
 **Fim do documento.** Gerado em 2026-06-04 (Bloco 6.1). Atualizado 2026-06-04 (Bloco 6.2 — Authenticated Smoke Gate). Status canônico:
 `RELEASE_GATE = READY_FOR_CONTROLLED_RELEASE` | `PRODUCTION_SCHEMA_STATE = VERIFIED_MISSING_AUDIT_RBAC_SCHEMA` | `AUTHENTICATED_SMOKE = PASS`
+
+**Addendum Pre-Release Product Fix Pack (2026-06-04):** foram aplicadas correções funcionais pré-release em e-mail de sessão de simulador, preservação da visualização semanal, pós-salvamento de fadiga diária, impressão A4 da agenda e navegação de ícones para Pasta 360. Não houve deploy, migration/apply, DQ/MIG ou produção mutante. Como o payload funcional mudou após o smoke autenticado de Bloco 6.2, o status operacional para a próxima janela passa a **`RELEASE_GATE = READY_FOR_CONTROLLED_RELEASE_PENDING_FINAL_SMOKE_RECHECK`**. Documento: `docs/AIRTRUST_PRE_RELEASE_PRODUCT_FIX_PACK_v0_5.md`.
