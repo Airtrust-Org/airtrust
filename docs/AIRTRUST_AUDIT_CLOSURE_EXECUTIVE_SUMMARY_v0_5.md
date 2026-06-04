@@ -7,7 +7,7 @@
 
 > **Addendum 2026-06-04:** o resumo acima permanece válido para o ciclo principal. Os residuais de cleanup de repositório, `.gitignore`, scripts ops e superfície debug/admin foram consolidados separadamente em `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`.
 >
-> **Addendum 2026-06-04 — Audit v2 + RBAC/Suporte Schema Readiness:** a fundação mínima local foi versionada com a migration `0389_platform_roles_support_access_foundation.sql`, helper de dual-read para papéis de plataforma/suporte e helper pequeno de dual-audit legado + v2. Sem apply remoto, sem deploy e sem enforcement amplo. Status canônico adicional: `RBAC_SUPPORT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`, `AUDIT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`.
+> **Addendum 2026-06-04 — Audit v2 + RBAC/Suporte Schema Readiness:** a fundação mínima local foi versionada com a migration `0389_platform_roles_support_access_foundation.sql`, helper de dual-read para papéis de plataforma/suporte e helper pequeno de dual-audit legado + v2. Sem apply remoto, sem deploy e sem enforcement amplo. No fechamento local máximo posterior, o status canônico adicional foi consolidado como `RBAC_SUPPORT_V2 = LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` e `AUDIT_V2 = LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT`.
 
 ---
 

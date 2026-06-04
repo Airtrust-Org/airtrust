@@ -60,7 +60,7 @@ Resultado consolidado até esta passada:
 - O writer legado (`registrarAuditoria`) foi mantido em paralelo para não depender de ativação plena do stream v2.
 - Como não houve apply remoto da fundação de suporte nem ativação operacional por flag:
   - `AUDIT_V2` **não** pode ser `RESOLVED`.
-  - status desta etapa passa a `READY_FOR_CONTROLLED_SCHEMA_MIGRATION`.
+  - status desta etapa passa a `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT`.
 
 ## 4. Testes e evidências desta passada
 
@@ -95,8 +95,8 @@ Resultado consolidado até esta passada:
 
 | Stream | Status |
 |---|---|
-| `RBAC_SUPPORT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
-| `AUDIT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
+| `RBAC_SUPPORT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
+| `AUDIT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
 | `MNT-01` | `DOCUMENTED_ROTATION_REQUIRED` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 
