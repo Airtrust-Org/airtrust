@@ -613,6 +613,20 @@
 - **Status final desta sprint:** `DQ-01 = READY_FOR_CONTROLLED_BACKFILL_EXECUTION`.
 - **Próxima fase:** aprovar o comando mutante por lote e executar a janela controlada em `local-copy`, ou promover pacote equivalente para `staging`.
 
+### DQ01 Local Copy Backfill Execution ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** executar DQ-01 de forma controlada em `local-copy`, sem tocar staging, produção, D1 remoto, deploy, `MIG-01` ou `0389`.
+- **Entregue:**
+  - resultado [AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md);
+  - safe command mutante `scripts/run-dq01-local-copy-backfill-apply.sh`;
+  - teste `dq01-local-copy-backfill-apply.test.ts`;
+  - snapshot pré-janela `dq01-local-copy-pre-window-20260604T172927Z.sqlite` fora do versionamento;
+  - rollback validado em cópia separada com `PRAGMA integrity_check = ok`.
+- **Resultado:** `registro_ativo_deleted_at_inconsistente` foi de `17` para `0`; resumo DQ foi de `PASS=5 WARN=4 FAIL=0 SKIPPED=5` para `PASS=6 WARN=3 FAIL=0 SKIPPED=5`.
+- **Remanescente:** `qualificacao_duplicada=45`, `alocacao_sem_escala_valida=2`, `alocacao_duplicada=2` e 5 checks `SKIPPED` por schema local incompleto.
+- **Status final:** `DQ-01 = LOCAL_COPY_BACKFILL_VALIDATED_READY_FOR_STAGING`; `MIG-01 = WAITING_FOR_DQ_STAGING_OR_CONTROLLED_DECISION`.
+- **Próxima fase:** staging real de DQ-01 ou decisão formal antes de iniciar `MIG-01`.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
