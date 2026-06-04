@@ -9,6 +9,8 @@
 >
 > **Addendum 2026-06-04 — Audit v2 + RBAC/Suporte Schema Readiness:** a fundação mínima local foi versionada com a migration `0389_platform_roles_support_access_foundation.sql`, helper de dual-read para papéis de plataforma/suporte e helper pequeno de dual-audit legado + v2. Sem apply remoto, sem deploy e sem enforcement amplo. Depois do rebaseline controlado de `MIG-01`, o status canônico atual passa a ser `RBAC_SUPPORT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION` e `AUDIT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`.
 >
+> **Addendum 2026-06-04 — 0389 Controlled Schema Execution:** a `0389` foi aplicada com sucesso em `staging` via wrapper dedicado, com gates, snapshot schema-only e rollback explícito. `RBAC_SUPPORT_V2` avança para `SCHEMA_APPLIED_READY_FOR_GRADUAL_ENFORCEMENT`. `AUDIT_V2` permanece em `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` porque o diagnóstico remoto confirmou `AUDIT_EVENTS_V2_EXISTS=0` em `staging`, fora do escopo permitido desta janela.
+>
 > **Addendum 2026-06-04 — Final Local Residual Closure:** os dois resíduos finais de auth/tenant apontados pela auditoria Opus foram corrigidos localmente. `AUTH-RESIDUAL-01 = RESOLVED`, `AUTH-RESIDUAL-02 = RESOLVED`, `AUTH_TENANT = CONFIRMED_CLOSED` e `LOCAL_AUDIT_CLOSURE = COMPLETE_WITH_ENVIRONMENT_BLOCKERS`.
 
 ---
@@ -68,8 +70,8 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 
 | Área | O que foi feito | O que falta |
 |---|---|---|
-| **RBAC/Suporte** | `userId===1` centralizado; Sprint P definiu `platform_admin` e `support_read_only`; Sprint Q definiu dual-read, enforcement e rollback por fases; `MIG-01` rebaselineado em `staging` para liberar o apply controlado da `0389` | Aplicar `0389`, validar grants de suporte, shadow dual-read, enforcement gradual e rollback |
-| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; Sprint X.5 aplicou migration `0385` em produção; `MIG-01` rebaselineado em `staging` para liberar o apply controlado da `0389` | Aplicar `0389`, ativar flag em fases, validar paridade, ampliar cobertura dual-write e validação jurídica de retenção |
+| **RBAC/Suporte** | `0389` aplicada em `staging`; tabelas, indices e FKs confirmados; dual-read e fallback legado preservados e validados localmente | Enforcement gradual, validacao operacional de grants/sessoes e remocao futura do fallback |
+| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; helper legado+canônico segue validado localmente | Fechar o gap de `audit_events_v2` em `staging`, ativar flag em fases, validar paridade e ampliar cobertura dual-write |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Migration Integrity** | Sprint AH congelou a governança local, Sprint AI fechou a estratégia de rebaseline controlado, Sprint AK adicionou contrato/runbook/gate, `DQ-01` foi executado em `staging` e a janela atual gerou/replayou o baseline SQL de `MIG-01` | `MIG-01` fechado para o escopo controlado; proxima janela grande e aplicar `0389` |
 | **Data Quality** | SQL validado, runner local criado, Sprint AH endureceu caminhos críticos, Sprint AI fechou mapa de backfill, Sprint AJ/AK criaram trilha controlada, Sprint AL validou `local-copy` e a janela atual executou `DQ-01` em `staging` com snapshot/rollback/gates PASS | `DQ-01` fechado para o escopo controlado; cobertura parcial remanescente continua documentada separadamente em `DQ-02` |
@@ -145,8 +147,8 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 ## 8. Proximas 5 acoes recomendadas
 
 1. **Fornecer credencial efemera/read-only + `AIRTRUST_EXPECTED_EMPRESA_ID`/`CODIGO`** e reexecutar o smoke autenticado.
-2. **Aplicar `0389` / schema Audit v2 + RBAC/Suporte v2** em janela controlada com snapshot/rollback/approval/safe-command.
-3. **Executar enforcement runtime gradual** de Audit v2 + RBAC/Suporte v2 com rollback por flag.
+2. **Executar enforcement runtime gradual** de `RBAC/Suporte v2` com rollback por flag.
+3. **Fechar a base operacional de `Audit v2` em `staging`** antes de qualquer rollout de paridade, porque `audit_events_v2` continua ausente no target.
 4. **Medir product/performance/scale em `staging`** nos hotspots herdados de FRMS/SGSO/LMS/escalas.
 5. **Planejar `DQ-02` como trilha separada**, apenas se a cobertura total do schema de staging ainda for necessária.
 

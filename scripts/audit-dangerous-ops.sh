@@ -67,6 +67,7 @@ readonly_remote_files=(
   "scripts/fase31_diagnostico.sh"
   "scripts/inspect_ssot.sh"
   "scripts/run-validate-ssot-final.sh"
+  "scripts/run-0389-staging-schema-readonly.sh"
   "scripts/setup_local_dev_mirror.sh"
   "scripts/smoke-view-historico.sh"
   "scripts/sync-core-qualificacoes.sh"
@@ -83,6 +84,7 @@ readonly_remote_files=(
 self_protected_files=(
   "scripts/sync-d1-production-sanitized.sh"
   "scripts/run-dq01-staging-backfill-apply.sh"
+  "scripts/run-0389-staging-schema-apply.sh"
 )
 
 # Scripts legados já bloqueados com banner + exit 1 (verificação relaxada)
