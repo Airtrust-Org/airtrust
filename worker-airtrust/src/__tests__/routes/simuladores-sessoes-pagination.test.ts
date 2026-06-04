@@ -3,9 +3,18 @@ import type { Env } from '../../types';
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
+    const empresaId = Number(c.env?.__mockEmpresaId ?? 1);
     c.set('userId', 1);
     c.set('userRole', String(c.env?.__mockRole || 'admin'));
-    c.set('empresaId', Number(c.env?.__mockEmpresaId ?? 1));
+    c.set('empresaId', empresaId);
+    c.set('tenantContext', {
+      empresaId,
+      empresaCodigo: `tenant-${empresaId}`,
+      empresaNome: `Tenant ${empresaId}`,
+      role: 'admin',
+      plano: 'pro',
+      permissions: ['read', 'write'],
+    });
     await next();
   },
   optionalAuth: () => async (_c: any, next: () => Promise<void>) => {
@@ -196,7 +205,7 @@ describe('simuladores pagination caps', () => {
       success: true,
       pagination: { limit: 200, offset: 3 },
     });
-    expect(binds.instrutores.at(-1)).toEqual([200, 3]);
+    expect(binds.instrutores.at(-1)).toEqual([1, 200, 3]);
   });
 
   it('sessoes parametriza limite com cap e preserva formato da resposta', async () => {

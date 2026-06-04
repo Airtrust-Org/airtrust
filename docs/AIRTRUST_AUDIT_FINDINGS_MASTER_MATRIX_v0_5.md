@@ -4,7 +4,7 @@
 **Branch:** `main`
 **HEAD base:** `c12d8bf63c7bc9bede27ad6238459a9d921edb50`
 **Modo:** Matriz atualizada após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado) e Sprint R04.5/R01 pós-apply oficial da fila pendente `0387` + `0388`. Sem migration manual ou alteração de dados reais.
-**Sprints de origem consolidados:** A (RBAC), B (Audit Trail/LGPD), C (Status Enum), D (Testes Beta), E (DDL), F (Data Quality), G (Runner), H (Repository Dashboard), I (Supabase Feasibility), J (Supabase Preparation), K (Tenant Isolation Docs), K.1 (Tenant Residuals), L (LMS Reports Integration), Reauditoria Opus v2, General Audit Opus, V (DDL Residual Design), W (DDL Pré-Fase), X.0–X.5 (DDL Schema Probe + Apply/Deploy), R/S/T/T.1 (Audit v2), OP-1 (Readiness operacional consolidada), OP-2 (Staging operational gate).
+**Sprints de origem consolidados:** A (RBAC), B (Audit Trail/LGPD), C (Status Enum), D (Testes Beta), E (DDL), F (Data Quality), G (Runner), H (Repository Dashboard), I (Supabase Feasibility), J (Supabase Preparation), K (Tenant Isolation Docs), K.1 (Tenant Residuals), L (LMS Reports Integration), Reauditoria Opus v2, General Audit Opus, V (DDL Residual Design), W (DDL Pré-Fase), X.0–X.5 (DDL Schema Probe + Apply/Deploy), R/S/T/T.1 (Audit v2), OP-1 (Readiness operacional consolidada), OP-2 (Staging operational gate), AH (Data Quality + Migration Integrity).
 
 ---
 
@@ -93,7 +93,8 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| DQ-01 | DATA_QUALITY | Runner local/staging criado mas com checks SKIPPED por cobertura parcial de snapshot | S1 | PARTIAL | SQL validado estaticamente, runner local seguro criado; OP-1 e OP-2 reexecutaram o runner local com o mesmo perfil agregado (`PASS=5 WARN=4 FAIL=0 SKIPPED=5`) | `1a9722c` | — | `validate-data-quality-sql.sh` PASS, `data-quality:local` PASS tecnico com resumo sanitizado | 5 checks SKIPPED por ausência de tabelas/colunas no snapshot local; nenhuma path de staging/snapshot completo estava configurada na OP-2 | Sprint futuro: Data Quality completo | GPT-5.4 Alta |
+| MIG-01 | MIGRATION_INTEGRITY | Cadeia canônica de migrations com 30 prefixos duplicados, 3 nomes fora do padrão e exceções históricas de replay/governança | S2 | PARTIAL | Guard local criado para pin de duplicatas, nomes fora do padrão, `CREATE TEMP TABLE` e `PRAGMA foreign_keys = OFF`; exceções históricas documentadas sem editar migrations aplicadas | Sprint AH | — | `migration-governance.test.ts`, `sigvoos-base-tables-schema.test.ts`, `AIRTRUST_DATA_QUALITY_AND_MIGRATION_INTEGRITY_AUDIT_v0_5.md` | A cadeia histórica continua frágil para replay limpo amplo e ainda exige estratégia futura de rebaseline/squash | Sprint futuro: governance/rebaseline | GPT-5.5 Altissimo |
+| DQ-01 | DATA_QUALITY | Runner parcial e caminhos críticos de simuladores dependiam de integridade implícita entre tenant, sessão, participante e checks | S1 | PARTIAL | SQL validado estaticamente, runner local seguro criado; OP-1/OP-2 preservados; Sprint AH endureceu `GET /instrutores`, participantes de sessão e fallback de checks com `empresa_id` e validação de referências | `1a9722c`, Sprint AH | — | `validate-data-quality-sql.sh` PASS, `data-quality:local` PASS tecnico com resumo sanitizado, `simuladores-sessoes-data-quality.test.ts` | 5 checks SKIPPED por ausência de snapshot completo; nenhum dado real foi saneado; inconsistências históricas continuam exigindo execução aprovada + possível backfill | Sprint futuro: Data Quality completo | GPT-5.4 Alta |
 | DQ-02 | DATA_QUALITY | Execução operacional completa pendente (snapshot staging completo) | S1 | OPEN | Não executado — requer ambiente aprovado com schema completo | — | — | — | Bloqueia GO pleno para cliente externo | Sprint futuro: executar em staging aprovado | GPT-5.4 Alta |
 
 | ID | Categoria | Achado | Severidade original | Status atual | Correção feita | Commit(s) | Deploy | Evidência/testes | Pendência | Próximo sprint | Modelo recomendado |
@@ -193,8 +194,9 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | LGPD-02 | AUDIT_LGPD | Cursos LMS passam colunas dedicadas ao writer v2 sem remover `audit_logs` | Aplicar schema, ativar flag e expandir integração |
 | LGPD-03 | AUDIT_LGPD | Writer exige `support_reason` para suporte e a validação local foi aprovada | Aplicar schema e integrar eventos reais de suporte/sensiveis |
 | LGPD-04 | AUDIT_LGPD | Schema, writer, índices mínimos, taxonomia, readiness local e rollback concluídos | Validação jurídica, staging flag test, rollout e purge policy operacional |
+| MIG-01 | MIGRATION_INTEGRITY | Governança local agora congela as exceções históricas, mas a cadeia canônica segue com duplicatas e replay frágil | Rebaseline/squash ou baseline governado para ambientes novos |
 | STATUS-01 | STATUS_ENUM | Status central aplicado em camada crítica mas não em cron/alertas/EVD | Expandir helpers para caminhos batch e operacionais |
-| DQ-01 | DATA_QUALITY | Runner funcional mas com 5 checks SKIPPED | Executar em ambiente com schema completo |
+| DQ-01 | DATA_QUALITY | Runner funcional, mas ainda parcial; simuladores críticos endurecidos nesta fase | Executar em ambiente com schema completo e separar saneamento/backfill se surgirem achados reais |
 | OPS-05 | OPERACOES_DEPLOY_DB | Smoke autenticado executado com PASS=11 mas empresa esperada não validada | Configurar `AIRTRUST_EXPECTED_EMPRESA_ID` e reexecutar |
 | BETA-01 | MODULOS_BETA | Hospedagem com contratos mínimos, mas cobertura ainda baixa | Expandir update/checkout e casos cross-tenant |
 | BETA-02 | MODULOS_BETA | SGSO com baseline de contratos, mas cobertura de transições ainda incompleta | Expandir casos de workflow e auditoria detalhada |
@@ -214,6 +216,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | RBAC-02 | RBAC_SUPORTE | `support_read_only` ainda não implementado em runtime | Sim — cliente externo e multiempresa |
 | RBAC-03 | RBAC_SUPORTE | `platform_admin` persistido ainda não implementado em runtime | Sim — multiempresa |
 | STATUS-02 | STATUS_ENUM | Status residual em cron/alertas/EVD | Parcialmente — escala |
+| MIG-01 | MIGRATION_INTEGRITY | Replay histórico amplo segue dependente de exceções documentadas e baseline governado | Não para produção atual; sim para confiança em ambientes novos/replay limpo |
 | DQ-02 | DATA_QUALITY | Execução operacional completa pendente | Sim — GO pleno |
 | BETA-05 | MODULOS_BETA | EVD sem cobertura de teste | Sim — cobertura |
 | DDL-03 | DDL_RUNTIME | `treinamentos-planejados-integration.ts` DDL residual | ✅ RESOLVIDO (Sprint X.5) |
@@ -234,6 +237,7 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 | RBAC-02 | Role `support` com escopo e auditoria | Nova tabela `support_access` com escopo, expiração, eventos |
 | RBAC-03 | `platform_admin` persistido | Schema para papéis de plataforma |
 | MULTI-04 | `escala_alocacoes.empresa_id` denormalizado + UNIQUE parcial | ALTER TABLE + CREATE UNIQUE INDEX |
+| MIG-01 | Cadeia histórica de migrations com duplicatas e exceções de replay | Rebaseline/squash ou baseline governado para novos ambientes |
 | DDL-02 | Tabelas `integracoes_sigvoos_*` | Bootstrap local + migrations históricas para 3 tabelas + 4 índices. **Status: RESOLVED.** `0387` já foi aplicada em produção, `scripts/bootstrap-new-environment.sql` permanece oficial para ambientes novos e o fallback runtime saiu integralmente do código na Sprint R01.4. |
 | DDL-04 | Consolidação de `documentos` em migration canônica | ✅ RESOLVED. Migration `0388` aplicada, bootstrap removido (R04.6), deploy + smoke concluídos (R04.7). |
 
@@ -313,4 +317,6 @@ Este documento consolida **todos os achados de auditoria** do AirTrust identific
 
 **Addendum Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (2026-06-04):** `ensureSigvoosTables()` foi removido de runtime, os 10 call sites foram eliminados, o bootstrap `scripts/bootstrap-new-environment.sql` foi preservado e o teste `sigvoos-no-runtime-ddl.test.ts` passou a bloquear regressões de DDL/runtime SIGVOOS. Nenhuma migration histórica foi editada, nenhuma migration nova foi criada, nenhum D1 remoto foi acessado e nenhum deploy foi executado. DDL-02 / R01 avançou para **`RESOLVED`**. `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual. Próxima etapa recomendada: reauditoria independente com Opus.
 
-**Fim da matriz.** Documento gerado em 2026-06-02. Atualizado com Sprint X.5 closure (R03 = RESOLVED), Sprint R04.7 (**R04 = RESOLVED**), Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy, Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness e Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (**R01 = RESOLVED**; `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual).
+**Addendum Sprint AH Data Quality + Migration Integrity (2026-06-04):** `MIG-01` foi reclassificado como **`PARTIAL_REQUIRES_FUTURE_REBASELINE`** com guard permanente de governança local (`migration-governance.test.ts`) pinando 30 prefixos duplicados, 3 nomes fora do padrão e os construtos históricos mais hostis ao runner do D1. `DQ-01` permaneceu **PARTIAL**, mas os caminhos críticos de simuladores foram endurecidos: `GET /instrutores`, participantes de sessão e fallback de checks agora respeitam `empresa_id` e validam referências no tenant atual. Nenhuma migration histórica foi editada, nenhuma migration nova foi criada, nenhum D1 remoto foi acessado, nenhum deploy foi executado e nenhum dado real foi saneado. Documento consolidado: `AIRTRUST_DATA_QUALITY_AND_MIGRATION_INTEGRITY_AUDIT_v0_5.md`.
+
+**Fim da matriz.** Documento gerado em 2026-06-02. Atualizado com Sprint X.5 closure (R03 = RESOLVED), Sprint R04.7 (**R04 = RESOLVED**), Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy, Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness, Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (**R01 = RESOLVED**; `AUDIT_CURRENT_CLOSURE = CLOSED` para o stream R01/DDL residual) e Sprint AH (**`MIG-01 = PARTIAL_REQUIRES_FUTURE_REBASELINE` / `DQ-01` parcial com hardening de caminhos críticos**).

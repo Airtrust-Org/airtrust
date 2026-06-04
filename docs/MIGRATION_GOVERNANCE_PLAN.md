@@ -11,12 +11,13 @@
 ### 1.1 Migration Inventory
 
 - **Canonical location:** `worker-airtrust/migrations/` (used by `wrangler d1 migrations apply`)
-- **Total files in canonical location:** 340 SQL files
+- **Total files in canonical location:** 360 SQL files
 - **Total files across all paths (incl. archives):** 1,022 entries found by `find`
-- **Highest numbered migration:** `0369_simulador_agendamentos_simulador_id_nullable.sql`
+- **Highest regular migration:** `0388_documentos_canonical_schema.sql`
+- **Reserved sentinel migration:** `9999_add_modelo_sessao_id_to_agendamentos.sql`
 - **Non-standard files (outside sequential pattern):**
+  - `0098-indices-performance.sql` (hyphenated legacy filename)
   - `132_add_funcionario_ativo.sql` (3-digit prefix, no leading zero)
-  - `9999_add_modelo_sessao_id_to_agendamentos.sql` (reserved sentinel)
   - `purge-soft-deleted-qualificacoes.sql` (no numeric prefix)
 
 ### 1.2 D1 Migration State
@@ -27,7 +28,7 @@
 | Production | `airtrust-db` | Full migration history (production baseline) |
 | Dev | `airtrust-db-dev` | Unknown; intended for local development |
 
-**Important:** Staging was synchronized via schema export from production (DDL only, no data), bypassing the migration runner. This means staging's `d1_migrations` table does not reflect the 340 migrations in `worker-airtrust/migrations/`. This is acceptable for QA purposes but means migrations cannot be tested end-to-end in staging.
+**Important:** Staging was synchronized via schema export from production (DDL only, no data), bypassing the migration runner. This means staging's `d1_migrations` table does not reflect the current canonical set of 360 migrations in `worker-airtrust/migrations/`. This is acceptable for QA purposes but means migrations cannot be tested end-to-end in staging.
 
 ### 1.3 Archive Directories
 
@@ -43,14 +44,15 @@ These archived files are not applied by wrangler and do not affect production. T
 
 The `find`-based search (1,022 files across all directories) revealed many numeric prefix collisions. This is expected because the same prefix appears in both the canonical location and archive directories.
 
-**Within the canonical `worker-airtrust/migrations/` (340 files), known issues:**
+**Within the canonical `worker-airtrust/migrations/` (360 files), known issues:**
 
 | Issue | Details | Risk |
 |-------|---------|------|
 | Non-sequential `132_add_funcionario_ativo.sql` | Uses 3-digit prefix instead of 4-digit | Low (applied once, already in production) |
 | `9999_` sentinel | Reserved high-number migration | Low (intentional workaround) |
 | `purge-soft-deleted-qualificacoes.sql` | No numeric prefix — wrangler ignores non-matching files | Low (effectively inert) |
-| Prefixes 0332, 0347, 0367 | Previously identified as having forward references | Historical, applied to production |
+| 30 duplicate prefixes in canonical history | Ambiguous governance / replay debt | Historical, applied to production |
+| Forward references such as `0058 -> 0059` and `0354 -> 0387` | Historical replay fragility | Historical, applied/mitigated via bootstrap where needed |
 
 **Historical note (Fase 6):** 3 duplicate prefixes (0332, 0347, 0367) were identified in the Fase 6 audit. These were resolved by applying schema export rather than the migration runner for staging.
 
@@ -67,7 +69,7 @@ As of 2026-05-15, no new migrations should be applied to production without:
 
 ### 3.2 Approved Next Migration
 
-The next migration must use prefix `0370` or higher (sequential from `0369`).
+The next regular migration must use prefix `0389` or higher (sequential from `0388`).
 
 ### 3.3 Prohibited Actions
 
@@ -113,7 +115,7 @@ All new migrations must follow:
 NNNN_description_in_snake_case.sql
 ```
 
-Where `NNNN` is a 4-digit zero-padded integer, sequential from the current maximum. Example: `0370_add_aeronave_certificado_field.sql`.
+Where `NNNN` is a 4-digit zero-padded integer, sequential from the current maximum. Example: `0389_add_aeronave_certificado_field.sql`.
 
 ### 5.2 Migration File Requirements
 
