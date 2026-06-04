@@ -227,7 +227,7 @@ fadigaAcumulada.get('/fadiga-acumulada/frota', async (c) => {
          JOIN funcionarios f ON CAST(j.tripulante_id AS INTEGER) = f.id AND f.deleted_at IS NULL
          WHERE j.data LIKE ?
            AND j.deleted_at IS NULL
-           AND (f.empresa_id IS NULL OR f.empresa_id = ?)
+           AND f.empresa_id = ?
          GROUP BY j.tripulante_id
          ORDER BY total_jornada_min DESC`,
       )
