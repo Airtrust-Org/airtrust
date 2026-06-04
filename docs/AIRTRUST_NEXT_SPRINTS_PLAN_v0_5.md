@@ -569,6 +569,17 @@
 - **Status final desta sprint:** `DQ-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`; `MIG-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`.
 - **Próxima fase:** declarar target/janela aprovados e executar DQ primeiro, MIG depois, em janelas separadas.
 
+### Audit Cycle Final Closure ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** fechar o ciclo atual sem criar nova preparação redundante, executando a decisão real dos gates e uma correção preventiva local de arquitetura/performance.
+- **Entregue:**
+  - relatório [AIRTRUST_AUDIT_CYCLE_FINAL_CLOSURE_v0_5.md](/Users/filipedaumas/SAAS/Airtrust/docs/AIRTRUST_AUDIT_CYCLE_FINAL_CLOSURE_v0_5.md);
+  - teste `architecture-performance-guard.test.ts`;
+  - matriz/plano/resumo atualizados para refletir bloqueio real de ambiente.
+- **Sem:** backfill real, rebaseline real, D1 remoto, deploy, migration nova, edição de migration histórica.
+- **Status final:** `DQ-01 = BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`; `MIG-01 = BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`; `ARCH-01 = MITIGATED_WITH_GUARDS`.
+- **Próxima fase:** auditoria independente Opus pós-ciclo antes de nova execução controlada real.
+
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
 - **Objetivo:** Expandir helpers de status para cron jobs, alertas e EVD.
@@ -654,6 +665,7 @@
 | AH | Data Quality + Migration Integrity ✅ | Concluído | GPT-5 / Sonnet 4.6 | Não | Não |
 | AI | Migration Rebaseline + Data Quality Backfill Readiness ✅ | Concluído | GPT-5 / Sonnet 4.6 | Não | Não |
 | AJ | DQ-01 Controlled Backfill Gate ✅ | Concluído | GPT-5 / Sonnet 4.6 | Não | Não |
+| AH-FINAL | Audit Cycle Final Closure ✅ | Concluído | GPT-5 / Sonnet 4.6 | Não | Não |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
 | AC | Repository Pattern Expansao | Longo prazo | GPT-5.4 | Sim | Nao |
@@ -664,4 +676,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)**, **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado)**, **Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (`ensureSigvoosTables()` removido, 10 call sites eliminados, teste de ausência de DDL/runtime criado, `R01 = RESOLVED`)**, **Sprint AH (Data Quality + Migration Integrity: `MIG-01` parcial com guard local permanente; `DQ-01` parcial com hardening crítico de simuladores)**, **Sprint AI (`MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`; docs + dry-run scripts + readiness tests criados)**, **Sprint AJ (`DQ-01 = BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS`; gate fail-closed + documento de execução bloqueada versionados)** e **Sprint AK (`MIG-01`/`DQ-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`; contrato/runbook/gates compartilhados versionados)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo)**, **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente)**, **Sprint R01.3 Staging/New Environment Gate + Fallback Removal Readiness (gate local-isolado PASS, inventário do fallback fechado)**, **Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (`ensureSigvoosTables()` removido, 10 call sites eliminados, teste de ausência de DDL/runtime criado, `R01 = RESOLVED`)**, **Sprint AH (Data Quality + Migration Integrity: `MIG-01` parcial com guard local permanente; `DQ-01` parcial com hardening crítico de simuladores)**, **Sprint AI (`MIG-01 = READY_FOR_CONTROLLED_REBASELINE`; `DQ-01 = READY_FOR_CONTROLLED_BACKFILL`; docs + dry-run scripts + readiness tests criados)**, **Sprint AJ (`DQ-01 = BACKFILL_EXECUTION_BLOCKED_BY_ENVIRONMENT_READINESS`; gate fail-closed + documento de execução bloqueada versionados)**, **Sprint AK (`MIG-01`/`DQ-01 = READY_FOR_CONTROLLED_EXECUTION_ENVIRONMENT`; contrato/runbook/gates compartilhados versionados)** e **Audit Cycle Final Closure (`DQ-01`/`MIG-01 = BLOCKED_BY_CONTROLLED_ENVIRONMENT_NOT_AVAILABLE`; `ARCH-01 = MITIGATED_WITH_GUARDS`)**.
