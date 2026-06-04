@@ -16,7 +16,7 @@
 | `LOCAL_AUDIT_CLOSURE` | `COMPLETE_WITH_ENVIRONMENT_BLOCKERS` |
 | `SIMULADORES_OPTIONAL_AUTH_SCOPE` | `RESOLVED` |
 | `DQ-01` | `RESOLVED_FOR_CONTROLLED_SCOPE` |
-| `MIG-01` | `READY_FOR_CONTROLLED_REBASELINE_AFTER_DQ` |
+| `MIG-01` | `RESOLVED_FOR_CONTROLLED_SCOPE` |
 | `ARCH-01` | `MITIGATED_WITH_GUARDS` |
 | `CLN-01` | `RESOLVED` |
 | `SEC-04` | `MITIGATED_BY_FLAG` |
@@ -26,8 +26,8 @@
 | `CLN-03` | `MITIGATED_BY_GITIGNORE` |
 | `OPS-01` | `MITIGATED_WITH_GUARDS` |
 | `VALIDATION_BASELINE` | `PASS` |
-| `RBAC_SUPPORT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
-| `AUDIT_V2` | `LOCAL_FOUNDATION_COMPLETE_BLOCKED_BY_ENVIRONMENT` |
+| `RBAC_SUPPORT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
+| `AUDIT_V2` | `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` |
 | `PRODUCT_PERFORMANCE_SCALE` | `MITIGATED_WITH_LOCAL_GUARDS_AND_SMOKE` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 
@@ -48,6 +48,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_DQ01_CONTROLLED_ENVIRONMENT_PACKAGE_v0_5.md` | pacote operacional rastreável de ambiente controlado para `DQ-01` |
 | `docs/AIRTRUST_DQ01_LOCAL_COPY_BACKFILL_EXECUTION_RESULT_v0_5.md` | resultado da execução controlada local-copy de `DQ-01` |
 | `docs/AIRTRUST_DQ01_STAGING_BACKFILL_EXECUTION_RESULT_AND_MIG01_HANDOFF_v0_5.md` | resultado da execução controlada em `staging` e handoff para `MIG-01` |
+| `docs/AIRTRUST_MIG01_CONTROLLED_REBASELINE_EXECUTION_RESULT_AND_0389_HANDOFF_v0_5.md` | resultado do rebaseline controlado de `MIG-01` e handoff para a `0389` |
 | `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md` | cleanup residual, governança e superfície pública |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_GOVERNANCE_v0_5.md` | matriz de RBAC/suporte/admin/maintenance/debug/audit da passada atual |
 | `docs/AIRTRUST_AUDIT_V2_RBAC_SUPPORT_SCHEMA_READINESS_v0_5.md` | fundação de schema/readiness para `Audit v2` + `RBAC/Suporte v2` |
@@ -71,6 +72,9 @@ Usar para `DQ-01`, `MIG-01` e trilhas controladas:
 | `docs/controlled-execution/dq01-rollback-plan-20260604.md` | rollback testável da janela `DQ-01` |
 | `docs/controlled-execution/dq01-staging-target-evidence-20260604.md` | evidência do target `staging` |
 | `docs/controlled-execution/dq01-staging-rollback-plan-20260604.md` | rollback testável da janela `DQ-01` em `staging` |
+| `docs/controlled-execution/mig01-staging-target-evidence-20260604.md` | evidência do target `staging` para `MIG-01` |
+| `docs/controlled-execution/mig01-staging-rollback-plan-20260604.md` | rollback testável da janela `MIG-01` em `staging` |
+| `docs/controlled-execution/mig01-staging-schema-baseline-20260604.sql` | baseline SQL de schema gerado a partir do snapshot `staging` |
 
 ## 4. Documentos históricos/encerrados
 
@@ -97,6 +101,6 @@ Estes documentos continuam úteis como trilha de auditoria, mas não devem ser u
 
 ## 6. Próximos blocos grandes
 
-1. `MIG-01` em janela controlada própria, com snapshot, rollback e aprovação explícita.
-2. `Audit v2` staging flag test seguido de foundation `RBAC/Suporte v2`.
-3. `DQ-02` apenas se a cobertura total de schema em `staging` ainda for necessária.
+1. Aplicar `0389` / schema `Audit v2` + `RBAC/Suporte v2` em janela controlada propria.
+2. Enforcement runtime gradual de `Audit v2` + `RBAC/Suporte v2`.
+3. Product/performance/scale em `staging`.

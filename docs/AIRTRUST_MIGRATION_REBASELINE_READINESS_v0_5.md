@@ -179,3 +179,7 @@ Os critérios agora atendidos são:
 ## 13. Próxima etapa recomendada
 
 Executar uma sprint separada de **controlled rebaseline execution** em ambiente isolado/staging aprovado, usando este documento, `AIRTRUST_CONTROLLED_EXECUTION_ENVIRONMENT_CONTRACT_v0_5.md`, `AIRTRUST_DQ01_MIG01_CONTROLLED_EXECUTION_RUNBOOK_v0_5.md` e `scripts/mig01-controlled-rebaseline-gate.sh` como gates de entrada, sem misturar a janela com backfill real ou mudanças funcionais de runtime.
+
+---
+
+**Addendum MIG01 Controlled Rebaseline Execution (2026-06-04):** a etapa recomendada acima foi executada em escopo controlado de `staging`, usando o snapshot SQLite pos-DQ como entrada. Resultado canônico atualizado: **`MIG-01 = RESOLVED_FOR_CONTROLLED_SCOPE`**; **`RBAC_SUPPORT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`**; **`AUDIT_V2 = READY_FOR_CONTROLLED_SCHEMA_MIGRATION`**. Evidência: `docs/AIRTRUST_MIG01_CONTROLLED_REBASELINE_EXECUTION_RESULT_AND_0389_HANDOFF_v0_5.md`.
