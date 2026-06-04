@@ -13,6 +13,8 @@
 Definir e fechar localmente a estratégia segura para resolver o bloqueio de replay limpo da cadeia `0354 → 0387` sem alterar migrations históricas, sem modificar runtime, sem deploy e sem afetar produção atual.
 
 > **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** o arquivo `scripts/bootstrap-new-environment.sql` foi criado com as 3 tabelas SIGVOOS base e 4 índices necessários antes da `0354`. O teste local `worker-airtrust/src/__tests__/migrations/sigvoos-base-tables-schema.test.ts` passou a provar explicitamente: (1) replay limpo sem bootstrap falha em `0354`; (2) replay com bootstrap atravessa `0354`; (3) bootstrap é idempotente; (4) bootstrap não exige dados reais; (5) bootstrap não depende de D1 remoto. `ensureSigvoosTables()` foi preservado. Novo status consolidado: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
+>
+> **Addendum Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness (2026-06-04):** o bootstrap foi reaudidado e o teste local passou a incluir um gate explícito por etapas em banco limpo temporário. O inventário do fallback runtime foi fechado em 10 call sites, sem D1 remoto, sem migration nova e sem deploy. Novo status consolidado: **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
 
 ---
 
@@ -20,7 +22,7 @@ Definir e fechar localmente a estratégia segura para resolver o bloqueio de rep
 
 | Métrica | Valor |
 |---|---|
-| R01 status | `BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE` |
+| R01 status | `READY_FOR_RUNTIME_FALLBACK_REMOVAL` |
 | 0387 aplicada em produção | Sim (Sprint R04.5, via fila pendente oficial) |
 | Produção atual | Mitigada — schema correto, `ensureSigvoosTables()` é no-op eficaz |
 | Replay limpo | Quebrado — `0354` falha com `no such table: integracoes_sigvoos_config` |
@@ -91,14 +93,14 @@ Uma nova migration posterior (ex. 0389) com `CREATE TABLE IF NOT EXISTS integrac
 ## 7. Decisão recomendada
 
 ```
-R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE
+R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL
 ```
 
 **Ações recomendadas, nesta ordem:**
 
 1. **Curto prazo concluído:** `scripts/bootstrap-new-environment.sql` foi criado com as tabelas SIGVOOS base (alinhado ao conteúdo de `0387`) e a documentação operacional desta fase registra que todo novo ambiente deve executar esse script antes da cadeia histórica.
 
-2. **Próximo gate (sprint dedicada):** validar o processo formal de "novo ambiente SIGVOOS" em ambiente aprovado: bootstrap primeiro, depois migrations em ordem. A prova local de replay já existe.
+2. **Gate concluído nesta fase:** o processo local-isolado de "novo ambiente SIGVOOS" foi validado com `bootstrap -> 0352 -> 0354 -> 0387`. A próxima sprint já pode focar na remoção do fallback runtime.
 
 3. **Longo prazo (sprint arquitetural):** squash/rebaseline de migrations — criar snapshot canônico do schema atual numerado como `N_baseline.sql` para ser usado como ponto de partida em novos ambientes, eliminando a necessidade de replay de toda a cadeia histórica.
 
@@ -207,10 +209,10 @@ No `sigvoos-base-tables-schema.test.ts`:
 |---|---|---|---|
 | R01-bootstrap | Criar `scripts/bootstrap-new-environment.sql` e documentar processo de novo ambiente | ✅ CONCLUÍDO nesta fase | Codex GPT-5 |
 | R01-replay-test | Estender `sigvoos-base-tables-schema.test.ts` para validar replay com bootstrap | ✅ CONCLUÍDO nesta fase | Codex GPT-5 |
-| R01-staging-gate | Validar bootstrap em staging com replay local + probe schema | replay-test PASS | Opus 4.x |
-| R01-remove-fallback | Remover `ensureSigvoosTables()` do runtime | Todas as condições da Seção 9 atendidas | Opus 4.x |
+| R01-staging-gate | Validar bootstrap em staging com replay local + probe schema | ✅ CONCLUÍDO local-isolado nesta fase | Codex GPT-5 |
+| R01-remove-fallback | Remover `ensureSigvoosTables()` do runtime | READY_FOR_RUNTIME_FALLBACK_REMOVAL | Opus 4.x |
 | R01-squash (longo prazo) | Criar schema baseline canônico para novos ambientes | Sprint arquitetural própria | Opus 4.x |
 
 ---
 
-**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure — script local criado, replay local comprovado e **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
+**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure e Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness — gate local-isolado PASS, inventário do fallback fechado e **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
