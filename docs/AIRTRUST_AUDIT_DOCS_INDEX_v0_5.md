@@ -112,6 +112,7 @@ Estes documentos continuam úteis como trilha de auditoria, mas não devem ser u
 
 ## 6. Próximos blocos grandes
 
-1. Reauditoria final Opus / release gate do ciclo sem alterar schema.
-2. Smoke autenticado com credencial efemera/read-only, se o gate de release exigir.
-3. Ampliar o enforcement gradual de `RBAC/Suporte v2` somente apos nova validacao operacional controlada.
+1. ✅ Reauditoria final Opus / release gate do ciclo — `RELEASE_GATE = READY_FOR_CONTROLLED_RELEASE` (2026-06-04).
+2. ✅ Smoke autenticado com credencial efêmera — `AUTHENTICATED_SMOKE = PASS` (PASS=11, FAIL=0, SKIPPED=2, 2026-06-04 Bloco 6.2).
+3. **Controlled Release / Deploy Gate Execution** — próximo bloco: snapshot pré-deploy, approval nominal, deploy Worker, smoke pós-deploy.
+4. Ampliar o enforcement gradual de `RBAC/Suporte v2` somente após nova validação operacional controlada (post-release).
