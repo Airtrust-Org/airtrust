@@ -1,13 +1,11 @@
 import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const migrationAuditScript = fileURLToPath(
-  new URL('../../../../scripts/audit-migration-chain-readiness.sh', import.meta.url),
-);
-const dataQualityAuditScript = fileURLToPath(
-  new URL('../../../../scripts/audit-data-quality-readiness.sh', import.meta.url),
-);
+const testDir = dirname(fileURLToPath(import.meta.url));
+const migrationAuditScript = join(testDir, '../../../../scripts/audit-migration-chain-readiness.sh');
+const dataQualityAuditScript = join(testDir, '../../../../scripts/audit-data-quality-readiness.sh');
 
 function runBash(scriptPath: string) {
   return spawnSync('bash', [scriptPath], {

@@ -9,11 +9,14 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+const testDir = dirname(fileURLToPath(import.meta.url));
+
 function src(relPath: string): string {
-  return readFileSync(fileURLToPath(new URL(`../../${relPath}`, import.meta.url)), 'utf8');
+  return readFileSync(join(testDir, '../../', relPath), 'utf8');
 }
 
 describe('tenant-scoped routes: no optionalAuth runtime usage', () => {

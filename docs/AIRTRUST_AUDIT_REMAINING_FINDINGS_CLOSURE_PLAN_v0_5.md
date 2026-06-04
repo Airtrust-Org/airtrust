@@ -10,6 +10,8 @@
 > **Addendum 2026-06-04 — 0389 Controlled Schema Execution:** a `0389` foi aplicada com sucesso em `staging` sob gate, snapshot schema-only, rollback explícito e wrappers dedicados. `RBAC_SUPPORT_V2` avança para `SCHEMA_APPLIED_READY_FOR_GRADUAL_ENFORCEMENT`. `AUDIT_V2` permanece conservador em `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` porque `audit_events_v2` nao existe nesse target no estado atual.
 >
 > **Addendum 2026-06-04 — Block 4 Controlled Closure:** a `0385_audit_events_v2.sql` foi aplicada com sucesso em `staging` sob gate específico, snapshot e rollback dedicados. O escopo controlado de enforcement foi ativado em rotas sensíveis de certificados/admin, sem deploy e sem remoção do fallback legado. Status atuais: `RBAC_SUPPORT_V2 = GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE` e `AUDIT_V2 = PARITY_VALIDATED_FOR_CONTROLLED_SCOPE`.
+>
+> **Addendum 2026-06-04 — Block 5 Product/Performance/Scale:** `VALIDATION_BASELINE = PASS` apos reconciliacao real do `npx tsc --noEmit --pretty false`. `PRODUCT_PERFORMANCE_SCALE = VALIDATED_IN_STAGING_FOR_CONTROLLED_SCOPE` com smoke publico staging read-only, diagnostico D1 staging read-only e guards/testes locais. Nao houve deploy, producao, DQ-01, MIG-01 ou migration/apply.
 
 ## 1. Resumo executivo
 
@@ -48,6 +50,7 @@ Nesta sprint consolidada, a decisao correta foi **nao executar nenhuma correcao 
 | RBAC/Suporte v2 | GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE | `0389` + enforcement gradual aplicados em rotas sensíveis de certificados/admin; grants/sessões/justificativa auditável validados no escopo pequeno | ampliar enforcement só após nova validação controlada; não remover fallback ainda | GPT-5.5 Altissimo |
 | Data Quality | RESOLVED_FOR_CONTROLLED_SCOPE | `staging` foi materializado com snapshot/rollback/approval; gates PASS; diagnóstico pré/pós ficou `PASS=9 WARN=0 FAIL=0 SKIPPED=5`; apply remoto autorizado em `funcionarios` concluiu com `changed=0` e `remaining=0` | manter `DQ-02` separado para cobertura futura de schema completo, sem reabrir `DQ-01` | GPT-5.4 Alta |
 | Smoke com empresa esperada | PARTIAL | sem credencial efemera/read-only e sem `AIRTRUST_EXPECTED_EMPRESA_*` tambem na OP-2 | configurar `AIRTRUST_EXPECTED_EMPRESA_ID` ou `CODIGO` e reexecutar | GPT-5.4 Baixa |
+| Product/performance/scale staging | VALIDATED_IN_STAGING_FOR_CONTROLLED_SCOPE | validado por smoke publico read-only, D1 read-only e guards/testes locais; sem load test amplo | usar Bloco 6 para release gate/reauditoria final; load test fica separado se cliente externo amplo exigir | GPT-5.5 Alta |
 | Auth/tenant residual final | RESOLVED | `AUTH-RESIDUAL-01` e `AUTH-RESIDUAL-02` fechados localmente; `AUTH_TENANT = CONFIRMED_CLOSED` | nenhuma acao local pendente | — |
 
 ## 4. R01 - SIGVOOS
@@ -97,29 +100,29 @@ Estado real (pos-Sprint R09):
 Estado real:
 - schema `audit_events_v2` aplicado em producao via `0385`;
 - writer canonico versionado;
-- dual-write continua atras de flag;
-- readiness local concluida;
-- falta apenas validacao controlada em staging/paridade operacional antes de ampliar cobertura.
+- `0385` aplicada tambem em `staging` no bloco 4;
+- paridade controlada validada para o escopo pequeno atual;
+- ampliacao operacional continua atras de decisao controlada.
 
 Conclusao:
-- o pendente principal nao e mais schema;
-- o pendente principal e **ativacao controlada**.
+- o pendente principal nao e mais schema nem paridade minima;
+- o pendente principal e **ampliacao controlada** sem perder fallback legado/canonico.
 
 ## 8. RBAC/Suporte v2
 
 Estado real:
 - design, readiness gate, phased plan, rollback e matriz de testes estao prontos;
-- runtime ainda usa fallback legado de plataforma;
-- implementacao depende da ordem `audit-first`.
+- `0389` aplicada em `staging` e enforcement gradual ativo no escopo sensivel selecionado;
+- fallback legado de plataforma continua preservado por decisao de rollout.
 
 Conclusao:
-- nao ha trabalho seguro de runtime para esta sprint;
-- o proximo passo correto continua sendo a foundation depois do Audit v2 staging flag test.
+- nao ha trabalho seguro de ampliacao ampla sem nova janela controlada;
+- o proximo passo correto e expandir enforcement apenas depois de novo smoke/validacao operacional.
 
 ## 9. Migration Integrity
 
 Estado real:
-- o diretorio canonico `worker-airtrust/migrations/` hoje tem 360 arquivos `.sql`;
+- o diretorio canonico `worker-airtrust/migrations/` hoje tem 361 arquivos `.sql`;
 - 30 prefixos numericos duplicados permanecem historicos;
 - 3 nomes canonicos seguem fora do padrao `NNNN_snake_case.sql`;
 - `0058 -> 0059` continua documentado como risco historico de replay no relatorio de staging;
@@ -127,42 +130,41 @@ Estado real:
 - a sprint atual criou o guard `migration-governance.test.ts`, pinando duplicatas, nomes fora do padrao, `CREATE TEMP TABLE` e `PRAGMA foreign_keys = OFF`.
 
 Conclusao:
-- o stream DDL runtime esta fechado e `MIG-01` agora já tem readiness suficiente para uma execucao controlada;
-- a cadeia historica continua exigindo uma sprint separada de execucao, nao mais de definicao;
-- a governanca local segue impedindo regressao silenciosa ate a janela real de rebaseline.
+- o stream DDL runtime esta fechado e `MIG-01` esta resolvido para o escopo controlado atual;
+- a cadeia historica ampla ainda pode exigir rebaseline/squash futuro para ambientes novos;
+- a governanca local segue impedindo regressao silenciosa.
 
 ## 10. Data Quality
 
 Estado real:
 - runner existe;
 - SQL ja foi validado;
-- faltam checks completos em ambiente com schema/snapshot aprovados;
+- `DQ-01` foi validado em `staging` com snapshot/rollback/approval e apply com `0` candidatos;
 - a sprint atual endureceu caminhos criticos de simuladores (`/instrutores`, participantes e fallback de checks) para que integridade de tenant e de referencias nao fique so implícita no schema;
 - o smoke autenticado ainda nao fechou empresa esperada por falta de env var.
 
 Conclusao:
-- este e o grupo de pendencias mais adequado para DeepSeek/GPT-5.4;
-- ele ja tem gate de execucao versionado, mas a execucao real segue bloqueada ate existir snapshot/staging aprovado com rollback explicito.
+- `DQ-01` nao deve ser reaberto no bloco atual;
+- o residual correto e `DQ-02`, separado, para cobertura futura de schema completo e smoke autenticado com empresa esperada.
 
 ## 11. Ordem final recomendada
 
-1. Provisionar staging/snapshot/rollback e liberar o gate de `DQ-01`.
-2. Fechar `Smoke + Data Quality` em ambiente aprovado, agora na forma de backfill controlado.
-3. Executar a janela controlada de `MIG-01 rebaseline`.
-4. Executar `Audit v2 Staging Flag Test` com schema ja aplicado e rollback por flag.
-5. Implementar `RBAC/Suporte v2 Foundation` somente depois da paridade minima do Audit v2.
+1. Reauditoria final Opus / release gate sem alterar schema.
+2. Smoke autenticado com empresa esperada, se o gate de release exigir credencial efemera/read-only.
+3. Ampliar `RBAC/Suporte v2` somente apos nova validacao operacional controlada.
+4. Planejar load test amplo separado se o objetivo mudar de piloto/controlado para cliente externo amplo.
 5. ~~`R09 Readiness/Verification Sprint`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
 6. ~~Remover o bootstrap de Documentos~~ ✅ CONCLUÍDO (Sprint R04.6 + R04.7). A `0388` já estava aplicada e sondada; o bootstrap foi removido (R04.6: `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado). Deploy Worker/API executado (R04.7: APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3). **R04 = RESOLVED.**
 7. `R01 SIGVOOS Runtime Fallback Removal` — **CONCLUÍDO** na Sprint R01.4. O bootstrap/runbook foi preservado e o runtime DDL saiu integralmente do código.
 8. Expandir `EVD/Beta`, `status residual`, `observabilidade` e `R2 metadata`.
 
-**Estado operacional atual:** `CONDITIONAL GO` para piloto/controlado; nao e `GO` pleno enquanto empresa esperada, Data Quality completo e staging flag test do Audit v2 nao estiverem fechados. A OP-2 nao alterou essa classificacao.
+**Estado operacional atual:** `CONDITIONAL GO` para piloto/controlado; nao e `GO` pleno para cliente externo amplo enquanto smoke autenticado com empresa esperada e eventual load test amplo nao estiverem fechados. `DQ-01`, `MIG-01`, `Audit v2`, `RBAC/Suporte v2` e `Product/performance/scale` estao validados apenas para escopos controlados.
 
 ## 12. O que pode ser feito com 5.4/DeepSeek
 
 - Smoke autenticado com empresa esperada.
-- Data Quality completo em staging/snapshot aprovado.
-- Execucao controlada de rebaseline/governanca de migrations usando a estrategia ja aprovada.
+- `DQ-02` futuro em staging/snapshot aprovado, sem reabrir `DQ-01`.
+- Smoke publico/read-only e checks de regressao operacional.
 - ~~Sprint curta de verificacao do `R09`~~ **CONCLUÍDO** (Sprint R09, 2026-06-03).
 - ~~R04 migration aplicada / bootstrap removido~~ ✅ CONCLUÍDO (Sprint R04.5: `0388` aplicada + probe pós-apply PASS; Sprint R04.6: bootstrap removido, `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo; Sprint R04.7: deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3. R04 = RESOLVED.)
 - Cobertura de testes beta/EVD.
@@ -171,9 +173,9 @@ Conclusao:
 
 ## 13. O que realmente exige 5.5
 
-- Audit v2 staging flag test/paridade controlada.
-- RBAC/Suporte v2 com migration de papeis e dual-read.
-- `MIG-01` enquanto depender da execucao controlada do baseline/rebaseline estrutural da cadeia historica.
+- Ampliacao de Audit v2 alem do escopo controlado atual.
+- Ampliacao de RBAC/Suporte v2 alem do enforcement gradual atual.
+- Load test amplo e decisao de escala 5+ empresas, se o objetivo sair de piloto/controlado.
 - ~~`R04` se envolver deploy do Worker/API e smoke pós-deploy~~ ✅ CONCLUÍDO (Sprint R04.7, 2026-06-04). Deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS (3/3). R04 = RESOLVED.
 - `R01` enquanto depender de baseline, cadeia historica e possivel estrategia de rebuild para ambientes novos.
 
@@ -181,12 +183,12 @@ Conclusao:
 
 As auditorias remanescentes so podem ser consideradas encerradas quando:
 
-1. Audit v2 tiver schema aplicado, flag validada e rollout/paridade aprovados.
-2. RBAC/Suporte v2 estiver persistido, auditavel e sem dependencia do fallback legado.
-3. Data Quality tiver ambiente aprovado, backfill executado e estiver sem `SKIPPED` relevantes em ambiente aprovado.
+1. Audit v2 tiver rollout amplo aprovado, alem da paridade controlada atual.
+2. RBAC/Suporte v2 estiver ampliado e sem dependencia do fallback legado, quando essa remocao for aprovada.
+3. `DQ-02` tiver ambiente aprovado e checks completos, sem reabrir `DQ-01`.
 4. `R01` nao depender mais de DDL runtime. Isso foi atingido na Sprint R01.4: `ensureSigvoosTables()` e os 10 call sites sairam do runtime, o bootstrap local permaneceu preservado e **`R01 = RESOLVED`**. `R04` = RESOLVED (Sprint R04.6 + R04.7: bootstrap removido, deploy + smoke PASS). `R09` = RESOLVED (Sprint R09, 2026-06-03).
 5. Smoke autenticado com empresa esperada estiver documentado como `PASS`.
-6. `MIG-01` sair do estado de readiness para uma execucao controlada concluida e validada.
+6. Load test amplo for concluido, se o objetivo for cliente externo amplo ou 5+ empresas.
 
 **Addendum Sprint R04.6 (2026-06-03):** o bootstrap runtime de Documentos foi removido, fechando o ciclo R04 iniciado no Sprint R04.1. Ações executadas: `auto-migration-documentos.ts` deletado; `api-bootstrap.ts` limpo (import + call); guard test atualizado com R04 documentado como RESOLVED nos comentários; 3 suites de teste PASS (8/8, 13/13, 12/12). **R04 = RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY.** Nenhuma migration nova, nenhum schema remoto alterado, nenhum backfill, nenhum dado tocado. Naquele momento, R01 permanecia o único resíduo runtime ativo (`0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`). Próximo passo da época: deploy do Worker/API + smoke pós-deploy → R04 = RESOLVED.
 

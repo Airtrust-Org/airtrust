@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 type TableColumn = {
@@ -24,16 +25,17 @@ const prohibitedPatterns = [
 describe('migration 0386 solicitacoes_treinamento planejado link schema', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-sol-trein-link-'));
   const databasePath = join(tempDir, 'schema.sqlite');
+  const testDir = dirname(fileURLToPath(import.meta.url));
   const baseSchemaSql = readFileSync(
-    new URL('../../../migrations/0280_create_solicitacoes_treinamento.sql', import.meta.url),
+    join(testDir, '../../../migrations/0280_create_solicitacoes_treinamento.sql'),
     'utf8',
   );
   const lmsLinkSql = readFileSync(
-    new URL('../../../migrations/0345_solicitacoes_treinamento_lms_link.sql', import.meta.url),
+    join(testDir, '../../../migrations/0345_solicitacoes_treinamento_lms_link.sql'),
     'utf8',
   );
   const migrationSql = readFileSync(
-    new URL('../../../migrations/0386_solicitacoes_treinamento_planejado_link.sql', import.meta.url),
+    join(testDir, '../../../migrations/0386_solicitacoes_treinamento_planejado_link.sql'),
     'utf8',
   );
 

@@ -1,9 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+
+const testDir = dirname(fileURLToPath(import.meta.url));
 
 describe('temporary production endpoints architecture guard', () => {
   it('não permite endpoints temporários de fix no index do worker', () => {
-    const source = readFileSync(new URL('../../index.ts', import.meta.url), 'utf8');
+    const source = readFileSync(join(testDir, '../../index.ts'), 'utf8');
 
     expect(source).not.toContain('FIX TEMPORÁRIO');
     expect(source).not.toContain('/api/fix/');
@@ -23,7 +27,7 @@ describe('temporary production endpoints architecture guard', () => {
     ] as const;
 
     for (const file of removedFiles) {
-      expect(existsSync(new URL(file, import.meta.url))).toBe(false);
+      expect(existsSync(join(testDir, file))).toBe(false);
     }
   });
 });

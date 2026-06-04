@@ -38,6 +38,20 @@ import simuladoresRelatoriosRoutes from '../../routes/simuladores-relatorios';
 import simuladoresEquipamentosRoutes from '../../routes/simuladores-equipamentos';
 import simuladoresModelosRoutes from '../../routes/simuladores-modelos';
 
+type RelatoriosUsoResponse = {
+  data: {
+    por_simulador: Array<{ codigo: string }>;
+  };
+};
+
+type EquipamentosResponse = {
+  data: Array<{ nome: string }>;
+};
+
+type ModelosResponse = {
+  data: Array<{ codigo: string }>;
+};
+
 function normalizeSql(query: string): string {
   return query.replace(/\s+/g, ' ').trim();
 }
@@ -256,8 +270,8 @@ describe('simuladores optional auth tenant scoping', () => {
       {} as ExecutionContext,
     );
 
-    const jsonA = await tenantA.json();
-    const jsonB = await tenantB.json();
+    const jsonA = (await tenantA.json()) as RelatoriosUsoResponse;
+    const jsonB = (await tenantB.json()) as RelatoriosUsoResponse;
 
     expect(jsonA.data.por_simulador[0].codigo).toBe('SIM-11');
     expect(jsonB.data.por_simulador[0].codigo).toBe('SIM-22');
@@ -275,8 +289,8 @@ describe('simuladores optional auth tenant scoping', () => {
       {} as ExecutionContext,
     );
 
-    const jsonA = await tenantA.json();
-    const jsonB = await tenantB.json();
+    const jsonA = (await tenantA.json()) as EquipamentosResponse;
+    const jsonB = (await tenantB.json()) as EquipamentosResponse;
 
     expect(jsonA.data[0].nome).toBe('SIMULADOR-31');
     expect(jsonB.data[0].nome).toBe('SIMULADOR-44');
@@ -294,8 +308,8 @@ describe('simuladores optional auth tenant scoping', () => {
       {} as ExecutionContext,
     );
 
-    const jsonA = await tenantA.json();
-    const jsonB = await tenantB.json();
+    const jsonA = (await tenantA.json()) as ModelosResponse;
+    const jsonB = (await tenantB.json()) as ModelosResponse;
 
     expect(jsonA.data[0].codigo).toBe('MODELO-51');
     expect(jsonB.data[0].codigo).toBe('MODELO-62');

@@ -47,6 +47,13 @@ vi.mock('../../repositories/lmsRelatoriosRepository', () => ({
 
 import lmsRelatoriosRoutes from '../../routes/lms-relatorios';
 
+type LmsRelatorioResponse = {
+  success: boolean;
+  error?: string;
+  code?: string;
+  data?: unknown;
+};
+
 function createApp() {
   const app = new Hono<{ Bindings: Env }>();
   app.onError(errorHandler);
@@ -127,7 +134,7 @@ describe('lms relatorios repository contract', () => {
       authenticatedRequest('/api/lms/relatorios/conformidade', 77),
       env,
     );
-    const body = await response.json();
+    const body = (await response.json()) as LmsRelatorioResponse;
 
     expect(response.status).toBe(200);
     expect(body).toEqual({
@@ -157,7 +164,7 @@ describe('lms relatorios repository contract', () => {
       authenticatedRequest('/api/lms/relatorios/cursos-conformidade', 88),
       env,
     );
-    const body = await response.json();
+    const body = (await response.json()) as LmsRelatorioResponse;
 
     expect(response.status).toBe(200);
     expect(body).toEqual({
@@ -186,7 +193,7 @@ describe('lms relatorios repository contract', () => {
       authenticatedRequest('/api/lms/relatorios/expiracoes?dias=45', 77),
       env,
     );
-    const body = await response.json();
+    const body = (await response.json()) as LmsRelatorioResponse;
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
@@ -229,7 +236,7 @@ describe('lms relatorios repository contract', () => {
       new Request('http://localhost/api/lms/relatorios/conformidade'),
       env,
     );
-    const body = await response.json();
+    const body = (await response.json()) as LmsRelatorioResponse;
 
     expect(response.status).toBe(401);
     expect(body).toMatchObject({ success: false });
@@ -249,7 +256,7 @@ describe('lms relatorios repository contract', () => {
       authenticatedRequest('/api/lms/relatorios/conformidade', 0),
       env,
     );
-    const body = await response.json();
+    const body = (await response.json()) as LmsRelatorioResponse;
 
     expect(response.status).toBe(500);
     expect(body).toMatchObject({
@@ -270,7 +277,7 @@ describe('lms relatorios repository contract', () => {
       authenticatedRequest('/api/lms/relatorios/expiracoes', 77),
       env,
     );
-    const body = await response.json();
+    const body = (await response.json()) as LmsRelatorioResponse;
 
     expect(response.status).toBe(500);
     expect(body).toMatchObject({

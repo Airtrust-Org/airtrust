@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 
 type TableColumn = {
@@ -27,7 +28,7 @@ const prohibitedPatterns = [
 describe('migration 0388 documentos canonical schema', () => {
   const tempDirs: string[] = [];
   const migrationSql = readFileSync(
-    new URL('../../../migrations/0388_documentos_canonical_schema.sql', import.meta.url),
+    join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0388_documentos_canonical_schema.sql'),
     'utf8',
   );
 

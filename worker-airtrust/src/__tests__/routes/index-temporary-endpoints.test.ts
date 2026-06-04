@@ -45,7 +45,7 @@ function createHealthyEnv(): Env {
         first: vi.fn().mockResolvedValue({ test: 1 }),
       }),
     } as unknown as D1Database,
-  } as Env;
+  } as unknown as Env;
 }
 
 describe('index temporary production endpoints', () => {

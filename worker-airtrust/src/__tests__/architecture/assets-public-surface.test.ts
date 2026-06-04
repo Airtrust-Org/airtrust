@@ -1,10 +1,14 @@
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { classifyAssetAccess } from '../../routes/assets';
 
+const testDir = dirname(fileURLToPath(import.meta.url));
+
 describe('assets public surface architecture guard', () => {
   it('mantém política explícita deny-by-default para /api/assets/*', () => {
-    const source = readFileSync(new URL('../../routes/assets.ts', import.meta.url), 'utf8');
+    const source = readFileSync(join(testDir, '../../routes/assets.ts'), 'utf8');
     const classifyIndex = source.indexOf('const policy = classifyAssetAccess(key)');
     const bucketGetIndex = source.indexOf('await c.env.BUCKET.get(key)');
 

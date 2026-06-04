@@ -1,12 +1,13 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const scriptPath = fileURLToPath(
-  new URL('../../../../scripts/run-dq01-local-copy-backfill-apply.sh', import.meta.url),
+const scriptPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../scripts/run-dq01-local-copy-backfill-apply.sh',
 );
 
 const tempDirs: string[] = [];

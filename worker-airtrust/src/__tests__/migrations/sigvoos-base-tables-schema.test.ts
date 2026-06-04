@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 
 type TableRow = {
@@ -44,20 +45,21 @@ function normalizeSql(sql: string) {
 
 describe('migration 0387 sigvoos base tables schema', () => {
   const tempDirs: string[] = [];
+  const testDir = dirname(fileURLToPath(import.meta.url));
   const migrationSql = readFileSync(
-    new URL('../../../migrations/0387_integracoes_sigvoos_base_tables.sql', import.meta.url),
+    join(testDir, '../../../migrations/0387_integracoes_sigvoos_base_tables.sql'),
     'utf8',
   );
   const bootstrapSql = readFileSync(
-    new URL('../../../../scripts/bootstrap-new-environment.sql', import.meta.url),
+    join(testDir, '../../../../scripts/bootstrap-new-environment.sql'),
     'utf8',
   );
   const enrichmentSql = readFileSync(
-    new URL('../../../migrations/0352_sigvoos_frms_pendencias_e_enriquecimento.sql', import.meta.url),
+    join(testDir, '../../../migrations/0352_sigvoos_frms_pendencias_e_enriquecimento.sql'),
     'utf8',
   );
   const hardeningSql = readFileSync(
-    new URL('../../../migrations/0354_auditoria_critica_schema_hardening.sql', import.meta.url),
+    join(testDir, '../../../migrations/0354_auditoria_critica_schema_hardening.sql'),
     'utf8',
   );
   const migrationChainPrereqSql = `

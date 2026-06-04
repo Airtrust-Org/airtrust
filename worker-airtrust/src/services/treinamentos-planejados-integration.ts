@@ -303,11 +303,11 @@ async function upsertHistoricoPlanejadoForParticipante(
     );
   }
 
+  const normalizedExistingStatus = normalizeQualificationStatusForCompatibility(existing?.status);
   if (
     existing &&
-    [QUALIFICACAO_STATUS.CONCLUIDA, QUALIFICACAO_STATUS.RENOVADA].includes(
-      normalizeQualificationStatusForCompatibility(existing.status) || '',
-    )
+    (normalizedExistingStatus === QUALIFICACAO_STATUS.CONCLUIDA ||
+      normalizedExistingStatus === QUALIFICACAO_STATUS.RENOVADA)
   ) {
     await updateParticipanteHistoricoLink(db, evento.id, participante.funcionario_id, existing.id);
     return { historicoId: existing.id, changed: false };

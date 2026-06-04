@@ -894,7 +894,7 @@ async function processScormUpload(
 
   const sanitizedEntries = Object.entries(files)
     .map(([path, data]) => [sanitizeArchivePath(path), data] as const)
-    .filter((entry): entry is [string, Uint8Array] => entry[0] !== null);
+    .filter((entry): entry is readonly [string, Uint8Array<ArrayBuffer>] => entry[0] !== null);
 
   const prefix = `lms/scorm/${empresaId}/${cursoId}/`;
   const manifestKey = sanitizedEntries.find(
@@ -951,7 +951,7 @@ async function processH5pUpload(
 
   const sanitizedEntries = Object.entries(files)
     .map(([path, data]) => [sanitizeArchivePath(path), data] as const)
-    .filter((entry): entry is [string, Uint8Array] => entry[0] !== null);
+    .filter((entry): entry is readonly [string, Uint8Array<ArrayBuffer>] => entry[0] !== null);
 
   const prefix = `lms/h5p/${empresaId}/${cursoId}/`;
   let tipoH5p = 'CoursePresentation';

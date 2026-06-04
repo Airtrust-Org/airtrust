@@ -1,12 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const srcRoot = fileURLToPath(new URL('../../', import.meta.url));
-const bootstrapPath = fileURLToPath(
-  new URL('../../../../scripts/bootstrap-new-environment.sql', import.meta.url),
-);
+const testDir = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(testDir, '../..');
+const bootstrapPath = join(testDir, '../../../../scripts/bootstrap-new-environment.sql');
 
 const runtimeForbiddenPatterns = [
   /\bensureSigvoosTables\s*\(/,

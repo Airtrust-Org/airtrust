@@ -9,6 +9,8 @@
 > **Addendum 2026-06-04:** esta matriz continua sendo a fonte mestre dos streams principais do ciclo. Para higiene residual de repositório, governança documental e superfície pública remanescente, usar como fonte canônica complementar `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`.
 >
 > **Addendum 2026-06-04 — Block 4 Controlled Closure:** `0385_audit_events_v2.sql` foi aplicada com sucesso em `staging` sob gate, snapshot e rollback dedicados, enquanto o enforcement gradual de `RBAC/Suporte v2` entrou em escopo controlado nas rotas sensíveis de certificados/admin. Status canônicos correntes: `RBAC_SUPPORT_V2 = GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE` e `AUDIT_V2 = PARITY_VALIDATED_FOR_CONTROLLED_SCOPE`.
+>
+> **Addendum 2026-06-04 — Block 5 Product/Performance/Scale:** o baseline global `npx tsc --noEmit --pretty false` foi reconciliado para `PASS`; `test:worker` passou com `133` arquivos e `874` testes; staging foi validado em modo read-only por smoke publico e diagnostico D1 remoto sem mutation. Status canonicos: `PRODUCT_PERFORMANCE_SCALE = VALIDATED_IN_STAGING_FOR_CONTROLLED_SCOPE` e `VALIDATION_BASELINE = PASS`.
 
 ---
 
@@ -16,15 +18,15 @@
 
 Este documento consolida **todos os achados de auditoria** do AirTrust identificados entre 2026-05 e 2026-06, cobrindo 12 sprints e 2 auditorias gerais independentes (Opus). O objetivo é fornecer uma matriz única que permita leitura rápida do estado de cada achado: o que foi corrigido, o que permanece aberto, e o que exige condições especiais (migration, staging, GPT-5.5) para ser tratado.
 
-**Estado geral do AirTrust em 2026-06-04 após o fechamento controlado do Bloco 4:**
+**Estado geral do AirTrust em 2026-06-04 após o fechamento controlado do Bloco 5:**
 
 - **Nenhum P0 ativo.** O único P0 da auditoria original (reset admin cross-tenant) foi mitigado e testado.
 - **Nenhum P1 de código ativo.** FRMS fail-open, `escala_alocacoes` sem `empresa_id`, e scripts destrutivos foram mitigados — com residuais P2 operacionais e P3 estruturais.
-- **Pronto para piloto interno/controlado:** Sim, com condições (CONDITIONAL GO).
+- **Pronto para piloto interno/controlado:** Sim, com condições (CONDITIONAL GO) e staging read-only validado para produto/performance/scale no escopo controlado.
 - **Pronto para cliente externo amplo:** Não ainda. O escopo atual de `Audit v2` e `RBAC/Suporte v2` continua controlado e não amplo.
 - **Pronto para 5+ empresas:** Não. Requer remoção de `userId===1`, DDL runtime residual, status enum central, e observabilidade multiempresa.
 
-**Status consolidado:** o writer canônico `recordAuditEventV2()` segue preservando o legado via helper dual-write. Após as janelas controladas de `0389` e `0385` em `staging`, `Audit v2` já tem schema/paridade validados para escopo controlado e `RBAC/Suporte v2` já tem enforcement gradual ativo apenas nas rotas sensíveis selecionadas.
+**Status consolidado:** o writer canônico `recordAuditEventV2()` segue preservando o legado via helper dual-write. Após as janelas controladas de `0389` e `0385` em `staging`, `Audit v2` já tem schema/paridade validados para escopo controlado e `RBAC/Suporte v2` já tem enforcement gradual ativo apenas nas rotas sensíveis selecionadas. O bloco 5 fechou a reconciliacao do baseline TypeScript e validou produto/performance/scale em `staging` apenas no escopo read-only/controlado, sem teste de carga amplo.
 
 ---
 

@@ -11,6 +11,8 @@
 PRODUCT_PERFORMANCE_SCALE = MITIGATED_WITH_LOCAL_GUARDS_AND_SMOKE
 ```
 
+> **Addendum 2026-06-04 — Staging Validation:** o bloco seguinte validou este stream em `staging` no escopo controlado/read-only, reconciliou `npx tsc --noEmit --pretty false` para `PASS` e executou `test:worker` com `133` arquivos / `874` testes. Status corrente do ciclo: `PRODUCT_PERFORMANCE_SCALE = VALIDATED_IN_STAGING_FOR_CONTROLLED_SCOPE`; load test amplo permanece fora do escopo.
+
 Leitura correta do status:
 - houve mitigação local relevante com guards e smoke tests em rotas críticas;
 - não houve medição real de latência/carga em staging;

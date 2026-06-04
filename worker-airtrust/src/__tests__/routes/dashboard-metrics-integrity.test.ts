@@ -33,6 +33,20 @@ vi.mock('../../services/dashboardService', () => ({
 
 import dashboardRoutes from '../../routes/dashboard';
 
+type DashboardMetricBody = {
+  success: boolean;
+  data: {
+    total_ativas: number;
+    validas: number;
+    a_vencer_30_dias: number;
+    vencidas: number;
+    renovadas?: number;
+    planejadas?: number;
+    por_categoria?: Array<{ categoria: string; total: number }>;
+    por_tipo?: Array<{ tipo: string; total: number }>;
+  };
+};
+
 function createApp() {
   const app = new Hono<{ Bindings: Env }>();
   app.route('/dashboard', dashboardRoutes);
@@ -144,7 +158,7 @@ describe('dashboard metrics integrity routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toContain('no-store');
-    const body = await response.json();
+    const body = (await response.json()) as DashboardMetricBody;
     expect(body).toMatchObject({
       success: true,
       data: {
@@ -193,7 +207,7 @@ describe('dashboard metrics integrity routes', () => {
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = (await response.json()) as DashboardMetricBody;
     expect(body).toMatchObject({
       success: true,
       data: {

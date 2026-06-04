@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 type TableColumn = {
@@ -64,7 +65,7 @@ describe('migration 0385 audit_events_v2 schema', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-audit-events-v2-'));
   const databasePath = join(tempDir, 'schema.sqlite');
   const migrationSql = readFileSync(
-    new URL('../../../migrations/0385_audit_events_v2.sql', import.meta.url),
+    join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0385_audit_events_v2.sql'),
     'utf8',
   );
 
