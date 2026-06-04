@@ -31,9 +31,11 @@
 | `PRODUCT_PERFORMANCE_SCALE` | `VALIDATED_IN_STAGING_FOR_CONTROLLED_SCOPE` |
 | `RES-03` | `ACCEPTED_LOW_RISK_DOCUMENTED` |
 | `PRODUCTION_SCHEMA_STATE` | `VERIFIED_MISSING_AUDIT_RBAC_SCHEMA` |
-| `AUTHENTICATED_SMOKE` | `BLOCKED_BY_MISSING_EPHEMERAL_CREDENTIAL` |
+| `AUTHENTICATED_SMOKE` | `PASS` |
 | `PRE_RELEASE_PRODUCT_FIXES` | `COMPLETE` |
-| `RELEASE_GATE` | `READY_FOR_CONTROLLED_RELEASE_PENDING_FINAL_SMOKE_RECHECK` |
+| `RELEASE_GATE` | `READY_FOR_CONTROLLED_RELEASE` |
+| `AIRTRUST_RELEASE` | `DEPLOYED_AND_VALIDATED_FOR_CONTROLLED_SCOPE` |
+| `AIRTRUST_AUDIT_HARDENING_CYCLE` | `CLOSED_WITH_ACCEPTED_RESIDUALS` |
 
 ## 2. Documentos canônicos atuais
 
@@ -62,6 +64,7 @@ Use estes documentos como fonte primária para status atual:
 | `docs/AIRTRUST_AUDIT_DOCS_INDEX_v0_5.md` | este índice |
 | `docs/AIRTRUST_RELEASE_GATE_RESIDUAL_RECONCILIATION_v0_5.md` | reconciliação do release gate: schema de produção verificado, residuais LOW aceitos, condições para deploy controlado |
 | `docs/AIRTRUST_PRE_RELEASE_PRODUCT_FIX_PACK_v0_5.md` | fix pack funcional pré-release: e-mail de sessão, agenda semanal, fadiga diária, impressão A4 e Pasta 360 |
+| `docs/AIRTRUST_CONTROLLED_RELEASE_EXECUTION_RESULT_v0_5.md` | resultado do deploy controlado: baseline pré-deploy, smokes, deploy Worker-only, smoke pós-deploy, status final |
 
 ## 3. Documentos de readiness e execution gates
 
@@ -117,5 +120,7 @@ Estes documentos continuam úteis como trilha de auditoria, mas não devem ser u
 1. ✅ Reauditoria final Opus / release gate do ciclo — `RELEASE_GATE = READY_FOR_CONTROLLED_RELEASE` (2026-06-04).
 2. ✅ Smoke autenticado com credencial efêmera — `AUTHENTICATED_SMOKE = PASS` (PASS=11, FAIL=0, SKIPPED=2, 2026-06-04 Bloco 6.2).
 3. ✅ Product Fix Pack pré-release — `PRE_RELEASE_PRODUCT_FIXES = COMPLETE` (2026-06-04).
-4. **Controlled Release / Deploy Gate Execution** — próximo bloco: snapshot pré-deploy, approval nominal, deploy Worker, smoke final público + autenticado read-only e smoke pós-deploy.
-5. Ampliar o enforcement gradual de `RBAC/Suporte v2` somente após nova validação operacional controlada (post-release).
+4. ✅ **Controlled Release Execution** — `AIRTRUST_RELEASE = DEPLOYED_AND_VALIDATED_FOR_CONTROLLED_SCOPE` (2026-06-04). Versão `2026-06-04T22:35:19Z-d371fd9`, deploy Worker-only, smoke pós-deploy PASS. `AIRTRUST_AUDIT_HARDENING_CYCLE = CLOSED_WITH_ACCEPTED_RESIDUALS`.
+5. Monitorar produção (24-48h) — sem ação necessária se nenhum erro crítico.
+6. Enforcement de `RBAC/Suporte v2` em produção — janela separada de apply da `0389` (post-release, não urgente).
+7. Ampliar `Audit v2` dual-write em produção — janela controlada futura.
