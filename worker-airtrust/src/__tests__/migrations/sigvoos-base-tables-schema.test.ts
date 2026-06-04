@@ -25,10 +25,21 @@ const prohibitedPatterns = [
   /\bUPSERT\b/i,
 ];
 
+function normalizeSql(sql: string) {
+  return sql
+    .replace(/--.*$/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 describe('migration 0387 sigvoos base tables schema', () => {
   const tempDirs: string[] = [];
   const migrationSql = readFileSync(
     new URL('../../../migrations/0387_integracoes_sigvoos_base_tables.sql', import.meta.url),
+    'utf8',
+  );
+  const bootstrapSql = readFileSync(
+    new URL('../../../../scripts/bootstrap-new-environment.sql', import.meta.url),
     'utf8',
   );
   const enrichmentSql = readFileSync(
@@ -309,5 +320,92 @@ describe('migration 0387 sigvoos base tables schema', () => {
     for (const pattern of prohibitedPatterns) {
       expect(migrationSql).not.toMatch(pattern);
     }
+  });
+
+  it('keeps the new-environment bootstrap aligned with the 0387 base-table DDL', () => {
+    expect(normalizeSql(bootstrapSql)).toBe(normalizeSql(migrationSql));
+  });
+
+  it('lets 0354 pass when the bootstrap runs before historical migrations', () => {
+    const { sqlite, queryJson } = createDb();
+
+    sqlite(`
+      ${migrationChainPrereqSql}
+      ${bootstrapSql}
+      ${hardeningSql}
+    `);
+
+    expect(queryJson<TableColumn>('PRAGMA table_info(integracoes_sigvoos_config);').map(({ name }) => name)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'empresa_id',
+        'chave',
+        'valor',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+        'notificar_falha_email',
+      ]),
+    );
+  });
+
+  it('replays bootstrap + 0352 + 0354 + 0387 locally without seed data or remote D1', () => {
+    const { sqlite, queryJson } = createDb();
+
+    sqlite(`
+      ${migrationChainPrereqSql}
+      ${bootstrapSql}
+      ${enrichmentSql}
+      ${hardeningSql}
+      ${migrationSql}
+    `);
+
+    const tables = queryJson<TableRow>(
+      `SELECT name
+         FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN (
+            'integracoes_sigvoos_config',
+            'integracoes_sigvoos_eventos',
+            'integracoes_sigvoos_mapeamentos',
+            'sigvoos_mapeamento_manual',
+            'frms_jornada_pendente'
+          )
+        ORDER BY name;`,
+    ).map(({ name }) => name);
+
+    expect(tables).toEqual([
+      'frms_jornada_pendente',
+      'integracoes_sigvoos_config',
+      'integracoes_sigvoos_eventos',
+      'integracoes_sigvoos_mapeamentos',
+      'sigvoos_mapeamento_manual',
+    ]);
+
+    expect(
+      queryJson<TableColumn>('PRAGMA table_info(integracoes_sigvoos_config);').map(({ name }) => name),
+    ).toContain('notificar_falha_email');
+
+    expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_config;')).toBe('0');
+    expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_eventos;')).toBe('0');
+    expect(sqlite('SELECT COUNT(*) FROM integracoes_sigvoos_mapeamentos;')).toBe('0');
+  });
+
+  it('is idempotent when the bootstrap script runs twice before the historical chain', () => {
+    const { sqlite, queryJson } = createDb();
+
+    sqlite(`
+      ${migrationChainPrereqSql}
+      ${bootstrapSql}
+      ${bootstrapSql}
+      ${hardeningSql}
+    `);
+
+    expect(queryJson<IndexRow>('PRAGMA index_list(integracoes_sigvoos_config);').map(({ name }) => name)).toContain(
+      'idx_integracoes_sigvoos_config_empresa_chave',
+    );
+    expect(
+      queryJson<TableColumn>('PRAGMA table_info(integracoes_sigvoos_config);').map(({ name }) => name),
+    ).toContain('notificar_falha_email');
   });
 });

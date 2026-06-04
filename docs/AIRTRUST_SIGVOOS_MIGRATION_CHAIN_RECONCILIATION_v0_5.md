@@ -25,7 +25,7 @@ O resultado desta sprint é um documento de decisão que:
 | Métrica | Valor |
 |---|---|
 | 0387 aplicada em produção | Sim (Sprint R04.5, via fila pendente) |
-| Status R01 | `0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION` |
+| Status R01 | `BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE` |
 | Fallback runtime | `ensureSigvoosTables()` preservado |
 | Teste de prova local | 8/8 PASS (`sigvoos-base-tables-schema.test.ts`) |
 | Migration nova criada nesta sprint | Não |
@@ -99,6 +99,8 @@ Prova local (dois testes em `sigvoos-base-tables-schema.test.ts`):
 
 **Conclusão:** o fallback permanece necessário enquanto a cadeia limpa não estiver reconciliada.
 
+> **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** a reconciliação local da cadeia ganhou um bootstrap operacional explícito para ambiente novo: `scripts/bootstrap-new-environment.sql`. O replay sem bootstrap continua falhando em `0354`, mas o replay com bootstrap agora atravessa `0354` localmente e mantém `0387` idempotente depois. `ensureSigvoosTables()` continua preservado. Novo status consolidado: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
+
 ---
 
 ## 8. Opções consideradas
@@ -120,7 +122,7 @@ Prova local (dois testes em `sigvoos-base-tables-schema.test.ts`):
 ## 9. Decisão recomendada
 
 ```
-R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED
+R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE
 ```
 
 **Classificação consolidada:**
@@ -134,10 +136,8 @@ R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED
 
 ## 10. Próximos passos
 
-1. Definir fase própria `R01-baseline` para:
-   - Criar migration de bootstrap idempotente para `integracoes_sigvoos_config` antes de `0354` (ex. baseline numerado atrás de `0354`); ou
-   - Adotar estratégia de provisionamento separado para ambientes novos que aplique as tabelas SIGVOOS antes da cadeia principal.
-2. Validar que a cadeia nova passa em ambiente limpo (teste local já existe).
+1. Validar o bootstrap já criado (`scripts/bootstrap-new-environment.sql`) em ambiente aprovado para provisionamento de ambiente novo.
+2. Confirmar que a cadeia nova passa em ambiente limpo (teste local já existe).
 3. Só então planejar remoção de `ensureSigvoosTables()`.
 4. Não editar `0354` sem análise de impacto operacional e validação em staging.
 5. Não remover `ensureSigvoosTables()` sem cadeia reconciliada.
@@ -159,4 +159,4 @@ R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED
 
 ---
 
-**Fim do documento.** Gerado em 2026-06-03. Sprint R01 Chain Reconciliation — docs/readiness/test-only.
+**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure — bootstrap local implementado e status avançado para **`BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.

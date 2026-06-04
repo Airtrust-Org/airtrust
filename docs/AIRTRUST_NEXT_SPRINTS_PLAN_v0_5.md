@@ -312,7 +312,7 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente na Sprint X.5:** DDL runtime remanescente na época: R04 (Documentos) = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5). **Nota: R04 bootstrap foi removido na Sprint R04.6** — status atual: RESOLVED. R01 (SIGVOOS) = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION (ativo). R09 = RESOLVED.
+- **Pendente na Sprint X.5:** DDL runtime remanescente na época: R04 (Documentos) = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5). **Nota: R04 bootstrap foi removido na Sprint R04.6** — status atual: RESOLVED. R01 (SIGVOOS) evoluiu depois para `BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE` (ativo). R09 = RESOLVED.
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
 
 ### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
@@ -460,7 +460,7 @@
   - Doc de decisão criado: `docs/AIRTRUST_SIGVOOS_MIGRATION_CHAIN_RECONCILIATION_v0_5.md`.
   - 10 docs de readiness/design/plan/matrix atualizados com addendum.
 - **Sem:** migration nova, D1 remoto, deploy, alteração de runtime, alteração de schema, backfill, dados reais.
-- **Próxima fase:** R01-baseline — criar migration de bootstrap idempotente para `integracoes_sigvoos_config` antes de `0354` e reconciliar cadeia limpa.
+- **Próxima fase:** R01-baseline — criar bootstrap local para `integracoes_sigvoos_*` antes de `0354` e reconciliar cadeia limpa.
 - **Modelo recomendado:** Sonnet 4.6 (docs/analysis-only); Opus para a fase de baseline design.
 
 ### Sprint R01.1 — SIGVOOS Baseline Strategy ✅ CONCLUIDO
@@ -477,6 +477,19 @@
 - **Sem:** migration nova, D1 remoto, deploy, alteração de runtime, alteração de schema, backfill, dados reais.
 - **Próxima fase:** R01-bootstrap — criar `scripts/bootstrap-new-environment.sql` e documentar processo de novo ambiente.
 - **Modelo recomendado:** Sonnet 4.6 (docs/bootstrap script); Opus 4.x para staging gate e remoção do fallback.
+
+### Sprint R01.2 — SIGVOOS Bootstrap + Replay Closure ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** entregar o pacote completo para ambientes novos sem editar migrations históricas: bootstrap SQL, runbook operacional e prova local de replay.
+- **Entregue:**
+  - `scripts/bootstrap-new-environment.sql` criado com DDL puro para `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos` e `integracoes_sigvoos_mapeamentos`, sem dados reais, sem backfill, sem tenant real e sem secrets.
+  - Documento operacional criado: `docs/AIRTRUST_SIGVOOS_R01_NEW_ENVIRONMENT_BOOTSTRAP_AND_REPLAY_CLOSURE_v0_5.md`.
+  - Teste local ampliado em `sigvoos-base-tables-schema.test.ts`, provando que: sem bootstrap, o replay limpo falha na `0354`; com bootstrap, a cadeia atravessa `0354`; o bootstrap é idempotente; e o fluxo não depende de dados reais nem de D1 remoto.
+  - Docs de strategy/readiness/matrix/closure/roadmap atualizados para refletir o novo estado.
+  - `ensureSigvoosTables()` preservado; nenhum call site alterado; nenhuma migration histórica editada; nenhuma migration nova criada.
+- **Sem:** D1 remoto, deploy, backfill, alteração de runtime, alteração de auth/RBAC/tenant, alteração de R2.
+- **Status final de R01 nesta sprint:** `BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`.
+- **Próxima fase:** R01-staging/new-environment gate — executar o bootstrap + cadeia histórica em ambiente novo aprovado antes de propor a remoção do fallback runtime.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
@@ -558,7 +571,7 @@
 | R09 | ~~R09 Readiness / Verification~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | GPT-5.4 DeepSeek | Sim (DDL removido) | Nao (sem migration) |
 | R04.6 | Documentos Bootstrap Removal ✅ | Concluído (2026-06-03) | GPT-5.5 | Pendente (deploy + smoke) | Nao (0388 ja aplicada) |
 | R04.7 | Deploy Worker/API + Smoke ✅ | Concluído (2026-06-04) | GPT-5.5 | Sim (APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9) | Nao |
-| Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |
+| Z | SIGVOOS Staging / New Environment Gate | Medio prazo | GPT-5.5 | Nao ate gate aprovado | Nao |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
 | AC | Repository Pattern Expansao | Longo prazo | GPT-5.4 | Sim | Nao |
@@ -569,4 +582,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)** e **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo, `ensureSigvoosTables()` preservado, próxima fase: R01-bootstrap)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-04 com Sprint X.5 closure (R03=RESOLVED), Sprint R04.5 (apply oficial `0387`+`0388`), Sprint R04.6 (bootstrap documentos removido), **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**, **Sprint R01 Chain Reconciliation (achado formalizado, R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED)**, **Sprint R01 Baseline Strategy (estratégia definida: bootstrap-new-environment.sql curto prazo, squash/rebaseline longo prazo, `ensureSigvoosTables()` preservado)** e **Sprint R01.2 Bootstrap + Replay Closure (bootstrap criado, replay provado localmente, R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE, próxima fase: R01-staging/new-environment gate)**.

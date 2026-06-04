@@ -10,9 +10,11 @@
 
 ## 1. Objetivo
 
-Mapear integralmente o escopo de `ensureSigvoosTables()` (R01) e registrar o estado pós-apply da `0387` em produção para preparar sua remoção futura do runtime DDL residual. A reconciliação da cadeia `0354 -> 0387` continua pendente.
+Mapear integralmente o escopo de `ensureSigvoosTables()` (R01), registrar o estado pós-apply da `0387` em produção e consolidar a estratégia local de bootstrap para preparar a remoção futura do runtime DDL residual. A reconciliação final da cadeia `0354 -> 0387` ainda depende de gate em ambiente novo aprovado.
 
-> **Addendum pós-apply em produção (2026-06-03):** a tentativa de aplicar apenas `0388_documentos_canonical_schema.sql` via mecanismo oficial `Cloudflare D1 migrations apply` consumiu a fila pendente completa e aplicou também `0387_integracoes_sigvoos_base_tables.sql`. Registrar como **`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`**. Resultado: `0387` está aplicada em produção, mas isso **não** corrige a cadeia limpa, porque `0354_auditoria_critica_schema_hardening.sql` continua historicamente anterior à `0387` e ainda depende da existência prévia de `integracoes_sigvoos_config`. Novo status consolidado: **`R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`**.
+> **Addendum pós-apply em produção (2026-06-03):** a tentativa de aplicar apenas `0388_documentos_canonical_schema.sql` via mecanismo oficial `Cloudflare D1 migrations apply` consumiu a fila pendente completa e aplicou também `0387_integracoes_sigvoos_base_tables.sql`. Registrar como **`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`**. Resultado: `0387` está aplicada em produção, mas isso **não** corrige a cadeia limpa, porque `0354_auditoria_critica_schema_hardening.sql` continua historicamente anterior à `0387` e ainda depende da existência prévia de `integracoes_sigvoos_config`. Status consolidado naquela fase: **`R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`**.
+>
+> **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** `scripts/bootstrap-new-environment.sql` foi criado para ambientes novos, contendo apenas o DDL base de `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos` e `integracoes_sigvoos_mapeamentos` + 4 índices. O teste local de migrations foi estendido para provar que o replay sem bootstrap falha em `0354`, enquanto o replay com bootstrap atravessa `0354` localmente, sem D1 remoto e sem dados reais. `ensureSigvoosTables()` segue preservado. Novo status consolidado: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
 
 ---
 
@@ -27,8 +29,8 @@ Mapear integralmente o escopo de `ensureSigvoosTables()` (R01) e registrar o est
 | Call sites (total) | 10 |
 | Call sites em rotas | 2 (`worker-airtrust/src/routes/integracoes_sigvoos.ts:374,600`) |
 | Call sites em serviços | 8 (`worker-airtrust/src/services/sigvoos-frms.ts:625,802,852,914,948,1045,2238,2500`) |
-| Status na matriz | 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION |
-| Status nesta sprint | 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION |
+| Status na matriz | BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE |
+| Status nesta sprint | BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE |
 
 ---
 
@@ -331,6 +333,8 @@ Inventário completo. Lacunas documentadas. Nenhuma ação de código.
 
 **Status consolidado após o apply oficial em produção:** `R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`.
 
+**Status consolidado após o bootstrap local e replay closure:** `R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`.
+
 ### Próxima fase (Z1): Criar migration + teste local
 
 **Migration proposta:** `0387_integracoes_sigvoos_base_tables.sql`
@@ -486,4 +490,6 @@ Reverter o commit que removeu/reduziu `ensureSigvoosTables()`. A função é ide
 
 **Addendum Sprint R01 Baseline Strategy (2026-06-03):** estratégia de resolução definida. Opção A (editar 0354) rejeitada. Opção B (0389 isolada) insuficiente para replay limpo. Decisão curto prazo: criar `scripts/bootstrap-new-environment.sql` com tabelas SIGVOOS base para novos ambientes executarem antes das migrations históricas. Decisão longo prazo: squash/rebaseline em sprint arquitetural. `ensureSigvoosTables()` preservado até bootstrap validado e condições da Seção 9 atendidas. Doc de estratégia: `docs/AIRTRUST_SIGVOOS_R01_BASELINE_STRATEGY_v0_5.md`.
 
-**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1, Z1.1, pós-apply oficial em produção, Sprint R01 Chain Reconciliation e Sprint R01 Baseline Strategy (2026-06-03). Status: R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED. `ensureSigvoosTables()` preservado. Próxima fase: R01-bootstrap.
+**Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** bootstrap criado em `scripts/bootstrap-new-environment.sql`; documentação operacional criada em `docs/AIRTRUST_SIGVOOS_R01_NEW_ENVIRONMENT_BOOTSTRAP_AND_REPLAY_CLOSURE_v0_5.md`; teste local estendido para provar replay sem bootstrap (FAIL em `0354`) vs replay com bootstrap (PASS atravessando `0354`). Nenhuma migration histórica editada, nenhuma migration nova criada, nenhum D1 remoto executado, nenhum deploy feito. **R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE.**
+
+**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1, Z1.1, pós-apply oficial em produção, Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy e Sprint R01 Bootstrap + Replay Closure (2026-06-04). Status atual: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**. `ensureSigvoosTables()` preservado. Próxima fase: R01-staging/new-environment gate.

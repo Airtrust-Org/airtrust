@@ -4,13 +4,15 @@
 **Sprint:** R01 Baseline Strategy
 **Branch:** `main`
 **HEAD:** `014b5921277fc864634e40f116a9d3b45c9e645e`
-**Modo:** docs/analysis-only. Sem D1 remoto. Sem migration nova aplicada. Sem deploy. Sem alteração de runtime SIGVOOS.
+**Modo:** docs/script/test local-only. Sem D1 remoto. Sem migration nova aplicada. Sem deploy. Sem alteração de runtime SIGVOOS.
 
 ---
 
 ## 1. Objetivo
 
-Definir a estratégia segura para resolver o bloqueio de replay limpo da cadeia `0354 → 0387` sem alterar migrations históricas, sem modificar runtime, sem deploy e sem afetar produção atual.
+Definir e fechar localmente a estratégia segura para resolver o bloqueio de replay limpo da cadeia `0354 → 0387` sem alterar migrations históricas, sem modificar runtime, sem deploy e sem afetar produção atual.
+
+> **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** o arquivo `scripts/bootstrap-new-environment.sql` foi criado com as 3 tabelas SIGVOOS base e 4 índices necessários antes da `0354`. O teste local `worker-airtrust/src/__tests__/migrations/sigvoos-base-tables-schema.test.ts` passou a provar explicitamente: (1) replay limpo sem bootstrap falha em `0354`; (2) replay com bootstrap atravessa `0354`; (3) bootstrap é idempotente; (4) bootstrap não exige dados reais; (5) bootstrap não depende de D1 remoto. `ensureSigvoosTables()` foi preservado. Novo status consolidado: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
 
 ---
 
@@ -18,10 +20,11 @@ Definir a estratégia segura para resolver o bloqueio de replay limpo da cadeia 
 
 | Métrica | Valor |
 |---|---|
-| R01 status | `MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED` |
+| R01 status | `BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE` |
 | 0387 aplicada em produção | Sim (Sprint R04.5, via fila pendente oficial) |
 | Produção atual | Mitigada — schema correto, `ensureSigvoosTables()` é no-op eficaz |
 | Replay limpo | Quebrado — `0354` falha com `no such table: integracoes_sigvoos_config` |
+| Bootstrap de novo ambiente | Implementado localmente em `scripts/bootstrap-new-environment.sql` |
 | `ensureSigvoosTables()` | Preservado — necessário para qualquer ambiente novo |
 | Call sites | 10 (8 em `sigvoos-frms.ts:625,802,852,914,948,1045,2238,2500`; 2 em `integracoes_sigvoos.ts:374,600`) |
 | Migrations históricas tocadas nesta sprint | Nenhuma |
@@ -80,7 +83,7 @@ Uma nova migration posterior (ex. 0389) com `CREATE TABLE IF NOT EXISTS integrac
 | A — Editar `0354` para tornar o ALTER condicional | **REJEITAR** | `0354` é migration histórica já aplicada em produção. Editar o arquivo altera rastreabilidade sem alterar o schema real. Gera inconsistência entre o arquivo e o estado aplicado. Pode quebrar ferramentas de verificação de integridade de migrations. | Alto |
 | B — Criar nova migration 0389 com `CREATE TABLE IF NOT EXISTS` | **INSUFICIENTE COMO SOLUÇÃO ISOLADA** | Não corrige replay limpo: `0354` ainda falha antes de `0389` ser alcançada. Útil apenas como complemento a outras estratégias (ex. squash). | Médio — gera falsa sensação de resolução |
 | C — Manter `ensureSigvoosTables()` como fallback | **ACEITAR TEMPORARIAMENTE** | Protege produção e ambientes existentes. Não resolve replay limpo, mas evita regressão enquanto a estratégia definitiva não está pronta. | Baixo operacionalmente; mantém DDL runtime residual |
-| D — Criar script de bootstrap para novos ambientes | **RECOMENDAR (curto prazo)** | Um script `scripts/bootstrap-new-environment.sql` que aplica as tabelas SIGVOOS base antes da cadeia histórica. Novos ambientes executam o bootstrap primeiro, depois aplicam migrations. Não altera nenhum arquivo histórico. | Baixo — aditivo, documentado, separado da cadeia |
+| D — Criar script de bootstrap para novos ambientes | **IMPLEMENTADA NESTA FASE** | `scripts/bootstrap-new-environment.sql` aplica as tabelas SIGVOOS base antes da cadeia histórica. Novos ambientes executam o bootstrap primeiro, depois aplicam migrations. Não altera nenhum arquivo histórico. | Baixo — aditivo, documentado, separado da cadeia |
 | E — Squash/rebaseline de migrations | **RECOMENDAR (longo prazo)** | Criar uma migration "baseline" representando o schema canônico atual, para uso em ambientes novos em vez da cadeia completa. Resolve definitivamente o replay. Requer fase arquitetural própria, validação extensiva e aprovação operacional. | Alto de planejamento; zero de risco para produção atual |
 
 ---
@@ -88,14 +91,14 @@ Uma nova migration posterior (ex. 0389) com `CREATE TABLE IF NOT EXISTS integrac
 ## 7. Decisão recomendada
 
 ```
-R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED
+R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE
 ```
 
 **Ações recomendadas, nesta ordem:**
 
-1. **Curto prazo (sem migration, sem deploy):** criar `scripts/bootstrap-new-environment.sql` com as tabelas SIGVOOS base (idêntico ao conteúdo de `0387`) e documentar que todo novo ambiente deve executar esse script antes da cadeia histórica. Atualiza o `README` ou `CLAUDE.md` sobre provisionamento de novos ambientes.
+1. **Curto prazo concluído:** `scripts/bootstrap-new-environment.sql` foi criado com as tabelas SIGVOOS base (alinhado ao conteúdo de `0387`) e a documentação operacional desta fase registra que todo novo ambiente deve executar esse script antes da cadeia histórica.
 
-2. **Médio prazo (sprint dedicada):** definir processo formal de "novo ambiente SIGVOOS": script de bootstrap aplicado primeiro, depois migrations em ordem. Validar localmente com teste de replay limpo completo.
+2. **Próximo gate (sprint dedicada):** validar o processo formal de "novo ambiente SIGVOOS" em ambiente aprovado: bootstrap primeiro, depois migrations em ordem. A prova local de replay já existe.
 
 3. **Longo prazo (sprint arquitetural):** squash/rebaseline de migrations — criar snapshot canônico do schema atual numerado como `N_baseline.sql` para ser usado como ponto de partida em novos ambientes, eliminando a necessidade de replay de toda a cadeia histórica.
 
@@ -109,7 +112,7 @@ R01 = MIGRATION_APPLIED_CHAIN_RECONCILIATION_REQUIRED
 
 ### Curto prazo: script de bootstrap
 
-Criar (em sprint futura autorizada):
+Implementado nesta fase:
 ```
 scripts/bootstrap-new-environment.sql
 ```
@@ -174,12 +177,13 @@ Enquanto qualquer uma dessas condições não for atendida, **`ensureSigvoosTabl
 `worker-airtrust/src/__tests__/architecture/no-runtime-ddl-hot-paths.test.ts`:
 - `services/sigvoos-frms.ts` em `DOCUMENTED_EXCEPTIONS` — trava que o fallback runtime está explicitamente documentado.
 
-### A criar (em sprint futura de bootstrap)
+### Implementado nesta fase
 
-Após criação do `scripts/bootstrap-new-environment.sql`:
+No `sigvoos-base-tables-schema.test.ts`:
 ```
-sigvoos-base-tables-schema.test.ts — adicionar caso:
-  "bootstrap script + migrations in order passes a clean chain replay"
+- "lets 0354 pass when the bootstrap runs before historical migrations"
+- "replays bootstrap + 0352 + 0354 + 0387 locally without seed data or remote D1"
+- "is idempotent when the bootstrap script runs twice before the historical chain"
 ```
 
 ---
@@ -201,12 +205,12 @@ sigvoos-base-tables-schema.test.ts — adicionar caso:
 
 | Fase | Ação | Pré-condição | Modelo |
 |---|---|---|---|
-| R01-bootstrap | Criar `scripts/bootstrap-new-environment.sql` e documentar processo de novo ambiente | Aprovação do escopo; nenhuma migration nova; apenas script + docs | Sonnet 4.6 |
-| R01-replay-test | Estender `sigvoos-base-tables-schema.test.ts` para validar replay com bootstrap | bootstrap criado e aprovado | Sonnet 4.6 |
+| R01-bootstrap | Criar `scripts/bootstrap-new-environment.sql` e documentar processo de novo ambiente | ✅ CONCLUÍDO nesta fase | Codex GPT-5 |
+| R01-replay-test | Estender `sigvoos-base-tables-schema.test.ts` para validar replay com bootstrap | ✅ CONCLUÍDO nesta fase | Codex GPT-5 |
 | R01-staging-gate | Validar bootstrap em staging com replay local + probe schema | replay-test PASS | Opus 4.x |
 | R01-remove-fallback | Remover `ensureSigvoosTables()` do runtime | Todas as condições da Seção 9 atendidas | Opus 4.x |
 | R01-squash (longo prazo) | Criar schema baseline canônico para novos ambientes | Sprint arquitetural própria | Opus 4.x |
 
 ---
 
-**Fim do documento.** Gerado em 2026-06-03. Sprint R01 Baseline Strategy — docs/analysis-only.
+**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure — script local criado, replay local comprovado e **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
