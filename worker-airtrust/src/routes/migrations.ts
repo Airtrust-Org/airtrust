@@ -7,8 +7,19 @@ const app = new Hono<{ Bindings: Env }>();
  * POST /api/migrations/fix-integer-ids
  * Executa migração para converter TEXT IDs → INTEGER IDs
  * CRÍTICO: Preserva todos os dados e relações
+ * Disabled by default — set ENABLE_MANUAL_MIGRATIONS=true in .dev.vars only.
  */
 app.post('/fix-integer-ids', async (c) => {
+  if (c.env.ENABLE_MANUAL_MIGRATIONS !== 'true') {
+    return c.json(
+      {
+        success: false,
+        error:
+          'Migration endpoints are disabled. Set ENABLE_MANUAL_MIGRATIONS=true in .dev.vars to enable in local environments only.',
+      },
+      403,
+    );
+  }
   const db = c.env.DB;
 
   try {

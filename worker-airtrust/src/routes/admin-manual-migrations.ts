@@ -3,7 +3,22 @@ import type { Env } from '../types';
 
 const app = new Hono<{ Bindings: Env }>();
 
+// Guard helper — fail-closed for all historical one-off migration endpoints.
+// These execute destructive DDL (DROP/recreate tables). Never enable in production.
+function requireManualMigrationsEnabled(c: { env: Env }) {
+  if (c.env.ENABLE_MANUAL_MIGRATIONS !== 'true') {
+    return {
+      success: false,
+      error:
+        'Manual migration endpoints are disabled. Set ENABLE_MANUAL_MIGRATIONS=true in .dev.vars to enable in local environments only.',
+    } as const;
+  }
+  return null;
+}
+
 app.post('/apply-migration-0133', async (c) => {
+  const gate = requireManualMigrationsEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
 
   try {
@@ -117,6 +132,8 @@ app.post('/apply-migration-0133', async (c) => {
 });
 
 app.post('/apply-migration-0134', async (c) => {
+  const gate = requireManualMigrationsEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
 
   try {
@@ -217,6 +234,8 @@ app.post('/apply-migration-0134', async (c) => {
 });
 
 app.post('/apply-migration-0135', async (c) => {
+  const gate = requireManualMigrationsEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
 
   try {
@@ -259,6 +278,8 @@ app.post('/apply-migration-0135', async (c) => {
 });
 
 app.get('/debug-funcionarios-old', async (c) => {
+  const gate = requireManualMigrationsEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
 
   try {
@@ -298,6 +319,8 @@ app.get('/debug-funcionarios-old', async (c) => {
 });
 
 app.post('/apply-migration-0136', async (c) => {
+  const gate = requireManualMigrationsEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
 
   try {

@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
+import { getTenantContext } from '../middleware/tenant';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -21,6 +22,7 @@ app.use('*', auth(), requireRole('admin'));
 app.get('/', async (c) => {
   try {
     const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
     const schemaInfo = await db.prepare("PRAGMA table_info('qualificacoes_historico')").all();
     const schemaColumns = new Set(
       (schemaInfo.results || []).map((row) => String((row as { name?: string }).name || '')),
@@ -36,6 +38,11 @@ app.get('/', async (c) => {
       ? 'renovacao_de IS NOT NULL'
       : hasRenovada
         ? 'COALESCE(renovada, 0) = 1'
+        : '0 = 1';
+    const vinculoExprQh = hasRenovacaoDe
+      ? 'qh.renovacao_de IS NOT NULL'
+      : hasRenovada
+        ? 'COALESCE(qh.renovada, 0) = 1'
         : '0 = 1';
 
     const cpfsQuery = c.req.query('cpfs') || '';
@@ -101,20 +108,21 @@ app.get('/', async (c) => {
     const { results: funcionarios } = await db
       .prepare(
         `
-      SELECT 
+      SELECT
         f.cpf,
         f.nome,
         f.codigo_anac,
-        CASE 
+        CASE
           WHEN f.deleted_at IS NOT NULL THEN 'DELETADO'
           ELSE 'OK'
         END AS status
       FROM funcionarios f
-      WHERE f.cpf IN (${cpfs.map(() => '?').join(',')})
+      WHERE f.empresa_id = ?
+        AND f.cpf IN (${cpfs.map(() => '?').join(',')})
       ORDER BY status DESC, f.cpf
     `,
       )
-      .bind(...cpfs)
+      .bind(empresaId, ...cpfs)
       .all();
 
     const cpfsNaoEncontrados = cpfsFormatados.filter((cpf) => {
@@ -129,19 +137,20 @@ app.get('/', async (c) => {
     const { results: qualificacoes } = await db
       .prepare(
         `
-      SELECT 
+      SELECT
         qt.codigo,
         qt.descricao,
-        CASE 
+        CASE
           WHEN qt.deleted_at IS NOT NULL THEN 'DELETADO'
           ELSE 'OK'
         END AS status
       FROM qualificacoes_tipos qt
-      WHERE qt.codigo IN (${codigos.map(() => '?').join(',')})
+      WHERE qt.empresa_id = ?
+        AND qt.codigo IN (${codigos.map(() => '?').join(',')})
       ORDER BY status DESC, qt.codigo
     `,
       )
-      .bind(...codigos)
+      .bind(empresaId, ...codigos)
       .all();
 
     const codigosNaoEncontrados = codigos.filter(
@@ -152,7 +161,7 @@ app.get('/', async (c) => {
     const { results: duplicatas } = await db
       .prepare(
         `
-      SELECT 
+      SELECT
         h.funcionario_cpf,
         h.qualificacao_codigo,
         h.data_vencimento,
@@ -160,20 +169,21 @@ app.get('/', async (c) => {
       FROM qualificacoes_historico h
       WHERE h.deleted_at IS NULL
         AND h.funcionario_cpf IN (${cpfs.map(() => '?').join(',')})
+        AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.cpf = h.funcionario_cpf AND f.empresa_id = ?)
       GROUP BY h.funcionario_cpf, h.qualificacao_codigo, h.data_vencimento
       HAVING COUNT(*) > 1
       ORDER BY total_duplicatas DESC
       LIMIT 50
     `,
       )
-      .bind(...cpfs)
+      .bind(...cpfs, empresaId)
       .all();
 
     // 4. VERIFICAR REGISTROS VENCIDOS
     const { results: vencidos } = await db
       .prepare(
         `
-      SELECT 
+      SELECT
         h.funcionario_cpf,
         h.qualificacao_codigo,
         h.data_vencimento,
@@ -182,18 +192,19 @@ app.get('/', async (c) => {
       WHERE h.deleted_at IS NULL
         AND h.data_vencimento < date('now')
         AND h.funcionario_cpf IN (${cpfs.map(() => '?').join(',')})
+        AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.cpf = h.funcionario_cpf AND f.empresa_id = ?)
       ORDER BY dias_vencido DESC
       LIMIT 30
     `,
       )
-      .bind(...cpfs)
+      .bind(...cpfs, empresaId)
       .all();
 
     // 5. CANDIDATOS A RENOVAÇÃO
     const { results: candidatosRenovacao } = await db
       .prepare(
         `
-      SELECT 
+      SELECT
         h.funcionario_cpf,
         h.qualificacao_codigo,
         COUNT(*) AS total_registros,
@@ -201,26 +212,30 @@ app.get('/', async (c) => {
       FROM qualificacoes_historico h
       WHERE h.deleted_at IS NULL
         AND h.funcionario_cpf IN (${cpfs.map(() => '?').join(',')})
+        AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.cpf = h.funcionario_cpf AND f.empresa_id = ?)
       GROUP BY h.funcionario_cpf, h.qualificacao_codigo
       HAVING total_registros > 1
       ORDER BY total_registros DESC
       LIMIT 50
     `,
       )
-      .bind(...cpfs)
+      .bind(...cpfs, empresaId)
       .all();
 
-    // 6. RESUMO GERAL
+    // 6. RESUMO GERAL — scoped to current tenant
     const resumoQuery = await db
       .prepare(
         `
-      SELECT 
-        (SELECT COUNT(*) FROM funcionarios WHERE deleted_at IS NULL AND ativo = 1) AS total_funcionarios,
-        (SELECT COUNT(*) FROM qualificacoes_tipos WHERE deleted_at IS NULL) AS total_qualificacoes,
-        (SELECT COUNT(*) FROM qualificacoes_historico WHERE deleted_at IS NULL) AS total_historico,
-        (SELECT COUNT(*) FROM qualificacoes_historico WHERE deleted_at IS NULL AND ${vinculoExprSemAlias}) AS historico_com_vinculo
+      SELECT
+        (SELECT COUNT(*) FROM funcionarios WHERE deleted_at IS NULL AND ativo = 1 AND empresa_id = ?) AS total_funcionarios,
+        (SELECT COUNT(*) FROM qualificacoes_tipos WHERE deleted_at IS NULL AND empresa_id = ?) AS total_qualificacoes,
+        (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.deleted_at IS NULL
+          AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = qh.funcionario_id AND f.empresa_id = ?)) AS total_historico,
+        (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.deleted_at IS NULL AND ${vinculoExprQh}
+          AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = qh.funcionario_id AND f.empresa_id = ?)) AS historico_com_vinculo
     `,
       )
+      .bind(empresaId, empresaId, empresaId, empresaId)
       .first();
 
     const resumo = resumoQuery || {

@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -64,4 +65,84 @@ describe('runtime DDL hardening', () => {
       }
     });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Broad runtime DDL guard — scans ALL src/ (excluding __tests__).
+// Files that intentionally contain DDL must appear in KNOWN_DDL_FILES below.
+// Each entry requires justification. New entries force a code-review decision.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Files with DDL that are explicitly accounted for.
+// - admin-manual-migrations.ts / migrations.ts: historical one-off migration runners,
+//   gated by ENABLE_MANUAL_MIGRATIONS; never run unless explicitly enabled in .dev.vars.
+// - admin-migrate.ts / admin-migration.ts: dead code — not imported or mounted in index.ts.
+// - qualificacoes/shared.ts: "ALTER TABLE" appears only inside a JSDoc comment (no-op, R09 RESOLVED).
+// - admin-apply-migration.ts: dead code — not mounted; uses db.exec() with arbitrary request SQL.
+const KNOWN_DDL_FILES = new Set([
+  'routes/admin-manual-migrations.ts',
+  'routes/admin-migrate.ts',
+  'routes/admin-migration.ts',
+  'routes/migrations.ts',
+  'routes/qualificacoes/shared.ts',
+  'routes/admin-apply-migration.ts',
+]);
+
+const BROAD_DDL_PATTERNS = [
+  /\bCREATE TABLE\b/i,
+  /\bCREATE INDEX\b/i,
+  /\bALTER TABLE\b/i,
+  /\bDROP TABLE\b/i,
+];
+
+function listAllRuntimeSourceFiles(dir: string): string[] {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    if (entry.name === '__tests__') continue;
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listAllRuntimeSourceFiles(fullPath));
+    } else if (entry.isFile() && fullPath.endsWith('.ts')) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+const srcRoot = fileURLToPath(new URL('../../', import.meta.url));
+
+describe('broad runtime DDL guard', () => {
+  it('scans every runtime source file and rejects DDL outside the known-files allowlist', () => {
+    const allFiles = listAllRuntimeSourceFiles(srcRoot);
+    const violations: string[] = [];
+
+    for (const file of allFiles) {
+      const rel = file.startsWith(srcRoot) ? file.slice(srcRoot.length) : file;
+      const relNorm = rel.replace(/\\/g, '/').replace(/^\//, '');
+
+      if (KNOWN_DDL_FILES.has(relNorm)) continue;
+
+      const source = readFileSync(file, 'utf8');
+      for (const pattern of BROAD_DDL_PATTERNS) {
+        if (pattern.test(source)) {
+          violations.push(`${relNorm}: matched ${pattern}`);
+          break;
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('pins the known-DDL-files allowlist — changes here require explicit justification', () => {
+    expect([...KNOWN_DDL_FILES].sort()).toEqual([
+      'routes/admin-apply-migration.ts',
+      'routes/admin-manual-migrations.ts',
+      'routes/admin-migrate.ts',
+      'routes/admin-migration.ts',
+      'routes/migrations.ts',
+      'routes/qualificacoes/shared.ts',
+    ]);
+  });
 });
