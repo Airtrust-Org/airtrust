@@ -15,6 +15,8 @@ Definir e fechar localmente a estratégia segura para resolver o bloqueio de rep
 > **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** o arquivo `scripts/bootstrap-new-environment.sql` foi criado com as 3 tabelas SIGVOOS base e 4 índices necessários antes da `0354`. O teste local `worker-airtrust/src/__tests__/migrations/sigvoos-base-tables-schema.test.ts` passou a provar explicitamente: (1) replay limpo sem bootstrap falha em `0354`; (2) replay com bootstrap atravessa `0354`; (3) bootstrap é idempotente; (4) bootstrap não exige dados reais; (5) bootstrap não depende de D1 remoto. `ensureSigvoosTables()` foi preservado. Novo status consolidado: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
 >
 > **Addendum Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness (2026-06-04):** o bootstrap foi reaudidado e o teste local passou a incluir um gate explícito por etapas em banco limpo temporário. O inventário do fallback runtime foi fechado em 10 call sites, sem D1 remoto, sem migration nova e sem deploy. Novo status consolidado: **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
+>
+> **Addendum Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (2026-06-04):** o fallback runtime foi removido de `sigvoos-frms.ts` e de `integracoes_sigvoos.ts` sem tocar migrations históricas. O bootstrap de novo ambiente permaneceu como caminho oficial para replay/local bootstrap, os testes de replay continuaram PASS e o fechamento final foi documentado em `docs/AIRTRUST_SIGVOOS_R01_RUNTIME_FALLBACK_REMOVAL_AND_AUDIT_CLOSURE_v0_5.md`. Novo status consolidado: **`R01 = RESOLVED`**.
 
 ---
 
@@ -22,15 +24,15 @@ Definir e fechar localmente a estratégia segura para resolver o bloqueio de rep
 
 | Métrica | Valor |
 |---|---|
-| R01 status | `READY_FOR_RUNTIME_FALLBACK_REMOVAL` |
+| R01 status | `RESOLVED` |
 | 0387 aplicada em produção | Sim (Sprint R04.5, via fila pendente oficial) |
-| Produção atual | Mitigada — schema correto, `ensureSigvoosTables()` é no-op eficaz |
+| Produção atual | Mitigada — schema correto e fallback runtime já removido |
 | Replay limpo | Quebrado — `0354` falha com `no such table: integracoes_sigvoos_config` |
 | Bootstrap de novo ambiente | Implementado localmente em `scripts/bootstrap-new-environment.sql` |
-| `ensureSigvoosTables()` | Preservado — necessário para qualquer ambiente novo |
-| Call sites | 10 (8 em `sigvoos-frms.ts:625,802,852,914,948,1045,2238,2500`; 2 em `integracoes_sigvoos.ts:374,600`) |
+| `ensureSigvoosTables()` | Removido na Sprint R01.4 |
+| Call sites | 0 |
 | Migrations históricas tocadas nesta sprint | Nenhuma |
-| Testes de prova do bloqueio | `sigvoos-base-tables-schema.test.ts` — 8/8 PASS, incluindo 2 casos de prova da falha |
+| Testes de prova do bloqueio | `sigvoos-base-tables-schema.test.ts` — PASS, incluindo prova negativa sem bootstrap e prova positiva com bootstrap |
 
 ---
 
@@ -215,4 +217,4 @@ No `sigvoos-base-tables-schema.test.ts`:
 
 ---
 
-**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure e Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness — gate local-isolado PASS, inventário do fallback fechado e **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
+**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness e Sprint R01.4 Runtime Fallback Removal + Final Audit Closure — bootstrap preservado, fallback removido e **`R01 = RESOLVED`**.

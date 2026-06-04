@@ -25,13 +25,13 @@ O resultado desta sprint é um documento de decisão que:
 | Métrica | Valor |
 |---|---|
 | 0387 aplicada em produção | Sim (Sprint R04.5, via fila pendente) |
-| Status R01 | `READY_FOR_RUNTIME_FALLBACK_REMOVAL` |
-| Fallback runtime | `ensureSigvoosTables()` preservado |
+| Status R01 | `RESOLVED` |
+| Fallback runtime | Removido na Sprint R01.4 |
 | Teste de prova local | 8/8 PASS (`sigvoos-base-tables-schema.test.ts`) |
 | Migration nova criada nesta sprint | Não |
 | D1 remoto tocado nesta sprint | Não |
 | Deploy executado nesta sprint | Não |
-| Runtime SIGVOOS alterado nesta sprint | Não |
+| Runtime SIGVOOS atual | Fallback removido na Sprint R01.4 |
 
 ---
 
@@ -102,6 +102,8 @@ Prova local (dois testes em `sigvoos-base-tables-schema.test.ts`):
 > **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** a reconciliação local da cadeia ganhou um bootstrap operacional explícito para ambiente novo: `scripts/bootstrap-new-environment.sql`. O replay sem bootstrap continua falhando em `0354`, mas o replay com bootstrap agora atravessa `0354` localmente e mantém `0387` idempotente depois. `ensureSigvoosTables()` continua preservado. Novo status consolidado: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
 >
 > **Addendum Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness (2026-06-04):** o pacote de bootstrap foi reaudidado e o teste local passou a incluir um gate explícito por etapas em banco limpo temporário. O inventário do fallback runtime foi fechado em 10 call sites e 2 arquivos. `ensureSigvoosTables()` continua preservado nesta etapa. Novo status consolidado: **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
+>
+> **Addendum Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (2026-06-04):** a etapa final removeu `ensureSigvoosTables()` e seus 10 call sites de runtime, preservando o bootstrap operacional para ambiente novo e toda a trilha de testes locais que prova a diferença entre replay sem bootstrap e replay com bootstrap. Nenhuma migration histórica foi editada, nenhuma migration nova foi criada e nenhum D1 remoto foi usado. Novo status consolidado: **`R01 = RESOLVED`**.
 
 ---
 
@@ -160,4 +162,4 @@ R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL
 
 ---
 
-**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure e Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness — bootstrap local revalidado e status avançado para **`READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
+**Fim do documento.** Gerado em 2026-06-03. Atualizado em 2026-06-04 com Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness e Sprint R01.4 Runtime Fallback Removal + Final Audit Closure — bootstrap local preservado, runtime DDL removido e status final **`R01 = RESOLVED`**.

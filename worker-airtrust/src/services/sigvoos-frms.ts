@@ -622,8 +622,6 @@ async function resolveSigvoosEmpresaId(
   db: D1Database,
   empresaId?: number | null,
 ): Promise<number | null> {
-  await ensureSigvoosTables(db);
-
   const preferredEmpresaId = normalizeEmpresaId(empresaId);
   if (preferredEmpresaId !== null) {
     const preferred = await db
@@ -687,119 +685,12 @@ async function reconcileStaleSigvoosEventos(
     .run();
 }
 
-export async function ensureSigvoosTables(db: D1Database): Promise<void> {
-  await db.batch([
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS integracoes_sigvoos_config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        empresa_id INTEGER,
-        chave TEXT NOT NULL,
-        valor TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        deleted_at TEXT
-      )`,
-    ),
-    db.prepare(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_integracoes_sigvoos_config_empresa_chave
-       ON integracoes_sigvoos_config(empresa_id, chave)`,
-    ),
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS integracoes_sigvoos_eventos (
-        id TEXT PRIMARY KEY,
-        empresa_id INTEGER,
-        tipo_evento TEXT NOT NULL,
-        status TEXT NOT NULL,
-        payload_json TEXT,
-        resposta_json TEXT,
-        erro_ultima TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
-      )`,
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_integracoes_sigvoos_eventos_empresa_created
-       ON integracoes_sigvoos_eventos(empresa_id, created_at DESC)`,
-    ),
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS integracoes_sigvoos_mapeamentos (
-        id TEXT PRIMARY KEY,
-        empresa_id INTEGER,
-        nome_sigvoos TEXT NOT NULL,
-        canac_sigvoos TEXT,
-        funcionario_id INTEGER NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
-      )`,
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_integracoes_sigvoos_mapeamentos_empresa_nome
-       ON integracoes_sigvoos_mapeamentos(empresa_id, nome_sigvoos)`,
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_integracoes_sigvoos_mapeamentos_empresa_canac
-       ON integracoes_sigvoos_mapeamentos(empresa_id, canac_sigvoos)`,
-    ),
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS sigvoos_mapeamento_manual (
-        id TEXT PRIMARY KEY,
-        empresa_id INTEGER,
-        nome_sigvoos TEXT NOT NULL,
-        inscricao_sigvoos TEXT,
-        canac_sigvoos TEXT,
-        funcionario_id INTEGER NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
-      )`,
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_sigvoos_mapeamento_manual_empresa_nome
-       ON sigvoos_mapeamento_manual(empresa_id, nome_sigvoos)`,
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_sigvoos_mapeamento_manual_empresa_inscricao
-       ON sigvoos_mapeamento_manual(empresa_id, inscricao_sigvoos)`,
-    ),
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS frms_jornada_pendente (
-        id TEXT PRIMARY KEY,
-        empresa_id INTEGER,
-        importacao_id TEXT,
-        nome_sigvoos TEXT NOT NULL,
-        identificador_sigvoos TEXT,
-        canac_sigvoos TEXT,
-        competencia TEXT NOT NULL,
-        jornadas INTEGER NOT NULL DEFAULT 0,
-        motivo TEXT NOT NULL,
-        payload_json TEXT,
-        status TEXT NOT NULL DEFAULT 'PENDENTE',
-        resolved_funcionario_id INTEGER,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
-      )`,
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_frms_jornada_pendente_empresa_status
-       ON frms_jornada_pendente(empresa_id, status, updated_at DESC)`,
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_frms_jornada_pendente_importacao
-       ON frms_jornada_pendente(importacao_id)`,
-    ),
-  ]);
-}
-
 export async function getSigvoosConfig(
   db: D1Database,
   empresaId?: number | null,
   overrides?: Partial<SigvoosConfig>,
   runtimeEnv?: SigvoosRuntimeEnv,
 ): Promise<SigvoosConfig> {
-  await ensureSigvoosTables(db);
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
 
   const rows = await db
@@ -849,7 +740,6 @@ async function upsertSigvoosConfigRaw(
   value: string | null,
   empresaId?: number | null,
 ): Promise<void> {
-  await ensureSigvoosTables(db);
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
   const timestamp = now();
 
@@ -911,7 +801,6 @@ export async function listSigvoosEventos(
   empresaId?: number | null,
   limit = 50,
 ): Promise<Array<Record<string, unknown>>> {
-  await ensureSigvoosTables(db);
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
   await reconcileStaleSigvoosEventos(db, resolvedEmpresaId);
   const rows = await db
@@ -945,7 +834,6 @@ async function loadSigvoosManualMappings(
   db: D1Database,
   empresaId: number | null | undefined,
 ): Promise<SigvoosManualMappingRow[]> {
-  await ensureSigvoosTables(db);
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
   const rows = await db
     .prepare(
@@ -1042,7 +930,6 @@ export async function upsertSigvoosManualMapping(
     funcionarioId: string | number;
   },
 ): Promise<SigvoosManualMapping | null> {
-  await ensureSigvoosTables(db);
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
   const timestamp = now();
   const funcionarioId = Number(input.funcionarioId);
@@ -2235,7 +2122,6 @@ export async function listSigvoosPendencias(
   empresaId?: number | null,
   limit = 200,
 ): Promise<SigvoosJornadaPendente[]> {
-  await ensureSigvoosTables(db);
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
   const rows = await db
     .prepare(
@@ -2497,7 +2383,6 @@ export async function syncSigvoosForFrms(
   rawInput: SigvoosSyncInput,
   runtimeEnv?: SigvoosRuntimeEnv,
 ): Promise<SigvoosSyncSummary> {
-  await ensureSigvoosTables(db);
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
   await reconcileStaleSigvoosEventos(db, resolvedEmpresaId);
   const parsedInput = SyncSchema.parse(rawInput);

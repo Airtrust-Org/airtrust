@@ -17,6 +17,8 @@ Mapear integralmente o escopo de `ensureSigvoosTables()` (R01), registrar o esta
 > **Addendum Sprint R01 Bootstrap + Replay Closure (2026-06-04):** `scripts/bootstrap-new-environment.sql` foi criado para ambientes novos, contendo apenas o DDL base de `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos` e `integracoes_sigvoos_mapeamentos` + 4 índices. O teste local de migrations foi estendido para provar que o replay sem bootstrap falha em `0354`, enquanto o replay com bootstrap atravessa `0354` localmente, sem D1 remoto e sem dados reais. `ensureSigvoosTables()` segue preservado. Status consolidado naquela fase: **`R01 = BOOTSTRAP_IMPLEMENTED_RUNTIME_FALLBACK_PENDING_REMOVAL_GATE`**.
 >
 > **Addendum Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness (2026-06-04):** o bootstrap foi reaudidado, o teste local passou a incluir um gate explícito por etapas em banco limpo temporário e o inventário do fallback runtime foi fechado em 10 call sites. O gate local-isolado passou, sem D1 remoto e sem dados reais. Novo status consolidado: **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**.
+>
+> **Addendum Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (2026-06-04):** `ensureSigvoosTables()` foi removido de `worker-airtrust/src/services/sigvoos-frms.ts` e seus 10 call sites foram eliminados de runtime, sem editar migrations históricas, sem criar migration nova, sem D1 remoto e sem deploy. O bootstrap de novo ambiente foi preservado, os testes de replay continuaram PASS e um teste dedicado de ausência de DDL/runtime SIGVOOS foi adicionado. Status final consolidado: **`R01 = RESOLVED`**. Documento de fechamento: `docs/AIRTRUST_SIGVOOS_R01_RUNTIME_FALLBACK_REMOVAL_AND_AUDIT_CLOSURE_v0_5.md`.
 
 ---
 
@@ -24,15 +26,15 @@ Mapear integralmente o escopo de `ensureSigvoosTables()` (R01), registrar o esta
 
 | Métrica | Valor |
 |---|---|
-| Função | `ensureSigvoosTables()` |
-| Arquivo | `worker-airtrust/src/services/sigvoos-frms.ts:690-794` |
-| Tabelas criadas em runtime | 5 (`integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos`, `sigvoos_mapeamento_manual`, `frms_jornada_pendente`) |
-| Índices criados em runtime | 8 |
-| Call sites (total) | 10 |
-| Call sites em rotas | 2 (`worker-airtrust/src/routes/integracoes_sigvoos.ts:374,600`) |
-| Call sites em serviços | 8 (`worker-airtrust/src/services/sigvoos-frms.ts:625,802,852,914,948,1045,2238,2500`) |
-| Status na matriz | READY_FOR_RUNTIME_FALLBACK_REMOVAL |
-| Status nesta sprint | READY_FOR_RUNTIME_FALLBACK_REMOVAL |
+| Função | Removida na Sprint R01.4 |
+| Arquivo | `worker-airtrust/src/services/sigvoos-frms.ts` — fallback removido |
+| Tabelas criadas em runtime | 0 |
+| Índices criados em runtime | 0 |
+| Call sites (total) | 0 |
+| Call sites em rotas | 0 |
+| Call sites em serviços | 0 |
+| Status na matriz | RESOLVED |
+| Status nesta sprint | RESOLVED |
 
 ---
 
@@ -498,4 +500,4 @@ Reverter o commit que removeu/reduziu `ensureSigvoosTables()`. A função é ide
 
 **Addendum Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness (2026-06-04):** gate local-isolado explícito adicionado ao teste de migrations com ordem `bootstrap -> 0352 -> 0354 -> 0387`; auditoria adicional do bootstrap confirmou escopo somente DDL, sem seeds, sem secrets e sem substituição de `0352`; inventário do fallback runtime fechado em 10 call sites. Nenhuma migration histórica editada, nenhuma migration nova criada, nenhum D1 remoto executado, nenhum deploy feito. **R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL.**
 
-**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1, Z1.1, pós-apply oficial em produção, Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy, Sprint R01 Bootstrap + Replay Closure e Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness (2026-06-04). Status atual: **`R01 = READY_FOR_RUNTIME_FALLBACK_REMOVAL`**. `ensureSigvoosTables()` preservado nesta etapa. Próxima fase: Runtime Fallback Removal + Final Audit Closure.
+**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1, Z1.1, pós-apply oficial em produção, Sprint R01 Chain Reconciliation, Sprint R01 Baseline Strategy, Sprint R01 Bootstrap + Replay Closure, Sprint R01 Staging/New Environment Gate + Fallback Removal Readiness e Sprint R01.4 Runtime Fallback Removal + Final Audit Closure (2026-06-04). Status atual: **`R01 = RESOLVED`**. Documento final de fechamento: `docs/AIRTRUST_SIGVOOS_R01_RUNTIME_FALLBACK_REMOVAL_AND_AUDIT_CLOSURE_v0_5.md`.
