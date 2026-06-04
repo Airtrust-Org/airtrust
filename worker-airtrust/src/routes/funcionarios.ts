@@ -20,7 +20,7 @@ import {
 } from '../utils/db';
 import { notFound, badRequest } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
-import { auth, optionalAuth } from '../middleware/auth';
+import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Context } from 'hono';
@@ -118,7 +118,7 @@ function buildFuncionarioAeronaveTokensExpr(funcAlias = 'f'): string {
  * - orderBy: coluna para ordenação (default: id)
  * - order: direção (ASC/DESC, default: DESC)
  */
-app.get('/', optionalAuth(), async (c) => {
+app.get('/', auth(), async (c) => {
   const db = c.env.DB;
   const aeronaveSelectExpr = buildFuncionarioAeronaveDisplayExpr('f');
 
@@ -355,8 +355,9 @@ app.get('/', optionalAuth(), async (c) => {
  * GET /api/funcionarios/stats
  * Retorna estatísticas dos funcionários (total, ativos, inativos)
  */
-app.get('/stats', optionalAuth(), async (c) => {
+app.get('/stats', auth(), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaIdSafe(c);
 
   // Descobrir schema real (status TEXT vs. ativo INTEGER)
   const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
@@ -379,15 +380,17 @@ app.get('/stats', optionalAuth(), async (c) => {
   const stats = await db
     .prepare(
       `
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN ${ativoExpr} THEN 1 ELSE 0 END) as ativos,
         SUM(CASE WHEN NOT (${ativoExpr}) THEN 1 ELSE 0 END) as inativos
       FROM funcionarios f
       LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id
       WHERE f.deleted_at IS NULL
+        AND f.empresa_id = ?
     `,
     )
+    .bind(empresaId)
     .first<{ total: number; ativos: number; inativos: number }>();
 
   return c.json({
@@ -404,7 +407,7 @@ app.get('/stats', optionalAuth(), async (c) => {
  * GET /api/funcionarios/stats/dashboard
  * Retorna estatísticas detalhadas para o dashboard (aeronaves, setores, funções, etc.)
  */
-app.get('/stats/dashboard', optionalAuth(), async (c) => {
+app.get('/stats/dashboard', auth(), async (c) => {
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaIdSafe(c);
@@ -908,7 +911,7 @@ app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), as
  * GET /api/funcionarios/:id
  * Busca funcionário por ID com TODOS os campos
  */
-app.get('/:id', optionalAuth(), async (c) => {
+app.get('/:id', auth(), async (c) => {
   const db = c.env.DB;
   const id = parseInt(c.req.param('id'));
 

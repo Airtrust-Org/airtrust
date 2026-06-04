@@ -11,8 +11,9 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../../types';
-import { auth, optionalAuth } from '../../middleware/auth';
+import { auth } from '../../middleware/auth';
 import { requireRole } from '../../middleware/rbac';
+import { getTenantContext } from '../../middleware/tenant';
 import { z } from 'zod';
 import {
   buildHistoricoTipoSnapshot,
@@ -186,9 +187,10 @@ async function logAuditoria(db: D1Database, entidade: string, entidade_id: strin
  */
 router.get(
   '/',
-  optionalAuth(),
+  auth(),
   safe(async (c) => {
     const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const limitRaw = c.req.query('limit');
@@ -211,9 +213,9 @@ router.get(
           hasIsCheck ? 'is_check' : '0 as is_check'
         }, created_at, updated_at,
         (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.qualificacao_id = qualificacoes_tipos.id AND qh.deleted_at IS NULL) AS total_no_historico
-        FROM qualificacoes_tipos WHERE deleted_at IS NULL ORDER BY categoria, nome LIMIT ?`,
+        FROM qualificacoes_tipos WHERE deleted_at IS NULL AND empresa_id = ? ORDER BY categoria, nome LIMIT ?`,
       )
-      .bind(limitFinal)
+      .bind(empresaId, limitFinal)
       .all();
 
     return c.json({
@@ -226,9 +228,10 @@ router.get(
 
 router.get(
   '/:id',
-  optionalAuth(),
+  auth(),
   safe(async (c) => {
     const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const id = c.req.param('id');
@@ -249,10 +252,10 @@ router.get(
           hasIsCheck ? 'is_check' : '0 as is_check'
         }, created_at, updated_at
         FROM qualificacoes_tipos
-        WHERE id = ? AND deleted_at IS NULL
+        WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
         LIMIT 1`,
       )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!tipo) {
