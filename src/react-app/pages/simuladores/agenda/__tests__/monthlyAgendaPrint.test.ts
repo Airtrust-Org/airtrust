@@ -76,4 +76,43 @@ describe('monthlyAgendaPrint', () => {
     expect(agendaHtml).toContain('table-layout:fixed;');
     expect(agendaHtml).toContain('break-inside: avoid;');
   });
+
+  it('mantem o shell da aplicacao fora do documento impresso e garante fundo branco', () => {
+    const builders = [
+      buildMonthlyAgendaPrintHtml({
+        monthDate: new Date(2026, 5, 1),
+        generatedAt: new Date('2026-06-04T12:00:00'),
+        sessions,
+      }),
+      buildCalendarGridHtml({
+        monthDate: new Date(2026, 5, 1),
+        generatedAt: new Date('2026-06-04T12:00:00'),
+        sessions,
+      }),
+      buildWeeklyAgendaPrintHtml({
+        weekStart: new Date('2026-06-08T00:00:00'),
+        generatedAt: new Date('2026-06-04T12:00:00'),
+        sessions,
+      }),
+      buildDailyAgendaPrintHtml({
+        date: new Date('2026-06-10T00:00:00'),
+        generatedAt: new Date('2026-06-04T12:00:00'),
+        sessions,
+      }),
+      buildAgendaListPrintHtml({
+        generatedAt: new Date('2026-06-04T12:00:00'),
+        sessions,
+      }),
+    ];
+
+    for (const html of builders) {
+      expect(html).toMatch(/background:\s*#fff/);
+      expect(html).not.toContain('Painel');
+      expect(html).not.toContain('Nova Sessão de Voo');
+      expect(html).not.toContain('Agenda / Calendário');
+      expect(html).not.toContain('backdrop');
+      expect(html).not.toContain('100vh');
+      expect(html).not.toContain('bg-black');
+    }
+  });
 });

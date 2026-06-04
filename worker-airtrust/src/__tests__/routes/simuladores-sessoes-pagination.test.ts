@@ -43,6 +43,18 @@ function createPaginationDb() {
 
   const db = {
     prepare: vi.fn((query: string) => {
+      if (query === 'PRAGMA table_info(simulador_agendamentos)') {
+        return {
+          bind: (..._args: unknown[]) => ({
+            all: async () => ({
+              results: [{ name: 'tipo_dispositivo' }, { name: 'aeronave_id' }],
+            }),
+            first: async () => null,
+            run: async () => ({ meta: { changes: 0, last_row_id: 0 } }),
+          }),
+        };
+      }
+
       if (query.includes('FROM simulador_agendamentos sa') && query.includes('sa.uuid')) {
         binds.sessoesRawQueries.push(query);
 
