@@ -10,7 +10,7 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../../types';
-import { auth, optionalAuth } from '../../middleware/auth';
+import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
 import {
