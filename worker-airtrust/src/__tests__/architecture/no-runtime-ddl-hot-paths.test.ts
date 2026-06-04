@@ -35,12 +35,15 @@ const HOT_PATH_FILES = [
 // stub from historico-helpers.ts:131 since R09). The call-site pattern matches
 // the ensure*Schema guard regex; these are safe no-op invocations.
 //
+// R04 (api-bootstrap.ts ensureDocumentosTableExists) — RESOLVED 2026-06-03.
+// Removed from runtime: auto-migration-documentos.ts deleted, api-bootstrap.ts
+// no longer calls DDL; schema is canonical via migration 0388.
+//
 // R09 (shared.ts ensureHistoricoSchema) — RESOLVED 2026-06-03.
 // The ALTER TABLE was removed from shared.ts. Migration 0200 intentionally
 // removed local + modalidade; renovada is present in the final schema.
 // shared.ts is dead code (not imported); the active path uses historico-helpers.ts.
 const DOCUMENTED_EXCEPTIONS = [
-  'runtime/api-bootstrap.ts',
   'routes/qualificacoes/historico.ts',
   'routes/qualificacoes/historico-write.ts',
   'services/sigvoos-frms.ts',
@@ -49,7 +52,6 @@ const DOCUMENTED_EXCEPTIONS = [
 describe('runtime DDL hardening', () => {
   it('keeps the deferred runtime-DDL allowlist explicit', () => {
     expect([...DOCUMENTED_EXCEPTIONS]).toEqual([
-      'runtime/api-bootstrap.ts',
       'routes/qualificacoes/historico.ts',
       'routes/qualificacoes/historico-write.ts',
       'services/sigvoos-frms.ts',

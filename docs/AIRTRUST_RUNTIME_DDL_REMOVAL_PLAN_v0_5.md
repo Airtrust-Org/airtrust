@@ -63,35 +63,35 @@ Rotas operacionais de migração manual (`admin-migration`, `admin-manual-migrat
   ✅ R03 = RESOLVED. Nenhum risco restante.
 - `services/sigvoos-frms.ts` ainda cria as tabelas `integracoes_sigvoos_*` em runtime.
   A cobertura encontrada em migrations é apenas parcial.
-- `runtime/api-bootstrap.ts` / `auto-migration-documentos.ts` permanecem como bootstrap de runtime.
-  A Sprint R04.2 executou o probe estrutural remoto read-only e confirmou baseline parcial/legado em produção: `documentos` sem `historico_id`/`sha256_hash`, com `empresa_id DEFAULT 1`, sem índice nominal `idx_documentos_uuid`; `pasta_virtual.documento_id` ausente; `certificados_templates` presente. A Sprint R04.3 fechou o desenho documental da `0388`, a Sprint R04.4 versionou a migration e o teste local dedicados e a Sprint R04.5 registrou o apply oficial da fila pendente (`0387` + `0388`) com probe pós-apply. Próxima ação: remover o bootstrap de `documentos` em sprint separada, sem misturar com o apply.
+- ~~`runtime/api-bootstrap.ts` / `auto-migration-documentos.ts`~~ (AMBOS REMOVIDOS NO SPRINT R04.6).
+  A Sprint R04.2 executou o probe estrutural remoto read-only e confirmou baseline parcial/legado em produção. A Sprint R04.3 fechou o desenho documental da `0388`. A Sprint R04.4 versionou a migration e o teste local dedicados. A Sprint R04.5 registrou o apply oficial da fila pendente (`0387` + `0388`) com probe pós-apply. **A Sprint R04.6 removeu definitivamente o bootstrap:** `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo (import + call removidos), guard test atualizado. Pendente: deploy + smoke → R04 = RESOLVED.
 
 ## Migrations futuras necessárias
 
 1. ~~Aplicar `0386_solicitacoes_treinamento_planejado_link.sql`~~ ✅ CONCLUÍDO (Sprint X.5).
 2. ~~Deployar o Worker/API sem o fallback de R03~~ ✅ CONCLUÍDO (Sprint X.5).
-3. Criar migration explícita para `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` e índices associados.
-4. Remover `auto-migration-documentos.ts` e o bootstrap correspondente apenas depois do apply já registrado da `0388` e do probe pós-apply PASS.
+3. Migration explícita `0387` já criada e aplicada em produção (Sprint R04.5). Resta reconciliar a cadeia `0354 -> 0387` antes de remover o fallback R01.
+4. ~~Remover `auto-migration-documentos.ts` e o bootstrap correspondente~~ ✅ CONCLUÍDO (Sprint R04.6, 2026-06-03). Bootstrap removido: `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado. Pendente: deploy + smoke → R04 = RESOLVED.
 
 ## Riscos de remover sem migration
 
 - `services/treinamentos-planejados-integration.ts` pode quebrar writes de sincronização para solicitações já aprovadas se as colunas de link não existirem.
 - `services/sigvoos-frms.ts` pode indisponibilizar leitura/escrita de configuração, eventos e mapeamentos SIGVOOS se as tabelas base não estiverem provisionadas.
-- `auto-migration-documentos.ts` ainda protege ambientes com schema drift; a Sprint R04.2 confirmou que a própria produção atual é parcial/legada, a Sprint R04.5 registrou a `0388` aplicada com probe pós-migration PASS e a remoção agora depende exclusivamente de uma sprint separada de runtime/deploy.
+- ~~`auto-migration-documentos.ts` já removido (Sprint R04.6).~~ A `0388` já estava aplicada em produção com probe pós-migration PASS desde a Sprint R04.5. O bootstrap foi removido com segurança: `auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado, 3 suites de teste PASS. Risco controlado — ambiente novo depende apenas da migration `0388`, já aplicada.
 
 ## Ordem recomendada das próximas fases
 
 1. ~~Aplicar `0386_solicitacoes_treinamento_planejado_link.sql`~~ ✅ CONCLUÍDO (Sprint X.5).
 2. ~~Deployar o Worker/API com segurança depois da aplicação da migration~~ ✅ CONCLUÍDO (Sprint X.5).
 3. Reconcilicar explicitamente a cadeia `0354 -> 0387` e só então remover `ensureSigvoosTables` dos serviços e rotas.
-4. Remover `api-bootstrap`/`auto-migration-documentos` agora que a `0388` já foi aplicada e sondada em produção.
+4. ~~Remover `api-bootstrap`/`auto-migration-documentos`~~ ✅ CONCLUÍDO (Sprint R04.6). Bootstrap removido: `auto-migration-documentos.ts` deletado; `api-bootstrap.ts` limpo; guard test atualizado; 3 suites de teste PASS. Pendente: deploy + smoke pós-deploy → R04 = RESOLVED.
 5. Revisitar `qualificacoes` e `simuladores` para retirar os `ensure*` remanescentes já cobertos por migration.
 
 ---
 
 ## Sprint V — DDL Runtime Residual Design (2026-06-03)
 
-**Status:** PARTIAL → R03 RESOLVED, R09 RESOLVED, R04 MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL, R01 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`. Sprint R09 (2026-06-03) removeu o ALTER TABLE de `shared.ts`. Sprint R04.2 registrou o probe estrutural remoto de produção para R04, a Sprint R04.3 fechou o desenho documental da `0388`, a Sprint R04.4 versionou a migration e o teste local e a Sprint R04.5 registrou o apply oficial da fila pendente (`0387` + `0388`) com probe pós-apply. Próximo: remoção planejada do bootstrap de `documentos`; em paralelo, reconciliação da cadeia limpa de R01.
+**Status:** PARTIAL → R03 RESOLVED, R09 RESOLVED, R04 RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY, R01 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION. Sprint V executado em modo read-only/docs-only. Sprints X.0–X.4 fizeram probe, versionaram migration e removeram fallback local. Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. Sprint Z0 mapeou integralmente R01 (SIGVOOS). Sprint Z1 criou `0387` e o teste local. Sprint Z1.1 provou a falha da cadeia limpa em `0354`. Sprint R09 (2026-06-03) removeu o ALTER TABLE de `shared.ts`. Sprint R04.2 registrou o probe estrutural remoto de produção para R04, a Sprint R04.3 fechou o desenho documental da `0388`, a Sprint R04.4 versionou a migration e o teste local, a Sprint R04.5 registrou o apply oficial da fila pendente (`0387` + `0388`) com probe pós-apply e **a Sprint R04.6 removeu o bootstrap runtime de Documentos** (`auto-migration-documentos.ts` deletado, `api-bootstrap.ts` limpo, guard test atualizado). Próximo: deploy + smoke → R04 = RESOLVED; em paralelo, reconciliação da cadeia limpa de R01.
 
 ### Inventário atualizado
 
@@ -111,7 +111,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 |---|---|---|---|
 | R01 | `services/sigvoos-frms.ts` | `integracoes_sigvoos_config`, `integracoes_sigvoos_eventos`, `integracoes_sigvoos_mapeamentos` — 3 tabelas base + 4 índices sem migration histórica anterior à `0354` | `0387_integracoes_sigvoos_base_tables.sql` (criada no Sprint Z1 e aplicada em produção na Sprint R04.5). **Status: 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION.** Doc: `AIRTRUST_SIGVOOS_DDL_R01_READINESS_v0_5.md` e `AIRTRUST_SIGVOOS_MIGRATION_CHAIN_AUDIT_v0_5.md` |
 | R03 | `services/treinamentos-planejados-integration.ts` | `solicitacoes_treinamento.treinamento_planejado_id`, `status_pre_agendamento`, `idx_solicitacoes_treinamento_planejado` — 2 colunas + 1 índice parcial | `0386_solicitacoes_treinamento_planejado_link.sql` (`MIGRATION_VERSIONED_RUNTIME_FALLBACK_REMOVED_PENDING_APPLY`) |
-| R04 | `utils/auto-migration-documentos.ts` + `runtime/api-bootstrap.ts` | `documentos` — baseline parcial/legada confirmada; migration já aplicada em produção, probe pós-apply concluído, bootstrap ainda presente | `0388_documentos_canonical_schema.sql` — MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5, 2026-06-03) |
+| R04 | ~~`utils/auto-migration-documentos.ts`~~ (DELETED) + ~~`runtime/api-bootstrap.ts`~~ (LIMPO) | `documentos` — baseline parcial/legada confirmada; migration `0388` aplicada em produção, probe pós-apply concluído, bootstrap runtime removido na Sprint R04.6 | `0388_documentos_canonical_schema.sql` — RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY (Sprint R04.6, 2026-06-03). Pendente: deploy + smoke → RESOLVED. |
 
 ### Novos residuais encontrados (não documentados anteriormente)
 
@@ -132,7 +132,7 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 | Gate X.0 | Probe read-only aprovado para `solicitacoes_treinamento` | Decidir formato real da M1 | MÉDIO |
 | Fase 1 | M1 — `0386` (link Treinamentos) | Remover R03 | MÉDIO |
 | Fase 2 | R09 — CONCLUÍDA (Sprint R09, 2026-06-03) | ALTER TABLE removido de `shared.ts`; colunas confirmadas: `renovada`=migration, `local`/`modalidade`=removidas por 0200 | — |
-| Fase 3 | R04 bootstrap removal | Remover R04 — **MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL Sprint R04.5** | MEDIO |
+| Fase 3 | R04 bootstrap removal ✅ | R04 bootstrap removido — **RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY Sprint R04.6** | RESOLVENDO (pendente deploy + smoke) |
 | Fase 4 | R01 baseline/chain plan | Destravar `0354 -> 0387` depois de `0387` já aplicada em produção, antes de qualquer remoção do fallback | ALTO |
 
 ### Documentos produzidos
@@ -142,4 +142,4 @@ A busca exaustiva por DDL em `worker-airtrust/src/` encontrou 20 ocorrências (e
 
 ### Status na matriz
 
-DDL_RUNTIME = PARTIAL (R03 = RESOLVED apos apply 0386 + deploy X.5; R09 = RESOLVED Sprint R09 2026-06-03; R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL Sprint R04.5 2026-06-03; R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION).
+DDL_RUNTIME = PARTIAL (R03 = RESOLVED; R09 = RESOLVED Sprint R09; R04 = RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY Sprint R04.6 2026-06-03; R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION).
