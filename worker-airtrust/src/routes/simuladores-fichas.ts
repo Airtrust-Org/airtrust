@@ -21,7 +21,7 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { auth, optionalAuth } from '../middleware/auth';
+import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { resolveFichaScope } from '../utils/ficha-role-scope';

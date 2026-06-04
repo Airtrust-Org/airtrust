@@ -158,6 +158,7 @@ export function filtrarChecksCompativeisComModelo<T extends { codigo?: string | 
 export async function listarTiposCheckPorIds(
   db: D1Database,
   ids: number[],
+  empresaId?: number,
 ): Promise<CheckTipoRecord[]> {
   const idsUnicos = Array.from(
     new Set(ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
@@ -168,6 +169,7 @@ export async function listarTiposCheckPorIds(
   }
 
   const placeholders = idsUnicos.map(() => '?').join(',');
+  const scopedFilter = empresaId ? ' AND empresa_id = ?' : '';
   const result = await db
     .prepare(
       `SELECT id, codigo, nome, descricao
@@ -175,9 +177,9 @@ export async function listarTiposCheckPorIds(
        WHERE id IN (${placeholders})
          AND deleted_at IS NULL
          AND ativo = 1
-         AND UPPER(COALESCE(categoria, '')) = 'CHECK'`,
+         AND UPPER(COALESCE(categoria, '')) = 'CHECK'${scopedFilter}`,
     )
-    .bind(...idsUnicos)
+    .bind(...idsUnicos, ...(empresaId ? [empresaId] : []))
     .all<CheckTipoRecord>();
 
   return result.results || [];
