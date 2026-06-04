@@ -7,12 +7,7 @@ import { jsonInternalError } from '../../middleware/response';
 const routesDir = join(process.cwd(), 'src', 'routes');
 
 const excludedPathFragments = [
-  'admin-apply-migration.ts',
   'admin-manual-migrations.ts',
-  'admin-migration.ts',
-  'admin-migrate.ts',
-  'debug.ts',
-  'debug-purge.ts',
   'migrations.ts',
 ];
 

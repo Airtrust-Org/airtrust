@@ -844,28 +844,6 @@ import migrationsRoutes from './routes/migrations';
 app.use('/api/migrations/*', auth(), requireRole('admin'));
 app.route('/api/migrations', migrationsRoutes);
 
-/**
- * Rotas de Debug
- * GET /api/debug/historico/:id
- */
-import debugRoutes from './routes/debug';
-app.use('/api/debug/*', async (c, next) => {
-  const env = (c.env as Env).ENVIRONMENT || 'development';
-  if (env === 'production') {
-    return c.json({ success: false, error: 'Rota indisponível em produção' }, 403);
-  }
-  return next();
-});
-app.use('/api/debug/*', auth(), requireRole('admin'));
-app.route('/api/debug', debugRoutes);
-
-/**
- * Rotas de Purge (DEBUG ONLY)
- * POST /api/debug/purge-qualificacoes
- */
-import debugPurgeRoutes from './routes/debug-purge';
-app.route('/api/debug', debugPurgeRoutes);
-
 // NOTA: Rotas EdApp já montadas em /api/integracoes/edapp via edappRouter (linha 480)
 // Arquivo integracoes/edapp.ts mantido como referência mas não utilizado
 

@@ -5,6 +5,8 @@
 **HEAD base:** `8ca0bcd326570a105fb64a25ada942c5de668f76`
 **Modo:** Sprint consolidada de fechamento documental dos achados remanescentes. Sem migration remota, sem schema remoto, sem deploy, sem alteracao de dados reais.
 
+> **Addendum 2026-06-04:** após o fechamento principal, a etapa ampla de cleanup/governança/superfície pública foi consolidada em `docs/AIRTRUST_REPOSITORY_CLEANUP_GOVERNANCE_PUBLIC_SURFACE_v0_5.md`. Este plano continua válido para `DQ-01`, `MIG-01`, Audit v2 e RBAC/Suporte v2.
+
 ## 1. Resumo executivo
 
 O AirTrust entrou numa fase em que os achados remanescentes ja nao sao de correcao rapida de codigo em producao. O que resta se divide em tres grupos:

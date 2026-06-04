@@ -156,6 +156,12 @@ node_modules
 .tmp-deploy*/
 dist/
 build/
+/playwright-report/
+/perplexity_airtrust_sources/
+/knowledge/airtrust/
+/A4R202-OPUS-*.md
+/debug-*.png
+/*.traineddata
 
 # Local AI/agent tooling
 .agents/
@@ -165,6 +171,12 @@ skills-lock.json
 
 # Local legacy SQL staging copy (classified version lives in scripts/validation)
 scripts/validar_sk76_inicial_12x22.sql
+scripts/seed-12-sessoes-aw139-COMPLETO.sql
+scripts/seed-data-complete.sql
+scripts/seed-dev-full-20251119.sql
+scripts/seed-local.sql
+scripts/seed-sgso-demo-full.sql
+scripts/validation/audit-endpoint-matrix.mjs
 
 # ========== SENSITIVE SQL DUMPS / BACKUPS ==========
 # Scoped to avoid hiding official migrations in worker-airtrust/migrations/

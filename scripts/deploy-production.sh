@@ -1,33 +1,9 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "🚨 DEPLOY PARA PRODUÇÃO - AIRTRUST"
-echo "Este script vai publicar BACKEND (Workers) e FRONTEND."
-echo ""
-read -p "Tem CERTEZA que deseja fazer deploy para PRODUÇÃO? (digite 'SIM' em maiúsculas): " CONFIRM
-
-if [ "$CONFIRM" != "SIM" ]; then
-  echo "❌ Deploy cancelado."
-  exit 1
-fi
-
-echo "🔧 Deploy BACKEND PRODUÇÃO..."
-cd worker-airtrust
-wrangler d1 migrations apply airtrust-db --env=production --remote || true
-wrangler deploy --env=production
-
-echo "🌐 Build FRONTEND..."
-cd ../react-app
-npm install
-npm run build
-
-# Se usar Vercel:
-if command -v vercel >/dev/null 2>&1; then
-  echo "🚀 Deploy FRONTEND (Vercel)..."
-  vercel --prod --yes
-  echo "✅ Deploy FRONTEND via Vercel finalizado."
-else
-  echo "⚠️ Vercel CLI não encontrado. Configure deploy do frontend manualmente (Pages ou outro)."
-fi
-
-echo "✅ DEPLOY PRODUÇÃO CONCLUÍDO."
+echo "ERROR: scripts/deploy-production.sh is a blocked legacy path."
+echo "Use one of the reviewed flows instead:"
+echo "  - npm run deploy:pages"
+echo "  - npm run deploy:worker:safe"
+echo "  - bash scripts/deploy-worker-only.sh with explicit migration env gates"
+exit 1

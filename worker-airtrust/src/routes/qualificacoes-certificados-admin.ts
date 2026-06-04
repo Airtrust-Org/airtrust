@@ -34,8 +34,22 @@ import adminOpsRoutes from './qualificacoes-certificados-admin-ops';
 
 const app = new Hono<{ Bindings: Env }>();
 
+function requireAdminDebugEnabled(c: { env: Env }) {
+  if (c.env.ENABLE_ADMIN_DEBUG_ROUTES !== 'true') {
+    return {
+      success: false,
+      error:
+        'Admin debug endpoints are disabled. Set ENABLE_ADMIN_DEBUG_ROUTES=true only in controlled local environments.',
+    } as const;
+  }
+
+  return null;
+}
+
 // DEBUG: Endpoint para diagnosticar template
-app.get('/debug/template/:id', auth(), async (c) => {
+app.get('/debug/template/:id', auth(), requireRole('admin'), async (c) => {
+  const gate = requireAdminDebugEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
   const id = parseInt(c.req.param('id'));
 
@@ -329,6 +343,8 @@ app.get('/admin/templates/:empresaId', auth(), requireRole('admin'), async (c) =
 
 // ADMIN ONLY: Inspeção completa do processo de geração de certificado
 app.get('/admin/inspecionar/:historicoId', auth(), requireRole('admin'), async (c) => {
+  const gate = requireAdminDebugEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
   const historicoId = parseInt(c.req.param('historicoId'));
 
@@ -460,6 +476,8 @@ app.get('/admin/inspecionar/:historicoId', auth(), requireRole('admin'), async (
 
 // ADMIN ONLY: Verificar configuração do Cloudflare
 app.get('/admin/verificar-cf', auth(), requireRole('admin'), async (c) => {
+  const gate = requireAdminDebugEnabled(c);
+  if (gate) return c.json(gate, 403);
   return c.json({
     success: true,
     cloudflare: {
@@ -484,6 +502,8 @@ app.get('/admin/verificar-cf', auth(), requireRole('admin'), async (c) => {
 
 // ADMIN ONLY: Ver HTML processado que será enviado ao Cloudflare
 app.get('/admin/preview-html/:historicoId', auth(), requireRole('admin'), async (c) => {
+  const gate = requireAdminDebugEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
   const historicoId = parseInt(c.req.param('historicoId'));
 
@@ -582,6 +602,8 @@ app.get('/admin/preview-html/:historicoId', auth(), requireRole('admin'), async 
 
 // ✅ ENDPOINT: Debug - Ver certificadoData e templateData que será usado
 app.get('/admin/debug-certificado-data/:historicoId', auth(), requireRole('admin'), async (c) => {
+  const gate = requireAdminDebugEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
   const id = parseInt(c.req.param('historicoId'));
 
@@ -717,6 +739,8 @@ app.get('/admin/debug-certificado-data/:historicoId', auth(), requireRole('admin
 
 // ✅ ENDPOINT: Debug - Ver template RAW do banco
 app.get('/admin/debug-template/:historicoId', auth(), requireRole('admin'), async (c) => {
+  const gate = requireAdminDebugEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
   const id = parseInt(c.req.param('historicoId'));
 
@@ -797,6 +821,8 @@ app.get('/admin/debug-template/:historicoId', auth(), requireRole('admin'), asyn
 
 // ✅ ENDPOINT: Debug - Verificar dados do histórico
 app.get('/admin/debug-query/:historicoId', auth(), requireRole('admin'), async (c) => {
+  const gate = requireAdminDebugEnabled(c);
+  if (gate) return c.json(gate, 403);
   const db = c.env.DB;
   const id = parseInt(c.req.param('historicoId'));
 
