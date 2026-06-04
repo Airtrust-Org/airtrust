@@ -3,7 +3,7 @@
 **Data:** 2026-06-03
 **Branch:** `main`
 **HEAD base:** `d65fc9eab2e8abe608c5f4820a6a23319ad1bb2c`
-**Modo:** Planejamento atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado), Sprint Z0 (R01 SIGVOOS readiness mapped) e Sprint R04.5/R01 pós-apply oficial da fila pendente `0387` + `0388`. Sem migration manual ou aplicação manual de dados reais.
+**Modo:** Planejamento atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado), Sprint Z0 (R01 SIGVOOS readiness mapped), Sprint R04.5/R01 pós-apply oficial da fila pendente `0387` + `0388` e **Sprint R04.6 (bootstrap runtime de Documentos removido)**. Sem migration manual ou aplicação manual de dados reais.
 
 ---
 
@@ -221,7 +221,7 @@
 - **Documentos:** `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
 - **Deploy:** Não (docs-only).
 - **Migration necessária:** Não nesta fase. 3 migrations planejadas para fases futuras.
-- **Pendente:** Fase 3 M3 (remoção do bootstrap R04 depois da `0388` já aplicada + probe pós-apply registrado) e Fase 2 M2 (baseline/chain plan R01). R09 = RESOLVED (Sprint R09). R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5, 2026-06-03).
+- **Pendente na Sprint V:** Fase 3 M3 (remoção do bootstrap R04) — CONCLUÍDO na Sprint R04.6. R04 = RESOLVED. Fase 2 M2 (baseline/chain plan R01) — pendente. R09 = RESOLVED.
 - **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados por fase).
 
 ### Sprint W — DDL Pré-Fase: Remover `ensure*` já cobertos
@@ -312,7 +312,7 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente:** DDL runtime remanescente: R04 (Documentos) = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5). R01 (SIGVOOS) = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION. R09 = RESOLVED (Sprint R09).
+- **Pendente na Sprint X.5:** DDL runtime remanescente na época: R04 (Documentos) = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5). **Nota: R04 bootstrap foi removido na Sprint R04.6** — status atual: RESOLVED. R01 (SIGVOOS) = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION (ativo). R09 = RESOLVED.
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
 
 ### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
@@ -363,7 +363,7 @@
 - **Objetivo:** reconciliar o estado real dos achados remanescentes sem abrir novas microfases desnecessarias.
 - **Entregue:**
   - plano consolidado em `AIRTRUST_AUDIT_REMAINING_FINDINGS_CLOSURE_PLAN_v0_5.md`;
-  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 bootstrap removal/deploy -> R01 chain plan` (R09 = RESOLVED Sprint R09; R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL Sprint R04.5);
+  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 bootstrap removal/deploy -> R01 chain plan` (R09 = RESOLVED; R04 bootstrap = CONCLUÍDO Sprint R04.6 — RESOLVED; pendente deploy + smoke);
   - confirmacao de que esta rodada nao comporta alteracao segura de runtime, migration ou deploy.
 - **Decisao:** fechar esta sprint como docs-only. Nenhum schema remoto, nenhum deploy e nenhuma migration remota.
 
@@ -422,6 +422,19 @@
   - Audit v2 mantido em `READY_FOR_STAGING_FLAG_TEST`, sem ativacao de flag.
 - **Decisao:** `CONDITIONAL GO` mantido.
 - **Pendente:** credencial efemera/read-only, empresa esperada, staging/snapshot aprovado com schema completo e autorizacao separada para qualquer staging flag test.
+
+### Sprint R04.6 — Documentos Bootstrap Removal ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-03.
+- **Objetivo:** remover o bootstrap runtime de Documentos (`auto-migration-documentos.ts`) agora que a `0388` já estava aplicada em produção e o probe pós-apply confirmou o schema canônico.
+- **Entregue:**
+  - `auto-migration-documentos.ts` deletado do runtime via `git rm`;
+  - `api-bootstrap.ts` limpo — `import { ensureDocumentosTableExists }` e `await ensureDocumentosTableExists(db)` removidos;
+  - guard test `no-runtime-ddl-hot-paths.test.ts` atualizado — `api-bootstrap.ts` removido de `DOCUMENTED_EXCEPTIONS`, R04 documentado como `RESOLVED` nos comentários;
+  - `documentos-canonical-schema` (8/8), `no-runtime-ddl-hot-paths` (13/13) e `tenant-isolation` (12/12) todos PASS.
+  - R04 reclassificado para `RESOLVED`.
+- **Decisao:** bootstrap removido. Nenhuma migration nova, nenhum schema remoto alterado, nenhum backfill, nenhum dado tocado.
+- **Pendente:** deploy do Worker/API + smoke pós-deploy → R04 = RESOLVED.
+- **Risco:** Baixo (migration `0388` já aplicada; probe pós-apply PASS; remoção do bootstrap é só código morto).
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
@@ -501,7 +514,7 @@
 | OP-1 | Operational Readiness Evidence ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | OP-2 | Staging Operational Gate ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | R09 | ~~R09 Readiness / Verification~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | GPT-5.4 DeepSeek | Sim (DDL removido) | Nao (sem migration) |
-| Y | Remover bootstrap de Documentos apos `0388` aplicada e probe pós-apply registrado | Medio prazo | GPT-5.5 | Sim | Sim |
+| R04.6 | Documentos Bootstrap Removal ✅ | Concluído (2026-06-03) | GPT-5.5 | Pendente (deploy + smoke) | Nao (0388 ja aplicada) |
 | Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
@@ -513,4 +526,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, APP_VERSION=2026-06-03T17:00:27Z-c12d8bf, R03=RESOLVED, Audit v2=APPLIED_SCHEMA_READY_FOR_FLAG_PLAN).
+**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, R03=RESOLVED, Audit v2=APPLIED_SCHEMA_READY_FOR_FLAG_PLAN), Sprint R04.5 (apply oficial `0387`+`0388`) e **Sprint R04.6 (bootstrap documentos removido, R04=RESOLVED)**.

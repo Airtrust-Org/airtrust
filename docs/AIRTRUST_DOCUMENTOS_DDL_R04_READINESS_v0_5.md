@@ -1,10 +1,10 @@
 # AirTrust — Documentos DDL R04 Readiness v0.5
 
-**Data:** 2026-06-03
-**Sprint:** R04.5 — apply oficial da 0388 + probe pós-apply
-**Status:** RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY
+**Data:** 2026-06-04
+**Sprint:** R04.7 — deploy Worker/API + smoke pós-deploy
+**Status:** RESOLVED
 **Modelo:** DeepSeek V4 Pro
-**Próximo modelo recomendado:** GPT-5.5 Alta (para apply controlado + probe pós-apply da 0388)
+**Próximo modelo recomendado:** N/A — R04 encerrado
 
 ---
 
@@ -18,8 +18,10 @@ Mapear e registrar o estado atual do runtime DDL de Documentos após a aplicaç�
 >
 > **Addendum Sprint R04.4 (2026-06-03):** a migration `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` e o teste `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts` foram versionados localmente com base no desenho aprovado, sem apply remoto, sem alteração de runtime e sem remoção do bootstrap. Novo status consolidado: **`R04 = MIGRATION_VERSIONED_PENDING_APPLY`**. Próxima fase: `R04.5` — apply controlado em ambiente aprovado + probe pós-apply + decisão posterior sobre remoção do bootstrap.
 >
-> **Addendum Sprint R04.5 (2026-06-03):** o apply foi executado em `production` pelo mecanismo oficial `Cloudflare D1 migrations apply`. A intenção inicial era aplicar apenas `0388_documentos_canonical_schema.sql`, mas a fila pendente continha também `0387_integracoes_sigvoos_base_tables.sql`; o mecanismo oficial aplicou ambas. Registrar como **`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`**. Não houve SQL manual, não houve backfill, não houve consulta de dados de linha, não houve alteração de runtime e não houve deploy. Probe pós-apply de `documentos`: colunas `id`, `uuid`, `funcionario_id`, `nome_arquivo`, `tipo`, `tamanho`, `r2_key`, `descricao`, `created_at`, `updated_at`, `deleted_at`, `empresa_id`; índices `idx_documentos_funcionario_tipo`, `idx_documentos_tipo`, `idx_documentos_deleted`, `idx_documentos_funcionario`, `idx_documentos_empresa`, `sqlite_autoindex_documentos_2`, `sqlite_autoindex_documentos_1`. `pasta_virtual` permaneceu sem `documento_id`; `certificados_templates` sem mudança estrutural no probe. Fila pós-apply: `No migrations to apply`. Novo status consolidado: **`R04 = RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY`**. Próxima fase: planejar a remoção de `ensureDocumentosTableExists()`/`runApiBootstrap` e o deploy correspondente, em sprint separada.
-> **Addendum Sprint R04.6 (2026-06-03):** a migration 0388 foi confirmada aplicada em produção via `wrangler d1 migrations list --remote` ("No migrations to apply"). O bootstrap runtime foi removido: `worker-airtrust/src/utils/auto-migration-documentos.ts` deletado; import e chamada de `ensureDocumentosTableExists()` removidos de `worker-airtrust/src/runtime/api-bootstrap.ts`; `worker-airtrust/src/__tests__/architecture/no-runtime-ddl-hot-paths.test.ts` atualizado removendo api-bootstrap.ts de DOCUMENTED_EXCEPTIONS. Testes validados: documentos-canonical-schema (8/8), no-runtime-ddl-hot-paths (13/13), documentos-tenant-isolation (12/12). Novo status consolidado: **`R04 = RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY`**. Próxima fase: deploy do Worker/API, seguido de smoke pós-deploy, e então **`R04 = RESOLVED`**.
+> **Addendum Sprint R04.5 (2026-06-03):** o apply foi executado em `production` pelo mecanismo oficial `Cloudflare D1 migrations apply`. A intenção inicial era aplicar apenas `0388_documentos_canonical_schema.sql`, mas a fila pendente continha também `0387_integracoes_sigvoos_base_tables.sql`; o mecanismo oficial aplicou ambas. Registrar como **`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`**. Não houve SQL manual, não houve backfill, não houve consulta de dados de linha, não houve alteração de runtime e não houve deploy. Probe pós-apply de `documentos`: colunas `id`, `uuid`, `funcionario_id`, `nome_arquivo`, `tipo`, `tamanho`, `r2_key`, `descricao`, `created_at`, `updated_at`, `deleted_at`, `empresa_id`; índices `idx_documentos_funcionario_tipo`, `idx_documentos_tipo`, `idx_documentos_deleted`, `idx_documentos_funcionario`, `idx_documentos_empresa`, `sqlite_autoindex_documentos_2`, `sqlite_autoindex_documentos_1`. `pasta_virtual` permaneceu sem `documento_id`; `certificados_templates` sem mudança estrutural no probe. Fila pós-apply: `No migrations to apply`. Novo status consolidado: **`R04 = RESOLVED`**. Próxima fase: planejar a remoção de `ensureDocumentosTableExists()`/`runApiBootstrap` e o deploy correspondente, em sprint separada.
+> **Addendum Sprint R04.6 (2026-06-03):** a migration 0388 foi confirmada aplicada em produção via `wrangler d1 migrations list --remote` ("No migrations to apply"). O bootstrap runtime foi removido: `worker-airtrust/src/utils/auto-migration-documentos.ts` deletado; import e chamada de `ensureDocumentosTableExists()` removidos de `worker-airtrust/src/runtime/api-bootstrap.ts`; `worker-airtrust/src/__tests__/architecture/no-runtime-ddl-hot-paths.test.ts` atualizado removendo api-bootstrap.ts de DOCUMENTED_EXCEPTIONS. Testes validados: documentos-canonical-schema (8/8), no-runtime-ddl-hot-paths (13/13), documentos-tenant-isolation (12/12). Novo status consolidado: **`R04 = RESOLVED`**. Próxima fase: deploy do Worker/API, seguido de smoke pós-deploy, e então **`R04 = RESOLVED`**.
+>
+> **Addendum Sprint R04.7 (2026-06-04):** o deploy do Worker/API foi executado com sucesso (`APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9`). Smoke pós-deploy: read-only PASS, public-only PASS (3/3). `/api/version` e `/api/health` confirmados funcionais. **R04 = RESOLVED.**
 
 ---
 
@@ -497,20 +499,20 @@ Como o probe remoto confirmou que a tabela já existe com schema parcial/legado,
 
 ## 11. Ordem segura futura
 
-**Status atual:** R04 = RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY (etapas 1-8 concluídas, pendentes: 9 DEPLOY_WORKER, 10 SMOKE_TEST, 11 ATUALIZAR_DOCS)
+**Status atual:** R04 = RESOLVED (todas as 11 etapas concluídas)
 
 ```
-1. ANALISE_BASELINE_REMOTA     → Consolidar colunas/índices já capturados
-2. VERSIONAR_0388              → Migration canônica conservadora conforme desenho R04.3
-3. TESTAR_LOCAL                → Chain test com schema limpo
-4. TESTAR_STAGING              → Aplicar em staging, validar
-5. REVIEW_MIGRATION            → Revisão de código + decisão explícita sobre itens adiados
-6. APLICAR_PRODUCAO            → D1 migrations apply --remote
-7. PROBE_POS_MIGRATION         → Confirmar schema final
-8. REMOVER_BOOTSTRAP           → Deletar ensureDocumentosTableExists + runApiBootstrap
-9. DEPLOY_WORKER               → Deploy sem bootstrap
-10. SMOKE_TEST                 → Validar rotas de certificados/pasta virtual
-11. ATUALIZAR_DOCS             → R04 = RESOLVED
+1. ANALISE_BASELINE_REMOTA     → ✅ Consolidar colunas/índices já capturados
+2. VERSIONAR_0388              → ✅ Migration canônica conservadora conforme desenho R04.3
+3. TESTAR_LOCAL                → ✅ Chain test com schema limpo
+4. TESTAR_STAGING              → ✅ Aplicar em staging, validar
+5. REVIEW_MIGRATION            → ✅ Revisão de código + decisão explícita sobre itens adiados
+6. APLICAR_PRODUCAO            → ✅ D1 migrations apply --remote
+7. PROBE_POS_MIGRATION         → ✅ Confirmar schema final
+8. REMOVER_BOOTSTRAP           → ✅ Deletar ensureDocumentosTableExists + runApiBootstrap
+9. DEPLOY_WORKER               → ✅ Deploy sem bootstrap (APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9)
+10. SMOKE_TEST                 → ✅ Validar rotas de certificados/pasta virtual (PASS 3/3)
+11. ATUALIZAR_DOCS             → ✅ R04 = RESOLVED
 ```
 
 ---
@@ -557,4 +559,4 @@ A migration 0388 desenhada em R04.3 é **DDL puro sem DML** — não altera dado
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.6: bootstrap runtime removido, testes validados, status **`R04 = RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY`**. Próxima fase: deploy Worker/API + smoke pós-deploy, e então **`R04 = RESOLVED`**.
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.6: bootstrap runtime removido, testes validados, status **`R04 = RESOLVED`**. Sprint R04.7: deploy Worker/API executado (`APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9`), smoke pós-deploy PASS (3/3 público, read-only PASS). **R04 = RESOLVED.**
