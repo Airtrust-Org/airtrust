@@ -431,10 +431,21 @@
   - `api-bootstrap.ts` limpo — `import { ensureDocumentosTableExists }` e `await ensureDocumentosTableExists(db)` removidos;
   - guard test `no-runtime-ddl-hot-paths.test.ts` atualizado — `api-bootstrap.ts` removido de `DOCUMENTED_EXCEPTIONS`, R04 documentado como `RESOLVED` nos comentários;
   - `documentos-canonical-schema` (8/8), `no-runtime-ddl-hot-paths` (13/13) e `tenant-isolation` (12/12) todos PASS.
-  - R04 reclassificado para `RESOLVED`.
+  - R04 reclassificado para `RUNTIME_FALLBACK_REMOVED_PENDING_DEPLOY`.
 - **Decisao:** bootstrap removido. Nenhuma migration nova, nenhum schema remoto alterado, nenhum backfill, nenhum dado tocado.
 - **Pendente:** deploy do Worker/API + smoke pós-deploy → R04 = RESOLVED.
 - **Risco:** Baixo (migration `0388` já aplicada; probe pós-apply PASS; remoção do bootstrap é só código morto).
+
+### Sprint R04.7 — Deploy Worker/API + Smoke ✅ CONCLUIDO
+- **Status:** CONCLUIDO em 2026-06-04.
+- **Objetivo:** executar o deploy do Worker/API sem o bootstrap de Documentos e validar com smoke pós-deploy.
+- **Entregue:**
+  - Deploy Worker/API executado: `APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9`.
+  - Smoke pós-deploy: read-only PASS, public-only PASS (3/3).
+  - `/api/version` retorna a versão correta; `/api/health` saudável.
+  - Deploy Pages: NÃO.
+  - R04 reclassificado para `RESOLVED`.
+- **Risco:** Nenhum. Migration `0388` já aplicada em produção, bootstrap já removido (R04.6), deploy apenas removeu código morto.
 
 ### Sprint Y — Status Enum Expansão
 - **Prioridade:** Médio prazo.
@@ -515,6 +526,7 @@
 | OP-2 | Staging Operational Gate ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | R09 | ~~R09 Readiness / Verification~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | GPT-5.4 DeepSeek | Sim (DDL removido) | Nao (sem migration) |
 | R04.6 | Documentos Bootstrap Removal ✅ | Concluído (2026-06-03) | GPT-5.5 | Pendente (deploy + smoke) | Nao (0388 ja aplicada) |
+| R04.7 | Deploy Worker/API + Smoke ✅ | Concluído (2026-06-04) | GPT-5.5 | Sim (APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9) | Nao |
 | Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
@@ -526,4 +538,4 @@
 
 ---
 
-**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, R03=RESOLVED, Audit v2=APPLIED_SCHEMA_READY_FOR_FLAG_PLAN), Sprint R04.5 (apply oficial `0387`+`0388`) e **Sprint R04.6 (bootstrap documentos removido, R04=RESOLVED)**.
+**Fim do plano de sprints.** Documento atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, R03=RESOLVED, Audit v2=APPLIED_SCHEMA_READY_FOR_FLAG_PLAN), Sprint R04.5 (apply oficial `0387`+`0388`), **Sprint R04.6 (bootstrap documentos removido)** e **Sprint R04.7 (deploy Worker/API APP_VERSION=2026-06-04T01:43:21Z-ca6a7d9, smoke pós-deploy PASS 3/3, R04=RESOLVED)**.
