@@ -1,8 +1,8 @@
 # AirTrust — Documentos DDL R04 Readiness v0.5
 
 **Data:** 2026-06-03
-**Sprint:** R04.4 — versionamento local da migration 0388
-**Status:** MIGRATION_VERSIONED_PENDING_APPLY
+**Sprint:** R04.5 — apply oficial da 0388 + probe pós-apply
+**Status:** MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL
 **Modelo:** DeepSeek V4 Pro
 **Próximo modelo recomendado:** GPT-5.5 Alta (para apply controlado + probe pós-apply da 0388)
 
@@ -10,13 +10,15 @@
 
 ## 1. Objetivo
 
-Mapear o estado atual do runtime DDL de Documentos para preparar a futura migration `0388_documentos_canonical_schema.sql`, que possibilitará a remoção segura de `auto-migration-documentos.ts` do runtime.
+Mapear e registrar o estado atual do runtime DDL de Documentos após a aplicação oficial da `0388_documentos_canonical_schema.sql`, preparando a remoção segura de `auto-migration-documentos.ts` do runtime em fase separada.
 
 > **Addendum Sprint R04.2 (2026-06-03):** o probe estrutural remoto read-only foi executado manualmente em `production` usando somente `PRAGMA table_info(...)` e `PRAGMA index_list(...)` para `documentos`, `pasta_virtual` e `certificados_templates`. Resultado operacional registrado: `Total queries executed: 6`, `Rows read: 0`, `Rows written: 0`, sem DML, sem DDL e sem consulta de dados de linha. Baseline confirmado: `documentos` existe com `empresa_id` e sem `historico_id`/`sha256_hash`; `idx_documentos_uuid` nominal não existe e a unicidade está coberta por autoíndices SQLite; `pasta_virtual.documento_id` não existe; `certificados_templates` existe em produção. **R04 = READY_FOR_0388_CANONICAL_WITH_PROBE_BASELINE.**
 >
 > **Addendum Sprint R04.3 (2026-06-03):** o desenho lógico da futura `0388_documentos_canonical_schema.sql` foi fechado em modo docs-only, sem criar migration, sem alterar runtime e sem tocar schema remoto. A decisão consolidada passou a ser: **`R04 = 0388_DESIGN_READY`**. A futura `0388` deve incluir apenas `CREATE TABLE IF NOT EXISTS documentos` aderente à baseline real de produção e os índices seguros `idx_documentos_empresa`, `idx_documentos_funcionario`, `idx_documentos_deleted`, `idx_documentos_tipo` e `idx_documentos_funcionario_tipo`. Permanecem fora da `0388` nesta fase: `historico_id`, `idx_documentos_historico`, `sha256_hash`, `idx_documentos_sha256`, `pasta_virtual.documento_id`, qualquer DDL em `certificados_templates` e os índices de `0200` dependentes de colunas fantasmas. Documento de desenho: `docs/AIRTRUST_DOCUMENTOS_0388_CANONICAL_SCHEMA_DESIGN_v0_5.md`.
 >
 > **Addendum Sprint R04.4 (2026-06-03):** a migration `worker-airtrust/migrations/0388_documentos_canonical_schema.sql` e o teste `worker-airtrust/src/__tests__/migrations/documentos-canonical-schema.test.ts` foram versionados localmente com base no desenho aprovado, sem apply remoto, sem alteração de runtime e sem remoção do bootstrap. Novo status consolidado: **`R04 = MIGRATION_VERSIONED_PENDING_APPLY`**. Próxima fase: `R04.5` — apply controlado em ambiente aprovado + probe pós-apply + decisão posterior sobre remoção do bootstrap.
+>
+> **Addendum Sprint R04.5 (2026-06-03):** o apply foi executado em `production` pelo mecanismo oficial `Cloudflare D1 migrations apply`. A intenção inicial era aplicar apenas `0388_documentos_canonical_schema.sql`, mas a fila pendente continha também `0387_integracoes_sigvoos_base_tables.sql`; o mecanismo oficial aplicou ambas. Registrar como **`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`**. Não houve SQL manual, não houve backfill, não houve consulta de dados de linha, não houve alteração de runtime e não houve deploy. Probe pós-apply de `documentos`: colunas `id`, `uuid`, `funcionario_id`, `nome_arquivo`, `tipo`, `tamanho`, `r2_key`, `descricao`, `created_at`, `updated_at`, `deleted_at`, `empresa_id`; índices `idx_documentos_funcionario_tipo`, `idx_documentos_tipo`, `idx_documentos_deleted`, `idx_documentos_funcionario`, `idx_documentos_empresa`, `sqlite_autoindex_documentos_2`, `sqlite_autoindex_documentos_1`. `pasta_virtual` permaneceu sem `documento_id`; `certificados_templates` sem mudança estrutural no probe. Fila pós-apply: `No migrations to apply`. Novo status consolidado: **`R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL`**. Próxima fase: planejar a remoção de `ensureDocumentosTableExists()`/`runApiBootstrap` e o deploy correspondente, em sprint separada.
 
 ---
 
@@ -552,4 +554,4 @@ A migration 0388 desenhada em R04.3 é **DDL puro sem DML** — não altera dado
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.4 e versionamento local da `0388` baseado na baseline estrutural remota de produção. Próxima fase: apply controlado + probe pós-apply da `0388_documentos_canonical_schema.sql` (GPT-5.5 Alta).
+**Fim do readiness document.** Gerado em 2026-06-03. Atualizado com Sprint R04.5 e registro do apply oficial da `0388` em produção, incluindo probe pós-apply e status **`R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL`**. Próxima fase: remoção planejada do bootstrap runtime em sprint separada (GPT-5.5 Alta).

@@ -11,7 +11,7 @@
 
 O AirTrust passou por um ciclo intenso de auditoria e remediação. Partimos de uma auditoria geral independente (2026-06-01) que identificou 1 P0 ativo (reset admin cross-tenant), 4 P1 (FRMS fail-open, `escala_alocacoes` sem `empresa_id`, scripts DB destrutivos, fallback `userId===1`), e dezenas de achados P2/P3.
 
-**Hoje, 2026-06-02, o estado é:**
+**Hoje, 2026-06-03, o estado é:**
 
 - **Nenhum P0 ativo.** O reset admin cross-tenant foi corrigido e testado.
 - **Nenhum P1 de código ativo.** Todos os P1 de runtime foram mitigados ou corrigidos.
@@ -66,7 +66,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 | **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; Sprint X.5 aplicou migration `0385` em produção | Ativar flag, validar paridade, ampliar cobertura dual-write e validação jurídica de retenção |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Data Quality** | SQL validado, runner local criado, 10 checks executados (5 PASS, 4 WARN, 5 SKIPPED); OP-1 e OP-2 repetiram a evidencia local com o mesmo perfil agregado | Executar em ambiente com schema completo para zerar SKIPPED |
-| **DDL Runtime** | 15 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Sprint Z0 mapeou integralmente R01 (SIGVOOS), Sprint Z1 criou `0387` e Sprint Z1.1 provou a falha da cadeia limpa na `0354`. R01 = MIGRATION_CHAIN_BLOCKED_BY_0354. Sprint R09 removeu o ALTER TABLE de `shared.ts`; R09 = RESOLVED. Sprint R04.2 registrou o probe estrutural remoto de produção para R04 com `PRAGMA` only, a Sprint R04.3 fechou o desenho documental da `0388` e a Sprint R04.4 versionou a migration e o teste local. R04 = MIGRATION_VERSIONED_PENDING_APPLY. |
+| **DDL Runtime** | 15 hot paths/helpers limpos, guard endurecido | Sprint V inventariou 20 ocorrências; Sprint W removeu os 6 caminhos cobertos (R02, R05, R06, R07, R08, R10); Sprint X.4 versionou `0386` e removeu o fallback de R03; Sprint X.5 aplicou `0386` em produção e deployou o Worker/API. R03 = RESOLVED. Sprint Z0 mapeou integralmente R01 (SIGVOOS), Sprint Z1 criou `0387` e Sprint Z1.1 provou a falha da cadeia limpa na `0354`. Sprint R04.5 registrou que o mecanismo oficial `Cloudflare D1 migrations apply` consumiu a fila pendente e aplicou `0387` + `0388` em produção, sem SQL manual, sem backfill, sem consulta de dados de linha e sem deploy. R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION. R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL. Sprint R09 removeu o ALTER TABLE de `shared.ts`; R09 = RESOLVED. |
 | **Repository Pattern** | Piloto em 2 domínios (dashboard, LMS reports) | Expandir gradualmente para lms-cursos, qualificações |
 | **Scripts DB** | Wrapper seguro criado para scripts críticos | Scripts shell legados ainda sem wrapper |
 | **`escala_alocacoes`** | Tenant-scope por JOIN garantido e testado | Migration opcional P3 para coluna `empresa_id` própria + UNIQUE parcial |
@@ -85,7 +85,7 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 
 ### Não bloqueadores (para piloto interno)
 
-6. **DDL runtime residual** em SIGVOOS e documentos. R03 = RESOLVED (Sprint X.5: `0386` aplicada + deploy). R09 = RESOLVED (Sprint R09: ALTER TABLE removido de `shared.ts`). R04 = MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4: baseline remota confirmada, desenho fechado, migration e teste versionados). R01 = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1).
+6. **DDL runtime residual** em SIGVOOS e documentos. R03 = RESOLVED (Sprint X.5: `0386` aplicada + deploy). R09 = RESOLVED (Sprint R09: ALTER TABLE removido de `shared.ts`). R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5: `0388` aplicada via fila oficial + probe pós-apply). R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION.
 7. **Status residual** em cron/alertas/EVD (bloqueia escala, não piloto).
 8. **R2 metadata** de tenant ausente (defense-in-depth, não critério de segurança).
 9. **Performance/bundle/N+1** sem auditoria (dívida estrutural).
@@ -140,7 +140,7 @@ Os seguintes itens **não bloqueiam** um piloto interno/controlado ( empresa atu
 2. **Executar Data Quality completo** em ambiente staging aprovado com schema completo para zerar checks `SKIPPED`.
 3. **Executar o Audit v2 staging flag test** com schema ja aplicado, rollback por flag e validacao de paridade minima.
 4. **Executar a foundation de RBAC/Suporte v2** somente depois do Audit v2 staging flag test aprovado.
-5. **Fechar o bloco DDL residual restante** na ordem `R04 -> R01`, mantendo a abordagem conservadora para schema/migrations. R09 = RESOLVED (Sprint R09). R04 = MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4). Próximo passo: apply controlado da `0388_documentos_canonical_schema.sql` + probe pós-apply sobre a baseline remota já capturada.
+5. **Fechar o bloco DDL residual restante** na ordem `R04 -> R01`, mantendo a abordagem conservadora para schema/migrations. R09 = RESOLVED (Sprint R09). R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5). Próximo passo: remover o bootstrap de Documentos em sprint separada; depois atacar a reconciliação da cadeia limpa de SIGVOOS.
 
 **Decisao operacional OP-1/OP-2:** `CONDITIONAL GO`.
 
@@ -176,4 +176,4 @@ O AirTrust está em um estado sólido para continuar operação e evolução. O 
 
 ---
 
-**Fim do resumo executivo.** Documento gerado em 2026-06-02. Atualizado com Sprint X.5 closure em 2026-06-03 (migrations 0385/0386 aplicadas em produção, Worker/API deployado, APP_VERSION=2026-06-03T17:00:27Z-c12d8bf, smoke pós-deploy PASS, R03=RESOLVED).
+**Fim do resumo executivo.** Documento gerado em 2026-06-02. Atualizado em 2026-06-03 com Sprint X.5 closure (migrations 0385/0386 aplicadas em produção, Worker/API deployado, APP_VERSION=2026-06-03T17:00:27Z-c12d8bf, smoke pós-deploy PASS, R03=RESOLVED) e Sprint R04.5/R01 pós-apply oficial da fila pendente `0387` + `0388` (R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL; R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION).

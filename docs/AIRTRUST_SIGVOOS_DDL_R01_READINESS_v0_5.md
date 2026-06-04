@@ -1,16 +1,18 @@
 # AirTrust — SIGVOOS DDL R01 Readiness v0.5
 
 **Data:** 2026-06-03
-**Sprint:** Z0 readiness + Z1 migration local + Z1.1 chain audit
+**Sprint:** Z0 readiness + Z1 migration local + Z1.1 chain audit + pós-apply oficial em produção
 **Branch:** `main`
 **HEAD:** `f2d0db6276e0600e34716823645622b5001d8b02`
-**Modo:** Z0 foi read-only/docs-only. Z1 criou migration local + testes + atualização documental. Z1.1 auditou a cadeia `0354 -> 0387` com prova local. Nenhum D1 remoto, nenhum banco real alterado, nenhum deploy.
+**Modo:** Z0 foi read-only/docs-only. Z1 criou migration local + testes + atualização documental. Z1.1 auditou a cadeia `0354 -> 0387` com prova local. Depois, o mecanismo oficial `Cloudflare D1 migrations apply` aplicou a `0387` em `production` ao consumir a fila pendente durante a tentativa de aplicar a `0388`. Não houve SQL manual, não houve backfill, não houve consulta de dados de linha, não houve alteração de runtime e não houve deploy.
 
 ---
 
 ## 1. Objetivo
 
-Mapear integralmente o escopo de `ensureSigvoosTables()` (R01) para preparar sua remoção futura do runtime DDL residual. Esta fase é **exclusivamente de inventário e planejamento** — não cria migration, não altera schema, não toca banco real.
+Mapear integralmente o escopo de `ensureSigvoosTables()` (R01) e registrar o estado pós-apply da `0387` em produção para preparar sua remoção futura do runtime DDL residual. A reconciliação da cadeia `0354 -> 0387` continua pendente.
+
+> **Addendum pós-apply em produção (2026-06-03):** a tentativa de aplicar apenas `0388_documentos_canonical_schema.sql` via mecanismo oficial `Cloudflare D1 migrations apply` consumiu a fila pendente completa e aplicou também `0387_integracoes_sigvoos_base_tables.sql`. Registrar como **`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`**. Resultado: `0387` está aplicada em produção, mas isso **não** corrige a cadeia limpa, porque `0354_auditoria_critica_schema_hardening.sql` continua historicamente anterior à `0387` e ainda depende da existência prévia de `integracoes_sigvoos_config`. Novo status consolidado: **`R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`**.
 
 ---
 
@@ -25,8 +27,8 @@ Mapear integralmente o escopo de `ensureSigvoosTables()` (R01) para preparar sua
 | Call sites (total) | 10 |
 | Call sites em rotas | 2 (`worker-airtrust/src/routes/integracoes_sigvoos.ts:374,600`) |
 | Call sites em serviços | 8 (`worker-airtrust/src/services/sigvoos-frms.ts:625,802,852,914,948,1045,2238,2500`) |
-| Status na matriz | DESIGN_READY |
-| Status nesta sprint | MIGRATION_CHAIN_BLOCKED_BY_0354 |
+| Status na matriz | 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION |
+| Status nesta sprint | 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION |
 
 ---
 
@@ -327,6 +329,8 @@ Inventário completo. Lacunas documentadas. Nenhuma ação de código.
 
 **Status resultante após Z1.1:** `R01 = MIGRATION_CHAIN_BLOCKED_BY_0354`.
 
+**Status consolidado após o apply oficial em produção:** `R01 = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION`.
+
 ### Próxima fase (Z1): Criar migration + teste local
 
 **Migration proposta:** `0387_integracoes_sigvoos_base_tables.sql`
@@ -404,10 +408,10 @@ CREATE INDEX IF NOT EXISTS idx_integracoes_sigvoos_mapeamentos_empresa_canac
 | 1 | Criar migration `0387` | Repositório | CONCLUÍDO | Schema runtime validado contra o código |
 | 2 | Validar `0387` localmente + cobertura com `0352` | Local | CONCLUÍDO | Teste `sigvoos-base-tables-schema.test.ts` |
 | 3 | Definir correção operacional para a dependência `0354 -> integracoes_sigvoos_config` | Repositório/Runbook | MÉDIO | Sem isso, fallback R01 não sai com segurança |
-| 4 | Aplicar `0387` em staging/ambiente aprovado | D1 staging | BAIXO | Plano de sequência aprovado |
-| 5 | Validar smoke SIGVOOS/FRMS | Staging | MÉDIO | Migration aplicada |
-| 6 | Aplicar `0387` em produção | D1 produção | ALTO | Staging validado + autorização explícita |
-| 7 | Reduzir/remover `ensureSigvoosTables()` | Código | MÉDIO | Migration aplicada em todos os ambientes |
+| 4 | Registrar o apply oficial da `0387` em produção via fila pendente (`APPLY_SCOPE_EXPANDED_BY_PENDING_QUEUE`) | D1 produção | CONCLUÍDO | `Cloudflare D1 migrations apply` executado |
+| 5 | Definir correção operacional para a dependência `0354 -> integracoes_sigvoos_config` | Repositório/Runbook | ALTO | Sem isso, fallback R01 não sai com segurança |
+| 6 | Validar estratégia de staging/ambiente limpo já reconciliada | D1 staging | MÉDIO | Plano de sequência aprovado |
+| 7 | Reduzir/remover `ensureSigvoosTables()` | Código | MÉDIO | Cadeia reconciliada + migration aplicada em todos os ambientes |
 | 8 | Deploy Worker/API | Cloudflare | MÉDIO | Código atualizado |
 | 9 | Smoke pós-deploy | Produção | BAIXO | Deploy concluído |
 
@@ -478,4 +482,4 @@ Reverter o commit que removeu/reduziu `ensureSigvoosTables()`. A função é ide
 
 ---
 
-**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1 e Z1.1 com a migration `0387`, prova local da falha de cadeia em `0354` e decisão de manter o fallback R01.
+**Fim do readiness document.** Gerado em 2026-06-03 no Sprint Z0 e atualizado nos Sprints Z1, Z1.1 e no registro pós-apply em produção, com a `0387` aplicada via fila oficial pendente, mas ainda exigindo reconciliação explícita da cadeia `0354 -> 0387` antes de qualquer remoção do fallback R01.

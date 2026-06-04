@@ -3,7 +3,7 @@
 **Data:** 2026-06-03
 **Branch:** `main`
 **HEAD base:** `d65fc9eab2e8abe608c5f4820a6a23319ad1bb2c`
-**Modo:** Planejamento atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado) e Sprint Z0 (R01 SIGVOOS readiness mapped). Sem migration manual ou aplicação manual de dados reais.
+**Modo:** Planejamento atualizado após Sprint X.5 (migrations 0385/0386 aplicadas, Worker/API deployado), Sprint Z0 (R01 SIGVOOS readiness mapped) e Sprint R04.5/R01 pós-apply oficial da fila pendente `0387` + `0388`. Sem migration manual ou aplicação manual de dados reais.
 
 ---
 
@@ -221,7 +221,7 @@
 - **Documentos:** `AIRTRUST_RUNTIME_DDL_RESIDUAL_DESIGN_v0_5.md`, `AIRTRUST_DDL_RESIDUAL_MIGRATION_READINESS_v0_5.md`.
 - **Deploy:** Não (docs-only).
 - **Migration necessária:** Não nesta fase. 3 migrations planejadas para fases futuras.
-- **Pendente:** Fase 3 M3 (apply controlado da `0388` já versionada + probe pós-apply → remoção bootstrap R04) e Fase 2 M2 (baseline/chain plan R01). R09 = RESOLVED (Sprint R09). R04 = MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4, 2026-06-03).
+- **Pendente:** Fase 3 M3 (remoção do bootstrap R04 depois da `0388` já aplicada + probe pós-apply registrado) e Fase 2 M2 (baseline/chain plan R01). R09 = RESOLVED (Sprint R09). R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5, 2026-06-03).
 - **Risco:** Controlado (fase documental concluída; riscos de implementação mapeados por fase).
 
 ### Sprint W — DDL Pré-Fase: Remover `ensure*` já cobertos
@@ -312,7 +312,7 @@
   - Observação: `/api/health stats.version` divergiu de `/api/version` (monitorar em sprint de observabilidade).
 - **Deploy necessário?:** Já executado (Worker/API).
 - **Migration necessária?:** Já aplicadas (0385 e 0386).
-- **Pendente:** DDL runtime remanescente: R04 (Documentos) = MIGRATION_VERSIONED_PENDING_APPLY (Sprint R04.4). R01 (SIGVOOS) = MIGRATION_CHAIN_BLOCKED_BY_0354 (Sprint Z1.1). R09 = RESOLVED (Sprint R09).
+- **Pendente:** DDL runtime remanescente: R04 (Documentos) = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL (Sprint R04.5). R01 (SIGVOOS) = 0387_APPLIED_IN_PRODUCTION_BUT_CHAIN_0354_STILL_NEEDS_RECONCILIATION. R09 = RESOLVED (Sprint R09).
 - **Risco:** Controlado. Migrations aplicadas via mecanismo oficial, probe confirmou schema, smoke pós-deploy PASS.
 
 ### Sprint Z0 — DDL Fase 2 R01 SIGVOOS Readiness ✅ CONCLUÍDO
@@ -363,7 +363,7 @@
 - **Objetivo:** reconciliar o estado real dos achados remanescentes sem abrir novas microfases desnecessarias.
 - **Entregue:**
   - plano consolidado em `AIRTRUST_AUDIT_REMAINING_FINDINGS_CLOSURE_PLAN_v0_5.md`;
-  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 0388 apply/probe -> R01 chain plan` (R09 = RESOLVED Sprint R09; R04 = MIGRATION_VERSIONED_PENDING_APPLY Sprint R04.4);
+  - reconciliacao da ordem real: `Smoke/Data Quality -> Audit v2 staging flag -> RBAC/Suporte v2 -> R04 bootstrap removal/deploy -> R01 chain plan` (R09 = RESOLVED Sprint R09; R04 = MIGRATION_APPLIED_PENDING_RUNTIME_REMOVAL Sprint R04.5);
   - confirmacao de que esta rodada nao comporta alteracao segura de runtime, migration ou deploy.
 - **Decisao:** fechar esta sprint como docs-only. Nenhum schema remoto, nenhum deploy e nenhuma migration remota.
 
@@ -501,7 +501,7 @@
 | OP-1 | Operational Readiness Evidence ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | OP-2 | Staging Operational Gate ✅ | Concluido | GPT-5.4 | Nao | Nao |
 | R09 | ~~R09 Readiness / Verification~~ **CONCLUÍDO** Sprint R09 2026-06-03 | — | GPT-5.4 DeepSeek | Sim (DDL removido) | Nao (sem migration) |
-| Y | Documentos Canonical Schema (`0388`) sobre baseline remota capturada e desenho aprovado | Medio prazo | GPT-5.5 | Sim | Sim |
+| Y | Remover bootstrap de Documentos apos `0388` aplicada e probe pós-apply registrado | Medio prazo | GPT-5.5 | Sim | Sim |
 | Z | SIGVOOS Baseline / Chain Plan | Medio prazo | GPT-5.5 | Nao ate plano aprovado | Sim/Strategic |
 | AA | Status Enum Expansao | Medio prazo | GPT-5.4 | Sim | Nao |
 | AB | Performance/Bundle Audit | Longo prazo | GPT-5.4 | Nao | Nao |
