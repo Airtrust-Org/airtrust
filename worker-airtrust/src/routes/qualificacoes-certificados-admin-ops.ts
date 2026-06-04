@@ -8,8 +8,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { requireControlledAdminOrSupportAccess } from '../middleware/platform-support';
 import {
   buildAuditMetadata,
   buildLegacyAuditoriaActor,
@@ -83,7 +83,16 @@ async function recordCertificadosAdminOperationAudit(
 }
 
 // 🔧 Endpoint para recuperar certificados órfãos (não linkados)
-opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
+opsRouter.post(
+  '/recuperar-orfaos',
+  auth(),
+  requireControlledAdminOrSupportAccess({
+    action: 'CERTIFICADOS_RECUPERAR_ORFAOS',
+    access: 'mutation',
+    entityType: 'certificados_admin_ops',
+    module: 'qualificacoes_certificados',
+  }),
+  async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
 
@@ -261,10 +270,20 @@ opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
       500,
     );
   }
-});
+  },
+);
 
 // 🧹 Endpoint para limpar referências órfãs (certificado_arquivo_id apontando para documento inexistente)
-opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => {
+opsRouter.post(
+  '/limpar-refs-orfas',
+  auth(),
+  requireControlledAdminOrSupportAccess({
+    action: 'CERTIFICADOS_LIMPAR_REFS_ORFAS',
+    access: 'mutation',
+    entityType: 'certificados_admin_ops',
+    module: 'qualificacoes_certificados',
+  }),
+  async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
 
@@ -393,13 +412,23 @@ opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => 
       500,
     );
   }
-});
+  },
+);
 
 /**
  * POST /historico/export-zip
  * Exporta certificados filtrados como ZIP
  */
-opsRouter.post('/historico/export-zip', auth(), requireRole('admin'), async (c) => {
+opsRouter.post(
+  '/historico/export-zip',
+  auth(),
+  requireControlledAdminOrSupportAccess({
+    action: 'CERTIFICADOS_EXPORT_ZIP',
+    access: 'sensitive_export',
+    entityType: 'certificados_admin_ops',
+    module: 'qualificacoes_certificados',
+  }),
+  async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
   const empresaId = getEmpresaId(c);
@@ -578,7 +607,8 @@ opsRouter.post('/historico/export-zip', auth(), requireRole('admin'), async (c) 
     console.error('[EXPORT ZIP] Error:', err);
     return c.json({ success: false, error: 'Erro ao gerar ZIP' }, 500);
   }
-});
+  },
+);
 
 
 export default opsRouter;

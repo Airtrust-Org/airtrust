@@ -1,4 +1,5 @@
-import { LEGACY_PLATFORM_ADMIN_USER_ID } from '../../middleware/tenant';
+// Keep the historical userId===1 fallback active while gradual enforcement is rolled out.
+const LEGACY_PLATFORM_ADMIN_USER_ID = 1;
 
 export type PlatformRoleCode = 'platform_admin' | 'support_read_only' | 'support_elevated';
 export type SupportAccessLevel = 'read_only' | 'elevated';

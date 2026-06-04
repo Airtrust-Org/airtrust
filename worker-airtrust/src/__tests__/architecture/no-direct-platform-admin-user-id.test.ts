@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const SRC_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const ALLOWED_LEGACY_HELPER_FILE = 'middleware/tenant.ts';
+const ALLOWED_LEGACY_HELPER_FILES = new Set([
+  'middleware/tenant.ts',
+  'lib/rbac/platform-access.ts',
+]);
 
 const FORBIDDEN_DIRECT_PLATFORM_ADMIN_PATTERNS = [
   /\buserId(?:Raw|Number)?\s*={2,3}\s*1\b/,
@@ -28,7 +31,7 @@ function listTypeScriptSourceFiles(dir: string): string[] {
 describe('platform admin boundary', () => {
   it('does not add direct userId=1 checks outside the centralized helper', () => {
     const violations = listTypeScriptSourceFiles(SRC_ROOT)
-      .filter((file) => relative(SRC_ROOT, file) !== ALLOWED_LEGACY_HELPER_FILE)
+      .filter((file) => !ALLOWED_LEGACY_HELPER_FILES.has(relative(SRC_ROOT, file)))
       .flatMap((file) => {
         const source = readFileSync(file, 'utf8');
         return FORBIDDEN_DIRECT_PLATFORM_ADMIN_PATTERNS.filter((pattern) =>

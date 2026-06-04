@@ -11,6 +11,8 @@
 >
 > **Addendum 2026-06-04 — 0389 Applied In Staging:** a `0389` foi aplicada com sucesso em `staging` via wrappers controlados, sem deploy e sem enforcement amplo. `RBAC_SUPPORT_V2 = SCHEMA_APPLIED_READY_FOR_GRADUAL_ENFORCEMENT`. `AUDIT_V2` permanece em `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` porque `audit_events_v2` ainda nao existe no target `staging`.
 >
+> **Addendum 2026-06-04 — Block 4 Closed:** a `0385_audit_events_v2.sql` foi aplicada com sucesso em `staging` sob gate/snapshot/rollback dedicados, e o enforcement gradual de `RBAC/Suporte v2` foi ativado em escopo controlado nas rotas sensíveis de certificados/admin. Status canônicos: `RBAC_SUPPORT_V2 = GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE` e `AUDIT_V2 = PARITY_VALIDATED_FOR_CONTROLLED_SCOPE`. Próximo bloco correto: `Product / performance / scale em staging`.
+>
 > **Addendum 2026-06-04 — Product/Performance/Scale Hardening:** houve uma passada local de hardening sem D1 remoto, sem deploy e sem mutation. Resultado: clamp seguro de `limit` em simuladores, smoke local adicional para dashboard/EVD e guard arquitetural ampliado para `SELECT *` em rotas críticas. Próximo passo correto para este stream: medição em staging dos hotspots herdados de FRMS/SGSO/LMS/escalas antes de qualquer conclusão de escala.
 
 ---

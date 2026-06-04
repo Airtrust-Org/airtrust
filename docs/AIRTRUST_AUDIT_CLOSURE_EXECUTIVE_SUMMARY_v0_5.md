@@ -12,6 +12,8 @@
 > **Addendum 2026-06-04 — 0389 Controlled Schema Execution:** a `0389` foi aplicada com sucesso em `staging` via wrapper dedicado, com gates, snapshot schema-only e rollback explícito. `RBAC_SUPPORT_V2` avança para `SCHEMA_APPLIED_READY_FOR_GRADUAL_ENFORCEMENT`. `AUDIT_V2` permanece em `READY_FOR_CONTROLLED_SCHEMA_MIGRATION` porque o diagnóstico remoto confirmou `AUDIT_EVENTS_V2_EXISTS=0` em `staging`, fora do escopo permitido desta janela.
 >
 > **Addendum 2026-06-04 — Final Local Residual Closure:** os dois resíduos finais de auth/tenant apontados pela auditoria Opus foram corrigidos localmente. `AUTH-RESIDUAL-01 = RESOLVED`, `AUTH-RESIDUAL-02 = RESOLVED`, `AUTH_TENANT = CONFIRMED_CLOSED` e `LOCAL_AUDIT_CLOSURE = COMPLETE_WITH_ENVIRONMENT_BLOCKERS`.
+>
+> **Addendum 2026-06-04 — Block 4 Controlled Closure:** a `0385_audit_events_v2.sql` foi aplicada com sucesso em `staging` sob gate, snapshot e rollback dedicados. O escopo controlado de enforcement de `RBAC/Suporte v2` foi ativado nas rotas sensíveis de certificados/admin, preservando o fallback legado `userId===1` e sem enforcement amplo. Status canônicos: `RBAC_SUPPORT_V2 = GRADUAL_ENFORCEMENT_ACTIVE_FOR_CONTROLLED_SCOPE`; `AUDIT_V2 = PARITY_VALIDATED_FOR_CONTROLLED_SCOPE`.
 
 ---
 
@@ -70,8 +72,8 @@ O código em produção permanece estável; o Sprint W removeu DDL runtime já c
 
 | Área | O que foi feito | O que falta |
 |---|---|---|
-| **RBAC/Suporte** | `0389` aplicada em `staging`; tabelas, indices e FKs confirmados; dual-read e fallback legado preservados e validados localmente | Enforcement gradual, validacao operacional de grants/sessoes e remocao futura do fallback |
-| **Audit Trail/LGPD** | Sanitização em `auth.ts`, `admin.ts`, `assets.ts`, `empresas.ts`; Sprint O criou design v2; Sprint Q definiu schema aditivo, canonical writer e rollout audit-first; Sprint R versionou schema; Sprint S criou writer; helper legado+canônico segue validado localmente | Fechar o gap de `audit_events_v2` em `staging`, ativar flag em fases, validar paridade e ampliar cobertura dual-write |
+| **RBAC/Suporte** | `0389` aplicada em `staging`; enforcement gradual ativo em rotas sensíveis de certificados/admin; dual-read e fallback legado preservados | ampliar enforcement com nova validação controlada e decidir janela futura de remoção do fallback |
+| **Audit Trail/LGPD** | `0385` aplicada em `staging`; helper legado+canônico e sanitização preservados; `audit_events_v2` já existe no target | ampliar cobertura dual-write operacional sem regressão de PII nem perda do writer legado |
 | **Status Enum** | Helpers centrais em dashboard, simuladores, qualificações e treinamentos | Expandir para cron jobs, alertas e EVD |
 | **Migration Integrity** | Sprint AH congelou a governança local, Sprint AI fechou a estratégia de rebaseline controlado, Sprint AK adicionou contrato/runbook/gate, `DQ-01` foi executado em `staging` e a janela atual gerou/replayou o baseline SQL de `MIG-01` | `MIG-01` fechado para o escopo controlado; proxima janela grande e aplicar `0389` |
 | **Data Quality** | SQL validado, runner local criado, Sprint AH endureceu caminhos críticos, Sprint AI fechou mapa de backfill, Sprint AJ/AK criaram trilha controlada, Sprint AL validou `local-copy` e a janela atual executou `DQ-01` em `staging` com snapshot/rollback/gates PASS | `DQ-01` fechado para o escopo controlado; cobertura parcial remanescente continua documentada separadamente em `DQ-02` |

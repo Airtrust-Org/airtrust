@@ -1,0 +1,23 @@
+# Audit v2 staging rollback plan
+
+- Date: `2026-06-04`
+- Scope: revert only the controlled staging application of `0385_audit_events_v2.sql`
+- Snapshot prerequisite: restore from the pre-window schema snapshot captured for this execution window
+- Tables and indexes introduced by the scoped apply:
+  - `audit_events_v2`
+  - `idx_audit_events_v2_empresa_created`
+  - `idx_audit_events_v2_target_empresa_created`
+  - `idx_audit_events_v2_actor_created`
+  - `idx_audit_events_v2_request`
+  - `idx_audit_events_v2_category_created`
+- Rollback steps:
+  - halt further controlled enforcement validation
+  - restore the pre-window staging schema snapshot
+  - rerun `bash scripts/run-audit-rbac-v2-staging-readonly.sh`
+  - confirm `AUDIT_EVENTS_V2_EXISTS=0` and `OBJECTS_0385_COUNT=0`
+- Constraints preserved during rollback:
+  - no deploy
+  - no production access
+  - no `DQ-01`
+  - no `MIG-01`
+  - no `0389`
