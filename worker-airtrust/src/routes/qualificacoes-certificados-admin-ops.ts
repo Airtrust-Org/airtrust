@@ -10,8 +10,77 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
+import {
+  buildAuditMetadata,
+  buildLegacyAuditoriaActor,
+  buildLegacyAuditPayload,
+} from '../lib/audit/context';
+import { registrarAuditoria } from '../utils/auditoria';
 
 const opsRouter = new Hono<{ Bindings: Env }>();
+
+async function recordCertificadosAdminOperationAudit(
+  c: {
+    env: Env;
+    get: (key: string) => unknown;
+    req: { header: (name: string) => string | undefined; path: string; method: string };
+  },
+  params: {
+    action: string;
+    entityId?: string | number | null;
+    metadata?: Record<string, unknown>;
+    legacyPayload?: Record<string, unknown>;
+  },
+) {
+  const actorUserId = Number(c.get('userId') || 0) || null;
+  const actorEmpresaId = Number(c.get('empresaId') || 0) || null;
+  const actorRole = typeof c.get('userRole') === 'string' ? String(c.get('userRole')) : null;
+  const empresaId = actorEmpresaId;
+  const metadata = buildAuditMetadata(c, {
+    request_path: c.req.path,
+    http_method: c.req.method,
+    operation: params.action,
+    ...params.metadata,
+  });
+
+  await registrarAuditoria({
+    db: c.env.DB,
+    tabela: 'certificados_admin_ops',
+    acao: 'BULK_UPDATE',
+    registro_id: params.entityId ?? params.action,
+    dados_novos: buildLegacyAuditPayload(c, params.legacyPayload || {}, metadata),
+    ...buildLegacyAuditoriaActor(c),
+  });
+
+  await recordAuditEventV2(c.env.DB, {
+    empresaId,
+    targetEmpresaId: empresaId,
+    actorUserId,
+    actorEmpresaId,
+    actorRole,
+    eventCategory: 'ADMIN_OPERATION',
+    eventAction: params.action,
+    entityType: 'certificados_admin_ops',
+    entityId: params.entityId ?? params.action,
+    riskLevel: 'high',
+    metadata: {
+      module: 'qualificacoes_certificados',
+      source: 'certificados_admin_ops',
+      operation: params.action,
+      request_path: c.req.path,
+      http_method: c.req.method,
+      scope: 'tenant',
+      result: 'success',
+      approximate_count:
+        typeof params.metadata?.approximate_count === 'number'
+          ? params.metadata.approximate_count
+          : undefined,
+      count: typeof params.metadata?.count === 'number' ? params.metadata.count : undefined,
+    },
+    retentionClass: 'SECURITY_LONG',
+  });
+}
 
 // 🔧 Endpoint para recuperar certificados órfãos (não linkados)
 opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
@@ -159,6 +228,19 @@ opsRouter.post('/recuperar-orfaos', auth(), requireRole('admin'), async (c) => {
 
     console.log(`✅ [RECUPERAR ORFAOS] Recuperados ${linkedCount} certificados`);
 
+    await recordCertificadosAdminOperationAudit(c, {
+      action: 'CERTIFICADOS_RECUPERAR_ORFAOS',
+      metadata: {
+        count: linkedCount,
+        approximate_count: orfaos.length,
+      },
+      legacyPayload: {
+        linkedCount,
+        orfaosCount: orfaos.length,
+        remainingOrfaos: orfaos.length - linkedCount,
+      },
+    });
+
     return c.json({
       success: true,
       message: `Recuperados ${linkedCount} certificados`,
@@ -275,6 +357,18 @@ opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => 
 
     console.log(`✅ [LIMPAR REFS] ${cleanedCount} referências órfãs removidas`);
 
+    await recordCertificadosAdminOperationAudit(c, {
+      action: 'CERTIFICADOS_LIMPAR_REFS_ORFAS',
+      metadata: {
+        count: cleanedCount,
+        approximate_count: refsOrfas.length,
+      },
+      legacyPayload: {
+        cleanedCount,
+        refsCount: refsOrfas.length,
+      },
+    });
+
     return c.json({
       success: true,
       message: `${cleanedCount} referências órfãs removidas`,
@@ -305,7 +399,7 @@ opsRouter.post('/limpar-refs-orfas', auth(), requireRole('admin'), async (c) => 
  * POST /historico/export-zip
  * Exporta certificados filtrados como ZIP
  */
-opsRouter.post('/historico/export-zip', auth(), async (c) => {
+opsRouter.post('/historico/export-zip', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const bucket = c.env.BUCKET;
   const empresaId = getEmpresaId(c);
@@ -453,6 +547,19 @@ opsRouter.post('/historico/export-zip', auth(), async (c) => {
     if (successCount === 0) {
       return c.json({ success: false, error: 'Falha ao baixar arquivos do storage' }, 500);
     }
+
+    await recordCertificadosAdminOperationAudit(c, {
+      action: 'CERTIFICADOS_EXPORT_ZIP',
+      metadata: {
+        count: successCount,
+        approximate_count: results.length,
+      },
+      legacyPayload: {
+        successCount,
+        requestedCount: results.length,
+        filtersApplied: Array.isArray(ids) && ids.length > 0 ? 'ids' : 'query',
+      },
+    });
 
     // Criar ZIP
     const zipped = zipSync(zipFiles, { level: 6 });

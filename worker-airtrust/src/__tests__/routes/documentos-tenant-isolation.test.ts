@@ -13,7 +13,7 @@ vi.mock('../../middleware/auth', () => ({
 
       c.set('userId', 10);
       c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 0));
-      c.set('userRole', 'admin');
+      c.set('userRole', c.req.header('x-test-role') || 'admin');
       await next();
     },
 }));
@@ -32,9 +32,16 @@ vi.mock('../../middleware/tenant', () => ({
 
 vi.mock('../../middleware/rbac', () => ({
   requireRole:
-    () =>
-    async (_c: any, next: () => Promise<void>) =>
-      next(),
+    (requiredRole: string) =>
+    async (c: any, next: () => Promise<void>) => {
+      if ((c.get('userRole') || '').toLowerCase() !== String(requiredRole).toLowerCase()) {
+        return c.json(
+          { success: false, error: 'Permissão negada. Acesso restrito a: admin' },
+          403,
+        );
+      }
+      await next();
+    },
 }));
 
 vi.mock('../../utils/auditoria', () => ({
@@ -471,6 +478,23 @@ describe('documentos tenant isolation', () => {
     expect(bucket.get).toHaveBeenCalledWith('certificados/a.pdf');
   });
 
+  it('bloqueia export-zip para role nao-admin antes de tocar R2', async () => {
+    const { env, bucket, runs } = createMockEnv();
+
+    const response = await request('/api/certificados/historico/export-zip', env, 1, {
+      method: 'POST',
+      body: JSON.stringify({ ids: [501] }),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-role': 'viewer',
+      },
+    });
+
+    expect(response.status).toBe(403);
+    expect(bucket.get).not.toHaveBeenCalled();
+    expect(runs).toHaveLength(0);
+  });
+
   it('bloqueia delete de pasta virtual cross-tenant sem mutation nem R2', async () => {
     const { env, bucket, runs } = createMockEnv();
 
@@ -506,8 +530,9 @@ describe('documentos tenant isolation', () => {
     expect(response.status).toBe(200);
     expect(body.data.linkedCount).toBe(1);
     expect(body.data.orfaosCount).toBe(1);
-    expect(runs).toHaveLength(1);
+    expect(runs).toHaveLength(2);
     expect(runs[0].args).toEqual([303, 601, 11, 1]);
+    expect(runs[1].query).toContain('INSERT INTO audit_events_v2');
     expect(JSON.stringify(runs)).not.toContain('404');
     expect(bucket.get).not.toHaveBeenCalled();
     expect(bucket.put).not.toHaveBeenCalled();
@@ -525,8 +550,9 @@ describe('documentos tenant isolation', () => {
     expect(response.status).toBe(200);
     expect(body.data.cleanedCount).toBe(1);
     expect(body.data.refsCount).toBe(1);
-    expect(runs).toHaveLength(1);
+    expect(runs).toHaveLength(2);
     expect(runs[0].args).toEqual([701, 1]);
+    expect(runs[1].query).toContain('INSERT INTO audit_events_v2');
     expect(JSON.stringify(runs)).not.toContain('502');
     expect(bucket.get).not.toHaveBeenCalled();
     expect(bucket.put).not.toHaveBeenCalled();
