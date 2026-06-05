@@ -69,7 +69,16 @@ interface EvolucaoItem {
   alerta_jornada_mes: string;
   alerta_voo_mes: string;
   integridade_status: 'OK' | 'INCONSISTENTE';
+  integridade_codigo?: string | null;
+  integridade_codigos?: string[];
+  integridade_mensagem?: string | null;
   inconsistencias: string[];
+  valores_brutos?: {
+    duracao_jornada_minutos: number | null;
+    horas_voo_minutos: number | null;
+    hora_apresentacao: string | null;
+    hora_termino: string | null;
+  };
 }
 
 interface IndividualResponse {
@@ -91,6 +100,21 @@ interface IndividualResponse {
 function getMesAtual() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function integridadeLabel(codigo?: string | null): string {
+  switch (codigo) {
+    case 'JORNADA_ZERO_COM_HV':
+      return 'Jornada zero';
+    case 'JORNADA_AUSENTE_COM_HV':
+      return 'Jornada ausente';
+    case 'HORARIO_INCOMPLETO_COM_HV':
+      return 'Horario incompleto';
+    case 'HV_MAIOR_QUE_JORNADA':
+      return 'HV > jornada';
+    default:
+      return 'Inconsistente';
+  }
 }
 
 function formatMinutos(minutos: number | null | undefined) {
@@ -418,10 +442,15 @@ export default function FrmsFadigaAcumulada() {
                             <td className="px-3 py-1.5 text-center">
                               {e.integridade_status === 'INCONSISTENTE' ? (
                                 <span
-                                  title={(e.inconsistencias || []).join(', ')}
-                                  className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-700"
+                                  title={[
+                                    e.integridade_mensagem,
+                                    ...(e.integridade_codigos || e.inconsistencias || []),
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' | ')}
+                                  className="inline-flex max-w-[160px] items-center justify-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-700"
                                 >
-                                  Inconsistente
+                                  {integridadeLabel(e.integridade_codigo)}
                                 </span>
                               ) : (
                                 <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700">
