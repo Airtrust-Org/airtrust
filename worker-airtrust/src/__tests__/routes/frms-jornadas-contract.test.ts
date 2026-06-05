@@ -164,4 +164,53 @@ describe('frms jornadas contract', () => {
     });
     expect(payload.data[0].integridade_codigos).toContain('HV_MAIOR_QUE_JORNADA');
   });
+
+  it('marca FIRA sem SIGVOOS como pendente e nao calcula FAT operacional', async () => {
+    const db = createDbForJornadas([
+      {
+        id: 'j-fira-1',
+        data: '2026-06-01',
+        duracao_jornada_minutos: 595,
+        horas_voo_minutos: 1537,
+        hora_apresentacao: '06:30',
+        hora_termino: '17:25',
+        status: 'ES',
+        origem: 'FIRA',
+        fat_id: 'f-fira-1',
+        total_fatorizado_jornada: -0.4132,
+        total_fatorizado_hv: 28.363,
+      },
+    ]);
+
+    const response = await frmsRoutes.fetch(
+      new Request('http://localhost/jornadas/7?mes=2026-06'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      data: Array<{
+        pct_voo_diaria: number | null;
+        pct_jornada_diaria: number | null;
+        source_status: string;
+        integridade_fonte: string[];
+        usado_no_frms_operacional: boolean;
+        usado_em_alertas: boolean;
+        usado_em_rolling: boolean;
+        fatorizacao?: unknown;
+      }>;
+    };
+
+    expect(payload.data[0]).toMatchObject({
+      pct_voo_diaria: null,
+      pct_jornada_diaria: null,
+      source_status: 'PENDENTE_SIGVOOS',
+      usado_no_frms_operacional: false,
+      usado_em_alertas: false,
+      usado_em_rolling: false,
+    });
+    expect(payload.data[0].integridade_fonte).toContain('FIRA_NAO_OPERACIONAL');
+    expect(payload.data[0].fatorizacao).toBeUndefined();
+  });
 });

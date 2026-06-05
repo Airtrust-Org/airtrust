@@ -89,6 +89,18 @@ export interface FrmsJornada {
   fonte_sono?: 'PADRAO' | 'INFORMADO' | null;
   acordou_na_wocl?: number | null;
   repouso_regulatorio_min?: number | null;
+  fonte_original?: string | null;
+  fonte_canonica?: string | null;
+  source_status?:
+    | 'CANONICAL_SIGVOOS'
+    | 'FONTE_NAO_CANONICA'
+    | 'PENDENTE_SIGVOOS'
+    | 'FIRA_NAO_OPERACIONAL'
+    | 'SOURCE_INTEGRITY_WARNING';
+  integridade_fonte?: string[];
+  usado_no_frms_operacional?: boolean;
+  usado_em_alertas?: boolean;
+  usado_em_rolling?: boolean;
 }
 
 export interface FrmsFatorizacao {

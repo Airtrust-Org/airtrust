@@ -685,8 +685,8 @@ export default function FrmsFichaTripulante() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                          {j.origem || 'MANUAL'}
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${presentation.sourceBadgeClass}`}>
+                          {presentation.sourceLabel}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
@@ -696,10 +696,17 @@ export default function FrmsFichaTripulante() {
                         {j.hora_termino || '—'}
                       </td>
                       <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">
-                        {j.duracao_jornada_minutos ? formatMin(j.duracao_jornada_minutos) : '—'}
+                        {presentation.operationalJourneyLabel}
                       </td>
                       <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">
-                        {j.horas_voo_minutos ? formatMin(j.horas_voo_minutos) : '—'}
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span>{presentation.operationalHvLabel}</span>
+                          {presentation.auxiliarySourceLabel ? (
+                            <span className="text-[10px] font-medium text-amber-700">
+                              {presentation.auxiliarySourceLabel}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="space-y-1 min-w-[220px]">

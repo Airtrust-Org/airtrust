@@ -58,12 +58,34 @@ export interface FrmsJornadaRow {
     | 'JORNADA_ZERO_COM_HV'
     | 'JORNADA_AUSENTE_COM_HV'
     | 'HORARIO_INCOMPLETO_COM_HV'
+    | 'FONTE_NAO_CANONICA'
+    | 'PENDENTE_SIGVOOS'
+    | 'FIRA_NAO_OPERACIONAL'
     | null;
   integridade_codigos?: Array<
-    'HV_MAIOR_QUE_JORNADA' | 'JORNADA_ZERO_COM_HV' | 'JORNADA_AUSENTE_COM_HV' | 'HORARIO_INCOMPLETO_COM_HV'
+    | 'HV_MAIOR_QUE_JORNADA'
+    | 'JORNADA_ZERO_COM_HV'
+    | 'JORNADA_AUSENTE_COM_HV'
+    | 'HORARIO_INCOMPLETO_COM_HV'
+    | 'FONTE_NAO_CANONICA'
+    | 'PENDENTE_SIGVOOS'
+    | 'FIRA_NAO_OPERACIONAL'
   >;
   integridade_mensagem?: string | null;
   inconsistencias?: string[];
+  fonte_original?: string | null;
+  fonte_canonica?: string | null;
+  source_status?:
+    | 'CANONICAL_SIGVOOS'
+    | 'FONTE_NAO_CANONICA'
+    | 'PENDENTE_SIGVOOS'
+    | 'FIRA_NAO_OPERACIONAL'
+    | 'SOURCE_INTEGRITY_WARNING'
+    | string;
+  integridade_fonte?: string[];
+  usado_no_frms_operacional?: boolean;
+  usado_em_alertas?: boolean;
+  usado_em_rolling?: boolean;
 }
 
 export interface FrmsAcumuloRolling {
