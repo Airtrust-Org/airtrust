@@ -48,6 +48,22 @@ export interface FrmsJornadaRow {
     fator_hv_noturno_arr_pct: number;
     total_fatorizado_hv: number;
   };
+  pct_jornada_diaria?: number | null;
+  pct_voo_diaria?: number | null;
+  pct_jornada_mes?: number | null;
+  pct_voo_mes?: number | null;
+  integridade_status?: 'OK' | 'INCONSISTENTE';
+  integridade_codigo?:
+    | 'HV_MAIOR_QUE_JORNADA'
+    | 'JORNADA_ZERO_COM_HV'
+    | 'JORNADA_AUSENTE_COM_HV'
+    | 'HORARIO_INCOMPLETO_COM_HV'
+    | null;
+  integridade_codigos?: Array<
+    'HV_MAIOR_QUE_JORNADA' | 'JORNADA_ZERO_COM_HV' | 'JORNADA_AUSENTE_COM_HV' | 'HORARIO_INCOMPLETO_COM_HV'
+  >;
+  integridade_mensagem?: string | null;
+  inconsistencias?: string[];
 }
 
 export interface FrmsAcumuloRolling {

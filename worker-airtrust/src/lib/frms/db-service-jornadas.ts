@@ -15,6 +15,7 @@ import {
 import type { AcumuloRollingResult } from './calculos';
 import { processarAlertas, deveBloquearLancamento } from './alertas';
 import type { AlertaGerado } from './alertas';
+import { calcularLinhaFadigaAcumulada } from './fadiga-acumulada-legal';
 import {
   generateId,
   now,
@@ -108,6 +109,18 @@ interface FatorizacaoRow extends FrmsFatorizacao {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+}
+
+interface JornadaFatigueSnapshot {
+  pct_jornada_diaria: number;
+  pct_voo_diaria: number;
+  pct_jornada_mes: number;
+  pct_voo_mes: number;
+  integridade_status: 'OK' | 'INCONSISTENTE';
+  integridade_codigo: string | null;
+  integridade_codigos: string[];
+  integridade_mensagem: string | null;
+  inconsistencias: string[];
 }
 
 // ────────────────────────────────────────────────────────
@@ -923,6 +936,57 @@ export async function buscarJornadas(
     }
     return jornada;
   });
+
+  const fatigueByJornadaId = new Map<string, JornadaFatigueSnapshot>();
+  const orderedJornadas = [...data].sort((a, b) => {
+    const byDate = String(a.data || '').localeCompare(String(b.data || ''));
+    if (byDate !== 0) return byDate;
+    const byCreatedAt = String((a as { created_at?: string }).created_at || '').localeCompare(
+      String((b as { created_at?: string }).created_at || ''),
+    );
+    if (byCreatedAt !== 0) return byCreatedAt;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+  const acumuladoPorMes = new Map<string, { jornada: number; voo: number }>();
+
+  for (const jornada of orderedJornadas) {
+    const monthKey = String(jornada.data || '').slice(0, 7);
+    const acumuladoAnterior = acumuladoPorMes.get(monthKey) ?? { jornada: 0, voo: 0 };
+    const linha = calcularLinhaFadigaAcumulada({
+      jornada: {
+        data: jornada.data,
+        duracao_jornada_minutos: jornada.duracao_jornada_minutos,
+        horas_voo_minutos: jornada.horas_voo_minutos,
+        hora_apresentacao: jornada.hora_apresentacao,
+        hora_termino: jornada.hora_termino,
+      },
+      acumuladoJornadaMinAnterior: acumuladoAnterior.jornada,
+      acumuladoVooMinAnterior: acumuladoAnterior.voo,
+    });
+
+    fatigueByJornadaId.set(String(jornada.id), {
+      pct_jornada_diaria: linha.pct_jornada_diaria,
+      pct_voo_diaria: linha.pct_voo_diaria,
+      pct_jornada_mes: linha.pct_jornada_mes,
+      pct_voo_mes: linha.pct_voo_mes,
+      integridade_status: linha.integridade_status,
+      integridade_codigo: linha.integridade_codigo,
+      integridade_codigos: linha.integridade_codigos,
+      integridade_mensagem: linha.integridade_mensagem,
+      inconsistencias: linha.inconsistencias,
+    });
+
+    acumuladoPorMes.set(monthKey, {
+      jornada: linha.jornada_acumulada_min,
+      voo: linha.voo_acumulado_min,
+    });
+  }
+
+  for (const jornada of data) {
+    const fatigue = fatigueByJornadaId.get(String(jornada.id));
+    if (!fatigue) continue;
+    Object.assign(jornada as FrmsJornada & Record<string, unknown>, fatigue);
+  }
 
   return {
     data,
