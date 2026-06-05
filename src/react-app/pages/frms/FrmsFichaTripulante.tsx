@@ -31,6 +31,7 @@ import FrmsEffectivenessPanel from './components/FrmsEffectivenessPanel';
 import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { formatFrmsDate } from './frmsUtils';
+import { buildJornadaMensalPresentation } from './frmsJornadasMensaisPresentation';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
@@ -635,10 +636,10 @@ export default function FrmsFichaTripulante() {
                     Alertas do Dia
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
-                    Fat.Jornada%
+                    FAT.JORNADA% dia
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
-                    Fat.HV%
+                    FAT.HV% dia
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-center">
                     Ações
@@ -663,8 +664,15 @@ export default function FrmsFichaTripulante() {
                     </td>
                   </tr>
                 ) : (
-                  jornadas.map((j) => (
-                    <tr key={j.id} className="hover:bg-gray-50/50 transition-colors">
+                  jornadas.map((j) => {
+                    const presentation = buildJornadaMensalPresentation(j);
+                    return (
+                    <tr
+                      key={j.id}
+                      className={`transition-colors hover:bg-gray-50/50 ${
+                        presentation.hasIntegrityIssue ? 'bg-rose-50/60' : ''
+                      }`}
+                    >
                       <td className="px-4 py-2.5 text-gray-700 tabular-nums font-medium">
                         {formatFrmsDate(j.data)}
                       </td>
@@ -695,35 +703,54 @@ export default function FrmsFichaTripulante() {
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="space-y-1 min-w-[220px]">
-                          {(alertasPorJornada[j.id] ?? []).length === 0 ? (
+                          {!presentation.hasIntegrityIssue &&
+                          (alertasPorJornada[j.id] ?? []).length === 0 ? (
                             <span className="text-xs text-gray-400">—</span>
                           ) : (
-                            (alertasPorJornada[j.id] ?? []).map((a) => (
-                              <div key={a.id} className="flex items-start gap-1.5">
-                                <span>{nivelBadge(a.nivel)}</span>
-                                <span className="text-xs text-gray-600 leading-4">
-                                  {a.mensagem
-                                    .replace(/Tripulante #\d+/g, nomeTrip)
-                                    .replace(
-                                      new RegExp(
-                                        `^${nomeTrip.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:?\\s*`,
-                                        'i',
-                                      ),
-                                      '',
-                                    )}
-                                </span>
-                              </div>
-                            ))
+                            <>
+                              {presentation.hasIntegrityIssue ? (
+                                <div className="flex items-start gap-1.5">
+                                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                                    {presentation.integrityLabel}
+                                  </span>
+                                  <span className="text-xs leading-4 text-rose-700">
+                                    {presentation.integrityMessage}
+                                  </span>
+                                </div>
+                              ) : null}
+                              {(alertasPorJornada[j.id] ?? []).map((a) => (
+                                <div key={a.id} className="flex items-start gap-1.5">
+                                  <span>{nivelBadge(a.nivel)}</span>
+                                  <span className="text-xs text-gray-600 leading-4">
+                                    {a.mensagem
+                                      .replace(/Tripulante #\d+/g, nomeTrip)
+                                      .replace(
+                                        new RegExp(
+                                          `^${nomeTrip.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:?\\s*`,
+                                          'i',
+                                        ),
+                                        '',
+                                      )}
+                                  </span>
+                                </div>
+                              ))}
+                            </>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums text-xs">
-                        {j.fatorizacao
-                          ? j.fatorizacao.total_fatorizado_jornada.toFixed(2) + '%'
-                          : '—'}
+                      <td
+                        className={`px-4 py-2.5 text-right tabular-nums text-xs ${
+                          presentation.hasIntegrityIssue ? 'text-rose-700' : 'text-gray-600'
+                        }`}
+                      >
+                        {presentation.fatJornadaDiaLabel}
                       </td>
-                      <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums text-xs">
-                        {j.fatorizacao ? j.fatorizacao.total_fatorizado_hv.toFixed(2) + '%' : '—'}
+                      <td
+                        className={`px-4 py-2.5 text-right tabular-nums text-xs font-medium ${
+                          presentation.hasIntegrityIssue ? 'text-rose-700' : 'text-gray-700'
+                        }`}
+                      >
+                        {presentation.fatHvDiaLabel}
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         <div className="inline-flex items-center gap-2">
@@ -748,7 +775,8 @@ export default function FrmsFichaTripulante() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
