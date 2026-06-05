@@ -12,14 +12,18 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
+import {
+  calcularEvolucaoFadigaAcumulada,
+  FADIGA_ACUMULADA_LIMITES,
+} from '../lib/frms/fadiga-acumulada-legal';
 
 const fadigaAcumulada = new Hono<{ Bindings: Env }>();
 
 fadigaAcumulada.use('*', auth());
 
 // PRC-OPS-012 limits
-const LIMITE_JORNADA_MES = 176; // hours
-const LIMITE_VOO_MES = 90; // hours
+const LIMITE_JORNADA_MES = FADIGA_ACUMULADA_LIMITES.JORNADA_MENSAL_HORAS; // hours
+const LIMITE_VOO_MES = FADIGA_ACUMULADA_LIMITES.HV_MENSAL_HORAS; // hours
 
 // Thresholds
 const THRESHOLD_VERDE = 80;
@@ -29,10 +33,10 @@ const THRESHOLD_VERMELHO = 95;
 interface JornadaDia {
   data: string;
   hora_apresentacao: string | null;
-  hora_encerramento: string | null;
-  duracao_minutos: number;
+  hora_termino: string | null;
+  duracao_jornada_minutos: number;
   horas_voo_minutos: number;
-  repouso_anterior_minutos: number | null;
+  repouso_anterior_min: number | null;
   hora_primeira_decolagem: string | null;
   hora_ultimo_pouso: string | null;
   status: string;
@@ -51,17 +55,17 @@ function calcFatoresAgravantes(j: JornadaDia) {
     if (h >= 8) fatorJornada -= 0.1;
   }
 
-  const duracaoHoras = j.duracao_minutos / 60;
+  const duracaoHoras = j.duracao_jornada_minutos / 60;
   // Jornada > 10h → +0.1%
   if (duracaoHoras > 10) fatorJornada += 0.1;
   // Jornada < 8h → -0.1% (mitigante)
   if (duracaoHoras > 0 && duracaoHoras < 8) fatorJornada -= 0.1;
 
   // Sem apresentação (dia de folga) → -0.2% (mitigante)
-  if (!j.hora_apresentacao && j.duracao_minutos === 0) fatorJornada -= 0.2;
+  if (!j.hora_apresentacao && j.duracao_jornada_minutos === 0) fatorJornada -= 0.2;
 
   // Repouso > 13h → -0.1% (mitigante)
-  if (j.repouso_anterior_minutos !== null && j.repouso_anterior_minutos > 13 * 60) {
+  if (j.repouso_anterior_min !== null && j.repouso_anterior_min > 13 * 60) {
     fatorJornada -= 0.1;
   }
 
@@ -113,66 +117,50 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
         `SELECT
            j.data,
            j.hora_apresentacao,
-           j.hora_encerramento,
-           COALESCE(j.duracao_minutos, 0) AS duracao_minutos,
+           j.hora_termino,
+           COALESCE(j.duracao_jornada_minutos, 0) AS duracao_jornada_minutos,
            COALESCE(j.horas_voo_minutos, 0) AS horas_voo_minutos,
-           j.repouso_anterior_minutos,
+           ar.repouso_anterior_min,
            j.hora_primeira_decolagem,
            j.hora_ultimo_pouso,
            j.status,
-           j.dia_ciclo_embarcado
+           NULL AS dia_ciclo_embarcado
          FROM frms_jornada j
+         JOIN funcionarios f ON CAST(j.tripulante_id AS INTEGER) = f.id AND f.deleted_at IS NULL
+         LEFT JOIN frms_acumulo_rolling ar
+           ON ar.tripulante_id = j.tripulante_id
+          AND ar.data_referencia = j.data
+          AND ar.deleted_at IS NULL
          WHERE j.tripulante_id = ?
            AND j.data LIKE ?
            AND j.deleted_at IS NULL
+           AND (? IS NULL OR COALESCE(j.empresa_id, f.empresa_id) = ?)
          ORDER BY j.data ASC`,
       )
-      .bind(tripulanteId, `${mes}-%`)
+      .bind(tripulanteId, `${mes}-%`, empresaId ?? null, empresaId ?? null)
       .all<JornadaDia>();
 
     const dias = jornadas.results || [];
 
-    // Calculate daily accumulated percentages
-    let acumuladoJornadaMin = 0;
-    let acumuladoVooMin = 0;
-    let fatoresJornadaAcumulados = 0;
-    let fatoresVooAcumulados = 0;
-
-    const evolucao = dias.map((j, idx) => {
-      acumuladoJornadaMin += j.duracao_minutos;
-      acumuladoVooMin += j.horas_voo_minutos;
-
+    const evolucao = calcularEvolucaoFadigaAcumulada(dias).map((linha, idx) => {
+      const j = dias[idx];
       const { fatorJornada, fatorVoo } = calcFatoresAgravantes(j);
-      fatoresJornadaAcumulados += fatorJornada;
-      fatoresVooAcumulados += fatorVoo;
-
-      const pctJornada = Math.min(
-        (acumuladoJornadaMin / 60 / LIMITE_JORNADA_MES) * 100 + fatoresJornadaAcumulados,
-        100,
-      );
-      const pctVoo = Math.min(
-        (acumuladoVooMin / 60 / LIMITE_VOO_MES) * 100 + fatoresVooAcumulados,
-        100,
-      );
 
       return {
+        ...linha,
         dia: idx + 1,
-        data: j.data,
-        dia_ciclo: j.dia_ciclo_embarcado,
-        jornada_horas: +(acumuladoJornadaMin / 60).toFixed(1),
-        voo_horas: +(acumuladoVooMin / 60).toFixed(1),
-        pct_jornada: +pctJornada.toFixed(1),
-        pct_voo: +pctVoo.toFixed(1),
         fator_jornada_dia: +fatorJornada.toFixed(2),
         fator_voo_dia: +fatorVoo.toFixed(2),
-        alerta_jornada: getAlertLevel(pctJornada),
-        alerta_voo: getAlertLevel(pctVoo),
+        alerta_jornada: getAlertLevel(linha.pct_jornada_diaria),
+        alerta_voo: getAlertLevel(linha.pct_voo_diaria),
+        alerta_jornada_mes: getAlertLevel(linha.pct_jornada_mes),
+        alerta_voo_mes: getAlertLevel(linha.pct_voo_mes),
       };
     });
 
     const ultimo = evolucao[evolucao.length - 1];
     const alertaGeral = ultimo
-      ? getAlertLevel(Math.max(ultimo.pct_jornada, ultimo.pct_voo))
+      ? getAlertLevel(Math.max(ultimo.pct_jornada_mes, ultimo.pct_voo_mes))
       : 'normal';
 
     return c.json({
@@ -180,7 +168,12 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
       data: {
         tripulante_id: tripulanteId,
         mes,
-        limites: { jornada_horas: LIMITE_JORNADA_MES, voo_horas: LIMITE_VOO_MES },
+        limites: {
+          jornada_horas: LIMITE_JORNADA_MES,
+          voo_horas: LIMITE_VOO_MES,
+          jornada_diaria_horas: FADIGA_ACUMULADA_LIMITES.JORNADA_DIARIA_HORAS,
+          voo_diaria_horas: FADIGA_ACUMULADA_LIMITES.HV_DIARIA_HORAS,
+        },
         thresholds: {
           verde: THRESHOLD_VERDE,
           amarelo: THRESHOLD_AMARELO,
@@ -188,11 +181,23 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
         },
         resumo: ultimo
           ? {
-              jornada_horas: ultimo.jornada_horas,
-              voo_horas: ultimo.voo_horas,
-              pct_jornada: ultimo.pct_jornada,
-              pct_voo: ultimo.pct_voo,
+              // Legacy generic fields stay monthly/accumulated for backward compatibility.
+              jornada_horas: ultimo.jornada_acumulada_horas,
+              voo_horas: ultimo.voo_acumulado_horas,
+              pct_jornada: ultimo.pct_jornada_mes,
+              pct_voo: ultimo.pct_voo_mes,
+              jornada_acumulada_horas: ultimo.jornada_acumulada_horas,
+              voo_acumulado_horas: ultimo.voo_acumulado_horas,
+              jornada_dia_horas: ultimo.jornada_horas,
+              voo_dia_horas: ultimo.voo_horas,
+              jornada_mes_horas: ultimo.jornada_acumulada_horas,
+              voo_mes_horas: ultimo.voo_acumulado_horas,
+              pct_jornada_dia: ultimo.pct_jornada_diaria,
+              pct_voo_dia: ultimo.pct_voo_diaria,
+              pct_jornada_mes: ultimo.pct_jornada_mes,
+              pct_voo_mes: ultimo.pct_voo_mes,
               alerta: alertaGeral,
+              integridade_status: ultimo.integridade_status,
             }
           : null,
         evolucao,
@@ -219,10 +224,10 @@ fadigaAcumulada.get('/fadiga-acumulada/frota', async (c) => {
     const tripulantes = await db
       .prepare(
         `SELECT DISTINCT j.tripulante_id, f.nome, f.guerra, f.funcao,
-                COALESCE(SUM(j.duracao_minutos), 0) AS total_jornada_min,
+                COALESCE(SUM(j.duracao_jornada_minutos), 0) AS total_jornada_min,
                 COALESCE(SUM(j.horas_voo_minutos), 0) AS total_voo_min,
                 COUNT(*) AS dias_jornada,
-                MAX(j.dia_ciclo_embarcado) AS max_dia_ciclo
+                NULL AS max_dia_ciclo
          FROM frms_jornada j
          JOIN funcionarios f ON CAST(j.tripulante_id AS INTEGER) = f.id AND f.deleted_at IS NULL
          WHERE j.data LIKE ?
@@ -267,7 +272,12 @@ fadigaAcumulada.get('/fadiga-acumulada/frota', async (c) => {
       success: true,
       data: {
         mes,
-        limites: { jornada_horas: LIMITE_JORNADA_MES, voo_horas: LIMITE_VOO_MES },
+        limites: {
+          jornada_horas: LIMITE_JORNADA_MES,
+          voo_horas: LIMITE_VOO_MES,
+          jornada_diaria_horas: FADIGA_ACUMULADA_LIMITES.JORNADA_DIARIA_HORAS,
+          voo_diaria_horas: FADIGA_ACUMULADA_LIMITES.HV_DIARIA_HORAS,
+        },
         thresholds: {
           verde: THRESHOLD_VERDE,
           amarelo: THRESHOLD_AMARELO,
@@ -302,14 +312,15 @@ fadigaAcumulada.get('/fadiga-acumulada/projecao', async (c) => {
     const totais = await db
       .prepare(
         `SELECT
-           COALESCE(SUM(duracao_minutos), 0) AS total_jornada_min,
+           COALESCE(SUM(duracao_jornada_minutos), 0) AS total_jornada_min,
            COALESCE(SUM(horas_voo_minutos), 0) AS total_voo_min,
            COUNT(*) AS dias_trabalhados,
-           MAX(dia_ciclo_embarcado) AS dia_ciclo
+           NULL AS dia_ciclo
          FROM frms_jornada
-         WHERE tripulante_id = ? AND data LIKE ? AND deleted_at IS NULL`,
+         WHERE tripulante_id = ? AND data LIKE ? AND deleted_at IS NULL
+           AND (? IS NULL OR empresa_id = ?)`,
       )
-      .bind(tripulanteId, `${mes}-%`)
+      .bind(tripulanteId, `${mes}-%`, empresaId ?? null, empresaId ?? null)
       .first<{
         total_jornada_min: number;
         total_voo_min: number;

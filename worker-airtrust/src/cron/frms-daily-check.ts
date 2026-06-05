@@ -227,9 +227,9 @@ export async function frmsDailyCheck(env: Env): Promise<{
       const mesAtual = hoje.slice(0, 7);
       const totaisMes = await db
         .prepare(
-          `SELECT COALESCE(SUM(duracao_minutos), 0) AS total_jornada,
+          `SELECT COALESCE(SUM(duracao_jornada_minutos), 0) AS total_jornada,
                   COALESCE(SUM(horas_voo_minutos), 0) AS total_voo,
-                  MAX(dia_ciclo_embarcado) AS dia_ciclo
+                  NULL AS dia_ciclo
            FROM frms_jornada
            WHERE tripulante_id = ? AND data LIKE ? AND deleted_at IS NULL`,
         )
