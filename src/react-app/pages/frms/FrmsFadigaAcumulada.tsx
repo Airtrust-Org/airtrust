@@ -52,12 +52,24 @@ interface EvolucaoItem {
   dia: number;
   data: string;
   dia_ciclo: number | null;
+  jornada_diaria_min: number;
+  voo_diario_min: number;
   jornada_horas: number;
   voo_horas: number;
+  jornada_acumulada_horas: number;
+  voo_acumulado_horas: number;
   pct_jornada: number;
   pct_voo: number;
+  pct_jornada_diaria: number;
+  pct_voo_diaria: number;
+  pct_jornada_mes: number;
+  pct_voo_mes: number;
   alerta_jornada: string;
   alerta_voo: string;
+  alerta_jornada_mes: string;
+  alerta_voo_mes: string;
+  integridade_status: 'OK' | 'INCONSISTENTE';
+  inconsistencias: string[];
 }
 
 interface IndividualResponse {
@@ -79,6 +91,13 @@ interface IndividualResponse {
 function getMesAtual() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMinutos(minutos: number | null | undefined) {
+  const total = Math.max(0, Math.round(Number(minutos || 0)));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, '0')}h${String(m).padStart(2, '0')}`;
 }
 
 function alertColor(alerta: string) {
@@ -343,16 +362,18 @@ export default function FrmsFadigaAcumulada() {
                 {/* Expanded detail: daily evolution */}
                 {expandedTrip === t.tripulante_id && evolucao.length > 0 && (
                   <div className="mt-1 ml-4 mr-4 rounded-lg border border-slate-200 bg-white overflow-x-auto">
-                    <table className="w-full min-w-[480px] text-xs">
+                    <table className="w-full min-w-[920px] text-xs">
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
                           <th className="px-3 py-2 text-left">Dia</th>
                           <th className="px-3 py-2 text-left">Data</th>
-                          <th className="px-3 py-2 text-right">Jornada acum.</th>
-                          <th className="px-3 py-2 text-right">% Jornada</th>
-                          <th className="px-3 py-2 text-right">Voo acum.</th>
-                          <th className="px-3 py-2 text-right">% Voo</th>
-                          <th className="px-3 py-2 text-center">Status</th>
+                          <th className="px-3 py-2 text-right">Jornada diária</th>
+                          <th className="px-3 py-2 text-right">FAT.JORNADA% dia</th>
+                          <th className="px-3 py-2 text-right">HV diária</th>
+                          <th className="px-3 py-2 text-right">FAT.HV% dia</th>
+                          <th className="px-3 py-2 text-right">Uso mês jornada</th>
+                          <th className="px-3 py-2 text-right">Uso mês HV</th>
+                          <th className="px-3 py-2 text-center">Auditoria</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -362,30 +383,51 @@ export default function FrmsFadigaAcumulada() {
                             <td className="px-3 py-1.5">
                               {e.data.slice(8, 10)}/{e.data.slice(5, 7)}
                             </td>
-                            <td className="px-3 py-1.5 text-right font-mono">{e.jornada_horas}h</td>
+                            <td className="px-3 py-1.5 text-right font-mono">
+                              {formatMinutos(e.jornada_diaria_min)}
+                            </td>
                             <td className="px-3 py-1.5 text-right">
                               <span className={`font-semibold ${alertText(e.alerta_jornada)}`}>
-                                {e.pct_jornada}%
+                                {Number(e.pct_jornada_diaria ?? e.pct_jornada).toFixed(3)}%
                               </span>
                             </td>
-                            <td className="px-3 py-1.5 text-right font-mono">{e.voo_horas}h</td>
+                            <td className="px-3 py-1.5 text-right font-mono">
+                              {formatMinutos(e.voo_diario_min)}
+                            </td>
                             <td className="px-3 py-1.5 text-right">
                               <span className={`font-semibold ${alertText(e.alerta_voo)}`}>
-                                {e.pct_voo}%
+                                {Number(e.pct_voo_diaria ?? e.pct_voo).toFixed(3)}%
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right">
+                              <span className={`font-semibold ${alertText(e.alerta_jornada_mes)}`}>
+                                {Number(e.pct_jornada_mes || 0).toFixed(3)}%
+                              </span>
+                              <span className="ml-1 font-mono text-slate-400">
+                                ({e.jornada_acumulada_horas}h)
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right">
+                              <span className={`font-semibold ${alertText(e.alerta_voo_mes)}`}>
+                                {Number(e.pct_voo_mes || 0).toFixed(3)}%
+                              </span>
+                              <span className="ml-1 font-mono text-slate-400">
+                                ({e.voo_acumulado_horas}h)
                               </span>
                             </td>
                             <td className="px-3 py-1.5 text-center">
-                              <div
-                                className={`inline-block w-2.5 h-2.5 rounded-full ${alertColor(
-                                  e.pct_jornada >= 95 || e.pct_voo >= 95
-                                    ? 'vermelho'
-                                    : e.pct_jornada >= 90 || e.pct_voo >= 90
-                                      ? 'amarelo'
-                                      : e.pct_jornada >= 80 || e.pct_voo >= 80
-                                        ? 'verde'
-                                        : 'normal',
-                                )}`}
-                              />
+                              {e.integridade_status === 'INCONSISTENTE' ? (
+                                <span
+                                  title={(e.inconsistencias || []).join(', ')}
+                                  className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-700"
+                                >
+                                  Inconsistente
+                                </span>
+                              ) : (
+                                <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700">
+                                  OK
+                                </span>
+                              )}
                             </td>
                           </tr>
                         ))}
