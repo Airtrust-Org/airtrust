@@ -25,6 +25,10 @@ import {
 } from './db-service-shared';
 import { despacharNotificacoes } from './db-service-notificacoes';
 import { carregarLimites } from './db-service-config';
+import {
+  resolveFrmsSourceStatus,
+  shouldUseForOperationalFrms,
+} from './frms-source-policy';
 
 // ────────────────────────────────────────────────────────
 // Período embarcado
@@ -112,10 +116,10 @@ interface FatorizacaoRow extends FrmsFatorizacao {
 }
 
 interface JornadaFatigueSnapshot {
-  pct_jornada_diaria: number;
-  pct_voo_diaria: number;
-  pct_jornada_mes: number;
-  pct_voo_mes: number;
+  pct_jornada_diaria: number | null;
+  pct_voo_diaria: number | null;
+  pct_jornada_mes: number | null;
+  pct_voo_mes: number | null;
   integridade_status: 'OK' | 'INCONSISTENTE';
   integridade_codigo: string | null;
   integridade_codigos: string[];
@@ -137,6 +141,48 @@ export async function recalcularPipeline(
   alertas: AlertaGerado[];
   bloqueado: boolean;
 }> {
+  if (!shouldUseForOperationalFrms(jornada)) {
+    const acumuloVazio: AcumuloRollingResult = {
+      hv_7_dias_min: 0,
+      hv_28_dias_min: 0,
+      hv_365_dias_min: 0,
+      hv_mes_calendario_min: 0,
+      hv_dia_min: 0,
+      pct_limite_7d: 0,
+      pct_limite_28d: 0,
+      pct_limite_mes_calendario: 0,
+      pct_limite_365d: 0,
+      pct_limite_dia: 0,
+      repouso_anterior_min: -1,
+      repouso_suficiente: 1,
+    };
+    const timestamp = now();
+    const fatorizacao: FatorizacaoRow = {
+      id: `non-operational-${jornada.id}`,
+      jornada_id: jornada.id,
+      processado_com_bug: 0,
+      fator_basica_pct: 0,
+      fator_apresentacao_pct: 0,
+      fator_duracao_pct: 0,
+      fator_repouso_pct: 0,
+      fator_noturno_dep_pct: 0,
+      fator_noturno_arr_pct: 0,
+      fator_ciclo_embarcado_pct: 0,
+      fator_base_away_pct: 0,
+      fator_aclimatacao_pct: 0,
+      total_fatorizado_jornada: 0,
+      fator_hv_basica_pct: 0,
+      fator_hv_quantidade_pct: 0,
+      fator_hv_noturno_dep_pct: 0,
+      fator_hv_noturno_arr_pct: 0,
+      total_fatorizado_hv: 0,
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null,
+    };
+    return { fatorizacao, acumulo: acumuloVazio, alertas: [], bloqueado: false };
+  }
+
   // Garantir consistência pós-regra de almoço: duração sempre recalculada pelos horários
   const duracaoRecalculada = calcDuracaoJornada(jornada);
   if (jornada.duracao_jornada_minutos !== duracaoRecalculada) {
@@ -913,7 +959,7 @@ export async function buscarJornadas(
 
   const data = (rows.results || []).map((row: Record<string, unknown>) => {
     const jornada = { ...row } as unknown as FrmsJornada & { fatorizacao?: FrmsFatorizacao };
-    if (row.fat_id) {
+    if (row.fat_id && shouldUseForOperationalFrms(jornada)) {
       jornada.fatorizacao = {
         id: row.fat_id as string,
         jornada_id: row.id as string,
@@ -937,6 +983,19 @@ export async function buscarJornadas(
     return jornada;
   });
 
+  const canonicalDates = new Set(
+    data.filter((jornada) => shouldUseForOperationalFrms(jornada)).map((jornada) => jornada.data),
+  );
+
+  for (const jornada of data) {
+    Object.assign(
+      jornada as FrmsJornada & Record<string, unknown>,
+      resolveFrmsSourceStatus(jornada, {
+        hasCanonicalForSameDay: canonicalDates.has(jornada.data),
+      }),
+    );
+  }
+
   const fatigueByJornadaId = new Map<string, JornadaFatigueSnapshot>();
   const orderedJornadas = [...data].sort((a, b) => {
     const byDate = String(a.data || '').localeCompare(String(b.data || ''));
@@ -950,6 +1009,22 @@ export async function buscarJornadas(
   const acumuladoPorMes = new Map<string, { jornada: number; voo: number }>();
 
   for (const jornada of orderedJornadas) {
+    if (!shouldUseForOperationalFrms(jornada)) {
+      fatigueByJornadaId.set(String(jornada.id), {
+        pct_jornada_diaria: null,
+        pct_voo_diaria: null,
+        pct_jornada_mes: null,
+        pct_voo_mes: null,
+        integridade_status: 'INCONSISTENTE',
+        integridade_codigo: 'FONTE_NAO_CANONICA',
+        integridade_codigos: ['FONTE_NAO_CANONICA'],
+        integridade_mensagem:
+          'Fonte nao canonica para FRMS operacional. Aguardando SIGVOOS para calcular percentuais, rolling e alertas.',
+        inconsistencias: ['FONTE_NAO_CANONICA'],
+      });
+      continue;
+    }
+
     const monthKey = String(jornada.data || '').slice(0, 7);
     const acumuladoAnterior = acumuladoPorMes.get(monthKey) ?? { jornada: 0, voo: 0 };
     const linha = calcularLinhaFadigaAcumulada({

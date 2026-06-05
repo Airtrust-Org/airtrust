@@ -54,4 +54,25 @@ describe('frms jornadas mensais presentation', () => {
     expect(presentation.integrityLabel).toBe('HV maior que jornada');
     expect(presentation.integrityMessage).toContain('excedem');
   });
+
+  it('exibe FIRA como auditoria pendente sem HV operacional validada', () => {
+    const presentation = buildJornadaMensalPresentation({
+      pct_jornada_diaria: null,
+      pct_voo_diaria: null,
+      integridade_status: 'INCONSISTENTE',
+      integridade_codigo: 'FONTE_NAO_CANONICA',
+      integridade_mensagem: 'Fonte nao canonica para FRMS operacional.',
+      fonte_original: 'FIRA',
+      source_status: 'PENDENTE_SIGVOOS',
+      usado_no_frms_operacional: false,
+      duracao_jornada_minutos: 595,
+      horas_voo_minutos: 1537,
+    });
+
+    expect(presentation.sourceLabel).toBe('Pendente SIGVOOS');
+    expect(presentation.operationalHvLabel).toBe('—');
+    expect(presentation.operationalJourneyLabel).toBe('—');
+    expect(presentation.auxiliarySourceLabel).toBe('FIRA: 25h37');
+    expect(presentation.fatHvDiaLabel).toBe('—');
+  });
 });

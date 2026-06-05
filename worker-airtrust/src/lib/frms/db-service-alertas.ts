@@ -4,6 +4,7 @@
 
 import type { FrmsAlerta, NivelAlerta } from './types';
 import { now, logAuditoria } from './db-service-shared';
+import { FRMS_CANONICAL_OPERATIONAL_SOURCE } from './frms-source-policy';
 
 export interface BuscarAlertasFiltro {
   tripulante_id?: string;
@@ -25,6 +26,8 @@ export async function buscarAlertas(
 
   // Coerência com módulo FRMS: considerar apenas jornadas ativas
   conditions.push('j.deleted_at IS NULL');
+  conditions.push("UPPER(COALESCE(j.origem, '')) = ?");
+  binds.push(FRMS_CANONICAL_OPERATIONAL_SOURCE);
   // Auto-cura: ocultar alerta FDP stale quando valor do alerta não bate com jornada atual
   conditions.push(
     "(a.tipo_limite <> 'FDP_DIARIO' OR COALESCE(a.valor_atual_min, -1) = COALESCE(j.duracao_jornada_minutos, -1))",

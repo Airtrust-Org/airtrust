@@ -25,6 +25,7 @@ import {
   isWithinWOCL,
 } from './fadiga-score';
 import { resolverFrmsConfig } from './frms-config';
+import { shouldUseForRolling } from './frms-source-policy';
 
 // ────────────────────────────────────────────────────────────────────
 // Helpers de tempo
@@ -574,15 +575,17 @@ export function calcEffectiveness(
 export interface AcumuloRollingInput {
   tripulanteId: number;
   dataReferencia: string; // YYYY-MM-DD
-  jornadasHistorico: Pick<
-    FrmsJornada,
-    | 'data'
-    | 'status'
-    | 'horas_voo_minutos'
-    | 'hora_termino'
-    | 'hora_apresentacao'
-    | 'duracao_jornada_minutos'
-  >[];
+  jornadasHistorico: Array<
+    Pick<
+      FrmsJornada,
+      | 'data'
+      | 'status'
+      | 'horas_voo_minutos'
+      | 'hora_termino'
+      | 'hora_apresentacao'
+      | 'duracao_jornada_minutos'
+    > & { origem?: string | null }
+  >;
   limites: LimitesMap;
 }
 
@@ -688,6 +691,10 @@ function calcHvRolling24h(
  */
 export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingResult {
   const { dataReferencia, jornadasHistorico, limites } = input;
+  const operationalHistorico = jornadasHistorico.filter((j) => {
+    if (!('origem' in j)) return true;
+    return shouldUseForRolling(j as { origem?: string | null });
+  });
 
   const refDate = new Date(dataReferencia + 'T00:00:00');
   const refYear = refDate.getFullYear();
@@ -704,7 +711,7 @@ export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingRe
     hvMes = 0,
     hvDia = 0;
 
-  for (const j of jornadasHistorico) {
+  for (const j of operationalHistorico) {
     const hv = j.horas_voo_minutos ?? 0;
     if (hv <= 0) continue;
 
@@ -719,7 +726,7 @@ export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingRe
     }
   }
 
-  hvDia = calcHvRolling24h(dataReferencia, jornadasHistorico);
+  hvDia = calcHvRolling24h(dataReferencia, operationalHistorico);
 
   const limite7min = limites.HV_7_DIAS_HORAS * 60;
   const limite28min = limites.HV_28_DIAS_HORAS * 60;
@@ -728,7 +735,7 @@ export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingRe
   const limiteDiaMin = limites.HV_DIARIA_HORAS * 60;
 
   // Repouso: tempo desde o término da última jornada até apresentação de hoje
-  const repousoMin = calcRepousoAnterior(dataReferencia, jornadasHistorico);
+  const repousoMin = calcRepousoAnterior(dataReferencia, operationalHistorico);
 
   return {
     hv_7_dias_min: hv7,
