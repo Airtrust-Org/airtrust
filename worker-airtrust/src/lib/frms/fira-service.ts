@@ -14,6 +14,11 @@ import {
   type FiraParseResult,
   type FiraLinhaDia,
 } from './fira-parser';
+import {
+  avaliarIntegridadeJornadaFrms,
+  type FrmsIntegridadeCodigo,
+  type FrmsIntegridadeStatus,
+} from './integridade';
 
 // ──────────────────────────────────────────────────────────────
 // Tipos de domínio FIRA
@@ -32,6 +37,16 @@ export interface FiraLinhPreview {
   situacao: 'NOVO' | 'DUPLICATA' | 'DIA_VAZIO';
   jornada_existente_id: string | null;
   marcado: boolean;
+  integridade_status?: FrmsIntegridadeStatus;
+  integridade_codigo?: FrmsIntegridadeCodigo | null;
+  integridade_codigos?: FrmsIntegridadeCodigo[];
+  integridade_mensagem?: string | null;
+  valores_brutos?: {
+    duracao_jornada_minutos: number | null;
+    horas_voo_minutos: number | null;
+    hora_apresentacao: string | null;
+    hora_termino: string | null;
+  };
 }
 
 export interface FiraImportacaoPreview {
@@ -82,6 +97,33 @@ function now(): string {
 
 function cloneArrayBuffer(buffer: ArrayBuffer): ArrayBuffer {
   return Uint8Array.from(new Uint8Array(buffer)).buffer;
+}
+
+export function enrichFiraPreviewLineIntegridade(
+  linha: Omit<
+    FiraLinhPreview,
+    | 'integridade_status'
+    | 'integridade_codigo'
+    | 'integridade_codigos'
+    | 'integridade_mensagem'
+    | 'valores_brutos'
+  >,
+): FiraLinhPreview {
+  const integridade = avaliarIntegridadeJornadaFrms({
+    duracao_jornada_minutos: linha.duracao_jornada_min,
+    horas_voo_minutos: linha.horas_voo_min,
+    hora_apresentacao: linha.hora_apresentacao,
+    hora_termino: linha.hora_termino,
+  });
+
+  return {
+    ...linha,
+    integridade_status: integridade.integridade_status,
+    integridade_codigo: integridade.integridade_codigo,
+    integridade_codigos: integridade.integridade_codigos,
+    integridade_mensagem: integridade.integridade_mensagem,
+    valores_brutos: integridade.valores_brutos,
+  };
 }
 
 interface JornadaExistenteParaMerge {
@@ -365,7 +407,7 @@ export async function processarUploadFira(
       situacao = 'NOVO';
     }
 
-    return {
+    return enrichFiraPreviewLineIntegridade({
       dia: d.dia,
       data,
       status_fira: d.situacao,
@@ -378,7 +420,7 @@ export async function processarUploadFira(
       situacao,
       jornada_existente_id: jornadaExistenteId,
       marcado: situacao === 'NOVO',
-    };
+    });
   });
 
   // 7. Calcular totais
@@ -701,6 +743,7 @@ export async function confirmarImportacaoFira(
 
   // 2. Recuperar preview
   const preview: FiraImportacaoPreview = JSON.parse(importacao.preview_json);
+  preview.linhas = preview.linhas.map((linha) => enrichFiraPreviewLineIntegridade(linha));
 
   // 3. Processar dias selecionados
   const diasMap = new Map(

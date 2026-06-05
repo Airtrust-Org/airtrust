@@ -34,8 +34,8 @@ interface JornadaDia {
   data: string;
   hora_apresentacao: string | null;
   hora_termino: string | null;
-  duracao_jornada_minutos: number;
-  horas_voo_minutos: number;
+  duracao_jornada_minutos: number | null;
+  horas_voo_minutos: number | null;
   repouso_anterior_min: number | null;
   hora_primeira_decolagem: string | null;
   hora_ultimo_pouso: string | null;
@@ -118,8 +118,8 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
            j.data,
            j.hora_apresentacao,
            j.hora_termino,
-           COALESCE(j.duracao_jornada_minutos, 0) AS duracao_jornada_minutos,
-           COALESCE(j.horas_voo_minutos, 0) AS horas_voo_minutos,
+           j.duracao_jornada_minutos AS duracao_jornada_minutos,
+           j.horas_voo_minutos AS horas_voo_minutos,
            ar.repouso_anterior_min,
            j.hora_primeira_decolagem,
            j.hora_ultimo_pouso,
@@ -198,6 +198,10 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
               pct_voo_mes: ultimo.pct_voo_mes,
               alerta: alertaGeral,
               integridade_status: ultimo.integridade_status,
+              integridade_codigo: ultimo.integridade_codigo,
+              integridade_codigos: ultimo.integridade_codigos,
+              integridade_mensagem: ultimo.integridade_mensagem,
+              valores_brutos: ultimo.valores_brutos,
             }
           : null,
         evolucao,

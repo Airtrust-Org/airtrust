@@ -1,3 +1,8 @@
+import {
+  avaliarIntegridadeJornadaFrms,
+  type FrmsIntegridadeCodigo,
+} from './integridade';
+
 export const FADIGA_ACUMULADA_LIMITES = {
   JORNADA_MENSAL_HORAS: 176,
   HV_MENSAL_HORAS: 90,
@@ -5,13 +10,15 @@ export const FADIGA_ACUMULADA_LIMITES = {
   HV_DIARIA_HORAS: 8,
 } as const;
 
-export type FadigaIntegridadeCodigo = 'HV_MAIOR_QUE_JORNADA';
+export type FadigaIntegridadeCodigo = FrmsIntegridadeCodigo;
 
 export interface JornadaFadigaAcumuladaInput {
   data: string;
   dia_ciclo_embarcado?: number | null;
   duracao_jornada_minutos: number | null;
   horas_voo_minutos: number | null;
+  hora_apresentacao?: string | null;
+  hora_termino?: string | null;
 }
 
 export interface JornadaFadigaAcumuladaOutput {
@@ -32,7 +39,17 @@ export interface JornadaFadigaAcumuladaOutput {
   pct_jornada_mes: number;
   pct_voo_mes: number;
   integridade_status: 'OK' | 'INCONSISTENTE';
+  integridade_codigo: FadigaIntegridadeCodigo | null;
+  integridade_codigos: FadigaIntegridadeCodigo[];
+  integridade_mensagem: string | null;
+  integridade_mensagens: string[];
   inconsistencias: FadigaIntegridadeCodigo[];
+  valores_brutos: {
+    duracao_jornada_minutos: number | null;
+    horas_voo_minutos: number | null;
+    hora_apresentacao: string | null;
+    hora_termino: string | null;
+  };
 }
 
 function round1(value: number): number {
@@ -57,11 +74,12 @@ export function calcularLinhaFadigaAcumulada(params: {
   const vooDiarioMin = Math.max(0, params.jornada.horas_voo_minutos ?? 0);
   const jornadaAcumuladaMin = params.acumuladoJornadaMinAnterior + jornadaDiariaMin;
   const vooAcumuladoMin = params.acumuladoVooMinAnterior + vooDiarioMin;
-  const inconsistencias: FadigaIntegridadeCodigo[] = [];
-
-  if (vooDiarioMin > jornadaDiariaMin) {
-    inconsistencias.push('HV_MAIOR_QUE_JORNADA');
-  }
+  const integridade = avaliarIntegridadeJornadaFrms({
+    duracao_jornada_minutos: params.jornada.duracao_jornada_minutos,
+    horas_voo_minutos: params.jornada.horas_voo_minutos,
+    hora_apresentacao: params.jornada.hora_apresentacao,
+    hora_termino: params.jornada.hora_termino,
+  });
 
   const pctJornadaDiaria = pct(jornadaDiariaMin, FADIGA_ACUMULADA_LIMITES.JORNADA_DIARIA_HORAS);
   const pctVooDiaria = pct(vooDiarioMin, FADIGA_ACUMULADA_LIMITES.HV_DIARIA_HORAS);
@@ -85,8 +103,13 @@ export function calcularLinhaFadigaAcumulada(params: {
     pct_voo_diaria: round3(pctVooDiaria),
     pct_jornada_mes: round3(pctJornadaMes),
     pct_voo_mes: round3(pctVooMes),
-    integridade_status: inconsistencias.length ? 'INCONSISTENTE' : 'OK',
-    inconsistencias,
+    integridade_status: integridade.integridade_status,
+    integridade_codigo: integridade.integridade_codigo,
+    integridade_codigos: integridade.integridade_codigos,
+    integridade_mensagem: integridade.integridade_mensagem,
+    integridade_mensagens: integridade.integridade_mensagens,
+    inconsistencias: integridade.integridade_codigos,
+    valores_brutos: integridade.valores_brutos,
   };
 }
 

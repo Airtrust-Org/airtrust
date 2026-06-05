@@ -1,10 +1,6 @@
 import { z } from 'zod';
 import { carregarLimites } from '../lib/frms/db-service-config';
-import {
-  confirmarImportacaoFira,
-  type FiraImportacaoPreview,
-  type FiraLinhPreview,
-} from '../lib/frms/fira-service';
+import { confirmarImportacaoFira, enrichFiraPreviewLineIntegridade, type FiraImportacaoPreview, type FiraLinhPreview } from '../lib/frms/fira-service';
 
 const SIGVOOS_DEFAULT_BASE_URL = 'https://api.sigvoos.com.br/api';
 const SIGVOOS_DEFAULT_SYSTEM = 'sigtrip';
@@ -1368,7 +1364,7 @@ export async function buildSigvoosMonthlyPreview(
   const lines: FiraLinhPreview[] = input.groupedDays.map((day) => {
     const jornadaExistenteId = existingJornadasByDate.get(day.data) ?? null;
 
-    return {
+    return enrichFiraPreviewLineIntegridade({
       dia: day.dia,
       data: day.data,
       status_fira: 'SIGVOOS',
@@ -1384,7 +1380,7 @@ export async function buildSigvoosMonthlyPreview(
       situacao: jornadaExistenteId ? 'DUPLICATA' : 'NOVO',
       jornada_existente_id: jornadaExistenteId,
       marcado: true,
-    };
+    });
   });
 
   const totalVooMin = lines.reduce((acc, line) => acc + line.horas_voo_min, 0);

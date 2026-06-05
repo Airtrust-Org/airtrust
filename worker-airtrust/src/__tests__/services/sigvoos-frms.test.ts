@@ -236,6 +236,66 @@ describe('sigvoos-frms service', () => {
       hora_termino: '11:20',
       horas_voo_min: 135,
       duracao_jornada_min: 190,
+      integridade_status: 'OK',
+      integridade_codigo: null,
+    });
+  });
+
+  it('marks SIGVOOS preview line as inconsistent when HV has no jornada', async () => {
+    const dbStub = {
+      prepare: () => ({
+        bind: () => ({
+          all: async () => ({ results: [] }),
+        }),
+      }),
+    } as any;
+
+    const preview = await buildSigvoosMonthlyPreview({
+      db: dbStub,
+      importacaoId: 'import-inconsistent',
+      tripulanteId: '33',
+      tripulanteNomeFira: 'JOAO SILVA',
+      tripulanteNomeSistema: 'Joao Silva',
+      canac: '951681',
+      identificadorSigvoos: null,
+      fonteResolucao: 'CANAC' as const,
+      ano: 2026,
+      mes: 4,
+      groupedDays: [
+        {
+          canac: '951681',
+          identificadorSigvoos: null,
+          tripulanteNome: 'JOAO SILVA',
+          data: '2026-04-03',
+          dia: 3,
+          horaApresentacao: null,
+          horaTermino: null,
+          horasVooMin: 42,
+          localBase: 'SBRJ',
+          matriculaAeronave: null,
+          tempoNoturnoMin: 0,
+          tempoIfrMin: 0,
+          rawItems: [{ etapa: 1 }],
+        },
+      ],
+    });
+
+    expect(preview.preview.linhas[0]).toMatchObject({
+      duracao_jornada_min: 0,
+      horas_voo_min: 42,
+      integridade_status: 'INCONSISTENTE',
+      integridade_codigo: 'JORNADA_ZERO_COM_HV',
+      integridade_codigos: [
+        'JORNADA_ZERO_COM_HV',
+        'HORARIO_INCOMPLETO_COM_HV',
+        'HV_MAIOR_QUE_JORNADA',
+      ],
+      valores_brutos: {
+        duracao_jornada_minutos: 0,
+        horas_voo_minutos: 42,
+        hora_apresentacao: null,
+        hora_termino: null,
+      },
     });
   });
 

@@ -18,6 +18,56 @@ describe('fadiga acumulada legal — escopo diario vs mensal', () => {
 
     expect(linha.integridade_status).toBe('INCONSISTENTE');
     expect(linha.inconsistencias).toContain('HV_MAIOR_QUE_JORNADA');
+    expect(linha.integridade_codigos).toEqual([
+      'JORNADA_ZERO_COM_HV',
+      'HORARIO_INCOMPLETO_COM_HV',
+      'HV_MAIOR_QUE_JORNADA',
+    ]);
+    expect(linha.integridade_codigo).toBe('JORNADA_ZERO_COM_HV');
+    expect(linha.integridade_mensagem).toContain('jornada zerada');
+  });
+
+  it('marca jornada ausente com HV positiva como inconsistente', () => {
+    const linha = calcularLinhaFadigaAcumulada({
+      jornada: {
+        data: '2026-05-25',
+        duracao_jornada_minutos: null,
+        horas_voo_minutos: 42,
+        hora_apresentacao: '08:00',
+        hora_termino: '09:00',
+      },
+      acumuladoJornadaMinAnterior: 0,
+      acumuladoVooMinAnterior: 0,
+    });
+
+    expect(linha.integridade_status).toBe('INCONSISTENTE');
+    expect(linha.integridade_codigos).toContain('JORNADA_AUSENTE_COM_HV');
+    expect(linha.integridade_codigos).not.toContain('HV_MAIOR_QUE_JORNADA');
+    expect(linha.valores_brutos.duracao_jornada_minutos).toBeNull();
+    expect(linha.voo_diario_min).toBe(42);
+  });
+
+  it('marca horario incompleto com HV positiva sem alterar os valores brutos', () => {
+    const linha = calcularLinhaFadigaAcumulada({
+      jornada: {
+        data: '2026-05-26',
+        duracao_jornada_minutos: 90,
+        horas_voo_minutos: 30,
+        hora_apresentacao: null,
+        hora_termino: '10:00',
+      },
+      acumuladoJornadaMinAnterior: 0,
+      acumuladoVooMinAnterior: 0,
+    });
+
+    expect(linha.integridade_status).toBe('INCONSISTENTE');
+    expect(linha.integridade_codigos).toEqual(['HORARIO_INCOMPLETO_COM_HV']);
+    expect(linha.valores_brutos).toMatchObject({
+      duracao_jornada_minutos: 90,
+      horas_voo_minutos: 30,
+      hora_apresentacao: null,
+      hora_termino: '10:00',
+    });
   });
 
   it('nao marca HV_MAIOR_QUE_JORNADA quando jornada e HV sao zero', () => {
@@ -33,6 +83,7 @@ describe('fadiga acumulada legal — escopo diario vs mensal', () => {
 
     expect(linha.integridade_status).toBe('OK');
     expect(linha.inconsistencias).toEqual([]);
+    expect(linha.integridade_codigo).toBeNull();
   });
 
   it('calcula HV diaria 04h42 contra limite diario de 8h', () => {
@@ -98,6 +149,7 @@ describe('fadiga acumulada legal — escopo diario vs mensal', () => {
     expect(linha.pct_voo_diaria).toBe(320.208);
     expect(linha.integridade_status).toBe('INCONSISTENTE');
     expect(linha.inconsistencias).toContain('HV_MAIOR_QUE_JORNADA');
+    expect(linha.integridade_codigo).toBe('HORARIO_INCOMPLETO_COM_HV');
   });
 
   it('calcula jornada 09h55 contra limite diario de jornada', () => {
