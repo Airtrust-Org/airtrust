@@ -109,6 +109,8 @@ interface SessaoParaEditar {
   instrutor_id: number;
   instrutor_nome?: string;
   tipo_sessao: string;
+  tipo_sessao_id?: number | null; // FK canônica (via template_id JOIN no backend)
+  tipo_sessao_codigo?: string | null; // Código do tipo (via template_id JOIN no backend)
   tipo_aeronave?: string; // Código da aeronave
   tipo_dispositivo?: 'SIMULADOR' | 'AERONAVE';
   aeronave_id?: number | null;
@@ -167,6 +169,7 @@ export default function ModalNovaSessao({
     message: '',
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [editHydrating, setEditHydrating] = useState(false); // Loading state for edit mode hydration
 
   // ========== FLUXO EM CASCATA ==========
   const [tipoDispositivo, setTipoDispositivo] = useState<'SIMULADOR' | 'AERONAVE'>('SIMULADOR');
@@ -242,10 +245,16 @@ export default function ModalNovaSessao({
       // Em criação: pré-preencher com data de hoje
       if (!isEditMode) {
         setData(new Date().toISOString().split('T')[0]);
+        setEditHydrating(false);
+      } else {
+        setEditHydrating(true); // Show loading until hydration completes
       }
 
       // Em criação: auto +2h; em edição: preservar valor existente
       setHorarioFimFoiEditado(isEditMode);
+    } else {
+      // Modal fechando: limpar estado de hidratação
+      setEditHydrating(false);
     }
   }, [isOpen]);
 
@@ -335,11 +344,34 @@ export default function ModalNovaSessao({
 
     if (!dataReady) return;
 
+    // Helper to set non-cascading fields (always populated, even if cascading lookups fail)
+    const setCamposIndependentes = () => {
+      setData((sessao!.data || '').split('T')[0]);
+      setHorarioInicio(sessao!.horario_inicio?.substring(0, 5) || '');
+      setHorarioFim(sessao!.horario_fim?.substring(0, 5) || '');
+      setHorarioFimFoiEditado(true);
+      setInstrutorId(sessao!.instrutor_id);
+      setObservacoes(sessao!.observacoes || '');
+      if (sessao!.tema_sessao) {
+        setTemaSessao(sessao!.tema_sessao);
+      }
+      // Preencher participantes (máximo 2)
+      if (sessao!.participantes && sessao!.participantes.length > 0) {
+        setParticipantes(
+          sessao!.participantes.slice(0, 2).map((p) => ({
+            funcionario_id: p.funcionario_id,
+            funcao: p.funcao,
+          })),
+        );
+      }
+    };
+
     {
       console.log('🔧 [EDIT MODE] Iniciando preenchimento:', {
         sessao_id: sessao!.id,
         simulador_id: sessao!.simulador_id,
         tipo_sessao: sessao!.tipo_sessao,
+        tipo_sessao_id: sessao!.tipo_sessao_id,
         tema_sessao: sessao!.tema_sessao,
         tipo_dispositivo: sessao!.tipo_dispositivo,
         aeronave_id: sessao!.aeronave_id,
@@ -347,6 +379,9 @@ export default function ModalNovaSessao({
 
       // tipoDisp is declared above, before the dataReady guard
       setTipoDispositivo(tipoDisp);
+
+      // ─── Always set non-cascading fields first ───
+      setCamposIndependentes();
 
       let aeronaveEncontrada: ModeloAeronave | undefined;
       let modeloDirecto: string | null = (sessao as any).simulador_modelo || null;
@@ -374,8 +409,7 @@ export default function ModalNovaSessao({
           setAeronaveRealId(sessao.aeronave_id);
         }
       } else {
-        // Modo SIMULADOR: comportamento original
-        // Encontrar o simulador para pegar aeronave_codigo
+        // Modo SIMULADOR
         const simulador = simuladores.find((s) => s.id === sessao.simulador_id);
 
         if (simulador) {
@@ -426,11 +460,22 @@ export default function ModalNovaSessao({
         }
       }
 
-      // Encontrar tipo de sessão pelo código
-      const tipoSessao = tiposSessao.find((t) => t.codigo === sessao.tipo_sessao);
+      // Encontrar tipo de sessão: tentar FK (tipo_sessao_id) primeiro, depois código TEXT
+      let tipoSessao = tiposSessao.find((t) => t.id === sessao.tipo_sessao_id);
+      let tipoSessaoSource = 'tipo_sessao_id';
+
+      if (!tipoSessao && sessao.tipo_sessao_codigo) {
+        tipoSessao = tiposSessao.find((t) => t.codigo === sessao.tipo_sessao_codigo);
+        tipoSessaoSource = 'tipo_sessao_codigo';
+      }
+
+      if (!tipoSessao && sessao.tipo_sessao) {
+        tipoSessao = tiposSessao.find((t) => t.codigo === sessao.tipo_sessao);
+        tipoSessaoSource = 'tipo_sessao (TEXT fallback)';
+      }
 
       if (tipoSessao) {
-        console.log('🔧 [EDIT MODE] Tipo sessão encontrado:', tipoSessao);
+        console.log(`🔧 [EDIT MODE] Tipo sessão encontrado via ${tipoSessaoSource}:`, tipoSessao);
         setTipoSessaoId(tipoSessao.id);
 
         // ✅ CARREGAR MODELOS USANDO O CÓDIGO DA AERONAVE ENCONTRADA
@@ -442,37 +487,21 @@ export default function ModalNovaSessao({
           });
           fetchModelosComCodigo(tipoSessao.id, codigoParaModelos, tipoDisp);
         } else {
-          console.error('❌ [EDIT MODE] Não pode carregar modelos - aeronave não determinada');
+          console.warn('⚠️ [EDIT MODE] Não pode carregar modelos - aeronave não determinada (campos básicos já preenchidos)');
         }
-      } else if (sessao.tipo_sessao) {
-        console.error('❌ [EDIT MODE] Tipo de sessão NÃO encontrado:', {
-          tipo_sessao_recebido: sessao.tipo_sessao,
-          tipos_disponiveis: tiposSessao.map((t) => t.codigo),
+      } else {
+        console.warn('⚠️ [EDIT MODE] Tipo de sessão NÃO encontrado por nenhum método:', {
+          tipo_sessao_id: sessao.tipo_sessao_id,
+          tipo_sessao_codigo: sessao.tipo_sessao_codigo,
+          tipo_sessao_text: sessao.tipo_sessao,
+          tipos_disponiveis: tiposSessao.map((t) => ({ id: t.id, codigo: t.codigo })),
         });
+        // ⚠️ Tipo não encontrado — campos básicos (data, horários, instrutor, etc.) já foram preenchidos.
+        //    O usuário verá o select de tipo vazio e precisará selecionar um manualmente.
       }
 
-      // ✅ PREENCHER TEMA DA SESSÃO DO BACKEND
-      if (sessao.tema_sessao) {
-        setTemaSessao(sessao.tema_sessao);
-      }
-
-      // Preencher campos básicos (normalizar data: pegar só YYYY-MM-DD)
-      setData((sessao.data || '').split('T')[0]);
-      setHorarioInicio(sessao.horario_inicio?.substring(0, 5) || '');
-      setHorarioFim(sessao.horario_fim?.substring(0, 5) || '');
-      setHorarioFimFoiEditado(true);
-      setInstrutorId(sessao.instrutor_id);
-      setObservacoes(sessao.observacoes || '');
-
-      // Preencher participantes (máximo 2)
-      if (sessao.participantes && sessao.participantes.length > 0) {
-        setParticipantes(
-          sessao.participantes.slice(0, 2).map((p) => ({
-            funcionario_id: p.funcionario_id,
-            funcao: p.funcao,
-          })),
-        );
-      }
+      // Hydration concluída
+      setEditHydrating(false);
     }
   }, [isOpen, isEditMode, sessao, simuladores, aeronaves, aeronavesReais, tiposSessao]);
 
@@ -1462,9 +1491,9 @@ export default function ModalNovaSessao({
               4. Tema da Sessão <span className="text-red-500">*</span>
             </label>
 
-            {loadingModelos && modelos.length === 0 ? (
+            {loadingModelos || editHydrating ? (
               <div className="w-full px-4 py-3 border border-slate-300 rounded-lg bg-slate-50 text-slate-500 text-sm">
-                🔄 Carregando modelos disponíveis...
+                🔄 {editHydrating ? 'Carregando dados da sessão...' : 'Carregando modelos disponíveis...'}
               </div>
             ) : modelos.length > 0 ? (
               // Dropdown com modelos disponíveis
@@ -1487,10 +1516,12 @@ export default function ModalNovaSessao({
                 ))}
               </select>
             ) : (
-              // Mensagem quando não há modelos
+              // Mensagem quando não há modelos (mas apenas se tipo + aeronave já estão selecionados)
               <div className="w-full px-4 py-3 border border-amber-300 rounded-lg bg-amber-50 text-amber-700 text-sm">
-                ⚠️ Nenhum modelo cadastrado para esta combinação. Cadastre um modelo primeiro em{' '}
-                <strong>Gestão → Modelos de Sessão</strong>
+                {tipoSessaoId
+                  ? '⚠️ Nenhum modelo cadastrado para esta combinação. Cadastre um modelo primeiro em '
+                  : 'Selecione o tipo de sessão e equipamento para carregar os modelos disponíveis.'}
+                {tipoSessaoId && <strong>Gestão → Modelos de Sessão</strong>}
               </div>
             )}
           </div>

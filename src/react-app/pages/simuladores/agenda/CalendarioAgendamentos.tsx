@@ -770,6 +770,8 @@ export default function CalendarioAgendamentos() {
           examinador_id: agendamento.examinador_id ?? null,
           examinador_nome: agendamento.examinador_nome,
           tipo_sessao: agendamento.tipo_sessao,
+          tipo_sessao_id: agendamento.tipo_sessao_id ?? null,
+          tipo_sessao_codigo: agendamento.tipo_sessao_codigo ?? null,
           // For AERONAVE sessions, use aeronave_modelo as the aircraft type code; fall back to simulador fields
           tipo_aeronave: agendamento.aeronave_modelo || agendamento.simulador_tipo || agendamento.simulador_modelo,
           tema_sessao: agendamento.tema_sessao,
@@ -782,14 +784,18 @@ export default function CalendarioAgendamentos() {
             })) || [],
           fichas: agendamento.fichas || [],
         };
-        // Close modal first (if open from a previous create flow), then re-open in edit mode.
-        // This prevents stale state where isEditMode = false from a previous null→create open.
-        setModalNovaSessaoOpen(false);
-        setSessaoSelecionada(sessaoFormatada as any);
-        // Use setTimeout to ensure React has processed state updates before re-opening
-        setTimeout(() => {
+        // Set session and open modal. If already open from a previous create flow,
+        // close first to force a clean re-open with new data.
+        if (modalNovaSessaoOpen) {
+          setModalNovaSessaoOpen(false);
+          setSessaoSelecionada(sessaoFormatada as any);
+          setTimeout(() => {
+            setModalNovaSessaoOpen(true);
+          }, 0);
+        } else {
+          setSessaoSelecionada(sessaoFormatada as any);
           setModalNovaSessaoOpen(true);
-        }, 0);
+        }
       } catch (error) {
         console.error('[Calendar] Erro handleClick:', error);
       }
