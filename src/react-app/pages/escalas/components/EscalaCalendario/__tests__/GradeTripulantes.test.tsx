@@ -45,6 +45,8 @@ function renderGrade() {
           resumo: { total: 1, completos: 0, parciais: 0, livres: 1 },
         }}
         alocacoes={[]}
+        eventos={[]}
+        escalaId="1"
         quinzenas={[
           {
             id: 1,

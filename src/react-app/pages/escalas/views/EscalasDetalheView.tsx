@@ -1378,6 +1378,8 @@ export default function EscalasDetalheView() {
                           resumo: resumoCoberturaTripulantes,
                         }}
                         alocacoes={alocacoesOperacionaisVisiveis}
+                        eventos={dadosCalendario.eventos}
+                        escalaId={String(escalaAtual.id)}
                         quinzenas={quinzenas}
                         escalaMes={escalaAtual.mes}
                         escalaAno={escalaAtual.ano}
