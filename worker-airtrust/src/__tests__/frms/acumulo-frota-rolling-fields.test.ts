@@ -237,9 +237,9 @@ describe('buscarAcumuloFrota — month mode (mesReferencia)', () => {
     // Mock precisa retornar apenas tripulantes com HAVING > 0
     // Vamos criar um db específico para este caso
     const db2 = {
-      prepare: () => ({
+      prepare: (query: string) => ({
         all: async () => {
-          if (typeof arguments[0] === 'string' && (arguments[0] as string).includes('FROM frms_configuracao_limites')) {
+          if (query.includes('FROM frms_configuracao_limites')) {
             return {
               results: [
                 { nome: 'HV_MES_HORAS', valor_numerico: 112.5 },

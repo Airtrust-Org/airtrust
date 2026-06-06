@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/react-app/config/api';
+import { notifyDataChanged, type DataChangeScope } from '@/react-app/utils/data-sync';
 
 type ApiFetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -104,6 +105,25 @@ function isTrustedApiOrigin(
   return override === defaultOrigin || (!!altOrigin && override === altOrigin);
 }
 
+function dataChangeScopeForMutation(pathname: string): DataChangeScope | null {
+  if (/\/api\/treinamentos(\/|$)/i.test(pathname)) return 'treinamentos';
+  if (/\/api\/escalas(\/|$)/i.test(pathname) || /\/api\/evd(\/|$)/i.test(pathname)) {
+    return 'escala';
+  }
+  if (/\/api\/simuladores(\/|$)/i.test(pathname)) return 'simuladores';
+  if (/\/api\/qualificacoes(\/|$)/i.test(pathname) || /\/api\/certificados(\/|$)/i.test(pathname)) {
+    return 'qualificacoes';
+  }
+  return null;
+}
+
+function notifyMutationDataChange(method: string, pathname: string | null, response: Response): void {
+  if (!response.ok || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return;
+  if (!pathname) return;
+  const scope = dataChangeScopeForMutation(pathname);
+  if (scope) notifyDataChanged(scope);
+}
+
 export function installGlobalApiFetch(): void {
   if (typeof window === 'undefined' || globalThis.__airtrust_api_fetch_installed__) {
     return;
@@ -192,7 +212,9 @@ export function installGlobalApiFetch(): void {
       bypassGetCache ||
       hasAuthorizationHeader
     ) {
-      return performFetchWithFallback();
+      const response = await performFetchWithFallback();
+      notifyMutationDataChange(method, resolved?.pathname || null, response);
+      return response;
     }
 
     const now = Date.now();

@@ -23,6 +23,7 @@ import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
 import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQualificacao';
 import {
+  useAtualizarPresencaDiaTreinamento,
   useAtualizarPresencaTreinamento,
   useAtualizarTreinamentoPlanejado,
   useConcluirParticipanteTreinamento,
@@ -38,7 +39,9 @@ import {
   type TreinamentoPlanejado,
   type TreinamentoPlanejadoConvocacaoPreview,
   type TreinamentoPlanejadoConvocacaoResultado,
+  type TreinamentoPlanejadoDia,
   type TreinamentoPlanejadoParticipante,
+  type TreinamentoPlanejadoPresencaDiaStatus,
   type TreinamentoPlanejadoStatus,
 } from '@/react-app/hooks/useTreinamentosPlanejados';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
@@ -126,6 +129,38 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'CANCELADO', label: 'Cancelado' },
 ];
 
+const PRESENCA_DIA_OPTIONS: Array<{
+  value: TreinamentoPlanejadoPresencaDiaStatus;
+  label: string;
+  className: string;
+}> = [
+  {
+    value: 'PRESENTE',
+    label: 'Presente',
+    className: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  },
+  {
+    value: 'AUSENTE',
+    label: 'Ausente',
+    className: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
+  },
+  {
+    value: 'PARCIAL',
+    label: 'Parcial',
+    className: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  },
+  {
+    value: 'DISPENSADO',
+    label: 'Dispensado',
+    className: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
+  },
+  {
+    value: 'PENDENTE',
+    label: 'Pendente',
+    className: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200',
+  },
+];
+
 function getTodayYmd(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -173,6 +208,29 @@ function formatHourRange(inicio?: string | null, fim?: string | null): string {
   if (inicio) return `Inicio ${inicio}`;
   if (fim) return `Fim ${fim}`;
   return 'Horario a definir';
+}
+
+function calcularMinutosPrevistos(inicio?: string | null, fim?: string | null): number | null {
+  if (!inicio || !fim) return null;
+  const [inicioHora, inicioMinuto] = inicio.split(':').map(Number);
+  const [fimHora, fimMinuto] = fim.split(':').map(Number);
+  if (![inicioHora, inicioMinuto, fimHora, fimMinuto].every(Number.isFinite)) return null;
+  const minutos = fimHora * 60 + fimMinuto - (inicioHora * 60 + inicioMinuto);
+  return minutos > 0 ? minutos : null;
+}
+
+function getPresencaDia(
+  dia: TreinamentoPlanejadoDia | null,
+  funcionarioId: number,
+): NonNullable<TreinamentoPlanejadoDia['presencas']>[number] | null {
+  return (
+    dia?.presencas?.find((presenca) => Number(presenca.funcionario_id) === Number(funcionarioId)) ||
+    null
+  );
+}
+
+function getPresencaDiaMeta(status: TreinamentoPlanejadoPresencaDiaStatus) {
+  return PRESENCA_DIA_OPTIONS.find((option) => option.value === status) || PRESENCA_DIA_OPTIONS[4];
 }
 
 function getEventoTitulo(item: TreinamentoPlanejado): string {
@@ -394,6 +452,7 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
   const [modalResultadoConvocacaoAberto, setModalResultadoConvocacaoAberto] = useState(false);
   const [treinamentoEditando, setTreinamentoEditando] = useState<TreinamentoPlanejado | null>(null);
   const [treinamentoSelecionadoId, setTreinamentoSelecionadoId] = useState<number | null>(null);
+  const [diaPresencaSelecionadoId, setDiaPresencaSelecionadoId] = useState<number | null>(null);
   const [formState, setFormState] = useState<TreinamentoFormState>(() => createEmptyForm(today));
   const [convocacaoPreview, setConvocacaoPreview] =
     useState<TreinamentoPlanejadoConvocacaoPreview | null>(null);
@@ -432,6 +491,7 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
   const criarTreinamento = useCriarTreinamentoPlanejado();
   const atualizarTreinamento = useAtualizarTreinamentoPlanejado();
   const atualizarPresenca = useAtualizarPresencaTreinamento();
+  const atualizarPresencaDia = useAtualizarPresencaDiaTreinamento();
   const concluirParticipante = useConcluirParticipanteTreinamento();
   const excluirTreinamento = useExcluirTreinamentoPlanejado();
   const previewConvocacao = usePreviewConvocacaoTreinamento();
@@ -451,6 +511,47 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
     [auditoriaQuery.data?.items],
   );
   const detalheTreinamento = detalheQuery.data || treinamentoEditando;
+  const diasPresenca = useMemo(
+    () =>
+      (detalheTreinamento?.dias || []).filter(
+        (dia) => Number(dia.id) > 0 && dia.status !== 'CANCELADO',
+      ),
+    [detalheTreinamento?.dias],
+  );
+  const diaPresencaSelecionado = useMemo(
+    () =>
+      diasPresenca.find((dia) => dia.id === diaPresencaSelecionadoId) || diasPresenca[0] || null,
+    [diaPresencaSelecionadoId, diasPresenca],
+  );
+  const indiceDiaPresenca = useMemo(
+    () =>
+      diaPresencaSelecionado
+        ? diasPresenca.findIndex((dia) => dia.id === diaPresencaSelecionado.id)
+        : -1,
+    [diaPresencaSelecionado, diasPresenca],
+  );
+  const resumoPresencaDia = useMemo(() => {
+    const presencas = diaPresencaSelecionado?.presencas || [];
+    const count = (status: TreinamentoPlanejadoPresencaDiaStatus) =>
+      presencas.filter((presenca) => presenca.status === status).length;
+    return {
+      presentes: count('PRESENTE'),
+      ausentes: count('AUSENTE'),
+      parciais: count('PARCIAL'),
+      dispensados: count('DISPENSADO'),
+      pendentes: Math.max(0, (detalheTreinamento?.participantes.length || 0) - presencas.length) + count('PENDENTE'),
+    };
+  }, [detalheTreinamento?.participantes.length, diaPresencaSelecionado?.presencas]);
+
+  useEffect(() => {
+    if (!modalDetalheAberto || diasPresenca.length === 0) {
+      setDiaPresencaSelecionadoId(null);
+      return;
+    }
+    if (!diaPresencaSelecionadoId || !diasPresenca.some((dia) => dia.id === diaPresencaSelecionadoId)) {
+      setDiaPresencaSelecionadoId(diasPresenca[0].id);
+    }
+  }, [diaPresencaSelecionadoId, diasPresenca, modalDetalheAberto]);
 
   const instrutores = useMemo(() => {
     const base = funcionarios as FuncionarioOption[];
@@ -770,6 +871,7 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
     setModalDetalheAberto(false);
     setTreinamentoSelecionadoId(null);
     setTreinamentoEditando(null);
+    setDiaPresencaSelecionadoId(null);
   }, []);
 
   async function excluirTreinamentoSelecionado() {
@@ -811,6 +913,75 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : 'Nao foi possivel atualizar a presenca.',
+      );
+    }
+  }
+
+  async function atualizarPresencaDiaParticipante(
+    participante: TreinamentoPlanejadoParticipante,
+    status: TreinamentoPlanejadoPresencaDiaStatus,
+  ) {
+    if (!treinamentoSelecionadoId || !diaPresencaSelecionado) return;
+    const minutosPrevistos = calcularMinutosPrevistos(
+      diaPresencaSelecionado.hora_inicio,
+      diaPresencaSelecionado.hora_fim,
+    );
+    const minutos =
+      status === 'PRESENTE'
+        ? minutosPrevistos
+        : status === 'AUSENTE' || status === 'PENDENTE' || status === 'DISPENSADO'
+          ? 0
+          : getPresencaDia(diaPresencaSelecionado, participante.funcionario_id)?.minutos_presentes ?? null;
+
+    try {
+      await atualizarPresencaDia.mutateAsync({
+        id: treinamentoSelecionadoId,
+        diaId: diaPresencaSelecionado.id,
+        input: {
+          funcionario_id: participante.funcionario_id,
+          status,
+          minutos_presentes: minutos,
+        },
+      });
+      toast.success('Presenca do dia atualizada.');
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Nao foi possivel atualizar a presenca do dia.',
+      );
+    }
+  }
+
+  async function atualizarPresencaDiaEmLote(status: TreinamentoPlanejadoPresencaDiaStatus) {
+    if (!treinamentoSelecionadoId || !diaPresencaSelecionado || !detalheTreinamento?.participantes.length) {
+      return;
+    }
+    const minutosPrevistos = calcularMinutosPrevistos(
+      diaPresencaSelecionado.hora_inicio,
+      diaPresencaSelecionado.hora_fim,
+    );
+    const minutos =
+      status === 'PRESENTE'
+        ? minutosPrevistos
+        : status === 'AUSENTE' || status === 'PENDENTE' || status === 'DISPENSADO'
+          ? 0
+          : null;
+
+    try {
+      for (const participante of detalheTreinamento.participantes) {
+        await atualizarPresencaDia.mutateAsync({
+          id: treinamentoSelecionadoId,
+          diaId: diaPresencaSelecionado.id,
+          input: {
+            funcionario_id: participante.funcionario_id,
+            status,
+            minutos_presentes: minutos,
+          },
+        });
+      }
+      toast.success('Presencas do dia atualizadas.');
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Nao foi possivel atualizar as presencas do dia.',
       );
     }
   }
@@ -2053,6 +2224,180 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                     )}
                   </div>
                 </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Presenca diaria</h3>
+                    <p className="text-sm text-slate-500">
+                      Registro por dia da turma; aprovacao e emissao continuam no bloco de conclusao.
+                    </p>
+                  </div>
+                  {diaPresencaSelecionado ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        disabled={indiceDiaPresenca <= 0}
+                        onClick={() =>
+                          setDiaPresencaSelecionadoId(diasPresenca[indiceDiaPresenca - 1]?.id || null)
+                        }
+                      >
+                        Anterior
+                      </Button>
+                      <select
+                        value={diaPresencaSelecionado.id}
+                        onChange={(event) => setDiaPresencaSelecionadoId(Number(event.target.value))}
+                        className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                        aria-label="Selecionar dia de presenca"
+                      >
+                        {diasPresenca.map((dia) => (
+                          <option key={dia.id} value={dia.id}>
+                            {formatDateLabel(dia.data)} · {formatHourRange(dia.hora_inicio, dia.hora_fim)}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        variant="secondary"
+                        disabled={indiceDiaPresenca < 0 || indiceDiaPresenca >= diasPresenca.length - 1}
+                        onClick={() =>
+                          setDiaPresencaSelecionadoId(diasPresenca[indiceDiaPresenca + 1]?.id || null)
+                        }
+                      >
+                        Proximo
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {!diaPresencaSelecionado ? (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                    Esta turma nao possui dias efetivos editaveis para presenca diaria.
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-5">
+                      {[
+                        ['Presentes', resumoPresencaDia.presentes],
+                        ['Ausentes', resumoPresencaDia.ausentes],
+                        ['Parciais', resumoPresencaDia.parciais],
+                        ['Dispensados', resumoPresencaDia.dispensados],
+                        ['Pendentes', resumoPresencaDia.pendentes],
+                      ].map(([label, value]) => (
+                        <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            {label}
+                          </p>
+                          <p className="mt-1 text-xl font-semibold text-slate-900">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        disabled={atualizarPresencaDia.isPending}
+                        onClick={() => atualizarPresencaDiaEmLote('PRESENTE')}
+                      >
+                        Marcar todos presentes
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        disabled={atualizarPresencaDia.isPending}
+                        onClick={() => atualizarPresencaDiaEmLote('AUSENTE')}
+                      >
+                        Marcar todos ausentes
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        disabled={atualizarPresencaDia.isPending}
+                        onClick={() => atualizarPresencaDiaEmLote('PENDENTE')}
+                      >
+                        Limpar dia
+                      </Button>
+                    </div>
+
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead>
+                          <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            <th className="px-3 py-3">Participante</th>
+                            <th className="px-3 py-3">Status diario</th>
+                            <th className="px-3 py-3">Minutos</th>
+                            <th className="px-3 py-3">Conclusao</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {detalheTreinamento.participantes.map((participante) => {
+                            const presenca = getPresencaDia(
+                              diaPresencaSelecionado,
+                              participante.funcionario_id,
+                            );
+                            const status = presenca?.status || 'PENDENTE';
+                            const meta = getPresencaDiaMeta(status);
+                            return (
+                              <tr key={`${diaPresencaSelecionado.id}-${participante.id}`} className="align-top">
+                                <td className="px-3 py-4">
+                                  <p className="font-semibold text-slate-900">
+                                    {participante.funcionario_guerra ||
+                                      participante.funcionario_nome ||
+                                      'Sem nome'}
+                                  </p>
+                                  <p className="text-slate-500">
+                                    {[participante.funcionario_nome, participante.funcionario_matricula]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </p>
+                                </td>
+                                <td className="px-3 py-4">
+                                  <div className="flex flex-wrap gap-2">
+                                    {PRESENCA_DIA_OPTIONS.map((option) => (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        disabled={atualizarPresencaDia.isPending}
+                                        onClick={() => atualizarPresencaDiaParticipante(participante, option.value)}
+                                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                          status === option.value
+                                            ? option.className
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        }`}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-4 text-slate-600">
+                                  {presenca?.minutos_presentes != null
+                                    ? `${presenca.minutos_presentes} min`
+                                    : status === 'PRESENTE'
+                                      ? `${calcularMinutosPrevistos(
+                                          diaPresencaSelecionado.hora_inicio,
+                                          diaPresencaSelecionado.hora_fim,
+                                        ) || 0} min`
+                                      : '-'}
+                                </td>
+                                <td className="px-3 py-4">
+                                  <span
+                                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}
+                                  >
+                                    {meta.label}
+                                  </span>
+                                  <p className="mt-2 text-xs text-slate-500">
+                                    {participante.resultado
+                                      ? `Resultado: ${participante.resultado}`
+                                      : 'Sem conclusao'}
+                                  </p>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </section>
 
               <section className="rounded-3xl border border-slate-200 bg-white p-5">

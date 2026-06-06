@@ -20,6 +20,7 @@ import {
 } from '../lib/frms/db-service';
 import { processarAlertas } from '../lib/frms/alertas';
 import type { AlertaGerado } from '../lib/frms/alertas';
+import { FRMS_STATUS, type FrmsStatus } from '../lib/frms/types';
 
 function getSaoPauloHour(now = new Date()): number {
   const value = new Intl.DateTimeFormat('en-US', {
@@ -199,6 +200,9 @@ export async function frmsDailyCheck(env: Env): Promise<{
       if (!jornadaSigvoosHoje?.id) {
         continue;
       }
+      const status = FRMS_STATUS.includes(jornadaSigvoosHoje.status as FrmsStatus)
+        ? (jornadaSigvoosHoje.status as FrmsStatus)
+        : 'OT';
 
       // 2. Gerar alertas
       const alertas = processarAlertas({
@@ -208,8 +212,8 @@ export async function frmsDailyCheck(env: Env): Promise<{
         jornada: {
           duracao_jornada_minutos: jornadaSigvoosHoje.duracao_jornada_minutos,
           horas_voo_minutos: jornadaSigvoosHoje.horas_voo_minutos,
-          status: jornadaSigvoosHoje.status,
-          tripulacao_aumentada: jornadaSigvoosHoje.tripulacao_aumentada,
+          status,
+          tripulacao_aumentada: jornadaSigvoosHoje.tripulacao_aumentada ?? 0,
         },
         acumulo,
         limites,

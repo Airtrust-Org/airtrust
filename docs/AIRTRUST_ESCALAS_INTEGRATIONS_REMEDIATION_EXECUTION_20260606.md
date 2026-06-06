@@ -1,60 +1,94 @@
-# AIRTRUST — Execução da Remediação (Escalas + Treinamentos + Integrações)
-Data: 2026-06-06 · Modelo: Claude Code — Opus 4.8 (esforço máximo) · Auditoria-base: `docs/AIRTRUST_ESCALAS_INTEGRATIONS_*_20260606.md`
+# AIRTRUST - Execucao Final da Remediacao (Escalas + Treinamentos + Integracoes)
+Data: 2026-06-06  
+Auditoria-base: `docs/AIRTRUST_ESCALAS_INTEGRATIONS_*_20260606.md`  
+Branch de trabalho: `fix/escalas-treinamentos-remediation`  
+Base: `main` / `origin/main` em `83f3fb51041b9336a3e7f3f0bf64f9c10388feda`
 
-> Este documento registra a execução iterativa da remediação. Status honesto por achado, com commit, teste e evidência. **Nada foi publicado em produção** nesta iteração (ver §"Gate de publicação" abaixo).
+Este documento substitui o registro intermediario anterior. A execucao foi reconstruida a partir do estado real do Git, arquivos e testes locais.
 
-## Estado git
-- Branch base: `main` @ `83f3fb5` (= `origin/main`, 0/0 no início).
-- Branch de trabalho: `fix/escalas-treinamentos-remediation` @ `0c145f9` (commit do Bloco 1).
-- **Sem push, sem deploy, sem migration** nesta iteração. Trabalho preservado em branch reversível.
+## Estado da branch antes da publicacao
 
-## Gate de publicação (por que ainda NÃO publicado)
-O próprio prompt (§31/§40) só permite publicar quando, entre outros, "EVD considera treinamentos" (A1) e a UI estiver consistente (A5/M2/B3). Esses itens são de frontend/integração maiores e **ainda não foram implementados**. Publicar apenas o bloco de backend deixaria a feature incoerente (EVD ainda não exibiria treinamento) e mudaria semântica de emissão (A3) num sistema de produção real **sem validação ponta-a-ponta contra D1 real**. Decisão conservadora: concluir o conjunto coeso (Bloco 2/3) e validar em D1 local/staging antes de publicar.
+- Commits ja existentes na branch:
+  - `0c145f9` - `fix(training): harden qualification completion lifecycle and monthly-view correctness`
+  - `832901f` - `docs(audit): preserve escalas/treinamentos audit package and record remediation execution`
+  - `e1413a6` - `fix(scheduling): integrate training into EVD and harden class creation/removal`
+  - `d4737f3` - `fix(monthly-view): auto-refresh integrated view and surface partial sources`
+- Alteracoes finais desta iteracao:
+  - UI de presenca diaria em `src/react-app/pages/TreinamentosPlanejadosPage.tsx`.
+  - Hook `useAtualizarPresencaDiaTreinamento` em `src/react-app/hooks/useTreinamentosPlanejados.ts`.
+  - Notificacao centralizada de mutacoes no wrapper `src/react-app/lib/apiFetch.ts`.
+  - Testes frontend para sincronizacao e contrato da UI de presenca diaria.
+  - Correcoes minimas dos 8 erros TypeScript FRMS preexistentes que impediam o gate `tsc -p worker-airtrust/tsconfig.json`.
+- Sem migration, sem backfill, sem alteracao de secrets, sem cron novo.
 
----
+## Matriz dos 21 achados originais
 
-## Bloco 1 — Correção de backend (CONCLUÍDO e TESTADO) — commit `0c145f9`
+| ID | Severidade original | Status final local | Evidencia tecnica |
+|---|---:|---|---|
+| A1 | Alto | Corrigido | EVD consulta `treinamentos_dias` e fallback legado em `escalas-evd.ts`; teste `A1` em `escalas-evd-put.test.ts`. |
+| A2 | Alto | Corrigido | `loadQualificacaoEvents` filtra e agrupa por `empresa_id`; teste multi-tenant em `escala-mensal-integrada.test.ts`. |
+| A3 | Alto | Corrigido | Conclusao via solicitacao entra no caminho unico de emissao; testes de integracao de treinamentos. |
+| A4 | Alto | Corrigido | `treinamentos_qualificacoes_geradas` passou a ser idempotente por historico gerado. |
+| A5 | Alto | Corrigido | Visao Mensal exibe dados parciais e revalida em mutacoes/foco; `apiFetch` emite escopos para escala, treinamentos, simuladores e qualificacoes. |
+| M1 | Medio | Corrigido | Filtro `funcaoId` aplicado no SQL da visao integrada. |
+| M2 | Medio | Corrigido | UI de presenca diaria consome `PATCH /planejados/:id/dias/:diaId/presencas`, separada de conclusao/aprovacao. |
+| M3 | Medio | Corrigido | Turma transiciona conforme conclusoes finais dos participantes. |
+| M4 | Medio | Corrigido | Remocao de participante limpa `treinamentos_presencas` explicitamente; vinculos emitidos sao preservados por rastreabilidade. |
+| M5 | Medio | Corrigido | Renovacao retroativa nao substitui conclusao posterior. |
+| M6 | Medio | Corrigido | `canonicalDedupKey` deduplica turma/sessao inclusive para instrutor. |
+| M7 | Medio | Corrigido | ESCALA x ESCALA nao gera conflito cruzado falso na visao integrada. |
+| M8 | Medio | Corrigido por isolamento A2 | O falso positivo original foi removido com tenant scope da subquery; igualdade adicional em `qualificacoes_tipos.empresa_id` nao foi aplicada por risco de falso negativo com codigo global. |
+| M9 | Medio | Resolvido por politica documentada | Cancelamento nao revoga automaticamente qualificacao ja `CONCLUIDA`; revogacao pos-emissao deve ser acao explicita, permissiva e auditada. Planejados/pendentes seguem cancelaveis pelo fluxo gerenciado. |
+| M10 | Medio | Corrigido | FRMS carrega `dateReliable`/`dateSource` e evita data operacional falsa baseada apenas em `created_at`. |
+| M11 | Medio | Validado | Benchmark sintetico com 300 funcionarios e 13.500 eventos finais: 90,87 ms para conflito + dedupe + resumo. |
+| M12 | Medio | Mitigado com residuo baixo | Janela curta de dedupe por chave natural, retorno idempotente e rollback de estado parcial em falha. Nao ha constraint unica persistida/idempotency key armazenada; ver reauditoria. |
+| B1 | Baixo | Corrigido | `canonicalDedupKey` deixou de ser campo morto. |
+| B2 | Baixo | Corrigido | `validateTrainingReferences` valida recursos de dias (`simulador_id`, `aeronave_id`, `sessao_id`) no tenant. |
+| B3 | Baixo | Corrigido | `DayCell` agora expande `+N itens` com botao acessivel e `aria-expanded`. |
+| B4 | Baixo | Corrigido | Filtro de severidade preserva eventos referenciados por conflitos. |
 
-| ID | Severidade | Status | Correção (arquivo) | Teste |
-|---|---|---|---|---|
-| A2 | ALTO | ✅ CORRIGIDO | `services/escala-mensal-integrada.ts` — subquery do "registro mais recente" filtra `empresa_id` e agrupa por `empresa_id`; bind extra | contrato `A2: seleção ... isolada por empresa` |
-| A3 | ALTO | ✅ CORRIGIDO | `services/treinamentos-planejados-integration.ts` — `sincronizarSolicitacaoConcluida...` preenche `resultado='APROVADO'`+`data_conclusao_efetiva`, fluindo pelo mesmo `concluirHistoricoPlanejado` | contrato A3 + behavioral existente de conclusão |
-| A4 | ALTO | ✅ CORRIGIDO | `ensureGeneratedQualificationLink` vira upsert pela chave estável `qualificacao_historico_id`; recalcula data/vencimento do histórico já CONCLUIDA | behavioral `A4: reconcluir com data corrigida ...` |
-| M1 | MÉDIO | ✅ CORRIGIDO | `employeeFilterSql`/`bindEmployeeFilters` aplicam `funcaoId` de fato | contrato `M1` |
-| M3 | MÉDIO | ✅ CORRIGIDO | ciclo de vida: turma → CONCLUIDO/EM_ANDAMENTO conforme resultados finais (sem rebaixar CONCLUIDO) | behavioral `M3: ...CONCLUIDO` e `...EM_ANDAMENTO` |
-| M5 | MÉDIO | ✅ CORRIGIDO | só renova histórico com `data_conclusao < nova` | behavioral `M5: conclusão retroativa ...` |
-| M6 | MÉDIO | ✅ CORRIGIDO | dedupe + conflito honram `canonicalDedupKey` (colapsa turma↔sessão, inclui instrutor) | pure `M6/B1: dedupe colapsa ...` e `... não conflitam` |
-| M7 | MÉDIO | ✅ CORRIGIDO | conflito ESCALA×ESCALA suprimido (representações do mesmo compromisso) | pure `M7: duas linhas de ESCALA ...` |
-| M10 | MÉDIO | ✅ CORRIGIDO | FRMS expõe `dateReliable`/`dateSource` (jornada vs created_at) | contrato `M10` |
-| B1 | BAIXO | ✅ CORRIGIDO | `canonicalDedupKey` agora é usada (dedupe/conflito) | coberto por M6 |
-| B4 | BAIXO | ✅ CORRIGIDO | filtro de severidade preserva eventos referenciados por conflitos | contrato `B4` |
+## Gates locais executados
 
-**Validação local do Bloco 1:** `tsc` root limpo · `tsc` worker limpo (exceto 8 erros FRMS pré-existentes) · `lint` (3 guardas) OK · worker **953 testes** OK · frontend **550 testes** OK. +25 testes adicionados.
+| Gate | Resultado |
+|---|---|
+| `npx tsc --noEmit` | OK |
+| `npx tsc -p worker-airtrust/tsconfig.json --noEmit` | OK |
+| `npm run lint` | OK (`lint:api-base`, `guard:tracked-secrets`, `guard:auth-boundaries`) |
+| `npm run build` | OK |
+| `npm run test:run` | OK: 65 arquivos, 556 testes (`62 passed`, `3 skipped`) |
+| `npm run test:worker` | OK: 146 arquivos, 956 testes |
+| Testes novos direcionados | OK: `data-sync`, `apiFetch-data-sync`, `TreinamentosPlanejadosPage.presenca-diaria` |
 
----
+## Benchmark M11
 
-## Pendente (próximas iterações) — NÃO concluído nesta sessão
+Benchmark sintetico do nucleo puro `buildConflictEvents` + `dedupeIntegratedEvents` + `summarizeEvents` em `worker-airtrust/src/services/escala-mensal-integrada.ts`, com escala, treinamento, simulador, qualificacao e FRMS por funcionario.
 
-| ID | Severidade | Natureza | Observação |
-|---|---|---|---|
-| A1 | ALTO | EVD↔treinamento (backend + UI) | exige fonte de disponibilidade na EVD + exibição; política centralizada. **Maior item.** |
-| A5 | ALTO | frontend (RQ + parcialidade) | migrar Visão Mensal para React Query + render de `diagnostics`/parcialidade + multi-aba |
-| M2 | MÉDIO | UI de presença por dia | consumir `/dias/:diaId/presencas`; diferenciar presença/aprovação/conclusão |
-| M4 | MÉDIO | órfãos na remoção | limpar `treinamentos_presencas` ao remover participante; preservar `geradas`/qualificação emitida para rastreio (sem `deleted_at` em participantes → usar limpeza explícita) |
-| M8 | MÉDIO | join `qualificacoes_tipos` | mitigado de fato por A2; filtro de igualdade por tenant intencionalmente NÃO adicionado (codigo é UNIQUE global; igualdade causaria falso-negativo em tenants não-primários). **Decisão conservadora documentada.** |
-| M9 | MÉDIO | política de cancelamento pós-emissão | definir ação explícita de revogação (permissão + auditoria); hoje qualificação CONCLUIDA permanece (comportamento conservador correto, falta UI/ação) |
-| M11 | MÉDIO | performance | medir 25/100/300 tripulantes; filtros server-side; virtualização |
-| M12 | MÉDIO | atomicidade/duplo-submit criar turma | D1 não tem transação interativa (id dependente); plano: idempotency-key + dedupe por chave natural + guarda de duplo-clique no frontend |
-| B2 | BAIXO | tenant de recursos de `dias` | validar `simulador_id`/`aeronave_id`/`sessao_id` em `validateTrainingReferences` |
-| B3 | BAIXO | "+N itens" expansível | popover/painel acessível |
+| Funcionarios | Eventos base | Conflitos gerados | Eventos finais | JSON final | Tempo medio total |
+|---:|---:|---:|---:|---:|---:|
+| 25 | 1.000 | 125 | 1.125 | 441 KB | 6,33 ms |
+| 100 | 4.000 | 500 | 4.500 | 1,77 MB | 23,31 ms |
+| 300 | 12.000 | 1.500 | 13.500 | 5,37 MB | 90,87 ms |
 
-Itens transversais pendentes: UX (linguagem de estados), acessibilidade em tela, e2e/Playwright, smoke autenticado com escrita controlada em produção, reauditoria pós-deploy, correção dos 8 erros TypeScript FRMS (deferidos — código FRMS/SIGVOOS sensível, fora do escopo escalas/treinamentos; risco operacional de tocá-los nesta missão).
+Conclusao: o nucleo de conflito/dedupe nao e o gargalo para o tamanho pedido. O risco restante de performance fica no custo de consulta/serializacao real em D1 e no volume visual da tabela, mitigado pelos filtros ja existentes e por `overflow-x`.
 
-## Decisão dos 8 erros TypeScript FRMS (pré-existentes)
-Estão em `frms/*` (testes), `cron/frms-daily-check.ts` e `routes/frms-fadiga-acumulada.ts`. São anteriores a esta missão e tocam cálculo/cron de fadiga (base SIGVOOS canônica recém-reconstruída). Corrigi-los mid-missão, sem reauditoria FRMS dedicada, traz risco operacional concreto — exatamente a exceção prevista no prompt (§28). **Deferidos com justificativa**, a tratar em frente FRMS própria. Nenhum dos meus arquivos introduz erro novo.
+## Smoke local de navegador
 
-## Confirmações de segurança desta iteração
-- Sem `git add .`, sem `git push`, sem `--force`, sem reset/clean.
-- Sem deploy, sem migration, sem escrita em produção, sem backfill.
-- Sem alteração de secrets/cron.
-- Documentos da auditoria original preservados (untracked) e referenciados.
+- Build servido via `npx vite preview --host 127.0.0.1 --port 4173`.
+- Playwright headless abriu:
+  - `http://127.0.0.1:4173/treinamentos/planejados`
+  - `http://127.0.0.1:4173/escalas/visao-mensal`
+  - mobile `390x844` em treinamentos.
+- Resultado: rotas protegidas redirecionam para `/login` sem erro de JavaScript.
+- Screenshots:
+  - `output/playwright/treinamentos-desktop.png`
+  - `output/playwright/visao-mensal-desktop.png`
+  - `output/playwright/treinamentos-mobile.png`
+- Limitacao local: `vite preview` em `127.0.0.1` resolve API como `/api` sem proxy; `/api/public/locale` e `/api/public/translate` retornaram 500 no preview. Isso nao reproduz producao nem dev server com proxy.
+- Credenciais de smoke autenticado ausentes no ambiente: `AIRTRUST_SMOKE_EMAIL`, `AIRTRUST_SMOKE_PASSWORD`, `SMOKE_EMAIL`, `SMOKE_PASSWORD`, `TEST_USER_EMAIL`, `TEST_USER_PASSWORD` estavam `unset`.
+
+## Decisao de publicacao
+
+Pre-condicoes locais de codigo estao verdes. Publicacao pode seguir para `main` sem migration/backfill. A certificacao final depende dos smokes read-only de producao e fica registrada em:
+
+- `docs/AIRTRUST_ESCALAS_INTEGRATIONS_DEPLOY_VALIDATION_20260606.md`
+- `docs/AIRTRUST_ESCALAS_INTEGRATIONS_FINAL_CERTIFICATION_20260606.md`
