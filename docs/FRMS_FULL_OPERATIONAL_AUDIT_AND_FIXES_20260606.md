@@ -317,9 +317,22 @@ read-only (`rows_written: 0`, `changed_db: false` em todas as execuções).
 - `npm run lint` → **PASS** (url guard, tracked-secrets, auth-boundaries)
 - `cd worker-airtrust && npx vitest run src/__tests__/frms/` → **233/233 PASS** (19 arquivos)
 
+### Atualização pós-deploy (2026-06-06T02:08Z — commit `4c8c41d`)
+
+Deploy de produção realizado (Pages + Worker, sem migrations). Produção agora roda
+**`2026-06-06T02:08:06Z-4c8c41d`**. Correções vivas:
+- `MÊS` operacional agora **canônico** (Dieter `864`/14h24, antes `2401`/40h01 contaminado por FIRA).
+- `MÊS`/`7d`/`365d` na **mesma fonte** (SIGVOOS). Paloma corretamente fora de junho (HV 100% FIRA).
+- `/score-atual` (triagem legada) agora usa fonte canônica nas somas 7d/28d (fix desta auditoria).
+- Coleta de Fadiga Diária com data normalizada e erro explícito (de `1ab74f1`).
+- Rolling/alertas SIGVOOS-only; 85 alertas abertos coerentes.
+
+Validações: tsc ✅ · lint ✅ · worker **924/924** ✅ · frontend **540/540** ✅ · build ✅.
+
 ### Status final
 
-**AMARELO** — código e backend coerentes e testados (HEAD verde); `7d/365d` resolvidos em produção;
-rolling e alertas íntegros (SIGVOOS, sem órfãos); FIRA isolado do operacional no rolling/alertas.
-**Ressalva bloqueante para produção:** o `MÊS` segue contaminado por FIRA até o **deploy de `1ab74f1`**,
-e há **saneamento de dados FIRA históricos** pendente de fase própria com escrita autorizada.
+**VERDE (operacional)** — módulo FRMS operacional correto e verificado em produção pós-deploy.
+**Ressalva não bloqueante:** permanece **saneamento de dados FIRA históricos** (13 registros
+`HV>jornada`/`jornada=0`, todos FIRA não operacional, e 525 FIRA históricos pré-SIGVOOS), isolados
+de todos os cálculos operacionais, visíveis apenas em históricos rotulados. Requer **fase própria de
+escrita em banco** (backup + dry-run + autorização explícita) — não executada nesta fase.
