@@ -16,6 +16,7 @@ import {
   buildTripulanteAlocacoesMap,
   chooseTripulanteDayAlocacao,
   isAlocacaoOperacionalComAeronave,
+  isSyntheticAlocacao,
 } from './GradeTripulantes.utils';
 import { DayCell } from './DayCell';
 import { CabecalhoDiasSituacao } from './LinhaSituacao';
@@ -639,6 +640,7 @@ function TripulanteRow({
 
         const aeronaveAtiva = isAlocacaoOperacionalComAeronave(alocacaoAtiva);
         const folgaAtiva = (alocacaoAtiva.situacao_tipo as string | null | undefined) === 'FOLGA';
+        const synthetic = isSyntheticAlocacao(alocacaoAtiva);
 
         return (
           <DayCell
@@ -653,7 +655,13 @@ function TripulanteRow({
             placeholderType={mapAlocacaoPlaceholderType(alocacaoAtiva)}
             placeholderLabel={getAlocacaoLabel(alocacaoAtiva)}
             placeholderExtra={getAlocacaoExtra(alocacaoAtiva)}
+            // Synthetic (external) events are READ-ONLY — they cannot be edited as alocacoes
             onClick={() => {
+              if (synthetic) {
+                // External events: no-op (read-only in monthly grid)
+                return;
+              }
+
               if (folgaAtiva) {
                 onAlocarLivre(payloadBase);
                 return;

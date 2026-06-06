@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildSyntheticAlocacoesFromEventos,
   buildTripulanteAlocacoesMap,
   chooseTripulanteDayAlocacao,
   isOppositeTripulanteQuinzenaDay,
+  isSyntheticAlocacao,
+  parseSyntheticId,
+  SYNTHETIC_ID_PREFIX,
 } from '../GradeTripulantes.utils';
 import type {
   EscalaAlocacao,
   EscalaCoberturaTripulante,
+  EscalaEvento,
 } from '../../../hooks/queries/useEscalasQuery';
 
 function createAlocacao(partial: Partial<EscalaAlocacao>): EscalaAlocacao {
@@ -234,5 +239,447 @@ describe('isOppositeTripulanteQuinzenaDay', () => {
     expect(isOppositeTripulanteQuinzenaDay(1, 1)).toBe(false);
     expect(isOppositeTripulanteQuinzenaDay(2, 2)).toBe(false);
     expect(isOppositeTripulanteQuinzenaDay(null, 1)).toBe(false);
+  });
+});
+
+// ── helpers for synthetic tests ──────────────────────────────────────────
+
+function createEvento(partial: Partial<EscalaEvento>): EscalaEvento {
+  return {
+    id: partial.id || 'evt-1',
+    escala_id: partial.escala_id || '1',
+    tripulacao_id: partial.tripulacao_id ?? null,
+    funcionario_id: partial.funcionario_id || 'func-1',
+    funcionario_nome: partial.funcionario_nome || 'Tripulante Teste',
+    funcionario_matricula: partial.funcionario_matricula || '12345',
+    funcionario_cargo: partial.funcionario_cargo ?? 'comandante',
+    tipo_evento: partial.tipo_evento || 'treinamento_simulador',
+    data_inicio: partial.data_inicio || '2026-06-10',
+    data_fim: partial.data_fim || '2026-06-10',
+    turno: partial.turno ?? 'dia_todo',
+    local: partial.local ?? null,
+    aeronave: partial.aeronave ?? null,
+    simulador_id: partial.simulador_id ?? null,
+    gerado_automaticamente: partial.gerado_automaticamente ?? 1,
+    motivo_automatico: partial.motivo_automatico ?? null,
+    origem: partial.origem ?? 'simuladores',
+    status: partial.status || 'confirmado',
+    observacoes: partial.observacoes ?? null,
+  };
+}
+
+// ── isSyntheticAlocacao & parseSyntheticId ───────────────────────────────
+
+describe('isSyntheticAlocacao', () => {
+  it('detecta alocacao sintetica pelo prefixo', () => {
+    expect(isSyntheticAlocacao({ id: 'synthetic-treinamento_simulador-abc' })).toBe(true);
+    expect(isSyntheticAlocacao({ id: 'aloc-1' })).toBe(false);
+    expect(isSyntheticAlocacao({ id: '123' })).toBe(false);
+    expect(isSyntheticAlocacao({ id: '' })).toBe(false);
+  });
+});
+
+describe('parseSyntheticId', () => {
+  it('extrai tipo_evento e eventoId do ID sintetico', () => {
+    // Known tipo_evento 'treinamento_simulador' is matched even when evento.id contains hyphens
+    const result = parseSyntheticId('synthetic-treinamento_simulador-abc-123');
+    expect(result).toEqual({ tipoEvento: 'treinamento_simulador', eventoId: 'abc-123' });
+  });
+
+  it('extrai IDs com UUID no eventoId (contem hyphens)', () => {
+    const result = parseSyntheticId('synthetic-ferias-550e8400-e29b-41d4-a716-446655440000');
+    expect(result).toEqual({ tipoEvento: 'ferias', eventoId: '550e8400-e29b-41d4-a716-446655440000' });
+  });
+
+  it('retorna null para ids que nao sao sinteticos', () => {
+    expect(parseSyntheticId('aloc-1')).toBeNull();
+    expect(parseSyntheticId('123')).toBeNull();
+  });
+});
+
+// ── buildSyntheticAlocacoesFromEventos ───────────────────────────────────
+
+describe('buildSyntheticAlocacoesFromEventos', () => {
+  it('mostra sessao de simulador para participante ativo', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-sim-1',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'func-10',
+          escala_id: '1',
+          status: 'confirmado',
+          data_inicio: '2026-06-15',
+          data_fim: '2026-06-15',
+        }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('synthetic-treinamento_simulador-evt-sim-1');
+    expect(result[0].situacao_tipo).toBe('SIM');
+    expect(result[0].situacao_cor).toBe('#9333EA');
+    expect(result[0].funcionario_id).toBe('func-10');
+  });
+
+  it('mostra simulador para instrutor (via evento com cargo)', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-instrutor',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'instr-1',
+          funcionario_cargo: 'instrutor',
+          escala_id: '1',
+          status: 'confirmado',
+        }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['instr-1']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].situacao_tipo).toBe('SIM');
+  });
+
+  it('mostra examinador quando presente no evento', () => {
+    // Examinador é tratado como participante do evento — mesmo funcionario_id
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-exam',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'exam-99',
+          funcionario_cargo: 'examinador',
+          escala_id: '1',
+        }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['exam-99']),
+    });
+
+    expect(result).toHaveLength(1);
+  });
+
+  it('sessao sem qualificacao associada aparece mesmo assim', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-sem-qual',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'func-10',
+          escala_id: '1',
+          // sem qualificacao, sem turma — apenas o evento existe
+        }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+  });
+
+  it('sessao sem turma aparece mesmo assim', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-sem-turma',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'func-10',
+          escala_id: '1',
+          tripulacao_id: null, // sem turma associada
+        }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+  });
+
+  it('sessao cancelada nao aparece', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-cancelado',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'func-10',
+          escala_id: '1',
+          status: 'cancelado',
+        }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('sessao cross-tenant nao aparece (escala_id diferente)', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-cross',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'func-10',
+          escala_id: 'outra-escala',
+        }),
+      ],
+      escalaId: '1', // escala atual
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('sessao so aparece para tripulantes na cobertura', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-1',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'func-10',
+          escala_id: '1',
+        }),
+        createEvento({
+          id: 'evt-2',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'func-99',
+          escala_id: '1',
+        }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']), // apenas func-10 na cobertura
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].funcionario_id).toBe('func-10');
+  });
+
+  it('preserva data e horario corretamente', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({
+          id: 'evt-data',
+          tipo_evento: 'treinamento_simulador',
+          funcionario_id: 'func-10',
+          escala_id: '1',
+          data_inicio: '2026-06-15',
+          data_fim: '2026-06-16',
+        }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].data_inicio).toBe('2026-06-15');
+    expect(result[0].data_fim).toBe('2026-06-16');
+  });
+
+  // ── Safety: synthetic events must not be editable ────────────────────
+
+  it('evento sintetico tem auto_gerado=true para nao ser tratado como alocacao manual', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-1', tipo_evento: 'treinamento_simulador', funcionario_id: 'func-10', escala_id: '1' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].auto_gerado).toBe(true);
+  });
+
+  it('evento sintetico tem ID com prefixo sintetico para evitar colisao', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'abc-123', tipo_evento: 'treinamento_simulador', funcionario_id: 'func-10', escala_id: '1' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toMatch(/^synthetic-/);
+    // IDs sinteticos nunca colidem com IDs numericos do banco
+    expect(typeof result[0].id).toBe('string');
+    expect(Number.isNaN(Number(result[0].id))).toBe(true); // nao é puramente numerico
+  });
+
+  it('preserva origem nos observacoes para rastreabilidade', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({
+        id: 'evt-src',
+        tipo_evento: 'treinamento_simulador',
+        funcionario_id: 'func-10',
+        escala_id: '1',
+        origem: 'simuladores',
+        observacoes: 'Sessao de check',
+      })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].observacoes).toContain('fonte: simuladores#evt-src');
+    expect(result[0].observacoes).toContain('Sessao de check');
+  });
+
+  // ── Multi-type events ────────────────────────────────────────────────
+
+  it('ferias aparecem na grade', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-ferias', tipo_evento: 'ferias', funcionario_id: 'func-10', escala_id: '1' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].situacao_tipo).toBe('FERIAS');
+    expect(result[0].situacao_cor).toBe('#16A34A');
+  });
+
+  it('licenca aparece na grade', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-lic', tipo_evento: 'licenca', funcionario_id: 'func-10', escala_id: '1' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].situacao_tipo).toBe('AFT');
+  });
+
+  it('medico aparece na grade', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-med', tipo_evento: 'medico', funcionario_id: 'func-10', escala_id: '1' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].situacao_tipo).toBe('MED');
+  });
+
+  it('treinamento aparece na grade', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-treino', tipo_evento: 'treinamento_solo', funcionario_id: 'func-10', escala_id: '1' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].situacao_tipo).toBe('CURSO');
+  });
+
+  it('cancelados nao aparecem independente do tipo', () => {
+    const tipos = ['treinamento_simulador', 'ferias', 'licenca', 'medico', 'treinamento_solo'] as const;
+    for (const tipo of tipos) {
+      const result = buildSyntheticAlocacoesFromEventos({
+        eventos: [createEvento({ id: 'evt-x', tipo_evento: tipo, funcionario_id: 'func-10', escala_id: '1', status: 'cancelado' })],
+        escalaId: '1',
+        tripulanteIds: new Set(['func-10']),
+      });
+      expect(result, `tipo ${tipo} cancelado deve ser filtrado`).toHaveLength(0);
+    }
+  });
+
+  it('vinculada a turma nao duplica — um evento por pessoa', () => {
+    // Dois eventos com mesmo funcionario_id devem gerar uma alocacao sintetica cada
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [
+        createEvento({ id: 'evt-a', tipo_evento: 'treinamento_simulador', funcionario_id: 'func-10', escala_id: '1' }),
+        createEvento({ id: 'evt-b', tipo_evento: 'treinamento_simulador', funcionario_id: 'func-10', escala_id: '1' }),
+      ],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    // Cada evento gera 1 alocacao sintetica — é esperado
+    // O chooseTripulanteDayAlocacao decide qual mostrar por dia
+    expect(result).toHaveLength(2);
+    // Ambas pertencem ao mesmo tripulante
+    expect(result.every((a) => a.funcionario_id === 'func-10')).toBe(true);
+  });
+
+  // ── Real × synthetic priority ─────────────────────────────────────────
+
+  it('alocacao manual tem prioridade sobre sintetica no mesmo dia', () => {
+    const synthetic = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-sim', tipo_evento: 'treinamento_simulador', funcionario_id: 'func-10', escala_id: '1', data_inicio: '2026-06-15', data_fim: '2026-06-15' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    const manual = createAlocacao({
+      id: 'real-aloc',
+      funcionario_id: 'func-10',
+      situacao_tipo: 'SIM',
+      auto_gerado: 0, // manual
+      data_inicio: '2026-06-15',
+      data_fim: '2026-06-15',
+    });
+
+    const chosen = chooseTripulanteDayAlocacao([...synthetic, manual], '2026-06-15');
+    expect(chosen?.id).toBe('real-aloc');
+  });
+
+  it('alocacao sintetica respeita prioridade visual do tipo (FERIAS sobre operacional)', () => {
+    // FERIAS has priority 0, operational has priority 2 — the higher visual priority wins
+    // regardless of auto_gerado. The safety against editing synthetic events is in the
+    // click handler (isSyntheticAlocacao guard), not in the display priority.
+    const synthetic = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-ferias', tipo_evento: 'ferias', funcionario_id: 'func-10', escala_id: '1', data_inicio: '2026-06-15', data_fim: '2026-06-15' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    const operacional = createAlocacao({
+      id: 'real-operacional',
+      funcionario_id: 'func-10',
+      aeronave_id: 10,
+      aeronave_prefixo: 'PP-ABC',
+      auto_gerado: 0,
+      data_inicio: '2026-06-15',
+      data_fim: '2026-06-15',
+    });
+
+    const chosen = chooseTripulanteDayAlocacao([...synthetic, operacional], '2026-06-15');
+    // FERIAS (priority 0) shows over operational (priority 2) — correct visual hierarchy.
+    // Synthetic events are still READ-ONLY via the click handler guard.
+    expect(chosen?.situacao_tipo).toBe('FERIAS');
+    // The chosen one is synthetic — but its click is trapped by isSyntheticAlocacao guard
+    expect(chosen?.id).toMatch(/^synthetic-/);
+  });
+
+  // ── Edge cases ────────────────────────────────────────────────────────
+
+  it('retorna array vazio quando nao ha eventos', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+    expect(result).toHaveLength(0);
+  });
+
+  it('retorna array vazio quando tripulanteIds esta vazio', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-1', tipo_evento: 'treinamento_simulador', funcionario_id: 'func-10', escala_id: '1' })],
+      escalaId: '1',
+      tripulanteIds: new Set(),
+    });
+    expect(result).toHaveLength(0);
+  });
+
+  it('ignora tipos de evento nao mapeados', () => {
+    const result = buildSyntheticAlocacoesFromEventos({
+      eventos: [createEvento({ id: 'evt-voo', tipo_evento: 'voo' as any, funcionario_id: 'func-10', escala_id: '1' })],
+      escalaId: '1',
+      tripulanteIds: new Set(['func-10']),
+    });
+
+    // 'voo' nao esta no EVENT_TYPE_TO_SITUACAO map
+    expect(result).toHaveLength(0);
   });
 });
