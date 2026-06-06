@@ -232,7 +232,7 @@ function HistoricoTab() {
 function PainelGestorTab() {
   const hoje = getTodayLocalKey();
   const [data, setData] = useState(hoje);
-  const { data: painel, isLoading } = useFadigaPainel(data);
+  const { data: painel, isLoading, isError, error, refetch, isFetching } = useFadigaPainel(data);
   const rows = Array.isArray(painel) ? painel : [];
 
   return (
@@ -252,6 +252,17 @@ function PainelGestorTab() {
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         {isLoading ? (
           <div className="py-10 text-center text-sm text-slate-400">Carregando...</div>
+        ) : isError ? (
+          <div className="space-y-3 px-4 py-10 text-center">
+            <p className="text-sm font-medium text-rose-700">
+              {error instanceof Error ? error.message : 'Erro ao carregar check-ins da equipe.'}
+            </p>
+            <div className="flex justify-center">
+              <Button variant="secondary" onClick={() => void refetch()} disabled={isFetching}>
+                Tentar novamente
+              </Button>
+            </div>
+          </div>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-400">Nenhum check-in registrado para esta data.</div>
         ) : (

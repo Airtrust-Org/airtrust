@@ -8,6 +8,7 @@ import FrmsCheckinFadiga, {
   optionalBinaryResponseToPayload,
 } from '../FrmsCheckinFadiga';
 import { resolveFadigaPostSavePath } from '../frmsPostSaveNavigation';
+import type { FadigaPainelEquipeItem } from '@/react-app/hooks/useFadigaCheckin';
 
 const mutateAsyncMock = vi.fn();
 const refetchMock = vi.fn();
@@ -164,7 +165,14 @@ describe('FrmsCheckinFadiga UI', () => {
     mutateAsyncMock.mockResolvedValue({ data: { requires_frat_review: 0 } });
     refetchMock.mockResolvedValue(undefined);
     useFadigaHistoricoMock.mockReturnValue({ data: { data: [] }, isLoading: false });
-    useFadigaPainelMock.mockReturnValue({ data: [], isLoading: false });
+    useFadigaPainelMock.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
     usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, role: 'INSTRUTOR' });
   });
 
@@ -483,5 +491,86 @@ describe('FrmsCheckinFadiga UI', () => {
     render(<FrmsCheckinFadiga />);
     expect(screen.getByText(/Ferramenta de triagem operacional/i)).toBeInTheDocument();
     expect(screen.getByText(/não determina automaticamente aptidão ou restrição operacional/i)).toBeInTheDocument();
+  });
+
+  it('na aba Equipe renderiza tripulantes quando a query retorna dados', async () => {
+    const equipeRows: FadigaPainelEquipeItem[] = [
+      {
+        id: 'daily-fatigue-41',
+        funcionario_id: 41,
+        funcionario_nome: 'Filipe Passaroni Daumas',
+        cargo: 'Comandante',
+        data: '2026-06-05',
+        status: 'normal',
+        data_source: 'crew_reported',
+        kss_score: 3,
+        score_fadiga: 13,
+        nivel_fadiga: 'VERDE',
+        status_operacional: 'APTO',
+      },
+      {
+        id: 'daily-fatigue-33',
+        funcionario_id: 33,
+        funcionario_nome: 'Wilson Maciel Martins Nery',
+        cargo: 'Comandante',
+        data: '2026-06-05',
+        status: 'normal',
+        data_source: 'crew_reported',
+        kss_score: 1,
+        score_fadiga: 4,
+        nivel_fadiga: 'VERDE',
+        status_operacional: 'APTO',
+      },
+    ];
+    usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: true, role: 'GESTOR' });
+    useFadigaPainelMock.mockReturnValue({
+      data: equipeRows,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
+
+    expect(await screen.findByText('Filipe Passaroni Daumas')).toBeInTheDocument();
+    expect(screen.getByText('Wilson Maciel Martins Nery')).toBeInTheDocument();
+    expect(screen.queryByText('Nenhum check-in registrado para esta data.')).not.toBeInTheDocument();
+  });
+
+  it('na aba Equipe mostra erro claro e nao converte falha em lista vazia', async () => {
+    const refetchPainel = vi.fn();
+    usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: true, role: 'GESTOR' });
+    useFadigaPainelMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Erro ao carregar check-ins da equipe.'),
+      refetch: refetchPainel,
+      isFetching: false,
+    });
+
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
+
+    expect(await screen.findByText('Erro ao carregar check-ins da equipe.')).toBeInTheDocument();
+    expect(screen.queryByText('Nenhum check-in registrado para esta data.')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+    expect(refetchPainel).toHaveBeenCalledTimes(1);
+  });
+
+  it('na aba Equipe mostra vazio apenas quando a request teve sucesso e voltou sem registros', async () => {
+    usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: true, role: 'GESTOR' });
+
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
+
+    expect(await screen.findByText('Nenhum check-in registrado para esta data.')).toBeInTheDocument();
   });
 });

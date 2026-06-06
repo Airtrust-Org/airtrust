@@ -331,6 +331,33 @@ describe('FrmsControleOperacional', () => {
     });
   });
 
+  it('mostra aviso quando funcionario_id esta ativo via query string', () => {
+    mockSnapshotData([]);
+
+    renderControle(['/frms/controle-operacional?data=2026-05-27&funcionario_id=41']);
+
+    expect(screen.getByText('Filtro técnico ativo: exibindo apenas um tripulante.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Limpar filtro técnico' })).toBeInTheDocument();
+    expect(screen.getByText(/query string \(funcionario_id=41\)/i)).toBeInTheDocument();
+    expect(screen.getByText('Filtro tecnico ativo')).toBeInTheDocument();
+  });
+
+  it('limpa o filtro tecnico e chama o hook sem funcionario_id', async () => {
+    mockSnapshotData([]);
+
+    renderControle(['/frms/controle-operacional?data=2026-05-27&funcionario_id=41']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar filtro técnico' }));
+
+    await waitFor(() => {
+      const calls = useFrmsOperationalSnapshotMock.mock.calls;
+      const lastFilters = calls[calls.length - 1]?.[0] as Record<string, unknown>;
+      expect(lastFilters.funcionario_id).toBe('');
+    });
+
+    expect(screen.queryByText('Filtro técnico ativo: exibindo apenas um tripulante.')).not.toBeInTheDocument();
+  });
+
   it('renderiza ciencia operacional vinculada aos tripulantes visiveis', () => {
     const acknowledgeEvent = vi.fn();
     mockSnapshotData();
@@ -444,6 +471,7 @@ describe('FrmsControleOperacional', () => {
       expect(useFrmsOperationalSnapshotMock).toHaveBeenCalledWith(
         expect.objectContaining({ funcionario_id: '35' }),
       );
+      expect(screen.getByText('Filtro técnico ativo: exibindo apenas um tripulante.')).toBeInTheDocument();
     });
 
     it('usa hoje como fallback quando data inválida na QS', () => {

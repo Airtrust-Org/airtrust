@@ -87,6 +87,30 @@ export interface FadigaAnalyticsResponse {
   }>;
 }
 
+export interface FadigaPainelEquipeItem {
+  id: string;
+  funcionario_id: number;
+  funcionario_nome?: string;
+  cargo?: string | null;
+  data: string;
+  status:
+    | 'normal'
+    | 'attention'
+    | 'critical'
+    | 'unfit_for_duty'
+    | 'not_submitted'
+    | 'no_duty';
+  data_source: 'crew_reported' | 'default_estimate' | 'not_applicable';
+  kss_score: number | null;
+  score_fadiga: number | null;
+  nivel_fadiga: string | null;
+  status_operacional: string | null;
+  hora_checkin?: string | null;
+  horas_sono?: number | null;
+  wake_time?: string | null;
+  requires_operational_review?: number;
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken();
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
@@ -130,10 +154,33 @@ export function useSubmitCheckin() {
 export function useFadigaPainel(data?: string) {
   return useQuery({
     queryKey: ['fadiga-painel', data || 'hoje'],
-    queryFn: () =>
-      fetchJson<Array<Record<string, unknown>>>(
-        `/frms/fadiga-checkin/painel-gestor${data ? `?data=${data}` : ''}`,
-      ),
+    queryFn: async () => {
+      const payload = await fetchJson<{
+        date: string;
+        items?: Array<Record<string, unknown>>;
+      }>(`/frms/daily-fatigue?date=${encodeURIComponent(data || 'hoje')}&scope=team`);
+
+      return (payload.items || [])
+        .filter((item) => String(item.status || '') !== 'no_duty')
+        .map<FadigaPainelEquipeItem>((item) => ({
+          id: String(item.checkin_id || `daily-fatigue-${item.funcionario_id || 'unknown'}-${item.date || data || 'hoje'}`),
+          funcionario_id: Number(item.funcionario_id || 0),
+          funcionario_nome: String(item.funcionario_nome || item.funcionario_id || '-'),
+          cargo: item.cargo == null ? null : String(item.cargo),
+          data: String(item.date || data || ''),
+          status: String(item.status || 'normal') as FadigaPainelEquipeItem['status'],
+          data_source: String(item.data_source || 'not_applicable') as FadigaPainelEquipeItem['data_source'],
+          kss_score: item.kss_score == null ? null : Number(item.kss_score),
+          score_fadiga: item.score_fadiga == null ? null : Number(item.score_fadiga),
+          nivel_fadiga: item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
+          status_operacional: item.status_operacional == null ? null : String(item.status_operacional),
+          hora_checkin: item.hora_checkin == null ? null : String(item.hora_checkin),
+          horas_sono: item.sleep_hours_24h == null ? null : Number(item.sleep_hours_24h),
+          wake_time: item.wake_time == null ? null : String(item.wake_time),
+          requires_operational_review:
+            item.requires_operational_review == null ? 0 : Number(item.requires_operational_review),
+        }));
+    },
     staleTime: 5 * 60 * 1000,
     refetchInterval: 30 * 60 * 1000,
   });
