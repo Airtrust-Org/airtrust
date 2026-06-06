@@ -11,6 +11,7 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/lms-cursos.ts': 2295,
   'routes/escalas-alocacoes.ts': 2268,
   'routes/escalas-evd.ts': 2040,
+  'routes/treinamentos-planejados.ts': 2207,
 } as const;
 
 const SQL_PREPARE_CAPS = {

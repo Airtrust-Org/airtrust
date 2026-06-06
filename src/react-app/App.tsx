@@ -151,6 +151,10 @@ const ConfiguracaoEscala = lazyWithRetry(
 );
 const MinhaEscala = lazyWithRetry(() => import('./pages/escalas/MinhaEscalaPage'), 'MinhaEscala');
 const EvdPage = lazyWithRetry(() => import('./pages/escalas/EvdPage'), 'EvdPage');
+const VisaoMensalIntegradaPage = lazyWithRetry(
+  () => import('./pages/escalas/VisaoMensalIntegradaPage'),
+  'VisaoMensalIntegradaPage',
+);
 // FRMS (Gestão de Fadiga e Jornada)
 const FrmsFichaTripulante = lazyWithRetry(
   () => import('./pages/frms/FrmsFichaTripulante'),
@@ -695,6 +699,14 @@ export default function App() {
                       }
                     />
                     <Route
+                      path="/escalas/visao-mensal"
+                      element={
+                        <ProtectedRoute>
+                          <VisaoMensalIntegradaPage />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
                       path="/escalas/diaria"
                       element={
                         <ProtectedRoute>
@@ -881,10 +893,13 @@ export default function App() {
                       }
                     />
 
-                    {/* Treinamentos Planejados — agora aba de Qualificações */}
                     <Route
                       path="/treinamentos/planejados"
-                      element={<Navigate to="/qualificacoes" replace />}
+                      element={
+                        <ProtectedRoute>
+                          <TreinamentosPlanejadosPage />
+                        </ProtectedRoute>
+                      }
                     />
                     <Route
                       path="/treinamentos/solicitacoes"
@@ -918,7 +933,11 @@ export default function App() {
                     />
                     <Route
                       path="/treinamentos"
-                      element={<Navigate to="/treinamentos/planejados" replace />}
+                      element={
+                        <ProtectedRoute>
+                          <TreinamentosPlanejadosPage />
+                        </ProtectedRoute>
+                      }
                     />
                     <Route
                       path="/lms/cursos"

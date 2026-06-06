@@ -39,15 +39,19 @@ type MockEvent = {
   titulo: string | null;
   descricao: string | null;
   observacoes: string | null;
+  codigo_turma: string | null;
 };
 
 type MockParticipant = {
+  id: number;
   treinamento_id: number;
   funcionario_id: number;
   qualificacao_historico_id: number | null;
   confirmado: number | null;
   presente: number | null;
   aprovado: number | null;
+  resultado: string | null;
+  data_conclusao_efetiva: string | null;
 };
 
 type MockHistory = {
@@ -83,7 +87,18 @@ type MockState = {
   participants: MockParticipant[];
   histories: MockHistory[];
   requests: MockRequest[];
+  generatedLinks: Array<{
+    id: number;
+    empresa_id: number;
+    treinamento_id: number;
+    participante_id: number;
+    funcionario_id: number;
+    qualificacao_tipo_id: number;
+    qualificacao_historico_id: number;
+    data_conclusao_efetiva: string;
+  }>;
   nextHistoryId: number;
+  nextGeneratedLinkId: number;
 };
 
 function createMockDb(state: MockState): D1Database {
@@ -163,6 +178,21 @@ function createMockDb(state: MockState): D1Database {
           );
         }
 
+        if (query.includes('FROM treinamentos_qualificacoes_geradas')) {
+          const [empresaId, treinamentoId, participanteId, qualificacaoTipoId, dataConclusao] =
+            args as [number, number, number, number, string];
+          return (
+            state.generatedLinks.find(
+              (item) =>
+                item.empresa_id === empresaId &&
+                item.treinamento_id === treinamentoId &&
+                item.participante_id === participanteId &&
+                item.qualificacao_tipo_id === qualificacaoTipoId &&
+                item.data_conclusao_efetiva === dataConclusao,
+            ) || null
+          );
+        }
+
         throw new Error(`Unhandled first query: ${query}`);
       };
 
@@ -172,20 +202,22 @@ function createMockDb(state: MockState): D1Database {
         }
 
         if (
-          query.includes(
-            'SELECT funcionario_id, qualificacao_historico_id, confirmado, presente, aprovado',
-          )
+          query.includes('FROM treinamentos_participantes') &&
+          query.includes('data_conclusao_efetiva')
         ) {
           const [treinamentoId] = args as [number];
           return {
             results: state.participants
               .filter((item) => item.treinamento_id === treinamentoId)
               .map((item) => ({
+                id: item.id,
                 funcionario_id: item.funcionario_id,
                 qualificacao_historico_id: item.qualificacao_historico_id,
                 confirmado: item.confirmado,
                 presente: item.presente,
                 aprovado: item.aprovado,
+                resultado: item.resultado,
+                data_conclusao_efetiva: item.data_conclusao_efetiva,
               })),
           };
         }
@@ -269,6 +301,10 @@ function createMockDb(state: MockState): D1Database {
             string,
             number,
           ];
+          void _validadeMeses;
+          void _instrutor;
+          void _cargaHoraria;
+          void _tipoTreinamento;
 
           state.histories.push({
             id: historicoId,
@@ -285,6 +321,29 @@ function createMockDb(state: MockState): D1Database {
           });
 
           return { meta: { changes: 1, last_row_id: historicoId } };
+        }
+
+        if (query.includes('INSERT INTO treinamentos_qualificacoes_geradas')) {
+          const [
+            empresaId,
+            treinamentoId,
+            participanteId,
+            funcionarioId,
+            qualificacaoTipoId,
+            qualificacaoHistoricoId,
+            dataConclusaoEfetiva,
+          ] = args as [number, number, number, number, number, number, string];
+          state.generatedLinks.push({
+            id: state.nextGeneratedLinkId++,
+            empresa_id: empresaId,
+            treinamento_id: treinamentoId,
+            participante_id: participanteId,
+            funcionario_id: funcionarioId,
+            qualificacao_tipo_id: qualificacaoTipoId,
+            qualificacao_historico_id: qualificacaoHistoricoId,
+            data_conclusao_efetiva: dataConclusaoEfetiva,
+          });
+          return { meta: { changes: 1, last_row_id: state.nextGeneratedLinkId - 1 } };
         }
 
         if (
@@ -329,6 +388,9 @@ function createMockDb(state: MockState): D1Database {
             number,
             number,
           ];
+          void _instrutor;
+          void _cargaHoraria;
+          void _tipoTreinamento;
           const history = state.histories.find(
             (item) => item.id === historicoId && item.empresa_id === empresaId,
           );
@@ -341,6 +403,18 @@ function createMockDb(state: MockState): D1Database {
             history.observacoes = observacoes;
             history.status = 'PLANEJADA';
           }
+          return { meta: { changes: history ? 1 : 0, last_row_id: 0 } };
+        }
+
+        if (
+          query.includes('UPDATE qualificacoes_historico') &&
+          query.includes('SET observacoes = ?')
+        ) {
+          const [observacoes, historicoId, empresaId] = args as [string, number, number];
+          const history = state.histories.find(
+            (item) => item.id === historicoId && item.empresa_id === empresaId,
+          );
+          if (history) history.observacoes = observacoes;
           return { meta: { changes: history ? 1 : 0, last_row_id: 0 } };
         }
 
@@ -360,11 +434,20 @@ function createMockDb(state: MockState): D1Database {
           query.includes('UPDATE qualificacoes_historico') &&
           query.includes("SET status = 'CONCLUIDA'")
         ) {
-          const [historicoId, empresaId] = args as [number, number];
+          const [dataConclusao, dataVencimento, historicoId, empresaId] = args as [
+            string,
+            string,
+            number,
+            number,
+          ];
           const history = state.histories.find(
             (item) => item.id === historicoId && item.empresa_id === empresaId,
           );
-          if (history) history.status = 'CONCLUIDA';
+          if (history) {
+            history.status = 'CONCLUIDA';
+            history.data_conclusao = dataConclusao;
+            history.data_vencimento = dataVencimento;
+          }
           return { meta: { changes: history ? 1 : 0, last_row_id: 0 } };
         }
 
@@ -491,15 +574,19 @@ function buildBaseState(status: string): MockState {
       titulo: 'CRM Recorrente',
       descricao: 'Reciclagem operacional',
       observacoes: 'Checklist completo',
+      codigo_turma: 'CRM-2026-A',
     },
     participants: [
       {
+        id: 501,
         treinamento_id: 77,
         funcionario_id: 11,
         qualificacao_historico_id: null,
         confirmado: 1,
         presente: null,
         aprovado: null,
+        resultado: null,
+        data_conclusao_efetiva: null,
       },
     ],
     histories: [],
@@ -516,7 +603,9 @@ function buildBaseState(status: string): MockState {
         data_realizada: null,
       },
     ],
+    generatedLinks: [],
     nextHistoryId: 900,
+    nextGeneratedLinkId: 1,
   };
 }
 
@@ -544,6 +633,7 @@ describe('treinamentos planejados integration service', () => {
       status: 'PLANEJADA',
     });
     expect(state.histories[0].observacoes).toContain('Origem: Treinamento Planejado #77');
+    expect(state.histories[0].observacoes).toContain('Origem: Turma CRM-2026-A');
     expect(state.participants[0].qualificacao_historico_id).toBe(state.histories[0].id);
     expect(state.requests[0]).toMatchObject({
       status: 'AGENDADA',
@@ -604,7 +694,7 @@ describe('treinamentos planejados integration service', () => {
     expect(invalidateMaterializedStatsMock).toHaveBeenCalledTimes(1);
   });
 
-  it('conclui historico e solicitacao vinculada quando o participante comparece ao treinamento concluido', async () => {
+  it('não conclui qualificação apenas por presença e encerramento da turma', async () => {
     const state = buildBaseState('CONCLUIDO');
     state.participants[0] = {
       ...state.participants[0],
@@ -648,11 +738,58 @@ describe('treinamentos planejados integration service', () => {
       treinamentoId: 77,
     });
 
-    expect(state.histories[0].status).toBe('CONCLUIDA');
+    expect(state.histories[0].status).toBe('PLANEJADA');
+    expect(state.requests[0]).toMatchObject({
+      status: 'AGENDADA',
+      treinamento_planejado_id: 77,
+      data_realizada: null,
+    });
+    expect(publishQualificacaoEventMock).not.toHaveBeenCalled();
+  });
+
+  it('conclui histórico e solicitação com aprovação e data efetiva individuais', async () => {
+    const state = buildBaseState('CONCLUIDO');
+    state.participants[0] = {
+      ...state.participants[0],
+      qualificacao_historico_id: 801,
+      presente: 1,
+      aprovado: 1,
+      resultado: 'APROVADO',
+      data_conclusao_efetiva: '2026-06-22',
+    };
+    state.histories = [
+      {
+        id: 801,
+        empresa_id: 1,
+        funcionario_id: 11,
+        qualificacao_id: 9,
+        qualificacao_codigo: 'CRM',
+        categoria: 'TREINAMENTO',
+        status: 'PLANEJADA',
+        observacoes: 'Checklist completo\nOrigem: Treinamento Planejado #77',
+        data_conclusao: '2026-06-20',
+        data_vencimento: '2027-06-20',
+        renovada: 0,
+      },
+    ];
+    state.requests[0] = {
+      ...state.requests[0],
+      status: 'AGENDADA',
+      status_pre_agendamento: 'APROVADA_OPS',
+      treinamento_planejado_id: 77,
+      data_prevista: '2026-06-20',
+    };
+    const db = createMockDb(state);
+
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 });
+
+    expect(state.histories[0]).toMatchObject({
+      status: 'CONCLUIDA',
+      data_conclusao: '2026-06-22',
+    });
     expect(state.requests[0]).toMatchObject({
       status: 'CONCLUIDA',
-      treinamento_planejado_id: 77,
-      data_realizada: '2026-06-20',
+      data_realizada: '2026-06-22',
       status_pre_agendamento: null,
     });
     expect(publishQualificacaoEventMock).toHaveBeenCalledWith(
@@ -662,6 +799,13 @@ describe('treinamentos planejados integration service', () => {
       'CRM',
       expect.objectContaining({ status: 'CONCLUIDA' }),
     );
+    expect(state.generatedLinks).toHaveLength(1);
+    expect(state.generatedLinks[0]).toMatchObject({
+      treinamento_id: 77,
+      participante_id: 501,
+      qualificacao_historico_id: 801,
+      data_conclusao_efetiva: '2026-06-22',
+    });
     expect(invalidateMaterializedStatsMock).toHaveBeenCalledTimes(1);
   });
 });

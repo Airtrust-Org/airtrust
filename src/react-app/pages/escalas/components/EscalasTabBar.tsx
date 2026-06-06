@@ -3,10 +3,11 @@
  * Usada por EscalasListagemView e EvdPage para manter consistência visual.
  */
 import { NavLink } from 'react-router-dom';
-import { CalendarDays, ClipboardList, Settings } from 'lucide-react';
+import { CalendarDays, ClipboardList, LayoutDashboard, Settings } from 'lucide-react';
 
 const tabs = [
   { to: '/escalas', end: true, icon: CalendarDays, label: 'Escala Mensal' },
+  { to: '/escalas/visao-mensal', end: false, icon: LayoutDashboard, label: 'Visão Integrada' },
   { to: '/escalas/diaria', end: false, icon: ClipboardList, label: 'Escala Diária de Voo' },
   { to: '/escalas/configuracoes', end: false, icon: Settings, label: 'Configurações' },
 ];
