@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
+import { notifyDataChanged } from '@/react-app/utils/data-sync';
 
 export type TreinamentoPlanejadoStatus =
   | 'PLANEJADO'
@@ -339,6 +340,9 @@ const KEYS = {
 };
 
 function invalidateTreinamentosPlanejados(queryClient: ReturnType<typeof useQueryClient>) {
+  // A5: além de invalidar o cache React Query, sinaliza páginas/abas que não usam RQ
+  // (ex.: Visão Mensal Integrada) e dependem destes dados, para revalidarem.
+  notifyDataChanged('treinamentos');
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: ['treinamentos-planejados'] }),
     queryClient.invalidateQueries({ queryKey: ['solicitacoes-treinamento'] }),
