@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 // @ts-expect-error Script operacional .mjs fora do pacote worker, importado aqui só para testes puros.
 import {
+  buildOrphanAlertCleanupSql,
   buildPlan,
   dedupeSigvoosRows,
   isValidSigvoosLine,
@@ -118,5 +119,23 @@ describe('frms-rebuild-from-sigvoos-2026 planning', () => {
     expect(plan.invalidSigvoos).toHaveLength(1);
     expect(plan.actions).toHaveLength(0);
     expect(plan.pendingRows).toHaveLength(1);
+  });
+
+  it('soft-deletes orphan active alerts without a physical delete', () => {
+    const statements = buildOrphanAlertCleanupSql(
+      [
+        {
+          id: 'orphan-alert',
+          tripulante_id: 7,
+          tipo_limite: 'HV_MES',
+          created_at: '2026-04-30 08:00:38',
+        },
+      ],
+      '2026-06-06 00:00:00',
+    );
+
+    expect(statements.join('\n')).toContain('UPDATE frms_alerta SET deleted_at');
+    expect(statements.join('\n')).toContain('FRMS_SIGVOOS_GLOBAL_REBUILD_ORPHAN_ALERT_SOFT_DELETE');
+    expect(statements.join('\n')).not.toMatch(/\bDELETE\s+FROM\b/i);
   });
 });

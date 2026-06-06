@@ -34,6 +34,7 @@ async function inserirAlertaComDedupe24h(
   db: D1Database,
   input: {
     tripulanteId: number;
+    jornadaId: string;
     tipoLimite: string;
     nivel: 'AVISO' | 'ATENCAO' | 'CRITICO' | 'VIOLACAO';
     percentualAtingido: number;
@@ -70,7 +71,7 @@ async function inserirAlertaComDedupe24h(
     .bind(
       id,
       String(input.tripulanteId),
-      null,
+      input.jornadaId,
       input.tipoLimite,
       input.nivel,
       input.percentualAtingido,
@@ -84,6 +85,30 @@ async function inserirAlertaComDedupe24h(
 
   await despacharNotificacoes(db, id, input.nivel, input.tripulanteId);
   return true;
+}
+
+async function carregarJornadaSigvoosDoDia(db: D1Database, tripulanteId: number, data: string) {
+  return db
+    .prepare(
+      `SELECT id, duracao_jornada_minutos, horas_voo_minutos, status, tripulacao_aumentada, effectiveness_pct
+       FROM frms_jornada
+       WHERE tripulante_id = ?
+         AND data = ?
+         AND deleted_at IS NULL
+         AND UPPER(COALESCE(origem, '')) = 'SIGVOOS'
+         AND COALESCE(horas_voo_minutos, 0) <= COALESCE(duracao_jornada_minutos, 0)
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT 1`,
+    )
+    .bind(tripulanteId, data)
+    .first<{
+      id: string;
+      duracao_jornada_minutos: number | null;
+      horas_voo_minutos: number | null;
+      status: string | null;
+      tripulacao_aumentada: number | null;
+      effectiveness_pct: number | null;
+    }>();
 }
 
 export async function notificarCheckinFadigaPendente(
@@ -169,13 +194,23 @@ export async function frmsDailyCheck(env: Env): Promise<{
     try {
       // 1. Recalcular acúmulo rolling
       const acumulo = await recalcularAcumuloRolling(db, trip.id, hoje, limites);
+      const jornadaSigvoosHoje = await carregarJornadaSigvoosDoDia(db, trip.id, hoje);
+
+      if (!jornadaSigvoosHoje?.id) {
+        continue;
+      }
 
       // 2. Gerar alertas
       const alertas = processarAlertas({
         tripulanteId: trip.id,
         tripulanteNome: trip.nome,
-        jornadaId: null,
-        jornada: null,
+        jornadaId: jornadaSigvoosHoje.id,
+        jornada: {
+          duracao_jornada_minutos: jornadaSigvoosHoje.duracao_jornada_minutos,
+          horas_voo_minutos: jornadaSigvoosHoje.horas_voo_minutos,
+          status: jornadaSigvoosHoje.status,
+          tripulacao_aumentada: jornadaSigvoosHoje.tripulacao_aumentada,
+        },
         acumulo,
         limites,
       });
@@ -231,7 +266,10 @@ export async function frmsDailyCheck(env: Env): Promise<{
                   COALESCE(SUM(horas_voo_minutos), 0) AS total_voo,
                   NULL AS dia_ciclo
            FROM frms_jornada
-           WHERE tripulante_id = ? AND data LIKE ? AND deleted_at IS NULL`,
+           WHERE tripulante_id = ?
+             AND data LIKE ?
+             AND deleted_at IS NULL
+             AND UPPER(COALESCE(origem, '')) = 'SIGVOOS'`,
         )
         .bind(trip.id, `${mesAtual}-%`)
         .first<{ total_jornada: number; total_voo: number; dia_ciclo: number | null }>();
@@ -295,6 +333,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
         const pct7d = (acumulo.hv_7_dias_min / limite7dMin) * 100;
         const criouAlerta60h = await inserirAlertaComDedupe24h(db, {
           tripulanteId: trip.id,
+          jornadaId: jornadaSigvoosHoje.id,
           tipoLimite: 'HV_7D',
           nivel: 'CRITICO',
           percentualAtingido: Number(pct7d.toFixed(1)),
@@ -308,25 +347,12 @@ export async function frmsDailyCheck(env: Env): Promise<{
       }
 
       // 6. Thresholds de effectiveness: <77 critico, 77-89 moderado
-      const effectivenessHoje = await db
-        .prepare(
-          `SELECT effectiveness_pct
-           FROM frms_jornada
-           WHERE tripulante_id = ?
-             AND data = ?
-             AND effectiveness_pct IS NOT NULL
-             AND deleted_at IS NULL
-           ORDER BY updated_at DESC
-           LIMIT 1`,
-        )
-        .bind(trip.id, hoje)
-        .first<{ effectiveness_pct: number | null }>();
-
-      const effectivenessPct = effectivenessHoje?.effectiveness_pct;
+      const effectivenessPct = jornadaSigvoosHoje.effectiveness_pct;
       if (typeof effectivenessPct === 'number') {
         if (effectivenessPct < 77) {
           const criouCritico = await inserirAlertaComDedupe24h(db, {
             tripulanteId: trip.id,
+            jornadaId: jornadaSigvoosHoje.id,
             tipoLimite: 'EFFECTIVENESS',
             nivel: 'CRITICO',
             percentualAtingido: Number(effectivenessPct.toFixed(1)),
@@ -340,6 +366,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
         } else if (effectivenessPct <= 89) {
           const criouModerado = await inserirAlertaComDedupe24h(db, {
             tripulanteId: trip.id,
+            jornadaId: jornadaSigvoosHoje.id,
             tipoLimite: 'EFFECTIVENESS',
             nivel: 'ATENCAO',
             percentualAtingido: Number(effectivenessPct.toFixed(1)),

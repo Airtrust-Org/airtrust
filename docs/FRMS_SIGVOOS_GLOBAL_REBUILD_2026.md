@@ -32,6 +32,12 @@ Backup/export local antes de escrita:
 
 Os backups contem dados operacionais e nao foram preparados para commit.
 
+Backup pontual complementar em 2026-06-06 antes da limpeza de alertas orfaos:
+
+- Diretorio: `artifacts/frms-sigvoos-global-rebuild-20260605/backup-orphan-alerts-20260606T0038Z`
+- `frms_alerta_orphans_before.json`: 28 linhas, SHA-256 `1ff6dfca2073e0753ed5f9d49e343f62002579cc6718b44904a13db77168add6`
+- Os backups contem dados operacionais e nao devem ser commitados.
+
 ## Dry-Run
 
 Piloto Dieter:
@@ -73,6 +79,22 @@ Resultado global final:
 - `active_sigvoos_after_data`: 261
 - `rolling_rows_inserted`: 261
 
+Execucao complementar em 2026-06-06 para alertas orfaos ativos sem `jornada_id` no recorte 2026:
+
+```bash
+node scripts/frms-rebuild-from-sigvoos-2026.mjs --dry-run --from 2026-01-01 --to 2026-06-05 --all-tripulantes --out-dir artifacts/frms-sigvoos-global-rebuild-20260605/dry-run-orphan-alert-cleanup-20260101-20260605
+node scripts/frms-rebuild-from-sigvoos-2026.mjs --execute --from 2026-01-01 --to 2026-06-05 --all-tripulantes --out-dir artifacts/frms-sigvoos-global-rebuild-20260605/execute-orphan-alert-cleanup-20260101-20260605
+```
+
+Resultado complementar:
+
+- jornadas alteradas: 0
+- `orphan_active_alerts_without_jornada`: 28
+- `data_result.totalChanges`: 0
+- `derived_result.totalChanges`: 748
+- `active_sigvoos_after_data`: 261
+- `rolling_rows_inserted`: 261
+
 Nenhuma migration foi executada. Nao houve `DELETE` fisico. As escritas foram `UPDATE`/`INSERT` gerados pelo script versionado.
 
 ## Contagens
@@ -103,6 +125,7 @@ Depois, por mes/origem:
 - FIRA com fatorizacao ativa: 0
 - Rolling sem SIGVOOS no mesmo dia: 0
 - Alertas ativos sem jornada SIGVOOS: 0
+- Alertas orfaos ativos no recorte 2026-01-01 a 2026-06-05: 0 apos limpeza complementar
 - Divergencia alerta diaria vs coluna da jornada: 0
 - SIGVOOS ativo extremo/invalido: 0
 - Pendencias reais sem SIGVOOS valido: 659 linhas nao canonicas ativas, exibidas como nao operacionais pela politica de fonte.
