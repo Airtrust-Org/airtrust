@@ -2480,13 +2480,22 @@ export default function Qualificacoes() {
                 </button>
               )}
               {isPlanejadosTab && (
-                <button
-                  onClick={() => abrirModalTurmaPlanejada()}
-                  className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Incluir Turma</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => abrirModalTurmaPlanejada()}
+                    className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Incluir Turma (legado)</span>
+                  </button>
+                  <a
+                    href="/treinamentos/planejados"
+                    className="flex items-center gap-2 rounded-md border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Gerenciar Turmas</span>
+                  </a>
+                </div>
               )}
               {activeTab === 'categorias' && (
                 <button
@@ -3973,6 +3982,23 @@ export default function Qualificacoes() {
         }
       >
         <div className="space-y-4">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <p className="font-medium">Registro legado — sessão avulsa</p>
+            <p className="mt-1 text-xs text-amber-700">
+              Este formulário cria um registro simples com data única e instrutor em texto livre.
+              Para turmas com múltiplos dias, instrutores cadastrados, recursos e controle de
+              presença, use o{' '}
+              <a
+                href="/treinamentos/planejados"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-amber-900 underline hover:text-amber-950"
+              >
+                Gerenciador de Turmas Planejadas
+              </a>
+              .
+            </p>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Qualificacao" required>
               <Select
