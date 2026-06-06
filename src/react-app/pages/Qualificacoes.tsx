@@ -72,6 +72,10 @@ import { showToast } from '@/react-app/utils/toast';
 import { safeDelete } from '@/react-app/utils/safeDelete';
 import { logger } from '@/react-app/utils/logger';
 import { apiFetch } from '@/react-app/lib/apiFetch';
+const TreinamentosPlanejadosPage = lazyWithRetry(
+  () => import('./TreinamentosPlanejadosPage'),
+  'TreinamentosPlanejadosPage',
+);
 const ModalCertificado = lazyWithRetry(
   () =>
     import('@/react-app/components/modals/ModalCertificado').then((m) => ({
@@ -110,8 +114,8 @@ const historicoActionDangerButtonClass =
 const QUALIFICACOES_PREFS_KEY = 'qualificacoes_prefs_v1';
 
 interface QualificacoesPrefs {
-  activeTab?: 'historico' | 'tipos' | 'categorias' | 'planejados';
-  planejadosViewMode?: 'list' | 'calendar';
+  activeTab?: 'historico' | 'tipos' | 'categorias' | 'turmas';
+  turmasViewMode?: 'list' | 'calendar';
   limit?: number;
   searchTerm?: string;
   sortColumn?: string | null;
@@ -134,11 +138,11 @@ export default function Qualificacoes() {
     const parsedId = Number(rawId);
     return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
   }, [searchParams]);
-  const [activeTab, setActiveTab] = useState<'historico' | 'tipos' | 'categorias' | 'planejados'>(
+  const [activeTab, setActiveTab] = useState<'historico' | 'tipos' | 'categorias' | 'turmas'>(
     initialPrefs.activeTab ?? 'historico',
   );
-  const [planejadosViewMode, setPlanejadosViewMode] = useState<'list' | 'calendar'>(
-    initialPrefs.planejadosViewMode ?? 'list',
+  const [turmasViewMode, setTurmasViewMode] = useState<'list' | 'calendar'>(
+    initialPrefs.turmasViewMode ?? 'list',
   );
   const [limit, setLimit] = useState(initialPrefs.limit ?? 50); // Paginação: 50 registros por página
   const [page, setPage] = useState(1); // Página atual
@@ -202,13 +206,13 @@ export default function Qualificacoes() {
   );
 
   const isHistoricoTab = activeTab === 'historico';
-  const isPlanejadosTab = activeTab === 'planejados';
-  const usesHistoricoDataset = isHistoricoTab || isPlanejadosTab;
+  const isTurmasTab = activeTab === 'turmas';
+  const usesHistoricoDataset = isHistoricoTab;
 
   useEffect(() => {
     writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
       activeTab,
-      planejadosViewMode,
+      turmasViewMode,
       limit,
       searchTerm,
       sortColumn: sortConfig.column,
@@ -219,7 +223,7 @@ export default function Qualificacoes() {
     });
   }, [
     activeTab,
-    planejadosViewMode,
+    turmasViewMode,
     limit,
     searchTerm,
     sortConfig.column,
@@ -230,8 +234,8 @@ export default function Qualificacoes() {
   ]);
 
   const effectiveHistoricoStatusFiltro = useMemo(
-    () => (isPlanejadosTab ? ['PLANEJADA'] : [...statusFiltro]),
-    [isPlanejadosTab, statusFiltro],
+    () => [...statusFiltro],
+    [statusFiltro],
   );
 
   const {
@@ -290,8 +294,8 @@ export default function Qualificacoes() {
   // 🔍 Aplicar filtros da URL ao montar componente
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'planejados') {
-      setActiveTab('planejados');
+    if (tabParam === 'turmas') {
+      setActiveTab('turmas');
     }
 
     if (highlightedHistoricoId) {
@@ -2338,16 +2342,16 @@ export default function Qualificacoes() {
               <button
                 onClick={() => setActiveTab('planejados')}
                 className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
-                  activeTab === 'planejados'
+                  activeTab === 'turmas'
                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
                 <CalendarDays
                   size={16}
-                  className={activeTab === 'planejados' ? 'text-blue-600' : ''}
+                  className={activeTab === 'turmas' ? 'text-blue-600' : ''}
                 />
-                Planejados
+                Turmas
               </button>
               <button
                 onClick={() => setActiveTab('tipos')}
@@ -2479,23 +2483,10 @@ export default function Qualificacoes() {
                   <span>Novo Modelo</span>
                 </button>
               )}
-              {isPlanejadosTab && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => abrirModalTurmaPlanejada()}
-                    className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Incluir Turma (legado)</span>
-                  </button>
-                  <a
-                    href="/treinamentos/planejados"
-                    className="flex items-center gap-2 rounded-md border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Gerenciar Turmas</span>
-                  </a>
-                </div>
+              {isTurmasTab && (
+                <span className="text-xs text-slate-400 italic">
+                  Use o botão <strong>+ Novo treinamento</strong> abaixo para criar turmas multi-dia.
+                </span>
               )}
               {activeTab === 'categorias' && (
                 <button
@@ -2693,7 +2684,7 @@ export default function Qualificacoes() {
             </div>
           )}
 
-          {isPlanejadosTab && (
+          {isHistoricoTab && false && (
             <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
                 <span>Total</span>
@@ -3262,97 +3253,19 @@ export default function Qualificacoes() {
             </div>
           )}
 
-          {isPlanejadosTab && (
-            <div className="space-y-4">
-              {/* Toggle visualization mode */}
-              <div className="flex items-center gap-2 px-4 pt-2">
-                <button
-                  onClick={() => setPlanejadosViewMode('list')}
-                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    planejadosViewMode === 'list'
-                      ? 'bg-primary text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <ListFilter className="w-4 h-4" />
-                  Lista
-                </button>
-                <button
-                  onClick={() => setPlanejadosViewMode('calendar')}
-                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    planejadosViewMode === 'calendar'
-                      ? 'bg-primary text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <Grid3x3 className="w-4 h-4" />
-                  Calendário
-                </button>
-              </div>
-
-              {/* List view */}
-              {planejadosViewMode === 'list' && (
-                <DataTable
-                  key={`planejados-page-${page}-limit-${limit}`}
-                  tableId="qualificacoes-historico"
-                  data={planejadosHistorico}
-                  columns={historicoColumns}
-                  rowClassName={(row) => {
-                    const item = row as HistoricoItem;
-                    return isPlanejadaVencida(item)
-                      ? 'bg-amber-50 border-l-4 border-amber-400'
-                      : '';
-                  }}
-                  loading={planejadosTableLoading}
-                  columnConfigOpen={columnConfigOpen === 'historico'}
-                  onColumnConfigOpenChange={(open) =>
-                    setColumnConfigOpen(open ? 'historico' : null)
-                  }
-                  showInternalColumnConfigButton={false}
-                  sortConfig={sortConfig}
-                  onSortChange={(newSortConfig) => {
-                    setSortConfig(newSortConfig);
-                    setPage(1);
-                  }}
-                  page={page}
-                  pageSize={limit}
-                  total={historicoMeta?.total ?? planejadosHistorico.length}
-                  onPageChange={(newPage) => setPage(newPage)}
-                  onPageSizeChange={(size) => {
-                    setLimit(size);
-                    setPage(1);
-                  }}
-                  pageSizeOptions={[50, 100]}
-                  emptyState={
-                    <div className="text-center py-12">
-                      <CalendarDays className="mx-auto mb-4 text-slate-300" size={60} />
-                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                        Nenhum treinamento planejado encontrado
-                      </h3>
-                      <p className="text-sm text-slate-600 mb-4">
-                        Os treinamentos futuros aparecem aqui quando a qualificação é criada no
-                        Histórico com data planejada.
-                      </p>
-                    </div>
-                  }
-                />
-              )}
-
-              {/* Calendar view */}
-              {planejadosViewMode === 'calendar' && (
-                <div className="px-4">
-                  <QualificacoesCalendario
-                    qualificacoes={planejadosHistorico}
-                    onOpenQualificacao={(qualificacao) =>
-                      abrirModalPlanejada(qualificacao as HistoricoItem)
-                    }
-                  />
+          {isTurmasTab && (
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center py-20">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 </div>
-              )}
-            </div>
+              }
+            >
+              <TreinamentosPlanejadosPage asTab={true} />
+            </Suspense>
           )}
 
-          {isPlanejadosTab && false && (
+          {isHistoricoTab && false && (
             <DataTable
               key={`planejados-page-${page}-limit-${limit}`}
               tableId="qualificacoes-historico"

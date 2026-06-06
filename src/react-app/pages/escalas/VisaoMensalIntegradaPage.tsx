@@ -163,12 +163,19 @@ function severityMatches(employee: IntegratedEmployeeMonth, severity: string) {
 }
 
 function EventPill({ event }: { event: IntegratedMonthlyEvent }) {
+  const isConcluded =
+    event.type === 'TREINAMENTO_CONCLUIDO' ||
+    event.status === 'CONCLUIDO' ||
+    event.status === 'CONCLUIDA';
+
   return (
     <a
       href={event.sourceRoute || '#'}
       className={[
         'group block rounded border px-1.5 py-1 text-[11px] leading-tight transition hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
-        SEVERITY_CLASS[event.severity],
+        isConcluded
+          ? 'border-slate-200 bg-slate-100 text-slate-400 line-through decoration-slate-300'
+          : SEVERITY_CLASS[event.severity],
       ].join(' ')}
       title={`${SOURCE_LABEL[event.source]} - ${event.title}${event.description ? `: ${event.description}` : ''}`}
     >
@@ -177,7 +184,8 @@ function EventPill({ event }: { event: IntegratedMonthlyEvent }) {
         {event.sourceRoute ? <ExternalLink className="h-3 w-3 shrink-0 opacity-60" /> : null}
       </span>
       <span className="mt-0.5 block truncate opacity-80">
-        {SOURCE_LABEL[event.source]} · {SEVERITY_LABEL[event.severity]}
+        {SOURCE_LABEL[event.source]}
+        {isConcluded ? ' · Concluído' : ` · ${SEVERITY_LABEL[event.severity]}`}
       </span>
     </a>
   );

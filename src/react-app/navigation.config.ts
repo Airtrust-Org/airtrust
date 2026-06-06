@@ -166,15 +166,20 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
       ],
     },
     {
-      id: 'treinamentos',
-      label: 'Treinamentos',
+      id: 'qualificacoes',
+      label: 'Qualificações',
       icon: 'GraduationCap',
       expandable: true,
       children: [
         {
-          id: 'treinamentos-planejados',
-          label: 'Turmas Planejadas',
-          path: '/treinamentos/planejados',
+          id: 'qualificacoes-historico',
+          label: 'Histórico',
+          path: '/qualificacoes',
+        },
+        {
+          id: 'qualificacoes-turmas',
+          label: 'Turmas',
+          path: '/qualificacoes?tab=turmas',
         },
       ],
     },
