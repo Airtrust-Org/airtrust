@@ -8,7 +8,7 @@ Escopo: reauditoria dos 21 achados Opus A1-A5, M1-M12, B1-B4 apos remediacao.
 - Achados medios: 11/12 corrigidos ou resolvidos por politica; M12 ficou com residuo baixo por ausencia de idempotencia persistida/constraint unica.
 - Achados baixos: 4/4 corrigidos.
 - Novos bloqueadores altos/medios: nenhum encontrado.
-- Deploy: pendente neste documento; evidencias de publicacao ficam no documento de deploy.
+- Deploy: executado em `main` no commit `23f893e684f80f29a2789dd41542e36aa5964203`; evidencias detalhadas ficam no documento de deploy.
 
 ## Achados reavaliados
 
@@ -41,7 +41,7 @@ Escopo: reauditoria dos 21 achados Opus A1-A5, M1-M12, B1-B4 apos remediacao.
 | ID | Severidade | Status | Descricao | Tratamento |
 |---|---|---|---|---|
 | R1 | Baixo | Documentado | M12 nao tem idempotency key persistida nem constraint unica para concorrencia estrita entre criacoes identicas. | Risco operacional reduzido por dedupe/rollback. Proxima melhoria: coluna `idempotency_key` ou indice unico parcial/natural apos desenho de DDL reversivel. |
-| R2 | Baixo | Documentado | Smoke autenticado nao foi executado localmente por ausencia de credenciais de teste no ambiente. | Smoke read-only de producao sera executado; classificacao final deve mencionar limitacao autenticada se as credenciais continuarem ausentes. |
+| R2 | Baixo | Documentado | Smoke autenticado nao foi executado por ausencia de token/cookie/credenciais de teste no ambiente. | Smokes publicos/read-only de producao passaram; classificacao final menciona limitacao autenticada. |
 | R3 | Baixo | Documentado | `vite preview` em `127.0.0.1` nao tem proxy e retorna 500 em `/api/public/locale` e `/api/public/translate`. | Nao e regressao do escopo; usar dev server com proxy ou producao para smoke funcional. |
 
 ## Conclusao de reauditoria local
