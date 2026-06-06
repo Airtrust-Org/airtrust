@@ -124,3 +124,4 @@ Estes documentos continuam úteis como trilha de auditoria, mas não devem ser u
 5. Monitorar produção (24-48h) — sem ação necessária se nenhum erro crítico.
 6. Enforcement de `RBAC/Suporte v2` em produção — janela separada de apply da `0389` (post-release, não urgente).
 7. Ampliar `Audit v2` dual-write em produção — janela controlada futura.
+8. ✅ **FRMS Operational Closure** — `FRMS = VERDE` (2026-06-06). Fonte canônica SIGVOOS unificada, 7d/365d corrigidos, `/score-atual` canônico, 85 alertas coerentes, zero órfãos, coleta Fadiga Diária normalizada. Commit `4c8c41d`, versão `2026-06-06T02:08:06Z-4c8c41d`. Ver `docs/FRMS_OPERATIONAL_CLOSURE_20260606.md`.
