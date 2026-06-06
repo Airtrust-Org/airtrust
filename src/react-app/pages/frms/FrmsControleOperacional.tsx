@@ -175,6 +175,14 @@ function formatNumber(value: number | null): string {
   return String(value);
 }
 
+function formatDisplayDate(isoDate: string | null | undefined): string {
+  if (!isoDate) return '-';
+  // Parse ISO date YYYY-MM-DD manually to avoid timezone offset issues
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return isoDate;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
 function formatMinutesAsHours(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '-';
   return `${(value / 60).toFixed(1)}h`;
@@ -184,6 +192,28 @@ function formatTripulante(item: FrmsOperationalSnapshotItem): string {
   return item.nome_guerra || item.nome || `ID ${item.funcionario_id}`;
 }
 
+function formatFortnightLabel(indicator: FrmsFortnightIndicator | null): string {
+  if (!indicator) return 'Quinzena sem indicador';
+  const statusMap: Record<string, string> = {
+    OK: 'completa',
+    ATENCAO: 'com atencao',
+    CRITICO: 'critica',
+    INCOMPLETO: 'incompleta',
+  };
+  const statusLabel = statusMap[indicator.status_quinzena] || indicator.status_quinzena.toLowerCase();
+  const dutyText = indicator.duty_time_periodo_min != null && Number.isFinite(indicator.duty_time_periodo_min)
+    ? ` · jornada ${formatMinutesAsHours(indicator.duty_time_periodo_min)}`
+    : '';
+  return `Quinzena ${statusLabel}${dutyText}`;
+}
+
+const FORTNIGHT_STATUS_LABELS: Record<string, string> = {
+  OK: 'Quinzena completa',
+  ATENCAO: 'Quinzena com atencao',
+  CRITICO: 'Quinzena critica',
+  INCOMPLETO: 'Quinzena incompleta',
+};
+
 function operationalBucket(item: FrmsOperationalSnapshotItem): OperationalBucket {
   if (item.escalado) return 'escalado';
   if (item.checkin_status === 'RECEBIDO') return 'checkin_sem_escala';
@@ -191,9 +221,18 @@ function operationalBucket(item: FrmsOperationalSnapshotItem): OperationalBucket
   return 'sem_atividade';
 }
 
-function operationalBucketLabel(item: FrmsOperationalSnapshotItem): string {
+function hasAnyEscalaData(items: FrmsOperationalSnapshotItem[]): boolean {
+  return items.some((item) => item.escalado);
+}
+
+function operationalBucketLabel(item: FrmsOperationalSnapshotItem, escalaAvailable: boolean): string {
   const bucket = operationalBucket(item);
   if (bucket === 'escalado') return item.escala_source === 'EVD' ? 'Escala diaria' : `Escala ${item.escala_source}`;
+  if (!escalaAvailable) {
+    // When escala data is unavailable for the period, don't say "sem escala"
+    if (bucket === 'checkin_sem_escala') return 'Check-in (escala indisponivel)';
+    if (bucket === 'jornada_sem_escala') return 'Jornada (escala indisponivel)';
+  }
   if (bucket === 'checkin_sem_escala') return 'Check-in sem escala';
   if (bucket === 'jornada_sem_escala') return 'Jornada sem escala';
   return 'Sem atividade';
@@ -369,6 +408,7 @@ export default function FrmsControleOperacional() {
   );
 
   const visibleItems = useMemo(() => filterItems(data, appliedFilters), [data, appliedFilters]);
+  const escalaAvailable = useMemo(() => hasAnyEscalaData(visibleItems), [visibleItems]);
   const visibleIds = useMemo(() => new Set(visibleItems.map((item) => item.funcionario_id)), [visibleItems]);
   const visibleReadAckEvents = useMemo(
     () => readAck.events.filter((event) => isVisibleReadAckEvent(event, visibleIds)),
@@ -598,6 +638,11 @@ export default function FrmsControleOperacional() {
           </div>
         )}
 
+        {!escalaAvailable && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Dados de escala indisponiveis para este periodo. As verificacoes de vinculo com escala nao puderam ser realizadas — tripulantes com check-in ou jornada sao exibidos sem a confirmacao de escala.
+          </div>
+        )}
         {!appliedFilters.include_inconsistencies && (
           <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
             Visao filtrada: inconsistencias foram ocultadas. Os KPIs e a tabela refletem apenas o recorte sem excecoes.
@@ -672,8 +717,8 @@ export default function FrmsControleOperacional() {
                         <div className="text-xs text-slate-500">{item.base || 'Base nao informada'}</div>
                       </td>
                       <td className="px-3 py-3">
-                        <div className="font-medium text-slate-800">{operationalBucketLabel(item)}</div>
-                        <div className="text-xs text-slate-500">{item.data_operacional}</div>
+                        <div className="font-medium text-slate-800">{operationalBucketLabel(item, escalaAvailable)}</div>
+                        <div className="text-xs text-slate-500">{formatDisplayDate(item.data_operacional)}</div>
                         <div className="text-xs text-slate-500">
                           {item.teve_jornada
                             ? `${item.hora_apresentacao || '--:--'} - ${item.hora_termino || '--:--'}`
@@ -696,9 +741,7 @@ export default function FrmsControleOperacional() {
                       <td className="px-3 py-3">
                         <div className="font-medium text-slate-800">Efetividade {formatPercentage(item.effectiveness_pct)}</div>
                         <div className="text-xs text-slate-500">
-                          {item.fortnight_indicator
-                            ? `Quinzena ${item.fortnight_indicator.status_quinzena} · duty ${formatMinutesAsHours(item.fortnight_indicator.duty_time_periodo_min)}`
-                            : 'Quinzena sem indicador'}
+                          {formatFortnightLabel(item.fortnight_indicator)}
                         </div>
                         {item.fatorizacao_status === 'AUSENTE' && item.teve_jornada && (
                           <div className="text-xs text-rose-700">Jornada sem fatorizacao</div>
@@ -715,28 +758,41 @@ export default function FrmsControleOperacional() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex max-w-xs flex-wrap gap-1">
-                          {item.alertas.length > 0 ? (
-                            item.alertas.map((alerta) => (
-                              <span
-                                key={`${item.funcionario_id}-${item.data_operacional}-${alerta}`}
-                                className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700"
-                              >
-                                {ALERT_LABELS[alerta] || alerta}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
+                          {(() => {
+                            const visibleAlertas = escalaAvailable
+                              ? item.alertas
+                              : item.alertas.filter(
+                                  (a) => a !== 'JORNADA_FRMS_SEM_ESCALA' && a !== 'ESCALADO_SEM_JORNADA_FRMS',
+                                );
+                            return visibleAlertas.length > 0 ? (
+                              visibleAlertas.map((alerta) => (
+                                <span
+                                  key={`${item.funcionario_id}-${item.data_operacional}-${alerta}`}
+                                  className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700"
+                                >
+                                  {ALERT_LABELS[alerta] || alerta}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          <SourceBadge value={item.sleep_data_source} />
-                          <SourceBadge value={item.wake_data_source} />
-                          <SourceBadge value={item.jornada_data_source} />
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          Sono / despertar / jornada
+                        <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className="text-[10px] text-slate-400">Sono</span>
+                            <SourceBadge value={item.sleep_data_source} />
+                          </div>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className="text-[10px] text-slate-400">Despertar</span>
+                            <SourceBadge value={item.wake_data_source} />
+                          </div>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className="text-[10px] text-slate-400">Jornada</span>
+                            <SourceBadge value={item.jornada_data_source} />
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -837,7 +893,7 @@ export default function FrmsControleOperacional() {
                       </span>
                       <span className="font-semibold text-slate-900">{formatReadAckEventLabel(event)}</span>
                       <span className="text-xs text-slate-500">
-                        {event.data_operacional} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
+                        {formatDisplayDate(event.data_operacional)} · {event.funcionario_nome || `ID ${event.funcionario_id}`}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">

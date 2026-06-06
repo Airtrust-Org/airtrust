@@ -355,3 +355,19 @@ As únicas pendências remanescentes (FIRA histórico, HV inconsistente, pendên
 - `docs/FRMS_SIGVOOS_FIRA_SOURCE_QUALITY_AND_REMAINING_FIRA_AUDIT_20260606.md`
 - `docs/FRMS_FULL_CALCULATION_AUDIT_OPUS_20260605.md`
 - `docs/FRMS_FADIGA_DIARIA_CALC_AUDIT_20260605.md`
+- `docs/FRMS_OPERATIONAL_CONTROL_FINAL_FIX_20260606.md` (patch adicional: Controle Operacional)
+
+## 23. Patch Adicional — Controle Operacional (2026-06-06)
+
+Após o fechamento inicial, foram identificados problemas de exibição na página **Controle Operacional**:
+
+- Datas em ISO (`2026-06-05`) → corrigido para `DD/MM/YYYY`
+- Texto técnico `Quinzena INCOMPLETO · duty -` → corrigido para texto amigável em português
+- Classificação "sem escala" falsa quando dados de escala indisponíveis → banner + labels ajustados
+- Alertas `JORNADA_FRMS_SEM_ESCALA` e `ESCALADO_SEM_JORNADA_FRMS` ocultados quando sem dados de escala
+- Badges de fonte com labels individuais (Sono/Despertar/Jornada)
+
+**Causa raiz do "sem escala":** Tabela `escala_voo_diaria` contém apenas 4 registros (até 2026-05-28), zero para junho/2026. A classificação de matching estava correta, mas a UI não diferenciava "escala não encontrada" de "dados de escala indisponíveis".
+
+**Commit:** (a ser criado após `07c63aa`)
+**Documento:** `docs/FRMS_OPERATIONAL_CONTROL_FINAL_FIX_20260606.md`
