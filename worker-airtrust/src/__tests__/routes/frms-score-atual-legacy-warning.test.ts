@@ -114,4 +114,59 @@ describe('GET /frms/score-atual/:funcionarioid legacy semantics', () => {
     });
     expect(payload.data.interpretation_warning).toContain('nao deve ser usado como decisao automatica');
   });
+
+  it('agrega HV 7d/28d apenas da fonte canonica SIGVOOS (nao infla score com FIRA/MANUAL)', async () => {
+    const app = createFrmsApp();
+    const preparedQueries: string[] = [];
+
+    const db = {
+      prepare: vi.fn((query: string) => {
+        preparedQueries.push(query);
+        return {
+          bind: (..._args: unknown[]) => {
+            if (query.includes('INSERT INTO rate_limit_store')) {
+              return { first: async () => ({ count: 1, reset_at: '2026-05-28T18:00:00.000Z' }) };
+            }
+            if (query.includes('SELECT id FROM funcionarios')) {
+              return { first: async () => ({ id: 123 }) };
+            }
+            if (query.includes("date(data) >= date('now','-7 days')")) {
+              return { first: async () => ({ minutos: 360 }) };
+            }
+            if (query.includes('COUNT(DISTINCT date(data)) AS dias')) {
+              return { first: async () => ({ dias: 5 }) };
+            }
+            if (query.includes("date(data) >= date('now','-28 days')")) {
+              return { first: async () => ({ minutos: 1200 }) };
+            }
+            if (query.includes('WITH score_base AS')) {
+              return { first: async () => ({ frms_score: 70, frms_status: 'critico' }) };
+            }
+            return {
+              first: async (): Promise<null> => null,
+              all: async () => ({ results: [] }),
+              run: async () => ({ meta: { changes: 0 } }),
+            };
+          },
+        };
+      }),
+    } as unknown as D1Database;
+
+    const response = await app.request(
+      '/frms/score-atual/123',
+      { method: 'GET', headers: { 'CF-Connecting-IP': '127.0.0.1' } },
+      { DB: db } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+
+    const hvQueries = preparedQueries.filter(
+      (q) => q.includes('SUM(COALESCE(horas_voo_minutos,0))') || q.includes('COUNT(DISTINCT date(data)) AS dias'),
+    );
+    // 7d HV, 28d HV e dias ativos 28d
+    expect(hvQueries.length).toBe(3);
+    for (const q of hvQueries) {
+      expect(q).toContain("UPPER(COALESCE(origem, '')) = 'SIGVOOS'");
+    }
+  });
 });

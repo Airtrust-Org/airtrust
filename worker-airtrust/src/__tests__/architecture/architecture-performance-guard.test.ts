@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const LARGE_FILE_LINE_CAPS = {
-  'routes/frms.ts': 3644,
+  'routes/frms.ts': 3649,
   'services/sigvoos-frms.ts': 2817,
   'routes/lms-cursos.ts': 2295,
   'routes/escalas-alocacoes.ts': 2268,
