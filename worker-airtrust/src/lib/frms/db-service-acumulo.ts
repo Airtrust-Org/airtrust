@@ -6,6 +6,10 @@ import type { FrmsJornada, LimitesMap, FrmsAcumuloRolling } from './types';
 import { diasNoMes, calcAcumuloMensal } from './calculos';
 import { dateOffset } from './db-service-shared';
 import { carregarLimites } from './db-service-config';
+import { buildCanonicalOperationalSourceSql } from './frms-source-policy';
+
+const CANONICAL_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('origem');
+const CANONICAL_JOINED_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('j.origem');
 
 export async function buscarAcumuloTripulante(
   db: D1Database,
@@ -70,6 +74,7 @@ export async function buscarAcumuloTripulante(
       .prepare(
         `SELECT strftime('%Y-%m', data) as mes FROM frms_jornada
          WHERE tripulante_id = ? AND deleted_at IS NULL
+           AND ${CANONICAL_JORNADA_SOURCE_SQL}
          ORDER BY data DESC LIMIT 1`,
       )
       .bind(tripulanteId)
@@ -79,7 +84,12 @@ export async function buscarAcumuloTripulante(
 
   const jornadas = await db
     .prepare(
-      "SELECT status, duracao_jornada_minutos, horas_voo_minutos FROM frms_jornada WHERE tripulante_id = ? AND data LIKE ? || '%' AND deleted_at IS NULL",
+      `SELECT status, duracao_jornada_minutos, horas_voo_minutos
+       FROM frms_jornada
+       WHERE tripulante_id = ?
+         AND data LIKE ? || '%'
+         AND deleted_at IS NULL
+         AND ${CANONICAL_JORNADA_SOURCE_SQL}`,
     )
     .bind(tripulanteId, mesConsulta)
     .all<Pick<FrmsJornada, 'status' | 'duracao_jornada_minutos' | 'horas_voo_minutos'>>();
@@ -89,7 +99,10 @@ export async function buscarAcumuloTripulante(
       `SELECT f.total_fatorizado_jornada, f.total_fatorizado_hv
        FROM frms_fatorizacao_jornada f
        JOIN frms_jornada j ON j.id = f.jornada_id AND j.deleted_at IS NULL
-       WHERE j.tripulante_id = ? AND j.data LIKE ? || '%' AND f.deleted_at IS NULL`,
+       WHERE j.tripulante_id = ?
+         AND j.data LIKE ? || '%'
+         AND f.deleted_at IS NULL
+         AND ${CANONICAL_JOINED_JORNADA_SOURCE_SQL}`,
     )
     .bind(tripulanteId, mesConsulta)
     .all<{ total_fatorizado_jornada: number; total_fatorizado_hv: number }>();
@@ -534,6 +547,7 @@ export async function buscarAcumuloFrota(
            AND j.deleted_at IS NULL
            AND j.data >= ?
            AND j.data <= ?
+           AND ${CANONICAL_JOINED_JORNADA_SOURCE_SQL}
          LEFT JOIN frms_acumulo_rolling ar ON ar.tripulante_id = t.tripulante_id
            AND ar.id = (
              SELECT ar2.id

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildCanonicalOperationalSourceSql,
   resolveFrmsSourceStatus,
   shouldUseForOperationalAlerts,
   shouldUseForOperationalFrms,
@@ -41,5 +42,11 @@ describe('frms source policy', () => {
 
     expect(decision.source_status).toBe('FIRA_NAO_OPERACIONAL');
     expect(decision.usado_no_frms_operacional).toBe(false);
+  });
+
+  it('expõe um predicado SQL reutilizável para a fonte canônica operacional', () => {
+    expect(buildCanonicalOperationalSourceSql('j.origem')).toBe(
+      "UPPER(COALESCE(j.origem, '')) = 'SIGVOOS'",
+    );
   });
 });

@@ -68,6 +68,22 @@ function createDbForFadigaAcumulada(
         all: async <T = unknown>() => {
           statements.push({ sql: normalized, binds });
           if (normalized.includes('FROM frms_jornada j')) {
+            if (normalized.includes('GROUP BY j.tripulante_id')) {
+              return {
+                results: [
+                  {
+                    tripulante_id: '7',
+                    nome: 'Dieter',
+                    guerra: 'Dieter',
+                    funcao: 'Comandante',
+                    total_jornada_min: 706,
+                    total_voo_min: 471,
+                    dias_jornada: 2,
+                    max_dia_ciclo: null,
+                  },
+                ] as T[],
+              };
+            }
             return {
               results: jornadaRows as T[],
             };
@@ -144,6 +160,9 @@ describe('frms fadiga acumulada contract', () => {
     expect(
       statements.some((item) => item.sql.includes('LEFT JOIN frms_acumulo_rolling ar')),
     ).toBe(true);
+    expect(
+      statements.some((item) => item.sql.includes("UPPER(COALESCE(j.origem, '')) = 'SIGVOOS'")),
+    ).toBe(true);
   });
 
   it('retorna campos de integridade quando jornada zerada tem HV positiva', async () => {
@@ -198,5 +217,40 @@ describe('frms fadiga acumulada contract', () => {
       horas_voo_minutos: 18,
     });
     expect(payload.data.resumo?.integridade_codigo).toBe('JORNADA_ZERO_COM_HV');
+  });
+
+  it('mantém /fadiga-acumulada/frota restrito à fonte operacional canônica SIGVOOS', async () => {
+    const { db, statements } = createDbForFadigaAcumulada();
+
+    const response = await frmsFadigaAcumuladaRoutes.fetch(
+      new Request('http://localhost/fadiga-acumulada/frota?mes=2026-06'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      success: boolean;
+      data: {
+        frota: Array<{
+          tripulante_id: string;
+          voo_horas: number;
+        }>;
+      };
+    };
+
+    expect(payload.success).toBe(true);
+    expect(payload.data.frota).toHaveLength(1);
+    expect(payload.data.frota[0]).toMatchObject({
+      tripulante_id: '7',
+      voo_horas: 7.8,
+    });
+    expect(
+      statements.some(
+        (item) =>
+          item.sql.includes('GROUP BY j.tripulante_id') &&
+          item.sql.includes("UPPER(COALESCE(j.origem, '')) = 'SIGVOOS'"),
+      ),
+    ).toBe(true);
   });
 });

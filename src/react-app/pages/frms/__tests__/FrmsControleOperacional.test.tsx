@@ -45,6 +45,7 @@ function baseHookState() {
       quinzena_atencao: 0,
       quinzena_critica: 0,
     },
+    meta: null,
     loading: false,
     error: null as string | null,
     unauthorized: false,
@@ -331,6 +332,22 @@ describe('FrmsControleOperacional', () => {
     });
   });
 
+  it('sem funcionario_id na URL e tripulante vazio nao envia filtro tecnico', () => {
+    mockSnapshotData([]);
+
+    renderControle(['/frms/controle-operacional?data_inicio=2026-06-01&data_fim=2026-06-05']);
+
+    const firstFilters = useFrmsOperationalSnapshotMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(firstFilters).toMatchObject({
+      data_inicio: '2026-06-01',
+      data_fim: '2026-06-05',
+      include_inconsistencies: true,
+    });
+    expect(firstFilters.funcionario_id).toBe('');
+    expect(screen.getByLabelText('Tripulante')).toHaveValue('');
+    expect(screen.queryByText('Filtro técnico ativo: exibindo apenas um tripulante.')).not.toBeInTheDocument();
+  });
+
   it('mostra aviso quando funcionario_id esta ativo via query string', () => {
     mockSnapshotData([]);
 
@@ -356,6 +373,46 @@ describe('FrmsControleOperacional', () => {
     });
 
     expect(screen.queryByText('Filtro técnico ativo: exibindo apenas um tripulante.')).not.toBeInTheDocument();
+  });
+
+  it('mostra aviso quando backend aplica escopo individual pelo perfil da sessao', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      buildHookState({
+        data: [],
+        meta: { scope: 'self', forced_funcionario_id: 41 },
+      }),
+    );
+
+    renderControle(['/frms/controle-operacional?data_inicio=2026-06-01&data_fim=2026-06-05']);
+
+    expect(screen.getByText('Filtro técnico ativo: exibindo apenas um tripulante.')).toBeInTheDocument();
+    expect(screen.getByText(/perfil da sessão \(funcionario_id=41\)/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Limpar filtro técnico' })).not.toBeInTheDocument();
+    expect(screen.getByText('Filtro tecnico ativo')).toBeInTheDocument();
+  });
+
+  it('reflete incluir inconsistencias no filtro enviado ao snapshot', async () => {
+    mockSnapshotData([]);
+
+    renderControle(['/frms/controle-operacional?data_inicio=2026-06-01&data_fim=2026-06-05']);
+
+    const inconsistencias = screen.getByLabelText('Incluir inconsistencias');
+    expect(inconsistencias).toBeChecked();
+
+    fireEvent.click(inconsistencias);
+    fireEvent.click(screen.getByText('Aplicar filtros'));
+
+    await waitFor(() => {
+      const calls = useFrmsOperationalSnapshotMock.mock.calls;
+      const lastFilters = calls[calls.length - 1]?.[0] as Record<string, unknown>;
+      expect(lastFilters.include_inconsistencies).toBe(false);
+    });
+
+    expect(
+      screen.getByText(
+        /Visao filtrada: inconsistencias foram ocultadas\. Os KPIs e a tabela refletem apenas o recorte sem excecoes\./i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('renderiza ciencia operacional vinculada aos tripulantes visiveis', () => {

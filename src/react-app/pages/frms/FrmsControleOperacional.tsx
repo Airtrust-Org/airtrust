@@ -346,7 +346,7 @@ export default function FrmsControleOperacional() {
     ],
   );
 
-  const { data, loading, error, unauthorized, refetch } = useFrmsOperationalSnapshot(snapshotFilters);
+  const { data, meta, loading, error, unauthorized, refetch } = useFrmsOperationalSnapshot(snapshotFilters);
   const readAck = useFrmsReadAckEvents(appliedFilters, {
     status: readAckStatus,
     event_type: readAckEventType || undefined,
@@ -375,8 +375,10 @@ export default function FrmsControleOperacional() {
     [readAck.events, visibleIds],
   );
   const technicalFilterSource = searchParams.get('funcionario_id')?.trim() || '';
+  const backendScopedFuncionarioId =
+    meta?.scope === 'self' && meta.forced_funcionario_id ? String(meta.forced_funcionario_id) : '';
   const technicalFilterValue = appliedFilters.funcionario_id?.trim() || draft.funcionario_id?.trim() || '';
-  const hasTechnicalFilter = Boolean(technicalFilterValue);
+  const hasTechnicalFilter = Boolean(technicalFilterValue || backendScopedFuncionarioId);
   const operationalSummary = useMemo(
     () => buildOperationalSummary(visibleItems, visibleReadAckEvents),
     [visibleItems, visibleReadAckEvents],
@@ -442,14 +444,18 @@ export default function FrmsControleOperacional() {
               <div>
                 <p className="font-semibold">Filtro técnico ativo: exibindo apenas um tripulante.</p>
                 <p className="text-xs text-amber-800">
-                  {technicalFilterSource
+                  {backendScopedFuncionarioId
+                    ? `Escopo aplicado pelo perfil da sessão (funcionario_id=${backendScopedFuncionarioId}).`
+                    : technicalFilterSource
                     ? `Origem: query string (funcionario_id=${technicalFilterSource}).`
                     : `Funcionario ID ativo: ${technicalFilterValue}.`}
                 </p>
               </div>
-              <Button variant="secondary" onClick={handleClearTechnicalFilter}>
-                Limpar filtro técnico
-              </Button>
+              {!backendScopedFuncionarioId && (
+                <Button variant="secondary" onClick={handleClearTechnicalFilter}>
+                  Limpar filtro técnico
+                </Button>
+              )}
             </div>
           )}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
@@ -551,7 +557,7 @@ export default function FrmsControleOperacional() {
                 }
                 className="h-4 w-4 accent-blue-600"
               />
-              Mostrar inconsistencias
+              Incluir inconsistencias
             </label>
             <details className="md:col-span-2 xl:col-span-2" open={hasTechnicalFilter || undefined}>
               <summary className="cursor-pointer pt-2 text-sm font-medium text-slate-600">
@@ -589,6 +595,12 @@ export default function FrmsControleOperacional() {
         {error && !unauthorized && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
+          </div>
+        )}
+
+        {!appliedFilters.include_inconsistencies && (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            Visao filtrada: inconsistencias foram ocultadas. Os KPIs e a tabela refletem apenas o recorte sem excecoes.
           </div>
         )}
 

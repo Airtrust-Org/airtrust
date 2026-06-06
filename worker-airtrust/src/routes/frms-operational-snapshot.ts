@@ -8,6 +8,7 @@ import {
   listFrmsOperationalSnapshot,
   type FrmsOperationalSnapshotFilters,
 } from '../lib/frms/operational-snapshot';
+import { canSeeFrmsTeamScope } from '../lib/frms/access';
 
 type SnapshotContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
 
@@ -43,22 +44,8 @@ const QuerySchema = z
     path: ['data_fim'],
   });
 
-function normalizeRole(value: unknown): string {
-  return String(value || '')
-    .trim()
-    .toUpperCase();
-}
-
 function canSeeTeam(c: SnapshotContext): boolean {
-  const role = normalizeRole(c.get('userRole'));
-  return (
-    role === 'ADMIN' ||
-    role === 'MANAGER' ||
-    role === 'GESTOR' ||
-    role === 'COORDENACAO' ||
-    role === 'COORDENADOR' ||
-    role === 'COORDINATOR'
-  );
+  return canSeeFrmsTeamScope(c.get('userRole'));
 }
 
 async function resolveOwnFuncionarioId(c: SnapshotContext, empresaId: number): Promise<number | null> {
@@ -146,8 +133,10 @@ router.get('/operational-snapshot', async (c) => {
       : undefined,
     include_inconsistencies: data.include_inconsistencies,
   };
+  const hasTeamScope = canSeeTeam(c);
+  let forcedFuncionarioId: number | undefined;
 
-  if (!canSeeTeam(c)) {
+  if (!hasTeamScope) {
     const ownFuncionarioId = await resolveOwnFuncionarioId(c, empresaId);
     if (!ownFuncionarioId) {
       return c.json(
@@ -160,6 +149,7 @@ router.get('/operational-snapshot', async (c) => {
     }
 
     filters.funcionario_id = ownFuncionarioId;
+    forcedFuncionarioId = ownFuncionarioId;
   }
 
   try {
@@ -174,6 +164,10 @@ router.get('/operational-snapshot', async (c) => {
       success: true,
       data: result.items,
       summary: result.summary,
+      meta: {
+        scope: hasTeamScope ? 'team' : 'self',
+        forced_funcionario_id: forcedFuncionarioId,
+      },
     });
   } catch (error) {
     return c.json(
