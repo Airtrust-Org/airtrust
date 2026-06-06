@@ -8,7 +8,9 @@ import {
   FileClock,
   MapPin,
   Mail,
+  Plus,
   ShieldCheck,
+  Trash2,
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,6 +25,7 @@ import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQu
 import {
   useAtualizarPresencaTreinamento,
   useAtualizarTreinamentoPlanejado,
+  useConcluirParticipanteTreinamento,
   useCriarTreinamentoPlanejado,
   useEnviarConvocacaoTreinamento,
   useExcluirTreinamentoPlanejado,
@@ -65,12 +68,30 @@ interface TreinamentoFormState {
   observacoes: string;
   local: string;
   data_prevista: string;
+  data_fim: string;
   hora_inicio: string;
   hora_fim: string;
   instrutor_id: string;
   carga_horaria_prevista: string;
   status: TreinamentoPlanejadoStatus;
   participante_ids: number[];
+  codigo_turma: string;
+  modalidade:
+    | 'TEORICO'
+    | 'SALA'
+    | 'PRATICO'
+    | 'MISTO'
+    | 'EAD'
+    | 'SIMULADOR'
+    | 'AERONAVE'
+    | 'VOO'
+    | 'CHEQUE'
+    | 'OUTRO';
+  base: string;
+  sala: string;
+  equipamento_descricao: string;
+  limite_participantes: string;
+  dias: Array<{ data: string; hora_inicio: string; hora_fim: string }>;
 }
 
 const STATUS_META: Record<TreinamentoPlanejadoStatus, { label: string; className: string }> = {
@@ -200,6 +221,22 @@ function getMonthRange(month: string): { inicio?: string; fim?: string } {
   };
 }
 
+function buildTrainingDays(start: string, end: string, horaInicio: string, horaFim: string) {
+  if (!start || !end || end < start) return [];
+  const result: Array<{ data: string; hora_inicio: string; hora_fim: string }> = [];
+  const cursor = new Date(`${start}T12:00:00`);
+  const last = new Date(`${end}T12:00:00`);
+  while (cursor <= last && result.length < 90) {
+    result.push({
+      data: cursor.toISOString().slice(0, 10),
+      hora_inicio: horaInicio,
+      hora_fim: horaFim,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return result;
+}
+
 function buildCalendarCells(month: string) {
   if (!/^\d{4}-\d{2}$/.test(month)) return [] as Array<{ date: string; outside: boolean }>;
   const [year, monthNumber] = month.split('-').map(Number);
@@ -243,12 +280,20 @@ function createEmptyForm(today: string): TreinamentoFormState {
     observacoes: '',
     local: '',
     data_prevista: today,
-    hora_inicio: '',
-    hora_fim: '',
+    data_fim: today,
+    hora_inicio: '08:00',
+    hora_fim: '17:00',
     instrutor_id: '',
     carga_horaria_prevista: '',
     status: 'PLANEJADO',
     participante_ids: [],
+    codigo_turma: '',
+    modalidade: 'TEORICO',
+    base: '',
+    sala: '',
+    equipamento_descricao: '',
+    limite_participantes: '',
+    dias: [{ data: today, hora_inicio: '08:00', hora_fim: '17:00' }],
   };
 }
 
@@ -260,8 +305,9 @@ function mapTreinamentoToForm(item: TreinamentoPlanejado): TreinamentoFormState 
     observacoes: item.observacoes || '',
     local: item.local || '',
     data_prevista: item.data_prevista,
-    hora_inicio: item.hora_inicio || '',
-    hora_fim: item.hora_fim || '',
+    data_fim: item.data_fim || item.data_prevista,
+    hora_inicio: item.hora_inicio || '08:00',
+    hora_fim: item.hora_fim || '17:00',
     instrutor_id: item.instrutor_id ? String(item.instrutor_id) : '',
     carga_horaria_prevista:
       item.carga_horaria_prevista === null || item.carga_horaria_prevista === undefined
@@ -269,6 +315,28 @@ function mapTreinamentoToForm(item: TreinamentoPlanejado): TreinamentoFormState 
         : String(item.carga_horaria_prevista),
     status: item.status,
     participante_ids: item.participantes.map((participante) => participante.funcionario_id),
+    codigo_turma: item.codigo_turma || '',
+    modalidade: item.modalidade || 'TEORICO',
+    base: item.base || '',
+    sala: item.sala || '',
+    equipamento_descricao: item.equipamento_descricao || '',
+    limite_participantes: item.limite_participantes ? String(item.limite_participantes) : '',
+    dias:
+      item.dias && item.dias.length > 0
+        ? item.dias
+            .filter((dia) => dia.status !== 'CANCELADO')
+            .map((dia) => ({
+              data: dia.data,
+              hora_inicio: dia.hora_inicio,
+              hora_fim: dia.hora_fim,
+            }))
+        : [
+            {
+              data: item.data_prevista,
+              hora_inicio: item.hora_inicio || '08:00',
+              hora_fim: item.hora_fim || '17:00',
+            },
+          ],
   };
 }
 
@@ -364,14 +432,24 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
   const criarTreinamento = useCriarTreinamentoPlanejado();
   const atualizarTreinamento = useAtualizarTreinamentoPlanejado();
   const atualizarPresenca = useAtualizarPresencaTreinamento();
+  const concluirParticipante = useConcluirParticipanteTreinamento();
   const excluirTreinamento = useExcluirTreinamentoPlanejado();
   const previewConvocacao = usePreviewConvocacaoTreinamento();
   const enviarConvocacao = useEnviarConvocacaoTreinamento();
   const reenviarConvocacao = useReenviarConvocacaoTreinamento();
 
-  const listaTreinamentos = treinamentosQuery.data?.items || [];
-  const calendarioTreinamentos = calendarioQuery.data?.items || [];
-  const auditoriaTreinamentos = auditoriaQuery.data?.items || [];
+  const listaTreinamentos = useMemo(
+    () => treinamentosQuery.data?.items || [],
+    [treinamentosQuery.data?.items],
+  );
+  const calendarioTreinamentos = useMemo(
+    () => calendarioQuery.data?.items || [],
+    [calendarioQuery.data?.items],
+  );
+  const auditoriaTreinamentos = useMemo(
+    () => auditoriaQuery.data?.items || [],
+    [auditoriaQuery.data?.items],
+  );
   const detalheTreinamento = detalheQuery.data || treinamentoEditando;
 
   const instrutores = useMemo(() => {
@@ -446,14 +524,28 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
   const eventosPorDia = useMemo(() => {
     const map = new Map<string, TreinamentoPlanejado[]>();
     calendarioTreinamentos.forEach((item) => {
-      const current = map.get(item.data_prevista) || [];
-      current.push(item);
-      current.sort((left, right) => {
-        const leftKey = `${left.hora_inicio || '99:99'}${getEventoTitulo(left)}`;
-        const rightKey = `${right.hora_inicio || '99:99'}${getEventoTitulo(right)}`;
-        return leftKey.localeCompare(rightKey);
+      const occurrences =
+        item.dias && item.dias.length > 0
+          ? item.dias
+              .filter((dia) => dia.status === 'ATIVO')
+              .map((dia) => ({
+                ...item,
+                data_prevista: dia.data,
+                hora_inicio: dia.hora_inicio,
+                hora_fim: dia.hora_fim,
+                local: dia.local || item.local,
+              }))
+          : [item];
+      occurrences.forEach((occurrence) => {
+        const current = map.get(occurrence.data_prevista) || [];
+        current.push(occurrence);
+        current.sort((left, right) => {
+          const leftKey = `${left.hora_inicio || '99:99'}${getEventoTitulo(left)}`;
+          const rightKey = `${right.hora_inicio || '99:99'}${getEventoTitulo(right)}`;
+          return leftKey.localeCompare(rightKey);
+        });
+        map.set(occurrence.data_prevista, current);
       });
-      map.set(item.data_prevista, current);
     });
     return map;
   }, [calendarioTreinamentos]);
@@ -502,6 +594,62 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
     });
   }
 
+  function atualizarIntervalo(dataInicial: string, dataFinal: string) {
+    setFormState((current) => ({
+      ...current,
+      data_prevista: dataInicial,
+      data_fim: dataFinal,
+      dias: buildTrainingDays(
+        dataInicial,
+        dataFinal,
+        normalizeTimeInput(current.hora_inicio) || '08:00',
+        normalizeTimeInput(current.hora_fim) || '17:00',
+      ),
+    }));
+  }
+
+  function atualizarDia(
+    index: number,
+    patch: Partial<{ data: string; hora_inicio: string; hora_fim: string }>,
+  ) {
+    setFormState((current) => ({
+      ...current,
+      dias: current.dias.map((dia, currentIndex) =>
+        currentIndex === index ? { ...dia, ...patch } : dia,
+      ),
+    }));
+  }
+
+  function adicionarDia() {
+    setFormState((current) => {
+      const lastDate = [...current.dias].sort((a, b) => a.data.localeCompare(b.data)).at(-1)?.data;
+      const next = new Date(`${lastDate || current.data_fim || current.data_prevista}T12:00:00`);
+      next.setDate(next.getDate() + 1);
+      return {
+        ...current,
+        data_fim:
+          next.toISOString().slice(0, 10) > current.data_fim
+            ? next.toISOString().slice(0, 10)
+            : current.data_fim,
+        dias: [
+          ...current.dias,
+          {
+            data: next.toISOString().slice(0, 10),
+            hora_inicio: normalizeTimeInput(current.hora_inicio) || '08:00',
+            hora_fim: normalizeTimeInput(current.hora_fim) || '17:00',
+          },
+        ],
+      };
+    });
+  }
+
+  function removerDia(index: number) {
+    setFormState((current) => ({
+      ...current,
+      dias: current.dias.filter((_, currentIndex) => currentIndex !== index),
+    }));
+  }
+
   async function salvarFormulario(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -517,6 +665,10 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
 
     if (!formState.data_prevista) {
       toast.error('Informe a data prevista do treinamento.');
+      return;
+    }
+    if (!formState.data_fim || formState.data_fim < formState.data_prevista) {
+      toast.error('A data final deve ser igual ou posterior à data inicial.');
       return;
     }
 
@@ -536,6 +688,27 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
       toast.error('O horario final precisa ser maior ou igual ao horario inicial.');
       return;
     }
+    if (
+      formState.limite_participantes &&
+      formState.participante_ids.length > Number(formState.limite_participantes)
+    ) {
+      toast.error('A quantidade de participantes excede o limite da turma.');
+      return;
+    }
+
+    const dias = formState.dias;
+    if (dias.length === 0) {
+      toast.error('A turma precisa possuir ao menos um dia efetivo.');
+      return;
+    }
+    if (new Set(dias.map((dia) => dia.data)).size !== dias.length) {
+      toast.error('Não é permitido repetir um dia efetivo.');
+      return;
+    }
+    if (dias.some((dia) => dia.hora_fim <= dia.hora_inicio)) {
+      toast.error('Cada dia deve terminar depois do horário inicial.');
+      return;
+    }
 
     const payload = {
       qualificacao_tipo_id: Number(formState.qualificacao_tipo_id),
@@ -544,6 +717,8 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
       observacoes: normalizeText(formState.observacoes),
       local: normalizeText(formState.local),
       data_prevista: formState.data_prevista,
+      data_inicio: formState.data_prevista,
+      data_fim: formState.data_fim,
       hora_inicio: horaInicioNormalizada || normalizeText(formState.hora_inicio),
       hora_fim: horaFimNormalizada || normalizeText(formState.hora_fim),
       instrutor_id: formState.instrutor_id ? Number(formState.instrutor_id) : null,
@@ -552,6 +727,20 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
         : null,
       status: formState.status,
       participante_ids: formState.participante_ids,
+      codigo_turma: normalizeText(formState.codigo_turma),
+      modalidade: formState.modalidade,
+      base: normalizeText(formState.base),
+      sala: normalizeText(formState.sala),
+      equipamento_descricao: normalizeText(formState.equipamento_descricao),
+      limite_participantes: formState.limite_participantes
+        ? Number(formState.limite_participantes)
+        : null,
+      instrutor_ids: formState.instrutor_id ? [Number(formState.instrutor_id)] : [],
+      dias: dias.map((dia) => ({
+        ...dia,
+        local: normalizeText(formState.local),
+        instrutor_id: formState.instrutor_id ? Number(formState.instrutor_id) : null,
+      })),
     };
 
     try {
@@ -623,6 +812,39 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
       toast.error(
         error instanceof Error ? error.message : 'Nao foi possivel atualizar a presenca.',
       );
+    }
+  }
+
+  async function concluirParticipanteIndividual(
+    participante: TreinamentoPlanejadoParticipante,
+    resultado: 'APROVADO' | 'REPROVADO' | 'INCOMPLETO' | 'CANCELADO',
+  ) {
+    if (!treinamentoSelecionadoId) return;
+    const dataConclusao =
+      resultado === 'APROVADO'
+        ? participante.data_conclusao_efetiva ||
+          detalheTreinamento?.data_fim ||
+          detalheTreinamento?.data_prevista ||
+          today
+        : null;
+    try {
+      const response = await concluirParticipante.mutateAsync({
+        id: treinamentoSelecionadoId,
+        input: {
+          funcionario_id: participante.funcionario_id,
+          resultado,
+          data_conclusao_efetiva: dataConclusao,
+          nota: participante.nota,
+          conceito: participante.conceito,
+        },
+      });
+      toast.success(
+        response.qualificacao_historico_id
+          ? 'Resultado salvo e qualificação oficial atualizada.'
+          : 'Resultado individual salvo.',
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível concluir o participante.');
     }
   }
 
@@ -706,7 +928,7 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
     return (
       <div className="p-6">
         <PageHeader
-          title="Treinamentos planejados"
+          title="Planejamento e Gestão de Treinamentos"
           subtitle="Calendario operacional e trilha de auditoria para treinamentos futuros."
         />
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
@@ -751,7 +973,7 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
           <div className="flex justify-end pb-2">{actionButtons}</div>
         ) : (
           <PageHeader
-            title="Treinamentos planejados"
+            title="Planejamento e Gestão de Treinamentos"
             subtitle="Calendario, quadro operacional e auditoria dos treinamentos futuros e seus convocados."
             actions={actionButtons}
           />
@@ -1197,6 +1419,20 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
             treinamentoEditando ? 'Editar treinamento planejado' : 'Novo treinamento planejado'
           }
           size="5xl"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setModalFormularioAberto(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                form="treinamento-planejado-form"
+                disabled={salvandoFormulario}
+              >
+                {salvandoFormulario ? 'Salvando...' : 'Salvar turma'}
+              </Button>
+            </>
+          }
         >
           <form id="treinamento-planejado-form" className="space-y-5" onSubmit={salvarFormulario}>
             <div className="grid gap-4 md:grid-cols-2">
@@ -1261,14 +1497,99 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
             </label>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Código da turma</span>
+                <input
+                  type="text"
+                  value={formState.codigo_turma}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, codigo_turma: event.target.value }))
+                  }
+                  placeholder="Ex.: CRM-2026-06-A"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Modalidade</span>
+                <select
+                  value={formState.modalidade}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      modalidade: event.target.value as TreinamentoFormState['modalidade'],
+                    }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                >
+                  <option value="TEORICO">Teórico</option>
+                  <option value="SALA">Sala de aula</option>
+                  <option value="PRATICO">Prático</option>
+                  <option value="MISTO">Misto</option>
+                  <option value="SIMULADOR">Simulador</option>
+                  <option value="EAD">EAD</option>
+                  <option value="AERONAVE">Aeronave</option>
+                  <option value="VOO">Voo de treinamento</option>
+                  <option value="CHEQUE">Cheque ou avaliação</option>
+                  <option value="OUTRO">Outro</option>
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Base</span>
+                <input
+                  type="text"
+                  value={formState.base}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, base: event.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Limite de participantes</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={formState.limite_participantes}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      limite_participantes: event.target.value,
+                    }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <label className="space-y-1.5 xl:col-span-1">
-                <span className="text-sm font-medium text-slate-700">Data prevista</span>
+                <span className="text-sm font-medium text-slate-700">Data inicial</span>
                 <input
                   type="date"
                   value={formState.data_prevista}
                   min={today}
+                  onChange={(event) => {
+                    const nextStart = event.target.value;
+                    const nextEnd =
+                      formState.data_fim < nextStart ? nextStart : formState.data_fim;
+                    atualizarIntervalo(nextStart, nextEnd);
+                  }}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+
+              <label className="space-y-1.5 xl:col-span-1">
+                <span className="text-sm font-medium text-slate-700">Data final</span>
+                <input
+                  type="date"
+                  value={formState.data_fim}
+                  min={formState.data_prevista || today}
                   onChange={(event) =>
-                    setFormState((current) => ({ ...current, data_prevista: event.target.value }))
+                    atualizarIntervalo(formState.data_prevista, event.target.value)
                   }
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
                 />
@@ -1279,7 +1600,11 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                 <TimeInput
                   value={formState.hora_inicio}
                   onChange={(value) =>
-                    setFormState((current) => ({ ...current, hora_inicio: value }))
+                    setFormState((current) => ({
+                      ...current,
+                      hora_inicio: value,
+                      dias: current.dias.map((dia) => ({ ...dia, hora_inicio: value })),
+                    }))
                   }
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
                 />
@@ -1290,7 +1615,11 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                 <TimeInput
                   value={formState.hora_fim}
                   onChange={(value) =>
-                    setFormState((current) => ({ ...current, hora_fim: value }))
+                    setFormState((current) => ({
+                      ...current,
+                      hora_fim: value,
+                      dias: current.dias.map((dia) => ({ ...dia, hora_fim: value })),
+                    }))
                   }
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
                 />
@@ -1309,6 +1638,90 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                       carga_horaria_prevista: event.target.value,
                     }))
                   }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+            </div>
+
+            <section className="border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Dias efetivos</h3>
+                  <p className="text-sm text-slate-500">
+                    Remova datas, adicione reposições e ajuste horários específicos.
+                  </p>
+                </div>
+                <Button type="button" variant="secondary" onClick={adicionarDia}>
+                  <Plus className="h-4 w-4" />
+                  Adicionar dia
+                </Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {formState.dias.map((dia, index) => (
+                  <div
+                    key={`${dia.data}-${index}`}
+                    className="grid gap-2 border-b border-slate-100 pb-3 sm:grid-cols-[1fr,120px,120px,40px]"
+                  >
+                    <input
+                      type="date"
+                      aria-label={`Data do dia ${index + 1}`}
+                      value={dia.data}
+                      onChange={(event) => atualizarDia(index, { data: event.target.value })}
+                      className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    />
+                    <TimeInput
+                      value={dia.hora_inicio}
+                      onChange={(value) => atualizarDia(index, { hora_inicio: value })}
+                      className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    />
+                    <TimeInput
+                      value={dia.hora_fim}
+                      onChange={(value) => atualizarDia(index, { hora_fim: value })}
+                      className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remover dia ${index + 1}`}
+                      title="Remover dia"
+                      onClick={() => removerDia(index)}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-rose-50 hover:text-rose-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                {formState.dias.length === 0 && (
+                  <p className="py-3 text-sm text-rose-700">
+                    Adicione ao menos um dia efetivo para salvar a turma.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Sala</span>
+                <input
+                  type="text"
+                  value={formState.sala}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, sala: event.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Equipamento</span>
+                <input
+                  type="text"
+                  value={formState.equipamento_descricao}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      equipamento_descricao: event.target.value,
+                    }))
+                  }
+                  placeholder="Projetor, mockup ou equipamento específico"
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
                 />
               </label>
@@ -1512,7 +1925,12 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                         Agenda
                       </p>
                       <p className="mt-2 text-sm font-semibold text-slate-900">
-                        {formatDateLabel(detalheTreinamento.data_prevista)}
+                        {formatDateLabel(detalheTreinamento.data_inicio || detalheTreinamento.data_prevista)}
+                        {(detalheTreinamento.data_fim || detalheTreinamento.data_prevista) !==
+                          (detalheTreinamento.data_inicio || detalheTreinamento.data_prevista) &&
+                          ` até ${formatDateLabel(
+                            detalheTreinamento.data_fim || detalheTreinamento.data_prevista,
+                          )}`}
                       </p>
                       <p className="mt-1 text-sm text-slate-500">
                         {formatHourRange(
@@ -1541,6 +1959,33 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                       </p>
                     </div>
                   </div>
+
+                  {(detalheTreinamento.dias || []).length > 0 && (
+                    <div className="mt-4 rounded-2xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+                        Dias da turma
+                      </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {(detalheTreinamento.dias || []).map((dia) => (
+                          <div
+                            key={dia.id}
+                            className="flex items-center justify-between border-b border-slate-100 py-2 text-sm"
+                          >
+                            <span className="font-medium text-slate-900">
+                              {formatDateLabel(dia.data)}
+                            </span>
+                            <span className="text-slate-500">
+                              {formatHourRange(dia.hora_inicio, dia.hora_fim)}
+                              {(dia.presencas || []).length > 0 &&
+                                ` · ${(dia.presencas || []).filter(
+                                  (presenca) => presenca.status === 'PRESENTE',
+                                ).length} presente(s)`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
                     <div className="rounded-2xl bg-white p-4">
@@ -1724,10 +2169,10 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    atualizarParticipante(participante, { aprovado: true })
+                                    concluirParticipanteIndividual(participante, 'APROVADO')
                                   }
                                   className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                    participante.aprovado === true
+                                    participante.resultado === 'APROVADO'
                                       ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
                                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                   }`}
@@ -1737,10 +2182,10 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    atualizarParticipante(participante, { aprovado: false })
+                                    concluirParticipanteIndividual(participante, 'REPROVADO')
                                   }
                                   className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                    participante.aprovado === false
+                                    participante.resultado === 'REPROVADO'
                                       ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
                                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                   }`}
@@ -1750,13 +2195,21 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    atualizarParticipante(participante, { aprovado: null })
+                                    concluirParticipanteIndividual(participante, 'INCOMPLETO')
                                   }
                                   className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
                                 >
-                                  Limpar
+                                  Incompleto
                                 </button>
                               </div>
+                              {participante.resultado === 'APROVADO' && (
+                                <p className="mt-2 text-xs text-slate-500">
+                                  Conclusão: {formatDateLabel(participante.data_conclusao_efetiva)}
+                                  {participante.qualificacao_historico_id
+                                    ? ` · Histórico #${participante.qualificacao_historico_id}`
+                                    : ''}
+                                </p>
+                              )}
                             </td>
                           </tr>
                         ))

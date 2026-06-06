@@ -25,6 +25,34 @@ export interface TreinamentoPlanejadoParticipante {
   nota: number | null;
   observacoes?: string | null;
   qualificacao_historico_id?: number | null;
+  status_participacao?: string | null;
+  resultado?: 'APROVADO' | 'REPROVADO' | 'INCOMPLETO' | 'CANCELADO' | null;
+  conceito?: string | null;
+  data_conclusao_efetiva?: string | null;
+  concluido_em?: string | null;
+}
+
+export interface TreinamentoPlanejadoDia {
+  id: number;
+  treinamento_id: number;
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
+  local?: string | null;
+  instrutor_id?: number | null;
+  instrutor_nome?: string | null;
+  simulador_id?: number | null;
+  aeronave_id?: number | null;
+  sessao_id?: number | null;
+  status: 'ATIVO' | 'CANCELADO' | 'SUBSTITUIDO';
+  observacoes?: string | null;
+  presencas?: Array<{
+    participante_id: number;
+    funcionario_id: number;
+    status: 'PENDENTE' | 'PRESENTE' | 'AUSENTE' | 'PARCIAL' | 'DISPENSADO';
+    minutos_presentes?: number | null;
+    observacoes?: string | null;
+  }>;
 }
 
 export interface TreinamentoPlanejadoAuditoria {
@@ -140,10 +168,36 @@ export interface TreinamentoPlanejado {
   created_by?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  codigo_turma?: string | null;
+  modalidade?:
+    | 'TEORICO'
+    | 'SALA'
+    | 'PRATICO'
+    | 'MISTO'
+    | 'EAD'
+    | 'SIMULADOR'
+    | 'AERONAVE'
+    | 'VOO'
+    | 'CHEQUE'
+    | 'OUTRO';
+  data_inicio?: string | null;
+  data_fim?: string | null;
+  base?: string | null;
+  sala?: string | null;
+  equipamento_descricao?: string | null;
+  limite_participantes?: number | null;
   convocados_total: number;
   confirmados_total: number;
   presentes_total: number;
   participantes: TreinamentoPlanejadoParticipante[];
+  dias?: TreinamentoPlanejadoDia[];
+  instrutores?: Array<{
+    funcionario_id: number;
+    nome?: string | null;
+    guerra?: string | null;
+    papel: string;
+    principal: boolean;
+  }>;
   auditoria?: TreinamentoPlanejadoAuditoria[];
   convocacoes_email?: TreinamentoPlanejadoConvocacaoEvent[];
 }
@@ -194,6 +248,36 @@ export interface TreinamentoPlanejadoInput {
   carga_horaria_prevista?: number | null;
   status?: TreinamentoPlanejadoStatus;
   participante_ids?: number[];
+  codigo_turma?: string | null;
+  modalidade?:
+    | 'TEORICO'
+    | 'SALA'
+    | 'PRATICO'
+    | 'MISTO'
+    | 'EAD'
+    | 'SIMULADOR'
+    | 'AERONAVE'
+    | 'VOO'
+    | 'CHEQUE'
+    | 'OUTRO';
+  data_inicio?: string;
+  data_fim?: string;
+  base?: string | null;
+  sala?: string | null;
+  equipamento_descricao?: string | null;
+  limite_participantes?: number | null;
+  instrutor_ids?: number[];
+  dias?: Array<{
+    data: string;
+    hora_inicio: string;
+    hora_fim: string;
+    local?: string | null;
+    instrutor_id?: number | null;
+    simulador_id?: number | null;
+    aeronave_id?: number | null;
+    sessao_id?: number | null;
+    observacoes?: string | null;
+  }>;
 }
 
 export interface TreinamentoPlanejadoPresencaInput {
@@ -361,6 +445,42 @@ export function useAtualizarPresencaTreinamento() {
   return useMutation({
     mutationFn: ({ id, input }: { id: number; input: TreinamentoPlanejadoPresencaInput }) =>
       request<{ id: number; funcionario_id: number }>(`/planejados/${id}/presenca`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateTreinamentosPlanejados(queryClient),
+        queryClient.invalidateQueries({ queryKey: KEYS.detail(variables.id) }),
+      ]);
+    },
+  });
+}
+
+export function useConcluirParticipanteTreinamento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: number;
+      input: {
+        funcionario_id: number;
+        resultado: 'APROVADO' | 'REPROVADO' | 'INCOMPLETO' | 'CANCELADO';
+        data_conclusao_efetiva: string | null;
+        nota?: number | null;
+        conceito?: string | null;
+        observacoes?: string | null;
+      };
+    }) =>
+      request<{
+        treinamento_id: number;
+        funcionario_id: number;
+        resultado: string;
+        qualificacao_historico_id: number | null;
+      }>(`/planejados/${id}/participantes/conclusao`, {
         method: 'PATCH',
         body: JSON.stringify(input),
       }),

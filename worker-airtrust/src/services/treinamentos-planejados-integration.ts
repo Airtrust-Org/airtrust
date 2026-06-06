@@ -35,14 +35,18 @@ type EventoContextRow = {
   titulo: string | null;
   descricao: string | null;
   observacoes: string | null;
+  codigo_turma: string | null;
 };
 
 type ParticipanteContextRow = {
+  id: number;
   funcionario_id: number;
   qualificacao_historico_id: number | null;
   confirmado: number | null;
   presente: number | null;
   aprovado: number | null;
+  resultado: string | null;
+  data_conclusao_efetiva: string | null;
 };
 
 type HistoricoPlanejadoRow = {
@@ -69,14 +73,22 @@ type RemovedParticipantLink = {
   qualificacao_historico_id?: number | null;
 };
 
+type GeneratedQualificationLinkRow = {
+  id: number;
+  qualificacao_historico_id: number;
+};
+
 const ORIGEM_PREFIX = 'Origem: Treinamento Planejado #';
 const DEFAULT_REQUEST_PREVIOUS_STATUS = 'APROVADA_OPS';
 const REQUEST_APPROVAL_STATUSES = new Set(['APROVADA_GESTOR', 'APROVADA_OPS']);
-const REQUEST_OPEN_STATUSES = new Set(['APROVADA_GESTOR', 'APROVADA_OPS', 'AGENDADA']);
 const REQUEST_REVERT_ALLOWED = new Set(['APROVADA_GESTOR', 'APROVADA_OPS']);
 
 function buildOrigemMarker(treinamentoId: number): string {
   return `${ORIGEM_PREFIX}${treinamentoId}`;
+}
+
+function buildTurmaLabel(evento: EventoContextRow): string {
+  return `Origem: Turma ${evento.codigo_turma || `#${evento.id}`}`;
 }
 
 function stripMarker(observacoes: string | null | undefined, marker: string): string | null {
@@ -113,12 +125,12 @@ function resolveTipoTreinamento(
 }
 
 function shouldCompleteParticipante(
-  evento: EventoContextRow,
   participante: ParticipanteContextRow,
 ) {
   return (
-    Number(participante.aprovado || 0) === 1 ||
-    (Number(participante.presente || 0) === 1 && evento.status === 'CONCLUIDO')
+    Number(participante.aprovado || 0) === 1 &&
+    String(participante.resultado || '').toUpperCase() === 'APROVADO' &&
+    Boolean(participante.data_conclusao_efetiva)
   );
 }
 
@@ -129,6 +141,19 @@ async function tabelaExiste(db: D1Database, nomeTabela: string): Promise<boolean
     .first<{ name: string }>();
 
   return Boolean(result?.name);
+}
+
+async function tabelaTemColunas(
+  db: D1Database,
+  nomeTabela: string,
+  colunasObrigatorias: string[],
+): Promise<boolean> {
+  if (!(await tabelaExiste(db, nomeTabela))) return false;
+  const result = await db
+    .prepare(`PRAGMA table_info('${nomeTabela.replaceAll("'", "''")}')`)
+    .all<{ name: string }>();
+  const columns = new Set((result.results || []).map((row) => row.name));
+  return colunasObrigatorias.every((column) => columns.has(column));
 }
 async function loadEventoContext(
   db: D1Database,
@@ -157,7 +182,8 @@ async function loadEventoContext(
                 t.carga_horaria_prevista,
                 t.titulo,
                 t.descricao,
-                t.observacoes
+                t.observacoes,
+                t.codigo_turma
            FROM treinamentos_planejados t
            LEFT JOIN qualificacoes_tipos qt ON qt.id = t.qualificacao_tipo_id AND qt.deleted_at IS NULL
            LEFT JOIN funcionarios instr ON instr.id = t.instrutor_id AND instr.deleted_at IS NULL
@@ -174,7 +200,8 @@ async function loadParticipantesContext(
 ): Promise<ParticipanteContextRow[]> {
   const rows = await db
     .prepare(
-      `SELECT funcionario_id, qualificacao_historico_id, confirmado, presente, aprovado
+      `SELECT id, funcionario_id, qualificacao_historico_id, confirmado, presente, aprovado,
+              resultado, data_conclusao_efetiva
          FROM treinamentos_participantes
         WHERE treinamento_id = ?
         ORDER BY funcionario_id`,
@@ -200,6 +227,100 @@ async function loadHistoricoById(
       .bind(historicoId, empresaId)
       .first<HistoricoPlanejadoRow>()) || null
   );
+}
+
+async function loadGeneratedQualificationLink(
+  db: D1Database,
+  empresaId: number,
+  treinamentoId: number,
+  participanteId: number,
+  qualificacaoTipoId: number,
+  dataConclusaoEfetiva: string,
+): Promise<GeneratedQualificationLinkRow | null> {
+  return (
+    (await db
+      .prepare(
+        `SELECT id, qualificacao_historico_id
+           FROM treinamentos_qualificacoes_geradas
+          WHERE empresa_id = ?
+            AND treinamento_id = ?
+            AND participante_id = ?
+            AND qualificacao_tipo_id = ?
+            AND data_conclusao_efetiva = ?
+          LIMIT 1`,
+      )
+      .bind(
+        empresaId,
+        treinamentoId,
+        participanteId,
+        qualificacaoTipoId,
+        dataConclusaoEfetiva,
+      )
+      .first<GeneratedQualificationLinkRow>()) || null
+  );
+}
+
+async function ensureGeneratedQualificationLink(
+  db: D1Database,
+  empresaId: number,
+  evento: EventoContextRow,
+  participante: ParticipanteContextRow,
+  qualificacaoHistoricoId: number,
+  dataConclusaoEfetiva: string,
+): Promise<GeneratedQualificationLinkRow> {
+  const existing = await loadGeneratedQualificationLink(
+    db,
+    empresaId,
+    evento.id,
+    participante.id,
+    evento.qualificacao_tipo_id,
+    dataConclusaoEfetiva,
+  );
+  if (existing) return existing;
+
+  try {
+    await db
+      .prepare(
+        `INSERT INTO treinamentos_qualificacoes_geradas
+          (empresa_id, treinamento_id, participante_id, funcionario_id, qualificacao_tipo_id,
+           qualificacao_historico_id, data_conclusao_efetiva)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        empresaId,
+        evento.id,
+        participante.id,
+        participante.funcionario_id,
+        evento.qualificacao_tipo_id,
+        qualificacaoHistoricoId,
+        dataConclusaoEfetiva,
+      )
+      .run();
+  } catch (error) {
+    const afterConflict = await loadGeneratedQualificationLink(
+      db,
+      empresaId,
+      evento.id,
+      participante.id,
+      evento.qualificacao_tipo_id,
+      dataConclusaoEfetiva,
+    );
+    if (afterConflict) return afterConflict;
+    throw error;
+  }
+
+  const inserted = await loadGeneratedQualificationLink(
+    db,
+    empresaId,
+    evento.id,
+    participante.id,
+    evento.qualificacao_tipo_id,
+    dataConclusaoEfetiva,
+  );
+  if (!inserted) {
+    throw new Error('Falha ao registrar vínculo idempotente da qualificação gerada.');
+  }
+  return inserted;
 }
 
 async function findHistoricoPlanejadoCandidate(
@@ -309,11 +430,30 @@ async function upsertHistoricoPlanejadoForParticipante(
     (normalizedExistingStatus === QUALIFICACAO_STATUS.CONCLUIDA ||
       normalizedExistingStatus === QUALIFICACAO_STATUS.RENOVADA)
   ) {
+    const completedObservacoes = mergeObservacoes(
+      existing.observacoes,
+      [evento.observacoes, buildTurmaLabel(evento)].filter(Boolean).join('\n'),
+      marker,
+    );
+    if (completedObservacoes !== existing.observacoes) {
+      await db
+        .prepare(
+          `UPDATE qualificacoes_historico
+              SET observacoes = ?, updated_at = datetime('now')
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(completedObservacoes, existing.id, empresaId)
+        .run();
+    }
     await updateParticipanteHistoricoLink(db, evento.id, participante.funcionario_id, existing.id);
     return { historicoId: existing.id, changed: false };
   }
 
-  const observacoes = mergeObservacoes(existing?.observacoes, evento.observacoes, marker);
+  const observacoes = mergeObservacoes(
+    existing?.observacoes,
+    [evento.observacoes, buildTurmaLabel(evento)].filter(Boolean).join('\n'),
+    marker,
+  );
 
   if (existing?.id) {
     await db
@@ -456,20 +596,50 @@ async function concluirHistoricoPlanejado(
     currentStatus === QUALIFICACAO_STATUS.CONCLUIDA ||
     currentStatus === QUALIFICACAO_STATUS.RENOVADA
   ) {
+    await ensureGeneratedQualificationLink(
+      db,
+      empresaId,
+      evento,
+      participante,
+      upserted.historicoId,
+      participante.data_conclusao_efetiva as string,
+    );
     return false;
   }
+
+  const dataConclusao = participante.data_conclusao_efetiva as string;
+  const validadeMeses =
+    typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
+      ? evento.qualificacao_validade
+      : 12;
+  const dataVencimento = calcularDataVencimento(
+    dataConclusao,
+    validadeMeses,
+    Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
+  );
 
   await db
     .prepare(
       `UPDATE qualificacoes_historico
           SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
+              data_conclusao = ?,
+              data_vencimento = ?,
               data_confirmacao = datetime('now'),
               confirmada_por = NULL,
               updated_at = datetime('now')
         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
-    .bind(upserted.historicoId, empresaId)
+    .bind(dataConclusao, dataVencimento, upserted.historicoId, empresaId)
     .run();
+
+  await ensureGeneratedQualificationLink(
+    db,
+    empresaId,
+    evento,
+    participante,
+    upserted.historicoId,
+    dataConclusao,
+  );
 
   const anterior = await db
     .prepare(
@@ -525,7 +695,14 @@ async function scheduleSolicitacoesForParticipante(
   evento: EventoContextRow,
   participante: ParticipanteContextRow,
 ): Promise<void> {
-  if (!(await tabelaExiste(db, 'solicitacoes_treinamento'))) return;
+  if (
+    !(await tabelaTemColunas(db, 'solicitacoes_treinamento', [
+      'status_pre_agendamento',
+      'treinamento_planejado_id',
+    ]))
+  ) {
+    return;
+  }
 
   const rows = await db
     .prepare(
@@ -568,7 +745,14 @@ async function unscheduleSolicitacoesLinkedToTraining(
   treinamentoId: number,
   funcionarioId: number,
 ): Promise<void> {
-  if (!(await tabelaExiste(db, 'solicitacoes_treinamento'))) return;
+  if (
+    !(await tabelaTemColunas(db, 'solicitacoes_treinamento', [
+      'status_pre_agendamento',
+      'treinamento_planejado_id',
+    ]))
+  ) {
+    return;
+  }
 
   const rows = await db
     .prepare(
@@ -610,7 +794,14 @@ async function concluirSolicitacoesLinkedToTraining(
   funcionarioId: number,
   dataRealizada: string,
 ): Promise<void> {
-  if (!(await tabelaExiste(db, 'solicitacoes_treinamento'))) return;
+  if (
+    !(await tabelaTemColunas(db, 'solicitacoes_treinamento', [
+      'status_pre_agendamento',
+      'treinamento_planejado_id',
+    ]))
+  ) {
+    return;
+  }
 
   await db
     .prepare(
@@ -693,7 +884,7 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
     historicoChanged = historicoChanged || upserted.changed;
     await scheduleSolicitacoesForParticipante(db, empresaId, evento, participante);
 
-    if (shouldCompleteParticipante(evento, participante)) {
+    if (shouldCompleteParticipante(participante)) {
       const completed = await concluirHistoricoPlanejado(db, empresaId, evento, participante);
       historicoChanged = historicoChanged || completed;
       await concluirSolicitacoesLinkedToTraining(
@@ -701,7 +892,7 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
         empresaId,
         treinamentoId,
         participante.funcionario_id,
-        evento.data_prevista,
+        participante.data_conclusao_efetiva as string,
       );
     }
   }

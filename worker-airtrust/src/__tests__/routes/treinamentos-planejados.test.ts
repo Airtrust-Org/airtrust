@@ -48,9 +48,14 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
       const trimmed = query.trim();
       const ddlPrefixes = ['CREATE TABLE', 'CREATE INDEX'];
       const ddlQuery = ddlPrefixes.some((prefix) => trimmed.startsWith(prefix));
+      const trainingClassQuery = [
+        'treinamentos_dias',
+        'treinamentos_instrutores',
+        'treinamentos_qualificacoes_geradas',
+      ].some((table) => query.includes(table));
 
       const entry = handlers.find(([matcher]) => query.includes(matcher));
-      if (!entry && !ddlQuery) {
+      if (!entry && !ddlQuery && !trainingClassQuery) {
         throw new Error(`Unhandled query: ${query}`);
       }
 
@@ -95,6 +100,18 @@ describe('treinamentos planejados router', () => {
 
   it('cria treinamento planejado com convocados', async () => {
     const { db, calls } = createMockDb([
+      [
+        'FROM qualificacoes_tipos',
+        {
+          first: () => ({ id: 9 }),
+        },
+      ],
+      [
+        'FROM funcionarios',
+        {
+          all: () => ({ results: [{ id: 4 }, { id: 11 }, { id: 12 }] }),
+        },
+      ],
       [
         'INSERT INTO treinamentos_planejados',
         {
@@ -159,6 +176,14 @@ describe('treinamentos planejados router', () => {
       'CRM Recorrente',
       null,
       null,
+      null,
+      'TEORICO',
+      '2026-06-20',
+      '2026-06-20',
+      null,
+      null,
+      null,
+      null,
       '99',
     ]);
 
@@ -179,6 +204,86 @@ describe('treinamentos planejados router', () => {
         acao: 'INSERT',
         registro_id: 21,
       }),
+    );
+  });
+
+  it('bloqueia modelo de qualificação de outro tenant ou inativo', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'FROM qualificacoes_tipos',
+        {
+          first: () => null,
+        },
+      ],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/planejados', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          qualificacao_tipo_id: 999,
+          titulo: 'Modelo inválido',
+          data_prevista: '2026-06-20',
+          participante_ids: [],
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('outro tenant'),
+    });
+    expect(calls.some((call) => call.query.includes('INSERT INTO treinamentos_planejados'))).toBe(
+      false,
+    );
+  });
+
+  it('bloqueia participante de outro tenant', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'FROM qualificacoes_tipos',
+        {
+          first: () => ({ id: 9 }),
+        },
+      ],
+      [
+        'FROM funcionarios',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/planejados', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          qualificacao_tipo_id: 9,
+          titulo: 'Participante inválido',
+          data_prevista: '2026-06-20',
+          participante_ids: [999],
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('Participante'),
+    });
+    expect(calls.some((call) => call.query.includes('INSERT INTO treinamentos_planejados'))).toBe(
+      false,
     );
   });
 

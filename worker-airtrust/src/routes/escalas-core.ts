@@ -55,6 +55,7 @@ import exportacao from './escalas-exportacao';
 import alocacoes from './escalas-alocacoes';
 import coberturaRoutes from './escalas-cobertura';
 import confirmacoes from './escalas-confirmacoes';
+import visaoMensalIntegrada from './escala-mensal-integrada';
 
 const escalas = new Hono<{ Bindings: Env }>();
 
@@ -72,6 +73,7 @@ escalas.route('/disponibilidade', disponibilidade);
 escalas.route('/tripulantes-operacionais', tripulantesOperacionais);
 escalas.route('/funcionarios/pilotos', pilotos);
 escalas.route('/preferencias', preferencias);
+escalas.route('/', visaoMensalIntegrada);
 
 // ================================================================
 // DIRECT ROUTES — must precede root-mounted modules to avoid /:id capture
@@ -237,7 +239,7 @@ escalas.post('/:id/notificar', auth(), requireRole('admin', 'manager'), async (c
     await db.batch(stmts);
 
     return c.json({ success: true, notificados: funcionarios.length });
-  } catch (e) {
+  } catch {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
@@ -312,7 +314,7 @@ escalas.get('/frms-score/:funcionarioId', auth(), async (c) => {
         nivel: score >= 95 ? 'critico' : score >= 80 ? 'alto' : score >= 50 ? 'medio' : 'baixo',
       },
     });
-  } catch (e) {
+  } catch {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
