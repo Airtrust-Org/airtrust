@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { invalidateMaterializedStatsMock, publishQualificacaoEventMock } = vi.hoisted(() => ({
@@ -135,12 +136,8 @@ function createMockDb(state: MockState): D1Database {
         }
 
         if (query.includes('FROM qualificacoes_historico') && query.includes('AND id <> ?')) {
-          const [empresaId, funcionarioId, qualificacaoCodigo, historicoId] = args as [
-            number,
-            number,
-            string,
-            number,
-          ];
+          const [empresaId, funcionarioId, qualificacaoCodigo, historicoId, dataConclusaoNova] =
+            args as [number, number, string, number, string];
           return (
             state.histories.find(
               (item) =>
@@ -149,7 +146,9 @@ function createMockDb(state: MockState): D1Database {
                 item.qualificacao_codigo === qualificacaoCodigo &&
                 item.id !== historicoId &&
                 item.status === 'CONCLUIDA' &&
-                item.renovada === 0,
+                item.renovada === 0 &&
+                // M5: só renova histórico ANTERIOR à nova conclusão.
+                (item.data_conclusao || '1900-01-01') < dataConclusaoNova,
             ) || null
           );
         }
@@ -174,6 +173,21 @@ function createMockDb(state: MockState): D1Database {
                 item.renovada === 0 &&
                 ((item.status === 'PLANEJADA' && item.data_conclusao === dataConclusao) ||
                   String(item.observacoes || '').includes(String(marker).replace(/%/g, ''))),
+            ) || null
+          );
+        }
+
+        if (
+          query.includes('FROM treinamentos_qualificacoes_geradas') &&
+          query.includes('qualificacao_historico_id = ?') &&
+          !query.includes('treinamento_id = ?')
+        ) {
+          // A4: lookup pela chave estável (qualificacao_historico_id).
+          const [empresaId, historicoId] = args as [number, number];
+          return (
+            state.generatedLinks.find(
+              (item) =>
+                item.empresa_id === empresaId && item.qualificacao_historico_id === historicoId,
             ) || null
           );
         }
@@ -321,6 +335,64 @@ function createMockDb(state: MockState): D1Database {
           });
 
           return { meta: { changes: 1, last_row_id: historicoId } };
+        }
+
+        if (query.includes('UPDATE treinamentos_qualificacoes_geradas')) {
+          // A4: atualização idempotente do vínculo pela chave estável.
+          const [
+            treinamentoId,
+            participanteId,
+            funcionarioId,
+            qualificacaoTipoId,
+            dataConclusaoEfetiva,
+            id,
+            empresaId,
+          ] = args as [number, number, number, number, string, number, number];
+          const link = state.generatedLinks.find(
+            (item) => item.id === id && item.empresa_id === empresaId,
+          );
+          if (link) {
+            link.treinamento_id = treinamentoId;
+            link.participante_id = participanteId;
+            link.funcionario_id = funcionarioId;
+            link.qualificacao_tipo_id = qualificacaoTipoId;
+            link.data_conclusao_efetiva = dataConclusaoEfetiva;
+          }
+          return { meta: { changes: link ? 1 : 0, last_row_id: 0 } };
+        }
+
+        if (
+          query.includes('UPDATE treinamentos_planejados') &&
+          query.includes('SET status = ?')
+        ) {
+          // M3: transição de ciclo de vida da turma.
+          const [status, treinamentoId, empresaId] = args as [string, number, number];
+          if (state.event.id === treinamentoId && state.event.empresa_id === empresaId) {
+            state.event.status = status;
+          }
+          return { meta: { changes: 1, last_row_id: 0 } };
+        }
+
+        if (
+          query.includes('UPDATE qualificacoes_historico') &&
+          query.includes('SET data_conclusao = ?, data_vencimento = ?') &&
+          !query.includes("status")
+        ) {
+          // A4: recálculo de data/vencimento em qualificação já concluída.
+          const [dataConclusao, dataVencimento, historicoId, empresaId] = args as [
+            string,
+            string,
+            number,
+            number,
+          ];
+          const history = state.histories.find(
+            (item) => item.id === historicoId && item.empresa_id === empresaId,
+          );
+          if (history) {
+            history.data_conclusao = dataConclusao;
+            history.data_vencimento = dataVencimento;
+          }
+          return { meta: { changes: history ? 1 : 0, last_row_id: 0 } };
         }
 
         if (query.includes('INSERT INTO treinamentos_qualificacoes_geradas')) {
@@ -807,5 +879,175 @@ describe('treinamentos planejados integration service', () => {
       data_conclusao_efetiva: '2026-06-22',
     });
     expect(invalidateMaterializedStatsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('A4: reconcluir com data corrigida atualiza o vínculo sem duplicar nem lançar erro', async () => {
+    const state = buildBaseState('EM_ANDAMENTO');
+    state.participants[0] = {
+      ...state.participants[0],
+      qualificacao_historico_id: 801,
+      presente: 1,
+      aprovado: 1,
+      resultado: 'APROVADO',
+      data_conclusao_efetiva: '2026-06-22',
+    };
+    state.histories = [
+      {
+        id: 801,
+        empresa_id: 1,
+        funcionario_id: 11,
+        qualificacao_id: 9,
+        qualificacao_codigo: 'CRM',
+        categoria: 'TREINAMENTO',
+        status: 'PLANEJADA',
+        observacoes: 'Checklist completo\nOrigem: Treinamento Planejado #77',
+        data_conclusao: '2026-06-20',
+        data_vencimento: '2027-06-20',
+        renovada: 0,
+      },
+    ];
+    const db = createMockDb(state);
+
+    // 1ª conclusão (data 2026-06-22)
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 });
+    expect(state.generatedLinks).toHaveLength(1);
+    expect(state.generatedLinks[0].data_conclusao_efetiva).toBe('2026-06-22');
+    expect(state.histories[0].status).toBe('CONCLUIDA');
+
+    // Correção de data: 2026-06-25 — não deve lançar, não deve duplicar.
+    state.participants[0].data_conclusao_efetiva = '2026-06-25';
+    await expect(
+      syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 }),
+    ).resolves.toBeUndefined();
+
+    expect(state.generatedLinks).toHaveLength(1);
+    expect(state.generatedLinks[0].data_conclusao_efetiva).toBe('2026-06-25');
+    expect(state.histories[0].data_conclusao).toBe('2026-06-25');
+  });
+
+  it('M5: conclusão retroativa renova apenas histórico anterior, preservando o mais novo', async () => {
+    const state = buildBaseState('CONCLUIDO');
+    state.participants[0] = {
+      ...state.participants[0],
+      qualificacao_historico_id: 801,
+      presente: 1,
+      aprovado: 1,
+      resultado: 'APROVADO',
+      data_conclusao_efetiva: '2026-06-22',
+    };
+    state.histories = [
+      {
+        id: 801,
+        empresa_id: 1,
+        funcionario_id: 11,
+        qualificacao_id: 9,
+        qualificacao_codigo: 'CRM',
+        categoria: 'TREINAMENTO',
+        status: 'PLANEJADA',
+        observacoes: 'Origem: Treinamento Planejado #77',
+        data_conclusao: '2026-06-20',
+        data_vencimento: '2027-06-20',
+        renovada: 0,
+      },
+      {
+        id: 700,
+        empresa_id: 1,
+        funcionario_id: 11,
+        qualificacao_id: 9,
+        qualificacao_codigo: 'CRM',
+        categoria: 'TREINAMENTO',
+        status: 'CONCLUIDA',
+        observacoes: 'Antigo',
+        data_conclusao: '2026-01-01',
+        data_vencimento: '2027-01-01',
+        renovada: 0,
+      },
+      {
+        id: 900,
+        empresa_id: 1,
+        funcionario_id: 11,
+        qualificacao_id: 9,
+        qualificacao_codigo: 'CRM',
+        categoria: 'TREINAMENTO',
+        status: 'CONCLUIDA',
+        observacoes: 'Mais novo',
+        data_conclusao: '2026-08-01',
+        data_vencimento: '2027-08-01',
+        renovada: 0,
+      },
+    ];
+    const db = createMockDb(state);
+
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 });
+
+    const byId = (id: number) => state.histories.find((h) => h.id === id)!;
+    expect(byId(801).status).toBe('CONCLUIDA');
+    // 700 é anterior a 2026-06-22 -> renovado.
+    expect(byId(700).status).toBe('RENOVADA');
+    expect(byId(700).renovada).toBe(1);
+    // 900 é posterior -> NÃO pode ser marcado como renovado por conclusão retroativa.
+    expect(byId(900).status).toBe('CONCLUIDA');
+    expect(byId(900).renovada).toBe(0);
+  });
+
+  it('M3: turma é encerrada (CONCLUIDO) quando todos os participantes têm resultado final', async () => {
+    const state = buildBaseState('PLANEJADO');
+    state.participants[0] = {
+      ...state.participants[0],
+      presente: 1,
+      aprovado: 1,
+      resultado: 'APROVADO',
+      data_conclusao_efetiva: '2026-06-22',
+    };
+    const db = createMockDb(state);
+
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 });
+
+    expect(state.event.status).toBe('CONCLUIDO');
+  });
+
+  it('A3: a conclusão via solicitações preenche resultado/data para emitir a qualificação', () => {
+    const source = readFileSync(
+      new URL('../../services/treinamentos-planejados-integration.ts', import.meta.url).pathname,
+      'utf8',
+    );
+    // O caminho legado (solicitações) deve usar a MESMA semântica do endpoint novo:
+    // sem preencher resultado + data_conclusao_efetiva, shouldCompleteParticipante não
+    // dispara e a qualificação ficaria presa em PLANEJADA (bug A3).
+    expect(source).toContain("resultado = COALESCE(NULLIF(resultado, ''), 'APROVADO')");
+    expect(source).toContain('data_conclusao_efetiva = COALESCE(data_conclusao_efetiva, ?)');
+  });
+
+  it('M3: turma fica EM_ANDAMENTO quando há resultado parcial entre participantes', async () => {
+    const state = buildBaseState('PLANEJADO');
+    state.participants = [
+      {
+        id: 501,
+        treinamento_id: 77,
+        funcionario_id: 11,
+        qualificacao_historico_id: null,
+        confirmado: 1,
+        presente: 1,
+        aprovado: 1,
+        resultado: 'APROVADO',
+        data_conclusao_efetiva: '2026-06-22',
+      },
+      {
+        id: 502,
+        treinamento_id: 77,
+        funcionario_id: 12,
+        qualificacao_historico_id: null,
+        confirmado: 1,
+        presente: null,
+        aprovado: null,
+        resultado: null,
+        data_conclusao_efetiva: null,
+      },
+    ];
+    const db = createMockDb(state);
+
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 });
+
+    expect(state.event.status).toBe('EM_ANDAMENTO');
   });
 });

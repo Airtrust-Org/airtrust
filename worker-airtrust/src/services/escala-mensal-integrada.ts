@@ -238,15 +238,24 @@ export function summarizeEvents(events: IntegratedMonthlyEvent[]) {
 export function dedupeIntegratedEvents(events: IntegratedMonthlyEvent[]): IntegratedMonthlyEvent[] {
   const seen = new Map<string, IntegratedMonthlyEvent>();
   for (const event of events) {
-    const key = [
-      event.source,
-      event.sourceId ?? event.id,
-      event.employeeId,
-      event.date,
-      event.startAt || '',
-      event.endAt || '',
-      event.type,
-    ].join('|');
+    // B1/M6: quando o evento carrega uma chave canônica (turma↔sessão de simulador),
+    // ela é a identidade do compromisso — colapsa duplicatas turma/simulador inclusive
+    // para instrutores. Caso contrário, usa a chave composta tradicional.
+    const canonicalKey =
+      typeof event.metadata?.canonicalDedupKey === 'string' && event.metadata.canonicalDedupKey
+        ? `CANON|${event.employeeId}|${event.metadata.canonicalDedupKey}`
+        : null;
+    const key =
+      canonicalKey ||
+      [
+        event.source,
+        event.sourceId ?? event.id,
+        event.employeeId,
+        event.date,
+        event.startAt || '',
+        event.endAt || '',
+        event.type,
+      ].join('|');
     const existing = seen.get(key);
     if (!existing) {
       seen.set(key, event);
@@ -281,6 +290,18 @@ export function buildConflictEvents(events: IntegratedMonthlyEvent[]): Integrate
         const a = employeeEvents[i];
         const b = employeeEvents[j];
         if (a.source === b.source && a.sourceId === b.sourceId) continue;
+        // M7: duas linhas técnicas de ESCALA no mesmo dia (ex.: situação administrativa
+        // + alocação operacional) são representações do mesmo compromisso, não conflito
+        // real. A incompatibilidade interna de escala é tratada pelo módulo de escalas
+        // (escalas-conflitos); aqui detectamos apenas conflitos CRUZADOS entre módulos.
+        if (a.source === 'ESCALA' && b.source === 'ESCALA') continue;
+        // M6/B1: dois eventos que compartilham a mesma chave canônica (ex.: um dia de
+        // turma vinculado a uma sessão de simulador e o próprio evento da sessão, para
+        // o mesmo tripulante/instrutor) são o MESMO compromisso — não devem conflitar
+        // nem ser contados duas vezes.
+        const aCanonical = typeof a.metadata?.canonicalDedupKey === 'string' ? a.metadata.canonicalDedupKey : null;
+        const bCanonical = typeof b.metadata?.canonicalDedupKey === 'string' ? b.metadata.canonicalDedupKey : null;
+        if (aCanonical && bCanonical && aCanonical === bCanonical) continue;
         if (!eventsOverlap(a, b)) continue;
         const hasOperational = a.source === 'ESCALA' || b.source === 'ESCALA';
         const hasBlockingSource =
@@ -333,6 +354,7 @@ function bindEmployeeFilters(base: unknown[], filters: IntegratedMonthlyFilters)
   const bindings = [...base];
   if (filters.employeeId) bindings.push(filters.employeeId);
   if (filters.baseId) bindings.push(filters.baseId);
+  if (filters.funcaoId) bindings.push(filters.funcaoId);
   return bindings;
 }
 
@@ -340,6 +362,9 @@ function employeeFilterSql(alias = 'f', filters: IntegratedMonthlyFilters): stri
   const parts: string[] = [];
   if (filters.employeeId) parts.push(`AND CAST(${alias}.id AS TEXT) = ?`);
   if (filters.baseId) parts.push(`AND COALESCE(${alias}.base, '') = ?`);
+  // M1: a função é exposta no contrato e deve filtrar de fato (não pode ser no-op).
+  // Compara contra função/cargo do funcionário; aceita id/código textual.
+  if (filters.funcaoId) parts.push(`AND COALESCE(${alias}.funcao, ${alias}.cargo, '') = ?`);
   return parts.join('\n');
 }
 
@@ -729,16 +754,20 @@ async function loadQualificacaoEvents(db: D1Database, empresaId: number, month: 
         AND ${vencimentoExpr} IS NOT NULL
         AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days')
         AND qh.id IN (
+          -- A2: a seleção do registro mais recente DEVE ser isolada por tenant.
+          -- Sem o filtro/grouping por empresa_id, um registro mais novo de OUTRO
+          -- tenant (mesmo CPF) suprimiria o alerta do tenant correto (falso negativo).
           SELECT MAX(id)
           FROM qualificacoes_historico
           WHERE deleted_at IS NULL
-          GROUP BY COALESCE(funcionario_cpf, CAST(funcionario_id AS TEXT)), qualificacao_codigo
+            AND empresa_id = ?
+          GROUP BY empresa_id, COALESCE(funcionario_cpf, CAST(funcionario_id AS TEXT)), qualificacao_codigo
         )
         ${employeeFilterSql('f', filters)}
       ORDER BY date(data_vencimento), f.nome
       `,
     )
-    .bind(...bindEmployeeFilters([month.startDate, empresaId, month.endDate, alertaDias], filters))
+    .bind(...bindEmployeeFilters([month.startDate, empresaId, month.endDate, alertaDias, empresaId], filters))
     .all<Record<string, unknown>>();
 
   return (rows.results || []).map((row) => {
@@ -807,6 +836,7 @@ async function loadFrmsEvents(db: D1Database, empresaId: number, month: MonthRan
         a.mensagem,
         a.percentual_atingido,
         a.resolvido,
+        j.data AS jornada_data,
         COALESCE(j.data, a.created_at) AS data_ref,
         COALESCE(NULLIF(f.guerra, ''), f.nome) AS funcionario_nome
       FROM frms_alerta a
@@ -828,6 +858,10 @@ async function loadFrmsEvents(db: D1Database, empresaId: number, month: MonthRan
     const nivel = String(row.nivel || '').toUpperCase();
     const severity: IntegratedMonthlyEventSeverity =
       nivel === 'VIOLACAO' || nivel === 'CRITICO' ? 'BLOCKING' : nivel === 'ATENCAO' ? 'WARNING' : 'INFO';
+    // M10: a data operacional confiável é a da jornada. Quando ausente, caímos em
+    // created_at apenas para não ocultar o alerta, mas sinalizamos a inconsistência
+    // (dateReliable=false) para a UI poder marcar a fonte como parcial/aproximada.
+    const dateReliable = Boolean(normalizeText(row.jornada_data));
     return {
       id: `FRMS:${row.id}`,
       source: 'FRMS' as const,
@@ -848,6 +882,8 @@ async function loadFrmsEvents(db: D1Database, empresaId: number, month: MonthRan
         jornadaId: row.jornada_id,
         percent: row.percentual_atingido,
         sensitiveFieldsOmitted: true,
+        dateSource: dateReliable ? 'jornada' : 'created_at',
+        dateReliable,
         rule: 'FRMS_ALERTA_PERSISTIDO_SEM_IA',
       },
     };
@@ -950,7 +986,18 @@ export async function buildIntegratedMonthlyView(params: BuildIntegratedMonthlyP
   const conflictEvents = buildConflictEvents(baseEvents);
   let events = dedupeIntegratedEvents([...baseEvents, ...conflictEvents]);
   if (filters.severity) {
-    events = events.filter((event) => event.severity === filters.severity);
+    // B4: ao filtrar por severidade, preserva também os eventos referenciados por um
+    // conflito que sobreviveu ao filtro, para não deixar conflitos órfãos apontando
+    // para eventos removidos.
+    const kept = events.filter((event) => event.severity === filters.severity);
+    const referencedIds = new Set<string>();
+    for (const event of kept) {
+      const ids = event.metadata?.eventIds;
+      if (Array.isArray(ids)) ids.forEach((id) => referencedIds.add(String(id)));
+    }
+    events = events.filter(
+      (event) => event.severity === filters.severity || referencedIds.has(String(event.id)),
+    );
   }
 
   const summary = summarizeEvents(events);
