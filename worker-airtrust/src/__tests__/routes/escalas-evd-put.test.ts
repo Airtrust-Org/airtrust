@@ -231,6 +231,31 @@ describe('EVD PUT operational guard', () => {
     expect(calls.some((call) => call.method === 'run' && call.query.includes('UPDATE escala_voo_diaria SET'))).toBe(false);
   });
 
+  it('A1: alterar a tripulação faz a EVD consultar compromissos de treinamento do tripulante', async () => {
+    const { db, calls } = createMockDb();
+    const app = createApp();
+
+    const response = await app.fetch(
+      new Request('http://localhost/evd/evd-1', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', 'x-role': 'manager', 'x-empresa-id': '1' },
+        // pic_id é campo crítico -> dispara as checagens operacionais.
+        body: JSON.stringify({ pic_id: 303 }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    // A EVD passou a enxergar treinamento como compromisso operacional: deve consultar
+    // treinamentos_dias para o novo PIC (303).
+    const trainingQuery = calls.find(
+      (call) => call.method === 'first' && call.query.includes('treinamentos_dias'),
+    );
+    expect(trainingQuery).toBeDefined();
+    expect(trainingQuery?.args).toEqual(expect.arrayContaining([303]));
+  });
+
   it('blocks invalid composition when PIC and SIC are the same in PUT', async () => {
     const { db } = createMockDb();
     const app = createApp();

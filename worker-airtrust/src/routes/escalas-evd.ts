@@ -518,6 +518,108 @@ async function validateCrewAvailabilityOnMonthlyScale(params: {
   return { blocked: false };
 }
 
+type TrainingCommitment = {
+  treinamentoId: number;
+  titulo: string;
+  codigoTurma: string | null;
+  status: string;
+  horaInicio: string | null;
+  horaFim: string | null;
+  confirmed: boolean;
+};
+
+/**
+ * A1: a EVD precisa enxergar treinamentos como compromisso operacional. Política
+ * centralizada no backend (não duplicada no frontend):
+ *  - turma CONFIRMADO/EM_ANDAMENTO sobreposta -> conflito operacional (exige justificativa);
+ *  - turma PLANEJADO (ainda não confirmada) -> aviso informativo (não exige justificativa);
+ *  - turma CANCELADO/CONCLUIDO -> ignorada.
+ * Considera dias efetivos (treinamentos_dias) e turmas legadas sem dias (data_prevista),
+ * para participante, instrutor (tabela nova) e instrutor_id legado.
+ */
+async function findTrainingCommitment(
+  db: D1Database,
+  empresaId: number,
+  funcionarioId: number,
+  data: string,
+): Promise<TrainingCommitment | null> {
+  const map = (row: Record<string, unknown> | null): TrainingCommitment | null => {
+    if (!row) return null;
+    const status = String(row.status || 'PLANEJADO').toUpperCase();
+    return {
+      treinamentoId: Number(row.id),
+      titulo: String(row.titulo || row.codigo_turma || 'Treinamento'),
+      codigoTurma: (row.codigo_turma as string | null) || null,
+      status,
+      horaInicio: (row.hora_inicio as string | null) || null,
+      horaFim: (row.hora_fim as string | null) || null,
+      confirmed: status === 'CONFIRMADO' || status === 'EM_ANDAMENTO',
+    };
+  };
+
+  const personFilter = `AND (
+        EXISTS (SELECT 1 FROM treinamentos_participantes tp WHERE tp.treinamento_id = t.id AND tp.funcionario_id = ?)
+        OR EXISTS (SELECT 1 FROM treinamentos_instrutores ti WHERE ti.treinamento_id = t.id AND ti.funcionario_id = ?)
+        OR t.instrutor_id = ?
+      )`;
+
+  try {
+  // Dias efetivos (turmas com cronograma).
+  const fromDays = await db
+    .prepare(
+      `SELECT t.id, t.titulo, t.codigo_turma,
+              UPPER(COALESCE(t.status, 'PLANEJADO')) AS status,
+              td.hora_inicio, td.hora_fim
+         FROM treinamentos_dias td
+         INNER JOIN treinamentos_planejados t
+           ON t.id = td.treinamento_id AND t.empresa_id = ? AND t.deleted_at IS NULL
+        WHERE td.empresa_id = ?
+          AND td.deleted_at IS NULL
+          AND td.status = 'ATIVO'
+          AND date(td.data) = date(?)
+          AND UPPER(COALESCE(t.status, 'PLANEJADO')) NOT IN ('CANCELADO', 'CONCLUIDO')
+          ${personFilter}
+        ORDER BY CASE WHEN UPPER(COALESCE(t.status, 'PLANEJADO')) IN ('CONFIRMADO', 'EM_ANDAMENTO') THEN 0 ELSE 1 END,
+                 td.hora_inicio
+        LIMIT 1`,
+    )
+    .bind(empresaId, empresaId, data, funcionarioId, funcionarioId, funcionarioId)
+    .first<Record<string, unknown>>();
+  if (fromDays) return map(fromDays);
+
+  // Turmas legadas sem dias efetivos (usa data_prevista/data_inicio).
+  const fromLegacy = await db
+    .prepare(
+      `SELECT t.id, t.titulo, t.codigo_turma,
+              UPPER(COALESCE(t.status, 'PLANEJADO')) AS status,
+              t.hora_inicio, t.hora_fim
+         FROM treinamentos_planejados t
+        WHERE t.empresa_id = ?
+          AND t.deleted_at IS NULL
+          AND UPPER(COALESCE(t.status, 'PLANEJADO')) NOT IN ('CANCELADO', 'CONCLUIDO')
+          AND date(COALESCE(t.data_prevista, t.data_inicio)) = date(?)
+          AND NOT EXISTS (
+            SELECT 1 FROM treinamentos_dias d
+             WHERE d.treinamento_id = t.id AND d.deleted_at IS NULL
+          )
+          ${personFilter}
+        ORDER BY CASE WHEN UPPER(COALESCE(t.status, 'PLANEJADO')) IN ('CONFIRMADO', 'EM_ANDAMENTO') THEN 0 ELSE 1 END
+        LIMIT 1`,
+    )
+    .bind(empresaId, data, funcionarioId, funcionarioId, funcionarioId)
+    .first<Record<string, unknown>>();
+  return map(fromLegacy);
+  } catch (error) {
+    // Resiliência (§18): falha ao consultar a fonte de treinamento NÃO pode quebrar o
+    // fluxo crítico da EVD. Degrada para "sem compromisso detectado" e registra o erro.
+    console.error('evd_training_commitment_check_failed', {
+      funcionarioId,
+      error: (error as Error)?.message,
+    });
+    return null;
+  }
+}
+
 async function collectOperationalWarningsAndBlocks(params: {
   db: D1Database;
   empresaId: number;
@@ -587,6 +689,26 @@ async function collectOperationalWarningsAndBlocks(params: {
       // Divergencia com escala mensal: permitir salvar, mas exigir justificativa.
       warnings.push(`Conflito escala mensal: ${availability.message}`);
       requiresOperationalJustification = true;
+    }
+
+    // A1: treinamento como compromisso operacional (política centralizada).
+    const training = await findTrainingCommitment(params.db, params.empresaId, crewId, params.data);
+    if (training) {
+      const turma = training.codigoTurma ? ` [${training.codigoTurma}]` : '';
+      const horario =
+        training.horaInicio && training.horaFim
+          ? ` ${training.horaInicio}–${training.horaFim}`
+          : '';
+      if (training.confirmed) {
+        warnings.push(
+          `Conflito com treinamento ${training.status === 'EM_ANDAMENTO' ? 'em andamento' : 'confirmado'}: ${training.titulo}${turma}${horario}. Tripulante ${crewId}.`,
+        );
+        requiresOperationalJustification = true;
+      } else {
+        warnings.push(
+          `Tripulante ${crewId} possui treinamento planejado: ${training.titulo}${turma}${horario}. Confirme a disponibilidade.`,
+        );
+      }
     }
   }
 

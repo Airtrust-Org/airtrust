@@ -10,8 +10,11 @@ const LARGE_FILE_LINE_CAPS = {
   'services/sigvoos-frms.ts': 2817,
   'routes/lms-cursos.ts': 2295,
   'routes/escalas-alocacoes.ts': 2268,
-  'routes/escalas-evd.ts': 2040,
-  'routes/treinamentos-planejados.ts': 2207,
+  // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
+  'routes/escalas-evd.ts': 2162,
+  // Acknowledged growth (audit remediation B2/M4/M12): resource-tenant validation,
+  // orphan cleanup and create dedupe/atomic rollback.
+  'routes/treinamentos-planejados.ts': 2336,
 } as const;
 
 const SQL_PREPARE_CAPS = {
@@ -19,6 +22,8 @@ const SQL_PREPARE_CAPS = {
   'routes/auth.ts': 52,
   'routes/simuladores-sessoes-update.ts': 48,
   'routes/lms-cursos.ts': 44,
+  // Acknowledged (B2/M4/M12 remediation): added resource validation + create rollback.
+  'routes/treinamentos-planejados.ts': 42,
 } as const;
 
 const HIGH_SQL_LIMIT_CAPS = {

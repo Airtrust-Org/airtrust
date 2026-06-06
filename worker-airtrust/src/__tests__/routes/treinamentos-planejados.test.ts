@@ -113,13 +113,20 @@ describe('treinamentos planejados router', () => {
         },
       ],
       [
+        // M12: janela de deduplicação de duplo-submit — sem turma recente idêntica.
+        "-20 seconds",
+        {
+          first: () => null,
+        },
+      ],
+      [
         'INSERT INTO treinamentos_planejados',
         {
           run: () => ({ meta: { changes: 1, last_row_id: 21 } }),
         },
       ],
       [
-        'SELECT funcionario_id FROM treinamentos_participantes WHERE treinamento_id = ?',
+        'FROM treinamentos_participantes WHERE treinamento_id = ?',
         {
           all: () => ({ results: [] }),
         },
@@ -281,6 +288,79 @@ describe('treinamentos planejados router', () => {
     await expect(response.json()).resolves.toMatchObject({
       success: false,
       error: expect.stringContaining('Participante'),
+    });
+    expect(calls.some((call) => call.query.includes('INSERT INTO treinamentos_planejados'))).toBe(
+      false,
+    );
+  });
+
+  it('B2: rejeita recurso (simulador) de outro tenant referenciado num dia', async () => {
+    const { db, calls } = createMockDb([
+      ['FROM qualificacoes_tipos', { first: () => ({ id: 9 }) }],
+      ['FROM funcionarios', { all: () => ({ results: [{ id: 11 }] }) }],
+      // simulador 777 não pertence ao tenant -> nenhum resultado.
+      ['FROM simuladores', { all: () => ({ results: [] }) }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/planejados', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          qualificacao_tipo_id: 9,
+          titulo: 'Turma com simulador inválido',
+          data_prevista: '2026-06-20',
+          participante_ids: [11],
+          dias: [
+            { data: '2026-06-20', hora_inicio: '08:00', hora_fim: '12:00', simulador_id: 777 },
+          ],
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('Simulador'),
+    });
+    expect(calls.some((call) => call.query.includes('INSERT INTO treinamentos_planejados'))).toBe(
+      false,
+    );
+  });
+
+  it('M12: duplo-submit retorna a turma existente (idempotente) sem inserir de novo', async () => {
+    const { db, calls } = createMockDb([
+      ['FROM qualificacoes_tipos', { first: () => ({ id: 9 }) }],
+      ['FROM funcionarios', { all: () => ({ results: [{ id: 11 }] }) }],
+      // M12: janela de dedupe encontra uma turma idêntica recém-criada.
+      ['-20 seconds', { first: () => ({ id: 55 }) }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/planejados', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          qualificacao_tipo_id: 9,
+          titulo: 'CRM Recorrente',
+          data_prevista: '2026-06-20',
+          participante_ids: [11],
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { id: 55, deduplicated: true },
     });
     expect(calls.some((call) => call.query.includes('INSERT INTO treinamentos_planejados'))).toBe(
       false,
