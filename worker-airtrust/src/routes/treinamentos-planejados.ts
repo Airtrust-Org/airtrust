@@ -292,12 +292,50 @@ function normalizePositiveIds(values: number[]): number[] {
   return [...new Set(values.filter((value) => Number.isInteger(value) && value > 0))];
 }
 
+function collectResourceIdsFromDias(
+  dias?: Array<{ simulador_id?: number | null; aeronave_id?: number | null; sessao_id?: number | null }>,
+): { simuladorIds: number[]; aeronaveIds: number[]; sessaoIds: number[] } {
+  const list = dias || [];
+  return {
+    simuladorIds: normalizePositiveIds(list.map((dia) => Number(dia.simulador_id || 0))),
+    aeronaveIds: normalizePositiveIds(list.map((dia) => Number(dia.aeronave_id || 0))),
+    sessaoIds: normalizePositiveIds(list.map((dia) => Number(dia.sessao_id || 0))),
+  };
+}
+
+async function validateResourceTenant(
+  db: D1Database,
+  empresaId: number,
+  table: 'simuladores' | 'aeronaves' | 'simulador_agendamentos',
+  ids: number[],
+  label: string,
+): Promise<string | null> {
+  const unique = normalizePositiveIds(ids);
+  if (unique.length === 0) return null;
+  const placeholders = unique.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `SELECT id FROM ${table}
+        WHERE empresa_id = ? AND deleted_at IS NULL AND id IN (${placeholders})`,
+    )
+    .bind(empresaId, ...unique)
+    .all<{ id: number }>();
+  const valid = new Set((rows.results || []).map((row) => Number(row.id)));
+  if (unique.some((id) => !valid.has(id))) {
+    return `${label} inexistente ou pertencente a outro tenant`;
+  }
+  return null;
+}
+
 async function validateTrainingReferences(params: {
   db: D1Database;
   empresaId: number;
   qualificacaoTipoId?: number;
   participanteIds?: number[];
   instrutorIds?: number[];
+  simuladorIds?: number[];
+  aeronaveIds?: number[];
+  sessaoIds?: number[];
 }): Promise<string | null> {
   const { db, empresaId } = params;
   if (params.qualificacaoTipoId) {
@@ -336,6 +374,19 @@ async function validateTrainingReferences(params: {
     }
   }
 
+  // B2: recursos referenciados nos dias da turma também precisam pertencer ao tenant.
+  const resourceError =
+    (await validateResourceTenant(db, empresaId, 'simuladores', params.simuladorIds || [], 'Simulador')) ||
+    (await validateResourceTenant(db, empresaId, 'aeronaves', params.aeronaveIds || [], 'Aeronave')) ||
+    (await validateResourceTenant(
+      db,
+      empresaId,
+      'simulador_agendamentos',
+      params.sessaoIds || [],
+      'Sessão de simulador',
+    ));
+  if (resourceError) return resourceError;
+
   return null;
 }
 
@@ -365,22 +416,42 @@ async function replaceParticipantes(
 ): Promise<void> {
   const ids = normalizePositiveIds(participanteIds);
   const existing = await db
-    .prepare('SELECT funcionario_id FROM treinamentos_participantes WHERE treinamento_id = ?')
+    .prepare('SELECT id, funcionario_id FROM treinamentos_participantes WHERE treinamento_id = ?')
     .bind(treinamentoId)
-    .all<{ funcionario_id: number }>();
+    .all<{ id: number; funcionario_id: number }>();
 
+  const existingRows = existing.results || [];
   const existingIds = new Set(
-    (existing.results || []).map((row) => Number(row.funcionario_id)).filter((value) => value > 0),
+    existingRows.map((row) => Number(row.funcionario_id)).filter((value) => value > 0),
   );
 
-  const idsToDelete = [...existingIds].filter((id) => !ids.includes(id));
-  if (idsToDelete.length > 0) {
-    const placeholders = idsToDelete.map(() => '?').join(', ');
+  const rowsToDelete = existingRows.filter((row) => !ids.includes(Number(row.funcionario_id)));
+  if (rowsToDelete.length > 0) {
+    // M4: o D1 não aplica FK ON DELETE CASCADE em runtime; removemos as presenças
+    // explicitamente para não deixar órfãos em treinamentos_presencas. Os vínculos de
+    // qualificação emitida (treinamentos_qualificacoes_geradas) são preservados por
+    // rastreabilidade — o upsert idempotente (A4) lida com reentradas sem bloquear
+    // reemissão.
+    const participanteRowIds = rowsToDelete.map((row) => Number(row.id)).filter((v) => v > 0);
+    if (participanteRowIds.length > 0) {
+      const presencaPlaceholders = participanteRowIds.map(() => '?').join(', ');
+      await db
+        .prepare(
+          `DELETE FROM treinamentos_presencas WHERE participante_id IN (${presencaPlaceholders})`,
+        )
+        .bind(...participanteRowIds)
+        .run();
+    }
+
+    const funcionarioIdsToDelete = rowsToDelete
+      .map((row) => Number(row.funcionario_id))
+      .filter((v) => v > 0);
+    const placeholders = funcionarioIdsToDelete.map(() => '?').join(', ');
     await db
       .prepare(
         `DELETE FROM treinamentos_participantes WHERE treinamento_id = ? AND funcionario_id IN (${placeholders})`,
       )
-      .bind(treinamentoId, ...idsToDelete)
+      .bind(treinamentoId, ...funcionarioIdsToDelete)
       .run();
   }
 
@@ -1091,6 +1162,7 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
     qualificacaoTipoId: input.qualificacao_tipo_id,
     participanteIds,
     instrutorIds,
+    ...collectResourceIdsFromDias(input.dias),
   });
   if (referenceError) {
     return c.json({ success: false, error: referenceError }, 400);
@@ -1129,6 +1201,27 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
   }
   const ua = extrairUsuarioAuditoria(c);
 
+  // M12: proteção contra duplo-submit/retry. Sem transação interativa no D1, usamos uma
+  // janela curta de deduplicação por chave natural — se uma turma idêntica acabou de ser
+  // criada, devolvemos a existente de forma idempotente em vez de duplicar.
+  const duplicate = await db
+    .prepare(
+      `SELECT id FROM treinamentos_planejados
+        WHERE empresa_id = ?
+          AND qualificacao_tipo_id = ?
+          AND data_prevista = ?
+          AND COALESCE(titulo, '') = COALESCE(?, '')
+          AND deleted_at IS NULL
+          AND UPPER(COALESCE(status, 'PLANEJADO')) <> 'CANCELADO'
+          AND created_at >= datetime('now', '-20 seconds')
+        ORDER BY id DESC LIMIT 1`,
+    )
+    .bind(empresaId, input.qualificacao_tipo_id, input.data_prevista, input.titulo)
+    .first<{ id: number }>();
+  if (duplicate?.id) {
+    return c.json({ success: true, data: { id: duplicate.id, deduplicated: true } }, 200);
+  }
+
   const result = await db
     .prepare(
       `INSERT INTO treinamentos_planejados (
@@ -1165,20 +1258,55 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
     .run();
 
   const treinamentoId = Number(result.meta.last_row_id || 0);
-  await replaceParticipantes(db, treinamentoId, participanteIds);
-  await replaceDias(db, empresaId, treinamentoId, dias);
-  await replaceInstrutores(
-    db,
-    empresaId,
-    treinamentoId,
-    instrutorIds,
-    input.instrutor_id,
-  );
-  await syncTreinamentoPlanejadoIntegration({
-    db,
-    empresaId,
-    treinamentoId,
-  });
+  try {
+    await replaceParticipantes(db, treinamentoId, participanteIds);
+    await replaceDias(db, empresaId, treinamentoId, dias);
+    await replaceInstrutores(db, empresaId, treinamentoId, instrutorIds, input.instrutor_id);
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+  } catch (error) {
+    // M12: a criação não é atômica no D1. Em falha de uma etapa, desfazemos o estado
+    // parcial (incluindo histórico planejado gerado pela sync) para permitir retry seguro.
+    const safeRun = (sql: string, binds: unknown[]) =>
+      db
+        .prepare(sql)
+        .bind(...binds)
+        .run()
+        .catch(() => undefined);
+    await safeRun(
+      `DELETE FROM treinamentos_presencas
+        WHERE treinamento_dia_id IN (SELECT id FROM treinamentos_dias WHERE treinamento_id = ?)`,
+      [treinamentoId],
+    );
+    await safeRun('DELETE FROM treinamentos_dias WHERE treinamento_id = ? AND empresa_id = ?', [
+      treinamentoId,
+      empresaId,
+    ]);
+    await safeRun(
+      'DELETE FROM treinamentos_instrutores WHERE treinamento_id = ? AND empresa_id = ?',
+      [treinamentoId, empresaId],
+    );
+    await safeRun('DELETE FROM treinamentos_participantes WHERE treinamento_id = ?', [treinamentoId]);
+    await safeRun(
+      `DELETE FROM qualificacoes_historico
+        WHERE empresa_id = ? AND status = 'PLANEJADA' AND COALESCE(observacoes, '') LIKE ?`,
+      [empresaId, `%Origem: Treinamento Planejado #${treinamentoId}%`],
+    );
+    await safeRun('DELETE FROM treinamentos_planejados WHERE id = ? AND empresa_id = ?', [
+      treinamentoId,
+      empresaId,
+    ]);
+    console.error('treinamento_create_partial_rollback', {
+      treinamentoId,
+      error: (error as Error)?.message,
+    });
+    return c.json(
+      {
+        success: false,
+        error: 'Falha ao criar a turma; nenhuma alteração foi mantida. Tente novamente.',
+      },
+      500,
+    );
+  }
 
   await registrarAuditoria({
     db,
@@ -1541,6 +1669,7 @@ treinamentosPlanejadosRoutes.patch(
         ...(input.instrutor_id ? [input.instrutor_id] : []),
         ...((input.dias || []).flatMap((dia) => (dia.instrutor_id ? [dia.instrutor_id] : []))),
       ]),
+      ...collectResourceIdsFromDias(input.dias),
     });
     if (referenceError) {
       return c.json({ success: false, error: referenceError }, 400);
