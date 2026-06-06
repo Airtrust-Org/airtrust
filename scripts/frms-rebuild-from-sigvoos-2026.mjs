@@ -258,6 +258,18 @@ function jornadasSql(args) {
     ORDER BY tripulante_id, data, created_at, id`;
 }
 
+function orphanAlertasSql(args) {
+  const tripFilter = args.tripulanteId ? `AND a.tripulante_id = ${Number(args.tripulanteId)}` : '';
+  return `
+    SELECT a.*
+    FROM frms_alerta a
+    WHERE a.deleted_at IS NULL
+      AND a.jornada_id IS NULL
+      AND date(a.created_at) BETWEEN date(${q(args.from)}) AND date(${q(args.to)})
+      ${tripFilter}
+    ORDER BY a.tripulante_id, a.created_at, a.id`;
+}
+
 function limitesSql() {
   return `
     SELECT nome, valor_numerico
@@ -526,7 +538,24 @@ function buildAlertas(row, limites) {
   return alertas;
 }
 
-function buildDerivedSql(args, rollingRows, limites, timestamp) {
+export function buildOrphanAlertCleanupSql(orphanAlertRows, timestamp) {
+  const statements = [];
+  for (const alerta of orphanAlertRows) {
+    statements.push(
+      `UPDATE frms_alerta SET deleted_at = ${q(timestamp)}, updated_at = ${q(timestamp)}
+        WHERE id = ${q(alerta.id)} AND deleted_at IS NULL AND jornada_id IS NULL;`,
+    );
+    statements.push(
+      `INSERT INTO auditoria_avancada_v2 (tabela, acao, registro_id, dados_anteriores, dados_novos)
+       VALUES ('frms_alerta', 'FRMS_SIGVOOS_GLOBAL_REBUILD_ORPHAN_ALERT_SOFT_DELETE', ${q(alerta.id)},
+        ${q(JSON.stringify({ id: alerta.id, tripulante_id: alerta.tripulante_id, tipo_limite: alerta.tipo_limite, created_at: alerta.created_at }))},
+        ${q(JSON.stringify({ deleted_by: 'REBUILD_SIGVOOS_2026', reason: 'ORPHAN_ALERT_WITHOUT_CANONICAL_JORNADA' }))});`,
+    );
+  }
+  return statements;
+}
+
+function buildDerivedSql(args, rollingRows, limites, timestamp, orphanAlertRows = []) {
   const tripFilter = args.tripulanteId ? `AND tripulante_id = ${Number(args.tripulanteId)}` : '';
   const alertTripFilter = args.tripulanteId ? `AND tripulante_id = ${Number(args.tripulanteId)}` : '';
   const statements = [
@@ -587,6 +616,8 @@ function buildDerivedSql(args, rollingRows, limites, timestamp) {
     }
   }
 
+  statements.push(...buildOrphanAlertCleanupSql(orphanAlertRows, timestamp));
+
   return statements;
 }
 
@@ -620,9 +651,13 @@ async function main() {
   const rawSigvoosRows = queryRows(sigvoosSourceSql(args), args);
   const sigvoosRows = dedupeSigvoosRows(rawSigvoosRows);
   const jornadasRows = queryRows(jornadasSql(args), args);
+  const orphanAlertRows = queryRows(orphanAlertasSql(args), args);
   const limites = readLimites(args);
   const plan = buildPlan({ sigvoosRows, jornadasRows });
-  const summary = summarizeActions(plan, rawSigvoosRows);
+  const summary = {
+    ...summarizeActions(plan, rawSigvoosRows),
+    orphan_active_alerts_without_jornada: orphanAlertRows.length,
+  };
 
   const report = {
     generated_at: new Date().toISOString(),
@@ -633,6 +668,7 @@ async function main() {
     summary,
     invalid_sigvoos: plan.invalidSigvoos.slice(0, 100),
     pending_samples: plan.pendingRows.slice(0, 100),
+    orphan_alert_samples: orphanAlertRows.slice(0, 100),
     action_samples: plan.actions.slice(0, 100),
   };
 
@@ -652,7 +688,7 @@ async function main() {
 
   const activeSigvoos = queryRows(activeSigvoosSql(args), args);
   const rollingRows = calcRollingRows(activeSigvoos, limites);
-  const derivedStatements = buildDerivedSql(args, rollingRows, limites, timestamp);
+  const derivedStatements = buildDerivedSql(args, rollingRows, limites, timestamp, orphanAlertRows);
   console.log(`[frms-rebuild] executing derived statements=${derivedStatements.length}`);
   const derivedResult = runSqlStatements(derivedStatements, args);
 
