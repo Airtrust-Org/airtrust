@@ -55,6 +55,7 @@ type HistoricoPlanejadoRow = {
   qualificacao_codigo: string | null;
   status: string | null;
   observacoes: string | null;
+  data_conclusao: string | null;
 };
 
 type SolicitacaoRow = {
@@ -220,7 +221,7 @@ async function loadHistoricoById(
   return (
     (await db
       .prepare(
-        `SELECT id, funcionario_id, qualificacao_codigo, status, observacoes
+        `SELECT id, funcionario_id, qualificacao_codigo, status, observacoes, data_conclusao
            FROM qualificacoes_historico
           WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
@@ -260,6 +261,24 @@ async function loadGeneratedQualificationLink(
   );
 }
 
+async function loadGeneratedQualificationLinkByHistorico(
+  db: D1Database,
+  empresaId: number,
+  qualificacaoHistoricoId: number,
+): Promise<GeneratedQualificationLinkRow | null> {
+  return (
+    (await db
+      .prepare(
+        `SELECT id, qualificacao_historico_id
+           FROM treinamentos_qualificacoes_geradas
+          WHERE empresa_id = ? AND qualificacao_historico_id = ?
+          LIMIT 1`,
+      )
+      .bind(empresaId, qualificacaoHistoricoId)
+      .first<GeneratedQualificationLinkRow>()) || null
+  );
+}
+
 async function ensureGeneratedQualificationLink(
   db: D1Database,
   empresaId: number,
@@ -277,6 +296,39 @@ async function ensureGeneratedQualificationLink(
     dataConclusaoEfetiva,
   );
   if (existing) return existing;
+
+  // A4: o histórico (qualificacao_historico_id) é a chave ESTÁVEL do vínculo. Quando o
+  // gestor corrige a data de conclusão, o mesmo histórico é reaproveitado; inserir uma
+  // nova linha violaria UNIQUE(qualificacao_historico_id) e produziria erro 500. Aqui
+  // atualizamos a linha existente (idempotente) em vez de inserir.
+  const byHistorico = await loadGeneratedQualificationLinkByHistorico(
+    db,
+    empresaId,
+    qualificacaoHistoricoId,
+  );
+  if (byHistorico) {
+    await db
+      .prepare(
+        `UPDATE treinamentos_qualificacoes_geradas
+            SET treinamento_id = ?,
+                participante_id = ?,
+                funcionario_id = ?,
+                qualificacao_tipo_id = ?,
+                data_conclusao_efetiva = ?
+          WHERE id = ? AND empresa_id = ?`,
+      )
+      .bind(
+        evento.id,
+        participante.id,
+        participante.funcionario_id,
+        evento.qualificacao_tipo_id,
+        dataConclusaoEfetiva,
+        byHistorico.id,
+        empresaId,
+      )
+      .run();
+    return { id: byHistorico.id, qualificacao_historico_id: qualificacaoHistoricoId };
+  }
 
   try {
     await db
@@ -297,14 +349,15 @@ async function ensureGeneratedQualificationLink(
       )
       .run();
   } catch (error) {
-    const afterConflict = await loadGeneratedQualificationLink(
-      db,
-      empresaId,
-      evento.id,
-      participante.id,
-      evento.qualificacao_tipo_id,
-      dataConclusaoEfetiva,
-    );
+    const afterConflict =
+      (await loadGeneratedQualificationLink(
+        db,
+        empresaId,
+        evento.id,
+        participante.id,
+        evento.qualificacao_tipo_id,
+        dataConclusaoEfetiva,
+      )) || (await loadGeneratedQualificationLinkByHistorico(db, empresaId, qualificacaoHistoricoId));
     if (afterConflict) return afterConflict;
     throw error;
   }
@@ -596,13 +649,40 @@ async function concluirHistoricoPlanejado(
     currentStatus === QUALIFICACAO_STATUS.CONCLUIDA ||
     currentStatus === QUALIFICACAO_STATUS.RENOVADA
   ) {
+    const dataConclusaoCorrigida = participante.data_conclusao_efetiva as string;
+    // A4: correção de data em qualificação JÁ concluída — recalcula data/vencimento do
+    // histórico (sem duplicar) e mantém o vínculo idempotente coerente. RENOVADA não é
+    // re-datada (já foi superada por um registro mais novo).
+    if (
+      currentStatus === QUALIFICACAO_STATUS.CONCLUIDA &&
+      existing?.data_conclusao &&
+      existing.data_conclusao !== dataConclusaoCorrigida
+    ) {
+      const validadeMesesCorrigida =
+        typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
+          ? evento.qualificacao_validade
+          : 12;
+      const dataVencimentoCorrigida = calcularDataVencimento(
+        dataConclusaoCorrigida,
+        validadeMesesCorrigida,
+        Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
+      );
+      await db
+        .prepare(
+          `UPDATE qualificacoes_historico
+              SET data_conclusao = ?, data_vencimento = ?, updated_at = datetime('now')
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(dataConclusaoCorrigida, dataVencimentoCorrigida, upserted.historicoId, empresaId)
+        .run();
+    }
     await ensureGeneratedQualificationLink(
       db,
       empresaId,
       evento,
       participante,
       upserted.historicoId,
-      participante.data_conclusao_efetiva as string,
+      dataConclusaoCorrigida,
     );
     return false;
   }
@@ -641,6 +721,9 @@ async function concluirHistoricoPlanejado(
     dataConclusao,
   );
 
+  // M5: ao concluir um treinamento (inclusive retroativo), só pode ser marcado como
+  // RENOVADO um histórico ANTERIOR à nova conclusão. Sem o filtro de data, uma
+  // conclusão retroativa marcaria erroneamente a qualificação MAIS NOVA como renovada.
   const anterior = await db
     .prepare(
       `SELECT id
@@ -652,10 +735,17 @@ async function concluirHistoricoPlanejado(
           AND deleted_at IS NULL
           AND ${sqlStatusEqualsAny('status', COMPLETED_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)}
           AND COALESCE(renovada, 0) = 0
+          AND date(COALESCE(data_conclusao, '1900-01-01')) < date(?)
         ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
         LIMIT 1`,
     )
-    .bind(empresaId, participante.funcionario_id, evento.qualificacao_codigo, upserted.historicoId)
+    .bind(
+      empresaId,
+      participante.funcionario_id,
+      evento.qualificacao_codigo,
+      upserted.historicoId,
+      dataConclusao,
+    )
     .first<{ id: number }>();
 
   if (anterior?.id) {
@@ -897,6 +987,33 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
     }
   }
 
+  // M3: ciclo de vida da turma. Resultado final = APROVADO/REPROVADO/CANCELADO.
+  // INCOMPLETO é tratado como pendência (reposição) e mantém a turma EM_ANDAMENTO.
+  // Só avançamos o status (nunca rebaixamos CONCLUIDO automaticamente).
+  if (evento.status !== 'CANCELADO' && currentParticipants.length > 0) {
+    const isFinalResult = (resultado: string | null) =>
+      ['APROVADO', 'REPROVADO', 'CANCELADO'].includes(String(resultado || '').trim().toUpperCase());
+    const finalizedCount = currentParticipants.filter((p) => isFinalResult(p.resultado)).length;
+    const desiredStatus =
+      finalizedCount === currentParticipants.length
+        ? 'CONCLUIDO'
+        : finalizedCount > 0
+          ? 'EM_ANDAMENTO'
+          : null;
+    const isDowngrade = evento.status === 'CONCLUIDO' && desiredStatus === 'EM_ANDAMENTO';
+    if (desiredStatus && desiredStatus !== evento.status && !isDowngrade) {
+      await db
+        .prepare(
+          `UPDATE treinamentos_planejados
+              SET status = ?, updated_at = datetime('now')
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(desiredStatus, treinamentoId, empresaId)
+        .run();
+      historicoChanged = true;
+    }
+  }
+
   if (historicoChanged) {
     await invalidateMaterializedStats(db);
   }
@@ -1028,7 +1145,7 @@ export async function sincronizarSolicitacaoConcluidaComTreinamentoPlanejado(par
   solicitacaoId: string;
   dataRealizada: string;
 }): Promise<{ treinamentoPlanejadoId: number | null; qualificacaoHistoricoId: number | null }> {
-  const { db, empresaId, solicitacaoId } = params;
+  const { db, empresaId, solicitacaoId, dataRealizada } = params;
 
   const solicitacao = await db
     .prepare(
@@ -1049,16 +1166,23 @@ export async function sincronizarSolicitacaoConcluidaComTreinamentoPlanejado(par
     return { treinamentoPlanejadoId: null, qualificacaoHistoricoId: null };
   }
 
+  // A3: a conclusão pela rota de solicitações precisa usar a MESMA semântica do endpoint
+  // novo de conclusão. Preenchendo resultado='APROVADO' + data_conclusao_efetiva, o
+  // gate shouldCompleteParticipante dispara e a qualificação é efetivamente EMITIDA
+  // (CONCLUIDA) via concluirHistoricoPlanejado — em vez de ficar presa em PLANEJADA.
   await db
     .prepare(
       `UPDATE treinamentos_participantes
           SET confirmado = 1,
               presente = 1,
               aprovado = 1,
+              resultado = COALESCE(NULLIF(resultado, ''), 'APROVADO'),
+              data_conclusao_efetiva = COALESCE(data_conclusao_efetiva, ?),
+              concluido_em = COALESCE(concluido_em, datetime('now')),
               updated_at = datetime('now')
         WHERE treinamento_id = ? AND funcionario_id = ?`,
     )
-    .bind(treinamentoPlanejadoId, solicitacao.solicitante_id)
+    .bind(dataRealizada, treinamentoPlanejadoId, solicitacao.solicitante_id)
     .run();
 
   const pendencias = await db

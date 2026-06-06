@@ -196,3 +196,118 @@ describe('escala-mensal-integrada training source contract', () => {
     expect(source).toContain("severity: Number(row.resource_conflict || 0) === 1 ? 'CONFLICT'");
   });
 });
+
+describe('escala-mensal-integrada — correções de auditoria', () => {
+  it('M7: duas linhas de ESCALA no mesmo dia não geram conflito interno falso', () => {
+    const a = event({
+      id: 'esc-a',
+      source: 'ESCALA',
+      sourceId: '1',
+      allDay: true,
+      startAt: null,
+      endAt: null,
+      title: 'Situação administrativa',
+    });
+    const b = event({
+      id: 'esc-b',
+      source: 'ESCALA',
+      sourceId: '2',
+      allDay: true,
+      startAt: null,
+      endAt: null,
+      title: 'Alocação operacional',
+    });
+
+    expect(buildConflictEvents([a, b])).toHaveLength(0);
+  });
+
+  it('M6/B1: dedupe colapsa turma + sessão de simulador com a mesma chave canônica', () => {
+    const canonicalDedupKey = 'simulador_agendamento:9:funcionario:10';
+    const training = event({
+      id: 'treino',
+      source: 'TREINAMENTO',
+      sourceId: 5,
+      metadata: { canonicalDedupKey },
+    });
+    const simulador = event({
+      id: 'sim',
+      source: 'SIMULADOR',
+      sourceId: 9,
+      metadata: { canonicalDedupKey },
+    });
+
+    const deduped = dedupeIntegratedEvents([training, simulador]);
+    expect(deduped).toHaveLength(1);
+    // mantém o evento de treinamento (mais rico em contexto, primeiro na ordem)
+    expect(deduped[0].source).toBe('TREINAMENTO');
+  });
+
+  it('M6/B1: eventos com a mesma chave canônica não conflitam entre si (instrutor em sessão vinculada)', () => {
+    const canonicalDedupKey = 'simulador_agendamento:9:funcionario:10';
+    const training = event({
+      id: 'treino',
+      source: 'TREINAMENTO',
+      sourceId: 5,
+      startAt: '2026-06-10T08:00:00-03:00',
+      endAt: '2026-06-10T12:00:00-03:00',
+      metadata: { canonicalDedupKey },
+    });
+    const simulador = event({
+      id: 'sim',
+      source: 'SIMULADOR',
+      sourceId: 9,
+      startAt: '2026-06-10T08:00:00-03:00',
+      endAt: '2026-06-10T12:00:00-03:00',
+      metadata: { canonicalDedupKey },
+    });
+
+    expect(buildConflictEvents([training, simulador])).toHaveLength(0);
+  });
+
+  it('M6: compromissos distintos (chaves canônicas diferentes) ainda conflitam', () => {
+    const training = event({
+      id: 'treino',
+      source: 'TREINAMENTO',
+      sourceId: 5,
+      startAt: '2026-06-10T08:00:00-03:00',
+      endAt: '2026-06-10T12:00:00-03:00',
+      metadata: { canonicalDedupKey: 'treinamento:5:dia:1:funcionario:10' },
+    });
+    const simulador = event({
+      id: 'sim',
+      source: 'SIMULADOR',
+      sourceId: 9,
+      startAt: '2026-06-10T09:00:00-03:00',
+      endAt: '2026-06-10T11:00:00-03:00',
+      metadata: { canonicalDedupKey: 'simulador_agendamento:9:funcionario:10' },
+    });
+
+    expect(buildConflictEvents([training, simulador])).toHaveLength(1);
+  });
+});
+
+describe('escala-mensal-integrada — contrato de tenant/filtros/parcialidade', () => {
+  const source = readFileSync(
+    new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname,
+    'utf8',
+  );
+
+  it('A2: seleção do registro mais recente é isolada por empresa', () => {
+    expect(source).toContain('AND empresa_id = ?');
+    expect(source).toContain('GROUP BY empresa_id, COALESCE(funcionario_cpf');
+  });
+
+  it('M1: o filtro de função é aplicado de fato (não é no-op)', () => {
+    expect(source).toContain('.funcao, ${alias}.cargo');
+    expect(source).toContain('if (filters.funcaoId) bindings.push(filters.funcaoId);');
+  });
+
+  it('M10: alerta FRMS sinaliza confiabilidade da data operacional', () => {
+    expect(source).toContain('dateReliable');
+    expect(source).toContain("dateSource: dateReliable ? 'jornada' : 'created_at'");
+  });
+
+  it('B4: filtro de severidade preserva eventos referenciados por conflitos', () => {
+    expect(source).toContain('referencedIds');
+  });
+});
