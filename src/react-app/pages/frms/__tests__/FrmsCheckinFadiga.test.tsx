@@ -8,7 +8,12 @@ import FrmsCheckinFadiga, {
   optionalBinaryResponseToPayload,
 } from '../FrmsCheckinFadiga';
 import { resolveFadigaPostSavePath } from '../frmsPostSaveNavigation';
-import type { FadigaPainelEquipeItem } from '@/react-app/hooks/useFadigaCheckin';
+import {
+  buildFadigaPainelRequestPath,
+  normalizeFadigaPainelDate,
+  normalizeFadigaPainelPayload,
+  type FadigaPainelEquipeItem,
+} from '@/react-app/hooks/useFadigaCheckin';
 
 const mutateAsyncMock = vi.fn();
 const refetchMock = vi.fn();
@@ -40,12 +45,18 @@ vi.mock('@/react-app/hooks/usePermissions', () => ({
   usePermissions: () => usePermissionsMock(),
 }));
 
-vi.mock('@/react-app/hooks/useFadigaCheckin', () => ({
-  useCheckinHoje: () => ({ data: null, refetch: refetchMock }),
-  useSubmitCheckin: () => ({ mutateAsync: mutateAsyncMock, isPending: submitPending }),
-  useFadigaHistorico: (...args: unknown[]) => useFadigaHistoricoMock(...args),
-  useFadigaPainel: (...args: unknown[]) => useFadigaPainelMock(...args),
-}));
+vi.mock('@/react-app/hooks/useFadigaCheckin', async () => {
+  const actual = await vi.importActual<typeof import('@/react-app/hooks/useFadigaCheckin')>(
+    '@/react-app/hooks/useFadigaCheckin',
+  );
+  return {
+    ...actual,
+    useCheckinHoje: () => ({ data: null, refetch: refetchMock }),
+    useSubmitCheckin: () => ({ mutateAsync: mutateAsyncMock, isPending: submitPending }),
+    useFadigaHistorico: (...args: unknown[]) => useFadigaHistoricoMock(...args),
+    useFadigaPainel: (...args: unknown[]) => useFadigaPainelMock(...args),
+  };
+});
 
 vi.mock('sonner', () => ({
   toast: {
@@ -150,6 +161,59 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(resolveFadigaPostSavePath('TRIPULANTE')).toBe('/home');
     expect(resolveFadigaPostSavePath('GESTOR')).toBe('/');
     expect(resolveFadigaPostSavePath('ADMINISTRADOR')).toBe('/');
+  });
+});
+
+describe('FrmsCheckinFadiga team panel adapter', () => {
+  const canonicalItems = [
+    ['bb2a03a5', 3, 'Antonio Luiz Simões Ramos', 3, 13],
+    ['7b2bf012', 41, 'Filipe Passaroni Daumas', 3, 13],
+    ['49d52917', 38, 'Gabriel Ferreira Barreto', 3, 9],
+    ['243a1652', 15, 'José Alfredo Gomes Marinho', 1, 0],
+    ['5fa8ffaa', 33, 'Wilson Maciel Martins Nery', 1, 4],
+  ].map(([checkin_id, funcionario_id, funcionario_nome, kss_score, score_fadiga]) => ({
+    checkin_id,
+    funcionario_id,
+    funcionario_nome,
+    date: '2026-06-05',
+    status: 'normal',
+    data_source: 'crew_reported',
+    kss_score,
+    sleep_hours_24h: 7,
+    score_fadiga,
+    nivel_fadiga: 'VERDE',
+    status_operacional: 'APTO',
+  }));
+
+  it('monta request canônica com data ISO e scope=team', () => {
+    expect(normalizeFadigaPainelDate('05/06/2026')).toBe('2026-06-05');
+    expect(buildFadigaPainelRequestPath('05/06/2026')).toBe(
+      '/frms/daily-fatigue?date=2026-06-05&scope=team',
+    );
+  });
+
+  it('normaliza o shape canônico real com 5 check-ins de 2026-06-05', () => {
+    const rows = normalizeFadigaPainelPayload({ date: '2026-06-05', items: canonicalItems }, '2026-06-05');
+
+    expect(rows).toHaveLength(5);
+    expect(rows.map((row) => row.funcionario_nome)).toEqual([
+      'Antonio Luiz Simões Ramos',
+      'Filipe Passaroni Daumas',
+      'Gabriel Ferreira Barreto',
+      'José Alfredo Gomes Marinho',
+      'Wilson Maciel Martins Nery',
+    ]);
+    expect(rows.every((row) => row.status === 'normal')).toBe(true);
+  });
+
+  it('não converte resposta individual ou shape inesperado em lista vazia', () => {
+    expect(() =>
+      normalizeFadigaPainelPayload({ date: '2026-06-05', funcionario_id: 41 } as any, '2026-06-05'),
+    ).toThrow(/escopo individual/i);
+
+    expect(() => normalizeFadigaPainelPayload({ date: '2026-06-05' }, '2026-06-05')).toThrow(
+      /Formato inesperado/i,
+    );
   });
 });
 
@@ -493,8 +557,21 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByText(/não determina automaticamente aptidão ou restrição operacional/i)).toBeInTheDocument();
   });
 
-  it('na aba Equipe renderiza tripulantes quando a query retorna dados', async () => {
+  it('na aba Equipe renderiza os 5 check-ins reais de 05/06/2026 quando a query retorna dados', async () => {
     const equipeRows: FadigaPainelEquipeItem[] = [
+      {
+        id: 'daily-fatigue-3',
+        funcionario_id: 3,
+        funcionario_nome: 'Antonio Luiz Simões Ramos',
+        cargo: 'Comandante',
+        data: '2026-06-05',
+        status: 'normal',
+        data_source: 'crew_reported',
+        kss_score: 3,
+        score_fadiga: 13,
+        nivel_fadiga: 'VERDE',
+        status_operacional: 'APTO',
+      },
       {
         id: 'daily-fatigue-41',
         funcionario_id: 41,
@@ -505,6 +582,32 @@ describe('FrmsCheckinFadiga UI', () => {
         data_source: 'crew_reported',
         kss_score: 3,
         score_fadiga: 13,
+        nivel_fadiga: 'VERDE',
+        status_operacional: 'APTO',
+      },
+      {
+        id: 'daily-fatigue-38',
+        funcionario_id: 38,
+        funcionario_nome: 'Gabriel Ferreira Barreto',
+        cargo: 'Copiloto',
+        data: '2026-06-05',
+        status: 'normal',
+        data_source: 'crew_reported',
+        kss_score: 3,
+        score_fadiga: 9,
+        nivel_fadiga: 'VERDE',
+        status_operacional: 'APTO',
+      },
+      {
+        id: 'daily-fatigue-15',
+        funcionario_id: 15,
+        funcionario_nome: 'José Alfredo Gomes Marinho',
+        cargo: 'Comandante',
+        data: '2026-06-05',
+        status: 'normal',
+        data_source: 'crew_reported',
+        kss_score: 1,
+        score_fadiga: 0,
         nivel_fadiga: 'VERDE',
         status_operacional: 'APTO',
       },
@@ -536,9 +639,25 @@ describe('FrmsCheckinFadiga UI', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
 
+    expect(await screen.findByText('Antonio Luiz Simões Ramos')).toBeInTheDocument();
     expect(await screen.findByText('Filipe Passaroni Daumas')).toBeInTheDocument();
+    expect(screen.getByText('Gabriel Ferreira Barreto')).toBeInTheDocument();
+    expect(screen.getByText('José Alfredo Gomes Marinho')).toBeInTheDocument();
     expect(screen.getByText('Wilson Maciel Martins Nery')).toBeInTheDocument();
     expect(screen.queryByText('Nenhum check-in registrado para esta data.')).not.toBeInTheDocument();
+  });
+
+  it('na aba Equipe troca de data refaz consulta com 2026-06-05', async () => {
+    usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: true, role: 'GESTOR' });
+
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
+    fireEvent.change(screen.getByLabelText('Data de referência'), { target: { value: '2026-06-05' } });
+
+    await waitFor(() => {
+      expect(useFadigaPainelMock).toHaveBeenLastCalledWith('2026-06-05');
+    });
   });
 
   it('na aba Equipe mostra erro claro e nao converte falha em lista vazia', async () => {

@@ -37,6 +37,17 @@ function createDb(overrides?: {
 
   let lastBindArgs: unknown[] = [];
 
+  function sumMonthlyHvForTrip(query: string, tripulanteId: string): number {
+    const usesCanonicalSource = query.includes("UPPER(COALESCE(j.origem, '')) = 'SIGVOOS'");
+    return jornadaRows
+      .filter((j) => j.tripulante_id === tripulanteId)
+      .filter((j) => {
+        if (!usesCanonicalSource) return true;
+        return String(j.origem ?? 'SIGVOOS').toUpperCase() === 'SIGVOOS';
+      })
+      .reduce((sum, j) => sum + ((j.horas_voo_minutos as number) || 0), 0);
+  }
+
   const db = {
     prepare: (query: string) => ({
       all: async () => {
@@ -78,9 +89,7 @@ function createDb(overrides?: {
                 ? overrides?.funcionarioA ?? { nome: 'Dieter', guerra: 'Dieter' }
                 : overrides?.funcionarioB ?? { nome: 'Marinho', guerra: 'Marinho' };
 
-            const hvMesMin = jornadaRows
-              .filter((j) => j.tripulante_id === tid)
-              .reduce((sum, j) => sum + ((j.horas_voo_minutos as number) || 0), 0);
+            const hvMesMin = sumMonthlyHvForTrip(query, tid);
 
             rows.push({
               tripulante_id: tid,
@@ -117,9 +126,7 @@ function createDb(overrides?: {
                     ? overrides?.funcionarioA ?? { nome: 'Dieter', guerra: 'Dieter' }
                     : overrides?.funcionarioB ?? { nome: 'Marinho', guerra: 'Marinho' };
 
-                const hvMesMin = jornadaRows
-                  .filter((j) => j.tripulante_id === tid)
-                  .reduce((sum, j) => sum + ((j.horas_voo_minutos as number) || 0), 0);
+                const hvMesMin = sumMonthlyHvForTrip(query, tid);
 
                 rows.push({
                   tripulante_id: tid,
@@ -322,5 +329,27 @@ describe('buscarAcumuloFrota — month mode (mesReferencia)', () => {
     // Rolling fields devem vir do rolling table
     expect(dieter.hv_365d_min).toBe(6000);
     expect(dieter.hv_7d_min).toBe(800);
+  });
+
+  it('ignora FIRA e MANUAL no hv_mes_min mensal, preservando rolling 7d/365d/dia', async () => {
+    const { db } = createDb({
+      jornadaRows: [
+        { tripulante_id: TRIPULANTE_A, origem: 'FIRA', horas_voo_minutos: 1537 },
+        { tripulante_id: TRIPULANTE_A, origem: 'SIGVOOS', horas_voo_minutos: 315 },
+        { tripulante_id: TRIPULANTE_A, origem: 'SIGVOOS', horas_voo_minutos: 549 },
+        { tripulante_id: TRIPULANTE_A, origem: 'MANUAL', horas_voo_minutos: 999 },
+        { tripulante_id: TRIPULANTE_B, origem: 'FIRA', horas_voo_minutos: 1537 },
+      ],
+    });
+
+    const resultado = await buscarAcumuloFrota(db, '2026-06', EMPRESA_ID, 30);
+
+    const dieter = resultado.find((r) => r.tripulante_id === TRIPULANTE_A)!;
+    expect(dieter.hv_mes_min).toBe(864);
+    expect(dieter.hv_7d_min).toBe(800);
+    expect(dieter.hv_365d_min).toBe(6000);
+
+    const paloma = resultado.find((r) => r.tripulante_id === TRIPULANTE_B)!;
+    expect(paloma.hv_mes_min).toBe(0);
   });
 });

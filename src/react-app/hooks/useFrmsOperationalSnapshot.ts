@@ -99,6 +99,11 @@ export interface FrmsOperationalSnapshotSummary {
   quinzena_critica: number;
 }
 
+export interface FrmsOperationalSnapshotMeta {
+  scope: 'team' | 'self';
+  forced_funcionario_id?: number;
+}
+
 export interface FrmsOperationalSnapshotFilters {
   data_inicio: string;
   data_fim: string;
@@ -113,12 +118,14 @@ interface SnapshotApiResponse {
   success: boolean;
   data: FrmsOperationalSnapshotItem[];
   summary: FrmsOperationalSnapshotSummary;
+  meta?: FrmsOperationalSnapshotMeta;
   error?: string;
 }
 
 interface UseFrmsOperationalSnapshotResult {
   data: FrmsOperationalSnapshotItem[];
   summary: FrmsOperationalSnapshotSummary;
+  meta: FrmsOperationalSnapshotMeta | null;
   loading: boolean;
   error: string | null;
   unauthorized: boolean;
@@ -160,6 +167,7 @@ export function useFrmsOperationalSnapshot(
 ): UseFrmsOperationalSnapshotResult {
   const [data, setData] = useState<FrmsOperationalSnapshotItem[]>([]);
   const [summary, setSummary] = useState<FrmsOperationalSnapshotSummary>(EMPTY_SUMMARY);
+  const [meta, setMeta] = useState<FrmsOperationalSnapshotMeta | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
@@ -189,6 +197,7 @@ export function useFrmsOperationalSnapshot(
         ...EMPTY_SUMMARY,
         ...(payload.summary || {}),
       });
+      setMeta(payload.meta || null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar snapshot operacional';
       if (
@@ -199,6 +208,7 @@ export function useFrmsOperationalSnapshot(
       }
       setData([]);
       setSummary(EMPTY_SUMMARY);
+      setMeta(null);
       setError(message);
     } finally {
       setLoading(false);
@@ -220,6 +230,7 @@ export function useFrmsOperationalSnapshot(
   return {
     data,
     summary,
+    meta,
     loading,
     error,
     unauthorized,

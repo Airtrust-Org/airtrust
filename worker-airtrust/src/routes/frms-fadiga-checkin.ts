@@ -14,6 +14,7 @@ import {
 import { carregarLimites } from '../lib/frms/db-service-config';
 import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
+import { canSeeFrmsTeamScope } from '../lib/frms/access';
 import {
   CheckinCreateSchema,
   GestorRespostaSchema,
@@ -100,8 +101,7 @@ function minutesToTime(minutes: number): string {
 }
 
 function isManagerPlus(c: FrmsContext): boolean {
-  const role = String(c.get('userRole') || '').toUpperCase();
-  return role === 'ADMIN' || role === 'MANAGER' || role === 'GESTOR';
+  return canSeeFrmsTeamScope(c.get('userRole'));
 }
 
 async function getConfig(db: D1Database, empresaId: number): Promise<FadigaConfigRow> {

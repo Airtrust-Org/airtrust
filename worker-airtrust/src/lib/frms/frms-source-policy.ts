@@ -28,6 +28,10 @@ function normalizeSource(source?: string | null): string | null {
   return normalized || null;
 }
 
+export function buildCanonicalOperationalSourceSql(columnName = 'origem'): string {
+  return `UPPER(COALESCE(${columnName}, '')) = '${FRMS_CANONICAL_OPERATIONAL_SOURCE}'`;
+}
+
 export function isCanonicalFrmsOperationalSource(source?: string | null): boolean {
   return normalizeSource(source) === FRMS_CANONICAL_OPERATIONAL_SOURCE;
 }

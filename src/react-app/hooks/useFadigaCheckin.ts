@@ -111,6 +111,62 @@ export interface FadigaPainelEquipeItem {
   requires_operational_review?: number;
 }
 
+type DailyFatigueTeamPayload = {
+  date?: string;
+  items?: Array<Record<string, unknown>>;
+};
+
+export function normalizeFadigaPainelDate(value?: string): string {
+  const raw = String(value || 'hoje').trim();
+  const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (brMatch) {
+    const [, day, month, year] = brMatch;
+    return `${year}-${month}-${day}`;
+  }
+  return raw;
+}
+
+export function buildFadigaPainelRequestPath(data?: string): string {
+  const date = normalizeFadigaPainelDate(data);
+  return `/frms/daily-fatigue?date=${encodeURIComponent(date)}&scope=team`;
+}
+
+export function normalizeFadigaPainelPayload(
+  payload: DailyFatigueTeamPayload | Array<Record<string, unknown>> | null | undefined,
+  data?: string,
+): FadigaPainelEquipeItem[] {
+  const requestedDate = normalizeFadigaPainelDate(data);
+  const items = Array.isArray(payload) ? payload : payload?.items;
+
+  if (!Array.isArray(items)) {
+    if (payload && typeof payload === 'object' && 'funcionario_id' in payload) {
+      throw new Error('Endpoint de fadiga diária retornou escopo individual; a aba Equipe exige scope=team.');
+    }
+    throw new Error('Formato inesperado no painel de fadiga da equipe.');
+  }
+
+  return items
+    .filter((item) => String(item.status || '') !== 'no_duty')
+    .map<FadigaPainelEquipeItem>((item) => ({
+      id: String(item.checkin_id || `daily-fatigue-${item.funcionario_id || 'unknown'}-${item.date || requestedDate}`),
+      funcionario_id: Number(item.funcionario_id || 0),
+      funcionario_nome: String(item.funcionario_nome || item.funcionario_id || '-'),
+      cargo: item.cargo == null ? null : String(item.cargo),
+      data: String(item.date || requestedDate || ''),
+      status: String(item.status || 'normal') as FadigaPainelEquipeItem['status'],
+      data_source: String(item.data_source || 'not_applicable') as FadigaPainelEquipeItem['data_source'],
+      kss_score: item.kss_score == null ? null : Number(item.kss_score),
+      score_fadiga: item.score_fadiga == null ? null : Number(item.score_fadiga),
+      nivel_fadiga: item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
+      status_operacional: item.status_operacional == null ? null : String(item.status_operacional),
+      hora_checkin: item.hora_checkin == null ? null : String(item.hora_checkin),
+      horas_sono: item.sleep_hours_24h == null ? null : Number(item.sleep_hours_24h),
+      wake_time: item.wake_time == null ? null : String(item.wake_time),
+      requires_operational_review:
+        item.requires_operational_review == null ? 0 : Number(item.requires_operational_review),
+    }));
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken();
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
@@ -152,34 +208,12 @@ export function useSubmitCheckin() {
 }
 
 export function useFadigaPainel(data?: string) {
+  const normalizedDate = normalizeFadigaPainelDate(data);
   return useQuery({
-    queryKey: ['fadiga-painel', data || 'hoje'],
+    queryKey: ['fadiga-painel', 'team', normalizedDate],
     queryFn: async () => {
-      const payload = await fetchJson<{
-        date: string;
-        items?: Array<Record<string, unknown>>;
-      }>(`/frms/daily-fatigue?date=${encodeURIComponent(data || 'hoje')}&scope=team`);
-
-      return (payload.items || [])
-        .filter((item) => String(item.status || '') !== 'no_duty')
-        .map<FadigaPainelEquipeItem>((item) => ({
-          id: String(item.checkin_id || `daily-fatigue-${item.funcionario_id || 'unknown'}-${item.date || data || 'hoje'}`),
-          funcionario_id: Number(item.funcionario_id || 0),
-          funcionario_nome: String(item.funcionario_nome || item.funcionario_id || '-'),
-          cargo: item.cargo == null ? null : String(item.cargo),
-          data: String(item.date || data || ''),
-          status: String(item.status || 'normal') as FadigaPainelEquipeItem['status'],
-          data_source: String(item.data_source || 'not_applicable') as FadigaPainelEquipeItem['data_source'],
-          kss_score: item.kss_score == null ? null : Number(item.kss_score),
-          score_fadiga: item.score_fadiga == null ? null : Number(item.score_fadiga),
-          nivel_fadiga: item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
-          status_operacional: item.status_operacional == null ? null : String(item.status_operacional),
-          hora_checkin: item.hora_checkin == null ? null : String(item.hora_checkin),
-          horas_sono: item.sleep_hours_24h == null ? null : Number(item.sleep_hours_24h),
-          wake_time: item.wake_time == null ? null : String(item.wake_time),
-          requires_operational_review:
-            item.requires_operational_review == null ? 0 : Number(item.requires_operational_review),
-        }));
+      const payload = await fetchJson<DailyFatigueTeamPayload>(buildFadigaPainelRequestPath(normalizedDate));
+      return normalizeFadigaPainelPayload(payload, normalizedDate);
     },
     staleTime: 5 * 60 * 1000,
     refetchInterval: 30 * 60 * 1000,

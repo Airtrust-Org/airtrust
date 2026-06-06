@@ -16,6 +16,7 @@ import {
   calcularEvolucaoFadigaAcumulada,
   FADIGA_ACUMULADA_LIMITES,
 } from '../lib/frms/fadiga-acumulada-legal';
+import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
 
 const fadigaAcumulada = new Hono<{ Bindings: Env }>();
 
@@ -29,6 +30,8 @@ const LIMITE_VOO_MES = FADIGA_ACUMULADA_LIMITES.HV_MENSAL_HORAS; // hours
 const THRESHOLD_VERDE = 80;
 const THRESHOLD_AMARELO = 90;
 const THRESHOLD_VERMELHO = 95;
+const CANONICAL_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('j.origem');
+const CANONICAL_BASE_SOURCE_SQL = buildCanonicalOperationalSourceSql('origem');
 
 interface JornadaDia {
   data: string;
@@ -134,6 +137,7 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
          WHERE j.tripulante_id = ?
            AND j.data LIKE ?
            AND j.deleted_at IS NULL
+           AND ${CANONICAL_JORNADA_SOURCE_SQL}
            AND (? IS NULL OR COALESCE(j.empresa_id, f.empresa_id) = ?)
          ORDER BY j.data ASC`,
       )
@@ -236,6 +240,7 @@ fadigaAcumulada.get('/fadiga-acumulada/frota', async (c) => {
          JOIN funcionarios f ON CAST(j.tripulante_id AS INTEGER) = f.id AND f.deleted_at IS NULL
          WHERE j.data LIKE ?
            AND j.deleted_at IS NULL
+           AND ${CANONICAL_JORNADA_SOURCE_SQL}
            AND f.empresa_id = ?
          GROUP BY j.tripulante_id
          ORDER BY total_jornada_min DESC`,
@@ -322,6 +327,7 @@ fadigaAcumulada.get('/fadiga-acumulada/projecao', async (c) => {
            NULL AS dia_ciclo
          FROM frms_jornada
          WHERE tripulante_id = ? AND data LIKE ? AND deleted_at IS NULL
+           AND ${CANONICAL_BASE_SOURCE_SQL}
            AND (? IS NULL OR empresa_id = ?)`,
       )
       .bind(tripulanteId, `${mes}-%`, empresaId ?? null, empresaId ?? null)

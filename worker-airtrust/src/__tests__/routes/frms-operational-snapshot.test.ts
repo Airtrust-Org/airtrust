@@ -104,6 +104,57 @@ describe('GET /frms/operational-snapshot', () => {
     });
   });
 
+  it('permite role ADMINISTRADOR ver snapshot de equipe sem forçar funcionario_id próprio', async () => {
+    listSnapshotMock.mockResolvedValueOnce({
+      items: [],
+      summary: {
+        total_tripulantes: 0,
+        total_escalados: 0,
+        checkins_recebidos: 0,
+        checkins_pendentes: 0,
+        alertas_criticos: 0,
+        alertas_atencao: 0,
+        dados_estimados: 0,
+        inconsistencias: 0,
+        sem_fatorizacao: 0,
+      },
+    });
+
+    const app = createApp();
+    const response = await app.fetch(
+      new Request(
+        'http://localhost/frms/operational-snapshot?data_inicio=2026-06-01&data_fim=2026-06-05',
+        {
+          method: 'GET',
+          headers: {
+            'x-role': 'ADMINISTRADOR',
+            'x-empresa-id': '6',
+            'x-user-id': '41',
+            'x-funcionario-id': '41',
+          },
+        },
+      ),
+      { DB: createDb(41) } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(listSnapshotMock).toHaveBeenCalledTimes(1);
+
+    const [, params] = listSnapshotMock.mock.calls[0];
+    expect(params).toMatchObject({
+      empresaId: 6,
+      dataInicio: '2026-06-01',
+      dataFim: '2026-06-05',
+      filters: expect.not.objectContaining({ funcionario_id: 41 }),
+    });
+
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      meta: { scope: 'team' },
+    });
+  });
+
   it('8) usuário comum não vê snapshot de outros funcionários', async () => {
     listSnapshotMock.mockResolvedValueOnce({
       items: [],
@@ -144,6 +195,11 @@ describe('GET /frms/operational-snapshot', () => {
     expect(params).toMatchObject({
       empresaId: 7,
       filters: expect.objectContaining({ funcionario_id: 11 }),
+    });
+
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      meta: { scope: 'self', forced_funcionario_id: 11 },
     });
   });
 });
