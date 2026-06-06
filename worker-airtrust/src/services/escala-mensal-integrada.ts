@@ -609,7 +609,10 @@ async function loadTreinamentoEvents(db: D1Database, empresaId: number, month: M
     startAt: row.hora_inicio ? `${row.data_prevista}T${String(row.hora_inicio).slice(0, 5)}:00-03:00` : null,
     endAt: row.hora_fim ? `${row.data_prevista}T${String(row.hora_fim).slice(0, 5)}:00-03:00` : null,
     allDay: !row.hora_inicio && !row.hora_fim,
-    type: 'TREINAMENTO_PLANEJADO',
+    type:
+      String(row.status || 'PLANEJADO').toUpperCase() === 'CONCLUIDO'
+        ? 'TREINAMENTO_CONCLUIDO'
+        : 'TREINAMENTO_PLANEJADO',
     title: String(row.titulo || row.qualificacao_nome || 'Treinamento planejado'),
     description: normalizeText(row.local) || normalizeText(row.qualificacao_codigo),
     severity: Number(row.resource_conflict || 0) === 1 ? 'CONFLICT' : 'INFO',
