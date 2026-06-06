@@ -301,7 +301,7 @@ function isVisibleReadAckEvent(event: FrmsReadAckEvent, visibleIds: Set<number>)
 
 export default function FrmsControleOperacional() {
   const today = useMemo(() => getTodayLocalIsoDate(), []);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Read QS on mount to support deep links from EVD (data_inicio, data_fim, funcionario_id, base, aeronave).
   // searchParams intentionally excluded from deps — filters are initialized once on mount only.
@@ -374,6 +374,9 @@ export default function FrmsControleOperacional() {
     () => readAck.events.filter((event) => isVisibleReadAckEvent(event, visibleIds)),
     [readAck.events, visibleIds],
   );
+  const technicalFilterSource = searchParams.get('funcionario_id')?.trim() || '';
+  const technicalFilterValue = appliedFilters.funcionario_id?.trim() || draft.funcionario_id?.trim() || '';
+  const hasTechnicalFilter = Boolean(technicalFilterValue);
   const operationalSummary = useMemo(
     () => buildOperationalSummary(visibleItems, visibleReadAckEvents),
     [visibleItems, visibleReadAckEvents],
@@ -392,8 +395,24 @@ export default function FrmsControleOperacional() {
   };
 
   const handleClearFilters = () => {
-    setDraft(initialFilters);
-    setAppliedFilters(initialFilters);
+    const nextFilters = { ...initialFilters, funcionario_id: '', tripulante_query: '', base: '', aeronave: '', status: '' };
+    setDraft(nextFilters);
+    setAppliedFilters(nextFilters);
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete('funcionario_id');
+    setSearchParams(nextSearchParams);
+  };
+
+  const handleClearTechnicalFilter = () => {
+    const nextDraft = { ...draft, funcionario_id: '' };
+    const nextApplied = { ...appliedFilters, funcionario_id: '' };
+    setDraft(nextDraft);
+    setAppliedFilters(nextApplied);
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete('funcionario_id');
+    setSearchParams(nextSearchParams);
   };
 
   return (
@@ -418,6 +437,21 @@ export default function FrmsControleOperacional() {
         </header>
 
         <section className="rounded-lg border border-slate-200 bg-white p-4">
+          {hasTechnicalFilter && (
+            <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="font-semibold">Filtro técnico ativo: exibindo apenas um tripulante.</p>
+                <p className="text-xs text-amber-800">
+                  {technicalFilterSource
+                    ? `Origem: query string (funcionario_id=${technicalFilterSource}).`
+                    : `Funcionario ID ativo: ${technicalFilterValue}.`}
+                </p>
+              </div>
+              <Button variant="secondary" onClick={handleClearTechnicalFilter}>
+                Limpar filtro técnico
+              </Button>
+            </div>
+          )}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <label className="text-sm font-medium text-slate-700">
               Data inicio
@@ -519,9 +553,10 @@ export default function FrmsControleOperacional() {
               />
               Mostrar inconsistencias
             </label>
-            <details className="md:col-span-2 xl:col-span-2">
+            <details className="md:col-span-2 xl:col-span-2" open={hasTechnicalFilter || undefined}>
               <summary className="cursor-pointer pt-2 text-sm font-medium text-slate-600">
                 Filtro tecnico
+                {hasTechnicalFilter ? ' ativo' : ''}
               </summary>
               <label className="mt-2 block text-sm font-medium text-slate-700">
                 Funcionario ID
