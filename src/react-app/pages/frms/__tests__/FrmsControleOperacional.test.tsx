@@ -547,4 +547,127 @@ describe('FrmsControleOperacional', () => {
       expect(call.data_inicio).not.toBe('nao-e-data');
     });
   });
+
+  describe('Datas no formato DD/MM/YYYY', () => {
+    it('exibe data_operacional no formato brasileiro em vez de ISO', () => {
+      mockSnapshotData([buildSnapshotItem({ data_operacional: '2026-06-05' })]);
+      renderControle();
+      expect(screen.getByText('05/06/2026')).toBeInTheDocument();
+      expect(screen.queryByText('2026-06-05')).not.toBeInTheDocument();
+    });
+
+    it('exibe data valida mesmo para datas historicas', () => {
+      mockSnapshotData([buildSnapshotItem({ data_operacional: '2026-01-15' })]);
+      renderControle();
+      expect(screen.getByText('15/01/2026')).toBeInTheDocument();
+    });
+  });
+
+  describe('Quinzena — texto amigavel sem duty tecnico', () => {
+    it('nao exibe "duty -" quando duty_time_periodo_min e null', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            status_quinzena: 'INCOMPLETO',
+            duty_time_periodo_min: null,
+          },
+        }),
+      ]);
+      renderControle();
+      expect(screen.getByText(/Quinzena incompleta/)).toBeInTheDocument();
+      expect(screen.queryByText(/duty/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/duty -/)).not.toBeInTheDocument();
+    });
+
+    it('exibe "Quinzena completa · jornada 30.0h" quando duty preenchido', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            status_quinzena: 'OK',
+            duty_time_periodo_min: 1800,
+          },
+        }),
+      ]);
+      renderControle();
+      expect(screen.getByText(/Quinzena completa/)).toBeInTheDocument();
+      expect(screen.getByText(/jornada 30\.0h/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Escala indisponivel — banner e ajustes de classificacao', () => {
+    it('mostra banner quando nenhum tripulante tem escala', () => {
+      mockSnapshotData([
+        buildSnapshotItem({ escalado: false, escala_source: 'AUSENTE' as any }),
+        buildSnapshotItem({
+          funcionario_id: 20, tripulante_id: 20, nome: 'Ana', nome_guerra: 'Ana',
+          escalado: false, escala_source: 'AUSENTE' as any,
+        }),
+      ]);
+      renderControle();
+      expect(screen.getByText(/Dados de escala indisponiveis/)).toBeInTheDocument();
+    });
+
+    it('nao mostra banner quando ha pelo menos um tripulante escalado', () => {
+      mockSnapshotData();
+      renderControle();
+      expect(screen.queryByText(/Dados de escala indisponiveis/)).not.toBeInTheDocument();
+    });
+
+    it('substitui "Check-in sem escala" por "Check-in (escala indisponivel)"', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          escalado: false, escala_source: 'AUSENTE' as any,
+          teve_jornada: false, checkin_status: 'RECEBIDO',
+        }),
+      ]);
+      renderControle();
+      expect(screen.getByText('Check-in (escala indisponivel)')).toBeInTheDocument();
+      expect(screen.queryByText('Check-in sem escala')).not.toBeInTheDocument();
+    });
+
+    it('oculta alertas JORNADA_FRMS_SEM_ESCALA e ESCALADO_SEM_JORNADA_FRMS quando sem escala', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          escalado: false, escala_source: 'AUSENTE' as any,
+          alertas: ['JORNADA_FRMS_SEM_ESCALA', 'CHECKIN_PENDENTE'],
+        }),
+      ]);
+      renderControle();
+      expect(screen.queryByText('Jornada FRMS sem escala')).not.toBeInTheDocument();
+      expect(screen.getAllByText('Check-in pendente').length).toBeGreaterThan(0);
+    });
+
+    it('mantem alertas de escala quando ha dados de escala disponiveis', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          escalado: true,
+          alertas: ['ESCALADO_SEM_JORNADA_FRMS'],
+        }),
+      ]);
+      renderControle();
+      expect(screen.getByText('Escalado sem jornada FRMS')).toBeInTheDocument();
+    });
+  });
+
+  describe('Fontes com rotulos individuais por coluna', () => {
+    it('exibe rotulos Sono, Despertar e Jornada acima de cada badge', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          sleep_data_source: 'REAL',
+          wake_data_source: 'ESTIMADO',
+          jornada_data_source: 'MANUAL' as any,
+        }),
+      ]);
+      renderControle();
+      // Check that individual labels are shown instead of the old single caption
+      const sonoLabels = screen.getAllByText('Sono');
+      const despertarLabels = screen.getAllByText('Despertar');
+      const jornadaLabels = screen.getAllByText('Jornada');
+      expect(sonoLabels.length).toBeGreaterThan(0);
+      expect(despertarLabels.length).toBeGreaterThan(0);
+      expect(jornadaLabels.length).toBeGreaterThan(0);
+    });
+  });
 });
