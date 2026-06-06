@@ -506,19 +506,24 @@ export async function buscarAcumuloFrota(
     const mesFim = `${mesReferencia}-${String(diasNoMes(ano, mes)).padStart(2, '0')}`;
     const periodoInicio = quinzenaReferencia === 'Q2' ? `${mesReferencia}-16` : mesInicio;
     const periodoFim = quinzenaReferencia === 'Q1' ? `${mesReferencia}-15` : mesFim;
-    const seteDiasInicio = dateOffset(periodoFim, -6);
     const limiteMesMin = Math.max(1, Math.round((limites.HV_MES_HORAS || 1) * 60));
-    const limite7dMin = Math.max(1, Math.round((limites.HV_7_DIAS_HORAS || 1) * 60));
 
     // Use frms_acumulo_rolling as base (same universe as heatmap) and LEFT JOIN jornadas
     // so ALL monitored tripulants appear, even those without jornadas in this month.
+    // Also LEFT JOIN the latest rolling snapshot per tripulant for 7d/365d/dia values,
+    // which must come from the rolling table (not computed from jornadas scoped to the month).
     const rowsMes = await db
       .prepare(
         `SELECT t.tripulante_id,
                 COALESCE(p.nome, 'Tripulante #' || t.tripulante_id) as nome,
                 NULLIF(p.guerra, '') as nome_guerra,
                 COALESCE(SUM(CASE WHEN j.data >= ? AND j.data <= ? THEN j.horas_voo_minutos ELSE 0 END), 0) as hv_mes_min,
-                COALESCE(SUM(CASE WHEN j.data >= ? AND j.data <= ? THEN j.horas_voo_minutos ELSE 0 END), 0) as hv_7d_min
+                ar.hv_365_dias_min as hv_365d_min,
+                ar.pct_limite_365d as pct_365d,
+                ar.hv_7_dias_min as hv_7d_min,
+                ar.pct_limite_7d as pct_7d,
+                ar.hv_dia_min as hv_dia_min,
+                ar.pct_limite_dia as pct_dia
          FROM (
            SELECT DISTINCT tripulante_id
            FROM frms_acumulo_rolling
@@ -529,6 +534,14 @@ export async function buscarAcumuloFrota(
            AND j.deleted_at IS NULL
            AND j.data >= ?
            AND j.data <= ?
+         LEFT JOIN frms_acumulo_rolling ar ON ar.tripulante_id = t.tripulante_id
+           AND ar.id = (
+             SELECT ar2.id
+             FROM frms_acumulo_rolling ar2
+             WHERE ar2.tripulante_id = t.tripulante_id AND ar2.deleted_at IS NULL
+             ORDER BY ar2.data_referencia DESC, ar2.id DESC
+             LIMIT 1
+           )
          WHERE p.deleted_at IS NULL
            AND (? IS NULL OR p.empresa_id = ?)
          GROUP BY t.tripulante_id
@@ -537,8 +550,6 @@ export async function buscarAcumuloFrota(
       )
       .bind(
         periodoInicio,
-        periodoFim,
-        seteDiasInicio,
         periodoFim,
         periodoInicio,
         periodoFim,
@@ -552,9 +563,13 @@ export async function buscarAcumuloFrota(
     const resultadosMes = (rowsMes.results || []).map((row: Record<string, unknown>) => {
       const hvMesMin = (row.hv_mes_min as number) || 0;
       const hv7dMin = (row.hv_7d_min as number) || 0;
+      const pct7d = (row.pct_7d as number) || 0;
+      const hv365dMin = (row.hv_365d_min as number) || 0;
+      const pct365d = (row.pct_365d as number) || 0;
+      const hvDiaMin = (row.hv_dia_min as number) || 0;
+      const pctDia = (row.pct_dia as number) || 0;
       const pctMes = (hvMesMin / limiteMesMin) * 100;
-      const pct7d = (hv7dMin / limite7dMin) * 100;
-      const pctMax = Math.max(pctMes, pct7d);
+      const pctMax = Math.max(pctMes, pct7d, pct365d, pctDia);
 
       let nivelMax = 'OK';
       if (pctMax >= limiteCriticoPct) nivelMax = 'CRITICO';
@@ -569,10 +584,10 @@ export async function buscarAcumuloFrota(
         pct_mes: pctMes,
         hv_7d_min: hv7dMin,
         pct_7d: pct7d,
-        hv_365d_min: 0,
-        pct_365d: 0,
-        hv_dia_min: 0,
-        pct_dia: 0,
+        hv_365d_min: hv365dMin,
+        pct_365d: pct365d,
+        hv_dia_min: hvDiaMin,
+        pct_dia: pctDia,
         nivel_max: nivelMax,
       };
     });
