@@ -58,21 +58,22 @@ function calcFatoresAgravantes(j: JornadaDia) {
     if (h >= 8) fatorJornada -= 0.1;
   }
 
-  const duracaoHoras = j.duracao_jornada_minutos / 60;
+  const duracaoMinutos = j.duracao_jornada_minutos ?? 0;
+  const duracaoHoras = duracaoMinutos / 60;
   // Jornada > 10h → +0.1%
   if (duracaoHoras > 10) fatorJornada += 0.1;
   // Jornada < 8h → -0.1% (mitigante)
   if (duracaoHoras > 0 && duracaoHoras < 8) fatorJornada -= 0.1;
 
   // Sem apresentação (dia de folga) → -0.2% (mitigante)
-  if (!j.hora_apresentacao && j.duracao_jornada_minutos === 0) fatorJornada -= 0.2;
+  if (!j.hora_apresentacao && duracaoMinutos === 0) fatorJornada -= 0.2;
 
   // Repouso > 13h → -0.1% (mitigante)
   if (j.repouso_anterior_min !== null && j.repouso_anterior_min > 13 * 60) {
     fatorJornada -= 0.1;
   }
 
-  const horasVoo = j.horas_voo_minutos / 60;
+  const horasVoo = (j.horas_voo_minutos ?? 0) / 60;
   // Horas de voo ≥ 6h → +0.1%
   if (horasVoo >= 6) fatorVoo += 0.1;
   // Até 4h de voo → -0.1% (mitigante)

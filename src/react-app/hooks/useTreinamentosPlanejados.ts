@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
-import { notifyDataChanged } from '@/react-app/utils/data-sync';
 
 export type TreinamentoPlanejadoStatus =
   | 'PLANEJADO'
@@ -290,6 +289,20 @@ export interface TreinamentoPlanejadoPresencaInput {
   observacoes?: string | null;
 }
 
+export type TreinamentoPlanejadoPresencaDiaStatus =
+  | 'PENDENTE'
+  | 'PRESENTE'
+  | 'AUSENTE'
+  | 'PARCIAL'
+  | 'DISPENSADO';
+
+export interface TreinamentoPlanejadoPresencaDiaInput {
+  funcionario_id: number;
+  status: TreinamentoPlanejadoPresencaDiaStatus;
+  minutos_presentes?: number | null;
+  observacoes?: string | null;
+}
+
 type ApiEnvelope<T> = {
   success: boolean;
   data?: T;
@@ -340,9 +353,6 @@ const KEYS = {
 };
 
 function invalidateTreinamentosPlanejados(queryClient: ReturnType<typeof useQueryClient>) {
-  // A5: além de invalidar o cache React Query, sinaliza páginas/abas que não usam RQ
-  // (ex.: Visão Mensal Integrada) e dependem destes dados, para revalidarem.
-  notifyDataChanged('treinamentos');
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: ['treinamentos-planejados'] }),
     queryClient.invalidateQueries({ queryKey: ['solicitacoes-treinamento'] }),
@@ -452,6 +462,35 @@ export function useAtualizarPresencaTreinamento() {
         method: 'PATCH',
         body: JSON.stringify(input),
       }),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateTreinamentosPlanejados(queryClient),
+        queryClient.invalidateQueries({ queryKey: KEYS.detail(variables.id) }),
+      ]);
+    },
+  });
+}
+
+export function useAtualizarPresencaDiaTreinamento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      diaId,
+      input,
+    }: {
+      id: number;
+      diaId: number;
+      input: TreinamentoPlanejadoPresencaDiaInput;
+    }) =>
+      request<{ treinamento_id: number; dia_id: number; participante_id: number }>(
+        `/planejados/${id}/dias/${diaId}/presencas`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        },
+      ),
     onSuccess: async (_, variables) => {
       await Promise.all([
         invalidateTreinamentosPlanejados(queryClient),

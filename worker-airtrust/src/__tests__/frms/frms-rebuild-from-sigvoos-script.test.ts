@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-// @ts-expect-error Script operacional .mjs fora do pacote worker, importado aqui só para testes puros.
+// Operational .mjs script lives outside the worker package; this test imports its pure helpers.
 import {
   buildOrphanAlertCleanupSql,
   buildPlan,
