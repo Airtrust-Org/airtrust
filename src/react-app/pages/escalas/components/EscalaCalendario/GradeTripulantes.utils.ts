@@ -1,6 +1,7 @@
 import type {
   EscalaAlocacao,
   EscalaCoberturaTripulante,
+  EscalaEvento,
 } from '../../hooks/queries/useEscalasQuery';
 
 export function isAlocacaoOperacionalComAeronave(alocacao: EscalaAlocacao): boolean {
@@ -77,6 +78,106 @@ export function isOppositeTripulanteQuinzenaDay(
 
   return tripulanteQuinzena !== quinzenaNumero;
 }
+
+/**
+ * Mapping from escala_eventos.tipo_evento to the corresponding
+ * escala_alocacoes.situacao_tipo and display color.
+ * Events synced from external modules (simuladores, funcionarios) appear only
+ * in escala_eventos — not in escala_alocacoes. GradeTripulantes only renders
+ * from alocacoes, so we bridge them here.
+ */
+const EVENT_TYPE_TO_SITUACAO: Record<
+  string,
+  { situacao_tipo: NonNullable<EscalaAlocacao['situacao_tipo']>; cor: string; label: string }
+> = {
+  treinamento_simulador: { situacao_tipo: 'SIM', cor: '#9333EA', label: 'Simulador' },
+  ferias: { situacao_tipo: 'FERIAS', cor: '#16A34A', label: 'Férias' },
+  licenca: { situacao_tipo: 'AFT', cor: '#DC2626', label: 'Licença' },
+  medico: { situacao_tipo: 'MED', cor: '#F59E0B', label: 'Médico' },
+  treinamento_solo: { situacao_tipo: 'CURSO', cor: '#6366F1', label: 'Treinamento' },
+};
+
+/**
+ * Build synthetic EscalaAlocacao objects from events in escala_eventos that
+ * were synced from external modules (simuladores, funcionarios) but never
+ * materialized in escala_alocacoes.
+ *
+ * The GradeTripulantes grid only renders from alocacoes — without this bridge,
+ * externally-managed events would be invisible to tripulantes in the
+ * traditional Escala Mensal view.
+ */
+export function buildSyntheticAlocacoesFromEventos(params: {
+  eventos: EscalaEvento[];
+  escalaId: string;
+  tripulanteIds: Set<string>;
+}): EscalaAlocacao[] {
+  const { eventos, escalaId, tripulanteIds } = params;
+
+  return eventos
+    .filter(
+      (evento) =>
+        evento.escala_id === String(escalaId) &&
+        tripulanteIds.has(evento.funcionario_id) &&
+        evento.status !== 'cancelado' &&
+        EVENT_TYPE_TO_SITUACAO[evento.tipo_evento] !== undefined,
+    )
+    .map((evento) => {
+      const mapping = EVENT_TYPE_TO_SITUACAO[evento.tipo_evento];
+      const now = new Date().toISOString();
+      const syntheticId = `synthetic-${evento.tipo_evento}-${evento.id}`;
+
+      return {
+        id: syntheticId,
+        escala_id: escalaId,
+        funcao: null as EscalaAlocacao['funcao'],
+        situacao_tipo: mapping.situacao_tipo,
+        situacao_cor: mapping.cor,
+        situacao_nome: evento.observacoes || mapping.label,
+        situacao_icone: null,
+        situacao_bloqueia_alocacao: null,
+        quinzena_id: null,
+        data_inicio: evento.data_inicio,
+        data_fim: evento.data_fim,
+        padrao_escala_id: null,
+        base: null,
+        observacoes: evento.observacoes || null,
+        status: (evento.status === 'confirmado'
+          ? 'confirmado'
+          : 'planejado') as EscalaAlocacao['status'],
+        auto_gerado: true,
+        created_by: null,
+        created_at: now,
+        updated_at: now,
+        funcionario: {
+          id: evento.funcionario_id,
+          nome: evento.funcionario_nome || null,
+          nome_guerra: null,
+          matricula: evento.funcionario_matricula || null,
+          role: evento.funcionario_cargo || null,
+        },
+        aeronave: {
+          id: null,
+          prefixo: null,
+          modelo: null,
+        },
+        funcionario_id: evento.funcionario_id,
+        funcionario_nome: evento.funcionario_nome || null,
+        funcionario_guerra: null,
+        funcionario_matricula: evento.funcionario_matricula || null,
+        funcionario_role: evento.funcionario_cargo || null,
+        funcionario_quinzena: null,
+        funcionario_is_instrutor: undefined,
+        aeronave_id: null,
+        aeronave_prefixo: null,
+        aeronave_modelo: null,
+        modelo_aeronave: null,
+        funcionario_modelo_aeronave: null,
+      } satisfies EscalaAlocacao;
+    });
+}
+
+// Keep legacy alias for backward compat with any direct imports
+export const buildSimulatorSyntheticAlocacoes = buildSyntheticAlocacoesFromEventos;
 
 export function buildTripulanteAlocacoesMap(params: {
   tripulantes: EscalaCoberturaTripulante[];

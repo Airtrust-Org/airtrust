@@ -10,7 +10,9 @@ import type {
   EscalaCoberturaTripulante,
   QuinzenaEscala,
 } from '../../hooks/queries/useEscalasQuery';
+import type { EscalaEvento } from '../../hooks/queries/useEscalasQuery';
 import {
+  buildSyntheticAlocacoesFromEventos,
   buildTripulanteAlocacoesMap,
   chooseTripulanteDayAlocacao,
   isAlocacaoOperacionalComAeronave,
@@ -29,6 +31,8 @@ interface Props {
     };
   };
   alocacoes: EscalaAlocacao[];
+  eventos?: EscalaEvento[]; // eventos da escala (ex: treinamento_simulador)
+  escalaId: string; // ID da escala atual (necessário para filtrar eventos sintéticos)
   quinzenas: QuinzenaEscala[];
   escalaMes: number;
   escalaAno: number;
@@ -165,6 +169,8 @@ function StatusBar({ status }: { status: EscalaCoberturaTripulante['status_geral
 export default function GradeTripulantes({
   cobertura,
   alocacoes,
+  eventos,
+  escalaId,
   quinzenas,
   escalaMes,
   escalaAno,
@@ -211,15 +217,34 @@ export default function GradeTripulantes({
     ? format(diasFiltrados[diasFiltrados.length - 1], 'yyyy-MM-dd')
     : '';
 
+  // Merge synthetic alocacoes from simulator eventos (treinamento_simulador)
+  // so they appear in the GradeTripulantes grid alongside real alocacoes.
+  const alocacoesComSimulador = useMemo(() => {
+    if (!eventos || eventos.length === 0) return alocacoes;
+
+    const ids = new Set(cobertura.tripulantes.map((t) => t.id));
+    const synthetic = buildSyntheticAlocacoesFromEventos({
+      eventos,
+      escalaId,
+      tripulanteIds: ids,
+    });
+
+    if (synthetic.length === 0) return alocacoes;
+
+    // Prepend synthetic entries — real alocacoes have higher priority
+    // in chooseTripulanteDayAlocacao, so they'll win if there's overlap
+    return [...synthetic, ...alocacoes];
+  }, [alocacoes, eventos, cobertura.tripulantes]);
+
   const alocacoesPorTripulante = useMemo(
     () =>
       buildTripulanteAlocacoesMap({
         tripulantes: cobertura.tripulantes,
-        alocacoes,
+        alocacoes: alocacoesComSimulador,
         intervaloInicio,
         intervaloFim,
       }),
-    [alocacoes, cobertura.tripulantes, intervaloFim, intervaloInicio],
+    [alocacoesComSimulador, cobertura.tripulantes, intervaloFim, intervaloInicio],
   );
 
   const grupos = useMemo<GrupoTripulante[]>(() => {
