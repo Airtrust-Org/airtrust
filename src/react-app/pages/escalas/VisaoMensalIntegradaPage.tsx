@@ -248,13 +248,36 @@ export default function VisaoMensalIntegradaPage() {
   }, [data?.employees, onlyBlocking, onlyConflicts, query, severity, source]);
 
   const visualSummary = useMemo(() => {
-    const events = filteredEmployees.flatMap(allEvents);
+    // Percorre os buckets de cada dia de cada tripulante para contar eventos
+    // com a semântica correta:
+    //   Compromissos = alocações operacionais + treinamentos/simuladores (commitments)
+    //   Avisos       = alertas (qualificações, FRMS, indisponibilidade) severidade WARNING
+    //   Conflitos    = eventos com severidade CONFLICT
+    //   Bloqueios    = eventos com severidade BLOCKING ou blocksAllocation
+    let compromissos = 0;
+    let avisos = 0;
+    let conflitos = 0;
+    let bloqueios = 0;
+    for (const employee of filteredEmployees) {
+      for (const day of Object.values(employee.days)) {
+        for (const event of day.operationalAssignments) compromissos++;
+        for (const event of day.commitments) compromissos++;
+        for (const event of day.alerts) {
+          if (event.severity === 'BLOCKING' || event.blocksAllocation) {
+            bloqueios++;
+          } else if (event.severity === 'WARNING') {
+            avisos++;
+          }
+        }
+        for (const event of day.conflicts) conflitos++;
+      }
+    }
     return {
       employees: filteredEmployees.length,
-      events: events.length,
-      warnings: events.filter((event) => event.severity === 'WARNING').length,
-      conflicts: events.filter((event) => event.severity === 'CONFLICT').length,
-      blockingIssues: events.filter((event) => event.severity === 'BLOCKING' || event.blocksAllocation).length,
+      events: compromissos,
+      warnings: avisos,
+      conflicts: conflitos,
+      blockingIssues: bloqueios,
     };
   }, [filteredEmployees]);
 

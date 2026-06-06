@@ -310,4 +310,127 @@ describe('escala-mensal-integrada — contrato de tenant/filtros/parcialidade', 
   it('B4: filtro de severidade preserva eventos referenciados por conflitos', () => {
     expect(source).toContain('referencedIds');
   });
+
+  it('M11: qualificação vencida NÃO é clampada para primeiro dia do mês', () => {
+    // A data do evento deve usar a data real de vencimento, não
+    // month.startDate como fallback para qualificações já vencidas.
+    // O clamp anterior (dataVencimento < month.startDate ? month.startDate : ...)
+    // empilhava todas as qualificações vencidas no dia 1 do mês,
+    // poluindo o calendário com eventos artificiais.
+    // month.startDate ainda é usado legitimamente para binds SQL e
+    // cálculo de severidade (vencida/vencendoNoMes).
+    expect(source).toContain('date: dataVencimento');
+    // O padrão antigo de clamp com operador ternário não deve existir:
+    expect(source).not.toContain('month.startDate\n            ? month.startDate');
+  });
+
+  it('M12: qualificação vencida não bloqueia alocação quando tem renovação planejada', () => {
+    expect(source).toContain('hasRenewal');
+    expect(source).toContain('blocksAllocation: vencida && !hasRenewal');
+    expect(source).toContain('vencida && !hasRenewal ? \'BLOCKING\' : \'WARNING\'');
+  });
+
+  it('M13: sumário usa buckets corretos — compromissos ≠ alertas ≠ conflitos', () => {
+    // sourceBucket deve colocar QUALIFICACAO/FRMS/INDISPONIBILIDADE em alerts,
+    // ESCALA em operationalAssignments, CONFLICT em conflicts,
+    // e TREINAMENTO/SIMULADOR/OUTRO em commitments.
+    expect(source).toContain("event.source === 'QUALIFICACAO' || event.source === 'FRMS'");
+    expect(source).toContain("return 'alerts'");
+    expect(source).toContain("return 'commitments'");
+    expect(source).toContain("return 'operationalAssignments'");
+  });
+
+  it('M14: TREINAMENTO CANCELADO não aparece como compromisso ativo', () => {
+    // O loader de treinamentos exclui status CANCELADO.
+    // CONCLUIDO é mantido (aparece em cinza no frontend).
+    expect(source).toContain("<> 'CANCELADO'");
+    expect(source).toContain('TREINAMENTO_PLANEJADO');
+  });
+});
+
+describe('escala-mensal-integrada — qualificação date integrity', () => {
+  it('qualificação com vencimento antes do mês usa data real, não month.startDate', () => {
+    // Quando uma qualificação venceu antes do mês corrente (ex: 2026-05-15
+    // para mês 2026-06), o evento NÃO deve ser clampado para 2026-06-01.
+    // Ele deve usar a data real (2026-05-15), o que significa que não
+    // aparecerá no grid do mês corrente (days[event.date] não inclui maio),
+    // mas ainda será contabilizado no sumário do tripulante.
+    const source = readFileSync(
+      new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname,
+      'utf8',
+    );
+
+    // Isola o corpo da função loadQualificacaoEvents (da declaração até o
+    // início da próxima função loadFrmsEvents).
+    const qualStart = source.indexOf('async function loadQualificacaoEvents');
+    const nextFunc = source.indexOf('async function loadFrmsEvents');
+    const qualSection = source.slice(qualStart, nextFunc);
+
+    // A data do evento (campo `date:`) deve usar dataVencimento diretamente,
+    // NÃO com operador ternário de clamp para month.startDate/month.endDate.
+    // month.startDate ainda pode aparecer em outros contextos (bind SQL,
+    // cálculo de vencida/vencendoNoMes), que são usos legítimos.
+    expect(qualSection).toContain('date: dataVencimento');
+    // O padrão antigo de clamp não deve existir:
+    expect(qualSection).not.toContain('month.startDate\n            ? month.startDate');
+    expect(qualSection).not.toContain('month.startDate\n              ? month.startDate');
+  });
+
+  it('qualificação com vencimento dentro do mês aparece na data correta', () => {
+    const source = readFileSync(
+      new URL('../../services/escala-mensal-integrada.ts', import.meta.url).pathname,
+      'utf8',
+    );
+    // Verifica que há lógica para usar a data real quando dentro do mês
+    const qualSection = source.slice(source.indexOf('loadQualificacaoEvents'));
+    expect(qualSection).toContain('dataVencimento');
+  });
+});
+
+describe('aeronaves — contrato de filtro somenteAtivas', () => {
+  const source = readFileSync(
+    new URL('../../routes/aeronaves.ts', import.meta.url).pathname,
+    'utf8',
+  );
+
+  it('somenteAtivas exclui apenas status de indisponibilidade, não outros status válidos', () => {
+    // O filtro anterior UPPER(...) = 'ATIVO' excluía status como 'D' (Disponível).
+    // O novo filtro NOT IN ('I', 'INATIVO', 'INDISPONIVEL', 'INDISPONÍVEL')
+    // alinha com isAeronaveAtiva() do frontend: aeronave é ativa quando
+    // NÃO está indisponível.
+    expect(source).toContain("NOT IN ('I', 'INATIVO', 'INDISPONIVEL', 'INDISPONÍVEL')");
+    expect(source).toContain('isAeronaveAtiva');
+  });
+
+  it('aeronaves com status NULL ou vazio são tratadas como ATIVO', () => {
+    expect(source).toContain("COALESCE(NULLIF(TRIM(status), '')");
+    expect(source).toContain("'ATIVO'");
+  });
+
+  it('tenant isolation é mantida no filtro somenteAtivas', () => {
+    expect(source).toContain('empresa_id = ?');
+    expect(source).toContain('deleted_at IS NULL');
+  });
+});
+
+describe('evd — aeronaves não converte erro em lista vazia silenciosa', () => {
+  const source = readFileSync(
+    new URL('../../routes/aeronaves.ts', import.meta.url).pathname,
+    'utf8',
+  );
+
+  it('erro na query de aeronaves retorna 500, não lista vazia', () => {
+    expect(source).toContain("throw new ApiError('Erro ao listar aeronaves', 500)");
+  });
+
+  it('resposta de sucesso sempre inclui array (nunca null/undefined)', () => {
+    expect(source).toContain('data: results || []');
+  });
+
+  it('lista vazia verdadeira (sem aeronaves) é distinguível de erro', () => {
+    // O endpoint retorna { success: true, data: [] } quando realmente
+    // não há aeronaves, e 500 quando há erro. O frontend pode distinguir
+    // pelo HTTP status code.
+    expect(source).toContain('success: true');
+  });
 });

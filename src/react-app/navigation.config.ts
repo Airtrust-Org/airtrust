@@ -166,6 +166,19 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
       ],
     },
     {
+      id: 'treinamentos',
+      label: 'Treinamentos',
+      icon: 'GraduationCap',
+      expandable: true,
+      children: [
+        {
+          id: 'treinamentos-planejados',
+          label: 'Turmas Planejadas',
+          path: '/treinamentos/planejados',
+        },
+      ],
+    },
+    {
       id: 'minhas-assinaturas',
       label: 'Minhas Assinaturas',
       icon: 'CheckCircle',

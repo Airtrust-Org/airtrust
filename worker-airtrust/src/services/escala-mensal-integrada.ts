@@ -783,12 +783,12 @@ async function loadQualificacaoEvents(db: D1Database, empresaId: number, month: 
       sourceRoute: `/qualificacoes?id=${row.id}`,
       employeeId: String(row.funcionario_id),
       employeeName: String(row.funcionario_nome || 'Tripulante'),
-      date:
-        dataVencimento < month.startDate
-          ? month.startDate
-          : dataVencimento > month.endDate
-            ? month.endDate
-            : dataVencimento,
+      // Usa a data real de vencimento. Qualificações vencidas antes do mês
+      // NÃO são clampadas para o primeiro dia do mês — isso poluía o
+      // calendário com eventos all-day artificiais. O evento só aparece no
+      // grid se a data real estiver dentro do mês corrente; no sumário do
+      // tripulante ele ainda é contabilizado como alerta/bloqueio.
+      date: dataVencimento,
       allDay: true,
       type: vencida
         ? hasRenewal

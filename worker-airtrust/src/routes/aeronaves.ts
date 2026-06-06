@@ -22,7 +22,13 @@ aeronaves.get('/', auth(), async (c) => {
   try {
     const filters = ['deleted_at IS NULL', 'empresa_id = ?'];
     if (somenteAtivas) {
-      filters.push("UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'");
+      // Alinha com isAeronaveAtiva() do frontend: aeronave é ativa quando NÃO está
+      // em status de indisponibilidade. Status NULL/vazio é tratado como ATIVO.
+      // Status como 'D' (Disponível), 'ATIVO', ou qualquer outro não-indisponível
+      // devem aparecer na EVD.
+      filters.push(
+        "UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) NOT IN ('I', 'INATIVO', 'INDISPONIVEL', 'INDISPONÍVEL')",
+      );
     }
 
     const { results } = await db
