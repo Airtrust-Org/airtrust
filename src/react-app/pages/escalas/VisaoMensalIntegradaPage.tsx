@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
@@ -9,11 +9,13 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  WifiOff,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
 import { useApi } from '@/react-app/hooks/useApi';
+import { onDataChanged } from '@/react-app/utils/data-sync';
 import EscalasTabBar from './components/EscalasTabBar';
 
 type IntegratedMonthlyEventSource =
@@ -183,6 +185,9 @@ function EventPill({ event }: { event: IntegratedMonthlyEvent }) {
 
 function DayCell({ date, events }: { date: string; events: IntegratedMonthlyEvent[] }) {
   const dayNumber = Number(date.slice(8, 10));
+  const [expanded, setExpanded] = useState(false);
+  const hasOverflow = events.length > 4;
+  const visible = expanded ? events : events.slice(0, 4);
   return (
     <div className="min-h-[112px] min-w-[132px] border-r border-slate-200 bg-white p-2 align-top last:border-r-0">
       <div className="mb-1 flex items-center justify-between">
@@ -194,13 +199,18 @@ function DayCell({ date, events }: { date: string; events: IntegratedMonthlyEven
         ) : null}
       </div>
       <div className="space-y-1">
-        {events.slice(0, 4).map((event) => (
+        {visible.map((event) => (
           <EventPill key={event.id} event={event} />
         ))}
-        {events.length > 4 ? (
-          <div className="rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] text-slate-600">
-            +{events.length - 4} itens
-          </div>
+        {hasOverflow ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
+            className="w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-left text-[11px] text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-400"
+          >
+            {expanded ? 'Mostrar menos' : `+${events.length - 4} itens`}
+          </button>
         ) : null}
       </div>
     </div>
@@ -258,6 +268,26 @@ export default function VisaoMensalIntegradaPage() {
     setRefreshKey((value) => value + 1);
     refetch();
   };
+
+  // A5: revalida automaticamente quando dados relacionados mudam (mesma aba ou outra
+  // aba) e ao reativar a janela — sem depender de recarga manual. Sem polling.
+  useEffect(() => {
+    const unsubscribe = onDataChanged(
+      () => refetch(),
+      ['treinamentos', 'escala', 'qualificacoes', 'simuladores', 'all'],
+    );
+    const onFocus = () => refetch();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refetch]);
+
+  const diagnostics = data?.diagnostics;
+  const partialSources = diagnostics?.partialSources || [];
+  const diagnosticWarnings = diagnostics?.warnings || [];
+  const hasPartialData = partialSources.length > 0 || diagnosticWarnings.length > 0;
 
   return (
     <AppLayout>
@@ -322,6 +352,51 @@ export default function VisaoMensalIntegradaPage() {
             </div>
           ))}
         </section>
+
+        {hasPartialData ? (
+          <section
+            className="rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-sm"
+            role="alert"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-3">
+              <WifiOff className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700" aria-hidden="true" />
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-amber-900">
+                  Dados parciais — uma ou mais fontes não responderam
+                </div>
+                <p className="mt-1 text-sm text-amber-800">
+                  Os totais abaixo podem estar incompletos. Ausência de eventos de uma fonte
+                  indisponível <strong>não significa</strong> ausência de compromissos.
+                </p>
+                {partialSources.length > 0 ? (
+                  <p className="mt-1 text-sm text-amber-800">
+                    Fontes afetadas:{' '}
+                    <span className="font-medium">
+                      {partialSources
+                        .map((src) => SOURCE_LABEL[src as IntegratedMonthlyEventSource] || src)
+                        .join(', ')}
+                    </span>
+                    .
+                  </p>
+                ) : null}
+                {diagnosticWarnings.length > 0 ? (
+                  <ul className="mt-1 list-disc pl-5 text-xs text-amber-700">
+                    {diagnosticWarnings.map((warning, index) => (
+                      <li key={index}>{warning}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                <div className="mt-2">
+                  <Button variant="secondary" onClick={handleRefresh}>
+                    <RefreshCw className="h-4 w-4" />
+                    Tentar novamente
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
