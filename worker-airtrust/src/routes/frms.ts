@@ -62,6 +62,7 @@ import {
 } from '../lib/frms/db-service';
 import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms.handler';
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
+import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import fadigaAcumulada from './frms-fadiga-acumulada';
 import firaRoutes from './frms-fira';
@@ -1414,12 +1415,14 @@ frmsRoutes.get(
       }
     }
 
+    // Triagem operacional usa apenas fonte canônica (SIGVOOS); FIRA/MANUAL não inflam o score.
     const horas7 = await c.env.DB.prepare(
       `SELECT COALESCE(SUM(COALESCE(horas_voo_minutos,0)),0) AS minutos
          FROM frms_jornada
         WHERE tripulante_id = ?
           AND date(data) >= date('now','-7 days')
-          AND deleted_at IS NULL`,
+          AND deleted_at IS NULL
+          AND ${buildCanonicalOperationalSourceSql('origem')}`,
     )
       .bind(funcionarioId)
       .first<{ minutos: number }>();
@@ -1429,7 +1432,8 @@ frmsRoutes.get(
          FROM frms_jornada
         WHERE tripulante_id = ?
           AND date(data) >= date('now','-28 days')
-          AND deleted_at IS NULL`,
+          AND deleted_at IS NULL
+          AND ${buildCanonicalOperationalSourceSql('origem')}`,
     )
       .bind(funcionarioId)
       .first<{ minutos: number }>();
@@ -1439,7 +1443,8 @@ frmsRoutes.get(
          FROM frms_jornada
         WHERE tripulante_id = ?
           AND date(data) >= date('now','-28 days')
-          AND deleted_at IS NULL`,
+          AND deleted_at IS NULL
+          AND ${buildCanonicalOperationalSourceSql('origem')}`,
     )
       .bind(funcionarioId)
       .first<{ dias: number }>();
