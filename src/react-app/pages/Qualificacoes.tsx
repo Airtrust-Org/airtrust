@@ -2340,7 +2340,7 @@ export default function Qualificacoes() {
                 Histórico
               </button>
               <button
-                onClick={() => setActiveTab('planejados')}
+                onClick={() => setActiveTab('turmas')}
                 className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
                   activeTab === 'turmas'
                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
@@ -2684,30 +2684,7 @@ export default function Qualificacoes() {
             </div>
           )}
 
-          {isHistoricoTab && false && (
-            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
-                <span>Total</span>
-                <strong className="text-slate-700 dark:text-slate-200">
-                  {planejadosStats.total}
-                </strong>
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-1 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300">
-                <span>Futuros</span>
-                <strong>{planejadosStats.futuros}</strong>
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                <span>Atrasados</span>
-                <strong>{planejadosStats.atrasados}</strong>
-              </span>
-              {planejadosStats.semData > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  <span>Sem data</span>
-                  <strong>{planejadosStats.semData}</strong>
-                </span>
-              )}
-            </div>
-          )}
+          {/* Planejados stats bar removed — Turmas tab handles scheduling separately */}
         </div>
 
         {/* Error Banners */}
@@ -3265,48 +3242,7 @@ export default function Qualificacoes() {
             </Suspense>
           )}
 
-          {isHistoricoTab && false && (
-            <DataTable
-              key={`planejados-page-${page}-limit-${limit}`}
-              tableId="qualificacoes-historico"
-              data={planejadosHistorico}
-              columns={historicoColumns}
-              rowClassName={(row) => {
-                const item = row as HistoricoItem;
-                return isPlanejadaVencida(item) ? 'bg-amber-50 border-l-4 border-amber-400' : '';
-              }}
-              loading={planejadosTableLoading}
-              columnConfigOpen={columnConfigOpen === 'historico'}
-              onColumnConfigOpenChange={(open) => setColumnConfigOpen(open ? 'historico' : null)}
-              showInternalColumnConfigButton={false}
-              sortConfig={sortConfig}
-              onSortChange={(newSortConfig) => {
-                setSortConfig(newSortConfig);
-                setPage(1);
-              }}
-              page={page}
-              pageSize={limit}
-              total={historicoMeta?.total ?? planejadosHistorico.length}
-              onPageChange={(newPage) => setPage(newPage)}
-              onPageSizeChange={(size) => {
-                setLimit(size);
-                setPage(1);
-              }}
-              pageSizeOptions={[50, 100]}
-              emptyState={
-                <div className="text-center py-12">
-                  <CalendarDays className="mx-auto mb-4 text-slate-300" size={60} />
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    Nenhum treinamento planejado encontrado
-                  </h3>
-                  <p className="text-sm text-slate-600 mb-4">
-                    Os treinamentos futuros aparecem aqui quando a qualificação é criada no
-                    Histórico com data planejada.
-                  </p>
-                </div>
-              }
-            />
-          )}
+          {/* Planejados DataTable removed — now handled by TreinamentosPlanejadosPage in Turmas tab */}
         </div>
       </div>
 
@@ -3902,7 +3838,7 @@ export default function Qualificacoes() {
               Para turmas com múltiplos dias, instrutores cadastrados, recursos e controle de
               presença, use o{' '}
               <a
-                href="/treinamentos/planejados"
+                href="/qualificacoes?tab=turmas"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-amber-900 underline hover:text-amber-950"

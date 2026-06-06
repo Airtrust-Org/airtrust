@@ -346,10 +346,14 @@ app.get('/sessoes', async (c) => {
         sa.status,
         sa.observacoes,
         sa.created_at,
-        sa.updated_at
+        sa.updated_at,
+        ms.tipo_sessao_id as tipo_sessao_id,
+        ts_ref.codigo as tipo_sessao_codigo
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       ${aeronaveJoin}
+      LEFT JOIN modelos_sessao ms ON sa.template_id = ms.id AND ms.deleted_at IS NULL
+      LEFT JOIN tipos_sessao ts_ref ON ms.tipo_sessao_id = ts_ref.id AND ts_ref.deleted_at IS NULL
       INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
       WHERE sa.deleted_at IS NULL
@@ -379,6 +383,8 @@ app.get('/sessoes', async (c) => {
         sa.observacoes,
         sa.created_at,
         sa.updated_at,
+        ms.tipo_sessao_id as tipo_sessao_id,
+        ts_ref.codigo as tipo_sessao_codigo,
         -- PARTICIPANTES em JSON (evita N+1)
         COALESCE(
           json_group_array(
@@ -408,6 +414,8 @@ app.get('/sessoes', async (c) => {
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       ${aeronaveJoin}
+      LEFT JOIN modelos_sessao ms ON sa.template_id = ms.id AND ms.deleted_at IS NULL
+      LEFT JOIN tipos_sessao ts_ref ON ms.tipo_sessao_id = ts_ref.id AND ts_ref.deleted_at IS NULL
       INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
       -- LEFT JOIN participantes
