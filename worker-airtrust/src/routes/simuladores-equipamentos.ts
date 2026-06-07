@@ -241,12 +241,18 @@ app.get('/tipos-check', async (c) => {
 app.get('/', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
+    // Check if empresa_id column exists (may not be present in older DB schemas)
+    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
+    const hasEmpresaId = (tableInfo.results || []).some(
+      (row: any) => String(row.name || '') === 'empresa_id',
+    );
     const page = Math.max(parseInt(c.req.query('page') || '1', 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '100', 10) || 100, 1), 500);
     const offset = (page - 1) * limit;
     const search = (c.req.query('search') || '').trim();
     const status = c.req.query('status') || '';
     const tipo = c.req.query('tipo') || '';
+    const empresaClause = hasEmpresaId ? ' AND empresa_id = ?' : '';
     let q = `SELECT
       id,
       nome,
@@ -258,12 +264,10 @@ app.get('/', async (c) => {
       created_at,
       updated_at
     FROM simuladores
-    WHERE deleted_at IS NULL
-      AND empresa_id = ?`;
-    let countQuery =
-      'SELECT COUNT(*) as total FROM simuladores WHERE deleted_at IS NULL AND empresa_id = ?';
-    const ps: any[] = [empresaId];
-    const countParams: any[] = [empresaId];
+    WHERE deleted_at IS NULL${empresaClause}`;
+    let countQuery = `SELECT COUNT(*) as total FROM simuladores WHERE deleted_at IS NULL${empresaClause}`;
+    const ps: any[] = hasEmpresaId ? [empresaId] : [];
+    const countParams: any[] = hasEmpresaId ? [empresaId] : [];
     if (search) {
       q +=
         ' AND (nome LIKE ? OR modelo LIKE ? OR tipo LIKE ? OR fabricante LIKE ? OR localizacao LIKE ?)';
@@ -384,10 +388,16 @@ app.get('/:id', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
+    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
+    const hasEmpresaId = (tableInfo.results || []).some(
+      (row: any) => String(row.name || '') === 'empresa_id',
+    );
     const s = await c.env.DB.prepare(
-      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
+      hasEmpresaId
+        ? 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?'
+        : 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL',
     )
-      .bind(id, empresaId)
+      .bind(...(hasEmpresaId ? [id, empresaId] : [id]))
       .first();
     if (!s) {
       return c.json({ success: false, error: 'Não encontrado', code: 'SIMULADOR_NOT_FOUND' }, 404);
@@ -406,18 +416,21 @@ app.put('/:id', async (c) => {
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
     const b = await c.req.json();
-    const a = await c.env.DB.prepare(
-      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
-    )
-      .bind(id, empresaId)
-      .first();
-    if (!a) {
-      return c.json({ success: false, error: 'Não encontrado', code: 'SIMULADOR_NOT_FOUND' }, 404);
-    }
     const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
     const colunas = new Set(
       (tableInfo.results || []).map((row: Record<string, unknown>) => String(row.name || '')),
     );
+    const hasEmpresaId = colunas.has('empresa_id');
+    const a = await c.env.DB.prepare(
+      hasEmpresaId
+        ? 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?'
+        : 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL',
+    )
+      .bind(...(hasEmpresaId ? [id, empresaId] : [id]))
+      .first();
+    if (!a) {
+      return c.json({ success: false, error: 'Não encontrado', code: 'SIMULADOR_NOT_FOUND' }, 404);
+    }
 
     const updates = [
       'nome=?',
@@ -449,16 +462,19 @@ app.put('/:id', async (c) => {
 
     updates.push("updated_at=datetime('now')");
     params.push(id);
+    if (hasEmpresaId) params.push(empresaId);
 
     await c.env.DB.prepare(
-      `UPDATE simuladores SET ${updates.join(',')} WHERE id=? AND empresa_id = ?`,
+      `UPDATE simuladores SET ${updates.join(',')} WHERE id=?${hasEmpresaId ? ' AND empresa_id = ?' : ''}`,
     )
-      .bind(...params, empresaId)
+      .bind(...params)
       .run();
     const u = await c.env.DB.prepare(
-      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
+      hasEmpresaId
+        ? 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?'
+        : 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL',
     )
-      .bind(id, empresaId)
+      .bind(...(hasEmpresaId ? [id, empresaId] : [id]))
       .first();
     await audit(c.env.DB, {
       tabela: 'simuladores',
@@ -485,14 +501,24 @@ app.delete('/:id', async (c) => {
     if (denied) return denied;
 
     const id = c.req.param('id');
+    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
+    const hasEmpresaId = (tableInfo.results || []).some(
+      (row: any) => String(row.name || '') === 'empresa_id',
+    );
     const a = await c.env.DB.prepare(
-      'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?',
+      hasEmpresaId
+        ? 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?'
+        : 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL',
     )
-      .bind(id, empresaId)
+      .bind(...(hasEmpresaId ? [id, empresaId] : [id]))
       .first();
     if (!a) {
-      const deleted = await c.env.DB.prepare('SELECT * FROM simuladores WHERE id=? AND empresa_id = ?')
-        .bind(id, empresaId)
+      const deleted = await c.env.DB.prepare(
+        hasEmpresaId
+          ? 'SELECT * FROM simuladores WHERE id=? AND empresa_id = ?'
+          : 'SELECT * FROM simuladores WHERE id=?',
+      )
+        .bind(...(hasEmpresaId ? [id, empresaId] : [id]))
         .first();
       if (deleted) {
         return c.json({ success: true, message: 'Simulador já excluído' });
@@ -500,9 +526,11 @@ app.delete('/:id', async (c) => {
       return c.json({ success: false, error: 'Não encontrado', code: 'SIMULADOR_NOT_FOUND' }, 404);
     }
     await c.env.DB.prepare(
-      "UPDATE simuladores SET deleted_at=datetime('now')WHERE id=? AND empresa_id = ?",
+      hasEmpresaId
+        ? "UPDATE simuladores SET deleted_at=datetime('now')WHERE id=? AND empresa_id = ?"
+        : "UPDATE simuladores SET deleted_at=datetime('now')WHERE id=?",
     )
-      .bind(id, empresaId)
+      .bind(...(hasEmpresaId ? [id, empresaId] : [id]))
       .run();
     await audit(c.env.DB, {
       tabela: 'simuladores',
