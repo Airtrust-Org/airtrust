@@ -1070,12 +1070,17 @@ export default function Qualificacoes() {
     [filteredHistorico, historicoMeta?.total, historicoPlanejadoRelacionado.length, statusFiltro],
   );
 
+  // renovadas/planejadas are always global (from API), never derived from the filtered page.
+  // Only total/validas/vencendo/vencidas follow the local-vs-api split.
+  const globalRenovadas = Number(stats.renovadas || 0);
+  const globalPlanejadas = Math.max(
+    Number(stats.planejadas || 0),
+    historicoPlanejadoRelacionado.length,
+  );
+
   const historicoHeaderStats = shouldUseLocalHistoricoHeaderStats
-    ? localHistoricoStats
-    : {
-        ...stats,
-        planejadas: Math.max(stats.planejadas || 0, historicoPlanejadoRelacionado.length),
-      };
+    ? { ...localHistoricoStats, renovadas: globalRenovadas, planejadas: globalPlanejadas }
+    : { ...stats, renovadas: globalRenovadas, planejadas: globalPlanejadas };
 
   const historicoTableLoading = loading && prioritizedHistorico.length === 0;
   const planejadosTableLoading = loading && planejadosHistorico.length === 0;
@@ -3256,44 +3261,136 @@ export default function Qualificacoes() {
 
           {isPlanejadosTab && (
             <div className="space-y-0">
-              {/* Sub-tabs: Lista | Calendário | Turmas */}
-              <div className="flex items-center gap-1 border-b border-slate-100 px-4 pt-2 pb-0">
-                {(['lista', 'calendario', 'turmas'] as const).map((view) => {
-                  const labels: Record<string, string> = {
-                    lista: 'Lista',
-                    calendario: 'Calendário',
-                    turmas: 'Turmas',
-                  };
-                  return (
-                    <button
-                      key={view}
-                      onClick={() => setPlannedView(view)}
-                      className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                        plannedView === view
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                      }`}
-                    >
-                      {labels[view]}
-                    </button>
-                  );
-                })}
+              {/* Tags de resumo globais — sempre vindas da API, nunca da página local */}
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100">
+                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700">
+                  Total <strong>{globalPlanejadas}</strong>
+                </span>
+                {historicoPlanejadoRelacionado.length > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-purple-50 text-purple-700">
+                    Qualificações <strong>{historicoPlanejadoRelacionado.length}</strong>
+                  </span>
+                )}
+                {(treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-blue-50 text-blue-700">
+                    Turmas <strong>{treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0}</strong>
+                  </span>
+                )}
               </div>
 
-              {/* Lista: planejados individuais */}
+              {/* Sub-tabs: Lista | Calendário (só se tiver dados) | Turmas (só se tiver dados) */}
+              {(() => {
+                const temTreinamentos = (treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0) > 0;
+                const viewsDisponiveis = temTreinamentos
+                  ? (['lista', 'calendario', 'turmas'] as const)
+                  : (['lista'] as const);
+                if (viewsDisponiveis.length <= 1 && plannedView !== 'lista') {
+                  setPlannedView('lista');
+                }
+                return viewsDisponiveis.length > 1 ? (
+                  <div className="flex items-center gap-1 border-b border-slate-100 px-4 pt-2 pb-0">
+                    {viewsDisponiveis.map((view) => {
+                      const labels: Record<string, string> = {
+                        lista: 'Lista',
+                        calendario: 'Calendário',
+                        turmas: 'Turmas',
+                      };
+                      return (
+                        <button
+                          key={view}
+                          onClick={() => setPlannedView(view)}
+                          className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                            plannedView === view
+                              ? 'border-blue-600 text-blue-600'
+                              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                          }`}
+                        >
+                          {labels[view]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Lista: qualificações planejadas do histórico + treinamentos planejados */}
               {plannedView === 'lista' && (
-                <Suspense
-                  fallback={
+                <>
+                  {/* Qualificações com status PLANEJADA vindas do historico */}
+                  {historicoPlanejadoRelacionado.length > 0 && (
+                    <div className="px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                        Qualificações planejadas
+                      </p>
+                      <div className="rounded-lg border border-slate-200 overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Tripulante</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Qualificação</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Data prevista</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {historicoPlanejadoRelacionado.map((item) => (
+                              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-3 py-2 font-medium text-slate-800">{item.funcionario_nome}</td>
+                                <td className="px-3 py-2 text-slate-600">
+                                  {item.qualificacao_nome || item.qualificacao_codigo || '—'}
+                                </td>
+                                <td className="px-3 py-2 text-slate-600">
+                                  {item.data_conclusao
+                                    ? new Date(item.data_conclusao + 'T00:00:00').toLocaleDateString('pt-BR')
+                                    : '—'}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-purple-50 text-purple-700">
+                                    Planejada
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Treinamentos planejados via TreinamentosPlanejadosPage */}
+                  {(treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0) > 0 && (
+                    <Suspense
+                      fallback={
+                        <div className="flex items-center justify-center py-20">
+                          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        </div>
+                      }
+                    >
+                      <TreinamentosPlanejadosPage asTab={true} forcedTab="quadro" hideTabNav={true} />
+                    </Suspense>
+                  )}
+
+                  {/* Nenhuma fonte com dados */}
+                  {historicoPlanejadoRelacionado.length === 0 &&
+                    (treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0) === 0 &&
+                    !treinamentosPlanejadosConvocacaoQuery.isLoading && (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <p className="text-slate-500 text-sm">Nenhum treinamento planejado.</p>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Use <strong>Novo treinamento</strong> para criar um planejamento.
+                      </p>
+                    </div>
+                  )}
+
+                  {treinamentosPlanejadosConvocacaoQuery.isLoading && historicoPlanejadoRelacionado.length === 0 && (
                     <div className="flex items-center justify-center py-20">
                       <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     </div>
-                  }
-                >
-                  <TreinamentosPlanejadosPage asTab={true} forcedTab="quadro" hideTabNav={true} />
-                </Suspense>
+                  )}
+                </>
               )}
 
-              {/* Calendário: visão mensal de planejamentos */}
+              {/* Calendário: apenas se houver treinamentos planejados */}
               {plannedView === 'calendario' && (
                 <Suspense
                   fallback={
