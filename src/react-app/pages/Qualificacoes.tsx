@@ -2380,7 +2380,7 @@ export default function Qualificacoes() {
                   size={16}
                   className={isPlanejadosTab ? 'text-blue-600' : ''}
                 />
-                Planejados
+                Planejadas
               </button>
               <button
                 onClick={() => setActiveTab('tipos')}
@@ -2512,10 +2512,26 @@ export default function Qualificacoes() {
                   <span>Novo Modelo</span>
                 </button>
               )}
-              {isPlanejadosTab && plannedView === 'turmas' && (
-                <span className="text-xs text-slate-400 italic">
-                  Use o botão <strong>+ Novo treinamento</strong> na aba Turmas para criar turmas multi-dia.
-                </span>
+              {isPlanejadosTab && plannedView !== 'turmas' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      void carregarHistorico();
+                      treinamentosPlanejadosConvocacaoQuery.refetch();
+                    }}
+                    className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Atualizar</span>
+                  </button>
+                  <button
+                    onClick={() => setPlannedView('turmas')}
+                    className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Novo treinamento</span>
+                  </button>
+                </div>
               )}
               {activeTab === 'categorias' && (
                 <button
@@ -3278,40 +3294,29 @@ export default function Qualificacoes() {
                 )}
               </div>
 
-              {/* Sub-tabs: Lista | Calendário (só se tiver dados) | Turmas (só se tiver dados) */}
-              {(() => {
-                const temTreinamentos = (treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0) > 0;
-                const viewsDisponiveis = temTreinamentos
-                  ? (['lista', 'calendario', 'turmas'] as const)
-                  : (['lista'] as const);
-                if (viewsDisponiveis.length <= 1 && plannedView !== 'lista') {
-                  setPlannedView('lista');
-                }
-                return viewsDisponiveis.length > 1 ? (
-                  <div className="flex items-center gap-1 border-b border-slate-100 px-4 pt-2 pb-0">
-                    {viewsDisponiveis.map((view) => {
-                      const labels: Record<string, string> = {
-                        lista: 'Lista',
-                        calendario: 'Calendário',
-                        turmas: 'Turmas',
-                      };
-                      return (
-                        <button
-                          key={view}
-                          onClick={() => setPlannedView(view)}
-                          className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                            plannedView === view
-                              ? 'border-blue-600 text-blue-600'
-                              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                          }`}
-                        >
-                          {labels[view]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null;
-              })()}
+              {/* Sub-tabs: Lista | Calendário | Turmas — sempre visíveis */}
+              <div className="flex items-center gap-1 border-b border-slate-100 px-4 pt-2 pb-0">
+                {(['lista', 'calendario', 'turmas'] as const).map((view) => {
+                  const labels: Record<string, string> = {
+                    lista: 'Lista',
+                    calendario: 'Calendário',
+                    turmas: 'Turmas',
+                  };
+                  return (
+                    <button
+                      key={view}
+                      onClick={() => setPlannedView(view)}
+                      className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        plannedView === view
+                          ? 'border-blue-600 text-blue-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {labels[view]}
+                    </button>
+                  );
+                })}
+              </div>
 
               {/* Lista: qualificações planejadas do histórico + treinamentos planejados */}
               {plannedView === 'lista' && (
@@ -3390,21 +3395,47 @@ export default function Qualificacoes() {
                 </>
               )}
 
-              {/* Calendário: apenas se houver treinamentos planejados */}
+              {/* Calendário: qualificações planejadas do histórico + treinamentos planejados */}
               {plannedView === 'calendario' && (
-                <Suspense
-                  fallback={
-                    <div className="flex items-center justify-center py-20">
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <>
+                  {historicoPlanejadoRelacionado.length > 0 && (
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                        Qualificações planejadas
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {historicoPlanejadoRelacionado.map((item) => (
+                          <span
+                            key={item.id}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700"
+                          >
+                            <CalendarDays size={12} />
+                            {item.data_conclusao
+                              ? new Date(item.data_conclusao + 'T00:00:00').toLocaleDateString('pt-BR')
+                              : '—'}
+                            {' — '}
+                            {item.funcionario_nome || '—'}
+                            {' — '}
+                            {item.qualificacao_nome || item.qualificacao_codigo || '—'}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  }
-                >
-                  <TreinamentosPlanejadosPage
-                    asTab={true}
-                    forcedTab="calendario"
-                    hideTabNav={true}
-                  />
-                </Suspense>
+                  )}
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center py-20">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      </div>
+                    }
+                  >
+                    <TreinamentosPlanejadosPage
+                      asTab={true}
+                      forcedTab="calendario"
+                      hideTabNav={true}
+                    />
+                  </Suspense>
+                </>
               )}
 
               {/* Turmas: gestão multi-dia via TreinamentosPlanejadosPage */}
