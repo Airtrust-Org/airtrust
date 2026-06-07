@@ -278,6 +278,16 @@ function createMockDb(state: MockState): D1Database {
           };
         }
 
+        // R1: instructor query — return empty list (no instructors in unit tests)
+        if (query.includes('FROM treinamentos_instrutores ti') || query.includes('t.instrutor_id AS funcionario_id')) {
+          return { results: [] };
+        }
+
+        // R2: dias efetivos query — return empty list (legacy single-day in unit tests)
+        if (query.includes('FROM treinamentos_dias')) {
+          return { results: [] };
+        }
+
         throw new Error(`Unhandled all query: ${query}`);
       };
 
@@ -618,6 +628,8 @@ function createMockDb(state: MockState): D1Database {
         }),
       };
     },
+    // R1/R2/R3: sync to escala_eventos uses db.batch(); accept silently in unit tests.
+    batch: async (_stmts: unknown[]) => [],
   } as unknown as D1Database;
 }
 
