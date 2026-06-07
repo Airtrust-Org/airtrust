@@ -33,6 +33,7 @@ OVERRIDES_FILE="$SCRIPT_DIR/setup-local-overrides.sql"
 DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 LMS_MIGRATIONS=(
+  "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
   "$WORKER_DIR/migrations/0337_lms_progresso_scorm.sql"
@@ -47,6 +48,8 @@ LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0346_lms_matricula_ciclos_ssot.sql"
   "$WORKER_DIR/migrations/0347_lms_cursos_content_filename.sql"
   "$WORKER_DIR/migrations/0360_matriz_treinamento_funcao.sql"
+  "$WORKER_DIR/migrations/0389_platform_roles_support_access_foundation.sql"
+  "$WORKER_DIR/migrations/0390_training_class_management.sql"
 )
 
 # ── Cores ──────────────────────────────────────────────────
