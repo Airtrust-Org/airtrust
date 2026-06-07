@@ -172,8 +172,10 @@ router.post(
 
     // Verificar se tipo existe
     const tipo = await db
-      .prepare('SELECT id FROM qualificacoes_tipos WHERE id = ? AND deleted_at IS NULL LIMIT 1')
-      .bind(tipoId)
+      .prepare(
+        'SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+      )
+      .bind(tipoId, tenantCtx.empresaId)
       .first();
     if (!tipo) {
       return c.json({ success: false, error: 'Tipo de qualificação não encontrado' }, 404);
@@ -197,8 +199,8 @@ router.post(
     const result = await db
       .prepare(
         `INSERT INTO qualificacoes_historico 
-         (funcionario_id, qualificacao_id, data_conclusao, data_vencimento, instrutor, observacoes, status, renovada, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'), NULL)`,
+         (funcionario_id, qualificacao_id, data_conclusao, data_vencimento, instrutor, observacoes, status, renovada, empresa_id, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, datetime('now'), datetime('now'), NULL)`,
       )
       .bind(
         data.funcionario_id,
@@ -208,6 +210,7 @@ router.post(
         data.instrutor || null,
         observacoes || null,
         statusQualificacao,
+        tenantCtx.empresaId,
       )
       .run();
 

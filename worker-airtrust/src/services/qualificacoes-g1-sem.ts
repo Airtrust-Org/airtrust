@@ -28,6 +28,10 @@ type RealizarG1SemParams = {
   cargaHoraria?: number | null;
 };
 
+type FuncionarioEmpresaRow = {
+  empresa_id: number | null;
+};
+
 function normalizeCodigo(value?: string | null): string {
   return String(value || '')
     .trim()
@@ -72,6 +76,7 @@ async function marcarG1SemAnteriorComoRenovada(
   db: D1Database,
   params: {
     funcionarioId: number | string;
+    empresaId: number;
     historicoAtualId: number;
     dataConclusaoAtual: string;
   },
@@ -83,6 +88,7 @@ async function marcarG1SemAnteriorComoRenovada(
               status = 'RENOVADA',
               updated_at = datetime('now')
         WHERE funcionario_id = ?
+          AND empresa_id = ?
           AND id <> ?
           AND deleted_at IS NULL
           AND UPPER(COALESCE(qualificacao_codigo, '')) = 'G1-SEM'
@@ -91,7 +97,7 @@ async function marcarG1SemAnteriorComoRenovada(
           AND COALESCE(status, '') <> 'CANCELADA'
           AND date(COALESCE(data_conclusao, data_vencimento, '1900-01-01')) < date(?)`,
     )
-    .bind(params.funcionarioId, params.historicoAtualId, params.dataConclusaoAtual)
+    .bind(params.funcionarioId, params.empresaId, params.historicoAtualId, params.dataConclusaoAtual)
     .run();
 }
 
@@ -111,26 +117,35 @@ export function calcularDataVencimentoG1Sem(dataConclusaoG1: string): string | n
   return addMonths(dataConclusaoG1, 6);
 }
 
+async function buscarEmpresaFuncionario(
+  db: D1Database,
+  funcionarioId?: number | string | null,
+): Promise<number | null> {
+  if (funcionarioId == null) return null;
+
+  const row = await db
+    .prepare(
+      `SELECT empresa_id
+         FROM funcionarios
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(funcionarioId)
+    .first<FuncionarioEmpresaRow>();
+
+  const empresaId = Number(row?.empresa_id || 0);
+  return Number.isFinite(empresaId) && empresaId > 0 ? empresaId : null;
+}
+
 async function buscarTipoG1Sem(
   db: D1Database,
   funcionarioId?: number | string | null,
 ): Promise<{ id: number; categoria: string | null } | null> {
   const tiposHasEmpresaId = await tableHasColumn(db, 'qualificacoes_tipos', 'empresa_id');
-  const empresaRow =
-    tiposHasEmpresaId && funcionarioId != null
-      ? await db
-          .prepare(
-            `SELECT empresa_id
-               FROM funcionarios
-              WHERE id = ?
-                AND deleted_at IS NULL
-              LIMIT 1`,
-          )
-          .bind(funcionarioId)
-          .first<{ empresa_id: number | null }>()
-      : null;
+  const empresaId = tiposHasEmpresaId ? await buscarEmpresaFuncionario(db, funcionarioId) : null;
 
-  if (tiposHasEmpresaId && empresaRow?.empresa_id != null) {
+  if (tiposHasEmpresaId && empresaId != null) {
     const tipoDaEmpresa = await db
       .prepare(
         `SELECT id, categoria
@@ -141,7 +156,7 @@ async function buscarTipoG1Sem(
           ORDER BY id DESC
           LIMIT 1`,
       )
-      .bind(empresaRow.empresa_id)
+      .bind(empresaId)
       .first<{ id: number; categoria: string | null }>();
 
     if (tipoDaEmpresa) {
@@ -167,12 +182,15 @@ export async function buscarG1SemPendente(
   dataReferencia?: string | null,
 ): Promise<G1SemHistoricoRow | null> {
   const referencia = String(dataReferencia || '').trim();
+  const empresaId = await buscarEmpresaFuncionario(db, funcionarioId);
+  if (!empresaId) return null;
 
   return db
     .prepare(
       `SELECT id, data_conclusao, data_vencimento, observacoes, status, validade_meses
          FROM qualificacoes_historico
         WHERE funcionario_id = ?
+          AND empresa_id = ?
           AND deleted_at IS NULL
           AND UPPER(COALESCE(qualificacao_codigo, '')) = 'G1-SEM'
           AND COALESCE(status, 'PLANEJADA') = 'PLANEJADA'
@@ -184,7 +202,13 @@ export async function buscarG1SemPendente(
                  id DESC
         LIMIT 1`,
     )
-    .bind(funcionarioId, referencia, referencia || '9999-12-31', referencia || '9999-12-31')
+    .bind(
+      funcionarioId,
+      empresaId,
+      referencia,
+      referencia || '9999-12-31',
+      referencia || '9999-12-31',
+    )
     .first<G1SemHistoricoRow>();
 }
 
@@ -211,6 +235,11 @@ async function upsertG1SemConcluido(
     throw new Error('INVALID_G1_SEM_DATE');
   }
 
+  const empresaId = await buscarEmpresaFuncionario(db, params.funcionarioId);
+  if (!empresaId) {
+    throw new Error('G1_SEM_TENANT_NOT_FOUND');
+  }
+
   const tipoG1Sem = await buscarTipoG1Sem(db, params.funcionarioId);
   if (!tipoG1Sem && !params.qualificacaoId) {
     throw new Error('G1_SEM_TIPO_NOT_FOUND');
@@ -232,16 +261,18 @@ async function upsertG1SemConcluido(
           `SELECT id
              FROM qualificacoes_historico
             WHERE id = ?
+              AND empresa_id = ?
               AND deleted_at IS NULL
             LIMIT 1`,
         )
-        .bind(params.existingId)
+        .bind(params.existingId, empresaId)
         .first<{ id: number }>()
     : await db
         .prepare(
           `SELECT id
-             FROM qualificacoes_historico
-            WHERE funcionario_id = ?
+            FROM qualificacoes_historico
+           WHERE funcionario_id = ?
+              AND empresa_id = ?
               AND deleted_at IS NULL
               AND UPPER(COALESCE(qualificacao_codigo, '')) = 'G1-SEM'
               AND COALESCE(status, '') != 'CANCELADA'
@@ -255,6 +286,7 @@ async function upsertG1SemConcluido(
         )
         .bind(
           params.funcionarioId,
+          empresaId,
           dataConclusao,
           observacaoOrigem,
           observacaoOrigem ? `%${observacaoOrigem}%` : null,
@@ -279,6 +311,7 @@ async function upsertG1SemConcluido(
                 carga_horaria = COALESCE(?, carga_horaria),
                 updated_at = datetime('now')
           WHERE id = ?
+            AND empresa_id = ?
             AND deleted_at IS NULL`,
       )
       .bind(
@@ -293,11 +326,13 @@ async function upsertG1SemConcluido(
         tipoTreinamentoFinal,
         params.cargaHoraria ?? null,
         existente.id,
+        empresaId,
       )
       .run();
 
     await marcarG1SemAnteriorComoRenovada(db, {
       funcionarioId: params.funcionarioId,
+      empresaId,
       historicoAtualId: existente.id,
       dataConclusaoAtual: dataConclusao,
     });
@@ -321,9 +356,10 @@ async function upsertG1SemConcluido(
          status,
          renovada,
          carga_horaria,
+         empresa_id,
          created_at,
          updated_at
-       ) VALUES (?, ?, 'G1-SEM', ?, ?, ?, 6, ?, ?, ?, ?, 0, ?, datetime('now'), datetime('now'))`,
+       ) VALUES (?, ?, 'G1-SEM', ?, ?, ?, 6, ?, ?, ?, ?, 0, ?, ?, datetime('now'), datetime('now'))`,
     )
     .bind(
       params.funcionarioId,
@@ -336,6 +372,7 @@ async function upsertG1SemConcluido(
       observacoes,
       statusFinal,
       params.cargaHoraria ?? null,
+      empresaId,
     )
     .run();
 
@@ -344,6 +381,7 @@ async function upsertG1SemConcluido(
   if (insertedId > 0) {
     await marcarG1SemAnteriorComoRenovada(db, {
       funcionarioId: params.funcionarioId,
+      empresaId,
       historicoAtualId: insertedId,
       dataConclusaoAtual: dataConclusao,
     });

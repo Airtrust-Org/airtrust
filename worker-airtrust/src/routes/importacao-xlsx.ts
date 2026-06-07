@@ -15,6 +15,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
+import { getTenantContext } from '../middleware/tenant';
 import { createLogger } from '../utils/logger';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -117,6 +118,7 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
     }
 
     const db = c.env.DB;
+    const tenantCtx = getTenantContext(c);
     const errors: any[] = [];
     let inserted = 0;
     let updated = 0;
@@ -125,14 +127,26 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
     // Modo SUBSTITUIR: deletar tudo primeiro
     if (mode === 'substituir') {
       const deleteResult = await db
-        .prepare(`UPDATE funcionarios SET deleted_at = datetime('now') WHERE deleted_at IS NULL`)
+        .prepare(
+          `UPDATE funcionarios
+              SET deleted_at = datetime('now')
+            WHERE deleted_at IS NULL
+              AND empresa_id = ?`,
+        )
+        .bind(tenantCtx.empresaId)
         .run();
       deleted = deleteResult.meta.changes || 0;
     }
 
     // ─── PRE-FETCH: modelos_aeronave e CPFs existentes (2 queries para toda a planilha) ───
     const modelosAeronave = await db
-      .prepare(`SELECT id, modelo, codigo, nome FROM modelos_aeronave WHERE deleted_at IS NULL`)
+      .prepare(
+        `SELECT id, modelo, codigo, nome
+           FROM modelos_aeronave
+          WHERE deleted_at IS NULL
+            AND empresa_id = ?`,
+      )
+      .bind(tenantCtx.empresaId)
       .all<{ id: number; modelo: string | null; codigo: string | null; nome: string | null }>();
     const modeloMap = new Map<string, number>();
     for (const m of modelosAeronave.results ?? []) {
@@ -149,9 +163,13 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
       const placeholders = cpfsNaPlanilha.map(() => '?').join(',');
       const existentes = await db
         .prepare(
-          `SELECT id, cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND deleted_at IS NULL`,
+          `SELECT id, cpf
+             FROM funcionarios
+            WHERE cpf IN (${placeholders})
+              AND empresa_id = ?
+              AND deleted_at IS NULL`,
         )
-        .bind(...cpfsNaPlanilha)
+        .bind(...cpfsNaPlanilha, tenantCtx.empresaId)
         .all<{ id: string; cpf: string }>();
       for (const f of existentes.results ?? []) {
         existentesByCpf.set(f.cpf, f.id);
@@ -183,7 +201,7 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
                 nome = ?, matricula = ?, email = ?, telefone = ?, nascimento = ?, admissao = ?,
                 cargo = ?, funcao = ?, modelo_aeronave_id = ?, codigo_anac = ?, licenca = ?,
                 is_instrutor = ?, is_examinador = ?, ativo = ?, updated_at = datetime('now')
-              WHERE id = ?`,
+              WHERE id = ? AND empresa_id = ?`,
             )
             .bind(
               row.Nome,
@@ -201,6 +219,7 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
               row.Examinador === 'Sim' ? 1 : 0,
               row.Ativo === 'Sim' ? 1 : 0,
               existenteId,
+              tenantCtx.empresaId,
             ),
         );
         updated++;
@@ -211,8 +230,8 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
               `INSERT INTO funcionarios (
                 nome, cpf, matricula, email, telefone, nascimento, admissao,
                 cargo, funcao, modelo_aeronave_id, codigo_anac, licenca,
-                is_instrutor, is_examinador, ativo, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+                is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
             )
             .bind(
               row.Nome,
@@ -230,6 +249,7 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
               row.Instrutor === 'Sim' ? 1 : 0,
               row.Examinador === 'Sim' ? 1 : 0,
               row.Ativo === 'Sim' ? 1 : 0,
+              tenantCtx.empresaId,
             ),
         );
         inserted++;
@@ -283,6 +303,7 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
     }
 
     const db = c.env.DB;
+    const tenantCtx = getTenantContext(c);
     const errors: any[] = [];
     let inserted = 0;
     let updated = 0;
@@ -292,15 +313,25 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
     if (mode === 'substituir') {
       const deleteResult = await db
         .prepare(
-          `UPDATE qualificacoes_historico SET deleted_at = datetime('now') WHERE deleted_at IS NULL`,
+          `UPDATE qualificacoes_historico
+              SET deleted_at = datetime('now')
+            WHERE deleted_at IS NULL
+              AND empresa_id = ?`,
         )
+        .bind(tenantCtx.empresaId)
         .run();
       deleted = deleteResult.meta.changes || 0;
     }
 
     // ─── PRE-FETCH: funcionarios e tipos_qualificacoes (2 queries para toda a planilha) ───
     const todosFuncionarios = await db
-      .prepare(`SELECT id, nome FROM funcionarios WHERE deleted_at IS NULL`)
+      .prepare(
+        `SELECT id, nome
+           FROM funcionarios
+          WHERE deleted_at IS NULL
+            AND empresa_id = ?`,
+      )
+      .bind(tenantCtx.empresaId)
       .all<{ id: string; nome: string }>();
     const funcionarioByNome = new Map<string, string>();
     for (const f of todosFuncionarios.results ?? []) {
@@ -308,7 +339,13 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
     }
 
     const todosTipos = await db
-      .prepare(`SELECT id, nome FROM tipos_qualificacoes WHERE deleted_at IS NULL`)
+      .prepare(
+        `SELECT id, nome
+           FROM qualificacoes_tipos
+          WHERE deleted_at IS NULL
+            AND empresa_id = ?`,
+      )
+      .bind(tenantCtx.empresaId)
       .all<{ id: string; nome: string }>();
     const tipoByNome = new Map<string, string>();
     for (const t of todosTipos.results ?? []) {
@@ -354,14 +391,15 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
             `INSERT INTO qualificacoes_historico (
               funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
               data_conclusao, data_vencimento, instrutor, observacoes,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+              empresa_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
             ON CONFLICT(funcionario_id, qualificacao_id, data_conclusao) DO UPDATE SET
               qualificacao_codigo = excluded.qualificacao_codigo,
               categoria = excluded.categoria,
               data_vencimento = excluded.data_vencimento,
               instrutor = excluded.instrutor,
               observacoes = excluded.observacoes,
+              empresa_id = excluded.empresa_id,
               updated_at = datetime('now')`,
           )
           .bind(
@@ -373,6 +411,7 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
             row['Data Vencimento'] || null,
             row.Instrutor || null,
             row['Observações'] || null,
+            tenantCtx.empresaId,
           ),
       );
       inserted++; // counting as inserted (upsert may update existing rows)
@@ -425,6 +464,7 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
     }
 
     const db = c.env.DB;
+    const tenantCtx = getTenantContext(c);
     const errors: any[] = [];
     let inserted = 0;
     let updated = 0;
@@ -434,15 +474,25 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
     if (mode === 'substituir') {
       const deleteResult = await db
         .prepare(
-          `UPDATE tipos_qualificacoes SET deleted_at = datetime('now') WHERE deleted_at IS NULL`,
+          `UPDATE qualificacoes_tipos
+              SET deleted_at = datetime('now')
+            WHERE deleted_at IS NULL
+              AND empresa_id = ?`,
         )
+        .bind(tenantCtx.empresaId)
         .run();
       deleted = deleteResult.meta.changes || 0;
     }
 
     // ─── PRE-FETCH: tipos existentes por código (1 query) ───
     const todosExistentes = await db
-      .prepare(`SELECT id, codigo FROM tipos_qualificacoes WHERE deleted_at IS NULL`)
+      .prepare(
+        `SELECT id, codigo
+           FROM qualificacoes_tipos
+          WHERE deleted_at IS NULL
+            AND empresa_id = ?`,
+      )
+      .bind(tenantCtx.empresaId)
       .all<{ id: string; codigo: string }>();
     const existentesByCodigo = new Map<string, string>();
     for (const t of todosExistentes.results ?? []) {
@@ -465,11 +515,11 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
         stmts.push(
           db
             .prepare(
-              `UPDATE tipos_qualificacoes SET
+              `UPDATE qualificacoes_tipos SET
                 tipo = ?, nome = ?, descricao = ?, categoria = ?,
                 carga_horaria = ?, validade = ?, observacoes = ?,
                 ativo = ?, updated_at = datetime('now')
-              WHERE id = ?`,
+              WHERE id = ? AND empresa_id = ?`,
             )
             .bind(
               row.Tipo || null,
@@ -481,6 +531,7 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
               row['Observações'] || null,
               row.Ativo === 'Sim' ? 1 : 0,
               existenteId,
+              tenantCtx.empresaId,
             ),
         );
         updated++;
@@ -488,10 +539,10 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
         stmts.push(
           db
             .prepare(
-              `INSERT INTO tipos_qualificacoes (
+              `INSERT INTO qualificacoes_tipos (
                 tipo, codigo, nome, descricao, categoria, carga_horaria,
-                validade, observacoes, ativo, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+                validade, observacoes, ativo, empresa_id, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
             )
             .bind(
               row.Tipo || null,
@@ -503,6 +554,7 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
               row['Validade (meses)'] || null,
               row['Observações'] || null,
               row.Ativo === 'Sim' ? 1 : 0,
+              tenantCtx.empresaId,
             ),
         );
         inserted++;

@@ -39,7 +39,7 @@ import { noCacheMiddleware } from './middleware/no-cache';
 import { requestIdMiddleware } from './middleware/requestId';
 import { rateLimiter, rateLimitPresets } from './middleware/rate-limit';
 import { requireRole } from './middleware/rbac';
-import { tenantMiddleware } from './middleware/tenant';
+import { getTenantContext, tenantMiddleware } from './middleware/tenant';
 import { domainEventProcessorMiddleware } from './middleware/domainEventProcessor';
 
 // Cron
@@ -521,15 +521,16 @@ app.route('/api/qualificacoes', qualificacoesRoutes);
 // Fallback para GET /api/qualificacoes (root endpoint)
 app.get('/api/qualificacoes', auth(), async (c) => {
   const db = c.env.DB;
+  const { empresaId } = getTenantContext(c);
   const limitRaw = c.req.query('limit');
   const limitParsed = parseInt(limitRaw || '50', 10);
   const limitFinal = Math.min(Math.max(limitParsed, 1), 200);
 
   try {
     const stmt = db.prepare(
-      'SELECT id, tipo, codigo, nome, descricao, categoria, carga_horaria, validade, observacoes, ativo, created_at, updated_at FROM qualificacoes_tipos WHERE deleted_at IS NULL ORDER BY categoria, nome LIMIT ?',
+      'SELECT id, tipo, codigo, nome, descricao, categoria, carga_horaria, validade, observacoes, ativo, created_at, updated_at FROM qualificacoes_tipos WHERE deleted_at IS NULL AND empresa_id = ? ORDER BY categoria, nome LIMIT ?',
     );
-    const { results } = await stmt.bind(limitFinal).all();
+    const { results } = await stmt.bind(empresaId, limitFinal).all();
     return c.json({
       success: true,
       data: results || [],

@@ -265,12 +265,13 @@ export class FuncionariosService {
       .bind(id)
       .first();
     if (!deleted) return null;
+    const empresaId = Number((existing as { empresa_id?: number | null }).empresa_id || 0);
     // Cascata manual (tolerante a schema divergente)
     await this.db
       .prepare(
-        'UPDATE qualificacoes_historico SET deleted_at = datetime("now") WHERE funcionario_id = ? AND deleted_at IS NULL',
+        'UPDATE qualificacoes_historico SET deleted_at = datetime("now") WHERE funcionario_id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
-      .bind(id)
+      .bind(id, empresaId)
       .run();
     await this.db
       .prepare(

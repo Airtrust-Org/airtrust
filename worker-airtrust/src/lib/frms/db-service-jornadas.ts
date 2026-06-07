@@ -127,6 +127,33 @@ interface JornadaFatigueSnapshot {
   inconsistencias: string[];
 }
 
+async function resolveTripulanteEmpresaId(
+  db: D1Database,
+  tripulanteId: string | number,
+  empresaId?: number | null,
+): Promise<number> {
+  if (empresaId != null && Number.isFinite(Number(empresaId)) && Number(empresaId) > 0) {
+    return Number(empresaId);
+  }
+
+  const row = await db
+    .prepare(
+      `SELECT empresa_id
+         FROM funcionarios
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(tripulanteId)
+    .first<{ empresa_id: number | null }>();
+
+  if (!row?.empresa_id) {
+    throw new Error(`FRMS_TENANT_NOT_FOUND tripulante_id=${tripulanteId}`);
+  }
+
+  return Number(row.empresa_id);
+}
+
 // ────────────────────────────────────────────────────────
 // Pipeline de recálculo (interna, exported for cross-module use)
 // ────────────────────────────────────────────────────────
@@ -601,6 +628,7 @@ export async function salvarJornada(
 ): Promise<SalvarJornadaResult> {
   const id = generateId();
   const timestamp = now();
+  const empresaId = await resolveTripulanteEmpresaId(db, input.tripulante_id, input.empresa_id);
 
   // Calcular duração da jornada
   const duracaoMinutos =
@@ -641,7 +669,7 @@ export async function salvarJornada(
     .bind(
       id,
       input.tripulante_id,
-      input.empresa_id ?? null,
+      empresaId,
       input.data,
       input.status,
       input.hora_apresentacao ?? null,
@@ -671,6 +699,7 @@ export async function salvarJornada(
 
   const jornada: FrmsJornada = {
     id,
+    empresa_id: empresaId,
     tripulante_id: Number(input.tripulante_id),
     data: input.data,
     status: input.status as FrmsJornada['status'],
@@ -741,6 +770,12 @@ export async function atualizarJornada(
     ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)),
     updated_at: timestamp,
   };
+  const empresaId = await resolveTripulanteEmpresaId(
+    db,
+    merged.tripulante_id ?? existing.tripulante_id,
+    input.empresa_id ?? merged.empresa_id ?? null,
+  );
+  merged.empresa_id = empresaId;
 
   // Recalcular duração
   if (merged.hora_apresentacao && merged.hora_termino) {
@@ -768,7 +803,9 @@ export async function atualizarJornada(
         empresa_id = COALESCE(empresa_id, ?),
         tipo_base = ?, tripulacao_aumentada = ?, classe_cabine = ?, aclimatado = ?,
         updated_at = ?
-       WHERE id = ? AND deleted_at IS NULL`,
+       WHERE id = ?
+         AND (empresa_id = ? OR empresa_id IS NULL)
+         AND deleted_at IS NULL`,
     )
     .bind(
       merged.status,
@@ -787,13 +824,14 @@ export async function atualizarJornada(
       merged.observacao ?? null,
       merged.origem ?? 'MANUAL',
       merged.local_base ?? null,
-      input.empresa_id ?? null,
+      empresaId,
       merged.tipo_base ?? 'HOME',
       merged.tripulacao_aumentada ?? 0,
       merged.classe_cabine ?? null,
       merged.aclimatado ?? 1,
       timestamp,
       id,
+      empresaId,
     )
     .run();
 
@@ -1094,6 +1132,7 @@ export async function importarApus(
   for (const input of jornadas) {
     try {
       const id = generateId();
+      const empresaId = await resolveTripulanteEmpresaId(db, input.tripulante_id, input.empresa_id);
       const duracaoMinutos =
         input.hora_apresentacao && input.hora_termino
           ? calcDuracaoMinutos(input.hora_apresentacao, input.hora_termino)
@@ -1108,6 +1147,7 @@ export async function importarApus(
 
       const jornada: FrmsJornada = {
         id,
+        empresa_id: empresaId,
         tripulante_id: Number(input.tripulante_id),
         data: input.data,
         status: input.status as FrmsJornada['status'],
@@ -1144,7 +1184,7 @@ export async function importarApus(
   if (prepared.length > 0) {
     const stmtIns = db.prepare(
       `INSERT OR IGNORE INTO frms_jornada (
-        id, tripulante_id, data, status,
+        id, tripulante_id, empresa_id, data, status,
         hora_apresentacao, hora_termino, duracao_jornada_minutos,
         horas_voo_minutos, hora_primeiro_acionamento, hora_primeira_decolagem,
         hora_ultimo_pouso, hora_corte_motor,
@@ -1152,13 +1192,14 @@ export async function importarApus(
         observacao, registrado_por, origem,
         tipo_base, tripulacao_aumentada, classe_cabine, aclimatado,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     await db.batch(
       prepared.map(({ jornada }) =>
         stmtIns.bind(
           jornada.id,
           String(jornada.tripulante_id),
+          jornada.empresa_id ?? null,
           jornada.data,
           jornada.status,
           jornada.hora_apresentacao,

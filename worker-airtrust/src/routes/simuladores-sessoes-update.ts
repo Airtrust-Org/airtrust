@@ -35,11 +35,13 @@ import {
   listarParticipantesDaSessaoParaQualificacao,
   sincronizarQualificacoesDaSessaoConcluida,
 } from './simuladores-shared';
+import { getTenantContext } from '../middleware/tenant';
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.put('/sessoes/:id', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
     const b = await c.req.json();
     const templateIdBody =
@@ -50,9 +52,9 @@ app.put('/sessoes/:id', async (c) => {
           : undefined;
     const resetarFluxoFichas = b.resetar_fluxo_fichas !== false;
     const a = await c.env.DB.prepare(
-      'SELECT * FROM simulador_agendamentos WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM simulador_agendamentos WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
     let participantesParaNotificacaoAlterados = false;
@@ -100,11 +102,12 @@ app.put('/sessoes/:id', async (c) => {
         const examinador = await c.env.DB.prepare(
           `SELECT id
            FROM funcionarios
-           WHERE id = ?
-             AND ${examinadorFlagExpr}
-             AND deleted_at IS NULL`,
+             WHERE id = ?
+               AND ${examinadorFlagExpr}
+               AND empresa_id = ?
+               AND deleted_at IS NULL`,
         )
-          .bind(examinadorIdBodyRaw)
+          .bind(examinadorIdBodyRaw, empresaId)
           .first();
         if (!examinador) {
           return c.json({ success: false, error: 'Examinador inválido' }, 400);
@@ -121,9 +124,9 @@ app.put('/sessoes/:id', async (c) => {
 
       // Atualizar campos na sessão
       await c.env.DB.prepare(
-        "UPDATE simulador_agendamentos SET examinador_id=?, is_check=?, updated_at=datetime('now') WHERE id=?",
+        "UPDATE simulador_agendamentos SET examinador_id=?, is_check=?, updated_at=datetime('now') WHERE id=? AND empresa_id = ?",
       )
-        .bind(examinadorIdBodyRaw || null, wantsCheck, id)
+        .bind(examinadorIdBodyRaw || null, wantsCheck, id, empresaId)
         .run();
 
       // Soft delete vínculos existentes
@@ -390,8 +393,8 @@ app.put('/sessoes/:id', async (c) => {
     const hasAeronaveIdUpd = colNomesUpd.has('aeronave_id');
 
     const updateFields = hasTipoDispositivoUpd && hasAeronaveIdUpd
-      ? "UPDATE simulador_agendamentos SET simulador_id=?,aeronave_id=?,tipo_dispositivo=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=?"
-      : "UPDATE simulador_agendamentos SET simulador_id=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=?";
+      ? "UPDATE simulador_agendamentos SET simulador_id=?,aeronave_id=?,tipo_dispositivo=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?"
+      : "UPDATE simulador_agendamentos SET simulador_id=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?";
 
     const updateBinds = hasTipoDispositivoUpd && hasAeronaveIdUpd
       ? [
@@ -409,6 +412,7 @@ app.put('/sessoes/:id', async (c) => {
           b.observacoes !== undefined ? b.observacoes : a.observacoes,
           b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
           id,
+          empresaId,
         ]
       : [
           b.simulador_id || a.simulador_id,
@@ -423,6 +427,7 @@ app.put('/sessoes/:id', async (c) => {
           b.observacoes !== undefined ? b.observacoes : a.observacoes,
           b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
           id,
+          empresaId,
         ];
 
     // UPDATE: incluindo hora_inicio, hora_fim, nome (tema_sessao), tipo_dispositivo, aeronave_id
@@ -513,7 +518,7 @@ app.put('/sessoes/:id', async (c) => {
               tipoSessao: tipoSessaoPut,
               data: b.data || (a as any).data,
               participantes: participantesRows,
-              empresaId: Number((c as any).get('empresaId') || 0),
+              empresaId,
             });
             diag.resultado = res.criadas > 0 ? 'criadas' : 'sem_novas';
             diag.criadas = res.criadas;
@@ -650,9 +655,19 @@ app.put('/sessoes/:id', async (c) => {
 
       // Soft-delete todos os participantes antigos
       await c.env.DB.prepare(
-        "UPDATE sessoes_participantes SET deleted_at=datetime('now') WHERE sessao_id=? AND deleted_at IS NULL",
+        `UPDATE sessoes_participantes
+            SET deleted_at=datetime('now')
+          WHERE sessao_id=?
+            AND deleted_at IS NULL
+            AND EXISTS (
+              SELECT 1
+                FROM simulador_agendamentos sa
+               WHERE sa.id = sessoes_participantes.sessao_id
+                 AND sa.empresa_id = ?
+                 AND sa.deleted_at IS NULL
+            )`,
       )
-        .bind(id)
+        .bind(id, empresaId)
         .run();
 
       // Inserir participantes novos + criar fichas para os que entraram agora
@@ -829,7 +844,7 @@ app.put('/sessoes/:id', async (c) => {
       }
 
       await syncSessaoEscalaEventos(c.env.DB, {
-        empresaId: (sessaoAtual as any)?.empresa_id || (c as any).get('empresaId') || null,
+        empresaId,
         sessaoId: id,
         simuladorId: simuladorIdFinal,
         data: dataFinal,
@@ -843,9 +858,9 @@ app.put('/sessoes/:id', async (c) => {
     }
 
     const u = await c.env.DB.prepare(
-      'SELECT * FROM simulador_agendamentos WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM simulador_agendamentos WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first<any>();
 
     const statusAnterior = String((a as any)?.status || '').toUpperCase();
@@ -854,7 +869,7 @@ app.put('/sessoes/:id', async (c) => {
       try {
         const syncQualResult = await sincronizarQualificacoesDaSessaoConcluida(c.env.DB, {
           sessaoId: Number(id),
-          empresaId: Number((c as any).get('empresaId') || (u as any)?.empresa_id || 0),
+          empresaId,
         });
         diag.qualificacoesConcluidas = syncQualResult.atualizadas;
       } catch (error: any) {
@@ -880,7 +895,7 @@ app.put('/sessoes/:id', async (c) => {
         .all<{ funcionario_id: string | number }>();
 
       await syncSessaoEscalaEventos(c.env.DB, {
-        empresaId: (u as any)?.empresa_id || (c as any).get('empresaId') || null,
+        empresaId,
         sessaoId: id,
         simuladorId: (u as any)?.simulador_id,
         data: String((u as any)?.data || dataFinal),
@@ -896,13 +911,13 @@ app.put('/sessoes/:id', async (c) => {
     }
 
     try {
-      const empresaId = Number((c as any).get('empresaId') || (u as any)?.empresa_id || 0);
+      const eventEmpresaId = Number((u as any)?.empresa_id || empresaId);
       const partRows = await c.env.DB.prepare(
         'SELECT funcionario_id FROM sessoes_participantes WHERE sessao_id = ? AND deleted_at IS NULL',
       )
         .bind(id)
         .all<{ funcionario_id: string | number }>();
-      if (empresaId > 0) {
+      if (eventEmpresaId > 0) {
         await Promise.allSettled(
           (partRows.results || []).map((participante) =>
             publishDomainEvent(
@@ -913,7 +928,7 @@ app.put('/sessoes/:id', async (c) => {
                 : 'SIMULADOR_AGENDADO',
               {
                 funcionario_id: String(participante.funcionario_id),
-                empresa_id: empresaId,
+                empresa_id: eventEmpresaId,
                 origem_modulo: 'simuladores',
                 sessao_id: String(id),
                 data_sessao: (u as any)?.data || null,
@@ -928,7 +943,7 @@ app.put('/sessoes/:id', async (c) => {
     }
 
     if (shouldNotifySimulatorSessionUpdate(a as any, u as any, participantesParaNotificacaoAlterados)) {
-      const notificationEmpresaId = Number((c as any).get('empresaId') || (u as any)?.empresa_id || 0);
+      const notificationEmpresaId = Number((u as any)?.empresa_id || empresaId);
       c.executionCtx?.waitUntil(
         sendSimulatorSessionEmailNotifications(c.env, c.env.DB, Number(id), {
           reason: 'updated',
@@ -989,13 +1004,14 @@ app.delete('/sessoes/:id', async (c) => {
     const denied = requireAdminForDelete(c);
     if (denied) return denied;
 
+    const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
 
     // Buscar sessão
     const a = await c.env.DB.prepare(
-      'SELECT * FROM simulador_agendamentos WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM simulador_agendamentos WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Sessão não encontrada' }, 404);
 
@@ -1007,16 +1023,24 @@ app.delete('/sessoes/:id', async (c) => {
 
     // Soft delete da sessão
     await c.env.DB.prepare(
-      "UPDATE simulador_agendamentos SET deleted_at=datetime('now') WHERE id=?",
+      "UPDATE simulador_agendamentos SET deleted_at=datetime('now') WHERE id=? AND empresa_id = ?",
     )
-      .bind(id)
+      .bind(id, empresaId)
       .run();
 
     // Soft delete dos participantes
     await c.env.DB.prepare(
-      "UPDATE sessoes_participantes SET deleted_at=datetime('now') WHERE sessao_id=?",
+      `UPDATE sessoes_participantes
+          SET deleted_at=datetime('now')
+        WHERE sessao_id=?
+          AND EXISTS (
+            SELECT 1
+              FROM simulador_agendamentos sa
+             WHERE sa.id = sessoes_participantes.sessao_id
+               AND sa.empresa_id = ?
+          )`,
     )
-      .bind(id)
+      .bind(id, empresaId)
       .run();
 
     // Soft delete das fichas vinculadas à sessão

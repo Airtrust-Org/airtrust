@@ -9,6 +9,10 @@ import { D1Database } from '@cloudflare/workers-types';
 const DEFAULT_CMA_ID = 1;
 const DEFAULT_ASO_ID = 18;
 
+interface FuncionarioEmpresaRow {
+  empresa_id: number | null;
+}
+
 interface FuncionarioCertificacao {
   funcionario_id: number;
   nivel_icao?: string | null;
@@ -25,13 +29,41 @@ interface FuncionarioCertificacao {
 /**
  * Busca ID do tipo de qualificação pelo código ou nome (case insensitive)
  */
-async function getTipoId(db: D1Database, codigo: string, defaultId: number): Promise<number> {
+async function getFuncionarioEmpresaId(
+  db: D1Database,
+  funcionarioId: number,
+): Promise<number | null> {
+  const funcionario = await db
+    .prepare(
+      `SELECT empresa_id
+         FROM funcionarios
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(funcionarioId)
+    .first<FuncionarioEmpresaRow>();
+
+  return funcionario?.empresa_id ?? null;
+}
+
+async function getTipoId(
+  db: D1Database,
+  codigo: string,
+  empresaId: number,
+  defaultId: number,
+): Promise<number> {
   try {
     const tipo = await db
       .prepare(
-        'SELECT id FROM qualificacoes_tipos WHERE (UPPER(codigo) = UPPER(?) OR UPPER(nome) = UPPER(?)) AND deleted_at IS NULL LIMIT 1',
+        `SELECT id
+           FROM qualificacoes_tipos
+          WHERE (UPPER(codigo) = UPPER(?) OR UPPER(nome) = UPPER(?))
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
       )
-      .bind(codigo, codigo)
+      .bind(codigo, codigo, empresaId)
       .first<{ id: number }>();
     return tipo?.id || defaultId;
   } catch (e) {
@@ -49,17 +81,24 @@ export async function syncFuncionarioCertificacoes(
   data: FuncionarioCertificacao,
 ): Promise<void> {
   const { funcionario_id } = data;
+  const empresaId = await getFuncionarioEmpresaId(db, funcionario_id);
+  if (!empresaId) {
+    throw new Error(`SYNC_TENANT_NOT_FOUND funcionario_id=${funcionario_id}`);
+  }
+
   console.log('[SYNC] Iniciando sincronização de certificações:', {
     funcionario_id,
+    empresa_id: empresaId,
     has_cma: !!data.data_realizacao_cma,
     has_aso: !!data.data_realizacao_aso,
   });
 
   // 1. Sincronizar CMA
   if (data.data_realizacao_cma || data.validade_cma) {
-    const cmaId = await getTipoId(db, 'CMA', DEFAULT_CMA_ID);
+    const cmaId = await getTipoId(db, 'CMA', empresaId, DEFAULT_CMA_ID);
     await upsertQualificacao(db, {
       funcionario_id,
+      empresa_id: empresaId,
       qualificacao_tipo_id: cmaId,
       data_conclusao: data.data_realizacao_cma || '', // Permitir um dos dois
       data_vencimento: data.validade_cma || '',
@@ -70,9 +109,10 @@ export async function syncFuncionarioCertificacoes(
 
   // 2. Sincronizar ASO
   if (data.data_realizacao_aso || data.validade_aso) {
-    const asoId = await getTipoId(db, 'ASO', DEFAULT_ASO_ID);
+    const asoId = await getTipoId(db, 'ASO', empresaId, DEFAULT_ASO_ID);
     await upsertQualificacao(db, {
       funcionario_id,
+      empresa_id: empresaId,
       qualificacao_tipo_id: asoId,
       data_conclusao: data.data_realizacao_aso || '',
       data_vencimento: data.validade_aso || '',
@@ -89,6 +129,7 @@ export async function syncFuncionarioCertificacoes(
 
 interface UpsertQualificacaoParams {
   funcionario_id: number;
+  empresa_id: number;
   qualificacao_tipo_id: number;
   data_conclusao: string;
   data_vencimento: string;
@@ -102,6 +143,7 @@ interface UpsertQualificacaoParams {
 async function upsertQualificacao(db: D1Database, params: UpsertQualificacaoParams): Promise<void> {
   const {
     funcionario_id,
+    empresa_id,
     qualificacao_tipo_id,
     data_conclusao,
     data_vencimento,
@@ -134,12 +176,13 @@ async function upsertQualificacao(db: D1Database, params: UpsertQualificacaoPara
       FROM qualificacoes_historico 
       WHERE funcionario_id = ? 
         AND qualificacao_tipo_id = ? 
+        AND empresa_id = ?
         AND deleted_at IS NULL
       ORDER BY created_at DESC
       LIMIT 1
     `,
     )
-    .bind(funcionario_id, qualificacao_tipo_id)
+    .bind(funcionario_id, qualificacao_tipo_id, empresa_id)
     .first<{ id: number; data_conclusao: string; data_vencimento: string }>();
 
   if (existing) {
@@ -158,9 +201,11 @@ async function upsertQualificacao(db: D1Database, params: UpsertQualificacaoPara
             observacoes = ?,
             updated_at = datetime('now')
         WHERE id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
       `,
       )
-      .bind(data_conclusao, data_vencimento, numero_documento, observacoes, existing.id)
+      .bind(data_conclusao, data_vencimento, numero_documento, observacoes, existing.id, empresa_id)
       .run();
   } else {
     // Criar novo registro
@@ -175,10 +220,11 @@ async function upsertQualificacao(db: D1Database, params: UpsertQualificacaoPara
           data_vencimento,
           numero_certificado,
           observacoes,
+          empresa_id,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `,
       )
       .bind(
@@ -188,6 +234,7 @@ async function upsertQualificacao(db: D1Database, params: UpsertQualificacaoPara
         data_vencimento,
         numero_documento,
         observacoes,
+        empresa_id,
       )
       .run();
   }
@@ -211,17 +258,23 @@ export async function syncQualificacaoToFuncionario(
       `
       SELECT 
         qh.funcionario_id,
+        qh.empresa_id,
         qh.data_conclusao,
         qh.data_vencimento,
         qt.codigo as tipo_codigo
       FROM qualificacoes_historico qh
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_tipo_id
+      LEFT JOIN qualificacoes_tipos qt
+        ON qt.id = qh.qualificacao_tipo_id
+       AND qt.empresa_id = qh.empresa_id
+       AND qt.deleted_at IS NULL
       WHERE qh.id = ?
+        AND qh.deleted_at IS NULL
     `,
     )
     .bind(qualificacaoHistoricoId)
     .first<{
       funcionario_id: number;
+      empresa_id: number;
       tipo_codigo: string;
       data_conclusao: string;
       data_vencimento: string;
@@ -241,9 +294,11 @@ export async function syncQualificacaoToFuncionario(
             validade_cma = ?,
             updated_at = datetime('now')
         WHERE id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
       `,
       )
-      .bind(qual.data_conclusao, qual.data_vencimento, qual.funcionario_id)
+      .bind(qual.data_conclusao, qual.data_vencimento, qual.funcionario_id, qual.empresa_id)
       .run();
   } else if (codigo === 'ASO') {
     await db
@@ -254,9 +309,11 @@ export async function syncQualificacaoToFuncionario(
             validade_aso = ?,
             updated_at = datetime('now')
         WHERE id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
       `,
       )
-      .bind(qual.data_conclusao, qual.data_vencimento, qual.funcionario_id)
+      .bind(qual.data_conclusao, qual.data_vencimento, qual.funcionario_id, qual.empresa_id)
       .run();
   }
 }

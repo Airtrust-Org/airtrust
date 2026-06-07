@@ -221,10 +221,10 @@ app.post('/:id/upload', auth(), async (c) => {
     try {
       insertResult = await db
         .prepare(
-          `INSERT INTO documentos (uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, sha256_hash, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+          `INSERT INTO documentos (uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, sha256_hash, empresa_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
         )
-        .bind(uuid, funcionarioId, file.name, 'application/pdf', file.size, r2Key, hashHex)
+        .bind(uuid, funcionarioId, file.name, 'application/pdf', file.size, r2Key, hashHex, empresaId)
         .run();
     } catch (insertError) {
       const errorMsg = String(insertError);
@@ -235,10 +235,10 @@ app.post('/:id/upload', auth(), async (c) => {
         );
         insertResult = await db
           .prepare(
-            `INSERT INTO documentos (uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+            `INSERT INTO documentos (uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, empresa_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
           )
-          .bind(uuid, funcionarioId, file.name, 'application/pdf', file.size, r2Key)
+          .bind(uuid, funcionarioId, file.name, 'application/pdf', file.size, r2Key, empresaId)
           .run();
       } else {
         throw insertError;
