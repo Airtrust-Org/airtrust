@@ -38,6 +38,41 @@ import writeRouter from './historico-write';
 
 const router = new Hono<{ Bindings: Env }>();
 
+const QUALIFICATION_STATUS_EXPR = "UPPER(COALESCE(qh.status, ''))";
+const RENEWED_STATUS_VALUES = ['RENOVADA', 'RENOVADO'] as const;
+const cancelledQualificationPredicate = sqlStatusEqualsAny(
+  QUALIFICATION_STATUS_EXPR,
+  CANCELLED_STATUS_VALUES,
+);
+
+function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
+  const renewalLinkPredicate = hasRenovacaoDe ? ' OR qh.renovacao_de IS NOT NULL' : '';
+  const renewedQualificationPredicate = `(COALESCE(qh.renovada, 0) = 1 OR ${sqlStatusEqualsAny(
+    QUALIFICATION_STATUS_EXPR,
+    RENEWED_STATUS_VALUES,
+  )}${renewalLinkPredicate})`;
+  const activeRenewedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND ${renewedQualificationPredicate})`;
+  const activePlannedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${renewedQualificationPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(
+    QUALIFICATION_STATUS_EXPR,
+    PLANNED_QUALIFICATION_STATUS_VALUES,
+  )}))`;
+
+  return {
+    renewedQualificationPredicate,
+    activeRenewedQualificationPredicate,
+    activePlannedQualificationPredicate,
+  };
+}
+
+async function hasHistoricoRenovacaoDeColumn(db: D1Database): Promise<boolean> {
+  try {
+    const { results } = await db.prepare('PRAGMA table_info(qualificacoes_historico)').all();
+    return (results || []).some((column: any) => column?.name === 'renovacao_de');
+  } catch {
+    return false;
+  }
+}
+
 // ===== ENDPOINTS =====
 
 /**
@@ -53,6 +88,12 @@ router.get(
 
     await ensureModelosAeronaveModeloColumn(db);
     await ensureHistoricoSchema(db);
+    const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
+    const {
+      renewedQualificationPredicate,
+      activeRenewedQualificationPredicate,
+      activePlannedQualificationPredicate,
+    } = buildRenewalSqlPredicates(hasRenovacaoDe);
 
     const {
       id = '',
@@ -148,26 +189,24 @@ router.get(
         switch (selectedStatus) {
           case 'VALIDA':
             statusConditions.push(
-              `(qh.deleted_at IS NULL AND COALESCE(qh.renovada, 0) = 0 AND qh.data_conclusao IS NOT NULL AND ${vencimentoExpr} > date('now','+30 days'))`,
+              `(qh.deleted_at IS NULL AND NOT (${renewedQualificationPredicate}) AND qh.data_conclusao IS NOT NULL AND ${vencimentoExpr} > date('now','+30 days'))`,
             );
             break;
           case 'VENCIDA':
             statusConditions.push(
-              `(qh.deleted_at IS NULL AND COALESCE(qh.renovada, 0) = 0 AND qh.data_conclusao IS NOT NULL AND ${vencimentoExpr} < date('now'))`,
+              `(qh.deleted_at IS NULL AND NOT (${renewedQualificationPredicate}) AND qh.data_conclusao IS NOT NULL AND ${vencimentoExpr} < date('now'))`,
             );
             break;
           case 'VENCENDO_30':
             statusConditions.push(
-              `(qh.deleted_at IS NULL AND COALESCE(qh.renovada, 0) = 0 AND qh.data_conclusao IS NOT NULL AND ${vencimentoExpr} >= date('now') AND ${vencimentoExpr} <= date('now','+30 days'))`,
+              `(qh.deleted_at IS NULL AND NOT (${renewedQualificationPredicate}) AND qh.data_conclusao IS NOT NULL AND ${vencimentoExpr} >= date('now') AND ${vencimentoExpr} <= date('now','+30 days'))`,
             );
             break;
           case 'RENOVADA':
-            statusConditions.push('(qh.deleted_at IS NULL AND COALESCE(qh.renovada, 0) = 1)');
+            statusConditions.push(activeRenewedQualificationPredicate);
             break;
           case 'PLANEJADA':
-            statusConditions.push(
-              `(qh.deleted_at IS NULL AND COALESCE(qh.renovada, 0) = 0 AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny("UPPER(COALESCE(qh.status, ''))", PLANNED_QUALIFICATION_STATUS_VALUES)}))`,
-            );
+            statusConditions.push(activePlannedQualificationPredicate);
             break;
           case 'CANCELADA':
             statusConditions.push(
@@ -188,27 +227,27 @@ router.get(
     const statsQuery = `SELECT 
       COUNT(*) as total,
       SUM(CASE 
-        WHEN qh.renovada = 1 THEN 0
+        WHEN ${renewedQualificationPredicate} THEN 0
         WHEN qh.data_conclusao IS NULL THEN 0
         WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) >= julianday('now') 
          AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) - julianday('now') > 30 THEN 1 
         ELSE 0 
       END) as validas,
       SUM(CASE 
-        WHEN qh.renovada = 1 THEN 0
+        WHEN ${renewedQualificationPredicate} THEN 0
         WHEN qh.data_conclusao IS NULL THEN 0
         WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) - julianday('now') <= 30 
          AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) >= julianday('now') THEN 1 
         ELSE 0 
       END) as vencendo,
       SUM(CASE 
-        WHEN qh.renovada = 1 THEN 0
+        WHEN ${renewedQualificationPredicate} THEN 0
         WHEN qh.data_conclusao IS NULL THEN 0
         WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) < julianday('now') THEN 1 
         ELSE 0 
       END) as vencidas,
-      SUM(CASE WHEN qh.renovada = 1 THEN 1 ELSE 0 END) as renovadas,
-      SUM(CASE WHEN (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny("UPPER(COALESCE(qh.status, ''))", PLANNED_QUALIFICATION_STATUS_VALUES)}) AND qh.deleted_at IS NULL AND qh.renovada = 0 THEN 1 ELSE 0 END) as planejadas
+      SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
+      SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
     FROM qualificacoes_historico qh
     LEFT JOIN funcionarios f ON f.id = qh.funcionario_id 
       AND f.deleted_at IS NULL 
@@ -255,6 +294,7 @@ router.get(
       qh.data_vencimento AS data_vencimento,
       qh.instrutor AS instrutor,
       qh.renovada,
+      ${hasRenovacaoDe ? 'qh.renovacao_de' : 'NULL'} AS renovacao_de,
       qh.numero_certificado,
       qh.observacoes AS observacao,
       qh.created_at,
@@ -323,13 +363,21 @@ router.get(
 
       let derivedStatus: string;
       const dbStatus = normalizeQualificationStatusForCompatibility(r.qualificacao_status);
+      const isRenewedQualification =
+        r.renovada === true ||
+        Number(r.renovada || 0) === 1 ||
+        RENEWED_STATUS_VALUES.includes(dbStatus as (typeof RENEWED_STATUS_VALUES)[number]) ||
+        r.renovacao_de != null;
       // Se o status salvo é PLANEJADA (data futura ou sem data), respeitar
-      if (isPlannedQualificationStatus(dbStatus) || (!r.data_realizacao && !dataVencimentoCalculada)) {
+      if (isRenewedQualification) {
+        derivedStatus = 'RENOVADA';
+      } else if (
+        isPlannedQualificationStatus(dbStatus) ||
+        (!r.data_realizacao && !dataVencimentoCalculada)
+      ) {
         derivedStatus = QUALIFICACAO_STATUS.PLANEJADA;
       } else if (!dataVencimentoCalculada) {
         derivedStatus = 'INDEFINIDA';
-      } else if (r.renovada) {
-        derivedStatus = 'RENOVADA';
       } else if (dataVencimentoCalculada < today) {
         derivedStatus = 'VENCIDA';
       } else if (dataVencimentoCalculada <= today30) {
@@ -398,27 +446,30 @@ router.get(
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
+    const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
+    const { renewedQualificationPredicate, activeRenewedQualificationPredicate } =
+      buildRenewalSqlPredicates(hasRenovacaoDe);
 
     const statsResult = await db
       .prepare(
         `SELECT 
         COUNT(*) as total,
         SUM(CASE 
-          WHEN qh.renovada = 1 THEN 0
+          WHEN ${renewedQualificationPredicate} THEN 0
           WHEN julianday(qh.data_vencimento) >= julianday('now') AND julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 
           ELSE 0 
         END) as validas,
         SUM(CASE 
-          WHEN qh.renovada = 1 THEN 0
+          WHEN ${renewedQualificationPredicate} THEN 0
           WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 
           ELSE 0 
         END) as vencendo,
         SUM(CASE 
-          WHEN qh.renovada = 1 THEN 0
+          WHEN ${renewedQualificationPredicate} THEN 0
           WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 
           ELSE 0 
         END) as vencidas,
-        SUM(CASE WHEN qh.renovada = 1 THEN 1 ELSE 0 END) as renovadas
+        SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas
       FROM qualificacoes_historico qh
       JOIN funcionarios f ON f.id = qh.funcionario_id
       WHERE qh.deleted_at IS NULL
@@ -455,6 +506,12 @@ router.get(
     const qualificacaoId = c.req.query('qualificacao_id');
     const extended = (c.req.query('extended') || 'false') === 'true';
     const materialized = (c.req.query('materialized') || 'false') === 'true';
+    const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
+    const {
+      renewedQualificationPredicate,
+      activeRenewedQualificationPredicate,
+      activePlannedQualificationPredicate,
+    } = buildRenewalSqlPredicates(hasRenovacaoDe);
 
     const whereClauses: string[] = [
       'qh.deleted_at IS NULL',
@@ -498,9 +555,11 @@ router.get(
     } else {
       const statsQuery = `SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN julianday(qh.data_vencimento) >= julianday('now') AND julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 ELSE 0 END) as validas,
-            SUM(CASE WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 ELSE 0 END) as vencendo,
-            SUM(CASE WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 ELSE 0 END) as vencidas
+            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN julianday(qh.data_vencimento) >= julianday('now') AND julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 ELSE 0 END) as validas,
+            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 ELSE 0 END) as vencendo,
+            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 ELSE 0 END) as vencidas,
+            SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
+            SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
           FROM qualificacoes_historico qh
           JOIN funcionarios f ON f.id = qh.funcionario_id
           WHERE ${whereClause}`;
@@ -519,51 +578,32 @@ router.get(
         if (materialized) {
           const scopeHash = `${tenantCtx.empresaId}|${funcionarioId || ''}|${qualificacaoId || ''}`;
           const day = new Date().toISOString().substring(0, 10);
-          const existing = await db
-            .prepare(
-              `SELECT total, validas, vencendo, vencidas, renovadas FROM qualificacoes_historico_stats_daily WHERE day = ? AND scope_hash = ? LIMIT 1`,
-            )
-            .bind(day, scopeHash)
+          const statsResult = await db
+            .prepare(statsQuery)
+            .bind(...bindings)
             .first();
-
-          if (existing) {
-            result = {
-              total: Number((existing as any).total || 0),
-              validas: Number((existing as any).validas || 0),
-              vencendo: Number((existing as any).vencendo || 0),
-              vencidas: Number((existing as any).vencidas || 0),
-              renovadas: Number((existing as any).renovadas || 0),
-              planejadas: Number((existing as any).planejadas || 0),
-            };
-          } else {
-            const statsResult = await db
-              .prepare(statsQuery)
-              .bind(...bindings)
-              .first();
-            const toInsert = {
-              total: Number((statsResult as any)?.total || 0),
-              validas: Number((statsResult as any)?.validas || 0),
-              vencendo: Number((statsResult as any)?.vencendo || 0),
-              vencidas: Number((statsResult as any)?.vencidas || 0),
-              renovadas: 0,
-              planejadas: 0,
-            };
-            await db
-              .prepare(
-                `INSERT OR IGNORE INTO qualificacoes_historico_stats_daily (day, scope_hash, total, validas, vencendo, vencidas, renovadas) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              )
-              .bind(
-                day,
-                scopeHash,
-                toInsert.total,
-                toInsert.validas,
-                toInsert.vencendo,
-                toInsert.vencidas,
-                toInsert.renovadas,
-              )
-              .run();
-            result = toInsert;
-          }
+          result = {
+            total: Number((statsResult as any)?.total || 0),
+            validas: Number((statsResult as any)?.validas || 0),
+            vencendo: Number((statsResult as any)?.vencendo || 0),
+            vencidas: Number((statsResult as any)?.vencidas || 0),
+            renovadas: Number((statsResult as any)?.renovadas || 0),
+            planejadas: Number((statsResult as any)?.planejadas || 0),
+          };
+          await db
+            .prepare(
+              `INSERT OR IGNORE INTO qualificacoes_historico_stats_daily (day, scope_hash, total, validas, vencendo, vencidas, renovadas) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            )
+            .bind(
+              day,
+              scopeHash,
+              result.total,
+              result.validas,
+              result.vencendo,
+              result.vencidas,
+              result.renovadas,
+            )
+            .run();
         } else {
           const statsResult = await db
             .prepare(statsQuery)
@@ -574,8 +614,8 @@ router.get(
             validas: Number((statsResult as any)?.validas || 0),
             vencendo: Number((statsResult as any)?.vencendo || 0),
             vencidas: Number((statsResult as any)?.vencidas || 0),
-            renovadas: 0,
-            planejadas: 0,
+            renovadas: Number((statsResult as any)?.renovadas || 0),
+            planejadas: Number((statsResult as any)?.planejadas || 0),
           };
         }
         return result;
@@ -619,9 +659,9 @@ router.get(
       try {
         const extQuery = `SELECT qt.categoria AS categoria,
                   COUNT(*) AS total,
-                  SUM(CASE WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 ELSE 0 END) AS vencidas,
-                  SUM(CASE WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 ELSE 0 END) AS vencendo,
-                  SUM(CASE WHEN julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 ELSE 0 END) AS validas
+                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 ELSE 0 END) AS vencidas,
+                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 ELSE 0 END) AS vencendo,
+                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 ELSE 0 END) AS validas
              FROM qualificacoes_historico qh
              JOIN funcionarios f ON f.id = qh.funcionario_id
              LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
