@@ -40,8 +40,8 @@ calendario.get('/:id/calendario', auth(), async (c) => {
       rangeFim = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-01`;
     }
 
-    // Eventos, tripulações legadas, alocações v2 e alertas CMA em paralelo
-    const [eventosResult, tripulacoesResult, alocacoesResult, alertasCMA] = await Promise.all([
+    // Eventos, tripulações legadas, alocações v2, alertas CMA e sessões diretas em paralelo
+    const [eventosResult, tripulacoesResult, alocacoesResult, alertasCMA, sessoesDiretas] = await Promise.all([
       db
         .prepare(
           `SELECT ee.*,
@@ -101,7 +101,62 @@ calendario.get('/:id/calendario', auth(), async (c) => {
         .bind(id, empresaId)
         .all(),
       gerarAlertasCMA(db, id),
+      // Direct projection: simulator sessions not yet in escala_eventos.
+      // Sessions created before the sync feature was deployed lack escala_eventos
+      // entries. This query adds them without requiring backfill or edits.
+      db
+        .prepare(
+          `SELECT
+             'direct-sim-' || CAST(sa.id AS TEXT) || '-' || CAST(sp.funcionario_id AS TEXT) AS id,
+             ? AS escala_id,
+             'sim_sessao:' || CAST(sa.id AS TEXT) AS tripulacao_id,
+             CAST(sp.funcionario_id AS TEXT) AS funcionario_id,
+             'treinamento_simulador' AS tipo_evento,
+             sa.data AS data_inicio,
+             sa.data AS data_fim,
+             'dia_todo' AS turno,
+             sim.nome AS local,
+             NULL AS aeronave,
+             CAST(sa.simulador_id AS TEXT) AS simulador_id,
+             1 AS gerado_automaticamente,
+             'Projetado da sessão de simulador (sem backfill). Gerencie no módulo Simuladores.' AS motivo_automatico,
+             CASE WHEN UPPER(COALESCE(sa.status, '')) LIKE '%CANCEL%' THEN 'cancelado'
+                  WHEN UPPER(COALESCE(sa.status, '')) LIKE '%PEND%' THEN 'pendente'
+                  ELSE 'confirmado' END AS status,
+             'simuladores' AS origem,
+             COALESCE(sa.nome, sa.tipo_sessao) AS observacoes,
+             f.nome AS funcionario_nome,
+             f.matricula AS funcionario_matricula,
+             f.cargo AS funcionario_cargo,
+             NULL AS tripulacao_aeronave,
+             NULL AS tripulacao_base
+           FROM simulador_agendamentos sa
+           JOIN sessoes_participantes sp
+             ON sp.sessao_id = sa.id AND sp.deleted_at IS NULL
+           LEFT JOIN funcionarios f
+             ON f.id = sp.funcionario_id AND f.deleted_at IS NULL
+           LEFT JOIN simuladores sim
+             ON sim.id = sa.simulador_id AND sim.deleted_at IS NULL
+           WHERE sa.empresa_id = ?
+             AND sa.deleted_at IS NULL
+             AND sa.data >= ?
+             AND sa.data <= ?
+             AND NOT EXISTS (
+               SELECT 1 FROM escala_eventos ee
+               WHERE ee.origem = 'simuladores'
+                 AND ee.tripulacao_id = 'sim_sessao:' || CAST(sa.id AS TEXT)
+                 AND ee.funcionario_id = CAST(sp.funcionario_id AS TEXT)
+                 AND ee.deleted_at IS NULL
+             )`,
+        )
+        .bind(id, empresaId, rangeInicio, rangeFim)
+        .all(),
     ]);
+
+    const todosEventos = [
+      ...eventosResult.results,
+      ...(sessoesDiretas.results || []),
+    ];
 
     return c.json({
       success: true,
@@ -110,7 +165,7 @@ calendario.get('/:id/calendario', auth(), async (c) => {
         range: { inicio: rangeInicio, fim: rangeFim },
         tripulacoes: tripulacoesResult.results,
         alocacoes: alocacoesResult.results,
-        eventos: eventosResult.results,
+        eventos: todosEventos,
         alertas_cma: alertasCMA,
       },
     });
