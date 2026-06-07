@@ -346,6 +346,7 @@ type ConsolidatedTrainingItem = Omit<
 > & {
   source: ConsolidatedSource;
   source_id: number;
+  sessao_id?: number | null;
   source_route: string | null;
   source_label: string;
   read_only: boolean;
@@ -1408,6 +1409,10 @@ async function loadSimulatorSessionItems(
     busca?: string | null;
   },
 ): Promise<ConsolidatedTrainingItem[]> {
+  const equipamentoExpr = (await hasColumn(db, 'aeronaves', 'matricula'))
+    ? 'COALESCE(sim.nome, aer.prefixo, aer.modelo, aer.matricula, sim.modelo)'
+    : 'COALESCE(sim.nome, aer.prefixo, aer.modelo, sim.modelo)';
+
   let sql = `SELECT sa.id,
                     sa.empresa_id,
                     sa.data AS data_prevista,
@@ -1423,7 +1428,7 @@ async function loadSimulatorSessionItems(
                     fi.guerra AS instrutor_guerra,
                     sa.examinador_id,
                     fe.nome AS examinador_nome,
-                    COALESCE(sim.nome, aer.prefixo, aer.modelo, aer.matricula, sim.modelo) AS equipamento_nome,
+                    ${equipamentoExpr} AS equipamento_nome,
                     sa.observacoes,
                     MIN(qh.id) AS linked_qualificacao_historico_id,
                     MIN(qh.qualificacao_id) AS linked_qualificacao_tipo_id,
@@ -1593,6 +1598,7 @@ async function loadSimulatorSessionItems(
         ].filter((instrutor) => instrutor.funcionario_id > 0),
         source: 'SIMULADOR',
         source_id: Number(row.id),
+        sessao_id: Number(row.id),
         source_route: `/simuladores/sessoes/${Number(row.id)}`,
         source_label:
           String(row.tipo_dispositivo || '').toUpperCase() === 'AERONAVE'

@@ -202,6 +202,7 @@ export interface TreinamentoPlanejado {
   convocacoes_email?: TreinamentoPlanejadoConvocacaoEvent[];
   source?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
   source_id?: number;
+  sessao_id?: number | null;
   source_route?: string | null;
   source_label?: string | null;
   read_only?: boolean;

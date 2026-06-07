@@ -52,6 +52,7 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
         'treinamentos_dias',
         'treinamentos_instrutores',
         'treinamentos_qualificacoes_geradas',
+        'aeronaves',
       ].some((table) => query.includes(table));
 
       const entry = handlers.find(([matcher]) => query.includes(matcher));
@@ -712,11 +713,126 @@ describe('treinamentos planejados router', () => {
           expect.objectContaining({
             source: 'SIMULADOR',
             source_id: 75,
+            sessao_id: 75,
             source_route: '/simuladores/sessoes/75',
             read_only: true,
             status: 'PLANEJADO',
             qualificacao_codigo: 'G2',
             modalidade: 'SIMULADOR',
+            dias: [
+              expect.objectContaining({
+                sessao_id: 75,
+                data: '2026-06-25',
+              }),
+            ],
+          }),
+        ],
+      },
+    });
+  });
+
+  it('simuladores_junho_aparecem_na_lista mesmo sem coluna aeronaves.matricula', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM treinamentos_planejados t',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
+        'FROM qualificacoes_historico qh',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
+        'FROM simulador_agendamentos sa',
+        {
+          all: () => ({
+            results: [
+              {
+                id: 75,
+                empresa_id: 6,
+                data_prevista: '2026-06-25',
+                hora_inicio: '11:00',
+                hora_fim: '13:00',
+                status: 'AGENDADO',
+                tipo_dispositivo: 'SIMULADOR',
+                simulador_id: 16,
+                aeronave_id: null,
+                sessao_nome: 'SK76 - LOFT E CHECK',
+                instrutor_id: 15,
+                instrutor_nome: 'Instrutor',
+                instrutor_guerra: 'Instr',
+                examinador_id: null,
+                examinador_nome: null,
+                equipamento_nome: 'SK76 FTD',
+                observacoes: null,
+                linked_qualificacao_historico_id: 4534,
+                linked_qualificacao_tipo_id: 40,
+                linked_qualificacao_nome: 'SK76 — Currículo de Voo (FFS)',
+                linked_qualificacao_codigo: 'G2',
+              },
+            ],
+          }),
+        },
+      ],
+      [
+        'FROM sessoes_participantes sp',
+        {
+          all: () => ({
+            results: [
+              {
+                sessao_id: 75,
+                funcionario_id: 3,
+                funcionario_nome: 'Antonio Luiz Simões Ramos',
+                funcionario_guerra: 'Ramos',
+                funcionario_matricula: '00074',
+                funcionario_email: 'antonio@example.com',
+                funcionario_setor: 'OPS',
+                funcionario_funcao: 'Piloto',
+                qualificacao_historico_id: 4534,
+              },
+            ],
+          }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request(
+        'http://localhost/treinamentos/planejados?source=SIMULADOR&inicio=2026-06-01&fim=2026-06-30',
+      ),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        total: 1,
+        items: [
+          expect.objectContaining({
+            source: 'SIMULADOR',
+            source_id: 75,
+            sessao_id: 75,
+            qualificacao_nome: 'SK76 — Currículo de Voo (FFS)',
+            dias: [
+              expect.objectContaining({
+                sessao_id: 75,
+                simulador_id: 16,
+              }),
+            ],
+            participantes: [
+              expect.objectContaining({
+                funcionario_nome: 'Antonio Luiz Simões Ramos',
+                qualificacao_historico_id: 4534,
+              }),
+            ],
           }),
         ],
       },

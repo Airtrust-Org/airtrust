@@ -157,16 +157,26 @@ export function buildSyntheticAlocacoesFromEventos(params: {
   tripulanteIds: Set<string>;
 }): EscalaAlocacao[] {
   const { eventos, escalaId, tripulanteIds } = params;
+  const normalizedTripulanteIds = new Set([...tripulanteIds].map(String));
+  const seen = new Set<string>();
 
-  return eventos
-    .filter(
-      (evento) =>
-        evento.escala_id === String(escalaId) &&
-        tripulanteIds.has(evento.funcionario_id) &&
-        evento.status !== 'cancelado' &&
-        EVENT_TYPE_TO_SITUACAO[evento.tipo_evento] !== undefined,
-    )
-    .map((evento) => {
+  return eventos.flatMap((evento) => {
+      const funcionarioId = String(evento.funcionario_id);
+      if (String(evento.escala_id) !== String(escalaId)) return [];
+      if (!normalizedTripulanteIds.has(funcionarioId)) return [];
+      if (String(evento.status || '').toLowerCase() === 'cancelado') return [];
+      if (EVENT_TYPE_TO_SITUACAO[evento.tipo_evento] === undefined) return [];
+
+      const eventKey = [
+        evento.tipo_evento,
+        String(evento.id),
+        funcionarioId,
+        evento.data_inicio,
+        evento.data_fim,
+      ].join('|');
+      if (seen.has(eventKey)) return [];
+      seen.add(eventKey);
+
       const mapping = EVENT_TYPE_TO_SITUACAO[evento.tipo_evento];
       const now = new Date().toISOString();
       const syntheticId = `${SYNTHETIC_ID_PREFIX}${evento.tipo_evento}-${evento.id}`;
@@ -175,58 +185,60 @@ export function buildSyntheticAlocacoesFromEventos(params: {
       const sourceId = evento.id; // original escala_eventos.id (UUID)
       const sourceRoute = evento.origem || evento.tipo_evento;
 
-      return {
-        id: syntheticId,
-        escala_id: escalaId,
-        funcao: null as EscalaAlocacao['funcao'],
-        situacao_tipo: mapping.situacao_tipo,
-        situacao_cor: mapping.cor,
-        situacao_nome: evento.observacoes || mapping.label,
-        situacao_icone: null,
-        situacao_bloqueia_alocacao: null,
-        quinzena_id: null,
-        data_inicio: evento.data_inicio,
-        data_fim: evento.data_fim,
-        padrao_escala_id: null,
-        base: null,
-        // Embed source traceability in observacoes for debugging (non-breaking)
-        observacoes: evento.observacoes
-          ? `${evento.observacoes} [fonte: ${sourceRoute}#${sourceId}]`
-          : `[fonte: ${sourceRoute}#${sourceId}]`,
-        status: (evento.status === 'confirmado'
-          ? 'confirmado'
-          : 'planejado') as EscalaAlocacao['status'],
-        auto_gerado: true,
-        created_by: null,
-        created_at: now,
-        updated_at: now,
-        funcionario: {
-          id: evento.funcionario_id,
-          nome: evento.funcionario_nome || null,
-          nome_guerra: null,
-          matricula: evento.funcionario_matricula || null,
-          role: evento.funcionario_cargo || null,
-        },
-        aeronave: {
-          id: null,
-          prefixo: null,
-          modelo: null,
-        },
-        funcionario_id: evento.funcionario_id,
-        funcionario_nome: evento.funcionario_nome || null,
-        funcionario_guerra: null,
-        funcionario_matricula: evento.funcionario_matricula || null,
-        funcionario_role: evento.funcionario_cargo || null,
-        funcionario_quinzena: null,
-        funcionario_is_instrutor: undefined,
-        aeronave_id: null,
-        aeronave_prefixo: null,
-        aeronave_modelo: null,
-        modelo_aeronave: null,
-        funcionario_modelo_aeronave: null,
-        // ⚠️ Source metadata stored as comments — not part of EscalaAlocacao type
-        // sourceId and sourceRoute for traceability
-      } satisfies EscalaAlocacao;
+      return [
+        {
+          id: syntheticId,
+          escala_id: String(escalaId),
+          funcao: null as EscalaAlocacao['funcao'],
+          situacao_tipo: mapping.situacao_tipo,
+          situacao_cor: mapping.cor,
+          situacao_nome: evento.observacoes || mapping.label,
+          situacao_icone: null,
+          situacao_bloqueia_alocacao: null,
+          quinzena_id: null,
+          data_inicio: evento.data_inicio,
+          data_fim: evento.data_fim,
+          padrao_escala_id: null,
+          base: null,
+          // Embed source traceability in observacoes for debugging (non-breaking)
+          observacoes: evento.observacoes
+            ? `${evento.observacoes} [fonte: ${sourceRoute}#${sourceId}]`
+            : `[fonte: ${sourceRoute}#${sourceId}]`,
+          status: (evento.status === 'confirmado'
+            ? 'confirmado'
+            : 'planejado') as EscalaAlocacao['status'],
+          auto_gerado: true,
+          created_by: null,
+          created_at: now,
+          updated_at: now,
+          funcionario: {
+            id: funcionarioId,
+            nome: evento.funcionario_nome || null,
+            nome_guerra: null,
+            matricula: evento.funcionario_matricula || null,
+            role: evento.funcionario_cargo || null,
+          },
+          aeronave: {
+            id: null,
+            prefixo: null,
+            modelo: null,
+          },
+          funcionario_id: funcionarioId,
+          funcionario_nome: evento.funcionario_nome || null,
+          funcionario_guerra: null,
+          funcionario_matricula: evento.funcionario_matricula || null,
+          funcionario_role: evento.funcionario_cargo || null,
+          funcionario_quinzena: null,
+          funcionario_is_instrutor: undefined,
+          aeronave_id: null,
+          aeronave_prefixo: null,
+          aeronave_modelo: null,
+          modelo_aeronave: null,
+          funcionario_modelo_aeronave: null,
+          // ⚠️ Source metadata stored as comments — not part of EscalaAlocacao type
+          // sourceId and sourceRoute for traceability
+        } satisfies EscalaAlocacao,
+      ];
     });
 }
 

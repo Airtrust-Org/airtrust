@@ -145,7 +145,9 @@ function getAlocacaoExtra(alocacao: EscalaAlocacao) {
     if (prefixo && funcao) return `${prefixo} · ${funcao}`;
     return prefixo || funcao || undefined;
   }
-  return undefined;
+  const nome = alocacao.situacao_nome?.trim();
+  const tipo = String(alocacao.situacao_tipo || '').trim();
+  return nome && nome !== tipo ? nome : undefined;
 }
 
 function getQuinzenaByDia(quinzenas: QuinzenaEscala[], diaIso: string) {

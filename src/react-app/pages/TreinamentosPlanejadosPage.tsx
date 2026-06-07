@@ -5,9 +5,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardList,
-  Clock3,
   FileClock,
-  MapPin,
   Mail,
   Plus,
   ShieldCheck,
@@ -20,6 +18,8 @@ import { Modal } from '@/components/ui/Modal';
 import PageHeader from '@/react-app/components/PageHeader';
 import TimeInput from '@/react-app/components/TimeInput';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
+import ModalNovaSessao from '@/react-app/components/modals/ModalNovaSessao';
+import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
 import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQualificacao';
@@ -96,6 +96,35 @@ interface TreinamentoFormState {
   equipamento_descricao: string;
   limite_participantes: string;
   dias: Array<{ data: string; hora_inicio: string; hora_fim: string }>;
+}
+
+interface SessaoSimuladorParaEditar {
+  id: number;
+  template_id?: number | null;
+  simulador_id?: number | null;
+  simulador_nome?: string;
+  simulador_modelo?: string;
+  data: string;
+  horario_inicio: string;
+  horario_fim: string;
+  instrutor_id: number;
+  instrutor_nome?: string;
+  tipo_sessao: string;
+  tipo_sessao_id?: number | null;
+  tipo_sessao_codigo?: string | null;
+  tipo_aeronave?: string;
+  tipo_dispositivo?: 'SIMULADOR' | 'AERONAVE';
+  aeronave_id?: number | null;
+  aeronave_prefixo?: string;
+  aeronave_modelo?: string;
+  tema_sessao?: string;
+  observacoes?: string;
+  examinador_id?: number | null;
+  participantes?: Array<{
+    funcionario_id: number;
+    funcao?: 'PIC' | 'SIC';
+  }>;
+  fichas?: Array<{ id: number }>;
 }
 
 const STATUS_META: Record<TreinamentoPlanejadoStatus, { label: string; className: string }> = {
@@ -234,8 +263,99 @@ function getPresencaDiaMeta(status: TreinamentoPlanejadoPresencaDiaStatus) {
   return PRESENCA_DIA_OPTIONS.find((option) => option.value === status) || PRESENCA_DIA_OPTIONS[4];
 }
 
+function getParticipantNames(item: TreinamentoPlanejado): string[] {
+  return [
+    ...new Set(
+      (item.participantes || [])
+        .map((participant) => participant.funcionario_nome?.trim())
+        .filter((name): name is string => Boolean(name)),
+    ),
+  ];
+}
+
 function getEventoTitulo(item: TreinamentoPlanejado): string {
+  const participantNames = getParticipantNames(item);
+  const linkedParticipantNames = [
+    ...new Set(
+      (item.participantes || [])
+        .filter((participant) => Boolean(participant.qualificacao_historico_id))
+        .map((participant) => participant.funcionario_nome?.trim())
+        .filter((name): name is string => Boolean(name)),
+    ),
+  ];
+  const qualificationLabel = item.qualificacao_nome?.trim() || item.qualificacao_codigo?.trim();
+
+  if (item.source === 'QUALIFICACAO_PLANEJADA' && qualificationLabel) {
+    return participantNames[0]
+      ? `${participantNames[0]} — ${qualificationLabel}`
+      : qualificationLabel;
+  }
+
+  if (item.source === 'SIMULADOR' && qualificationLabel && linkedParticipantNames.length > 0) {
+    const leadName = linkedParticipantNames[0];
+    const extraCount = linkedParticipantNames.length - 1;
+    return `${leadName}${extraCount > 0 ? ` +${extraCount}` : ''} — ${qualificationLabel}`;
+  }
+
   return item.titulo?.trim() || item.qualificacao_nome || 'Treinamento planejado';
+}
+
+function getEventoParticipantSummary(item: TreinamentoPlanejado): string | null {
+  const participantNames = getParticipantNames(item);
+  if (participantNames.length === 0) return null;
+  if (participantNames.length <= 2) return participantNames.join(' • ');
+  return `${participantNames.slice(0, 2).join(' • ')} +${participantNames.length - 2}`;
+}
+
+function getEventoLinkedSessionLabel(item: TreinamentoPlanejado): string | null {
+  if (item.source !== 'SIMULADOR') return null;
+  if (!item.titulo?.trim()) return null;
+  const enrichedTitle = getEventoTitulo(item);
+  return enrichedTitle === item.titulo.trim() ? null : item.titulo.trim();
+}
+
+function getSimulatorSessionId(item: TreinamentoPlanejado): number | null {
+  if (item.source !== 'SIMULADOR') return null;
+  const rootId = Number(item.sessao_id || 0);
+  if (Number.isInteger(rootId) && rootId > 0) return rootId;
+  const dayId = Number((item.dias || []).find((dia) => Number(dia.sessao_id || 0) > 0)?.sessao_id || 0);
+  if (Number.isInteger(dayId) && dayId > 0) return dayId;
+  const sourceId = Number(item.source_id || 0);
+  return Number.isInteger(sourceId) && sourceId > 0 ? sourceId : null;
+}
+
+function mapTreinamentoToSessaoSimulador(
+  item: TreinamentoPlanejado,
+): SessaoSimuladorParaEditar | null {
+  const sessaoId = getSimulatorSessionId(item);
+  if (!sessaoId) return null;
+
+  const firstActiveDay =
+    (item.dias || []).find((dia) => dia.status !== 'CANCELADO') || (item.dias || [])[0] || null;
+  const equipamento = item.equipamento_descricao || item.local || undefined;
+
+  return {
+    id: sessaoId,
+    simulador_id: firstActiveDay?.simulador_id ?? null,
+    simulador_nome: equipamento,
+    simulador_modelo: equipamento,
+    data: item.data_prevista,
+    horario_inicio: item.hora_inicio || firstActiveDay?.hora_inicio || '',
+    horario_fim: item.hora_fim || firstActiveDay?.hora_fim || '',
+    instrutor_id: Number(item.instrutor_id || firstActiveDay?.instrutor_id || 0),
+    instrutor_nome: item.instrutor_nome || item.instrutor_guerra || firstActiveDay?.instrutor_nome || undefined,
+    tipo_sessao: item.titulo || item.qualificacao_nome || 'Sessão de treinamento',
+    tipo_dispositivo: item.modalidade === 'AERONAVE' ? 'AERONAVE' : 'SIMULADOR',
+    aeronave_id: firstActiveDay?.aeronave_id ?? null,
+    tipo_aeronave: item.qualificacao_codigo || equipamento,
+    tema_sessao: item.titulo || item.qualificacao_nome || undefined,
+    observacoes: item.observacoes || item.descricao || undefined,
+    participantes: (item.participantes || []).map((participante, index) => ({
+      funcionario_id: participante.funcionario_id,
+      funcao: index === 0 ? 'PIC' : 'SIC',
+    })),
+    fichas: [],
+  };
 }
 
 function getPessoaLabel(
@@ -441,6 +561,7 @@ interface TreinamentosPlanejadosPageProps {
   asTab?: boolean;
   forcedTab?: AbaAtiva;
   hideTabNav?: boolean;
+  hideActions?: boolean;
   sourceFilter?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
 }
 
@@ -448,6 +569,7 @@ export default function TreinamentosPlanejadosPage({
   asTab = false,
   forcedTab,
   hideTabNav = false,
+  hideActions = false,
   sourceFilter,
 }: TreinamentosPlanejadosPageProps) {
   const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
@@ -462,10 +584,13 @@ export default function TreinamentosPlanejadosPage({
   const [buscaConvocados, setBuscaConvocados] = useState('');
   const [modalFormularioAberto, setModalFormularioAberto] = useState(false);
   const [modalDetalheAberto, setModalDetalheAberto] = useState(false);
+  const [modalSessaoSimuladorAberto, setModalSessaoSimuladorAberto] = useState(false);
   const [modalConfirmacaoConvocacaoAberto, setModalConfirmacaoConvocacaoAberto] = useState(false);
   const [modalResultadoConvocacaoAberto, setModalResultadoConvocacaoAberto] = useState(false);
   const [treinamentoEditando, setTreinamentoEditando] = useState<TreinamentoPlanejado | null>(null);
   const [treinamentoSelecionadoId, setTreinamentoSelecionadoId] = useState<number | null>(null);
+  const [sessaoSimuladorEditando, setSessaoSimuladorEditando] =
+    useState<SessaoSimuladorParaEditar | null>(null);
   const [diaPresencaSelecionadoId, setDiaPresencaSelecionadoId] = useState<number | null>(null);
   const [formState, setFormState] = useState<TreinamentoFormState>(() => createEmptyForm(today));
   const [convocacaoPreview, setConvocacaoPreview] =
@@ -694,7 +819,24 @@ export default function TreinamentosPlanejadosPage({
     setModalFormularioAberto(true);
   }
 
+  const refetchPlanejadas = useCallback(() => {
+    void Promise.all([
+      treinamentosQuery.refetch(),
+      calendarioQuery.refetch(),
+      auditoriaQuery.refetch(),
+    ]);
+  }, [auditoriaQuery, calendarioQuery, treinamentosQuery]);
+
   function abrirDetalhes(treinamento: TreinamentoPlanejado) {
+    if (treinamento.source === 'SIMULADOR') {
+      const sessao = mapTreinamentoToSessaoSimulador(treinamento);
+      if (sessao) {
+        setSessaoSimuladorEditando(sessao);
+        setModalSessaoSimuladorAberto(true);
+        return;
+      }
+    }
+
     if (treinamento.read_only && treinamento.source_route) {
       navigate(treinamento.source_route);
       return;
@@ -702,6 +844,29 @@ export default function TreinamentosPlanejadosPage({
     setTreinamentoSelecionadoId(treinamento.id);
     setTreinamentoEditando(treinamento);
     setModalDetalheAberto(true);
+  }
+
+  function fecharModalSessaoSimulador() {
+    setModalSessaoSimuladorAberto(false);
+    setSessaoSimuladorEditando(null);
+  }
+
+  async function excluirSessaoSimulador(sessaoId: number) {
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/simuladores/sessoes/${sessaoId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || 'Erro ao excluir sessão de simulador.');
+      }
+      toast.success('Sessão de simulador removida.');
+      refetchPlanejadas();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível excluir a sessão.');
+    }
   }
 
   function abrirEditor(treinamento?: TreinamentoPlanejado | null) {
@@ -1152,6 +1317,7 @@ export default function TreinamentosPlanejadosPage({
   const enviandoConvocacao = previewConvocacao.isPending || enviarConvocacao.isPending;
 
   const convocacaoDisabledReason = getConvocacaoDisabledReason(detalheTreinamento);
+  const primaryActionLabel = sourceFilter === 'TURMA' ? 'Nova turma' : 'Novo treinamento';
 
   const actionButtons = (
     <div className="flex flex-wrap items-center gap-2">
@@ -1159,7 +1325,7 @@ export default function TreinamentosPlanejadosPage({
         Atualizar
       </Button>
       <Button icon="add" onClick={abrirNovoTreinamento}>
-        Novo treinamento
+        {primaryActionLabel}
       </Button>
     </div>
   );
@@ -1171,7 +1337,7 @@ export default function TreinamentosPlanejadosPage({
         data-testid="treinamentos-planejados-page"
       >
         {asTab ? (
-          <div className="flex justify-end pb-2">{actionButtons}</div>
+          !hideActions ? <div className="flex justify-end pb-2">{actionButtons}</div> : null
         ) : (
           <PageHeader
             title="Planejamento e Gestão de Treinamentos"
@@ -1372,6 +1538,16 @@ export default function TreinamentosPlanejadosPage({
                             <p className="mt-1 text-xs text-slate-500">
                               {formatHourRange(evento.hora_inicio, evento.hora_fim)}
                             </p>
+                            {getEventoParticipantSummary(evento) ? (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {getEventoParticipantSummary(evento)}
+                              </p>
+                            ) : null}
+                            {getEventoLinkedSessionLabel(evento) ? (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {getEventoLinkedSessionLabel(evento)}
+                              </p>
+                            ) : null}
                             {evento.source_label ? (
                               <p className="mt-1 text-xs text-slate-500">{evento.source_label}</p>
                             ) : null}
@@ -1411,97 +1587,125 @@ export default function TreinamentosPlanejadosPage({
                   Nenhum treinamento planejado encontrado para os filtros atuais.
                 </div>
               ) : (
-                <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-                  {listaTreinamentos.map((item) => (
-                    <article
-                      key={item.id}
-                      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                      data-testid={`treinamento-planejado-${item.id}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                            {item.qualificacao_codigo || 'TREINAMENTO'}
-                          </p>
-                          <h3 className="mt-1 text-lg font-semibold text-slate-900">
-                            {getEventoTitulo(item)}
-                          </h3>
-                        </div>
-                        <StatusBadge status={item.status} />
-                      </div>
-
-                        <div className="mt-4 space-y-3 text-sm text-slate-600">
-                          <div className="flex items-center gap-2">
-                            <CalendarDays className="h-4 w-4 text-slate-400" />
-                          <span>{formatDateLabel(item.data_prevista)}</span>
-                          <Clock3 className="ml-2 h-4 w-4 text-slate-400" />
-                          <span>{formatHourRange(item.hora_inicio, item.hora_fim)}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-slate-400" />
-                          <span>{item.local || 'Local a definir'}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Users className="h-4 w-4 text-slate-400" />
-                          <span>
-                            {item.convocados_total} convocados · {item.confirmados_total}{' '}
-                            confirmados · {item.presentes_total} presentes
-                          </span>
-                        </div>
-                        <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
-                          {item.source_label ? (
-                            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              {item.source_label}
-                            </p>
-                          ) : null}
-                          <p className="font-medium text-slate-700">
-                            Instrutor:{' '}
-                            <FuncionarioLink
-                              funcionarioId={item.instrutor_id ?? undefined}
-                              nome={item.instrutor_nome || item.instrutor_guerra || 'Nao definido'}
-                              className="font-medium text-slate-700"
-                            />
-                          </p>
-                          <p className="mt-1 line-clamp-2 text-slate-500">
-                            {item.descricao || item.observacoes || 'Sem observacoes adicionais.'}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {item.participantes.slice(0, 4).map((participante) => (
-                            <FuncionarioLink
-                              key={`${item.id}-${participante.funcionario_id}`}
-                              funcionarioId={participante.funcionario_id}
-                              nome={
-                                participante.funcionario_guerra || participante.funcionario_nome
-                              }
-                              className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
-                            />
-                          ))}
-                          {item.participantes.length > 4 && (
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                              +{item.participantes.length - 4}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        <Button
-                          variant="secondary"
-                          icon="visibility"
-                          onClick={() => abrirDetalhes(item)}
-                          data-testid={`treinamento-detalhes-${item.id}`}
-                        >
-                          {item.read_only ? 'Abrir origem' : 'Detalhes'}
-                        </Button>
-                        {!item.read_only ? (
-                          <Button variant="ghost" icon="edit" onClick={() => abrirEditor(item)}>
-                            Editar
-                          </Button>
-                        ) : null}
-                      </div>
-                    </article>
-                  ))}
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                  <table
+                    className="min-w-[1080px] divide-y divide-slate-200 text-sm"
+                    data-testid="treinamentos-planejados-table"
+                  >
+                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Data</th>
+                        <th className="px-4 py-3 text-left">Horário</th>
+                        <th className="px-4 py-3 text-left">Fonte</th>
+                        <th className="px-4 py-3 text-left">Treinamento / Qualificação</th>
+                        <th className="px-4 py-3 text-left">Participantes</th>
+                        <th className="px-4 py-3 text-left">Instrutor</th>
+                        <th className="px-4 py-3 text-left">Equipamento / Local</th>
+                        <th className="px-4 py-3 text-left">Status</th>
+                        <th className="px-4 py-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {listaTreinamentos.map((item) => {
+                        const simulatorSessionId = getSimulatorSessionId(item);
+                        const participantSummary =
+                          getEventoParticipantSummary(item) || `${item.convocados_total} convocados`;
+                        return (
+                          <tr
+                            key={item.id}
+                            className="align-top transition hover:bg-slate-50/80"
+                            data-testid={`treinamento-planejado-row-${item.id}`}
+                            data-source={item.source || 'TURMA'}
+                            data-sessao-id={simulatorSessionId || undefined}
+                          >
+                            <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                              {formatDateLabel(item.data_prevista)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                              {formatHourRange(item.hora_inicio, item.hora_fim)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                                {item.source_label || 'Turma'}
+                              </span>
+                            </td>
+                            <td className="max-w-[280px] px-4 py-3">
+                              <p className="font-semibold text-slate-900">{getEventoTitulo(item)}</p>
+                              {getEventoLinkedSessionLabel(item) ? (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {getEventoLinkedSessionLabel(item)}
+                                </p>
+                              ) : null}
+                              {item.descricao || item.observacoes ? (
+                                <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                                  {item.descricao || item.observacoes}
+                                </p>
+                              ) : null}
+                            </td>
+                            <td className="max-w-[220px] px-4 py-3 text-slate-600">
+                              <p>{participantSummary}</p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {item.participantes.slice(0, 3).map((participante) => (
+                                  <FuncionarioLink
+                                    key={`${item.id}-${participante.funcionario_id}`}
+                                    funcionarioId={participante.funcionario_id}
+                                    nome={
+                                      participante.funcionario_guerra ||
+                                      participante.funcionario_nome
+                                    }
+                                    className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
+                                  />
+                                ))}
+                                {item.participantes.length > 3 && (
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                    +{item.participantes.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              <FuncionarioLink
+                                funcionarioId={item.instrutor_id ?? undefined}
+                                nome={item.instrutor_nome || item.instrutor_guerra || 'Não definido'}
+                                className="font-medium text-slate-700"
+                              />
+                            </td>
+                            <td className="max-w-[180px] px-4 py-3 text-slate-600">
+                              {item.equipamento_descricao || item.local || 'Local a definir'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <StatusBadge status={item.status} />
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="secondary"
+                                  icon="visibility"
+                                  onClick={() => abrirDetalhes(item)}
+                                  data-testid={
+                                    simulatorSessionId
+                                      ? `simulador-editar-sessao-${simulatorSessionId}`
+                                      : `treinamento-detalhes-${item.id}`
+                                  }
+                                >
+                                  {simulatorSessionId
+                                    ? 'Editar sessão'
+                                    : item.read_only
+                                      ? 'Abrir origem'
+                                      : 'Detalhes'}
+                                </Button>
+                                {!item.read_only ? (
+                                  <Button variant="ghost" icon="edit" onClick={() => abrirEditor(item)}>
+                                    Editar
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -1614,6 +1818,21 @@ export default function TreinamentosPlanejadosPage({
             </div>
           )}
         </section>
+        <ModalNovaSessao
+          isOpen={modalSessaoSimuladorAberto}
+          onClose={fecharModalSessaoSimulador}
+          onSuccess={() => {
+            fecharModalSessaoSimulador();
+            refetchPlanejadas();
+          }}
+          sessao={sessaoSimuladorEditando}
+          onDelete={(sessaoId) => {
+            void excluirSessaoSimulador(sessaoId);
+          }}
+          onVerFichas={(sessaoId) => {
+            navigate(`/simuladores?tab=fichas&sessao=${sessaoId}`);
+          }}
+        />
         <Modal
           isOpen={modalFormularioAberto}
           onClose={() => setModalFormularioAberto(false)}
