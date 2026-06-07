@@ -12,18 +12,19 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/escalas-alocacoes.ts': 2268,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,
-  // Acknowledged growth (audit remediation B2/M4/M12): resource-tenant validation,
-  // orphan cleanup and create dedupe/atomic rollback.
-  'routes/treinamentos-planejados.ts': 2336,
+  // Acknowledged growth (stabilization 2026-06-06): consolidated planned
+  // training sources and route-level contract compatibility.
+  'routes/treinamentos-planejados.ts': 2911,
 } as const;
 
 const SQL_PREPARE_CAPS = {
-  'routes/simuladores-modelos.ts': 63,
+  // Acknowledged growth: schema guards for mixed local/prod model catalogs.
+  'routes/simuladores-modelos.ts': 65,
   'routes/auth.ts': 52,
   'routes/simuladores-sessoes-update.ts': 48,
   'routes/lms-cursos.ts': 44,
-  // Acknowledged (B2/M4/M12 remediation): added resource validation + create rollback.
-  'routes/treinamentos-planejados.ts': 42,
+  // Acknowledged (stabilization 2026-06-06): unified planned training contract.
+  'routes/treinamentos-planejados.ts': 45,
 } as const;
 
 const HIGH_SQL_LIMIT_CAPS = {
@@ -42,7 +43,8 @@ const CRITICAL_SELECT_STAR_CAPS = {
   'routes/funcionarios-mutations.ts': 4,
   'routes/lms-matriculas.ts': 5,
   'routes/simuladores-catalogo.ts': 6,
-  'routes/simuladores-equipamentos.ts': 6,
+  // Acknowledged growth: schema-guarded legacy simulator equipment compatibility.
+  'routes/simuladores-equipamentos.ts': 11,
   'routes/simuladores-fichas-acoes.ts': 3,
   'routes/simuladores-fichas-edicoes.ts': 3,
   'routes/simuladores-fichas-simulador.ts': 6,

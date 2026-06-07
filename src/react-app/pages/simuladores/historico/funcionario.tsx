@@ -7,6 +7,7 @@ export default function HistoricoFuncionario() {
   const { funcionario_id } = useParams();
   const [historico, setHistorico] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -15,15 +16,21 @@ export default function HistoricoFuncionario() {
 
   const carregarHistorico = async () => {
     try {
+      setErro(null);
       const response = await fetch(
         `${API_BASE_URL}/simuladores/sessoes/funcionario/${funcionario_id}`,
       );
       const data = await response.json();
       if (data.success) {
         setHistorico(data);
+      } else {
+        setHistorico(null);
+        setErro(data.error || 'Erro ao carregar histórico.');
       }
     } catch (error) {
       console.error('Erro ao carregar histórico:', error);
+      setHistorico(null);
+      setErro('Erro ao carregar histórico.');
     } finally {
       setLoading(false);
     }
@@ -40,6 +47,25 @@ export default function HistoricoFuncionario() {
   return (
     <div className="flex-1 bg-gray-50">
       <div className="max-w-5xl mx-auto  py-8">
+        {erro && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">{erro}</p>
+                <p className="mt-1">Falha de carga nao representa zero real nem lista vazia.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  void carregarHistorico();
+                }}
+                className="shrink-0 rounded-md bg-red-100 px-3 py-1.5 font-medium text-red-900 hover:bg-red-200"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          </div>
+        )}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Histórico de Simulador</h1>
           <p className="text-gray-600 mt-1">
@@ -119,7 +145,7 @@ export default function HistoricoFuncionario() {
             ))}
           </div>
 
-          {(!historico?.sessoes || historico.sessoes.length === 0) && (
+          {!erro && (!historico?.sessoes || historico.sessoes.length === 0) && (
             <p className="text-center text-gray-500 py-8">Nenhuma sessão encontrada</p>
           )}
         </div>

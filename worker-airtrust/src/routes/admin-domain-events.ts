@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { getCanonicalVersion } from './system';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -92,7 +93,7 @@ app.get('/integracoes/health', async (c) => {
       eventos_recentes: eventos.results || [],
       pasta_virtual_jobs: jobs.results || [],
       qualificacoes_pendencias: pendencias.results || [],
-      version: c.env.APP_VERSION || '0.0.0-dev',
+      version: getCanonicalVersion(c.env),
     },
   });
 });

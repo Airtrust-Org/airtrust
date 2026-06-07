@@ -60,14 +60,14 @@ if [ "$PURGE_ALL" = "--all" ]; then
     -d '{"purge_everything": true}')
   
 else
-  # Purge seletivo (apenas HTML e manifest)
-  echo "🎯 PURGE SELETIVO: Limpando apenas index.html e manifest.json"
+  # Purge seletivo (apenas HTML e web manifest)
+  echo "🎯 PURGE SELETIVO: Limpando apenas index.html e app.webmanifest"
   
   # URLs a limpar
   FILES=(
     "/"
     "/index.html"
-    "/manifest.json"
+    "/app.webmanifest"
   )
   
   # Construir JSON array

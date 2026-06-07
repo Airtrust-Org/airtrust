@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   CalendarDays,
@@ -436,11 +437,24 @@ function StatusBadge({ status }: { status: TreinamentoPlanejadoStatus }) {
   );
 }
 
-export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: boolean }) {
+interface TreinamentosPlanejadosPageProps {
+  asTab?: boolean;
+  forcedTab?: AbaAtiva;
+  hideTabNav?: boolean;
+  sourceFilter?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
+}
+
+export default function TreinamentosPlanejadosPage({
+  asTab = false,
+  forcedTab,
+  hideTabNav = false,
+  sourceFilter,
+}: TreinamentosPlanejadosPageProps) {
   const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
+  const navigate = useNavigate();
   const canManage = !isAluno && (isAdmin || isGestor || isInstrutor || can('qualificacoes.view'));
   const today = useMemo(() => getTodayYmd(), []);
-  const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('calendario');
+  const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(forcedTab || 'calendario');
   const [mesReferencia, setMesReferencia] = useState(today.slice(0, 7));
   const [statusFiltro, setStatusFiltro] = useState('');
   const [instrutorFiltro, setInstrutorFiltro] = useState('');
@@ -475,8 +489,9 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
       busca: buscaAdiada || undefined,
       inicio: monthRange.inicio,
       fim: monthRange.fim,
+      source: sourceFilter,
     }),
-    [buscaAdiada, instrutorFiltro, monthRange.fim, monthRange.inicio, statusFiltro],
+    [buscaAdiada, instrutorFiltro, monthRange.fim, monthRange.inicio, sourceFilter, statusFiltro],
   );
 
   const treinamentosQuery = useTreinamentosPlanejados(filtrosComuns);
@@ -484,6 +499,7 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
     mes: mesReferencia,
     status: statusFiltro || undefined,
     instrutor_id: instrutorFiltro ? Number(instrutorFiltro) : undefined,
+    source: sourceFilter,
   });
   const auditoriaQuery = useTreinamentosPlanejadosAuditoria(filtrosComuns);
   const detalheQuery = useTreinamentoPlanejadoDetalhe(treinamentoSelecionadoId);
@@ -654,6 +670,12 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
   const calendarCells = useMemo(() => buildCalendarCells(mesReferencia), [mesReferencia]);
 
   useEffect(() => {
+    if (forcedTab && abaAtiva !== forcedTab) {
+      setAbaAtiva(forcedTab);
+    }
+  }, [abaAtiva, forcedTab]);
+
+  useEffect(() => {
     if (!modalFormularioAberto) return;
     if (treinamentoEditando) {
       setFormState(mapTreinamentoToForm(treinamentoEditando));
@@ -669,6 +691,10 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
   }
 
   function abrirDetalhes(treinamento: TreinamentoPlanejado) {
+    if (treinamento.read_only && treinamento.source_route) {
+      navigate(treinamento.source_route);
+      return;
+    }
     setTreinamentoSelecionadoId(treinamento.id);
     setTreinamentoEditando(treinamento);
     setModalDetalheAberto(true);
@@ -1252,31 +1278,33 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: 'calendario', label: 'Calendario', icon: CalendarDays },
-              { id: 'quadro', label: 'Quadro', icon: ClipboardList },
-              { id: 'auditoria', label: 'Auditoria', icon: FileClock },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const active = abaAtiva === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setAbaAtiva(tab.id as AbaAtiva)}
-                  className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
-                    active
-                      ? 'bg-primary-600 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+          {!hideTabNav && (
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: 'calendario', label: 'Calendario', icon: CalendarDays },
+                { id: 'quadro', label: 'Quadro', icon: ClipboardList },
+                { id: 'auditoria', label: 'Auditoria', icon: FileClock },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const active = abaAtiva === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setAbaAtiva(tab.id as AbaAtiva)}
+                    className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                      active
+                        ? 'bg-primary-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {abaAtiva === 'calendario' && (
             <div className="mt-4 space-y-4">
@@ -1351,6 +1379,9 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                             <p className="mt-1 text-xs text-slate-500">
                               {formatHourRange(evento.hora_inicio, evento.hora_fim)}
                             </p>
+                            {evento.source_label ? (
+                              <p className="mt-1 text-xs text-slate-500">{evento.source_label}</p>
+                            ) : null}
                             <p className="mt-1 text-xs text-slate-500">
                               {evento.convocados_total} convocados
                             </p>
@@ -1406,9 +1437,9 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                         <StatusBadge status={item.status} />
                       </div>
 
-                      <div className="mt-4 space-y-3 text-sm text-slate-600">
-                        <div className="flex items-center gap-2">
-                          <CalendarDays className="h-4 w-4 text-slate-400" />
+                        <div className="mt-4 space-y-3 text-sm text-slate-600">
+                          <div className="flex items-center gap-2">
+                            <CalendarDays className="h-4 w-4 text-slate-400" />
                           <span>{formatDateLabel(item.data_prevista)}</span>
                           <Clock3 className="ml-2 h-4 w-4 text-slate-400" />
                           <span>{formatHourRange(item.hora_inicio, item.hora_fim)}</span>
@@ -1425,6 +1456,11 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                           </span>
                         </div>
                         <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
+                          {item.source_label ? (
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              {item.source_label}
+                            </p>
+                          ) : null}
                           <p className="font-medium text-slate-700">
                             Instrutor:{' '}
                             <FuncionarioLink
@@ -1463,11 +1499,13 @@ export default function TreinamentosPlanejadosPage({ asTab = false }: { asTab?: 
                           onClick={() => abrirDetalhes(item)}
                           data-testid={`treinamento-detalhes-${item.id}`}
                         >
-                          Detalhes
+                          {item.read_only ? 'Abrir origem' : 'Detalhes'}
                         </Button>
-                        <Button variant="ghost" icon="edit" onClick={() => abrirEditor(item)}>
-                          Editar
-                        </Button>
+                        {!item.read_only ? (
+                          <Button variant="ghost" icon="edit" onClick={() => abrirEditor(item)}>
+                            Editar
+                          </Button>
+                        ) : null}
                       </div>
                     </article>
                   ))}

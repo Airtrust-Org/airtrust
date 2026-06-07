@@ -128,7 +128,7 @@ import lmsProgressoRoutes from './routes/lms-progresso';
 import lmsRelatoriosRoutes from './routes/lms-relatorios';
 import lmsEdappLegadoRoutes from './routes/lms-edapp-legado';
 import { registerPublicRoutes } from './routes/public-routes';
-import { registerSystemRoutes } from './routes/system';
+import { getCanonicalVersion, registerSystemRoutes } from './routes/system';
 import './shared/handlers';
 
 // ===== CRIAR APP HONO =====
@@ -298,7 +298,7 @@ app.get('/', (c) => {
   return c.json({
     success: true,
     name: 'AirTrust Worker API',
-    version: c.env.APP_VERSION || '0.0.0-dev',
+    version: getCanonicalVersion(c.env),
     environment: c.env.ENVIRONMENT || 'development',
     endpoints: {
       health: '/api/health',

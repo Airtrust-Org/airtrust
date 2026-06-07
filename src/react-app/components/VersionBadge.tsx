@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { API_BASE_URL } from '@/react-app/config/api';
-import { DEPLOYMENT_VERSION } from '@/react-app/config/deployment';
+import {
+  DEPLOYMENT_VERSION,
+  readServedFrontendVersionFromDocument,
+} from '@/react-app/config/deployment';
 
 interface VersionData {
   version: string;
@@ -24,16 +27,7 @@ export function VersionBadge() {
   // Versão REAL do UI servido:
   // 1) meta build-version (carimbado no index.html servido)
   // 2) fallback local (DEPLOYMENT_VERSION) — dev/local
-  const metaVersion = (() => {
-    try {
-      const meta = document.querySelector('meta[name="build-version"]') as HTMLMetaElement | null;
-      const value = meta?.content?.trim();
-      if (!value || value === '__BUILD_VERSION__') return null;
-      return value;
-    } catch {
-      return null;
-    }
-  })();
+  const metaVersion = readServedFrontendVersionFromDocument();
 
   const version =
     metaVersion ||

@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { API_BASE_URL } from '@/react-app/config/api';
+import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { StatCard} from '../../components/SimuladoresLayout';
 import { Settings, Plane, FileText, List, Briefcase, Award } from 'lucide-react';
 
@@ -22,6 +22,7 @@ interface Props {
 }
 
 export default function ConfiguracoesCadastros({ onNavigate }: Props) {
+  const [erro, setErro] = useState<string | null>(null);
   const [stats, setStats] = useState({
     simuladores: 0,
     manobras: 0,
@@ -36,14 +37,17 @@ export default function ConfiguracoesCadastros({ onNavigate }: Props) {
 
   const carregarEstatisticas = async () => {
     try {
+      setErro(null);
+      const token = getAccessToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       // Carregar contadores de todos os cadastros em paralelo
       const [resSimuladores, resManobras, resCategorias, resTipos, resTemplates] =
         await Promise.all([
-          fetch(`${API_BASE_URL}/simuladores`),
-          fetch(`${API_BASE_URL}/simuladores/manobras`),
-          fetch(`${API_BASE_URL}/simuladores/categorias`),
-          fetch(`${API_BASE_URL}/simuladores/tipos`),
-          fetch(`${API_BASE_URL}/simuladores/templates`),
+          fetch(`${API_BASE_URL}/simuladores`, { headers }),
+          fetch(`${API_BASE_URL}/simuladores/manobras`, { headers }),
+          fetch(`${API_BASE_URL}/simuladores/categorias`, { headers }),
+          fetch(`${API_BASE_URL}/simuladores/tipos-sessao`, { headers }),
+          fetch(`${API_BASE_URL}/simuladores/modelos-sessao`, { headers }),
         ]);
 
       if (resSimuladores.ok) {
@@ -82,6 +86,7 @@ export default function ConfiguracoesCadastros({ onNavigate }: Props) {
       }
     } catch (error) {
       console.error('Erro ao carregar estatísticas:', error);
+      setErro('Nao foi possivel carregar os contadores de cadastros.');
     }
   };
 
@@ -130,6 +135,24 @@ export default function ConfiguracoesCadastros({ onNavigate }: Props) {
 
   return (
     <div className="space-y-4">
+      {erro && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">{erro}</p>
+              <p className="mt-1">Falha de API nao representa zero real nesta tela.</p>
+            </div>
+            <button
+              onClick={() => {
+                void carregarEstatisticas();
+              }}
+              className="shrink-0 rounded-md bg-amber-100 px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-200"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {cadastros.map((cadastro) => (
           <StatCard

@@ -61,6 +61,7 @@ describe('hardRefreshApp', () => {
       auth_session: 'session',
       'airtrust-runtime-recover:/frms/fadiga-checkin': '1',
       'airtrust-manifest-version': 'v1',
+      'airtrust-frontend-version': '808bb11',
     });
     const { api } = createCachesApi([]);
     const replaceMock = vi.fn();
@@ -77,6 +78,7 @@ describe('hardRefreshApp', () => {
     expect(sessionStorageApi.getItem('auth_session')).toBe('session');
     expect(sessionStorageApi.getItem('airtrust-runtime-recover:/frms/fadiga-checkin')).toBeNull();
     expect(sessionStorageApi.getItem('airtrust-manifest-version')).toBeNull();
+    expect(sessionStorageApi.getItem('airtrust-frontend-version')).toBeNull();
     expect(replaceMock).toHaveBeenCalledTimes(1);
   });
 

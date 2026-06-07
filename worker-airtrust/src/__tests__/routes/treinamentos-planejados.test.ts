@@ -404,6 +404,12 @@ describe('treinamentos planejados router', () => {
         },
       ],
       [
+        'SELECT qh.id,',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
         'FROM treinamentos_participantes tp',
         {
           all: () => ({
@@ -442,6 +448,12 @@ describe('treinamentos planejados router', () => {
               },
             ],
           }),
+        },
+      ],
+      [
+        'FROM simulador_agendamentos sa',
+        {
+          all: () => ({ results: [] }),
         },
       ],
     ]);
@@ -537,5 +549,260 @@ describe('treinamentos planejados router', () => {
         dados_novos: expect.objectContaining({ funcionario_id: 11, presente: true }),
       }),
     );
+  });
+
+  it('consolida qualificacao planejada avulsa na lista de planejados', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM treinamentos_planejados t',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
+        'FROM qualificacoes_historico qh',
+        {
+          all: () => ({
+            results: [
+              {
+                id: 4534,
+                empresa_id: 6,
+                funcionario_id: 3,
+                funcionario_nome: 'Antonio',
+                funcionario_guerra: 'Antonio',
+                funcionario_matricula: '123',
+                funcionario_email: 'antonio@example.com',
+                funcionario_setor: 'OPS',
+                funcionario_funcao: 'Piloto',
+                qualificacao_tipo_id: 40,
+                qualificacao_nome: 'Ground School G2',
+                qualificacao_codigo: 'G2',
+                data_planejada: '2026-06-25',
+                status: 'PLANEJADA',
+                instrutor_nome: null,
+                observacoes: null,
+              },
+            ],
+          }),
+        },
+      ],
+      [
+        'FROM simulador_agendamentos sa',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request(
+        'http://localhost/treinamentos/planejados?inicio=2026-06-01&fim=2026-06-30',
+      ),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        total: 1,
+        items: [
+          expect.objectContaining({
+            source: 'QUALIFICACAO_PLANEJADA',
+            source_id: 4534,
+            source_route: '/qualificacoes?id=4534',
+            read_only: true,
+            status: 'PLANEJADO',
+            qualificacao_codigo: 'G2',
+            data_prevista: '2026-06-25',
+          }),
+        ],
+      },
+    });
+  });
+
+  it('consolida sessoes de simulador com status canonico e origem read-only', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM treinamentos_planejados t',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
+        'FROM qualificacoes_historico qh',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
+        'FROM simulador_agendamentos sa',
+        {
+          all: () => ({
+            results: [
+              {
+                id: 75,
+                empresa_id: 6,
+                data_prevista: '2026-06-25',
+                hora_inicio: '11:00',
+                hora_fim: '13:00',
+                status: 'AGENDADO',
+                tipo_dispositivo: 'SIMULADOR',
+                simulador_id: 16,
+                aeronave_id: null,
+                sessao_nome: 'SK76 - LOFT E CHECK',
+                instrutor_id: 15,
+                instrutor_nome: 'Instrutor',
+                instrutor_guerra: 'Instr',
+                examinador_id: 33,
+                examinador_nome: 'Examinador',
+                equipamento_nome: 'SK76 FTD',
+                observacoes: null,
+                linked_qualificacao_historico_id: 4534,
+                linked_qualificacao_tipo_id: 40,
+                linked_qualificacao_nome: 'Ground School G2',
+                linked_qualificacao_codigo: 'G2',
+              },
+            ],
+          }),
+        },
+      ],
+      [
+        'FROM sessoes_participantes sp',
+        {
+          all: () => ({
+            results: [
+              {
+                sessao_id: 75,
+                funcionario_id: 3,
+                funcionario_nome: 'Antonio',
+                funcionario_guerra: 'Antonio',
+                funcionario_matricula: '123',
+                funcionario_email: 'antonio@example.com',
+                funcionario_setor: 'OPS',
+                funcionario_funcao: 'Piloto',
+                qualificacao_historico_id: 4534,
+              },
+            ],
+          }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request(
+        'http://localhost/treinamentos/planejados/calendario?inicio=2026-06-01&fim=2026-06-30',
+      ),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        items: [
+          expect.objectContaining({
+            source: 'SIMULADOR',
+            source_id: 75,
+            source_route: '/simuladores/sessoes/75',
+            read_only: true,
+            status: 'PLANEJADO',
+            qualificacao_codigo: 'G2',
+            modalidade: 'SIMULADOR',
+          }),
+        ],
+      },
+    });
+  });
+
+  it('respeita o filtro source=TURMA e nao mistura fontes virtuais', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM treinamentos_planejados t',
+        {
+          all: () => ({
+            results: [
+              {
+                id: 21,
+                empresa_id: 1,
+                qualificacao_tipo_id: 9,
+                qualificacao_nome: 'CRM',
+                qualificacao_codigo: 'CRM',
+                data_prevista: '2026-06-20',
+                hora_inicio: '08:00',
+                hora_fim: '12:00',
+                status: 'PLANEJADO',
+                instrutor_id: 4,
+                instrutor_nome: 'Instrutor',
+                instrutor_guerra: 'Instr',
+                local: 'Sala Alpha',
+                carga_horaria_prevista: 4,
+                titulo: 'CRM Recorrente',
+                descricao: null,
+                observacoes: null,
+                created_by: 99,
+                created_at: '2026-06-01',
+                updated_at: '2026-06-01',
+                codigo_turma: 'CRM-01',
+                modalidade: 'TEORICO',
+                data_inicio: '2026-06-20',
+                data_fim: '2026-06-20',
+                base: null,
+                sala: null,
+                equipamento_descricao: null,
+                limite_participantes: null,
+                convocados_total: 0,
+                confirmados_total: 0,
+                presentes_total: 0,
+              },
+            ],
+          }),
+        },
+      ],
+      [
+        'FROM treinamentos_participantes tp',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
+        'FROM treinamentos_dias td',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
+        'FROM treinamentos_instrutores ti',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/planejados?source=TURMA'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        total: 1,
+        items: [expect.objectContaining({ id: 21, source: 'TURMA', read_only: false })],
+      },
+    });
   });
 });

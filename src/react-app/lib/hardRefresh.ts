@@ -1,8 +1,16 @@
 const REFRESH_QUERY_PARAM = 'refresh';
 const REFRESH_RUNTIME_RECOVER_PARAM = 'runtime_recover';
 
-const LOCAL_STORAGE_KEYS_TO_REMOVE = ['airtrust-update-available', 'airtrust-manifest-version'];
-const SESSION_STORAGE_KEYS_TO_REMOVE = ['__sw_cleared', 'airtrust-manifest-version'];
+const LOCAL_STORAGE_KEYS_TO_REMOVE = [
+  'airtrust-update-available',
+  'airtrust-manifest-version',
+  'airtrust-frontend-version',
+];
+const SESSION_STORAGE_KEYS_TO_REMOVE = [
+  '__sw_cleared',
+  'airtrust-manifest-version',
+  'airtrust-frontend-version',
+];
 const SESSION_STORAGE_PREFIXES_TO_REMOVE = ['airtrust-runtime-recover:'];
 
 interface HardRefreshDeps {

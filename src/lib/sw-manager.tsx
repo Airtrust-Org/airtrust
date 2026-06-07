@@ -5,18 +5,24 @@
  * 1. Registrar SW na inicialização do app
  * 2. Ouvir mensagens de "update available"
  * 3. Oferecer reload ao usuário (toast)
- * 4. Monitorar versão do manifest.json (fallback se SW não funcionar)
+ * 4. Monitorar a versão real servida em index.html (fallback se SW não funcionar)
  */
 
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
+import {
+  fetchServedFrontendVersion,
+  readServedFrontendVersionFromDocument,
+} from '@/react-app/config/deployment';
 
 interface ServiceWorkerUpdateEvent {
   type: 'AIRTRUST_UPDATE_AVAILABLE';
   version: string;
   message: string;
 }
+
+const FRONTEND_VERSION_STORAGE_KEY = 'airtrust-frontend-version';
 
 function shouldBypassServiceWorkerForPath(pathname: string): boolean {
   return /^\/lms\/player\//.test(pathname);
@@ -132,10 +138,15 @@ export function useServiceWorkerUpdates(): void {
         });
     }
 
-    // Fallback: monitorar manifest.json a cada 60 minutos (era 1 minuto - muito agressivo!)
+    const currentVersion = readServedFrontendVersionFromDocument();
+    if (currentVersion) {
+      sessionStorage.setItem(FRONTEND_VERSION_STORAGE_KEY, currentVersion);
+    }
+
+    // Fallback: monitorar a versão do index.html servido a cada 60 minutos
     const manifestCheckInterval = setInterval(
       () => {
-        checkManifestVersion();
+        checkServedFrontendVersion();
       },
       60 * 60 * 1000,
     ); // A cada 60 minutos
@@ -207,26 +218,25 @@ export async function clearAllCaches(): Promise<void> {
 }
 
 /**
- * Monitorar versão do manifest.json como fallback
+ * Monitorar a versão servida do frontend como fallback
  * Se mudou, forçar reload
  */
-async function checkManifestVersion(): Promise<void> {
+async function checkServedFrontendVersion(): Promise<void> {
   try {
-    const response = await fetch('/manifest.json?v=' + Date.now());
-    if (!response.ok) return;
-
-    const manifest = (await response.json()) as Record<string, unknown>;
-    const currentVersion = sessionStorage.getItem('airtrust-manifest-version');
-    const newVersion = JSON.stringify(manifest);
+    const currentVersion =
+      sessionStorage.getItem(FRONTEND_VERSION_STORAGE_KEY) ||
+      readServedFrontendVersionFromDocument();
+    const newVersion = await fetchServedFrontendVersion();
+    if (!newVersion) return;
 
     if (currentVersion && currentVersion !== newVersion) {
-      console.log('[App] Manifest mudou, reload necessário');
+      console.log('[App] Versão servida mudou, reload necessário');
       showUpdateNotification();
     }
 
-    sessionStorage.setItem('airtrust-manifest-version', newVersion);
+    sessionStorage.setItem(FRONTEND_VERSION_STORAGE_KEY, newVersion);
   } catch (error) {
-    console.warn('[App] Erro checando manifest:', error);
+    console.warn('[App] Erro checando versão servida:', error);
   }
 }
 
