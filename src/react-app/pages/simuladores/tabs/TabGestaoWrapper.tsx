@@ -85,6 +85,7 @@ const colorClasses: Record<string, { icon: string; badge: string }> = {
 export default function TabGestaoWrapper() {
   const [loading, setLoading] = useState(true);
   const [dataReady, setDataReady] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const [subView, setSubView] = useState<SubView>('menu');
   const [stats, setStats] = useState<GestaoStats>({
     simuladores: 0,
@@ -93,6 +94,8 @@ export default function TabGestaoWrapper() {
     tiposSessao: 0,
     modelosSessao: 0,
   });
+  // Sentinel: null = carregando, false = OK, true = erro naquela entidade
+  const [entityErrors, setEntityErrors] = useState<Record<string, boolean>>({});
 
   const countSim = useCountUp(stats.simuladores, 500, dataReady);
   const countMan = useCountUp(stats.manobras, 500, dataReady);
@@ -113,6 +116,8 @@ export default function TabGestaoWrapper() {
     try {
       setLoading(true);
       setDataReady(false);
+      setErro(null);
+      setEntityErrors({});
       const _gt = getAccessToken();
       const _gh = _gt ? { Authorization: `Bearer ${_gt}` } : {};
       const noStore = { headers: _gh, cache: 'no-store' as RequestCache };
@@ -125,23 +130,38 @@ export default function TabGestaoWrapper() {
       ]);
 
       const [simData, manobrasData, categoriasData, tiposData, modelosData] = await Promise.all([
-        simRes.json(),
-        manobrasRes.json(),
-        categoriasRes.json(),
-        tiposRes.json(),
-        modelosRes.json(),
+        simRes.ok ? simRes.json() : Promise.resolve(null),
+        manobrasRes.ok ? manobrasRes.json() : Promise.resolve(null),
+        categoriasRes.ok ? categoriasRes.json() : Promise.resolve(null),
+        tiposRes.ok ? tiposRes.json() : Promise.resolve(null),
+        modelosRes.ok ? modelosRes.json() : Promise.resolve(null),
       ]);
 
+      // Track which entities failed
+      const failures: Record<string, boolean> = {};
+      let anyFailure = false;
+
+      const calc = (data: any, key: string): number => {
+        if (!data) { failures[key] = true; anyFailure = true; return 0; }
+        if (!data.success) { failures[key] = true; anyFailure = true; return 0; }
+        return data.data?.length || 0;
+      };
+
       setStats({
-        simuladores: simData.success ? simData.data?.length || 0 : 0,
-        manobras: manobrasData.success ? manobrasData.data?.length || 0 : 0,
-        categorias: categoriasData.success ? categoriasData.data?.length || 0 : 0,
-        tiposSessao: tiposData.success ? tiposData.data?.length || 0 : 0,
-        modelosSessao: modelosData.success ? modelosData.data?.length || 0 : 0,
+        simuladores: calc(simData, 'simuladores'),
+        manobras: calc(manobrasData, 'manobras'),
+        categorias: calc(categoriasData, 'categorias'),
+        tiposSessao: calc(tiposData, 'tipos'),
+        modelosSessao: calc(modelosData, 'modelos'),
       });
+      setEntityErrors(failures);
+      if (anyFailure) {
+        setErro('Alguns dados não puderam ser carregados. Verifique sua conexão e tente novamente.');
+      }
       setDataReady(true);
     } catch (error) {
       console.error('Erro ao carregar dados de gestao:', error);
+      setErro('Não foi possível carregar os dados de gestão. Verifique sua conexão.');
     } finally {
       setLoading(false);
     }
@@ -201,6 +221,7 @@ export default function TabGestaoWrapper() {
     const Icon = card.icon;
     const colors = colorClasses[card.color];
     const count = countMap[card.id];
+    const hasError = entityErrors[card.id] === true;
     return (
       <button
         key={card.id}
@@ -215,7 +236,13 @@ export default function TabGestaoWrapper() {
           <p className="text-xs text-gray-500 mt-0.5">{card.descricao}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-lg font-semibold text-gray-900 tabular-nums">{count}</span>
+          {hasError ? (
+            <span className="text-xs font-medium text-amber-600" title="Falha ao carregar — toque para tentar novamente">
+              ⚠️
+            </span>
+          ) : (
+            <span className="text-lg font-semibold text-gray-900 tabular-nums">{count}</span>
+          )}
           <ArrowUpRight className="h-3.5 w-3.5 text-gray-400 transition-all duration-200 group-hover:text-gray-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </div>
       </button>
@@ -250,6 +277,12 @@ export default function TabGestaoWrapper() {
           Gerencie a estrutura operacional e a biblioteca pedagógica dos simuladores.
         </p>
       </div>
+
+      {erro && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-medium">⚠️ {erro}</p>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid gap-5 lg:grid-cols-2">
