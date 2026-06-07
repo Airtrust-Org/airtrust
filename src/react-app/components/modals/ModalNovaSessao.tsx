@@ -338,25 +338,17 @@ export default function ModalNovaSessao({
   }, [isOpen, isEditMode, sessao?.data]);
 
   // ========== PREENCHER DADOS PARA EDIÇÃO ==========
+  // PHASE 1: Hydrate non-cascading fields (date, times, instructor, participants, etc.)
+  // Runs as soon as session detail is available — does NOT wait for cascading list fetches.
+  // This ensures basic fields are always populated even if a supporting endpoint fails.
   useEffect(() => {
-    // For SIMULADOR sessions: wait for simuladores + aeronaves + tiposSessao to load
-    // For AERONAVE sessions: simuladores may be empty (null simulador_id), so skip that guard
-    const tipoDisp = sessao?.tipo_dispositivo || 'SIMULADOR';
-    const detailReady = !isEditMode || sessaoDetalhe !== null;
-    const dataReady = tipoDisp === 'AERONAVE'
-      ? isOpen && isEditMode && sessao && detailReady && aeronaves.length > 0 && tiposSessao.length > 0 && aeronavesReais !== undefined
-      : isOpen && isEditMode && sessao && detailReady && simuladores.length > 0 && aeronaves.length > 0 && tiposSessao.length > 0;
+    if (!isOpen || !isEditMode || !sessao) return;
+    if (sessaoDetalhe === null) return; // detail not yet fetched (or _fallback not yet set)
 
-    if (!dataReady) return;
-
-    // Build merged session data: sessaoDetalhe is authoritative for DB-level fields,
-    // falling back to the sessao prop for fields the detail endpoint doesn't return.
-    // If sessaoDetalhe has _fallback flag (detail fetch failed), use prop data directly.
     const detailIsFallback = sessaoDetalhe?._fallback === true;
     const merged = sessaoDetalhe && !detailIsFallback
       ? {
           ...sessao,
-          // Map detail DB columns → frontend field names, preferring detail over prop
           data: sessaoDetalhe.data || sessao!.data,
           horario_inicio: sessaoDetalhe.hora_inicio || sessao!.horario_inicio,
           horario_fim: sessaoDetalhe.hora_fim || sessao!.horario_fim,
@@ -368,7 +360,6 @@ export default function ModalNovaSessao({
           aeronave_modelo: sessaoDetalhe.aeronave_modelo || sessao!.aeronave_modelo,
           examinador_nome: sessaoDetalhe.examinador_nome || sessao!.examinador_nome,
           observacoes: sessaoDetalhe.observacoes ?? sessao!.observacoes,
-          // Use detail participantes with proper mapping (aluno.id → funcionario_id)
           participantes:
             sessaoDetalhe.alunos?.length > 0
               ? sessaoDetalhe.alunos.map((a: any) => ({
@@ -376,7 +367,6 @@ export default function ModalNovaSessao({
                   funcao: (a.funcao as 'PIC' | 'SIC') || 'PIC',
                 }))
               : sessao!.participantes,
-          // Preserve simulador metadata from detail join
           tipo_aeronave:
             sessaoDetalhe.aeronave_modelo ||
             sessaoDetalhe.simulador_aeronave_codigo ||
@@ -385,176 +375,239 @@ export default function ModalNovaSessao({
         }
       : sessao!;
 
-    // Helper to set non-cascading fields (always populated, even if cascading lookups fail)
-    const setCamposIndependentes = () => {
-      setData((merged.data || '').split('T')[0]);
-      setHorarioInicio(merged.horario_inicio?.substring(0, 5) || '');
-      setHorarioFim(merged.horario_fim?.substring(0, 5) || '');
-      setHorarioFimFoiEditado(true);
-      setInstrutorId(merged.instrutor_id);
-      setObservacoes(merged.observacoes || '');
-      if (merged.tema_sessao) {
-        setTemaSessao(merged.tema_sessao);
+    const detailLabel = sessaoDetalhe && !detailIsFallback ? 'detail' : 'prop';
+    console.log('🔧 [PHASE 1] Hydrating non-cascading fields from', detailLabel, {
+      id: merged.id,
+      data: merged.data,
+      horario_inicio: merged.horario_inicio,
+      horario_fim: merged.horario_fim,
+      instrutor_id: merged.instrutor_id,
+      participantes: merged.participantes?.length || 0,
+    });
+
+    // Always set non-cascading fields — no list dependency
+    setData((merged.data || '').split('T')[0]);
+    setHorarioInicio(merged.horario_inicio?.substring(0, 5) || '');
+    setHorarioFim(merged.horario_fim?.substring(0, 5) || '');
+    setHorarioFimFoiEditado(true);
+    setInstrutorId(merged.instrutor_id);
+    setObservacoes(merged.observacoes || '');
+    if (merged.tema_sessao) {
+      setTemaSessao(merged.tema_sessao);
+    }
+    if (merged.participantes && merged.participantes.length > 0) {
+      setParticipantes(
+        merged.participantes.slice(0, 2).map((p: any) => ({
+          funcionario_id: p.funcionario_id,
+          funcao: p.funcao,
+        })),
+      );
+    }
+    setTipoDispositivo(sessao?.tipo_dispositivo || 'SIMULADOR');
+
+    // Store merged data for Phase 2 to use when lists arrive
+    setSessaoDetalhe((prev: any) => {
+      if (prev && !prev._fallback) {
+        return { ...prev, _phase1Merged: merged };
       }
-      // Preencher participantes (máximo 2)
-      if (merged.participantes && merged.participantes.length > 0) {
-        setParticipantes(
-          merged.participantes.slice(0, 2).map((p: any) => ({
-            funcionario_id: p.funcionario_id,
-            funcao: p.funcao,
-          })),
+      return { _fallback: true, _phase1Merged: merged };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isEditMode, sessao, sessaoDetalhe]);
+
+  // PHASE 2: Hydrate cascading fields (equipment, simulator, session type, model)
+  // Runs only when supporting lists are loaded. Uses merged data stored in sessaoDetalhe
+  // from Phase 1, or builds it from prop if Phase 1 hasn't stored it yet.
+  useEffect(() => {
+    if (!isOpen || !isEditMode || !sessao) return;
+    if (!sessaoDetalhe) return;
+
+    const tipoDisp = sessao?.tipo_dispositivo || 'SIMULADOR';
+    const detailIsFallback = sessaoDetalhe?._fallback === true;
+
+    // Build merged from stored Phase 1 data or fallback
+    const phase1Merged = (sessaoDetalhe as any)?._phase1Merged;
+    const merged = phase1Merged || (detailIsFallback ? sessao : {
+      ...sessao,
+      data: sessaoDetalhe.data || sessao!.data,
+      horario_inicio: sessaoDetalhe.hora_inicio || sessao!.horario_inicio,
+      horario_fim: sessaoDetalhe.hora_fim || sessao!.horario_fim,
+      tipo_sessao_id: sessaoDetalhe.tipo_sessao_id ?? sessao!.tipo_sessao_id,
+      tipo_sessao_codigo: sessaoDetalhe.tipo_sessao_codigo ?? sessao!.tipo_sessao_codigo,
+      tema_sessao: sessaoDetalhe.nome || sessao!.tema_sessao,
+      aeronave_id: sessaoDetalhe.aeronave_id ?? sessao!.aeronave_id,
+      aeronave_prefixo: sessaoDetalhe.aeronave_prefixo || sessao!.aeronave_prefixo,
+      aeronave_modelo: sessaoDetalhe.aeronave_modelo || sessao!.aeronave_modelo,
+      examinador_nome: sessaoDetalhe.examinador_nome || sessao!.examinador_nome,
+      observacoes: sessaoDetalhe.observacoes ?? sessao!.observacoes,
+      participantes:
+        sessaoDetalhe.alunos?.length > 0
+          ? sessaoDetalhe.alunos.map((a: any) => ({
+              funcionario_id: a.id as number,
+              funcao: (a.funcao as 'PIC' | 'SIC') || 'PIC',
+            }))
+          : sessao!.participantes,
+      tipo_aeronave:
+        sessaoDetalhe.aeronave_modelo ||
+        sessaoDetalhe.simulador_aeronave_codigo ||
+        sessaoDetalhe.simulador_tipo ||
+        sessao!.tipo_aeronave,
+    });
+
+    // Guard: need at least aeronaves + tiposSessao for cascading lookups.
+    // simuladores list is optional (AERONAVE mode doesn't need it; SIMULADOR
+    // mode handles missing simulador gracefully via legacy option).
+    if (aeronaves.length === 0 || tiposSessao.length === 0) return;
+
+    console.log('🔧 [PHASE 2] Hydrating cascading fields', {
+      id: merged.id,
+      tipoDisp,
+      simulador_id: merged.simulador_id,
+      simuladores_loaded: simuladores.length,
+      aeronaves_loaded: aeronaves.length,
+      tiposSessao_loaded: tiposSessao.length,
+    });
+
+    let aeronaveEncontrada: ModeloAeronave | undefined;
+    let modeloDirecto: string | null =
+      (merged as any).aeronave_modelo ||
+      (merged as any).simulador_aeronave_codigo ||
+      (merged as any).simulador_tipo ||
+      (merged as any).simulador_modelo ||
+      null;
+
+    if (tipoDisp === 'AERONAVE') {
+      modeloDirecto = merged.aeronave_modelo || merged.tipo_aeronave || null;
+      aeronaveEncontrada = aeronaves.find(
+        (a) => a.modelo === modeloDirecto || a.modelo === merged.tipo_aeronave,
+      );
+
+      if (aeronaveEncontrada) {
+        setAeronaveId(aeronaveEncontrada.id);
+        setAeronaveCodigo(aeronaveEncontrada.modelo);
+        const filtradosReais = aeronavesReais.filter(
+          (a) => a.modelo === aeronaveEncontrada!.modelo,
         );
+        setAeronavesReaisFiltradas(filtradosReais);
+      } else if (modeloDirecto) {
+        // Legacy AERONAVE: model code known but not in current aeronaves list
+        setAeronaveCodigo(modeloDirecto);
       }
-    };
 
-    {
-      console.log('🔧 [EDIT MODE] Iniciando preenchimento:', {
-        sessao_id: merged.id,
-        simulador_id: merged.simulador_id,
-        tipo_sessao: merged.tipo_sessao,
-        tipo_sessao_id: merged.tipo_sessao_id,
-        tipo_sessao_codigo: merged.tipo_sessao_codigo,
-        tema_sessao: merged.tema_sessao,
-        tipo_dispositivo: merged.tipo_dispositivo,
-        aeronave_id: merged.aeronave_id,
-        hasDetail: !!(sessaoDetalhe && !(sessaoDetalhe as any)._fallback),
-      });
+      if (merged.aeronave_id) {
+        setAeronaveRealId(merged.aeronave_id);
+      }
+    } else {
+      // Modo SIMULADOR
+      const simulador = simuladores.find((s) => s.id === merged.simulador_id);
 
-      setTipoDispositivo(tipoDisp);
-
-      // ─── Always set non-cascading fields first ───
-      setCamposIndependentes();
-
-      let aeronaveEncontrada: ModeloAeronave | undefined;
-      let modeloDirecto: string | null =
-        (merged as any).aeronave_modelo ||
-        (merged as any).simulador_aeronave_codigo ||
-        (merged as any).simulador_tipo ||
-        (merged as any).simulador_modelo ||
-        null;
-
-      if (tipoDisp === 'AERONAVE') {
-        // Modo AERONAVE: determinar modelo via aeronave_modelo ou tipo_aeronave
-        modeloDirecto = merged.aeronave_modelo || merged.tipo_aeronave || null;
+      if (simulador) {
+        console.log('🔧 [PHASE 2] Simulador encontrado:', simulador);
+        modeloDirecto =
+          simulador.aeronave_codigo || simulador.tipo || simulador.modelo || modeloDirecto || null;
 
         aeronaveEncontrada = aeronaves.find(
-          (a) => a.modelo === modeloDirecto || a.modelo === merged.tipo_aeronave,
+          (a) =>
+            a.modelo === modeloDirecto ||
+            a.modelo === simulador.modelo_aeronave ||
+            a.modelo === (merged as any).tipo_aeronave,
         );
 
         if (aeronaveEncontrada) {
           setAeronaveId(aeronaveEncontrada.id);
           setAeronaveCodigo(aeronaveEncontrada.modelo);
-          const filtradosReais = aeronavesReais.filter(
-            (a) => a.modelo === aeronaveEncontrada!.modelo,
-          );
-          setAeronavesReaisFiltradas(filtradosReais);
         } else if (modeloDirecto) {
+          // Legacy: model code known but not in current aeronaves list.
+          // Set aeronaveCodigo so cascading selects (tipo/modelo) can work.
+          // aeronaveId stays null — the equipment select will show empty
+          // but the user can still edit other fields.
           setAeronaveCodigo(modeloDirecto);
         }
 
-        if (merged.aeronave_id) {
-          setAeronaveRealId(merged.aeronave_id);
+        const modeloFinal = aeronaveEncontrada?.modelo ?? modeloDirecto ?? '';
+        if (modeloFinal) {
+          const filtrados = simuladores.filter(
+            (s) =>
+              s.aeronave_codigo === modeloFinal ||
+              s.tipo === modeloFinal ||
+              s.modelo === modeloFinal ||
+              s.modelo_aeronave === modeloFinal,
+          );
+          setSimuladoresFiltrados(filtrados);
         }
-      } else {
-        // Modo SIMULADOR
-        const simulador = simuladores.find((s) => s.id === merged.simulador_id);
 
-        if (simulador) {
-          console.log('🔧 [EDIT MODE] Simulador encontrado:', simulador);
-
-          modeloDirecto =
-            simulador.aeronave_codigo || simulador.tipo || simulador.modelo || modeloDirecto || null;
-
-          aeronaveEncontrada = aeronaves.find(
+        setSimuladorId(merged.simulador_id);
+      } else if (merged.simulador_id) {
+        // Simulador not found in current list — add legacy placeholder so
+        // the dropdown shows the stored value instead of appearing empty.
+        console.warn('⚠️ [PHASE 2] Simulador ID', merged.simulador_id, 'não está na lista carregada — adicionando opção legada');
+        setSimuladorId(merged.simulador_id);
+        // Add legacy placeholder so select shows the stored value
+        const legadoSim: Simulador = {
+          id: merged.simulador_id,
+          nome: `Simulador #${merged.simulador_id} (legado)`,
+          modelo: modeloDirecto || '',
+        };
+        setSimuladoresFiltrados((prev) => {
+          if (prev.some((s) => s.id === merged.simulador_id)) return prev;
+          return [legadoSim, ...prev];
+        });
+        // Also try aeronave lookup from merged data for this legacy simulador
+        if (modeloDirecto) {
+          const aeronaveLegada = aeronaves.find(
             (a) =>
               a.modelo === modeloDirecto ||
-              a.modelo === simulador.modelo_aeronave ||
               a.modelo === (merged as any).tipo_aeronave,
           );
-
-          if (aeronaveEncontrada) {
-            console.log('🔧 [EDIT MODE] Aeronave encontrada via lookup:', aeronaveEncontrada);
-            setAeronaveId(aeronaveEncontrada.id);
-            setAeronaveCodigo(aeronaveEncontrada.modelo);
-          } else if (modeloDirecto) {
-            console.warn(
-              '⚠️ [EDIT MODE] Aeronave não encontrada no lookup; usando modelo direto:',
-              modeloDirecto,
-            );
-            setAeronaveCodigo(modeloDirecto);
+          if (aeronaveLegada) {
+            setAeronaveId(aeronaveLegada.id);
+            setAeronaveCodigo(aeronaveLegada.modelo);
           } else {
-            console.error(
-              '❌ [EDIT MODE] Modelo de aeronave NÃO determinado para simulador:',
-              simulador,
-            );
+            // Set the aeronave codigo even if not in the loaded list
+            setAeronaveCodigo(modeloDirecto);
           }
-
-          const modeloFinal = aeronaveEncontrada?.modelo ?? modeloDirecto ?? '';
-          if (modeloFinal) {
-            const filtrados = simuladores.filter(
-              (s) =>
-                s.aeronave_codigo === modeloFinal ||
-                s.tipo === modeloFinal ||
-                s.modelo === modeloFinal ||
-                s.modelo_aeronave === modeloFinal,
-            );
-            setSimuladoresFiltrados(filtrados);
-          }
-
-          setSimuladorId(merged.simulador_id);
-        } else {
-          console.error('❌ [EDIT MODE] Simulador NÃO encontrado com ID:', merged.simulador_id);
         }
       }
-
-      // Encontrar tipo de sessão: tentar FK (tipo_sessao_id) primeiro, depois código TEXT
-      let tipoSessao = tiposSessao.find((t) => t.id === merged.tipo_sessao_id);
-      let tipoSessaoSource = 'tipo_sessao_id';
-
-      if (!tipoSessao && merged.tipo_sessao_codigo) {
-        tipoSessao = tiposSessao.find((t) => t.codigo === merged.tipo_sessao_codigo);
-        tipoSessaoSource = 'tipo_sessao_codigo';
-      }
-
-      if (!tipoSessao && merged.tipo_sessao) {
-        tipoSessao = tiposSessao.find((t) => t.codigo === merged.tipo_sessao);
-        tipoSessaoSource = 'tipo_sessao (TEXT fallback)';
-      }
-
-      if (tipoSessao) {
-        console.log(`🔧 [EDIT MODE] Tipo sessão encontrado via ${tipoSessaoSource}:`, tipoSessao);
-        setTipoSessaoId(tipoSessao.id);
-
-        // ✅ CARREGAR MODELOS USANDO O CÓDIGO DA AERONAVE ENCONTRADA
-        const codigoParaModelos = aeronaveEncontrada?.modelo ?? modeloDirecto;
-        if (codigoParaModelos) {
-          console.log('🔧 [EDIT MODE] Chamando fetchModelos com:', {
-            tipoSessaoId: tipoSessao.id,
-            aeronaveCodigo: codigoParaModelos,
-          });
-          fetchModelosComCodigo(tipoSessao.id, codigoParaModelos, tipoDisp);
-        } else {
-          console.warn('⚠️ [EDIT MODE] Não pode carregar modelos - aeronave não determinada (campos básicos já preenchidos)');
-        }
-      } else {
-        console.warn('⚠️ [EDIT MODE] Tipo de sessão NÃO encontrado por nenhum método:', {
-          tipo_sessao_id: merged.tipo_sessao_id,
-          tipo_sessao_codigo: merged.tipo_sessao_codigo,
-          tipo_sessao_text: merged.tipo_sessao,
-          tipos_disponiveis: tiposSessao.map((t) => ({ id: t.id, codigo: t.codigo })),
-        });
-        // ⚠️ Tipo não encontrado — campos básicos (data, horários, instrutor, etc.) já foram preenchidos.
-        //    O usuário verá o select de tipo vazio e precisará selecionar um manualmente.
-      }
-
-      // Hydration concluída — note: editHydrating stays true until models finish loading
-      // (set to false in the fetchModelos completion path if models are resolved)
-      if (!merged.tipo_sessao_id && !merged.tipo_sessao_codigo && !merged.tipo_sessao) {
-        // No session type info at all — can't load models, so finish hydration now
-        setEditHydrating(false);
-      }
-      // Otherwise editHydrating stays true; the auto-select/model-load path will clear it
     }
+
+    // Encontrar tipo de sessão: tentar FK primeiro, depois código TEXT
+    let tipoSessao = tiposSessao.find((t) => t.id === merged.tipo_sessao_id);
+    let tipoSessaoSource = 'tipo_sessao_id';
+
+    if (!tipoSessao && merged.tipo_sessao_codigo) {
+      tipoSessao = tiposSessao.find((t) => t.codigo === merged.tipo_sessao_codigo);
+      tipoSessaoSource = 'tipo_sessao_codigo';
+    }
+
+    if (!tipoSessao && merged.tipo_sessao) {
+      tipoSessao = tiposSessao.find((t) => t.codigo === merged.tipo_sessao);
+      tipoSessaoSource = 'tipo_sessao (TEXT fallback)';
+    }
+
+    if (tipoSessao) {
+      console.log(`🔧 [PHASE 2] Tipo sessão encontrado via ${tipoSessaoSource}:`, tipoSessao);
+      setTipoSessaoId(tipoSessao.id);
+
+      const codigoParaModelos = aeronaveEncontrada?.modelo ?? modeloDirecto;
+      if (codigoParaModelos) {
+        fetchModelosComCodigo(tipoSessao.id, codigoParaModelos, tipoDisp);
+      }
+    } else {
+      console.warn('⚠️ [PHASE 2] Tipo de sessão NÃO encontrado:', {
+        tipo_sessao_id: merged.tipo_sessao_id,
+        tipo_sessao_codigo: merged.tipo_sessao_codigo,
+        tipo_sessao_text: merged.tipo_sessao,
+        tipos_disponiveis: tiposSessao.map((t) => ({ id: t.id, codigo: t.codigo })),
+      });
+      // Non-cascading fields are already populated from Phase 1.
+      // User will see tipo select empty and can choose manually.
+    }
+
+    // Finish hydration if no session type info to trigger model loading
+    if (!merged.tipo_sessao_id && !merged.tipo_sessao_codigo && !merged.tipo_sessao) {
+      setEditHydrating(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isEditMode, sessao, sessaoDetalhe, simuladores, aeronaves, aeronavesReais, tiposSessao]);
 
   function _authHeaders(): HeadersInit {
@@ -610,13 +663,15 @@ export default function ModalNovaSessao({
 
   useEffect(() => {
     if (!tipoSessaoId) return;
+    // Guard: never reset cascading fields during edit hydration
+    if (editHydrating) return;
     if (tiposSessao.some((tipo) => tipo.id === tipoSessaoId)) return;
 
     setTipoSessaoId(null);
     setModeloSessaoId(null);
     setModelos([]);
     setTemaSessao('');
-  }, [tipoSessaoId, tiposSessao]);
+  }, [tipoSessaoId, tiposSessao, editHydrating]);
 
   async function fetchInstrutores() {
     try {
@@ -987,12 +1042,18 @@ export default function ModalNovaSessao({
     });
 
     if (!resolved) {
+      // Only finish hydration if we've passed the initial loading phase.
+      // sessaoDetalhe !== null means the detail fetch has completed (or fallback was set).
+      const detailDone = sessaoDetalhe !== null;
+      if (!detailDone) return; // still waiting for detail fetch
+
       // If models loaded but no match found, finish hydration so form is usable
       if (modelos.length > 0 && !loadingModelos) {
         setEditHydrating(false);
       }
       // If models loaded and they're empty (genuinely no models), also finish hydration
-      if (modelos.length === 0 && !loadingModelos) {
+      // BUT only if cascading hydration has been attempted (tipoSessaoId was set)
+      if (modelos.length === 0 && !loadingModelos && detailDone) {
         setEditHydrating(false);
       }
       return;
