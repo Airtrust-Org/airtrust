@@ -58,6 +58,8 @@ interface Agendamento {
   horario_inicio?: string; // Alias de hora_inicio (para compatibilidade com /sessoes)
   horario_fim?: string; // Alias de hora_fim (para compatibilidade com /sessoes)
   tipo_sessao: string;
+  tipo_sessao_id?: number | null; // FK canônica via JOIN modelos_sessao (commit 7b3b034)
+  tipo_sessao_codigo?: string | null; // Código via JOIN tipos_sessao (commit 7b3b034)
   tema_sessao?: string;
   instrutor_id: number;
   instrutor_nome: string;

@@ -170,6 +170,7 @@ export default function ModalNovaSessao({
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editHydrating, setEditHydrating] = useState(false); // Loading state for edit mode hydration
+  const [sessaoDetalhe, setSessaoDetalhe] = useState<any>(null); // Complete session data from GET /sessoes/:id
 
   // ========== FLUXO EM CASCATA ==========
   const [tipoDispositivo, setTipoDispositivo] = useState<'SIMULADOR' | 'AERONAVE'>('SIMULADOR');
@@ -233,6 +234,7 @@ export default function ModalNovaSessao({
       setSimuladoresFiltrados([]);
       setTipoSessaoId(null);
       setModeloSessaoId(null);
+      setSessaoDetalhe(null);
       fetchAeronaves();
       fetchAeronavesReais();
       fetchSimuladores();
@@ -242,12 +244,14 @@ export default function ModalNovaSessao({
       fetchExaminadores();
       fetchTiposCheck();
 
-      // Em criação: pré-preencher com data de hoje
-      if (!isEditMode) {
+      // Em edição: buscar detalhe completo da sessão via endpoint dedicado
+      if (isEditMode && sessao?.id) {
+        setEditHydrating(true);
+        fetchSessaoDetalhe(sessao.id);
+      } else if (!isEditMode) {
+        // Em criação: pré-preencher com data de hoje
         setData(new Date().toISOString().split('T')[0]);
         setEditHydrating(false);
-      } else {
-        setEditHydrating(true); // Show loading until hydration completes
       }
 
       // Em criação: auto +2h; em edição: preservar valor existente
@@ -338,27 +342,62 @@ export default function ModalNovaSessao({
     // For SIMULADOR sessions: wait for simuladores + aeronaves + tiposSessao to load
     // For AERONAVE sessions: simuladores may be empty (null simulador_id), so skip that guard
     const tipoDisp = sessao?.tipo_dispositivo || 'SIMULADOR';
+    const detailReady = !isEditMode || sessaoDetalhe !== null;
     const dataReady = tipoDisp === 'AERONAVE'
-      ? isOpen && isEditMode && sessao && aeronaves.length > 0 && tiposSessao.length > 0 && aeronavesReais !== undefined
-      : isOpen && isEditMode && sessao && simuladores.length > 0 && aeronaves.length > 0 && tiposSessao.length > 0;
+      ? isOpen && isEditMode && sessao && detailReady && aeronaves.length > 0 && tiposSessao.length > 0 && aeronavesReais !== undefined
+      : isOpen && isEditMode && sessao && detailReady && simuladores.length > 0 && aeronaves.length > 0 && tiposSessao.length > 0;
 
     if (!dataReady) return;
 
+    // Build merged session data: sessaoDetalhe is authoritative for DB-level fields,
+    // falling back to the sessao prop for fields the detail endpoint doesn't return.
+    const merged = sessaoDetalhe
+      ? {
+          ...sessao,
+          // Map detail DB columns → frontend field names, preferring detail over prop
+          data: sessaoDetalhe.data || sessao!.data,
+          horario_inicio: sessaoDetalhe.hora_inicio || sessao!.horario_inicio,
+          horario_fim: sessaoDetalhe.hora_fim || sessao!.horario_fim,
+          tipo_sessao_id: sessaoDetalhe.tipo_sessao_id ?? sessao!.tipo_sessao_id,
+          tipo_sessao_codigo: sessaoDetalhe.tipo_sessao_codigo ?? sessao!.tipo_sessao_codigo,
+          tema_sessao: sessaoDetalhe.nome || sessao!.tema_sessao,
+          aeronave_id: sessaoDetalhe.aeronave_id ?? sessao!.aeronave_id,
+          aeronave_prefixo: sessaoDetalhe.aeronave_prefixo || sessao!.aeronave_prefixo,
+          aeronave_modelo: sessaoDetalhe.aeronave_modelo || sessao!.aeronave_modelo,
+          examinador_nome: sessaoDetalhe.examinador_nome || sessao!.examinador_nome,
+          observacoes: sessaoDetalhe.observacoes ?? sessao!.observacoes,
+          // Use detail participantes with proper mapping (aluno.id → funcionario_id)
+          participantes:
+            sessaoDetalhe.alunos?.length > 0
+              ? sessaoDetalhe.alunos.map((a: any) => ({
+                  funcionario_id: a.id as number,
+                  funcao: (a.funcao as 'PIC' | 'SIC') || 'PIC',
+                }))
+              : sessao!.participantes,
+          // Preserve simulador metadata from detail join
+          tipo_aeronave:
+            sessaoDetalhe.aeronave_modelo ||
+            sessaoDetalhe.simulador_aeronave_codigo ||
+            sessaoDetalhe.simulador_tipo ||
+            sessao!.tipo_aeronave,
+        }
+      : sessao!;
+
     // Helper to set non-cascading fields (always populated, even if cascading lookups fail)
     const setCamposIndependentes = () => {
-      setData((sessao!.data || '').split('T')[0]);
-      setHorarioInicio(sessao!.horario_inicio?.substring(0, 5) || '');
-      setHorarioFim(sessao!.horario_fim?.substring(0, 5) || '');
+      setData((merged.data || '').split('T')[0]);
+      setHorarioInicio(merged.horario_inicio?.substring(0, 5) || '');
+      setHorarioFim(merged.horario_fim?.substring(0, 5) || '');
       setHorarioFimFoiEditado(true);
-      setInstrutorId(sessao!.instrutor_id);
-      setObservacoes(sessao!.observacoes || '');
-      if (sessao!.tema_sessao) {
-        setTemaSessao(sessao!.tema_sessao);
+      setInstrutorId(merged.instrutor_id);
+      setObservacoes(merged.observacoes || '');
+      if (merged.tema_sessao) {
+        setTemaSessao(merged.tema_sessao);
       }
       // Preencher participantes (máximo 2)
-      if (sessao!.participantes && sessao!.participantes.length > 0) {
+      if (merged.participantes && merged.participantes.length > 0) {
         setParticipantes(
-          sessao!.participantes.slice(0, 2).map((p) => ({
+          merged.participantes.slice(0, 2).map((p: any) => ({
             funcionario_id: p.funcionario_id,
             funcao: p.funcao,
           })),
@@ -368,30 +407,36 @@ export default function ModalNovaSessao({
 
     {
       console.log('🔧 [EDIT MODE] Iniciando preenchimento:', {
-        sessao_id: sessao!.id,
-        simulador_id: sessao!.simulador_id,
-        tipo_sessao: sessao!.tipo_sessao,
-        tipo_sessao_id: sessao!.tipo_sessao_id,
-        tema_sessao: sessao!.tema_sessao,
-        tipo_dispositivo: sessao!.tipo_dispositivo,
-        aeronave_id: sessao!.aeronave_id,
+        sessao_id: merged.id,
+        simulador_id: merged.simulador_id,
+        tipo_sessao: merged.tipo_sessao,
+        tipo_sessao_id: merged.tipo_sessao_id,
+        tipo_sessao_codigo: merged.tipo_sessao_codigo,
+        tema_sessao: merged.tema_sessao,
+        tipo_dispositivo: merged.tipo_dispositivo,
+        aeronave_id: merged.aeronave_id,
+        hasDetail: !!sessaoDetalhe,
       });
 
-      // tipoDisp is declared above, before the dataReady guard
       setTipoDispositivo(tipoDisp);
 
       // ─── Always set non-cascading fields first ───
       setCamposIndependentes();
 
       let aeronaveEncontrada: ModeloAeronave | undefined;
-      let modeloDirecto: string | null = (sessao as any).simulador_modelo || null;
+      let modeloDirecto: string | null =
+        (merged as any).aeronave_modelo ||
+        (merged as any).simulador_aeronave_codigo ||
+        (merged as any).simulador_tipo ||
+        (merged as any).simulador_modelo ||
+        null;
 
       if (tipoDisp === 'AERONAVE') {
         // Modo AERONAVE: determinar modelo via aeronave_modelo ou tipo_aeronave
-        modeloDirecto = sessao.aeronave_modelo || sessao.tipo_aeronave || null;
+        modeloDirecto = merged.aeronave_modelo || merged.tipo_aeronave || null;
 
         aeronaveEncontrada = aeronaves.find(
-          (a) => a.modelo === modeloDirecto || a.modelo === sessao.tipo_aeronave,
+          (a) => a.modelo === modeloDirecto || a.modelo === merged.tipo_aeronave,
         );
 
         if (aeronaveEncontrada) {
@@ -405,12 +450,12 @@ export default function ModalNovaSessao({
           setAeronaveCodigo(modeloDirecto);
         }
 
-        if (sessao.aeronave_id) {
-          setAeronaveRealId(sessao.aeronave_id);
+        if (merged.aeronave_id) {
+          setAeronaveRealId(merged.aeronave_id);
         }
       } else {
         // Modo SIMULADOR
-        const simulador = simuladores.find((s) => s.id === sessao.simulador_id);
+        const simulador = simuladores.find((s) => s.id === merged.simulador_id);
 
         if (simulador) {
           console.log('🔧 [EDIT MODE] Simulador encontrado:', simulador);
@@ -422,7 +467,7 @@ export default function ModalNovaSessao({
             (a) =>
               a.modelo === modeloDirecto ||
               a.modelo === simulador.modelo_aeronave ||
-              a.modelo === (sessao as any).tipo_aeronave,
+              a.modelo === (merged as any).tipo_aeronave,
           );
 
           if (aeronaveEncontrada) {
@@ -454,23 +499,23 @@ export default function ModalNovaSessao({
             setSimuladoresFiltrados(filtrados);
           }
 
-          setSimuladorId(sessao.simulador_id);
+          setSimuladorId(merged.simulador_id);
         } else {
-          console.error('❌ [EDIT MODE] Simulador NÃO encontrado com ID:', sessao.simulador_id);
+          console.error('❌ [EDIT MODE] Simulador NÃO encontrado com ID:', merged.simulador_id);
         }
       }
 
       // Encontrar tipo de sessão: tentar FK (tipo_sessao_id) primeiro, depois código TEXT
-      let tipoSessao = tiposSessao.find((t) => t.id === sessao.tipo_sessao_id);
+      let tipoSessao = tiposSessao.find((t) => t.id === merged.tipo_sessao_id);
       let tipoSessaoSource = 'tipo_sessao_id';
 
-      if (!tipoSessao && sessao.tipo_sessao_codigo) {
-        tipoSessao = tiposSessao.find((t) => t.codigo === sessao.tipo_sessao_codigo);
+      if (!tipoSessao && merged.tipo_sessao_codigo) {
+        tipoSessao = tiposSessao.find((t) => t.codigo === merged.tipo_sessao_codigo);
         tipoSessaoSource = 'tipo_sessao_codigo';
       }
 
-      if (!tipoSessao && sessao.tipo_sessao) {
-        tipoSessao = tiposSessao.find((t) => t.codigo === sessao.tipo_sessao);
+      if (!tipoSessao && merged.tipo_sessao) {
+        tipoSessao = tiposSessao.find((t) => t.codigo === merged.tipo_sessao);
         tipoSessaoSource = 'tipo_sessao (TEXT fallback)';
       }
 
@@ -491,19 +536,24 @@ export default function ModalNovaSessao({
         }
       } else {
         console.warn('⚠️ [EDIT MODE] Tipo de sessão NÃO encontrado por nenhum método:', {
-          tipo_sessao_id: sessao.tipo_sessao_id,
-          tipo_sessao_codigo: sessao.tipo_sessao_codigo,
-          tipo_sessao_text: sessao.tipo_sessao,
+          tipo_sessao_id: merged.tipo_sessao_id,
+          tipo_sessao_codigo: merged.tipo_sessao_codigo,
+          tipo_sessao_text: merged.tipo_sessao,
           tipos_disponiveis: tiposSessao.map((t) => ({ id: t.id, codigo: t.codigo })),
         });
         // ⚠️ Tipo não encontrado — campos básicos (data, horários, instrutor, etc.) já foram preenchidos.
         //    O usuário verá o select de tipo vazio e precisará selecionar um manualmente.
       }
 
-      // Hydration concluída
-      setEditHydrating(false);
+      // Hydration concluída — note: editHydrating stays true until models finish loading
+      // (set to false in the fetchModelos completion path if models are resolved)
+      if (!merged.tipo_sessao_id && !merged.tipo_sessao_codigo && !merged.tipo_sessao) {
+        // No session type info at all — can't load models, so finish hydration now
+        setEditHydrating(false);
+      }
+      // Otherwise editHydrating stays true; the auto-select/model-load path will clear it
     }
-  }, [isOpen, isEditMode, sessao, simuladores, aeronaves, aeronavesReais, tiposSessao]);
+  }, [isOpen, isEditMode, sessao, sessaoDetalhe, simuladores, aeronaves, aeronavesReais, tiposSessao]);
 
   function _authHeaders(): HeadersInit {
     const token = getAccessToken();
@@ -630,6 +680,39 @@ export default function ModalNovaSessao({
       setTiposCheck(data.data || []);
     } catch (error) {
       console.error('Erro ao buscar tipos de check:', error);
+    }
+  }
+
+  /** Fetch complete session detail from GET /sessoes/:id for edit mode hydration */
+  async function fetchSessaoDetalhe(sessaoId: number) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/simuladores/sessoes/${sessaoId}`, {
+        headers: _authHeaders(),
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        console.error('[fetchSessaoDetalhe] Erro HTTP:', res.status);
+        setEditHydrating(false);
+        return;
+      }
+      const data = await res.json();
+      if (!data?.success || !data?.sessao) {
+        console.error('[fetchSessaoDetalhe] Resposta inválida:', data);
+        setEditHydrating(false);
+        return;
+      }
+      console.log('✅ [fetchSessaoDetalhe] Detalhe carregado:', {
+        id: data.sessao.id,
+        template_id: data.sessao.template_id,
+        tipo_sessao_id: data.sessao.tipo_sessao_id,
+        tipo_sessao_codigo: data.sessao.tipo_sessao_codigo,
+        simulador_id: data.sessao.simulador_id,
+        aeronave_id: data.sessao.aeronave_id,
+      });
+      setSessaoDetalhe(data.sessao);
+    } catch (error) {
+      console.error('[fetchSessaoDetalhe] Erro:', error);
+      setEditHydrating(false);
     }
   }
 
@@ -891,6 +974,8 @@ export default function ModalNovaSessao({
 
   // ========== AUTO-SELECIONAR MODELO BASEADO NO TEMA (EDIÇÃO) ==========
   useEffect(() => {
+    if (!isEditMode) return;
+
     const resolved = resolveEditModeloSelection({
       modelos,
       modeloSessaoId,
@@ -900,6 +985,14 @@ export default function ModalNovaSessao({
     });
 
     if (!resolved) {
+      // If models loaded but no match found, finish hydration so form is usable
+      if (modelos.length > 0 && !loadingModelos) {
+        setEditHydrating(false);
+      }
+      // If models loaded and they're empty (genuinely no models), also finish hydration
+      if (modelos.length === 0 && !loadingModelos) {
+        setEditHydrating(false);
+      }
       return;
     }
 
@@ -908,6 +1001,9 @@ export default function ModalNovaSessao({
     if (resolved.temaSessao) {
       setTemaSessao(resolved.temaSessao);
     }
+
+    // Model resolved — hydration complete
+    setEditHydrating(false);
 
     if (resolved.source === 'tema') {
       console.log('✅ [AUTO-SELECT] Modelo selecionado automaticamente:', {
@@ -920,7 +1016,7 @@ export default function ModalNovaSessao({
         nome: resolved.temaSessao,
       });
     }
-  }, [modelos, temaSessao, modeloSessaoId, isEditMode, sessao?.template_id]);
+  }, [modelos, temaSessao, modeloSessaoId, isEditMode, sessao?.template_id, loadingModelos]);
 
   useEffect(() => {
     if (!aeronaveCodigo || checksSelecionados.length === 0 || tiposCheck.length === 0) {
