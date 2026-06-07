@@ -237,8 +237,11 @@ export default function TabGestaoWrapper() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {hasError ? (
-            <span className="text-xs font-medium text-amber-600" title="Falha ao carregar — toque para tentar novamente">
-              ⚠️
+            <span
+              className="text-xs font-semibold text-red-600"
+              title="Falha ao carregar. Este total nao representa zero real."
+            >
+              Erro
             </span>
           ) : (
             <span className="text-lg font-semibold text-gray-900 tabular-nums">{count}</span>
@@ -279,8 +282,27 @@ export default function TabGestaoWrapper() {
       </div>
 
       {erro && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <p className="font-medium">⚠️ {erro}</p>
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">{erro}</p>
+              <p className="mt-1">
+                As fontes com falha aparecem como <span className="font-semibold">Erro</span> e
+                nao como zero real.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                void fetchData();
+              }}
+              className="shrink-0 rounded-md bg-amber-100 px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-200"
+            >
+              Tentar novamente
+            </button>
+          </div>
         </div>
       )}
 

@@ -13,6 +13,7 @@ import {
   listGestoresCopia,
   sendConvocacaoInBatches,
 } from '../services/treinamentos-convocacao-email';
+import { normalizeTrainingStatusForCompatibility } from '../lib/status/status-codes';
 
 const treinamentosPlanejadosRoutes = new Hono<{ Bindings: Env }>();
 
@@ -215,6 +216,76 @@ type AuditoriaRow = {
   dados_depois: string | null;
   created_at: string;
 };
+
+type ConsolidatedSource = 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
+
+type PlannedQualificationRow = {
+  id: number;
+  empresa_id: number;
+  funcionario_id: number;
+  funcionario_nome: string | null;
+  funcionario_guerra: string | null;
+  funcionario_matricula: string | null;
+  funcionario_email: string | null;
+  funcionario_setor: string | null;
+  funcionario_funcao: string | null;
+  qualificacao_tipo_id: number;
+  qualificacao_nome: string | null;
+  qualificacao_codigo: string | null;
+  data_planejada: string | null;
+  status: string | null;
+  instrutor_nome: string | null;
+  observacoes: string | null;
+};
+
+type SimulatorSessionRow = {
+  id: number;
+  empresa_id: number;
+  data_prevista: string;
+  hora_inicio: string | null;
+  hora_fim: string | null;
+  status: string | null;
+  tipo_dispositivo: string | null;
+  simulador_id: number | null;
+  aeronave_id: number | null;
+  sessao_nome: string | null;
+  instrutor_id: number | null;
+  instrutor_nome: string | null;
+  instrutor_guerra: string | null;
+  examinador_id: number | null;
+  examinador_nome: string | null;
+  equipamento_nome: string | null;
+  observacoes: string | null;
+  linked_qualificacao_historico_id: number | null;
+  linked_qualificacao_tipo_id: number | null;
+  linked_qualificacao_nome: string | null;
+  linked_qualificacao_codigo: string | null;
+};
+
+type SimulatorParticipantRow = {
+  sessao_id: number;
+  funcionario_id: number;
+  funcionario_nome: string | null;
+  funcionario_guerra: string | null;
+  funcionario_matricula: string | null;
+  funcionario_email: string | null;
+  funcionario_setor: string | null;
+  funcionario_funcao: string | null;
+  qualificacao_historico_id: number | null;
+};
+
+type ConsolidatedTrainingItem = Omit<
+  ReturnType<typeof serializeEvento>,
+  'source' | 'source_id' | 'source_route' | 'source_label' | 'read_only'
+> & {
+  source: ConsolidatedSource;
+  source_id: number;
+  source_route: string | null;
+  source_label: string;
+  read_only: boolean;
+};
+
+const SOURCE_VALUES = ['TURMA', 'SIMULADOR', 'QUALIFICACAO_PLANEJADA'] as const;
 
 async function resolveGestoresCcByParticipantes(
   db: D1Database,
@@ -861,10 +932,41 @@ function serializeEvento(
       papel: instrutor.papel,
       principal: Number(instrutor.principal || 0) === 1,
     })),
+    source: 'TURMA' as const,
+    source_id: Number(row.id),
+    source_route: `/treinamentos/planejados`,
+    source_label: 'Turma',
+    read_only: false,
   };
 }
 
-async function listEventos(
+const VIRTUAL_ID_OFFSETS = {
+  QUALIFICACAO_PLANEJADA: 1000000000,
+  SIMULADOR: 2000000000,
+} as const;
+
+function toVirtualId(source: 'QUALIFICACAO_PLANEJADA' | 'SIMULADOR', sourceId: number): number {
+  return -1 * (VIRTUAL_ID_OFFSETS[source] + sourceId);
+}
+
+function normalizeSourceFilter(raw: string | null | undefined): ConsolidatedSource | null {
+  const normalized = String(raw || '')
+    .trim()
+    .toUpperCase();
+  return SOURCE_VALUES.includes(normalized as ConsolidatedSource)
+    ? (normalized as ConsolidatedSource)
+    : null;
+}
+
+function sortConsolidatedItems(items: ConsolidatedTrainingItem[]): ConsolidatedTrainingItem[] {
+  return [...items].sort((left, right) => {
+    const leftKey = `${left.data_prevista} ${left.hora_inicio || '99:99'} ${left.id}`;
+    const rightKey = `${right.data_prevista} ${right.hora_inicio || '99:99'} ${right.id}`;
+    return leftKey.localeCompare(rightKey);
+  });
+}
+
+async function listTreinamentosPlanejadosBase(
   db: D1Database,
   empresaId: number,
   filters: {
@@ -979,6 +1081,476 @@ async function listEventos(
   );
 }
 
+async function loadStandalonePlannedQualificationItems(
+  db: D1Database,
+  empresaId: number,
+  filters: {
+    status?: string | null;
+    inicio?: string | null;
+    fim?: string | null;
+    funcionarioId?: string | null;
+    busca?: string | null;
+  },
+): Promise<ConsolidatedTrainingItem[]> {
+  if (filters.status && normalizeTrainingStatusForCompatibility(filters.status) !== 'PLANEJADO') {
+    return [];
+  }
+
+  let sql = `SELECT qh.id,
+                    qh.empresa_id,
+                    qh.funcionario_id,
+                    f.nome AS funcionario_nome,
+                    f.guerra AS funcionario_guerra,
+                    f.matricula AS funcionario_matricula,
+                    f.email AS funcionario_email,
+                    f.setor AS funcionario_setor,
+                    f.funcao AS funcionario_funcao,
+                    qt.id AS qualificacao_tipo_id,
+                    qt.nome AS qualificacao_nome,
+                    COALESCE(qh.qualificacao_codigo, qt.codigo) AS qualificacao_codigo,
+                    qh.data_conclusao AS data_planejada,
+                    qh.status,
+                    qh.instrutor AS instrutor_nome,
+                    qh.observacoes
+               FROM qualificacoes_historico qh
+               INNER JOIN funcionarios f
+                  ON f.id = qh.funcionario_id
+                 AND f.deleted_at IS NULL
+                 AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
+               LEFT JOIN qualificacoes_tipos qt
+                 ON qt.id = qh.qualificacao_id
+                AND qt.deleted_at IS NULL
+              WHERE qh.empresa_id = ?
+                AND qh.deleted_at IS NULL
+                AND COALESCE(qh.renovada, 0) = 0
+                AND date(COALESCE(qh.data_conclusao, '')) IS NOT NULL
+                AND UPPER(COALESCE(qh.status, '')) IN ('PLANEJADA', 'PLANEJADO')
+                AND NOT EXISTS (
+                  SELECT 1
+                    FROM simulador_agendamentos sa
+                   WHERE sa.id = qh.sessao_id
+                     AND sa.empresa_id = qh.empresa_id
+                     AND sa.deleted_at IS NULL
+                )
+                AND NOT EXISTS (
+                  SELECT 1
+                    FROM treinamentos_participantes tp
+                    INNER JOIN treinamentos_planejados t
+                      ON t.id = tp.treinamento_id
+                     AND t.empresa_id = qh.empresa_id
+                     AND t.deleted_at IS NULL
+                   WHERE tp.qualificacao_historico_id = qh.id
+                )`;
+
+  const params: unknown[] = [empresaId];
+  if (filters.inicio) {
+    sql += ' AND date(qh.data_conclusao) >= date(?)';
+    params.push(filters.inicio);
+  }
+  if (filters.fim) {
+    sql += ' AND date(qh.data_conclusao) <= date(?)';
+    params.push(filters.fim);
+  }
+  if (filters.funcionarioId) {
+    sql += ' AND qh.funcionario_id = ?';
+    params.push(Number(filters.funcionarioId));
+  }
+  if (filters.busca) {
+    const busca = `%${filters.busca.trim().toUpperCase()}%`;
+    sql += ` AND (
+      UPPER(COALESCE(f.nome, '')) LIKE ? OR
+      UPPER(COALESCE(qt.nome, '')) LIKE ? OR
+      UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) LIKE ? OR
+      UPPER(COALESCE(qh.observacoes, '')) LIKE ?
+    )`;
+    params.push(busca, busca, busca, busca);
+  }
+
+  sql += ' ORDER BY date(qh.data_conclusao) ASC, qh.id ASC LIMIT 400';
+
+  const rows = await db.prepare(sql).bind(...params).all<PlannedQualificationRow>();
+
+  return (rows.results || []).map((row) => {
+    const itemId = toVirtualId('QUALIFICACAO_PLANEJADA', Number(row.id));
+    return {
+      id: itemId,
+      empresa_id: Number(row.empresa_id),
+      qualificacao_tipo_id: Number(row.qualificacao_tipo_id || 0),
+      qualificacao_nome: row.qualificacao_nome,
+      qualificacao_codigo: row.qualificacao_codigo,
+      data_prevista: String(row.data_planejada || '').slice(0, 10),
+      hora_inicio: null,
+      hora_fim: null,
+      status: 'PLANEJADO',
+      instrutor_id: null,
+      instrutor_nome: row.instrutor_nome,
+      instrutor_guerra: null,
+      local: null,
+      carga_horaria_prevista: null,
+      titulo: row.qualificacao_nome || row.qualificacao_codigo || 'Qualificação planejada',
+      descricao: row.observacoes,
+      observacoes: row.observacoes,
+      created_by: null,
+      created_at: null,
+      updated_at: null,
+      codigo_turma: null,
+      modalidade: 'OUTRO',
+      data_inicio: String(row.data_planejada || '').slice(0, 10),
+      data_fim: String(row.data_planejada || '').slice(0, 10),
+      base: null,
+      sala: null,
+      equipamento_descricao: null,
+      limite_participantes: 1,
+      convocados_total: 1,
+      confirmados_total: 0,
+      presentes_total: 0,
+      participantes: [
+        {
+          id: itemId,
+          treinamento_id: itemId,
+          funcionario_id: Number(row.funcionario_id),
+          funcionario_nome: row.funcionario_nome,
+          funcionario_guerra: row.funcionario_guerra,
+          funcionario_matricula: row.funcionario_matricula,
+          funcionario_email: row.funcionario_email,
+          funcionario_setor: row.funcionario_setor,
+          funcionario_funcao: row.funcionario_funcao,
+          confirmado: false,
+          presente: null,
+          aprovado: null,
+          nota: null,
+          observacoes: row.observacoes,
+          qualificacao_historico_id: Number(row.id),
+          status_participacao: 'PLANEJADO',
+          resultado: null,
+          conceito: null,
+          data_conclusao_efetiva: null,
+          concluido_em: null,
+        },
+      ],
+      dias: [
+        {
+          id: itemId,
+          treinamento_id: itemId,
+          data: String(row.data_planejada || '').slice(0, 10),
+          hora_inicio: '08:00',
+          hora_fim: '17:00',
+          local: null,
+          instrutor_id: null,
+          instrutor_nome: row.instrutor_nome,
+          simulador_id: null,
+          aeronave_id: null,
+          sessao_id: null,
+          status: 'ATIVO',
+          observacoes: row.observacoes,
+          presencas: [],
+        },
+      ],
+      instrutores: [],
+      source: 'QUALIFICACAO_PLANEJADA',
+      source_id: Number(row.id),
+      source_route: `/qualificacoes?id=${Number(row.id)}`,
+      source_label: 'Qualificação planejada',
+      read_only: true,
+    };
+  });
+}
+
+async function loadSimulatorParticipantsBySessao(
+  db: D1Database,
+  empresaId: number,
+  sessaoIds: number[],
+): Promise<Map<number, SimulatorParticipantRow[]>> {
+  const map = new Map<number, SimulatorParticipantRow[]>();
+  if (sessaoIds.length === 0) return map;
+
+  const placeholders = sessaoIds.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `SELECT sp.sessao_id,
+              sp.funcionario_id,
+              f.nome AS funcionario_nome,
+              f.guerra AS funcionario_guerra,
+              f.matricula AS funcionario_matricula,
+              f.email AS funcionario_email,
+              f.setor AS funcionario_setor,
+              f.funcao AS funcionario_funcao,
+              qh.id AS qualificacao_historico_id
+         FROM sessoes_participantes sp
+         INNER JOIN simulador_agendamentos sa
+           ON sa.id = sp.sessao_id
+          AND sa.empresa_id = ?
+          AND sa.deleted_at IS NULL
+         LEFT JOIN funcionarios f
+           ON f.id = sp.funcionario_id
+          AND f.deleted_at IS NULL
+         LEFT JOIN qualificacoes_historico qh
+           ON qh.sessao_id = sp.sessao_id
+          AND qh.funcionario_id = sp.funcionario_id
+          AND qh.empresa_id = sa.empresa_id
+          AND qh.deleted_at IS NULL
+          AND COALESCE(qh.renovada, 0) = 0
+        WHERE sp.deleted_at IS NULL
+          AND sp.sessao_id IN (${placeholders})
+        ORDER BY sp.sessao_id, COALESCE(f.nome, ''), sp.funcionario_id`,
+    )
+    .bind(empresaId, ...sessaoIds)
+    .all<SimulatorParticipantRow>();
+
+  for (const row of rows.results || []) {
+    const current = map.get(Number(row.sessao_id)) || [];
+    current.push(row);
+    map.set(Number(row.sessao_id), current);
+  }
+
+  return map;
+}
+
+async function loadSimulatorSessionItems(
+  db: D1Database,
+  empresaId: number,
+  filters: {
+    status?: string | null;
+    inicio?: string | null;
+    fim?: string | null;
+    instrutorId?: string | null;
+    funcionarioId?: string | null;
+    busca?: string | null;
+  },
+): Promise<ConsolidatedTrainingItem[]> {
+  let sql = `SELECT sa.id,
+                    sa.empresa_id,
+                    sa.data AS data_prevista,
+                    sa.hora_inicio,
+                    sa.hora_fim,
+                    sa.status,
+                    COALESCE(sa.tipo_dispositivo, 'SIMULADOR') AS tipo_dispositivo,
+                    sa.simulador_id,
+                    sa.aeronave_id,
+                    sa.nome AS sessao_nome,
+                    sa.instrutor_id,
+                    fi.nome AS instrutor_nome,
+                    fi.guerra AS instrutor_guerra,
+                    sa.examinador_id,
+                    fe.nome AS examinador_nome,
+                    COALESCE(sim.nome, aer.prefixo, aer.modelo, aer.matricula, sim.modelo) AS equipamento_nome,
+                    sa.observacoes,
+                    MIN(qh.id) AS linked_qualificacao_historico_id,
+                    MIN(qh.qualificacao_id) AS linked_qualificacao_tipo_id,
+                    MIN(qt.nome) AS linked_qualificacao_nome,
+                    MIN(COALESCE(qh.qualificacao_codigo, qt.codigo)) AS linked_qualificacao_codigo
+               FROM simulador_agendamentos sa
+               LEFT JOIN funcionarios fi ON fi.id = sa.instrutor_id AND fi.deleted_at IS NULL
+               LEFT JOIN funcionarios fe ON fe.id = sa.examinador_id AND fe.deleted_at IS NULL
+               LEFT JOIN simuladores sim ON sim.id = sa.simulador_id AND sim.deleted_at IS NULL
+               LEFT JOIN aeronaves aer ON aer.id = sa.aeronave_id AND aer.deleted_at IS NULL
+               LEFT JOIN qualificacoes_historico qh
+                 ON qh.sessao_id = sa.id
+                AND qh.empresa_id = sa.empresa_id
+                AND qh.deleted_at IS NULL
+                AND COALESCE(qh.renovada, 0) = 0
+               LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+              WHERE sa.empresa_id = ?
+                AND sa.deleted_at IS NULL`;
+
+  const params: unknown[] = [empresaId];
+  if (filters.inicio) {
+    sql += ' AND date(sa.data) >= date(?)';
+    params.push(filters.inicio);
+  }
+  if (filters.fim) {
+    sql += ' AND date(sa.data) <= date(?)';
+    params.push(filters.fim);
+  }
+  if (filters.instrutorId) {
+    sql += ' AND sa.instrutor_id = ?';
+    params.push(Number(filters.instrutorId));
+  }
+  if (filters.funcionarioId) {
+    sql += ` AND EXISTS (
+      SELECT 1
+        FROM sessoes_participantes sp2
+       WHERE sp2.sessao_id = sa.id
+         AND sp2.funcionario_id = ?
+         AND sp2.deleted_at IS NULL
+    )`;
+    params.push(Number(filters.funcionarioId));
+  }
+  if (filters.busca) {
+    const busca = `%${filters.busca.trim().toUpperCase()}%`;
+    sql += ` AND (
+      UPPER(COALESCE(sa.nome, '')) LIKE ? OR
+      UPPER(COALESCE(fi.nome, '')) LIKE ? OR
+      UPPER(COALESCE(fe.nome, '')) LIKE ? OR
+      UPPER(COALESCE(sim.nome, aer.prefixo, aer.modelo, aer.matricula, sim.modelo, '')) LIKE ?
+    )`;
+    params.push(busca, busca, busca, busca);
+  }
+
+  sql += ` GROUP BY sa.id
+           ORDER BY date(sa.data) ASC, COALESCE(sa.hora_inicio, '00:00') ASC, sa.id ASC
+           LIMIT 400`;
+
+  const rows = await db.prepare(sql).bind(...params).all<SimulatorSessionRow>();
+  const sessaoIds = (rows.results || []).map((row) => Number(row.id));
+  const participantesMap = await loadSimulatorParticipantsBySessao(db, empresaId, sessaoIds);
+
+  return (rows.results || []).flatMap((row): ConsolidatedTrainingItem[] => {
+      const normalizedStatus = normalizeTrainingStatusForCompatibility(row.status) || 'PLANEJADO';
+      if (filters.status && normalizedStatus !== normalizeTrainingStatusForCompatibility(filters.status)) {
+        return [];
+      }
+
+      const baseParticipantId = toVirtualId('SIMULADOR', Number(row.id));
+      const participantesRows = participantesMap.get(Number(row.id)) || [];
+      const participantes =
+        participantesRows.length > 0
+          ? participantesRows.map((participant, index) => ({
+              id: baseParticipantId - index,
+              treinamento_id: baseParticipantId,
+              funcionario_id: Number(participant.funcionario_id),
+              funcionario_nome: participant.funcionario_nome,
+              funcionario_guerra: participant.funcionario_guerra,
+              funcionario_matricula: participant.funcionario_matricula,
+              funcionario_email: participant.funcionario_email,
+              funcionario_setor: participant.funcionario_setor,
+              funcionario_funcao: participant.funcionario_funcao,
+              confirmado: true,
+              presente: null,
+              aprovado: null,
+              nota: null,
+              observacoes: null,
+              qualificacao_historico_id: participant.qualificacao_historico_id,
+              status_participacao: 'CONFIRMADO',
+              resultado: null,
+              conceito: null,
+              data_conclusao_efetiva: null,
+              concluido_em: null,
+            }))
+          : [];
+
+      return [{
+        id: baseParticipantId,
+        empresa_id: Number(row.empresa_id),
+        qualificacao_tipo_id: Number(row.linked_qualificacao_tipo_id || 0),
+        qualificacao_nome: row.linked_qualificacao_nome,
+        qualificacao_codigo: row.linked_qualificacao_codigo,
+        data_prevista: row.data_prevista,
+        hora_inicio: row.hora_inicio,
+        hora_fim: row.hora_fim,
+        status: normalizedStatus,
+        instrutor_id: row.instrutor_id,
+        instrutor_nome: row.instrutor_nome,
+        instrutor_guerra: row.instrutor_guerra,
+        local: row.equipamento_nome,
+        carga_horaria_prevista: null,
+        titulo: row.sessao_nome || row.linked_qualificacao_nome || 'Sessão planejada',
+        descricao: row.observacoes,
+        observacoes: row.observacoes,
+        created_by: null,
+        created_at: null,
+        updated_at: null,
+        codigo_turma: null,
+        modalidade:
+          String(row.tipo_dispositivo || '').toUpperCase() === 'AERONAVE' ? 'AERONAVE' : 'SIMULADOR',
+        data_inicio: row.data_prevista,
+        data_fim: row.data_prevista,
+        base: null,
+        sala: null,
+        equipamento_descricao: row.equipamento_nome,
+        limite_participantes: participantes.length || null,
+        convocados_total: participantes.length,
+        confirmados_total: participantes.length,
+        presentes_total: 0,
+        participantes,
+        dias: [
+          {
+            id: baseParticipantId,
+            treinamento_id: baseParticipantId,
+            data: row.data_prevista,
+            hora_inicio: row.hora_inicio || '08:00',
+            hora_fim: row.hora_fim || '17:00',
+            local: row.equipamento_nome,
+            instrutor_id: row.instrutor_id,
+            instrutor_nome: row.instrutor_nome,
+            simulador_id: row.simulador_id,
+            aeronave_id: row.aeronave_id,
+            sessao_id: Number(row.id),
+            status: normalizedStatus === 'CANCELADO' ? 'CANCELADO' : 'ATIVO',
+            observacoes: row.observacoes,
+            presencas: [],
+          },
+        ],
+        instrutores: [
+          {
+            funcionario_id: Number(row.instrutor_id || 0),
+            nome: row.instrutor_nome,
+            guerra: row.instrutor_guerra,
+            papel: 'INSTRUTOR',
+            principal: true,
+          },
+          ...(row.examinador_id
+            ? [
+                {
+                  funcionario_id: Number(row.examinador_id),
+                  nome: row.examinador_nome,
+                  guerra: null,
+                  papel: 'EXAMINADOR',
+                  principal: false,
+                },
+              ]
+            : []),
+        ].filter((instrutor) => instrutor.funcionario_id > 0),
+        source: 'SIMULADOR',
+        source_id: Number(row.id),
+        source_route: `/simuladores/sessoes/${Number(row.id)}`,
+        source_label:
+          String(row.tipo_dispositivo || '').toUpperCase() === 'AERONAVE'
+            ? 'Sessão em aeronave'
+            : 'Sessão de simulador',
+        read_only: true,
+      }];
+    });
+}
+
+async function listEventos(
+  db: D1Database,
+  empresaId: number,
+  filters: {
+    status?: string | null;
+    inicio?: string | null;
+    fim?: string | null;
+    instrutorId?: string | null;
+    funcionarioId?: string | null;
+    busca?: string | null;
+    treinamentoId?: number | null;
+    source?: string | null;
+  },
+): Promise<ConsolidatedTrainingItem[]> {
+  const sourceFilter = normalizeSourceFilter(filters.source);
+  const items: ConsolidatedTrainingItem[] = [];
+
+  if (!sourceFilter || sourceFilter === 'TURMA') {
+    items.push(
+      ...(await listTreinamentosPlanejadosBase(db, empresaId, filters)),
+    );
+  }
+
+  if (!filters.treinamentoId && (!sourceFilter || sourceFilter === 'QUALIFICACAO_PLANEJADA')) {
+    items.push(
+      ...(await loadStandalonePlannedQualificationItems(db, empresaId, filters)),
+    );
+  }
+
+  if (!filters.treinamentoId && (!sourceFilter || sourceFilter === 'SIMULADOR')) {
+    items.push(
+      ...(await loadSimulatorSessionItems(db, empresaId, filters)),
+    );
+  }
+
+  return sortConsolidatedItems(items).slice(0, 400);
+}
+
 async function loadAuditoriaByTreinamento(
   db: D1Database,
   treinamentoIds: number[],
@@ -1018,6 +1590,7 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
     instrutorId: c.req.query('instrutor_id'),
     funcionarioId: c.req.query('funcionario_id'),
     busca: c.req.query('busca'),
+    source: c.req.query('source'),
   });
 
   return c.json({
@@ -1043,6 +1616,7 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
     instrutorId: c.req.query('instrutor_id'),
     funcionarioId: c.req.query('funcionario_id'),
     busca: c.req.query('busca'),
+    source: c.req.query('source'),
   });
 
   return c.json({
@@ -1067,11 +1641,12 @@ treinamentosPlanejadosRoutes.get('/planejados/auditoria', async (c) => {
     instrutorId: c.req.query('instrutor_id'),
     funcionarioId: c.req.query('funcionario_id'),
     busca: c.req.query('busca'),
+    source: c.req.query('source'),
   });
 
   const auditMap = await loadAuditoriaByTreinamento(
     db,
-    items.map((item) => Number(item.id)),
+    items.filter((item) => item.source === 'TURMA').map((item) => Number(item.id)),
   );
 
   const enriched = items.map((item) => ({

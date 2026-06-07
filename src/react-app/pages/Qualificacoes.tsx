@@ -86,7 +86,6 @@ const ModalCertificado = lazyWithRetry(
 import ConfirmDeleteModal from '@/react-app/components/modals/ConfirmDeleteModal';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
-import { QualificacoesCalendario } from '@/components/qualificacoes/QualificacoesCalendario';
 import {
   buildPlanejadasRelacionadasMap,
   computeHistoricoHeaderStats,
@@ -223,8 +222,7 @@ export default function Qualificacoes() {
 
   const isHistoricoTab = activeTab === 'historico';
   const isPlanejadosTab = activeTab === 'planejados';
-  // Historico dataset (API + filters) is used by Histórico and Planejados > Lista subview
-  const usesHistoricoDataset = isHistoricoTab || (isPlanejadosTab && plannedView === 'lista');
+  const usesHistoricoDataset = isHistoricoTab;
 
   useEffect(() => {
     writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
@@ -3284,57 +3282,32 @@ export default function Qualificacoes() {
 
               {/* Lista: planejados individuais */}
               {plannedView === 'lista' && (
-                <DataTable
-                  key="planejados-lista"
-                  tableId="qualificacoes-historico"
-                  data={planejadosHistorico}
-                  columns={historicoColumns}
-                  rowClassName={(row) => {
-                    const item = row as HistoricoItem;
-                    return isPlanejadaVencida(item) ? 'bg-amber-50 border-l-4 border-amber-400' : '';
-                  }}
-                  loading={planejadosTableLoading}
-                  columnConfigOpen={columnConfigOpen === 'historico'}
-                  onColumnConfigOpenChange={(open) => setColumnConfigOpen(open ? 'historico' : null)}
-                  showInternalColumnConfigButton={false}
-                  sortConfig={sortConfig}
-                  onSortChange={(newSortConfig) => {
-                    setSortConfig(newSortConfig);
-                    setPage(1);
-                  }}
-                  emptyState={
-                    <div className="text-center py-12">
-                      <ShieldCheck className="mx-auto mb-4 text-slate-300" size={60} />
-                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                        Nenhum treinamento planejado
-                      </h3>
-                      <p className="text-sm text-slate-600 mb-4">
-                        Adicione uma qualificação com status PLANEJADA ou crie uma turma.
-                      </p>
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center py-20">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     </div>
                   }
-                />
+                >
+                  <TreinamentosPlanejadosPage asTab={true} forcedTab="quadro" hideTabNav={true} />
+                </Suspense>
               )}
 
               {/* Calendário: visão mensal de planejamentos */}
               {plannedView === 'calendario' && (
-                <div className="p-4">
-                  <Suspense
-                    fallback={
-                      <div className="flex items-center justify-center py-20">
-                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      </div>
-                    }
-                  >
-                    <QualificacoesCalendario
-                      qualificacoes={planejadosHistorico}
-                      onOpenQualificacao={(q) => {
-                        const item = q as HistoricoItem;
-                        if (item) abrirModalPlanejada(item);
-                      }}
-                    />
-                  </Suspense>
-                </div>
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center py-20">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    </div>
+                  }
+                >
+                  <TreinamentosPlanejadosPage
+                    asTab={true}
+                    forcedTab="calendario"
+                    hideTabNav={true}
+                  />
+                </Suspense>
               )}
 
               {/* Turmas: gestão multi-dia via TreinamentosPlanejadosPage */}
@@ -3346,7 +3319,7 @@ export default function Qualificacoes() {
                     </div>
                   }
                 >
-                  <TreinamentosPlanejadosPage asTab={true} />
+                  <TreinamentosPlanejadosPage asTab={true} sourceFilter="TURMA" />
                 </Suspense>
               )}
             </div>

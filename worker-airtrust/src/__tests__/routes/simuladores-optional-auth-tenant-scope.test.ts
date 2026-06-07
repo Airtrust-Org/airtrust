@@ -112,6 +112,14 @@ function createEquipamentosDb() {
   return {
     prepare(query: string) {
       const sql = normalizeSql(query);
+      if (sql === 'PRAGMA table_info(simuladores)') {
+        return {
+          async all() {
+            return { results: [{ name: 'empresa_id' }] };
+          },
+        };
+      }
+
       return {
         bind(...args: unknown[]) {
           return {
@@ -168,8 +176,20 @@ function createModelosDb() {
                 { name: 'codigo_aeronave' },
                 { name: 'tipo_aeronave' },
                 { name: 'tipo' },
+                { name: 'tipo_sessao_id' },
+                { name: 'qualificacao_tipo_id' },
               ],
             };
+          },
+        };
+      }
+      if (
+        sql === 'PRAGMA table_info(qualificacoes_tipos)' ||
+        sql === 'PRAGMA table_info(tipos_sessao)'
+      ) {
+        return {
+          async all() {
+            return { results: [{ name: 'empresa_id' }] };
           },
         };
       }

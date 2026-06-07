@@ -1081,7 +1081,23 @@ app.post('/sessoes', async (c) => {
 app.get('/sessoes/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const empresaId = (c as unknown as { get: (k: string) => unknown }).get('empresaId') as number | undefined;
+    const empresaId = (c as unknown as { get: (k: string) => unknown }).get(
+      'empresaId',
+    ) as number | undefined;
+    const { hasTipoDispositivo, hasAeronaveId } = await getSimuladorAgendamentosSchema(c.env.DB);
+    const tipoDispositivoSelect = hasTipoDispositivo
+      ? "COALESCE(sa.tipo_dispositivo, 'SIMULADOR') as tipo_dispositivo,"
+      : "NULL as tipo_dispositivo,";
+    const aeronaveSelect = hasAeronaveId
+      ? `sa.aeronave_id,
+        ae.prefixo as aeronave_prefixo,
+        ae.modelo as aeronave_modelo,`
+      : `NULL as aeronave_id,
+        NULL as aeronave_prefixo,
+        NULL as aeronave_modelo,`;
+    const aeronaveJoin = hasAeronaveId
+      ? 'LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL'
+      : '';
 
     // 1. Buscar sessão com dados completos: simulador, modelo, tipo, aeronave, examinador
     const s = await c.env.DB.prepare(
@@ -1091,17 +1107,17 @@ app.get('/sessoes/:id', async (c) => {
         s.modelo as simulador_modelo,
         s.tipo as simulador_tipo,
         s.aeronave_codigo as simulador_aeronave_codigo,
+        ${tipoDispositivoSelect}
+        ${aeronaveSelect}
         ms.tipo_sessao_id as tipo_sessao_id,
         ts_ref.codigo as tipo_sessao_codigo,
         ts_ref.nome as tipo_sessao_nome,
-        ae.prefixo as aeronave_prefixo,
-        ae.modelo as aeronave_modelo,
         fe.nome as examinador_nome
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
+      ${aeronaveJoin}
       LEFT JOIN modelos_sessao ms ON sa.template_id = ms.id AND ms.deleted_at IS NULL
       LEFT JOIN tipos_sessao ts_ref ON ms.tipo_sessao_id = ts_ref.id AND ts_ref.deleted_at IS NULL
-      LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
       WHERE sa.id = ? AND sa.deleted_at IS NULL`,
     )

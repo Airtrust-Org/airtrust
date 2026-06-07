@@ -79,6 +79,19 @@ export const ACTIVE_OR_COMPLETED_SESSION_STATUS_VALUES = [
   SESSION_STATUS.CONCLUIDO_LEGACY,
 ] as const;
 
+export const TRAINING_PLANNED_STATUS_VALUES = [
+  'PLANEJADO',
+  'PLANEJADA',
+  'PLANNED',
+  SESSION_STATUS.AGENDADO,
+  SESSION_STATUS.AGENDADA_LEGACY,
+  SESSION_STATUS.PENDENTE,
+  SESSION_STATUS.PENDING_LEGACY,
+] as const;
+
+export const TRAINING_CONFIRMED_STATUS_VALUES = ['CONFIRMADO', 'CONFIRMADA'] as const;
+export const TRAINING_IN_PROGRESS_STATUS_VALUES = ['EM_ANDAMENTO', 'EM ANDAMENTO'] as const;
+
 export const PLANNED_QUALIFICATION_STATUS_VALUES = [
   QUALIFICACAO_STATUS.PLANEJADA,
   QUALIFICACAO_STATUS.PLANEJADO_LEGACY,
@@ -87,6 +100,9 @@ export const PLANNED_QUALIFICATION_STATUS_VALUES = [
 const completedStatusSet = new Set<string>(COMPLETED_STATUS_VALUES);
 const cancelledStatusSet = new Set<string>(CANCELLED_STATUS_VALUES);
 const activeOrCompletedSessionStatusSet = new Set<string>(ACTIVE_OR_COMPLETED_SESSION_STATUS_VALUES);
+const plannedTrainingStatusSet = new Set<string>(TRAINING_PLANNED_STATUS_VALUES);
+const confirmedTrainingStatusSet = new Set<string>(TRAINING_CONFIRMED_STATUS_VALUES);
+const inProgressTrainingStatusSet = new Set<string>(TRAINING_IN_PROGRESS_STATUS_VALUES);
 const plannedQualificationStatusSet = new Set<string>(PLANNED_QUALIFICATION_STATUS_VALUES);
 const scheduledSessionStatusSet = new Set<string>(SCHEDULED_SESSION_STATUS_VALUES);
 
@@ -132,6 +148,18 @@ export function isScheduledSessionStatus(status: StatusLike): boolean {
   return scheduledSessionStatusSet.has(normalizeStatus(status));
 }
 
+export function isPlannedTrainingStatus(status: StatusLike): boolean {
+  return plannedTrainingStatusSet.has(normalizeStatus(status));
+}
+
+export function isConfirmedTrainingStatus(status: StatusLike): boolean {
+  return confirmedTrainingStatusSet.has(normalizeStatus(status));
+}
+
+export function isInProgressTrainingStatus(status: StatusLike): boolean {
+  return inProgressTrainingStatusSet.has(normalizeStatus(status));
+}
+
 export function normalizeCompletedStatusForNewWrites(
   status: StatusLike,
 ): typeof SESSION_STATUS.CONCLUIDA | null {
@@ -167,4 +195,19 @@ export function normalizeQualificationStatusForCompatibility(status: StatusLike)
   if (isCompletedStatus(normalized)) return QUALIFICACAO_STATUS.CONCLUIDA;
   if (isCancelledStatus(normalized)) return QUALIFICACAO_STATUS.CANCELADA;
   return normalized;
+}
+
+export function normalizeTrainingStatusForCompatibility(
+  status: StatusLike,
+): 'PLANEJADO' | 'CONFIRMADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'CANCELADO' | null {
+  const normalized = normalizeStatus(status);
+  if (!normalized) return null;
+  if (isCancelledStatus(normalized)) return 'CANCELADO';
+  if (isCompletedStatus(normalized)) return 'CONCLUIDO';
+  if (isInProgressTrainingStatus(normalized)) return 'EM_ANDAMENTO';
+  if (isConfirmedTrainingStatus(normalized)) return 'CONFIRMADO';
+  if (isPlannedTrainingStatus(normalized) || isPlannedQualificationStatus(normalized)) {
+    return 'PLANEJADO';
+  }
+  return normalized as 'PLANEJADO' | 'CONFIRMADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'CANCELADO';
 }

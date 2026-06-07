@@ -3,6 +3,25 @@ import type { Env, Variables } from '../types';
 
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
+const INVALID_DEPLOY_METADATA = new Set([
+  '',
+  'managed-by-script',
+  '__build_version__',
+  '__app_version__',
+  'null',
+  'undefined',
+  'unknown',
+]);
+
+function sanitizeDeployMetadata(value: string | undefined | null): string | null {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  if (INVALID_DEPLOY_METADATA.has(normalized.toLowerCase())) {
+    return null;
+  }
+  return normalized;
+}
+
 /**
  * Retorna a versão canónica de deployment usada por todos os endpoints de sistema.
  * Centralizada para garantir que /api/version, /api/health, /api/status sempre concordem.
@@ -12,9 +31,18 @@ type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
  * 2. CF_DEPLOYMENT_ID (fallback Cloudflare)
  * 3. 'dev-local' (fallback seguro para desenvolvimento local)
  */
-function getCanonicalVersion(env: Env): string {
+export function getCanonicalVersion(env: Env): string {
   const raw = env as unknown as Record<string, string>;
-  return raw.APP_VERSION || raw.CF_DEPLOYMENT_ID || 'dev-local';
+  return (
+    sanitizeDeployMetadata(raw.APP_VERSION) ||
+    sanitizeDeployMetadata(raw.CF_DEPLOYMENT_ID) ||
+    'dev-local'
+  );
+}
+
+export function getCanonicalBuildTime(env: Env): string | null {
+  const raw = env as unknown as Record<string, string>;
+  return sanitizeDeployMetadata(raw.APP_BUILD_TIME);
 }
 
 /**
@@ -130,7 +158,7 @@ export function registerSystemRoutes(app: SystemApp) {
     const deploymentId = getCanonicalVersion(c.env);
 
     const builtAt =
-      environment === 'development' ? new Date().toISOString() : c.env.APP_BUILD_TIME || null;
+      environment === 'development' ? new Date().toISOString() : getCanonicalBuildTime(c.env);
 
     return c.json({
       success: true,

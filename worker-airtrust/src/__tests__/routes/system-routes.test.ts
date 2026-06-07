@@ -201,6 +201,30 @@ describe('system routes extraction', () => {
     expect(versionBody.data.version).toBe(healthBody.stats.version);
   });
 
+  it('ignora placeholders tracked no git e expõe fallback real do deploy', async () => {
+    const app = createSystemApp();
+    const env = {
+      DB: createDbHealthyMock(),
+      APP_VERSION: 'managed-by-script',
+      APP_BUILD_TIME: 'managed-by-script',
+      CF_DEPLOYMENT_ID: 'cf-real-123',
+      ENVIRONMENT: 'production',
+    } as unknown as Env;
+
+    const [versionRes, healthRes] = await Promise.all([
+      app.request('/api/version', {}, env),
+      app.request('/api/health', {}, env),
+    ]);
+
+    const versionBody = (await versionRes.json()) as VersionBody;
+    const healthBody = (await healthRes.json()) as HealthBody;
+
+    expect(versionBody.data.version).toBe('cf-real-123');
+    expect(versionBody.data.deploymentId).toBe('cf-real-123');
+    expect(versionBody.data.builtAt).toBeNull();
+    expect(healthBody.stats.version).toBe('cf-real-123');
+  });
+
   it('FALLBACK: sem APP_VERSION nem CF_DEPLOYMENT_ID retorna dev-local em ambos', async () => {
     const app = createSystemApp();
     const env = { DB: createDbHealthyMock() } as Env;

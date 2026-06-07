@@ -82,7 +82,7 @@
   Cache-Control: public, max-age=604800
 
 # ===== MANIFEST E CONFIG - CACHE CURTO =====
-/manifest.json
+/app.webmanifest
   Cache-Control: public, max-age=3600
 
 /robots.txt

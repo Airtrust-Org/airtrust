@@ -77,8 +77,11 @@ describe('tenant-scoped tables: empresa_id filter present in GET queries', () =>
 
   it('simuladores-equipamentos.ts scopes simuladores and checks by empresa_id', () => {
     const source = src('routes/simuladores-equipamentos.ts');
-    expect(source).toMatch(/FROM simuladores\s+WHERE deleted_at IS NULL\s+AND empresa_id = \?/);
-    expect(source).toMatch(/FROM qualificacoes_tipos\s+WHERE deleted_at IS NULL\s+AND empresa_id = \?/);
+    expect(source).toMatch(/const empresaClause = hasEmpresaId \? ' AND empresa_id = \?' : ''/);
+    expect(source).toMatch(/WHERE deleted_at IS NULL\$\{empresaClause\}/);
+    expect(source).toMatch(
+      /FROM qualificacoes_tipos\s+WHERE deleted_at IS NULL\s+AND empresa_id = \?/,
+    );
   });
 
   it('simuladores-equipamentos.ts scopes alertas by funcionario.empresa_id', () => {

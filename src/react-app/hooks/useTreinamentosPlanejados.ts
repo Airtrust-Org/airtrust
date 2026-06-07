@@ -200,6 +200,11 @@ export interface TreinamentoPlanejado {
   }>;
   auditoria?: TreinamentoPlanejadoAuditoria[];
   convocacoes_email?: TreinamentoPlanejadoConvocacaoEvent[];
+  source?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
+  source_id?: number;
+  source_route?: string | null;
+  source_label?: string | null;
+  read_only?: boolean;
 }
 
 export interface TreinamentosPlanejadosListResponse {
@@ -233,6 +238,7 @@ export interface TreinamentoPlanejadoFiltros {
   instrutor_id?: number | null;
   funcionario_id?: number | null;
   busca?: string;
+  source?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
 }
 
 export interface TreinamentoPlanejadoInput {

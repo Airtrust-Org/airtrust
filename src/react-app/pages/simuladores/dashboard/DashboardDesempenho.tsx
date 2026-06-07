@@ -73,11 +73,13 @@ export default function DashboardDesempenho() {
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
 
   const fetchDashboard = useCallback(async () => {
     if (!funcionarioId) return;
     try {
       setLoading(true);
+      setErro(null);
       const response = await fetch(`${API_BASE_URL}/simuladores/dashboard/${funcionarioId}`, {
         headers: {
           Authorization: `Bearer ${getAccessToken()}`,
@@ -88,10 +90,14 @@ export default function DashboardDesempenho() {
         const result = await response.json();
         setDashboard(result.data);
       } else {
+        setDashboard(null);
+        setErro(`Erro ao carregar dashboard (${response.status})`);
         toast.error('Erro ao carregar dashboard');
       }
     } catch (error) {
       console.error('Erro ao buscar dashboard:', error);
+      setDashboard(null);
+      setErro('Erro ao carregar dashboard');
       toast.error('Erro ao carregar dashboard');
     } finally {
       setLoading(false);
@@ -154,7 +160,21 @@ export default function DashboardDesempenho() {
     return (
       <AppLayout>
         <div className="p-6">
-          <p className="text-gray-600">Nenhum dado disponível</p>
+          {erro ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <p className="font-medium">{erro}</p>
+              <button
+                onClick={() => {
+                  void fetchDashboard();
+                }}
+                className="mt-3 rounded-md bg-red-100 px-3 py-1.5 font-medium text-red-900 hover:bg-red-200"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : (
+            <p className="text-gray-600">Nenhum dado disponível</p>
+          )}
         </div>
       </AppLayout>
     );
