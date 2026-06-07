@@ -357,6 +357,9 @@ function invalidateTreinamentosPlanejados(queryClient: ReturnType<typeof useQuer
     queryClient.invalidateQueries({ queryKey: ['treinamentos-planejados'] }),
     queryClient.invalidateQueries({ queryKey: ['solicitacoes-treinamento'] }),
     queryClient.invalidateQueries({ queryKey: ['qualificacoes-historico'] }),
+    // Training mutations sync to escala_eventos — invalidate calendario cache so
+    // the monthly crew grid (GradeTripulantes) picks up the new treinamento_solo events.
+    queryClient.invalidateQueries({ queryKey: ['escalas'] }),
   ]);
 }
 
