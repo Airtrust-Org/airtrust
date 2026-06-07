@@ -15,6 +15,72 @@ import {
 } from '../services/treinamentos-convocacao-email';
 import { normalizeTrainingStatusForCompatibility } from '../lib/status/status-codes';
 
+interface TreinamentoSchemaCapabilities {
+  hasModalidade: boolean;
+  hasCodigoTurma: boolean;
+  hasDataInicio: boolean;
+  hasDataFim: boolean;
+  hasBase: boolean;
+  hasSala: boolean;
+  hasEquipamentoDescricao: boolean;
+  hasLimiteParticipantes: boolean;
+  hasInstrutoresTable: boolean;
+  hasDiasTable: boolean;
+}
+
+async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare('SELECT COUNT(*) as cnt FROM sqlite_master WHERE type = ? AND name = ?')
+      .bind('table', tableName)
+      .first<{ cnt: number }>();
+    return (row?.cnt ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
+  try {
+    const { results } = await db.prepare(`PRAGMA table_info(${table})`).all();
+    return (results || []).some((col: any) => col?.name === column);
+  } catch {
+    return false;
+  }
+}
+
+async function detectTreinamentoSchemaCapabilities(
+  db: D1Database,
+): Promise<TreinamentoSchemaCapabilities> {
+  const [hasModalidade, hasCodigoTurma, hasDataInicio, hasDataFim, hasBase, hasSala, hasEquipamentoDescricao, hasLimiteParticipantes] =
+    await Promise.all([
+      hasColumn(db, 'treinamentos_planejados', 'modalidade'),
+      hasColumn(db, 'treinamentos_planejados', 'codigo_turma'),
+      hasColumn(db, 'treinamentos_planejados', 'data_inicio'),
+      hasColumn(db, 'treinamentos_planejados', 'data_fim'),
+      hasColumn(db, 'treinamentos_planejados', 'base'),
+      hasColumn(db, 'treinamentos_planejados', 'sala'),
+      hasColumn(db, 'treinamentos_planejados', 'equipamento_descricao'),
+      hasColumn(db, 'treinamentos_planejados', 'limite_participantes'),
+    ]);
+  const [hasInstrutoresTable, hasDiasTable] = await Promise.all([
+    tableExists(db, 'treinamentos_instrutores'),
+    tableExists(db, 'treinamentos_dias'),
+  ]);
+  return {
+    hasModalidade,
+    hasCodigoTurma,
+    hasDataInicio,
+    hasDataFim,
+    hasBase,
+    hasSala,
+    hasEquipamentoDescricao,
+    hasLimiteParticipantes,
+    hasInstrutoresTable,
+    hasDiasTable,
+  };
+}
+
 const treinamentosPlanejadosRoutes = new Hono<{ Bindings: Env }>();
 
 treinamentosPlanejadosRoutes.use('*', auth());
@@ -978,7 +1044,19 @@ async function listTreinamentosPlanejadosBase(
     busca?: string | null;
     treinamentoId?: number | null;
   },
+  capabilities: TreinamentoSchemaCapabilities,
 ) {
+  const migration0390Cols = [
+    capabilities.hasCodigoTurma ? 't.codigo_turma' : 'NULL AS codigo_turma',
+    capabilities.hasModalidade ? 't.modalidade' : "'TEORICO' AS modalidade",
+    capabilities.hasDataInicio ? 't.data_inicio' : 't.data_prevista AS data_inicio',
+    capabilities.hasDataFim ? 't.data_fim' : 't.data_prevista AS data_fim',
+    capabilities.hasBase ? 't.base' : 'NULL AS base',
+    capabilities.hasSala ? 't.sala' : 'NULL AS sala',
+    capabilities.hasEquipamentoDescricao ? 't.equipamento_descricao' : 'NULL AS equipamento_descricao',
+    capabilities.hasLimiteParticipantes ? 't.limite_participantes' : 'NULL AS limite_participantes',
+  ].join(',\n                    ');
+
   let sql = `SELECT t.id,
                     t.empresa_id,
                     t.qualificacao_tipo_id,
@@ -999,14 +1077,7 @@ async function listTreinamentosPlanejadosBase(
                     t.created_by,
                     t.created_at,
                     t.updated_at,
-                    t.codigo_turma,
-                    t.modalidade,
-                    t.data_inicio,
-                    t.data_fim,
-                    t.base,
-                    t.sala,
-                    t.equipamento_descricao,
-                    t.limite_participantes,
+                    ${migration0390Cols},
                     COUNT(tp.id) AS convocados_total,
                     SUM(CASE WHEN COALESCE(tp.confirmado, 0) = 1 THEN 1 ELSE 0 END) AS confirmados_total,
                     SUM(CASE WHEN COALESCE(tp.presente, 0) = 1 THEN 1 ELSE 0 END) AS presentes_total
@@ -1027,13 +1098,28 @@ async function listTreinamentosPlanejadosBase(
     sql += ' AND t.status = ?';
     params.push(filters.status);
   }
-  if (filters.inicio) {
-    sql += ' AND date(t.data_prevista) >= date(?)';
-    params.push(filters.inicio);
-  }
-  if (filters.fim) {
-    sql += ' AND date(t.data_prevista) <= date(?)';
-    params.push(filters.fim);
+  if (filters.inicio && filters.fim && capabilities.hasDiasTable) {
+    // Include trainings with days within range, even if data_prevista is outside
+    sql += ` AND (
+      (date(t.data_prevista) >= date(?) AND date(t.data_prevista) <= date(?))
+      OR EXISTS (
+        SELECT 1 FROM treinamentos_dias td
+        WHERE td.treinamento_id = t.id
+          AND td.status = 'ATIVO'
+          AND date(td.data) >= date(?)
+          AND date(td.data) <= date(?)
+      )
+    )`;
+    params.push(filters.inicio, filters.fim, filters.inicio, filters.fim);
+  } else {
+    if (filters.inicio) {
+      sql += ' AND date(t.data_prevista) >= date(?)';
+      params.push(filters.inicio);
+    }
+    if (filters.fim) {
+      sql += ' AND date(t.data_prevista) <= date(?)';
+      params.push(filters.fim);
+    }
   }
   if (filters.instrutorId) {
     sql += ' AND t.instrutor_id = ?';
@@ -1067,8 +1153,12 @@ async function listTreinamentosPlanejadosBase(
   const ids = (rows.results || []).map((row) => Number(row.id));
   const [participantes, dias, instrutores] = await Promise.all([
     loadParticipantesByTreinamento(db, empresaId, ids),
-    loadDiasByTreinamento(db, empresaId, ids),
-    loadInstrutoresByTreinamento(db, empresaId, ids),
+    capabilities.hasDiasTable
+      ? loadDiasByTreinamento(db, empresaId, ids)
+      : Promise.resolve(new Map<number, DiaRow[]>()),
+    capabilities.hasInstrutoresTable
+      ? loadInstrutoresByTreinamento(db, empresaId, ids)
+      : Promise.resolve(new Map<number, InstrutorRow[]>()),
   ]);
 
   return (rows.results || []).map((row) =>
@@ -1513,6 +1603,12 @@ async function loadSimulatorSessionItems(
     });
 }
 
+interface ListEventosDiagnostics {
+  turma: 'ok' | 'skipped' | 'error';
+  qualificacao_planejada: 'ok' | 'skipped' | 'error';
+  simulador: 'ok' | 'skipped' | 'error';
+}
+
 async function listEventos(
   db: D1Database,
   empresaId: number,
@@ -1526,29 +1622,63 @@ async function listEventos(
     treinamentoId?: number | null;
     source?: string | null;
   },
-): Promise<ConsolidatedTrainingItem[]> {
+  capabilities?: TreinamentoSchemaCapabilities,
+): Promise<{ items: ConsolidatedTrainingItem[]; diagnostics: ListEventosDiagnostics }> {
   const sourceFilter = normalizeSourceFilter(filters.source);
   const items: ConsolidatedTrainingItem[] = [];
+  const diagnostics: ListEventosDiagnostics = {
+    turma: 'skipped',
+    qualificacao_planejada: 'skipped',
+    simulador: 'skipped',
+  };
 
   if (!sourceFilter || sourceFilter === 'TURMA') {
-    items.push(
-      ...(await listTreinamentosPlanejadosBase(db, empresaId, filters)),
-    );
+    try {
+      const turmaCapabilities = capabilities || await detectTreinamentoSchemaCapabilities(db);
+      items.push(
+        ...(await listTreinamentosPlanejadosBase(db, empresaId, filters, turmaCapabilities)),
+      );
+      diagnostics.turma = 'ok';
+    } catch (err) {
+      console.error('[listEventos] TURMA source failed:', err);
+      diagnostics.turma = 'error';
+    }
   }
 
   if (!filters.treinamentoId && (!sourceFilter || sourceFilter === 'QUALIFICACAO_PLANEJADA')) {
-    items.push(
-      ...(await loadStandalonePlannedQualificationItems(db, empresaId, filters)),
-    );
+    try {
+      items.push(
+        ...(await loadStandalonePlannedQualificationItems(db, empresaId, filters)),
+      );
+      diagnostics.qualificacao_planejada = 'ok';
+    } catch (err) {
+      console.error('[listEventos] QUALIFICACAO_PLANEJADA source failed:', err);
+      diagnostics.qualificacao_planejada = 'error';
+    }
   }
 
   if (!filters.treinamentoId && (!sourceFilter || sourceFilter === 'SIMULADOR')) {
-    items.push(
-      ...(await loadSimulatorSessionItems(db, empresaId, filters)),
-    );
+    try {
+      items.push(
+        ...(await loadSimulatorSessionItems(db, empresaId, filters)),
+      );
+      diagnostics.simulador = 'ok';
+    } catch (err) {
+      console.error('[listEventos] SIMULADOR source failed:', err);
+      diagnostics.simulador = 'error';
+    }
   }
 
-  return sortConsolidatedItems(items).slice(0, 400);
+  const allFailed =
+    diagnostics.turma !== 'ok' &&
+    diagnostics.qualificacao_planejada !== 'ok' &&
+    diagnostics.simulador !== 'ok';
+
+  if (allFailed && items.length === 0) {
+    throw new Error('Todas as fontes de treinamentos falharam');
+  }
+
+  return { items: sortConsolidatedItems(items).slice(0, 400), diagnostics };
 }
 
 async function loadAuditoriaByTreinamento(
@@ -1583,7 +1713,8 @@ async function loadAuditoriaByTreinamento(
 treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  const items = await listEventos(db, empresaId, {
+  const capabilities = await detectTreinamentoSchemaCapabilities(db);
+  const { items, diagnostics } = await listEventos(db, empresaId, {
     status: c.req.query('status'),
     inicio: c.req.query('inicio'),
     fim: c.req.query('fim'),
@@ -1591,7 +1722,7 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
     funcionarioId: c.req.query('funcionario_id'),
     busca: c.req.query('busca'),
     source: c.req.query('source'),
-  });
+  }, capabilities);
 
   return c.json({
     success: true,
@@ -1599,6 +1730,7 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
       items,
       total: items.length,
     },
+    diagnostics: Object.values(diagnostics).some(v => v === 'error') ? diagnostics : undefined,
   });
 });
 
@@ -1608,8 +1740,9 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
   const monthRange = buildMonthRange(c.req.query('mes'));
   const inicio = c.req.query('inicio') || monthRange?.inicio || null;
   const fim = c.req.query('fim') || monthRange?.fim || null;
+  const capabilities = await detectTreinamentoSchemaCapabilities(db);
 
-  const items = await listEventos(db, empresaId, {
+  const { items } = await listEventos(db, empresaId, {
     status: c.req.query('status'),
     inicio,
     fim,
@@ -1617,7 +1750,7 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
     funcionarioId: c.req.query('funcionario_id'),
     busca: c.req.query('busca'),
     source: c.req.query('source'),
-  });
+  }, capabilities);
 
   return c.json({
     success: true,
@@ -1634,7 +1767,7 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
 treinamentosPlanejadosRoutes.get('/planejados/auditoria', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
-  const items = await listEventos(db, empresaId, {
+  const { items } = await listEventos(db, empresaId, {
     status: c.req.query('status'),
     inicio: c.req.query('inicio'),
     fim: c.req.query('fim'),
@@ -1688,7 +1821,7 @@ treinamentosPlanejadosRoutes.get('/planejados/:id', async (c) => {
     return c.json({ success: false, error: 'ID inválido' }, 400);
   }
 
-  const items = await listEventos(db, empresaId, { treinamentoId });
+  const { items } = await listEventos(db, empresaId, { treinamentoId });
   const item = items[0];
   if (!item) {
     return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
@@ -1919,7 +2052,7 @@ treinamentosPlanejadosRoutes.post(
       return c.json({ success: false, error: 'ID inválido' }, 400);
     }
 
-    const items = await listEventos(db, empresaId, { treinamentoId });
+    const { items } = await listEventos(db, empresaId, { treinamentoId });
     const item = items[0];
     if (!item) {
       return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
@@ -1995,7 +2128,7 @@ treinamentosPlanejadosRoutes.post(
       skip_missing_email?: boolean;
       gestores_cc_ids?: number[];
     };
-    const items = await listEventos(db, empresaId, { treinamentoId });
+    const { items } = await listEventos(db, empresaId, { treinamentoId });
     const item = items[0];
     if (!item) {
       return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
@@ -2131,7 +2264,7 @@ treinamentosPlanejadosRoutes.post(
       return c.json({ success: false, error: 'Dados inválidos' }, 400);
     }
 
-    const items = await listEventos(db, empresaId, { treinamentoId });
+    const { items } = await listEventos(db, empresaId, { treinamentoId });
     const item = items[0];
     if (!item) {
       return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
@@ -2639,7 +2772,7 @@ treinamentosPlanejadosRoutes.get('/planejados/:id/conclusao/preview', async (c) 
     return c.json({ success: false, error: 'ID inválido' }, 400);
   }
 
-  const items = await listEventos(db, empresaId, { treinamentoId });
+  const { items } = await listEventos(db, empresaId, { treinamentoId });
   const item = items[0];
   if (!item) {
     return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);

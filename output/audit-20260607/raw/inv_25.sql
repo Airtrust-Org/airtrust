@@ -1,0 +1,1 @@
+SELECT 'usuarios_empresas' tbl,SUM(empresa_id=1) e1,SUM(empresa_id=6) e6,SUM(empresa_id NOT IN(1,6) AND empresa_id IS NOT NULL) o,SUM(empresa_id IS NULL) n,0 sd,COUNT(*) t FROM usuarios_empresas;

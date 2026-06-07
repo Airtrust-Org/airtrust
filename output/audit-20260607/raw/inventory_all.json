@@ -1,0 +1,1136 @@
+[
+ {
+  "tbl": "qualificacoes_historico",
+  "e1": 362,
+  "e6": 590,
+  "o": 15,
+  "n": 0,
+  "sd": 90,
+  "t": 967
+ },
+ {
+  "tbl": "documentos",
+  "e1": 70,
+  "e6": 403,
+  "o": 0,
+  "n": 0,
+  "sd": 236,
+  "t": 473
+ },
+ {
+  "tbl": "pasta_virtual",
+  "e1": 70,
+  "e6": 175,
+  "o": 0,
+  "n": 0,
+  "sd": 67,
+  "t": 245
+ },
+ {
+  "tbl": "bkp_qual_historico_20260325",
+  "e1": 42,
+  "e6": 537,
+  "o": 0,
+  "n": 0,
+  "sd": 124,
+  "t": 579
+ },
+ {
+  "tbl": "qualificacoes_tipos",
+  "e1": 13,
+  "e6": 80,
+  "o": 0,
+  "n": 0,
+  "sd": 28,
+  "t": 93
+ },
+ {
+  "tbl": "sgso_spi_config",
+  "e1": 7,
+  "e6": 7,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 14
+ },
+ {
+  "tbl": "sgso_frat_fatores",
+  "e1": 6,
+  "e6": 12,
+  "o": 6,
+  "n": 0,
+  "sd": 0,
+  "t": 24
+ },
+ {
+  "tbl": "tipos_sessao",
+  "e1": 6,
+  "e6": 17,
+  "o": 0,
+  "n": 0,
+  "sd": 15,
+  "t": 23
+ },
+ {
+  "tbl": "integracoes_sigvoos_config",
+  "e1": 5,
+  "e6": 13,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 18
+ },
+ {
+  "tbl": "integracoes_sigvoos_eventos",
+  "e1": 4,
+  "e6": 241,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 245
+ },
+ {
+  "tbl": "bkp_qual_tipos_20260325",
+  "e1": 3,
+  "e6": 47,
+  "o": 0,
+  "n": 0,
+  "sd": 2,
+  "t": 50
+ },
+ {
+  "tbl": "sgso_sla_config",
+  "e1": 3,
+  "e6": 3,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 6
+ },
+ {
+  "tbl": "integracoes_edapp_cursos",
+  "e1": 2,
+  "e6": 14,
+  "o": 0,
+  "n": 2,
+  "sd": 2,
+  "t": 18
+ },
+ {
+  "tbl": "lms_cursos",
+  "e1": 2,
+  "e6": 12,
+  "o": 0,
+  "n": 0,
+  "sd": 5,
+  "t": 14
+ },
+ {
+  "tbl": "usuarios_empresas",
+  "e1": 2,
+  "e6": 54,
+  "o": 6,
+  "n": 0,
+  "sd": 0,
+  "t": 62
+ },
+ {
+  "tbl": "empresas_config",
+  "e1": 1,
+  "e6": 1,
+  "o": 3,
+  "n": 0,
+  "sd": 0,
+  "t": 5
+ },
+ {
+  "tbl": "sgso_frat_modelos",
+  "e1": 1,
+  "e6": 2,
+  "o": 1,
+  "n": 0,
+  "sd": 0,
+  "t": 4
+ },
+ {
+  "tbl": "sgso_matriz_risco_perfis",
+  "e1": 1,
+  "e6": 2,
+  "o": 1,
+  "n": 0,
+  "sd": 0,
+  "t": 4
+ },
+ {
+  "tbl": "aeronaves",
+  "e1": 0,
+  "e6": 20,
+  "o": 3,
+  "n": 0,
+  "sd": 15,
+  "t": 23
+ },
+ {
+  "tbl": "alertas_whatsapp_delivery",
+  "e1": 0,
+  "e6": 10,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 10
+ },
+ {
+  "tbl": "arquivos",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "audit_events_v2",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "audit_logs",
+  "e1": null,
+  "e6": null,
+  "o": 0,
+  "n": 210,
+  "sd": 0,
+  "t": 210
+ },
+ {
+  "tbl": "certificados_templates",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "convites_usuarios",
+  "e1": 0,
+  "e6": 13,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 13
+ },
+ {
+  "tbl": "domain_events",
+  "e1": 0,
+  "e6": 706,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 706
+ },
+ {
+  "tbl": "empresa_certificado_config",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "empresa_config",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "escala_alertas",
+  "e1": 0,
+  "e6": 397,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 397
+ },
+ {
+  "tbl": "escala_publicacao_snapshots",
+  "e1": 0,
+  "e6": 0,
+  "o": 8,
+  "n": 0,
+  "sd": 0,
+  "t": 8
+ },
+ {
+  "tbl": "escala_voo_diaria",
+  "e1": 0,
+  "e6": 4,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 4
+ },
+ {
+  "tbl": "escala_voo_diaria_justificativas",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "escala_voo_diaria_publicacoes",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "escalas_mensais",
+  "e1": 0,
+  "e6": 41,
+  "o": 3,
+  "n": 0,
+  "sd": 33,
+  "t": 44
+ },
+ {
+  "tbl": "escalas_quinzenas",
+  "e1": 0,
+  "e6": 26,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 26
+ },
+ {
+  "tbl": "escalas_templates_tripulacao",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "escalas_tipos_evento_config",
+  "e1": 0,
+  "e6": 15,
+  "o": 0,
+  "n": 0,
+  "sd": 4,
+  "t": 15
+ },
+ {
+  "tbl": "fichas_sessao",
+  "e1": 0,
+  "e6": 67,
+  "o": 0,
+  "n": 124,
+  "sd": 95,
+  "t": 191
+ },
+ {
+  "tbl": "fichas_sessao_edicoes",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "frms_carga_trabalho",
+  "e1": 0,
+  "e6": 156,
+  "o": 0,
+  "n": 0,
+  "sd": 9,
+  "t": 156
+ },
+ {
+  "tbl": "frms_explicacao_dia_cache",
+  "e1": 0,
+  "e6": 32,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 32
+ },
+ {
+  "tbl": "frms_fadiga_avaliacao_gestor",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "frms_fadiga_checkin",
+  "e1": 0,
+  "e6": 24,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 24
+ },
+ {
+  "tbl": "frms_fadiga_config_empresa",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "frms_fadiga_evento",
+  "e1": 0,
+  "e6": 75,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 75
+ },
+ {
+  "tbl": "frms_fonte_calculo_competencia",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "frms_jornada",
+  "e1": 0,
+  "e6": 2832,
+  "o": 0,
+  "n": 2378,
+  "sd": 4284,
+  "t": 5210
+ },
+ {
+  "tbl": "frms_jornada_pendente",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "frms_justificativas",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "frms_read_ack_event_audit",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "frms_read_ack_events",
+  "e1": 0,
+  "e6": 25,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 25
+ },
+ {
+  "tbl": "funcionarios",
+  "e1": 0,
+  "e6": 63,
+  "o": 5,
+  "n": 0,
+  "sd": 17,
+  "t": 68
+ },
+ {
+  "tbl": "funcoes",
+  "e1": 0,
+  "e6": 9,
+  "o": 3,
+  "n": 0,
+  "sd": 4,
+  "t": 12
+ },
+ {
+  "tbl": "horas_voo_lancamentos",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "horas_voo_saldo_inicial",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "hospedagem",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "hospedagem_sugestoes",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "importacoes_log",
+  "e1": 0,
+  "e6": 58,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 58
+ },
+ {
+  "tbl": "integracoes_edapp_config",
+  "e1": null,
+  "e6": null,
+  "o": 0,
+  "n": 4,
+  "sd": 0,
+  "t": 4
+ },
+ {
+  "tbl": "integracoes_edapp_eventos",
+  "e1": 0,
+  "e6": 377,
+  "o": 0,
+  "n": 6,
+  "sd": 6,
+  "t": 383
+ },
+ {
+  "tbl": "integracoes_edapp_usuarios",
+  "e1": 0,
+  "e6": 42,
+  "o": 0,
+  "n": 0,
+  "sd": 1,
+  "t": 42
+ },
+ {
+  "tbl": "integracoes_sigvoos_mapeamentos",
+  "e1": 0,
+  "e6": 3,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 3
+ },
+ {
+  "tbl": "lms_h5p_conteudos",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "lms_historico_importado",
+  "e1": 0,
+  "e6": 374,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 374
+ },
+ {
+  "tbl": "lms_matricula_ciclos",
+  "e1": 0,
+  "e6": 399,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 399
+ },
+ {
+  "tbl": "lms_matriculas",
+  "e1": 0,
+  "e6": 31,
+  "o": 0,
+  "n": 0,
+  "sd": 4,
+  "t": 31
+ },
+ {
+  "tbl": "lms_progresso_scorm",
+  "e1": 0,
+  "e6": 13,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 13
+ },
+ {
+  "tbl": "lms_xapi_statements",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "matriz_treinamento_funcao",
+  "e1": 0,
+  "e6": 9,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 9
+ },
+ {
+  "tbl": "modelos_aeronave",
+  "e1": 0,
+  "e6": 6,
+  "o": 0,
+  "n": 0,
+  "sd": 4,
+  "t": 6
+ },
+ {
+  "tbl": "modelos_sessao",
+  "e1": 0,
+  "e6": 60,
+  "o": 0,
+  "n": 0,
+  "sd": 9,
+  "t": 60
+ },
+ {
+  "tbl": "notificacoes_convocacao_cc_gestores",
+  "e1": 0,
+  "e6": 3,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 3
+ },
+ {
+  "tbl": "notificacoes_convocacao_email_config",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "notificacoes_inapp",
+  "e1": 0,
+  "e6": 34,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 34
+ },
+ {
+  "tbl": "padroes_escala",
+  "e1": null,
+  "e6": null,
+  "o": 0,
+  "n": 5,
+  "sd": 0,
+  "t": 5
+ },
+ {
+  "tbl": "pasta_virtual_jobs",
+  "e1": 0,
+  "e6": 8,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 8
+ },
+ {
+  "tbl": "perfis_permissoes",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "qualificacoes_pendencias",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "requisitos_compliance",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "restricoes_tripulacao",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 1,
+  "t": 1
+ },
+ {
+  "tbl": "setores",
+  "e1": 0,
+  "e6": 14,
+  "o": 3,
+  "n": 0,
+  "sd": 8,
+  "t": 17
+ },
+ {
+  "tbl": "setores_gestores",
+  "e1": 0,
+  "e6": 6,
+  "o": 0,
+  "n": 0,
+  "sd": 3,
+  "t": 6
+ },
+ {
+  "tbl": "sgso_acoes_mitigacao",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_audit_trail",
+  "e1": 0,
+  "e6": 6,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 6
+ },
+ {
+  "tbl": "sgso_auditoria_itens",
+  "e1": 0,
+  "e6": 3,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 3
+ },
+ {
+  "tbl": "sgso_auditorias",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_avaliacao_risco",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_avaliacao_risco_contexto",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_bowtie_barreira_historico",
+  "e1": 0,
+  "e6": 4,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 4
+ },
+ {
+  "tbl": "sgso_bowtie_barreira_vinculos",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_bowtie_barreiras",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_bowtie_cenarios",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_bowtie_nos",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_frat_aprovacoes",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_frat_avaliacoes",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_frat_respostas",
+  "e1": 0,
+  "e6": 10,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 10
+ },
+ {
+  "tbl": "sgso_licoes_aprendidas",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_moc_aprovacoes",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_moc_registros",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_nao_conformidades",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_perigos",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_protocolo_sequencia",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_relato_capturas",
+  "e1": 0,
+  "e6": 5,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 5
+ },
+ {
+  "tbl": "sgso_relato_ia_triagem",
+  "e1": 0,
+  "e6": 5,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 5
+ },
+ {
+  "tbl": "sgso_relato_notificacoes",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_relato_perigos",
+  "e1": 0,
+  "e6": 2,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 2
+ },
+ {
+  "tbl": "sgso_relato_privacidade",
+  "e1": 0,
+  "e6": 5,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 5
+ },
+ {
+  "tbl": "sgso_relato_workflow_eventos",
+  "e1": 0,
+  "e6": 5,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 5
+ },
+ {
+  "tbl": "sgso_relatos",
+  "e1": 0,
+  "e6": 5,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 5
+ },
+ {
+  "tbl": "sgso_relatos_arquivos",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_relatos_comentarios",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_relatos_fatores_humanos",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_relatos_historico_status",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sgso_relatos_midias_metadados",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "sigvoos_mapeamento_manual",
+  "e1": 0,
+  "e6": 1,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 1
+ },
+ {
+  "tbl": "simulador_agendamentos",
+  "e1": 0,
+  "e6": 93,
+  "o": 6,
+  "n": 0,
+  "sd": 41,
+  "t": 99
+ },
+ {
+  "tbl": "solicitacoes_treinamento",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "support_access_grants",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "support_access_sessions",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "treinamentos_convocacoes_email",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "treinamentos_dias",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "treinamentos_instrutores",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "treinamentos_planejados",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": null,
+  "t": 0
+ },
+ {
+  "tbl": "treinamentos_presencas",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "treinamentos_qualificacoes_geradas",
+  "e1": null,
+  "e6": null,
+  "o": null,
+  "n": null,
+  "sd": 0,
+  "t": 0
+ },
+ {
+  "tbl": "usuario_preferencias",
+  "e1": 0,
+  "e6": 10,
+  "o": 0,
+  "n": 0,
+  "sd": 0,
+  "t": 10
+ }
+]

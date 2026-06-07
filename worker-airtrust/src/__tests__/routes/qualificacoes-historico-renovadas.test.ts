@@ -66,7 +66,9 @@ function createMockDb(options: { hasRenovacaoDe?: boolean } = {}) {
       const bind = (...args: unknown[]) => ({
         first: async () => {
           calls.push({ query, args, method: 'first' });
-          if (query.includes('COUNT(*) as total')) {
+          const statsQuery = query.includes('COUNT(*) as total');
+          const globalQuery = query.includes('SUM(CASE WHEN') && query.toUpperCase().includes('AS RENOVADAS');
+          if (statsQuery || globalQuery) {
             return {
               total: 590,
               validas: 300,

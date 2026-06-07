@@ -177,6 +177,12 @@ router.get(
       params.push(categoria);
     }
 
+    // Save base conditions (without status filter) for global counts
+    const nonStatusConditions = [...conditions];
+    const nonStatusParams = [...params];
+    // Add qh.deleted_at IS NULL to base conditions (always applied for non-status scope)
+    nonStatusConditions.push('qh.deleted_at IS NULL');
+
     const vencimentoExpr =
       "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))";
 
@@ -261,13 +267,31 @@ router.get(
       .bind(...params)
       .first();
 
+    // Global counts (independent of status filter) for badge chips
+    const nonStatusWhere = nonStatusConditions.join(' AND ');
+    const globalCountsQuery = `SELECT
+      SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
+      SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
+    FROM qualificacoes_historico qh
+    LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+      AND f.deleted_at IS NULL
+      AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
+    LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
+    LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
+    WHERE ${nonStatusWhere}`;
+
+    const globalCountsResult = await db
+      .prepare(globalCountsQuery)
+      .bind(...nonStatusParams)
+      .first();
+
     const stats = {
       total: Number((statsResult as any)?.total || 0),
       validas: Number((statsResult as any)?.validas || 0),
       vencendo: Number((statsResult as any)?.vencendo || 0),
       vencidas: Number((statsResult as any)?.vencidas || 0),
-      renovadas: Number((statsResult as any)?.renovadas || 0),
-      planejadas: Number((statsResult as any)?.planejadas || 0),
+      renovadas: Number((globalCountsResult as any)?.renovadas || 0),
+      planejadas: Number((globalCountsResult as any)?.planejadas || 0),
     };
 
     // DADOS PAGINADOS

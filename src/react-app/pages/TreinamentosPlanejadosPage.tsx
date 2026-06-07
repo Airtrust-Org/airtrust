@@ -607,7 +607,9 @@ export default function TreinamentosPlanejadosPage({
         acc.presentes += item.presentes_total;
         if (item.status === 'PLANEJADO') acc.planejados += 1;
         if (item.status === 'CONFIRMADO') acc.confirmadosEventos += 1;
+        if (item.status === 'EM_ANDAMENTO') acc.emAndamento += 1;
         if (item.status === 'CONCLUIDO') acc.concluidos += 1;
+        if (item.status === 'CANCELADO') acc.cancelados += 1;
         return acc;
       },
       {
@@ -617,7 +619,9 @@ export default function TreinamentosPlanejadosPage({
         presentes: 0,
         planejados: 0,
         confirmadosEventos: 0,
+        emAndamento: 0,
         concluidos: 0,
+        cancelados: 0,
       },
     );
   }, [listaTreinamentos]);
@@ -1182,43 +1186,32 @@ export default function TreinamentosPlanejadosPage({
           </div>
         )}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            icon={<CalendarDays className="h-5 w-5" />}
-            label="Eventos no mes"
-            value={resumoLista.total}
-            helper={
-              proximoTreinamento
-                ? `Proximo: ${formatDateLabel(proximoTreinamento.data_prevista)}`
-                : 'Sem agenda futura neste mes'
-            }
-          />
-          <StatCard
-            icon={<Users className="h-5 w-5" />}
-            label="Convocados"
-            value={resumoLista.convocados}
-            helper={`${resumoLista.confirmados} confirmados e ${resumoLista.presentes} presentes registrados`}
-          />
-          <StatCard
-            icon={<ClipboardList className="h-5 w-5" />}
-            label="Status operacionais"
-            value={resumoLista.planejados}
-            helper={`${resumoLista.confirmadosEventos} confirmados e ${resumoLista.concluidos} concluidos`}
-          />
-          <StatCard
-            icon={<ShieldCheck className="h-5 w-5" />}
-            label="Ultima trilha"
-            value={
-              ultimoEventoAuditado
-                ? formatDateTimeLabel(ultimoEventoAuditado.created_at)
-                : 'Sem trilha'
-            }
-            helper={
-              ultimoEventoAuditado
-                ? `${ultimoEventoAuditado.acao} por ${ultimoEventoAuditado.usuario_nome || 'usuario do sistema'}`
-                : 'Nenhuma alteracao auditada no periodo'
-            }
-          />
+        {/* Summary tags — same visual pattern as Historico header bar */}
+        <section className="flex flex-wrap gap-2 px-1" aria-label="Resumo dos treinamentos">
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-slate-100 text-slate-700 text-sm">
+            <span>Total</span>
+            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.total}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-purple-50 text-purple-700 text-sm">
+            <span>Planejados</span>
+            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.planejados}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-emerald-50 text-emerald-700 text-sm">
+            <span>Confirmados</span>
+            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.confirmadosEventos}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-amber-50 text-amber-700 text-sm">
+            <span>Em andamento</span>
+            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.emAndamento}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-blue-50 text-blue-700 text-sm">
+            <span>Concluídos</span>
+            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.concluidos}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-rose-50 text-rose-700 text-sm">
+            <span>Cancelados</span>
+            <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.cancelados}</strong>
+          </span>
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
