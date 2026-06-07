@@ -25,7 +25,6 @@ import {
   Palette,
   CalendarDays,
   Grid3x3,
-  ChevronLeft,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
@@ -151,11 +150,11 @@ export default function Qualificacoes() {
       : VALID_TABS.includes(rawStoredTab as (typeof VALID_TABS)[number])
         ? (rawStoredTab as (typeof VALID_TABS)[number])
         : 'historico';
-  // 'turmas' is kept as a valid plannedView state (for the Nova turma button flow) but is
-  // no longer a visible sub-tab. Stored 'turmas' preference migrates to 'calendario'.
+  // Legacy main tab "turmas" maps to Planejadas > Turmas. Turmas is a visible
+  // management sub-tab again, so stored plannedView="turmas" must be preserved.
   const migratedPlannedView: (typeof VALID_PLANNED_VIEWS)[number] =
-    rawStoredView === 'turmas' || rawStoredTab === 'turmas'
-      ? 'calendario'
+    rawStoredTab === 'turmas'
+      ? 'turmas'
       : VALID_PLANNED_VIEWS.includes(rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
         ? (rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
         : 'lista';
@@ -295,6 +294,7 @@ export default function Qualificacoes() {
   const treinamentosPlanejadosConvocacaoQuery = useTreinamentosPlanejados({
     status: 'PLANEJADO',
   });
+  const plannedItemsCount = treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0;
   const previewConvocacaoPlanejada = usePreviewConvocacaoTreinamento();
   const enviarConvocacaoPlanejada = useEnviarConvocacaoTreinamento();
   const reenviarConvocacaoPlanejada = useReenviarConvocacaoTreinamento();
@@ -3285,33 +3285,24 @@ export default function Qualificacoes() {
               {/* Tags de resumo globais — sempre vindas da API, nunca da página local */}
               <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100">
                 <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700">
-                  Total <strong>{globalPlanejadas}</strong>
+                  Total <strong>{Math.max(globalPlanejadas, plannedItemsCount)}</strong>
                 </span>
-                {historicoPlanejadoRelacionado.length > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-purple-50 text-purple-700">
-                    Qualificações <strong>{historicoPlanejadoRelacionado.length}</strong>
-                  </span>
-                )}
-                {(treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0) > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-blue-50 text-blue-700">
-                    Turmas <strong>{treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0}</strong>
-                  </span>
-                )}
               </div>
 
-              {/* Sub-tabs visíveis: Lista | Calendário — Turmas oculta (acessível via botão Nova turma) */}
+              {/* Sub-tabs visíveis: Lista | Calendário | Turmas */}
               <div className="flex items-center gap-1 border-b border-slate-100 px-4 pt-2 pb-0">
-                {(['lista', 'calendario'] as const).map((view) => {
+                {(['lista', 'calendario', 'turmas'] as const).map((view) => {
                   const labels: Record<string, string> = {
                     lista: 'Lista',
                     calendario: 'Calendário',
+                    turmas: 'Turmas',
                   };
                   return (
                     <button
                       key={view}
                       onClick={() => setPlannedView(view)}
                       className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                        (plannedView === view || (view === 'calendario' && plannedView === 'turmas'))
+                        plannedView === view
                           ? 'border-blue-600 text-blue-600'
                           : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                       }`}
@@ -3322,148 +3313,58 @@ export default function Qualificacoes() {
                 })}
               </div>
 
-              {/* Lista: qualificações planejadas do histórico + treinamentos planejados */}
+              {/* Lista: dataset consolidado vindo de /api/treinamentos/planejados */}
               {plannedView === 'lista' && (
-                <>
-                  {/* Qualificações com status PLANEJADA vindas do historico */}
-                  {historicoPlanejadoRelacionado.length > 0 && (
-                    <div className="px-4 py-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                        Qualificações planejadas
-                      </p>
-                      <div className="rounded-lg border border-slate-200 overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead className="bg-slate-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Tripulante</th>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Qualificação</th>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Data prevista</th>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 bg-white">
-                            {historicoPlanejadoRelacionado.map((item) => (
-                              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-3 py-2 font-medium text-slate-800">{item.funcionario_nome}</td>
-                                <td className="px-3 py-2 text-slate-600">
-                                  {item.qualificacao_nome || item.qualificacao_codigo || '—'}
-                                </td>
-                                <td className="px-3 py-2 text-slate-600">
-                                  {item.data_conclusao
-                                    ? new Date(item.data_conclusao + 'T00:00:00').toLocaleDateString('pt-BR')
-                                    : '—'}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-purple-50 text-purple-700">
-                                    Planejada
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Treinamentos planejados via TreinamentosPlanejadosPage */}
-                  {(treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0) > 0 && (
-                    <Suspense
-                      fallback={
-                        <div className="flex items-center justify-center py-20">
-                          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                        </div>
-                      }
-                    >
-                      <TreinamentosPlanejadosPage asTab={true} forcedTab="quadro" hideTabNav={true} />
-                    </Suspense>
-                  )}
-
-                  {/* Nenhuma fonte com dados */}
-                  {historicoPlanejadoRelacionado.length === 0 &&
-                    (treinamentosPlanejadosConvocacaoQuery.data?.items?.length ?? 0) === 0 &&
-                    !treinamentosPlanejadosConvocacaoQuery.isLoading && (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <p className="text-slate-500 text-sm">Nenhum treinamento planejado.</p>
-                      <p className="text-slate-400 text-xs mt-1">
-                        Use <strong>Nova turma</strong> para criar um planejamento.
-                      </p>
-                    </div>
-                  )}
-
-                  {treinamentosPlanejadosConvocacaoQuery.isLoading && historicoPlanejadoRelacionado.length === 0 && (
+                <Suspense
+                  fallback={
                     <div className="flex items-center justify-center py-20">
                       <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     </div>
-                  )}
-                </>
+                  }
+                >
+                  <TreinamentosPlanejadosPage
+                    asTab={true}
+                    forcedTab="quadro"
+                    hideActions={true}
+                    hideTabNav={true}
+                  />
+                </Suspense>
               )}
 
-              {/* Calendário: qualificações planejadas do histórico + treinamentos planejados */}
+              {/* Calendário: mesmo dataset consolidado da lista */}
               {plannedView === 'calendario' && (
-                <>
-                  {historicoPlanejadoRelacionado.length > 0 && (
-                    <div className="px-4 py-3 border-b border-slate-100">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                        Qualificações planejadas
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {historicoPlanejadoRelacionado.map((item) => (
-                          <span
-                            key={item.id}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700"
-                          >
-                            <CalendarDays size={12} />
-                            {item.data_conclusao
-                              ? new Date(item.data_conclusao + 'T00:00:00').toLocaleDateString('pt-BR')
-                              : '—'}
-                            {' — '}
-                            {item.funcionario_nome || '—'}
-                            {' — '}
-                            {item.qualificacao_nome || item.qualificacao_codigo || '—'}
-                          </span>
-                        ))}
-                      </div>
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center py-20">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     </div>
-                  )}
-                  <Suspense
-                    fallback={
-                      <div className="flex items-center justify-center py-20">
-                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      </div>
-                    }
-                  >
-                    <TreinamentosPlanejadosPage
-                      asTab={true}
-                      forcedTab="calendario"
-                      hideTabNav={true}
-                    />
-                  </Suspense>
-                </>
+                  }
+                >
+                  <TreinamentosPlanejadosPage
+                    asTab={true}
+                    forcedTab="calendario"
+                    hideActions={true}
+                    hideTabNav={true}
+                  />
+                </Suspense>
               )}
 
-              {/* Turmas: nova turma via TreinamentosPlanejadosPage — botão voltar para Calendário */}
+              {/* Turmas: gestão cadastral real, filtrada por TURMA, sem duplicar Calendário */}
               {plannedView === 'turmas' && (
-                <>
-                  <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100">
-                    <button
-                      onClick={() => setPlannedView('calendario')}
-                      className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                      <span>Voltar ao Calendário</span>
-                    </button>
-                  </div>
-                  <Suspense
-                    fallback={
-                      <div className="flex items-center justify-center py-20">
-                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      </div>
-                    }
-                  >
-                    <TreinamentosPlanejadosPage asTab={true} sourceFilter="TURMA" />
-                  </Suspense>
-                </>
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center py-20">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    </div>
+                  }
+                >
+                  <TreinamentosPlanejadosPage
+                    asTab={true}
+                    forcedTab="quadro"
+                    hideTabNav={true}
+                    sourceFilter="TURMA"
+                  />
+                </Suspense>
               )}
             </div>
           )}

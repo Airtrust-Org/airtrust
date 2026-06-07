@@ -4,17 +4,28 @@
  * These tests verify the configuration constants and pure logic that drive the
  * Planejadas section without mounting React.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const qualificacoesSource = readFileSync(resolve(currentDir, '../Qualificacoes.tsx'), 'utf8');
+const treinamentosSource = readFileSync(
+  resolve(currentDir, '../TreinamentosPlanejadosPage.tsx'),
+  'utf8',
+);
 
 // ─── Mirror the constants from Qualificacoes.tsx ────────────────────────────
 
 const VALID_TABS = ['historico', 'planejados', 'tipos', 'categorias'] as const;
 const VALID_PLANNED_VIEWS = ['lista', 'calendario', 'turmas'] as const;
 
-/** Sub-tabs that are visible in the UI (Turmas is hidden — only reachable via "Nova turma" button). */
+/** Sub-tabs visible in the Planejadas UI. */
 const VISIBLE_PLANNED_SUBVIEWS: ReadonlyArray<(typeof VALID_PLANNED_VIEWS)[number]> = [
   'lista',
   'calendario',
+  'turmas',
 ];
 
 type ActiveTab = (typeof VALID_TABS)[number];
@@ -27,7 +38,7 @@ interface StoredPrefs {
 
 /**
  * Mirrors the migratedPlannedView logic in Qualificacoes.tsx.
- * 'turmas' stored preference → migrates to 'calendario' since the Turmas sub-tab is now hidden.
+ * 'turmas' stored preference is preserved because Turmas is a visible management sub-tab.
  */
 function migratePrefs(prefs: StoredPrefs): { activeTab: ActiveTab; plannedView: PlannedView } {
   const rawTab = prefs.activeTab;
@@ -40,10 +51,9 @@ function migratePrefs(prefs: StoredPrefs): { activeTab: ActiveTab; plannedView: 
         ? (rawTab as ActiveTab)
         : 'historico';
 
-  // 'turmas' pref now migrates to 'calendario' (Turmas hidden, user lands on Calendário)
   const migratedView: PlannedView =
-    rawView === 'turmas' || rawTab === 'turmas'
-      ? 'calendario'
+    rawTab === 'turmas'
+      ? 'turmas'
       : VALID_PLANNED_VIEWS.includes(rawView as PlannedView)
         ? (rawView as PlannedView)
         : 'lista';
@@ -96,16 +106,17 @@ describe('Qualificacoes — Planejadas tab', () => {
     expect(TAB_LABELS['planejados']).toBe('Planejadas');
   });
 
-  it('planejadas_mostra_lista_e_calendario — visible sub-tabs are exactly Lista and Calendário', () => {
-    expect(VISIBLE_PLANNED_SUBVIEWS).toHaveLength(2);
+  it('planejadas_mostra_lista_calendario_e_turmas — visible sub-tabs are exactly Lista, Calendário and Turmas', () => {
+    expect(VISIBLE_PLANNED_SUBVIEWS).toHaveLength(3);
     expect(VISIBLE_PLANNED_SUBVIEWS).toContain('lista');
     expect(VISIBLE_PLANNED_SUBVIEWS).toContain('calendario');
+    expect(VISIBLE_PLANNED_SUBVIEWS).toContain('turmas');
   });
 
-  it('planejadas_nao_mostra_subaba_turmas — Turmas is NOT in visible sub-tabs', () => {
-    expect(VISIBLE_PLANNED_SUBVIEWS).not.toContain('turmas');
-    // Turmas is still a valid state (reachable via Nova turma button) but not a rendered tab
+  it('planejadas_mostra_subaba_turmas — Turmas is a rendered management sub-tab', () => {
+    expect(VISIBLE_PLANNED_SUBVIEWS).toContain('turmas');
     expect(VALID_PLANNED_VIEWS).toContain('turmas');
+    expect(PLANNED_SUBVIEW_LABELS.turmas).toBe('Turmas');
   });
 
   it('planejadas_calendario_tem_botao_nova_turma — action button label is "Nova turma"', () => {
@@ -113,24 +124,40 @@ describe('Qualificacoes — Planejadas tab', () => {
     // The outer action buttons (incl. Nova turma) are shown on lista and calendario views
     expect(shouldShowOuterButtons('lista')).toBe(true);
     expect(shouldShowOuterButtons('calendario')).toBe(true);
-    // They are hidden when Turmas view is active (form is inline)
+    // The outer button is hidden in Turmas because the embedded management table owns the action.
     expect(shouldShowOuterButtons('turmas')).toBe(false);
   });
 
-  it('planejadas_lista_e_calendario_usam_mesmo_dataset — both views share historicoPlanejadoRelacionado + treinamentosPlanejados', () => {
-    // Both views read from: historicoPlanejadoRelacionado (PLANEJADA status) and
-    // treinamentosPlanejadosConvocacaoQuery (TURMA + SIMULADOR + QUALIFICACAO_PLANEJADA sources).
-    // Structural assertion: historicoPlanejadoRelacionado must use clean filters (no Histórico tab inheritance).
-    const historicParams = {
-      search: '',
-      aeronaveId: undefined as undefined,
-      categoriaId: undefined as undefined,
-      statuses: ['PLANEJADA'],
-    };
-    expect(historicParams.search).toBe('');
-    expect(historicParams.aeronaveId).toBeUndefined();
-    expect(historicParams.categoriaId).toBeUndefined();
-    expect(historicParams.statuses).toContain('PLANEJADA');
+  it('planejadas_lista_e_calendario_usam_mesmo_dataset — both views embed TreinamentosPlanejadosPage with hideActions', () => {
+    expect(qualificacoesSource).toContain('forcedTab="quadro"');
+    expect(qualificacoesSource).toContain('forcedTab="calendario"');
+    expect(qualificacoesSource).toContain('hideActions={true}');
+  });
+
+  it('planejadas_turmas_e_gestao_real — Turmas filters source=TURMA and does not duplicate calendar', () => {
+    expect(qualificacoesSource).toContain("(['lista', 'calendario', 'turmas'] as const)");
+    expect(qualificacoesSource).toContain('sourceFilter="TURMA"');
+    expect(qualificacoesSource).toContain('forcedTab="quadro"');
+    expect(qualificacoesSource).toContain('hideTabNav={true}');
+    expect(qualificacoesSource).not.toContain('Voltar ao Calendário');
+  });
+
+  it('calendario_nao_renderiza_pills_fora_do_grid — planned qualifications no longer render as standalone chips above the calendar', () => {
+    expect(qualificacoesSource).not.toContain('Qualificações planejadas');
+    expect(qualificacoesSource).not.toContain("historicoPlanejadoRelacionado.map((item) => (");
+  });
+
+  it('botao_novo_treinamento_nao_aparece_duplicado — embedded calendar/list hide inner actions while turma view uses Nova turma', () => {
+    expect(treinamentosSource).toContain('hideActions?: boolean;');
+    expect(treinamentosSource).toContain("const primaryActionLabel = sourceFilter === 'TURMA' ? 'Nova turma' : 'Novo treinamento';");
+    expect(treinamentosSource).toContain('!hideActions ? <div className="flex justify-end pb-2">{actionButtons}</div> : null');
+  });
+
+  it('planejadas_lista_renderiza_tabela_operacional — Lista uses compact table instead of cards', () => {
+    expect(treinamentosSource).toContain('data-testid="treinamentos-planejados-table"');
+    expect(treinamentosSource).toContain('Treinamento / Qualificação');
+    expect(treinamentosSource).toContain('Equipamento / Local');
+    expect(treinamentosSource).toContain('data-testid={`treinamento-planejado-row-${item.id}`}');
   });
 });
 
@@ -152,6 +179,12 @@ describe('Qualificacoes — Antônio SK76 FFS on June 25', () => {
     expect(date.getMonth()).toBe(5); // June (0-indexed)
     expect(date.getDate()).toBe(25);
     expect(date.toLocaleDateString('pt-BR')).toBe('25/06/2026');
+  });
+
+  it('planejada_antonio_25_06_renderiza_dentro_do_dia_25 — simulator-linked qualification title includes participant name and qualification', () => {
+    expect(treinamentosSource).toContain("if (item.source === 'SIMULADOR' && qualificationLabel && linkedParticipantNames.length > 0)");
+    expect(treinamentosSource).toContain('return `${leadName}${extraCount > 0 ? ` +${extraCount}` : \'\'} — ${qualificationLabel}`;');
+    expect(treinamentosSource).toContain('getEventoLinkedSessionLabel(evento)');
   });
 
   it('historico_planejado_tem_campos_necessarios — item has all fields needed for calendar pill display', () => {
@@ -207,6 +240,20 @@ describe('Qualificacoes — Simulator sessions June 2026', () => {
     expect(visible.every((s) => normalizeStatus(s.status) === 'PLANEJADO')).toBe(true);
   });
 
+  it('simuladores_junho_renderizam_dentro_dos_dias_corretos — calendar cards show participant summary inside the day cell', () => {
+    expect(treinamentosSource).toContain('getEventoParticipantSummary(evento)');
+    expect(treinamentosSource).toContain('Sem treinamentos planejados');
+  });
+
+  it('click_simulador_abre_modal_existente — SIMULADOR uses ModalNovaSessao hydrated by sessao_id', () => {
+    expect(treinamentosSource).toContain("import ModalNovaSessao from '@/react-app/components/modals/ModalNovaSessao';");
+    expect(treinamentosSource).toContain('function getSimulatorSessionId(item: TreinamentoPlanejado): number | null');
+    expect(treinamentosSource).toContain('function mapTreinamentoToSessaoSimulador');
+    expect(treinamentosSource).toContain("if (treinamento.source === 'SIMULADOR')");
+    expect(treinamentosSource).toContain('setModalSessaoSimuladorAberto(true)');
+    expect(treinamentosSource).toContain('simulador-editar-sessao-${simulatorSessionId}');
+  });
+
   it('sessao_cancelada_nao_aparece — CANCELADO sessions are excluded from upcoming list', () => {
     // The upcoming list in TreinamentosPlanejadosPage filters out CANCELADO items
     // (line: .filter((item) => item.data_prevista >= today && item.status !== 'CANCELADO'))
@@ -241,15 +288,15 @@ describe('Qualificacoes — Planejadas resilience', () => {
     expect(successfulItems).toHaveLength(3);
   });
 
-  it('preferencia_antiga_turmas_nao_deixa_tela_branca — stored plannedView="turmas" migrates to "calendario"', () => {
+  it('preferencia_turmas_preservada — stored plannedView="turmas" stays on Turmas', () => {
     const { plannedView } = migratePrefs({ activeTab: 'planejados', plannedView: 'turmas' });
-    expect(plannedView).toBe('calendario');
+    expect(plannedView).toBe('turmas');
   });
 
-  it('preferencia_tab_turmas_nao_deixa_tela_branca — stored activeTab="turmas" (legacy) migrates to planejados+calendario', () => {
+  it('preferencia_tab_turmas_nao_deixa_tela_branca — stored activeTab="turmas" legacy migrates to planejados+turmas', () => {
     const { activeTab, plannedView } = migratePrefs({ activeTab: 'turmas' });
     expect(activeTab).toBe('planejados');
-    expect(plannedView).toBe('calendario');
+    expect(plannedView).toBe('turmas');
   });
 
   it('preferencia_invalida_cai_em_lista — unknown plannedView falls back to lista', () => {
