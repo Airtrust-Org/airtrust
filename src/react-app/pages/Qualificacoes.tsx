@@ -25,6 +25,7 @@ import {
   Palette,
   CalendarDays,
   Grid3x3,
+  ChevronLeft,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
@@ -150,9 +151,11 @@ export default function Qualificacoes() {
       : VALID_TABS.includes(rawStoredTab as (typeof VALID_TABS)[number])
         ? (rawStoredTab as (typeof VALID_TABS)[number])
         : 'historico';
+  // 'turmas' is kept as a valid plannedView state (for the Nova turma button flow) but is
+  // no longer a visible sub-tab. Stored 'turmas' preference migrates to 'calendario'.
   const migratedPlannedView: (typeof VALID_PLANNED_VIEWS)[number] =
-    rawStoredTab === 'turmas'
-      ? 'turmas'
+    rawStoredView === 'turmas' || rawStoredTab === 'turmas'
+      ? 'calendario'
       : VALID_PLANNED_VIEWS.includes(rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
         ? (rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
         : 'lista';
@@ -274,16 +277,18 @@ export default function Qualificacoes() {
     highlightedHistoricoId || undefined,
   );
 
+  // Planejadas query: uses clean params — must NOT inherit Histórico tab filters
+  // (search, aeronave, categoria) to avoid items disappearing when those filters are active.
   const { historico: historicoPlanejadoRelacionado } = useQualificacoesHistorico(
     undefined,
     500,
     1,
     false,
-    debouncedSearch,
-    sortConfig.column || 'data_vencimento',
-    (sortConfig.direction?.toUpperCase() as 'ASC' | 'DESC') || 'ASC',
-    aeronaveFilter,
-    categoriaFilter,
+    '',
+    'data_conclusao',
+    'ASC',
+    undefined,
+    undefined,
     ['PLANEJADA'],
   );
 
@@ -2529,7 +2534,7 @@ export default function Qualificacoes() {
                     className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Novo treinamento</span>
+                    <span>Nova turma</span>
                   </button>
                 </div>
               )}
@@ -3294,20 +3299,19 @@ export default function Qualificacoes() {
                 )}
               </div>
 
-              {/* Sub-tabs: Lista | Calendário | Turmas — sempre visíveis */}
+              {/* Sub-tabs visíveis: Lista | Calendário — Turmas oculta (acessível via botão Nova turma) */}
               <div className="flex items-center gap-1 border-b border-slate-100 px-4 pt-2 pb-0">
-                {(['lista', 'calendario', 'turmas'] as const).map((view) => {
+                {(['lista', 'calendario'] as const).map((view) => {
                   const labels: Record<string, string> = {
                     lista: 'Lista',
                     calendario: 'Calendário',
-                    turmas: 'Turmas',
                   };
                   return (
                     <button
                       key={view}
                       onClick={() => setPlannedView(view)}
                       className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                        plannedView === view
+                        (plannedView === view || (view === 'calendario' && plannedView === 'turmas'))
                           ? 'border-blue-600 text-blue-600'
                           : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                       }`}
@@ -3382,7 +3386,7 @@ export default function Qualificacoes() {
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                       <p className="text-slate-500 text-sm">Nenhum treinamento planejado.</p>
                       <p className="text-slate-400 text-xs mt-1">
-                        Use <strong>Novo treinamento</strong> para criar um planejamento.
+                        Use <strong>Nova turma</strong> para criar um planejamento.
                       </p>
                     </div>
                   )}
@@ -3438,17 +3442,28 @@ export default function Qualificacoes() {
                 </>
               )}
 
-              {/* Turmas: gestão multi-dia via TreinamentosPlanejadosPage */}
+              {/* Turmas: nova turma via TreinamentosPlanejadosPage — botão voltar para Calendário */}
               {plannedView === 'turmas' && (
-                <Suspense
-                  fallback={
-                    <div className="flex items-center justify-center py-20">
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                    </div>
-                  }
-                >
-                  <TreinamentosPlanejadosPage asTab={true} sourceFilter="TURMA" />
-                </Suspense>
+                <>
+                  <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100">
+                    <button
+                      onClick={() => setPlannedView('calendario')}
+                      className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Voltar ao Calendário</span>
+                    </button>
+                  </div>
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center py-20">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      </div>
+                    }
+                  >
+                    <TreinamentosPlanejadosPage asTab={true} sourceFilter="TURMA" />
+                  </Suspense>
+                </>
               )}
             </div>
           )}
