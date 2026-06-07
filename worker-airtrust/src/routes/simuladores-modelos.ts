@@ -349,6 +349,7 @@ app.get('/modelos-sessao', async (c) => {
 
     const col = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
     const columns = (col.results || []).map((r: any) => r.name);
+    const hasQualificacaoTipoId = columns.includes('qualificacao_tipo_id');
     const filtroModeloExpr = [
       columns.includes('modelo_aeronave') ? 'ms.modelo_aeronave' : null,
       columns.includes('codigo_aeronave') ? 'ms.codigo_aeronave' : null,
@@ -357,6 +358,43 @@ app.get('/modelos-sessao', async (c) => {
       .filter(Boolean)
       .join(', ');
     const modeloAeronaveExpr = filtroModeloExpr ? `COALESCE(${filtroModeloExpr}, '')` : "''";
+
+    // Also check qualificacoes_tipos for empresa_id column (may be missing in older schemas)
+    let hasQualificacoesEmpresaId = true;
+    try {
+      const qtCol = await c.env.DB.prepare('PRAGMA table_info(qualificacoes_tipos)').all();
+      hasQualificacoesEmpresaId = (qtCol.results || []).some(
+        (r: any) => String(r.name || '') === 'empresa_id',
+      );
+    } catch {
+      hasQualificacoesEmpresaId = false;
+    }
+
+    // Check tipos_sessao for empresa_id column
+    let hasTiposEmpresaId = true;
+    try {
+      const tsCol = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
+      hasTiposEmpresaId = (tsCol.results || []).some(
+        (r: any) => String(r.name || '') === 'empresa_id',
+      );
+    } catch {
+      hasTiposEmpresaId = false;
+    }
+
+    // Build JOIN conditions based on column availability
+    const tiposJoinOn = hasTiposEmpresaId
+      ? 'ms.tipo_sessao_id = ts.id AND ts.empresa_id = ?'
+      : 'ms.tipo_sessao_id = ts.id';
+    const qualificacaoJoin = hasQualificacaoTipoId
+      ? `LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id${hasQualificacoesEmpresaId ? ' AND qt.empresa_id = ?' : ''}`
+      : '';
+    const qualificacaoSelect = hasQualificacaoTipoId
+      ? `,
+        qt.nome as qualificacao_tipo_nome,
+        qt.codigo as qualificacao_tipo_codigo`
+      : `,
+        NULL as qualificacao_tipo_nome,
+        NULL as qualificacao_tipo_codigo`;
 
     const tipo_sessao_id = c.req.query('tipo_sessao_id');
     const tipoSessaoCodigo = String(
@@ -376,18 +414,22 @@ app.get('/modelos-sessao', async (c) => {
       SELECT
         ms.*,
         ts.nome as tipo_sessao_nome,
-        ts.codigo as tipo_sessao_codigo,
-        qt.nome as qualificacao_tipo_nome,
-        qt.codigo as qualificacao_tipo_codigo,
+        ts.codigo as tipo_sessao_codigo${qualificacaoSelect},
         (SELECT COUNT(*) FROM modelos_sessao_manobras
          WHERE modelo_id = ms.id AND deleted_at IS NULL) as total_manobras
       FROM modelos_sessao ms
-      LEFT JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id AND ts.empresa_id = ?
-      LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id AND qt.empresa_id = ?
+      LEFT JOIN tipos_sessao ts ON ${tiposJoinOn}
+      ${qualificacaoJoin}
       WHERE ms.deleted_at IS NULL
         AND ms.empresa_id = ?
     `;
-    const params: any[] = [empresaId, empresaId, empresaId];
+    const params: any[] = [];
+    // ts.empresa_id param (only if tipos_sessao has the column)
+    if (hasTiposEmpresaId) params.push(empresaId);
+    // qt.empresa_id param (only if qualificacoes_tipos has the column)
+    if (hasQualificacaoTipoId && hasQualificacoesEmpresaId) params.push(empresaId);
+    // ms.empresa_id (always present per query WHERE)
+    params.push(empresaId);
 
     if (tipo_sessao_id || tipoSessaoCodigo || tipoSessaoNome) {
       const tipoClauses: string[] = [];
@@ -436,8 +478,8 @@ app.get('/modelos-sessao', async (c) => {
       .all();
     return c.json({ success: true, data: result.results });
   } catch (e: any) {
-    console.error('❌ [MODELOS] Erro GET:', e.message);
-    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
+    console.error('❌ [MODELOS] Erro GET:', e.message, e.cause);
+    return c.json({ success: false, error: 'Erro interno do servidor', debug: e.message }, 500);
   }
 });
 
