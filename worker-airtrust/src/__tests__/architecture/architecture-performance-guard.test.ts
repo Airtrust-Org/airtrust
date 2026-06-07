@@ -12,9 +12,8 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/escalas-alocacoes.ts': 2268,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,
-  // Acknowledged growth (stabilization 2026-06-06): consolidated planned
-  // training sources and route-level contract compatibility.
-  'routes/treinamentos-planejados.ts': 2911,
+  // Acknowledged growth (2026-06-07): schema guards + per-source error handling + calendar multi-day.
+  'routes/treinamentos-planejados.ts': 3050,
 } as const;
 
 const SQL_PREPARE_CAPS = {
@@ -24,7 +23,8 @@ const SQL_PREPARE_CAPS = {
   'routes/simuladores-sessoes-update.ts': 48,
   'routes/lms-cursos.ts': 44,
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
-  'routes/treinamentos-planejados.ts': 45,
+  // +10 prepare calls for schema introspection guards (migration-0390 compatibility).
+  'routes/treinamentos-planejados.ts': 56,
 } as const;
 
 const HIGH_SQL_LIMIT_CAPS = {

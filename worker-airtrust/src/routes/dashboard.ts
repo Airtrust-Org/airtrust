@@ -14,10 +14,43 @@ import {
   getTodayIsoSaoPaulo,
   getQualificacoesVencimentoExpr,
 } from '../utils/qualificacoes-alerta-config';
+import {
+  CANCELLED_STATUS_VALUES,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  sqlStatusEqualsAny,
+} from '../lib/status/status-codes';
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', auth());
+
+const QUALIFICATION_STATUS_EXPR = "UPPER(COALESCE(qh.status, ''))";
+const RENEWED_STATUS_VALUES = ['RENOVADA', 'RENOVADO'] as const;
+
+function buildDashboardRenewalSqlPredicates() {
+  // renovacao_de column may not exist in older schemas — we consider only renovada flag + status
+  const renewedQualificationPredicate = `(COALESCE(qh.renovada, 0) = 1 OR ${sqlStatusEqualsAny(
+    QUALIFICATION_STATUS_EXPR,
+    RENEWED_STATUS_VALUES,
+  )})`;
+  const activeRenewedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${sqlStatusEqualsAny(
+    QUALIFICATION_STATUS_EXPR,
+    CANCELLED_STATUS_VALUES,
+  )}) AND ${renewedQualificationPredicate})`;
+  return {
+    renewedQualificationPredicate,
+    activeRenewedQualificationPredicate,
+  };
+}
+
+async function hasDashboardRenovacaoDeColumn(db: D1Database): Promise<boolean> {
+  try {
+    const { results } = await db.prepare('PRAGMA table_info(qualificacoes_historico)').all();
+    return (results || []).some((column: any) => column?.name === 'renovacao_de');
+  } catch {
+    return false;
+  }
+}
 
 /**
  * GET /api/dashboard/qualificacoes
@@ -30,37 +63,52 @@ app.get('/qualificacoes', async (c) => {
     const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
+    const hasRenovacaoDe = await hasDashboardRenovacaoDeColumn(db);
+    const {
+      renewedQualificationPredicate,
+      activeRenewedQualificationPredicate,
+    } = buildDashboardRenewalSqlPredicates();
+
+    // If renovacao_de column exists, extend the predicate
+    const effectiveRenewedPredicate = hasRenovacaoDe
+      ? `(${renewedQualificationPredicate} OR qh.renovacao_de IS NOT NULL)`
+      : renewedQualificationPredicate;
+    const effectiveActiveRenewedPredicate = hasRenovacaoDe
+      ? `(qh.deleted_at IS NULL AND NOT (${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, CANCELLED_STATUS_VALUES)}) AND (${renewedQualificationPredicate} OR qh.renovacao_de IS NOT NULL))`
+      : activeRenewedQualificationPredicate;
+
+    const effectiveActivePlannedPredicate = `(qh.deleted_at IS NULL AND NOT (${effectiveRenewedPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, PLANNED_QUALIFICATION_STATUS_VALUES)}))`;
 
     // ✅ QUERY UNIFICADA - Cálculo DINÂMICO de data_vencimento
     // Usa julianday() para cálculo de datas e JOIN com funcionarios para filtrar ativos
     const statsResult = await db
       .prepare(
-        `SELECT 
+        `SELECT
           COUNT(*) as total,
-          SUM(CASE 
-            WHEN qh.renovada = 1 THEN 0
+          SUM(CASE
+            WHEN ${effectiveRenewedPredicate} THEN 0
             WHEN ${vencimentoExpr} IS NULL THEN 0
-            WHEN date(${vencimentoExpr}) > date(?, '+' || ? || ' days') THEN 1 
-            ELSE 0 
+            WHEN date(${vencimentoExpr}) > date(?, '+' || ? || ' days') THEN 1
+            ELSE 0
           END) as validas,
-          SUM(CASE 
-            WHEN qh.renovada = 1 THEN 0
+          SUM(CASE
+            WHEN ${effectiveRenewedPredicate} THEN 0
             WHEN ${vencimentoExpr} IS NULL THEN 0
             WHEN date(${vencimentoExpr}) >= date(?)
-             AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days') THEN 1 
-            ELSE 0 
+             AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days') THEN 1
+            ELSE 0
           END) as vencendo,
-          SUM(CASE 
-            WHEN qh.renovada = 1 THEN 0
+          SUM(CASE
+            WHEN ${effectiveRenewedPredicate} THEN 0
             WHEN ${vencimentoExpr} IS NULL THEN 0
-            WHEN date(${vencimentoExpr}) < date(?) THEN 1 
-            ELSE 0 
+            WHEN date(${vencimentoExpr}) < date(?) THEN 1
+            ELSE 0
           END) as vencidas,
-          SUM(CASE WHEN qh.renovada = 1 THEN 1 ELSE 0 END) as renovadas,
-          SUM(CASE WHEN (qh.data_conclusao IS NULL OR qh.status = 'PLANEJADA') AND qh.deleted_at IS NULL AND qh.renovada = 0 THEN 1 ELSE 0 END) as planejadas
+          SUM(CASE WHEN ${effectiveActiveRenewedPredicate} THEN 1 ELSE 0 END) as renovadas,
+          SUM(CASE WHEN ${effectiveActivePlannedPredicate} THEN 1 ELSE 0 END) as planejadas
         FROM qualificacoes_historico qh
-        LEFT JOIN funcionarios f ON f.id = qh.funcionario_id 
-          AND f.deleted_at IS NULL 
+        LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+          AND f.deleted_at IS NULL
           AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
         LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
         WHERE qh.deleted_at IS NULL
@@ -88,15 +136,15 @@ app.get('/qualificacoes', async (c) => {
     const porCategoriaResult = await db
       .prepare(
         `
-        SELECT qt.categoria, COUNT(*) as total 
+        SELECT qt.categoria, COUNT(*) as total
         FROM qualificacoes_historico qh
         LEFT JOIN qualificacoes_tipos qt ON qh.qualificacao_id = qt.id AND qt.deleted_at IS NULL
-        LEFT JOIN funcionarios f ON f.id = qh.funcionario_id 
-          AND f.deleted_at IS NULL 
+        LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+          AND f.deleted_at IS NULL
           AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-        WHERE qh.deleted_at IS NULL 
+        WHERE qh.deleted_at IS NULL
           AND f.id IS NOT NULL
-          AND qh.renovada = 0
+          AND NOT (${effectiveRenewedPredicate})
           AND qh.data_conclusao IS NOT NULL
           AND f.empresa_id = ?
         GROUP BY qt.categoria

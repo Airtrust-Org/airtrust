@@ -1,0 +1,11 @@
+├ Checking if file needs uploading
+│
+├ 🌀 Uploading 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae.e97fdfd27894f50b.sql
+│ 🌀 Uploading complete.
+│
+
+{
+  "error": {
+    "text": "too many terms in compound SELECT: SQLITE_ERROR"
+  }
+}

@@ -1,0 +1,69 @@
+[
+  {
+    "results": [
+      {
+        "tbl": "support_access_grants",
+        "e1": null,
+        "e6": null,
+        "o": null,
+        "n": null,
+        "sd": 0,
+        "t": 0
+      },
+      {
+        "tbl": "support_access_sessions",
+        "e1": null,
+        "e6": null,
+        "o": null,
+        "n": null,
+        "sd": 0,
+        "t": 0
+      },
+      {
+        "tbl": "tipos_sessao",
+        "e1": 6,
+        "e6": 17,
+        "o": 0,
+        "n": 0,
+        "sd": 15,
+        "t": 23
+      },
+      {
+        "tbl": "treinamentos_convocacoes_email",
+        "e1": null,
+        "e6": null,
+        "o": null,
+        "n": null,
+        "sd": 0,
+        "t": 0
+      },
+      {
+        "tbl": "treinamentos_dias",
+        "e1": null,
+        "e6": null,
+        "o": null,
+        "n": null,
+        "sd": null,
+        "t": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.9871
+      },
+      "duration": 0.9871,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 78180352,
+      "rows_read": 27,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

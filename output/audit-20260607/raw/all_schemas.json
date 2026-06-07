@@ -1,0 +1,972 @@
+[
+  {
+    "results": [
+      {
+        "name": "_cf_KV",
+        "sql": "CREATE TABLE _cf_KV (\n        key TEXT PRIMARY KEY,\n        value BLOB\n      ) WITHOUT ROWID"
+      },
+      {
+        "name": "d1_migrations",
+        "sql": "CREATE TABLE d1_migrations(\n\t\tid         INTEGER PRIMARY KEY AUTOINCREMENT,\n\t\tname       TEXT UNIQUE,\n\t\tapplied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL\n)"
+      },
+      {
+        "name": "sqlite_sequence",
+        "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+      },
+      {
+        "name": "funcoes",
+        "sql": "CREATE TABLE funcoes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT UNIQUE NOT NULL,\n  nome TEXT NOT NULL,\n  descricao TEXT,\n  categoria TEXT,\n  ativo INTEGER DEFAULT 1,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n, empresa_id INTEGER DEFAULT 1)"
+      },
+      {
+        "name": "setores",
+        "sql": "CREATE TABLE setores (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT UNIQUE NOT NULL,\n  nome TEXT NOT NULL,\n  descricao TEXT,\n  responsavel TEXT,\n  ativo INTEGER DEFAULT 1,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n, empresa_id INTEGER DEFAULT 1)"
+      },
+      {
+        "name": "aeronaves",
+        "sql": "CREATE TABLE aeronaves (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT UNIQUE NOT NULL,\n  modelo TEXT NOT NULL,\n  fabricante TEXT,\n  prefixo TEXT,\n  ano_fabricacao INTEGER,\n  status TEXT DEFAULT 'ATIVO',\n  observacoes TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n, empresa_id INTEGER DEFAULT 1)"
+      },
+      {
+        "name": "backups",
+        "sql": "CREATE TABLE backups (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  nome_arquivo TEXT NOT NULL,\n  tamanho INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n, filename TEXT DEFAULT '', size_bytes INTEGER DEFAULT 0, backup_type TEXT DEFAULT 'MANUAL', label TEXT DEFAULT '', storage_path TEXT DEFAULT '')"
+      },
+      {
+        "name": "simuladores",
+        "sql": "CREATE TABLE simuladores (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  nome TEXT NOT NULL,\n  modelo TEXT NOT NULL,\n  tipo TEXT NOT NULL,\n  fabricante TEXT,\n  localizacao TEXT,\n  capacidade INTEGER DEFAULT 1,\n  status TEXT CHECK(status IN ('ATIVO', 'MANUTENCAO', 'INATIVO')) DEFAULT 'ATIVO',\n  observacoes TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n, codigo_aeronave TEXT, aeronave_codigo TEXT)"
+      },
+      {
+        "name": "treinamentos",
+        "sql": "CREATE TABLE treinamentos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT UNIQUE NOT NULL,\n  nome TEXT NOT NULL,\n  categoria TEXT NOT NULL,\n  descricao TEXT,\n  periodicidade INTEGER,\n  carga_horaria INTEGER,\n  instrutor TEXT,\n  ativo INTEGER DEFAULT 1,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n, total_sessoes INTEGER DEFAULT 1, instrutor_responsavel TEXT, certificacao_relacionada TEXT, status TEXT DEFAULT 'ATIVO', categoria_id INTEGER REFERENCES \"qualificacoes_categorias\"(id), periodicidade_meses INTEGER)"
+      },
+      {
+        "name": "auditoria",
+        "sql": "CREATE TABLE auditoria (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  usuario_id TEXT,\n  usuario_nome TEXT,\n  acao TEXT NOT NULL,\n  tabela_afetada TEXT NOT NULL,\n  registro_id TEXT,\n  dados_antes TEXT,\n  dados_depois TEXT,\n  ip_address TEXT,\n  user_agent TEXT,\n  created_at TEXT DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "certificado_anexos",
+        "sql": "CREATE TABLE certificado_anexos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  certificado_id INTEGER NOT NULL,\n  nome_arquivo TEXT NOT NULL,\n  tipo_arquivo TEXT,\n  tamanho INTEGER,\n  url TEXT NOT NULL,\n  uploaded_at TEXT DEFAULT (datetime('now')),\n  uploaded_by TEXT,\n  FOREIGN KEY (certificado_id) REFERENCES certificados(id)\n)"
+      },
+      {
+        "name": "user_permissions",
+        "sql": "CREATE TABLE user_permissions (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  usuario_id TEXT NOT NULL,\n  permissao TEXT NOT NULL,\n  recurso TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  FOREIGN KEY (usuario_id) REFERENCES usuarios(id),\n  UNIQUE(usuario_id, permissao, recurso)\n)"
+      },
+      {
+        "name": "user_profiles",
+        "sql": "CREATE TABLE user_profiles (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  usuario_id TEXT UNIQUE NOT NULL,\n  avatar_url TEXT,\n  telefone TEXT,\n  departamento TEXT,\n  cargo TEXT,\n  preferencias TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')), deleted_at TEXT DEFAULT NULL,\n  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)\n)"
+      },
+      {
+        "name": "fichas_sessao",
+        "sql": "CREATE TABLE fichas_sessao (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT UNIQUE NOT NULL,\n  agendamento_slot_id INTEGER,\n  colaborador_id_aluno INTEGER NOT NULL,\n  funcao_na_sessao TEXT DEFAULT 'PF', \n  template_id INTEGER,\n  \n  \n  instrutor_id INTEGER NOT NULL,\n  instrutor_codigo_anac TEXT,\n  \n  \n  carga_horaria_total DECIMAL(4,2) DEFAULT 2.0,\n  carga_horaria_pf DECIMAL(4,2),\n  carga_horaria_pm DECIMAL(4,2),\n  \n  \n  tempo_acumulado DECIMAL(5,2) DEFAULT 0,\n  \n  \n  status TEXT DEFAULT 'PENDENTE', \n  resultado_final TEXT DEFAULT 'PENDENTE',\n  nota_final REAL, \n  nota_minima REAL, \n  aprovado BOOLEAN DEFAULT 0,\n  \n  \n  aluno_nome_validado TEXT,\n  aluno_matricula_validado TEXT,\n  \n  \n  observacoes TEXT,\n  feedback_instrutor TEXT,\n  pontos_fortes TEXT,\n  pontos_melhoria TEXT,\n  \n  \n  assinado BOOLEAN DEFAULT 0,\n  data_assinatura DATETIME,\n  hash_assinatura TEXT,\n  \n  \n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  deleted_at DATETIME\n, observacoes_gerais TEXT, assinatura_instrutor_completa INTEGER DEFAULT 0, assinatura_aluno_completa INTEGER DEFAULT 0, data_conclusao TEXT, pdf_url TEXT, empresa_id INTEGER, assinatura_instrutor INTEGER DEFAULT 0, assinatura_instrutor_data DATETIME, assinatura_instrutor_usuario_id INTEGER, assinatura_tripulante INTEGER DEFAULT 0, assinatura_tripulante_data DATETIME, assinatura_tripulante_usuario_id INTEGER, tipo_sessao TEXT, tipo_aeronave TEXT, data_sessao TEXT, assinatura_aluno_ip TEXT, assinatura_aluno_timestamp TEXT, assinatura_instrutor_ip TEXT, assinatura_instrutor_timestamp TEXT, arquivado INTEGER DEFAULT 0, caminho_arquivo TEXT, data_arquivamento TEXT, assinatura_aluno_imagem TEXT, assinatura_instrutor_imagem TEXT)"
+      },
+      {
+        "name": "catalogo_treinamentos",
+        "sql": "CREATE TABLE catalogo_treinamentos (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    codigo TEXT UNIQUE NOT NULL,\n    nome TEXT NOT NULL,\n    descricao TEXT,\n    categoria TEXT, -- 'INICIAL', 'RECORRENTE', 'ESPECIAL'\n    carga_horaria INTEGER,\n    validade_meses INTEGER,\n    observacoes TEXT,\n    ativo BOOLEAN DEFAULT 1,\n    created_at TEXT DEFAULT (datetime('now')),\n    updated_at TEXT DEFAULT (datetime('now')),\n    deleted_at TEXT DEFAULT NULL\n, tipo TEXT DEFAULT 'TREINAMENTO')"
+      },
+      {
+        "name": "system_config",
+        "sql": "CREATE TABLE system_config (\n    key TEXT PRIMARY KEY,\n    value TEXT,\n    description TEXT,\n    updated_at TEXT DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "system_logs",
+        "sql": "CREATE TABLE system_logs (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    level TEXT NOT NULL, -- 'INFO', 'WARNING', 'ERROR', 'CRITICAL'\n    message TEXT NOT NULL,\n    details TEXT, -- JSON\n    timestamp TEXT DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "qualificacoes_categorias",
+        "sql": "CREATE TABLE \"qualificacoes_categorias\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  nome TEXT NOT NULL,\n  codigo TEXT NOT NULL UNIQUE,\n  descricao TEXT,\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME\n, cor TEXT DEFAULT '#6B7280', ativo INTEGER DEFAULT 1)"
+      },
+      {
+        "name": "modelos_sessao",
+        "sql": "CREATE TABLE \"modelos_sessao\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT NOT NULL UNIQUE,\n  nome TEXT NOT NULL,\n  tipo TEXT,\n  descricao TEXT,\n  duracao_estimada INTEGER,\n  treinamento_id TEXT,\n  ordem_no_treinamento INTEGER,\n  ativo BOOLEAN DEFAULT 1,\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME NULL\n, tipo_sessao_id INTEGER, tipo_aeronave TEXT, codigo_aeronave TEXT, gera_qualificacao BOOLEAN DEFAULT 0, empresa_id INTEGER DEFAULT 1, modelo_aeronave TEXT, qualificacao_tipo_id INTEGER NULL REFERENCES qualificacoes_tipos(id))"
+      },
+      {
+        "name": "audit_cascade",
+        "sql": "CREATE TABLE audit_cascade (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  modelo TEXT NOT NULL, \n  arquivo TEXT, \n  comando TEXT, \n  tempo_ms INTEGER, \n  sucesso INTEGER DEFAULT 1, \n  checksum TEXT, \n  erros INTEGER DEFAULT 0, \n  warnings INTEGER DEFAULT 0, \n  score REAL, \n  detalhes TEXT, \n  created_at TEXT DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "empresas",
+        "sql": "CREATE TABLE empresas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  nome TEXT NOT NULL UNIQUE,\n  razao_social TEXT,\n  cnpj TEXT UNIQUE,\n  logo_url TEXT,\n  logo_hash TEXT,\n  assinatura_diretor_url TEXT,\n  assinatura_diretor_hash TEXT,\n  assinatura_diretor_nome TEXT DEFAULT 'Diretor Geral',\n  telefone TEXT,\n  email TEXT,\n  endereco TEXT,\n  ativo INTEGER DEFAULT 1,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n, codigo TEXT, plano TEXT DEFAULT 'basic', max_funcionarios INTEGER DEFAULT 100, max_storage_mb INTEGER DEFAULT 1000, dominio TEXT)"
+      },
+      {
+        "name": "certificados",
+        "sql": "CREATE TABLE certificados (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  habilitacao_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  qualificacao_id INTEGER NOT NULL,\n  arquivo_url TEXT NOT NULL,\n  arquivo_nome TEXT NOT NULL,\n  arquivo_tamanho INTEGER,\n  arquivo_hash TEXT,\n  numero_certificado TEXT UNIQUE NOT NULL,\n  tipo TEXT DEFAULT 'upload',\n  data_emissao DATE,\n  data_vencimento DATE,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  deleted_at DATETIME\n)"
+      },
+      {
+        "name": "empresa_certificado_config",
+        "sql": "CREATE TABLE empresa_certificado_config (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  template_html TEXT NOT NULL DEFAULT '',\n  logo_r2_url TEXT,\n  logo_filename TEXT,\n  cor_primaria TEXT NOT NULL DEFAULT '#0066cc',\n  cor_secundaria TEXT NOT NULL DEFAULT '#333333',\n  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,\n  atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP\n, deleted_at TEXT DEFAULT NULL)"
+      },
+      {
+        "name": "empresa_config",
+        "sql": "CREATE TABLE empresa_config (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL UNIQUE,\n  \n  \n  nome TEXT NOT NULL,\n  logo_url TEXT,\n  \n  \n  template_certificado TEXT,\n  cor_primaria TEXT DEFAULT '#0066cc',\n  cor_secundaria TEXT DEFAULT '#333333',\n  \n  \n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  deleted_at DATETIME,\n  \n  \n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "schema_versions",
+        "sql": "CREATE TABLE schema_versions (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  version TEXT NOT NULL,\n  module TEXT NOT NULL,\n  description TEXT,\n  applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "name": "sqlite_stat1",
+        "sql": "CREATE TABLE sqlite_stat1(tbl,idx,stat)"
+      },
+      {
+        "name": "manobras_avaliacoes",
+        "sql": "CREATE TABLE \"manobras_avaliacoes\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT UNIQUE NOT NULL,\n  ficha_id INTEGER NOT NULL,\n  manobra_id INTEGER NOT NULL,\n  nota REAL DEFAULT 0,\n  observacoes TEXT,\n  feedback_instrutor TEXT,\n  executada INTEGER DEFAULT 0,\n  avaliador_id INTEGER,\n  \n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TIMESTAMP\n)"
+      },
+      {
+        "name": "sessoes_participantes",
+        "sql": "CREATE TABLE sessoes_participantes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT UNIQUE NOT NULL,\n  sessao_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  funcao TEXT, -- PF (Pilot Flying), PM (Pilot Monitoring), PIC, SIC, etc\n  status TEXT DEFAULT 'CONFIRMADO', -- CONFIRMADO, FALTOU, DISPENSADO\n  ciclo_executado INTEGER DEFAULT 1,\n  \n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TIMESTAMP\n)"
+      },
+      {
+        "name": "migracao_mapeamento_ids",
+        "sql": "CREATE TABLE migracao_mapeamento_ids (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  tabela TEXT NOT NULL,\n  id_v1 INTEGER NOT NULL,\n  id_v2 INTEGER NOT NULL,\n  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,\n  UNIQUE(tabela, id_v1)\n)"
+      },
+      {
+        "name": "papeis",
+        "sql": "CREATE TABLE papeis (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Dados básicos\n  nome TEXT NOT NULL UNIQUE,  -- PILOTO, INSTRUTOR, SUPERVISOR, RH_ADMIN, MECANICO\n  descricao TEXT,\n  \n  -- Permissões (JSON string)\n  -- Exemplo: '[{\"recurso\":\"qualificacoes\",\"acao\":\"criar\"},{\"recurso\":\"pessoas\",\"acao\":\"editar\"}]'\n  permissoes TEXT NOT NULL DEFAULT '[]',\n  \n  -- Status\n  ativo INTEGER NOT NULL DEFAULT 1,\n  \n  -- Auditoria\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "pessoas_papeis",
+        "sql": "CREATE TABLE pessoas_papeis (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Relações\n  pessoa_id INTEGER NOT NULL,\n  papel_id INTEGER NOT NULL,\n  \n  -- Vigência\n  data_inicio TEXT NOT NULL DEFAULT (datetime('now')),\n  data_fim TEXT,  -- NULL = ainda ativo\n  \n  -- Auditoria\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  \n  -- Constraints\n  FOREIGN KEY (pessoa_id) REFERENCES \"__backup_pessoas\"(id) ON DELETE CASCADE,\n  FOREIGN KEY (papel_id) REFERENCES papeis(id) ON DELETE CASCADE,\n  UNIQUE (pessoa_id, papel_id)\n)"
+      },
+      {
+        "name": "credenciais",
+        "sql": "CREATE TABLE credenciais (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Relação\n  pessoa_id INTEGER NOT NULL,\n  \n  -- Tipo de credencial\n  tipo TEXT NOT NULL,  -- CPF, CNH, RG, LICENSE_AVIADOR, PASSPORT, OTHER\n  \n  -- Dados da credencial\n  numero TEXT NOT NULL UNIQUE,\n  data_emissao TEXT,\n  data_validade TEXT,  -- NULL = sem vencimento\n  orgao_expedidor TEXT,\n  \n  -- Status\n  status TEXT NOT NULL DEFAULT 'ATIVO',  -- ATIVO, EXPIRADO, REVOGADO\n  \n  -- Auditoria\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  \n  -- Constraints\n  FOREIGN KEY (pessoa_id) REFERENCES \"__backup_pessoas\"(id) ON DELETE CASCADE,\n  CONSTRAINT check_tipo_valid CHECK (tipo IN ('CPF', 'CNH', 'RG', 'LICENSE_AVIADOR', 'PASSPORT', 'OTHER')),\n  CONSTRAINT check_status_valid CHECK (status IN ('ATIVO', 'EXPIRADO', 'REVOGADO'))\n)"
+      },
+      {
+        "name": "pessoas_auditoria_acessos",
+        "sql": "CREATE TABLE pessoas_auditoria_acessos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Dados do acesso\n  pessoa_id INTEGER NOT NULL,\n  usuario_id TEXT NOT NULL,  -- Quem acessou\n  acao TEXT NOT NULL,  -- 'VISUALIZAR', 'BUSCAR_CPF', 'EDITAR', 'DELETAR'\n  recurso TEXT NOT NULL,  -- 'pessoas', 'credenciais', etc.\n  dados_sensíveis TEXT,  -- JSON com campos acessados (ex: {\"cpf\": true, \"email\": true})\n  \n  -- Contexto\n  ip_origem TEXT,\n  user_agent TEXT,\n  motivo TEXT,  -- Opcional: justificativa do acesso\n  \n  -- Timestamp\n  acessado_em TEXT NOT NULL DEFAULT (datetime('now')),\n  \n  -- Constraints\n  FOREIGN KEY (pessoa_id) REFERENCES \"__backup_pessoas\"(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "name": "certificados_templates",
+        "sql": "CREATE TABLE certificados_templates (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  \n  -- Identificação\n  nome VARCHAR(100) NOT NULL,\n  descricao TEXT,\n  tipo VARCHAR(50) DEFAULT 'PADRAO', -- PADRAO, TREINAMENTO, CURSO, CUSTOM\n  \n  -- Layout (JSON com estrutura do template)\n  template_json TEXT NOT NULL,\n  \n  -- Assets (URLs no R2)\n  logo_url TEXT,\n  background_url TEXT,\n  assinatura_url TEXT, -- Assinatura digital do responsável\n  \n  -- Configurações de estilo\n  fonte VARCHAR(50) DEFAULT 'Arial',\n  tamanho_fonte_titulo INTEGER DEFAULT 24,\n  tamanho_fonte_corpo INTEGER DEFAULT 14,\n  cor_primaria VARCHAR(7) DEFAULT '#000000', -- Título\n  cor_secundaria VARCHAR(7) DEFAULT '#666666', -- Corpo\n  cor_destaque VARCHAR(7) DEFAULT '#0066CC', -- Nome pessoa\n  \n  -- Layout\n  orientacao VARCHAR(20) DEFAULT 'landscape', -- landscape, portrait\n  tamanho_papel VARCHAR(10) DEFAULT 'A4', -- A4, Letter\n  margem_cm DECIMAL(4,2) DEFAULT 2.0,\n  \n  -- Status\n  ativo BOOLEAN DEFAULT 1,\n  padrao BOOLEAN DEFAULT 0, -- Template padrão da empresa\n  \n  -- Metadados\n  versao VARCHAR(10) DEFAULT '1.0',\n  tags TEXT, -- Separado por vírgula: \"treinamento,aviacao,basico\"\n  \n  -- Auditoria\n  created_by INTEGER,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  updated_by INTEGER,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  deleted_at DATETIME,\n  \n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (created_by) REFERENCES \"__backup_pessoas\"(id),\n  FOREIGN KEY (updated_by) REFERENCES \"__backup_pessoas\"(id)\n)"
+      },
+      {
+        "name": "job_queue",
+        "sql": "CREATE TABLE job_queue (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  tipo TEXT NOT NULL CHECK(tipo IN ('GERAR_CERTIFICADO', 'PROCESSAR_RENOVACAO', 'ENVIAR_NOTIFICACAO')),\n  payload TEXT NOT NULL, -- JSON com dados do job\n  status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'PROCESSING', 'DONE', 'FAILED')),\n  tentativas INTEGER NOT NULL DEFAULT 0,\n  max_tentativas INTEGER NOT NULL DEFAULT 3,\n  erro TEXT, -- Mensagem de erro se falhar\n  criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  processado_em TIMESTAMP,\n  concluido_em TIMESTAMP,\n  \n  -- Índices para performance\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP,\n  deleted_at TIMESTAMP\n)"
+      },
+      {
+        "name": "job_execution_log",
+        "sql": "CREATE TABLE job_execution_log (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  job_id INTEGER NOT NULL,\n  status TEXT NOT NULL,\n  mensagem TEXT,\n  detalhes TEXT, -- JSON com detalhes\n  executado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  \n  FOREIGN KEY (job_id) REFERENCES job_queue(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "name": "migracao_log",
+        "sql": "CREATE TABLE migracao_log (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  tabela_origem TEXT NOT NULL,\n  tabela_destino TEXT NOT NULL,\n  acao TEXT NOT NULL,\n  registros_afetados INTEGER DEFAULT 0,\n  detalhes TEXT,\n  status TEXT DEFAULT 'PENDENTE',\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "name": "sessoes",
+        "sql": "CREATE TABLE sessoes (\n  id TEXT PRIMARY KEY,\n  nome TEXT NOT NULL,\n  descricao TEXT,\n  data_inicio TEXT,\n  data_fim TEXT,\n  duracao_minutos INTEGER,\n  tipo TEXT DEFAULT 'SIMULADOR', -- 'SIMULADOR', 'TREINAMENTO', 'TEMPLATE'\n  status TEXT DEFAULT 'AGENDADA', -- 'AGENDADA', 'EM_PROGRESSO', 'CONCLUIDA', 'CANCELADA'\n  instrutor_id INTEGER,\n  migrado_de TEXT,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, carga_horaria INTEGER, hora_diurna INTEGER, hora_noturna INTEGER, pouso_diurno INTEGER, pouso_noturno INTEGER, deleted_at TEXT DEFAULT NULL,\n  FOREIGN KEY (instrutor_id) REFERENCES usuarios(id)\n)"
+      },
+      {
+        "name": "sessoes_fichas",
+        "sql": "CREATE TABLE \"sessoes_fichas\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT UNIQUE NOT NULL,\n  agendamento_id TEXT,\n  colaborador_id TEXT,\n  instrutor_id TEXT,\n  template_id TEXT,\n  status TEXT DEFAULT 'RASCUNHO',\n  nota_media REAL,\n  resultado_final TEXT,\n  carga_horaria INTEGER,\n  hora_diurna INTEGER,\n  hora_noturna INTEGER,\n  pouso_diurno INTEGER,\n  pouso_noturno INTEGER,\n  created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now'))\n)"
+      },
+      {
+        "name": "manobras",
+        "sql": "CREATE TABLE \"manobras\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT UNIQUE NOT NULL,\n  nome TEXT NOT NULL,\n  categoria TEXT,\n  descricao TEXT,\n  nivel_dificuldade INTEGER,\n  tempo_estimado INTEGER,\n  pontuacao_minima REAL,\n  created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  deleted_at TEXT DEFAULT NULL\n, tipo_sessao TEXT DEFAULT 'TREINAMENTO', tipo_aeronave TEXT DEFAULT 'AW139', ordem INTEGER DEFAULT 1)"
+      },
+      {
+        "name": "ficha_manobras_avaliacao",
+        "sql": "CREATE TABLE \"ficha_manobras_avaliacao\" ( id INTEGER PRIMARY KEY AUTOINCREMENT, ficha_id INTEGER NOT NULL, manobra_id INTEGER NOT NULL, nota REAL DEFAULT 0, observacoes TEXT, executada BOOLEAN DEFAULT 0, data_execucao DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT DEFAULT NULL, FOREIGN KEY (ficha_id) REFERENCES fichas_sessao(id), FOREIGN KEY (manobra_id) REFERENCES manobras(id), UNIQUE(ficha_id, manobra_id) )"
+      },
+      {
+        "name": "refresh_tokens",
+        "sql": "CREATE TABLE refresh_tokens (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  user_id INTEGER NOT NULL,\n  token TEXT NOT NULL UNIQUE,\n  expires_at TEXT NOT NULL,\n  created_at TEXT DEFAULT (datetime('now')),\n  revoked_at TEXT,\n  FOREIGN KEY (user_id) REFERENCES usuarios(id)\n)"
+      },
+      {
+        "name": "legacy_funcionarios",
+        "sql": "CREATE TABLE legacy_funcionarios (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Dados do funcionário\n  matricula TEXT UNIQUE NOT NULL,\n  nome TEXT NOT NULL,\n  cpf TEXT,\n  funcao TEXT,\n  setor TEXT,\n  email TEXT,\n  telefone TEXT,\n  \n  -- Dados legados de qualificações (denormalizados)\n  cma_numero TEXT,\n  cma_data_vencimento DATE,\n  cma_status TEXT,\n  aso_data_vencimento DATE,\n  nivel_icao TEXT,\n  nivel_icao_data_vencimento DATE,\n  \n  -- Metadata de origem\n  origem TEXT DEFAULT 'LEGACY_IMPORT',\n  fonte_backup TEXT, -- qual arquivo/commit originou\n  \n  -- Auditoria\n  created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  imported_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now'))\n)"
+      },
+      {
+        "name": "legacy_qualificacoes_tipos",
+        "sql": "CREATE TABLE legacy_qualificacoes_tipos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Identificadores\n  codigo TEXT UNIQUE NOT NULL,\n  nome TEXT NOT NULL,\n  \n  -- Metadados\n  categoria TEXT CHECK (categoria IN ('TREINAMENTO', 'EXAME', 'CHECK')),\n  validade_meses INTEGER,\n  periodicidade_meses INTEGER,\n  carga_horaria INTEGER,\n  descricao TEXT,\n  nota_minima REAL,\n  \n  -- Origem\n  origem TEXT DEFAULT 'LEGACY_IMPORT',\n  fonte_backup TEXT,\n  \n  -- Auditoria\n  created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  imported_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now'))\n)"
+      },
+      {
+        "name": "legacy_qualificacoes_historico",
+        "sql": "CREATE TABLE legacy_qualificacoes_historico (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Relacionamentos (por enquanto como TEXT, para aceitar qualquer formato)\n  matricula TEXT NOT NULL,\n  codigo TEXT NOT NULL,\n  \n  -- Dados denormalizados (podem vir nos dumps legados)\n  funcionario_nome TEXT,\n  qualificacao_nome TEXT,\n  \n  -- Categoria e tipo\n  categoria TEXT CHECK (categoria IN ('TREINAMENTO', 'EXAME', 'CHECK')),\n  tipo TEXT,\n  \n  -- Datas\n  data_conclusao DATE,\n  data_vencimento DATE,\n  validade DATE,\n  data_execucao DATE, -- nome antigo, pode ser mapeado para data_conclusao\n  \n  -- Avaliação\n  nota INTEGER,\n  nota_final REAL,\n  resultado TEXT,\n  \n  -- Status\n  status TEXT,\n  \n  -- Outros campos legados\n  instrutor TEXT,\n  checador TEXT,\n  local TEXT,\n  observacoes TEXT,\n  carga_horaria INTEGER,\n  \n  -- Certificado\n  certificado_url TEXT,\n  certificado_numero TEXT,\n  \n  -- Origem\n  origem TEXT DEFAULT 'LEGACY_IMPORT',\n  fonte_backup TEXT,\n  \n  -- Auditoria\n  created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  imported_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now'))\n)"
+      },
+      {
+        "name": "legacy_import_log",
+        "sql": "CREATE TABLE legacy_import_log (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Identificação da importação\n  batch_id TEXT NOT NULL,\n  fonte TEXT NOT NULL, -- arquivo, commit, backup\n  tabela_destino TEXT NOT NULL, -- legacy_funcionarios, legacy_qualificacoes_tipos, etc.\n  \n  -- Estatísticas\n  total_linhas INTEGER DEFAULT 0,\n  linhas_importadas INTEGER DEFAULT 0,\n  linhas_duplicadas INTEGER DEFAULT 0,\n  linhas_erro INTEGER DEFAULT 0,\n  \n  -- Status\n  status TEXT CHECK (status IN ('INICIADO', 'CONCLUIDO', 'ERRO', 'ROLLBACK')),\n  erro_mensagem TEXT,\n  \n  -- Auditoria\n  started_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  finished_at TEXT,\n  \n  -- Usuário responsável\n  imported_by TEXT DEFAULT 'SYSTEM'\n)"
+      },
+      {
+        "name": "fichas_sessao_manobras",
+        "sql": "CREATE TABLE fichas_sessao_manobras (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  ficha_id INTEGER NOT NULL,\n  codigo TEXT NOT NULL,\n  descricao TEXT,\n  categoria TEXT,\n  ordem INTEGER DEFAULT 0,\n  resultado TEXT DEFAULT 'NAO_REALIZADA',\n  observacoes TEXT,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TIMESTAMP, tripulante TEXT NOT NULL DEFAULT 'AB' CHECK(tripulante IN ('A','B','AB')), nome TEXT,\n  FOREIGN KEY(ficha_id) REFERENCES fichas_sessao(id)\n)"
+      },
+      {
+        "name": "auditoria_avancada_v2",
+        "sql": "CREATE TABLE auditoria_avancada_v2 (\n          id INTEGER PRIMARY KEY AUTOINCREMENT,\n          tabela TEXT NOT NULL,\n          acao TEXT NOT NULL,\n          registro_id TEXT NOT NULL,\n          dados_anteriores TEXT,\n            dados_novos TEXT,\n          created_at TEXT NOT NULL DEFAULT (datetime('now'))\n        , usuario_id INTEGER, ip_address TEXT, user_agent TEXT, origem TEXT DEFAULT 'system')"
+      },
+      {
+        "name": "qualificacoes_historico_stats_daily",
+        "sql": "CREATE TABLE qualificacoes_historico_stats_daily (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  day DATE NOT NULL, \n  scope_hash TEXT NOT NULL, \n  total INTEGER NOT NULL DEFAULT 0,\n  validas INTEGER NOT NULL DEFAULT 0,\n  vencendo INTEGER NOT NULL DEFAULT 0,\n  vencidas INTEGER NOT NULL DEFAULT 0,\n  renovadas INTEGER NOT NULL DEFAULT 0,\n  generated_at DATETIME NOT NULL DEFAULT (datetime('now')),\n  UNIQUE(day, scope_hash)\n)"
+      },
+      {
+        "name": "qualificacoes_tipos_old",
+        "sql": "CREATE TABLE \"qualificacoes_tipos_old\" (\n  id TEXT PRIMARY KEY,\n  nome TEXT NOT NULL,\n  codigo TEXT NOT NULL,\n  categoria TEXT NOT NULL,\n  validade_meses INTEGER,\n  descricao TEXT,\n  ativo INTEGER DEFAULT 1,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n, tipo TEXT, carga_horaria REAL CHECK(carga_horaria IS NULL OR carga_horaria > 0))"
+      },
+      {
+        "name": "hospedagens",
+        "sql": "CREATE TABLE hospedagens (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER NOT NULL,\n  hotel TEXT NOT NULL,\n  quarto TEXT,\n  data_checkin TEXT NOT NULL,\n  data_checkout TEXT NOT NULL,\n  valor REAL NOT NULL,\n  status TEXT CHECK(status IN ('reservado', 'confirmado', 'cancelado', 'finalizado')) DEFAULT 'reservado',\n  observacoes TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (funcionario_id) REFERENCES \"funcionarios_backup\"(id) ON DELETE RESTRICT ON UPDATE CASCADE\n)"
+      },
+      {
+        "name": "registros_frms",
+        "sql": "CREATE TABLE registros_frms (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER NOT NULL,\n  data_registro TEXT NOT NULL,\n  horas_sono REAL NOT NULL CHECK(horas_sono >= 0 AND horas_sono <= 24),\n  nivel_fadiga INTEGER CHECK(nivel_fadiga BETWEEN 1 AND 10) NOT NULL,\n  sintomas TEXT,\n  apto_voo INTEGER DEFAULT 1,\n  observacoes TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (funcionario_id) REFERENCES \"funcionarios_backup\"(id) ON DELETE RESTRICT ON UPDATE CASCADE\n)"
+      },
+      {
+        "name": "_backup_qh_tmp",
+        "sql": "CREATE TABLE \"_backup_qh_tmp\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER NOT NULL,\n  qualificacao_id INTEGER,\n  tipo_codigo TEXT,\n  codigo TEXT,\n  categoria TEXT,\n  validade TEXT,\n  numero_certificado TEXT,\n  orgao_emissor TEXT,\n  observacoes TEXT,\n  arquivo_url TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY(funcionario_id) REFERENCES \"funcionarios_backup\"(id) ON DELETE RESTRICT\n)"
+      },
+      {
+        "name": "_qualificacoes_mapping",
+        "sql": "CREATE TABLE _qualificacoes_mapping(\n  historico_id INT,\n  tipo_codigo TEXT,\n  codigo TEXT,\n  qualificacao_tipo_id TEXT,\n  status\n)"
+      },
+      {
+        "name": "_qualificacoes_enriquecimento",
+        "sql": "CREATE TABLE _qualificacoes_enriquecimento (historico_id INTEGER PRIMARY KEY, categoria TEXT, validade TEXT, numero_certificado TEXT, orgao_emissor TEXT, sugestao_codigo TEXT, sugestao_nome TEXT, status TEXT DEFAULT 'PENDING', created_at TEXT DEFAULT (datetime('now')))"
+      },
+      {
+        "name": "sessoes_treinamento",
+        "sql": "CREATE TABLE sessoes_treinamento (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  treinamento_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  data_inicio TEXT NOT NULL,\n  data_conclusao TEXT,\n  status TEXT CHECK(status IN ('AGENDADO','EM_ANDAMENTO','CONCLUIDO','CANCELADO')) DEFAULT 'AGENDADO',\n  nota_final REAL,\n  aprovado INTEGER,\n  observacoes TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')), deleted_at TEXT DEFAULT NULL,\n  FOREIGN KEY (treinamento_id) REFERENCES treinamentos(id),\n  FOREIGN KEY (funcionario_id) REFERENCES \"funcionarios_backup\"(id)\n)"
+      },
+      {
+        "name": "solicitacoes_lgpd",
+        "sql": "CREATE TABLE solicitacoes_lgpd (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER NOT NULL,\n  tipo TEXT NOT NULL CHECK(tipo IN ('confirmacao_dados','acesso_dados','correcao_dados','anonimizacao','eliminacao','portabilidade','informacao_compartilhamento','revogacao_consentimento')),\n  status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK(status IN ('PENDENTE','EM_ANDAMENTO','CONCLUIDA','REJEITADA')),\n  descricao TEXT,\n  data_solicitacao TEXT DEFAULT (datetime('now')),\n  data_conclusao TEXT,\n  responsavel_id INTEGER,\n  observacoes TEXT, deleted_at TEXT DEFAULT NULL,\n  FOREIGN KEY (funcionario_id) REFERENCES \"funcionarios_backup\"(id)\n)"
+      },
+      {
+        "name": "_data_recovery_log",
+        "sql": "CREATE TABLE _data_recovery_log (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  etapa TEXT NOT NULL,\n  detalhes TEXT,\n  executed_at TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "admin_actions",
+        "sql": "CREATE TABLE admin_actions (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Quem fez\n  user_id INTEGER,\n  user_email TEXT,\n  \n  -- O quê\n  action TEXT NOT NULL, -- 'RESET_FUNCIONARIOS', 'RESET_QUALIFICACOES_TIPOS', etc\n  module TEXT NOT NULL, -- 'funcionarios', 'qualificacoes_tipos', 'qualificacoes_historico'\n  \n  -- Resultado\n  deleted_count INTEGER DEFAULT 0,\n  success BOOLEAN DEFAULT 1,\n  error_message TEXT,\n  \n  -- Metadados\n  metadata_json TEXT, -- JSON com informações extras\n  ip_address TEXT,\n  user_agent TEXT,\n  \n  -- Timestamp\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  \n  -- Soft delete (para auditoria nunca é apagado)\n  deleted_at DATETIME DEFAULT NULL\n)"
+      },
+      {
+        "name": "importacoes_log",
+        "sql": "CREATE TABLE \"importacoes_log\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  entidade TEXT NOT NULL,\n  usuario_id INTEGER,\n  total_rows INTEGER NOT NULL DEFAULT 0,\n  to_create INTEGER NOT NULL DEFAULT 0,\n  to_update INTEGER NOT NULL DEFAULT 0,\n  to_skip INTEGER NOT NULL DEFAULT 0,\n  created INTEGER NOT NULL DEFAULT 0,\n  updated INTEGER NOT NULL DEFAULT 0,\n  skipped INTEGER NOT NULL DEFAULT 0,\n  failed INTEGER NOT NULL DEFAULT 0,\n  merge_mode TEXT,\n  raw_data TEXT,\n  created_at TEXT DEFAULT (datetime('now')), empresa_id INTEGER DEFAULT 1,\n  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)\n)"
+      },
+      {
+        "name": "funcionarios_tmp",
+        "sql": "CREATE TABLE funcionarios_tmp(\n  id INT,\n  nome TEXT,\n  email TEXT,\n  matricula TEXT,\n  cpf TEXT,\n  cargo TEXT,\n  departamento TEXT,\n  status TEXT,\n  observacoes TEXT,\n  guerra TEXT,\n  funcao TEXT,\n  setor TEXT,\n  codigo_anac TEXT,\n  is_instrutor INT,\n  is_checador INT,\n  ativo INT,\n  rg TEXT,\n  nascimento TEXT,\n  sexo TEXT,\n  nacionalidade TEXT,\n  telefone_emergencia TEXT,\n  contato_emergencia_nome TEXT,\n  foto_url TEXT,\n  base TEXT,\n  aeronave TEXT,\n  nivel_icao TEXT,\n  validade_icao TEXT,\n  cma TEXT,\n  validade_cma TEXT,\n  aso TEXT,\n  validade_aso TEXT,\n  sispat TEXT,\n  prestserv TEXT,\n  endereco TEXT,\n  cep TEXT,\n  logradouro TEXT,\n  numero TEXT,\n  complemento TEXT,\n  bairro TEXT,\n  cidade TEXT,\n  estado TEXT,\n  escala TEXT,\n  created_at TEXT,\n  updated_at TEXT,\n  deleted_at TEXT,\n  telefone TEXT,\n  licenca TEXT,\n  canac TEXT,\n  admissao TEXT\n)"
+      },
+      {
+        "name": "qualificacoes_tipos_backup_0063",
+        "sql": "CREATE TABLE qualificacoes_tipos_backup_0063(\n  id TEXT,\n  nome TEXT,\n  codigo TEXT,\n  categoria TEXT,\n  validade_meses INT,\n  descricao TEXT,\n  ativo INT,\n  created_at TEXT,\n  updated_at TEXT,\n  deleted_at TEXT,\n  tipo TEXT,\n  carga_horaria REAL\n)"
+      },
+      {
+        "name": "modelos_aeronave",
+        "sql": "CREATE TABLE modelos_aeronave (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT NOT NULL UNIQUE,\n  nome TEXT NOT NULL,\n  fabricante TEXT,\n  tipo TEXT, -- Ex: Jato, Turboélice, Helicóptero\n  categoria TEXT, -- Ex: Comercial, Executivo, Militar\n  descricao TEXT,\n  ativo INTEGER DEFAULT 1,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  deleted_at DATETIME\n, empresa_id INTEGER DEFAULT 1, modelo TEXT)"
+      },
+      {
+        "name": "notificacoes_config",
+        "sql": "CREATE TABLE notificacoes_config (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo VARCHAR(50) NOT NULL, ativo INTEGER DEFAULT 1 CHECK(ativo IN (0, 1)), dias_antes INTEGER NOT NULL, urgencia VARCHAR(20), destinatarios TEXT, template TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)"
+      },
+      {
+        "name": "historico_compliance",
+        "sql": "CREATE TABLE historico_compliance (   id INTEGER PRIMARY KEY AUTOINCREMENT,   funcionario_id INTEGER NOT NULL,   tipo_recurso TEXT NOT NULL CHECK(tipo_recurso IN ('qualificacao', 'licenca')),   recurso_id INTEGER NOT NULL,   status_compliance TEXT NOT NULL CHECK(status_compliance IN ('CONFORME', 'VENCIDO', 'PENDENTE', 'A_VENCER')),   percentual_conformidade REAL NOT NULL DEFAULT 0.0,   data_calculo TEXT NOT NULL DEFAULT (datetime('now')),   data_vencimento TEXT,   dias_para_vencer INTEGER,   observacoes TEXT,   created_at TEXT NOT NULL DEFAULT (datetime('now')),   updated_at TEXT NOT NULL DEFAULT (datetime('now')),   deleted_at TEXT,   FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id) ON DELETE CASCADE )"
+      },
+      {
+        "name": "qualificacoes_tipos_id_map",
+        "sql": "CREATE TABLE qualificacoes_tipos_id_map (\n        old_id TEXT PRIMARY KEY,\n        new_id INTEGER NOT NULL,\n        codigo TEXT NOT NULL\n      )"
+      },
+      {
+        "name": "qualificacoes_tipos_backup_20251128",
+        "sql": "CREATE TABLE qualificacoes_tipos_backup_20251128(\n  id TEXT,\n  tipo TEXT,\n  codigo TEXT,\n  nome TEXT,\n  descricao TEXT,\n  categoria TEXT,\n  carga_horaria REAL,\n  validade INT,\n  observacoes TEXT,\n  ativo INT,\n  created_at TEXT,\n  updated_at TEXT,\n  deleted_at TEXT,\n  vencimento_fim_mes INT\n)"
+      },
+      {
+        "name": "qualificacoes_tipos",
+        "sql": "CREATE TABLE \"qualificacoes_tipos\" (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        tipo TEXT,\n        codigo TEXT NOT NULL UNIQUE COLLATE NOCASE,\n        nome TEXT NOT NULL CHECK(length(trim(nome)) >= 3),\n        descricao TEXT,\n        categoria TEXT,\n        carga_horaria REAL CHECK(carga_horaria IS NULL OR carga_horaria > 0),\n        validade INTEGER CHECK(validade IS NULL OR validade > 0),\n        vencimento_fim_mes INTEGER DEFAULT 0 CHECK(vencimento_fim_mes IN (0, 1)),\n        observacoes TEXT,\n        ativo INTEGER DEFAULT 1 CHECK(ativo IN (0, 1)),\n        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n        deleted_at DATETIME DEFAULT NULL\n      , empresa_id INTEGER DEFAULT 1, is_check INTEGER NOT NULL DEFAULT 0, conteudo_programatico TEXT DEFAULT NULL, carga_horaria_inicial REAL CHECK(carga_horaria_inicial IS NULL OR carga_horaria_inicial > 0), carga_horaria_recorrente REAL CHECK(carga_horaria_recorrente IS NULL OR carga_horaria_recorrente > 0))"
+      },
+      {
+        "name": "funcionarios",
+        "sql": "CREATE TABLE \"funcionarios\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  nome TEXT NOT NULL,\n  email TEXT,\n  matricula TEXT,\n  cpf TEXT,\n  cargo TEXT,\n  departamento TEXT,\n  status TEXT DEFAULT 'ATIVO',\n  observacoes TEXT,\n  guerra TEXT,\n  funcao TEXT,\n  setor TEXT,\n  codigo_anac TEXT,\n  is_instrutor INTEGER DEFAULT 0,\n  is_checador INTEGER DEFAULT 0,\n  ativo INTEGER DEFAULT 1,\n  rg TEXT,\n  nascimento TEXT,\n  sexo TEXT,\n  nacionalidade TEXT,\n  telefone_emergencia TEXT,\n  contato_emergencia_nome TEXT,\n  foto_url TEXT,\n  base TEXT,\n  aeronave TEXT,\n  nivel_icao TEXT,\n  validade_icao TEXT,\n  cma TEXT,\n  validade_cma TEXT,\n  aso TEXT,\n  validade_aso TEXT,\n  sispat TEXT,\n  prestserv TEXT,\n  endereco TEXT,\n  cep TEXT,\n  logradouro TEXT,\n  numero TEXT,\n  complemento TEXT,\n  bairro TEXT,\n  cidade TEXT,\n  estado TEXT,\n  escala TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  telefone TEXT,\n  licenca TEXT,\n  admissao TEXT,\n  modelo_aeronave_id TEXT\n, empresa_id INTEGER DEFAULT 1, data_realizacao_icao TEXT, data_realizacao_cma TEXT, data_realizacao_aso TEXT, is_examinador INTEGER NOT NULL DEFAULT 0, quinzena TEXT\n  CHECK(quinzena IN ('primeira', 'segunda', 'personalizada'))\n  DEFAULT 'primeira')"
+      },
+      {
+        "name": "pasta_virtual",
+        "sql": "CREATE TABLE pasta_virtual (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        funcionario_id INTEGER NOT NULL,\n        tipo_documento TEXT NOT NULL,\n        categoria TEXT,\n        caminho_arquivo TEXT,\n        arquivourl TEXT,\n        nome_arquivo TEXT,\n        nomeoriginal TEXT,\n        arquivo_tamanho INTEGER,\n        tamanho INTEGER,\n        dataupload TEXT,\n        created_at TEXT DEFAULT (datetime('now')),\n        updated_at TEXT DEFAULT (datetime('now')),\n        uploadedby INTEGER,\n        certificacao_id INTEGER,\n        descricao TEXT,\n        deleted_at TEXT, empresa_id INTEGER DEFAULT 1,\n        FOREIGN KEY(funcionario_id) REFERENCES funcionarios(id) ON DELETE CASCADE\n      )"
+      },
+      {
+        "name": "alertas_enviados",
+        "sql": "CREATE TABLE alertas_enviados (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        tipo TEXT NOT NULL,\n        funcionario_id INTEGER NOT NULL,\n        qualificacao_id INTEGER,\n        data_envio TEXT DEFAULT (datetime('now')),\n        destinatario TEXT,\n        status TEXT DEFAULT 'ENVIADO',\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "arquivos",
+        "sql": "CREATE TABLE arquivos (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        funcionario_id INTEGER NOT NULL,\n        nome_original TEXT NOT NULL,\n        nome_arquivo TEXT NOT NULL,\n        categoria TEXT DEFAULT 'geral',\n        tamanho INTEGER,\n        tipo TEXT,\n        url_r2 TEXT NOT NULL,\n        created_at TEXT NOT NULL DEFAULT (datetime('now')),\n        updated_at TEXT,\n        deleted_at TEXT, empresa_id INTEGER DEFAULT 1,\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "compliance_status",
+        "sql": "CREATE TABLE compliance_status (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        funcionario_id INTEGER NOT NULL,\n        data_avaliacao TEXT NOT NULL,\n        status TEXT CHECK(status IN ('COMPLIANT', 'NON_COMPLIANT', 'PENDING')) NOT NULL,\n        detalhes TEXT,\n        avaliado_por TEXT,\n        created_at TEXT DEFAULT (datetime('now')),\n        updated_at TEXT DEFAULT (datetime('now')), deleted_at TEXT DEFAULT NULL,\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "consentimentos_lgpd",
+        "sql": "CREATE TABLE consentimentos_lgpd (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        funcionario_id INTEGER NOT NULL,\n        tipo TEXT NOT NULL CHECK(tipo IN ('coleta_dados', 'uso_imagem', 'compartilhamento', 'tratamento_dados')),\n        aceito INTEGER NOT NULL DEFAULT 0,\n        data_aceite TEXT,\n        ip_aceite TEXT,\n        user_agent TEXT,\n        revogado INTEGER DEFAULT 0,\n        data_revogacao TEXT,\n        created_at TEXT DEFAULT (datetime('now')),\n        updated_at TEXT DEFAULT (datetime('now')), deleted_at TEXT DEFAULT NULL,\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "documentos",
+        "sql": "CREATE TABLE documentos (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        uuid TEXT NOT NULL UNIQUE,\n        funcionario_id INTEGER NOT NULL,\n        nome_arquivo TEXT NOT NULL,\n        tipo TEXT NOT NULL,\n        tamanho INTEGER NOT NULL,\n        r2_key TEXT NOT NULL UNIQUE,\n        descricao TEXT,\n        created_at TEXT NOT NULL DEFAULT (datetime('now')),\n        updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n        deleted_at TEXT DEFAULT NULL, empresa_id INTEGER DEFAULT 1,\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "fichas_manobras_historico",
+        "sql": "CREATE TABLE fichas_manobras_historico (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        ficha_uuid TEXT NOT NULL,\n        participante_id INTEGER NOT NULL,\n        manobra_id INTEGER NOT NULL,\n        manobra_codigo TEXT NOT NULL,\n        manobra_nome TEXT NOT NULL,\n        nota_atual REAL NOT NULL CHECK(nota_atual >= 0 AND nota_atual <= 10),\n        observacoes TEXT,\n        avaliador_id INTEGER NOT NULL,\n        data_avaliacao TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n        deleted_at TEXT,\n        FOREIGN KEY (ficha_uuid) REFERENCES fichas_sessao(uuid) ON DELETE CASCADE,\n        FOREIGN KEY (participante_id) REFERENCES funcionarios(id) ON DELETE CASCADE,\n        FOREIGN KEY (manobra_id) REFERENCES manobras(id) ON DELETE CASCADE,\n        FOREIGN KEY (avaliador_id) REFERENCES funcionarios(id) ON DELETE CASCADE\n      )"
+      },
+      {
+        "name": "funcionario_documentos",
+        "sql": "CREATE TABLE funcionario_documentos (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        funcionario_id INTEGER NOT NULL,\n        tipo_documento TEXT NOT NULL,\n        nome_arquivo TEXT NOT NULL,\n        caminho_r2 TEXT NOT NULL,\n        tamanho_bytes INTEGER NOT NULL,\n        mime_type TEXT NOT NULL,\n        descricao TEXT,\n        data_upload DATETIME DEFAULT CURRENT_TIMESTAMP,\n        uploaded_by TEXT,\n        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n        deleted_at DATETIME,\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "funcionarios_aeronaves",
+        "sql": "CREATE TABLE funcionarios_aeronaves (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        funcionario_id INTEGER NOT NULL,\n        aeronave_id INTEGER NOT NULL,\n        data_inicio TEXT NOT NULL,\n        data_fim TEXT,\n        ativo INTEGER DEFAULT 1,\n        created_at TEXT DEFAULT (datetime('now')),\n        updated_at TEXT DEFAULT (datetime('now')), deleted_at TEXT DEFAULT NULL,\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),\n        FOREIGN KEY (aeronave_id) REFERENCES aeronaves(id),\n        UNIQUE(funcionario_id, aeronave_id, data_inicio)\n      )"
+      },
+      {
+        "name": "instrutores_simulador",
+        "sql": "CREATE TABLE instrutores_simulador (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        funcionario_id TEXT NOT NULL,\n        habilitacoes TEXT,\n        observacoes TEXT,\n        created_at TEXT DEFAULT (datetime('now')),\n        updated_at TEXT DEFAULT (datetime('now')),\n        deleted_at TEXT,\n        FOREIGN KEY(funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "logs_acesso_dados",
+        "sql": "CREATE TABLE logs_acesso_dados (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        funcionario_id INTEGER NOT NULL,\n        usuario_id INTEGER,\n        acao TEXT NOT NULL CHECK(acao IN ('READ', 'UPDATE', 'DELETE', 'EXPORT')),\n        campos_acessados TEXT,\n        ip TEXT,\n        user_agent TEXT,\n        timestamp TEXT DEFAULT (datetime('now')),\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "notificacoes",
+        "sql": "CREATE TABLE notificacoes (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        tipo TEXT NOT NULL,\n        titulo TEXT NOT NULL,\n        mensagem TEXT NOT NULL,\n        funcionario_id INTEGER,\n        lida BOOLEAN DEFAULT 0,\n        data_envio TEXT DEFAULT (datetime('now')),\n        created_at TEXT DEFAULT (datetime('now')),\n        FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n      )"
+      },
+      {
+        "name": "sessoes_template",
+        "sql": "CREATE TABLE sessoes_template (id INTEGER PRIMARY KEY AUTOINCREMENT, tema TEXT NOT NULL, tipo_sessao TEXT DEFAULT 'TREINAMENTO', tipo_aeronave TEXT DEFAULT 'AW139', duracao_estimada INTEGER DEFAULT 120, descricao TEXT, ativa BOOLEAN DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, deleted_at TIMESTAMP, codigo TEXT, gera_qualificacao BOOLEAN DEFAULT 0)"
+      },
+      {
+        "name": "modelos_sessao_manobras",
+        "sql": "CREATE TABLE \"modelos_sessao_manobras\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  modelo_id INTEGER NOT NULL,\n  manobra_id INTEGER NOT NULL,\n  ordem INTEGER NOT NULL DEFAULT 0,\n  obrigatoria BOOLEAN DEFAULT 1,\n  observacoes TEXT,\n  \n  -- Auditoria\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME NULL,\n  created_by TEXT,\n  updated_by TEXT, tripulante TEXT NOT NULL DEFAULT 'AB' CHECK(tripulante IN ('A','B','AB')),\n  \n  -- Foreign Keys CORRIGIDAS\n  FOREIGN KEY (modelo_id) REFERENCES modelos_sessao(id) ON DELETE CASCADE,\n  FOREIGN KEY (manobra_id) REFERENCES manobras(id) ON DELETE CASCADE,\n  \n  -- Constraint: não permitir manobra duplicada no mesmo modelo\n  UNIQUE(modelo_id, manobra_id)\n)"
+      },
+      {
+        "name": "tipos_sessao",
+        "sql": "CREATE TABLE \"tipos_sessao\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT NOT NULL,\n  nome TEXT NOT NULL,\n  descricao TEXT,\n  ativo INTEGER DEFAULT 1,\n  ordem INTEGER DEFAULT 0,\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME, empresa_id INTEGER DEFAULT 1,\n  UNIQUE(codigo, deleted_at)\n)"
+      },
+      {
+        "name": "historico_notas_manobras",
+        "sql": "CREATE TABLE historico_notas_manobras (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  -- Identificação\n  funcionario_id INTEGER NOT NULL,\n  ficha_id INTEGER NOT NULL,\n  codigo_manobra TEXT NOT NULL,\n  descricao_manobra TEXT NOT NULL,\n  categoria_manobra TEXT,\n  \n  -- Avaliação\n  nota REAL NOT NULL CHECK (nota >= 0 AND nota <= 10),\n  observacoes TEXT,\n  \n  -- Contexto da sessão\n  data_sessao TEXT NOT NULL,\n  tipo_sessao TEXT NOT NULL,\n  tipo_aeronave TEXT,\n  instrutor_id INTEGER,\n  \n  -- Metadata\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  \n  -- Foreign Keys\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),\n  FOREIGN KEY (ficha_id) REFERENCES fichas_sessao(id),\n  FOREIGN KEY (instrutor_id) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "alertas_reforco",
+        "sql": "CREATE TABLE alertas_reforco (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \n  funcionario_id INTEGER NOT NULL,\n  codigo_manobra TEXT NOT NULL,\n  descricao_manobra TEXT NOT NULL,\n  \n  -- Critério de alerta (2 sessões consecutivas < 7.0)\n  nota_sessao1 REAL NOT NULL,\n  data_sessao1 TEXT NOT NULL,\n  ficha_id_sessao1 INTEGER NOT NULL,\n  \n  nota_sessao2 REAL NOT NULL,\n  data_sessao2 TEXT NOT NULL,\n  ficha_id_sessao2 INTEGER NOT NULL,\n  \n  -- Status do alerta\n  status TEXT NOT NULL DEFAULT 'ATIVO', -- ATIVO | RESOLVIDO | IGNORADO\n  instrutor_notificado INTEGER NOT NULL DEFAULT 0, -- 0 = não, 1 = sim\n  data_notificacao TEXT,\n  instrutor_id_notificado INTEGER,\n  \n  -- Resolução\n  data_resolucao TEXT,\n  nota_resolucao REAL,\n  ficha_id_resolucao INTEGER,\n  observacoes_resolucao TEXT,\n  \n  -- Metadata\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  \n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),\n  FOREIGN KEY (instrutor_id_notificado) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "integracoes_edapp_usuarios",
+        "sql": "CREATE TABLE integracoes_edapp_usuarios (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER NOT NULL,\n  edapp_user_id TEXT NOT NULL,\n  edapp_email TEXT,\n  edapp_username TEXT,\n  ativo INTEGER NOT NULL DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT, empresa_id INTEGER REFERENCES empresas(id),\n  UNIQUE(funcionario_id, edapp_user_id)\n)"
+      },
+      {
+        "name": "integracoes_edapp_cursos",
+        "sql": "CREATE TABLE integracoes_edapp_cursos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  edapp_course_id TEXT NOT NULL,\n  edapp_course_name TEXT,\n  edapp_course_code TEXT,\n  qualificacao_codigo TEXT NOT NULL,\n  qualificacao_id INTEGER,\n  validade_meses INTEGER DEFAULT 12,\n  ativo INTEGER NOT NULL DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT, empresa_id INTEGER REFERENCES empresas(id),\n  UNIQUE(edapp_course_id)\n)"
+      },
+      {
+        "name": "integracoes_edapp_eventos",
+        "sql": "CREATE TABLE integracoes_edapp_eventos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  tipo_evento TEXT NOT NULL,\n  edapp_user_id TEXT,\n  edapp_course_id TEXT,\n  payload_json TEXT NOT NULL,\n  processado INTEGER NOT NULL DEFAULT 0,\n  erro_ultima TEXT,\n  tentativas INTEGER NOT NULL DEFAULT 0,\n  funcionario_id INTEGER,\n  qualificacao_historico_id INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, empresa_id INTEGER REFERENCES empresas(id))"
+      },
+      {
+        "name": "backups_controle",
+        "sql": "CREATE TABLE backups_controle (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT NOT NULL UNIQUE,\n  tipo TEXT NOT NULL CHECK(tipo IN ('COMPLETO', 'MODULAR', 'INCREMENTAL', 'TIME_TRAVEL')),\n  escopo TEXT NOT NULL, -- 'GERAL' ou nome do módulo\n  status TEXT NOT NULL DEFAULT 'INICIADO' CHECK(status IN ('INICIADO', 'EM_PROGRESSO', 'CONCLUIDO', 'FALHOU', 'RESTAURANDO')),\n  \n  -- Métricas\n  tamanho_bytes INTEGER,\n  total_registros INTEGER,\n  total_tabelas INTEGER,\n  duracao_segundos INTEGER,\n  \n  -- Storage R2\n  r2_bucket TEXT NOT NULL DEFAULT 'airtrust-backups',\n  r2_path TEXT NOT NULL,\n  r2_checksum_sha256 TEXT,\n  \n  -- Metadata\n  d1_backup_id TEXT,\n  modulos_incluidos TEXT, -- JSON array\n  triggered_by TEXT NOT NULL, -- 'MANUAL', 'CRON_DIARIO', 'CRON_SEMANAL', 'PRE_DEPLOY'\n  usuarios_id INTEGER,\n  descricao TEXT,\n  \n  -- Compliance e Auditoria\n  retention_policy TEXT NOT NULL DEFAULT '7_ANOS', -- '30_DIAS', '1_ANO', '7_ANOS'\n  expires_at TEXT,\n  compliance_tags TEXT, -- JSON\n  \n  -- Restore\n  restaurado_em TEXT,\n  restaurado_por INTEGER,\n  restore_log TEXT, -- JSON\n  \n  -- Timestamps\n  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TEXT,\n  \n  FOREIGN KEY (usuarios_id) REFERENCES usuarios(id),\n  FOREIGN KEY (restaurado_por) REFERENCES usuarios(id)\n)"
+      },
+      {
+        "name": "backups_logs",
+        "sql": "CREATE TABLE backups_logs (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  backups_controle_id INTEGER NOT NULL,\n  timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  nivel TEXT NOT NULL CHECK(nivel IN ('INFO', 'WARN', 'ERROR', 'SUCCESS')),\n  mensagem TEXT NOT NULL,\n  detalhes TEXT, -- JSON\n  tabela_afetada TEXT,\n  registros_processados INTEGER,\n  \n  FOREIGN KEY (backups_controle_id) REFERENCES backups_controle(id)\n)"
+      },
+      {
+        "name": "usuarios_empresas",
+        "sql": "CREATE TABLE usuarios_empresas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  usuario_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  role TEXT DEFAULT 'viewer',\n  is_primary INTEGER DEFAULT 0,\n  created_at TEXT DEFAULT (datetime('now')),\n  UNIQUE(usuario_id, empresa_id),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "empresas_config",
+        "sql": "CREATE TABLE empresas_config (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL UNIQUE,\n  dias_alerta_vencimento INTEGER DEFAULT 30,\n  email_notificacoes TEXT,\n  webhook_url TEXT,\n  timezone TEXT DEFAULT 'America/Sao_Paulo',\n  logo_relatorio TEXT,\n  cores_tema TEXT,\n  modulos_ativos TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')), certificado_logo_url TEXT, certificado_template_html TEXT, certificado_assinatura_digital TEXT, idioma TEXT DEFAULT 'pt-BR',\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "manobras_categorias",
+        "sql": "CREATE TABLE manobras_categorias (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT NOT NULL UNIQUE,\n  nome TEXT NOT NULL,\n  descricao TEXT,\n  cor TEXT,\n  icone TEXT,\n  ordem INTEGER DEFAULT 0,\n  ativo BOOLEAN DEFAULT 1,\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME\n)"
+      },
+      {
+        "name": "tipos_check",
+        "sql": "CREATE TABLE tipos_check (id INTEGER PRIMARY KEY AUTOINCREMENT, codigo TEXT NOT NULL UNIQUE, nome TEXT NOT NULL, descricao TEXT, qualificacao_tipo_id INTEGER NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT)"
+      },
+      {
+        "name": "frms_configuracao_limites",
+        "sql": "CREATE TABLE frms_configuracao_limites (\n  id TEXT PRIMARY KEY,\n  nome TEXT NOT NULL,\n  valor_numerico REAL NOT NULL,\n  unidade TEXT NOT NULL,\n  descricao TEXT,\n  ativo INTEGER DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "frms_fatorizacao_jornada",
+        "sql": "CREATE TABLE frms_fatorizacao_jornada (\n  id TEXT PRIMARY KEY,\n  jornada_id TEXT NOT NULL REFERENCES frms_jornada(id),\n  fator_basica_pct REAL DEFAULT 0,\n  fator_apresentacao_pct REAL DEFAULT 0,\n  fator_duracao_pct REAL DEFAULT 0,\n  fator_repouso_pct REAL DEFAULT 0,\n  fator_noturno_dep_pct REAL DEFAULT 0,\n  fator_noturno_arr_pct REAL DEFAULT 0,\n  total_fatorizado_jornada REAL DEFAULT 0,\n  fator_hv_basica_pct REAL DEFAULT 0,\n  fator_hv_quantidade_pct REAL DEFAULT 0,\n  fator_hv_noturno_dep_pct REAL DEFAULT 0,\n  fator_hv_noturno_arr_pct REAL DEFAULT 0,\n  total_fatorizado_hv REAL DEFAULT 0,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, fator_base_away_pct REAL DEFAULT 0, fator_aclimatacao_pct REAL DEFAULT 0, fator_ciclo_embarcado_pct REAL DEFAULT 0, effectiveness_pct REAL DEFAULT NULL, effectiveness_nivel TEXT DEFAULT NULL, effectiveness_componentes_json TEXT DEFAULT NULL, hora_despertar_estimada TEXT DEFAULT NULL, hora_inicio_sono_estimado TEXT DEFAULT NULL, duracao_sono_efetiva_min REAL DEFAULT NULL, tempo_abaixo_limiar_min REAL DEFAULT NULL, dia_periodo_embarcado INTEGER DEFAULT NULL, total_dias_periodo INTEGER DEFAULT NULL, processado_com_bug INTEGER NOT NULL DEFAULT 1)"
+      },
+      {
+        "name": "frms_acumulo_mensal",
+        "sql": "CREATE TABLE frms_acumulo_mensal (\n  id TEXT PRIMARY KEY,\n  tripulante_id INTEGER NOT NULL REFERENCES funcionarios(id),\n  ano INTEGER NOT NULL,\n  mes INTEGER NOT NULL CHECK(mes >= 1 AND mes <= 12),\n  jornada_realizada_min INTEGER DEFAULT 0,\n  hv_realizada_min INTEGER DEFAULT 0,\n  jornada_fatorizada_pct REAL DEFAULT 0,\n  hv_fatorizada_pct REAL DEFAULT 0,\n  dias_embarcado INTEGER DEFAULT 0,\n  dias_folga INTEGER DEFAULT 0,\n  dias_ferias INTEGER DEFAULT 0,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "frms_acumulo_rolling",
+        "sql": "CREATE TABLE frms_acumulo_rolling (\n  id TEXT PRIMARY KEY,\n  tripulante_id INTEGER NOT NULL REFERENCES funcionarios(id),\n  data_referencia TEXT NOT NULL,\n  hv_7_dias_min INTEGER DEFAULT 0,\n  hv_28_dias_min INTEGER DEFAULT 0,\n  hv_365_dias_min INTEGER DEFAULT 0,\n  hv_mes_calendario_min INTEGER DEFAULT 0,\n  hv_dia_min INTEGER DEFAULT 0,\n  pct_limite_7d REAL DEFAULT 0,\n  pct_limite_28d REAL DEFAULT 0,\n  pct_limite_365d REAL DEFAULT 0,\n  pct_limite_dia REAL DEFAULT 0,\n  repouso_anterior_min INTEGER DEFAULT 0,\n  repouso_suficiente INTEGER DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, pct_limite_mes_calendario REAL DEFAULT 0)"
+      },
+      {
+        "name": "frms_alerta",
+        "sql": "CREATE TABLE frms_alerta (\n  id TEXT PRIMARY KEY,\n  tripulante_id INTEGER NOT NULL REFERENCES funcionarios(id),\n  jornada_id TEXT REFERENCES frms_jornada(id),\n  tipo_limite TEXT NOT NULL CHECK(tipo_limite IN ('FDP_DIARIO','HV_DIARIA','HV_7D','HV_MES','HV_365D','REPOUSO')),\n  nivel TEXT NOT NULL CHECK(nivel IN ('AVISO','ATENCAO','CRITICO','VIOLACAO')),\n  percentual_atingido REAL NOT NULL,\n  valor_atual_min INTEGER NOT NULL,\n  valor_limite_min INTEGER NOT NULL,\n  mensagem TEXT NOT NULL,\n  visualizado INTEGER DEFAULT 0,\n  visualizado_em TEXT,\n  visualizado_por TEXT,\n  resolvido INTEGER DEFAULT 0,\n  resolvido_em TEXT,\n  resolvido_por TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, notas_resolucao TEXT DEFAULT NULL)"
+      },
+      {
+        "name": "frms_escala_quinzenal",
+        "sql": "CREATE TABLE frms_escala_quinzenal (\n  id TEXT PRIMARY KEY,\n  tripulante_id INTEGER NOT NULL REFERENCES funcionarios(id),\n  ano INTEGER NOT NULL,\n  ciclo INTEGER NOT NULL,\n  data_inicio_embarque TEXT NOT NULL,\n  data_fim_embarque TEXT NOT NULL,\n  data_inicio_folga TEXT NOT NULL,\n  data_fim_folga TEXT NOT NULL,\n  dias_embarcado INTEGER NOT NULL,\n  dias_folga INTEGER NOT NULL,\n  status_ciclo TEXT DEFAULT 'ATIVO' CHECK(status_ciclo IN ('ATIVO','ENCERRADO','CANCELADO')),\n  observacao TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "frms_notificacao_config",
+        "sql": "CREATE TABLE frms_notificacao_config (\n  id TEXT PRIMARY KEY,\n  cargo TEXT NOT NULL UNIQUE,          -- 'PILOTO', 'GERENTE_OPS', 'SEGURANCA_VOO', 'ADMIN'\n  nivel_minimo TEXT NOT NULL,          -- 'AVISO', 'ATENCAO', 'CRITICO', 'VIOLACAO'\n  ativo INTEGER DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now'))\n, deleted_at TEXT)"
+      },
+      {
+        "name": "frms_importacao_fira",
+        "sql": "CREATE TABLE frms_importacao_fira (\n  id                       TEXT PRIMARY KEY,\n  tripulante_id            TEXT,\n  canac                    TEXT NOT NULL,\n  nome_fira                TEXT NOT NULL,\n  ano                      INTEGER NOT NULL,\n  mes                      INTEGER NOT NULL,\n  arquivo_nome             TEXT NOT NULL,\n  arquivo_r2_key           TEXT,\n  status                   TEXT NOT NULL DEFAULT 'PENDENTE',\n  -- PENDENTE | REVISAO | IMPORTADO | REJEITADO | ERRO\n  total_dias_extraidos     INTEGER DEFAULT 0,\n  total_dias_importados    INTEGER DEFAULT 0,\n  total_dias_substituidos  INTEGER DEFAULT 0,\n  total_dias_ignorados     INTEGER DEFAULT 0,\n  total_dias_erro          INTEGER DEFAULT 0,\n  erros_json               TEXT,\n  revisado_por             TEXT,\n  revisado_em              TEXT,\n  importado_por            TEXT NOT NULL,\n  importado_em             TEXT,\n  observacao               TEXT,\n  importacao_anterior_id   TEXT DEFAULT NULL,\n  -- preview_json guarda o FiraImportacaoPreview completo para re-uso\n  preview_json             TEXT,\n  created_at               TEXT NOT NULL,\n  updated_at               TEXT NOT NULL,\n  deleted_at               TEXT\n)"
+      },
+      {
+        "name": "frms_notificacao_destinatario",
+        "sql": "CREATE TABLE \"frms_notificacao_destinatario\" (\n  id TEXT PRIMARY KEY,\n  alerta_id TEXT NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  cargo TEXT NOT NULL,\n  lido INTEGER DEFAULT 0,\n  lido_em TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (alerta_id) REFERENCES frms_alerta(id),\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "padroes_escala",
+        "sql": "CREATE TABLE padroes_escala (\n  id TEXT PRIMARY KEY,\n  nome TEXT NOT NULL,\n  dias_trabalho INTEGER NOT NULL,\n  dias_folga INTEGER NOT NULL,\n  descricao TEXT,\n  ativo INTEGER DEFAULT 1,\n  empresa_id INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "escalas_mensais",
+        "sql": "CREATE TABLE escalas_mensais (\n  id TEXT PRIMARY KEY,\n  mes INTEGER NOT NULL CHECK (mes >= 1 AND mes <= 12),\n  ano INTEGER NOT NULL CHECK (ano >= 2024 AND ano <= 2035),\n  titulo TEXT,\n  status TEXT NOT NULL DEFAULT 'rascunho' CHECK (status IN ('rascunho','em_revisao','aprovada','publicada')),\n  aprovado_por TEXT,\n  aprovado_em TEXT,\n  publicado_por TEXT,\n  publicado_em TEXT,\n  observacoes TEXT,\n  empresa_id INTEGER,\n  created_by TEXT NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, periodo TEXT\n  CHECK(periodo IN ('primeira', 'segunda', 'personalizada'))\n  DEFAULT 'personalizada', numero_revisao INTEGER NOT NULL DEFAULT 0)"
+      },
+      {
+        "name": "escala_tripulacoes",
+        "sql": "CREATE TABLE escala_tripulacoes (\n  id TEXT PRIMARY KEY,\n  escala_id TEXT NOT NULL,\n  pic_id TEXT NOT NULL,\n  sic_id TEXT,\n  data_inicio TEXT NOT NULL,\n  data_fim TEXT NOT NULL,\n  padrao_escala_id TEXT,\n  aeronave TEXT,\n  base TEXT,\n  restricoes TEXT,\n  observacoes TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "escala_eventos",
+        "sql": "CREATE TABLE escala_eventos (\n  id TEXT PRIMARY KEY,\n  escala_id TEXT NOT NULL,\n  tripulacao_id TEXT,\n  funcionario_id TEXT NOT NULL,\n  tipo_evento TEXT NOT NULL CHECK (tipo_evento IN (\n    'voo','viagem','treinamento_solo','treinamento_simulador',\n    'medico','cheque','reaquisi','trabalho','folga',\n    'standby','ferias','licenca'\n  )),\n  data_inicio TEXT NOT NULL,\n  data_fim TEXT NOT NULL,\n  turno TEXT DEFAULT 'dia_todo' CHECK (turno IN ('manha','tarde','noite','dia_todo')),\n  local TEXT,\n  aeronave TEXT,\n  simulador_id TEXT,\n  certificacao_id TEXT,\n  gerado_automaticamente INTEGER DEFAULT 0,\n  motivo_automatico TEXT,\n  status TEXT DEFAULT 'confirmado' CHECK (status IN ('confirmado','pendente','cancelado')),\n  observacoes TEXT,\n  created_by TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, origem TEXT DEFAULT 'manual', alocacao_id TEXT REFERENCES escala_alocacoes(id))"
+      },
+      {
+        "name": "restricoes_tripulacao",
+        "sql": "CREATE TABLE restricoes_tripulacao (\n  id TEXT PRIMARY KEY,\n  funcionario_a_id TEXT NOT NULL,\n  funcionario_b_id TEXT NOT NULL,\n  tipo_restricao TEXT NOT NULL CHECK (tipo_restricao IN ('nao_pode_voar_junto','preferencial','contratual')),\n  motivo TEXT,\n  contrato_referencia TEXT,\n  data_inicio TEXT,\n  data_fim TEXT,\n  ativo INTEGER DEFAULT 1,\n  empresa_id INTEGER,\n  created_by TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "escala_auditoria",
+        "sql": "CREATE TABLE escala_auditoria (\n  id TEXT PRIMARY KEY,\n  escala_id TEXT NOT NULL,\n  evento_id TEXT,\n  acao TEXT NOT NULL,\n  campo_alterado TEXT,\n  valor_anterior TEXT,\n  valor_novo TEXT,\n  justificativa TEXT,\n  realizado_por TEXT NOT NULL,\n  realizado_em TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "escalas_quinzenas",
+        "sql": "CREATE TABLE escalas_quinzenas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  ano INTEGER NOT NULL,\n  mes INTEGER NOT NULL,       -- 1-12\n  numero INTEGER NOT NULL,   -- 1 = first half, 2 = second half\n  data_inicio TEXT NOT NULL, -- YYYY-MM-DD\n  data_fim TEXT NOT NULL,    -- YYYY-MM-DD\n  observacoes TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  UNIQUE(empresa_id, ano, mes, numero)\n)"
+      },
+      {
+        "name": "escalas_tipos_evento_config",
+        "sql": "CREATE TABLE escalas_tipos_evento_config (id TEXT PRIMARY KEY, empresa_id INTEGER NOT NULL REFERENCES empresas(id), codigo TEXT NOT NULL, label TEXT NOT NULL, cor TEXT NOT NULL, icone TEXT, ativo INTEGER NOT NULL DEFAULT 1, ordem INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), deleted_at TEXT, sigla TEXT, UNIQUE(empresa_id, codigo))"
+      },
+      {
+        "name": "escalas_templates_tripulacao",
+        "sql": "CREATE TABLE escalas_templates_tripulacao (id TEXT PRIMARY KEY, empresa_id INTEGER NOT NULL REFERENCES empresas(id), nome TEXT NOT NULL, quinzena INTEGER NOT NULL DEFAULT 0, aeronave TEXT, pic_id TEXT REFERENCES funcionarios(id), sic_id TEXT REFERENCES funcionarios(id), padrao_escala_id TEXT, base TEXT, observacoes TEXT, ativo INTEGER NOT NULL DEFAULT 1, usos INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), deleted_at TEXT, migrado_para_v2 INTEGER NOT NULL DEFAULT 0)"
+      },
+      {
+        "name": "notificacoes_inapp",
+        "sql": "CREATE TABLE notificacoes_inapp (id TEXT PRIMARY KEY, funcionario_id TEXT NOT NULL REFERENCES funcionarios(id), empresa_id INTEGER NOT NULL REFERENCES empresas(id), tipo TEXT NOT NULL, titulo TEXT NOT NULL, mensagem TEXT, lida INTEGER NOT NULL DEFAULT 0, referencia_id TEXT, referencia_tipo TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), deleted_at TEXT)"
+      },
+      {
+        "name": "escala_publicacao_snapshots",
+        "sql": "CREATE TABLE escala_publicacao_snapshots (id TEXT PRIMARY KEY, escala_id TEXT NOT NULL, empresa_id TEXT, publicado_por TEXT, publicado_em TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT, deleted_at TEXT, revisao INTEGER NOT NULL DEFAULT 0, FOREIGN KEY (escala_id) REFERENCES escalas_mensais(id))"
+      },
+      {
+        "name": "domain_events",
+        "sql": "CREATE TABLE domain_events (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  modulo TEXT NOT NULL,\n  tipo TEXT NOT NULL,\n  payload TEXT NOT NULL,\n  processado INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  processed_at TEXT,\n  deleted_at TEXT\n, consumidores TEXT DEFAULT '[]', processado_por TEXT DEFAULT '[]', ultimo_erro TEXT)"
+      },
+      {
+        "name": "escala_alertas",
+        "sql": "CREATE TABLE escala_alertas (\n  id TEXT PRIMARY KEY,\n  escala_id TEXT NOT NULL REFERENCES escalas_mensais(id),\n  empresa_id INTEGER NOT NULL,\n  tipo TEXT NOT NULL,\n  funcionario_id TEXT,\n  mensagem TEXT NOT NULL,\n  resolvido INTEGER NOT NULL DEFAULT 0,\n  resolved_at TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "frms_carga_trabalho",
+        "sql": "CREATE TABLE frms_carga_trabalho (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  funcionario_id TEXT NOT NULL,\n  escala_id TEXT,\n  escala_tripulacao_id TEXT,\n  data_inicio TEXT,\n  data_fim TEXT,\n  tipo_alocacao TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "hospedagem_sugestoes",
+        "sql": "CREATE TABLE hospedagem_sugestoes (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  funcionario_id TEXT NOT NULL,\n  escala_id TEXT,\n  base TEXT,\n  data_inicio TEXT,\n  data_fim TEXT,\n  status TEXT NOT NULL DEFAULT 'pendente',\n  observacoes TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "qualificacoes_pendencias",
+        "sql": "CREATE TABLE qualificacoes_pendencias (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  funcionario_id TEXT NOT NULL,\n  tipo TEXT NOT NULL,\n  documento_r2_key TEXT,\n  status TEXT NOT NULL DEFAULT 'pendente',\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "pasta_virtual_jobs",
+        "sql": "CREATE TABLE pasta_virtual_jobs (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  funcionario_id TEXT,\n  referencia_id TEXT,\n  referencia_tipo TEXT NOT NULL,\n  tipo_documento TEXT NOT NULL,\n  nome_arquivo TEXT NOT NULL,\n  status_geracao TEXT NOT NULL DEFAULT 'pendente_geracao',\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "usuario_preferencias",
+        "sql": "CREATE TABLE usuario_preferencias (\n        id TEXT PRIMARY KEY,\n        usuario_id TEXT NOT NULL,\n        empresa_id INTEGER NOT NULL,\n        chave TEXT NOT NULL,\n        valor TEXT,\n        created_at TEXT DEFAULT (datetime('now')),\n        updated_at TEXT DEFAULT (datetime('now')),\n        deleted_at TEXT,\n        UNIQUE(usuario_id, empresa_id, chave)\n      )"
+      },
+      {
+        "name": "escala_cobertura_diaria",
+        "sql": "CREATE TABLE escala_cobertura_diaria (\n  id              INTEGER PRIMARY KEY AUTOINCREMENT,\n  escala_id       TEXT    NOT NULL REFERENCES escalas_mensais(id) ON DELETE CASCADE,\n  aeronave_id     INTEGER NOT NULL REFERENCES aeronaves(id),\n  data            TEXT    NOT NULL,   -- YYYY-MM-DD\n  qtd_pic         INTEGER NOT NULL DEFAULT 0,\n  qtd_sic         INTEGER NOT NULL DEFAULT 0,\n  status_cobertura TEXT NOT NULL DEFAULT 'ok'\n                  CHECK (status_cobertura IN ('ok','gap_pic','gap_sic','gap_total','excesso')),\n  updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),\n  UNIQUE (escala_id, aeronave_id, data)\n)"
+      },
+      {
+        "name": "escala_template_alocacoes",
+        "sql": "CREATE TABLE escala_template_alocacoes (\n  id              TEXT    PRIMARY KEY,\n  template_id     TEXT    NOT NULL REFERENCES escalas_templates_tripulacao(id) ON DELETE CASCADE,\n  funcao          TEXT    NOT NULL CHECK (funcao IN ('PIC','SIC','PIC_CHK','SIC_CHK','INSTRUTOR','FLEX')),\n  funcionario_id  TEXT    REFERENCES funcionarios(id),  -- null = slot vazio (a preencher)\n  padrao_escala_id TEXT   REFERENCES padroes_escala(id),\n  ordem           INTEGER NOT NULL DEFAULT 0,\n  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),\n  updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),\n  deleted_at      TEXT\n)"
+      },
+      {
+        "name": "escala_alocacoes",
+        "sql": "CREATE TABLE \"escala_alocacoes\" (\n  id                TEXT    PRIMARY KEY,\n  escala_id         TEXT    NOT NULL REFERENCES escalas_mensais(id) ON DELETE CASCADE,\n  funcionario_id    TEXT    NOT NULL REFERENCES funcionarios(id),\n  aeronave_id       INTEGER REFERENCES aeronaves(id),\n  funcao            TEXT    CHECK (funcao IN ('PIC','SIC','PIC_CHK','SIC_CHK','INSTRUTOR','FLEX')),\n  situacao_tipo     TEXT,\n  situacao_cor      TEXT,\n  quinzena_id       INTEGER REFERENCES escalas_quinzenas(id),\n  data_inicio       TEXT    NOT NULL,\n  data_fim          TEXT    NOT NULL,\n  padrao_escala_id  TEXT    REFERENCES padroes_escala(id),\n  base              TEXT,\n  observacoes       TEXT,\n  status            TEXT    NOT NULL DEFAULT 'planejado'\n                    CHECK (status IN ('planejado','confirmado','cancelado')),\n  tripulacao_legado_id TEXT,\n  created_by        TEXT    NOT NULL DEFAULT 'system',\n  created_at        TEXT    NOT NULL DEFAULT (datetime('now')),\n  updated_at        TEXT    NOT NULL DEFAULT (datetime('now')),\n  deleted_at        TEXT, auto_gerado INTEGER DEFAULT 0, cma_override INTEGER NOT NULL DEFAULT 0, cma_override_by TEXT NULL, modelo_aeronave TEXT,\n  CONSTRAINT chk_alocacao_datas CHECK (data_fim >= data_inicio)\n)"
+      },
+      {
+        "name": "escala_situacao_tipos",
+        "sql": "CREATE TABLE escala_situacao_tipos (\n  id                  INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo              TEXT    NOT NULL UNIQUE,\n  nome                TEXT    NOT NULL,\n  cor                 TEXT    NOT NULL,\n  icone               TEXT,\n  bloqueia_alocacao   INTEGER NOT NULL DEFAULT 1,\n  ativo               INTEGER NOT NULL DEFAULT 1,\n  ordem               INTEGER NOT NULL DEFAULT 0,\n  created_at          TEXT    NOT NULL DEFAULT (datetime('now')),\n  updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),\n  deleted_at          TEXT\n)"
+      },
+      {
+        "name": "funcionario_ferias",
+        "sql": "CREATE TABLE funcionario_ferias (\n  id                  TEXT    PRIMARY KEY,\n  funcionario_id      TEXT    NOT NULL REFERENCES funcionarios(id),\n  data_inicio         TEXT    NOT NULL,\n  data_fim            TEXT    NOT NULL,\n  tipo                TEXT    NOT NULL DEFAULT 'FERIAS',\n  observacoes         TEXT,\n  escala_alocacao_id  TEXT,\n  criado_por          TEXT    NOT NULL,\n  created_at          TEXT    NOT NULL DEFAULT (datetime('now')),\n  updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),\n  deleted_at          TEXT\n)"
+      },
+      {
+        "name": "sgso_relatos",
+        "sql": "CREATE TABLE sgso_relatos (\n  id TEXT PRIMARY KEY,                          \n  empresa_id INTEGER NOT NULL,                   \n  numero_protocolo TEXT NOT NULL UNIQUE,         \n\n  \n  tipo TEXT NOT NULL CHECK (tipo IN (\n    'OCORRENCIA',   \n    'PERIGO',       \n    'INCIDENTE',    \n    'ACIDENTE'      \n  )),\n  anonimo INTEGER NOT NULL DEFAULT 0 CHECK (anonimo IN (0, 1)),\n  relator_id INTEGER,                            \n\n  \n  aeronave_id INTEGER,                           \n  aeronave_matricula TEXT,                       \n  aeronave_modelo TEXT,                          \n\n  \n  data_ocorrencia TEXT NOT NULL,                 \n  local_icao TEXT,                               \n  local_descricao TEXT,                          \n\n  \n  fase_voo TEXT CHECK (fase_voo IN (\n    'PREFLIGHT', 'TAXI', 'DECOLAGEM', 'SUBIDA',\n    'CRUZEIRO', 'DESCIDA', 'APROXIMACAO', 'POUSO',\n    'POS_VOO', 'SOLO', 'MANUTENCAO', 'NAO_APLICAVEL'\n  )),\n  condicao_meteorologica TEXT CHECK (condicao_meteorologica IN (\n    'VMC', 'IMC', 'NOITE_VMC', 'NOITE_IMC', 'DEGRADADA', 'NAO_APLICAVEL'\n  )),\n\n  \n  descricao TEXT NOT NULL,                       \n  consequencia TEXT,                             \n  accao_imediata TEXT,                           \n\n  \n  categoria_adrep TEXT,                          \n  subcategoria_adrep TEXT,                       \n\n  \n  status TEXT NOT NULL DEFAULT 'ABERTO' CHECK (status IN (\n    'ABERTO',           \n    'EM_ANALISE',       \n    'AGUARDANDO_ACAO',  \n    'FECHADO'           \n  )),\n  gso_responsavel_id INTEGER,                    \n\n  \n  escala_id TEXT,                                \n  escala_quinzena INTEGER,                       \n  frms_jornada_id INTEGER,                       \n  efetividade_cognitiva REAL,                    \n  horas_acumuladas_7d REAL,                      \n  horas_acumuladas_28d REAL,                     \n  qualificacoes_vencidas INTEGER DEFAULT 0,      \n  dias_embarcado INTEGER,                        \n\n  \n  arquivo_url TEXT,                              \n  arquivo_nome TEXT,\n\n  \n  fechado_por INTEGER,                           \n  fechado_em TEXT,                               \n  observacoes_fechamento TEXT,\n\n  \n  created_by INTEGER,                            \n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT                                \n, em_triagem_em TEXT, em_investigacao_em TEXT, concluido_em TEXT, sla_triagem_prazo TEXT, sla_investigacao_prazo TEXT, sla_triagem_violado INTEGER NOT NULL DEFAULT 0, sla_investigacao_violado INTEGER NOT NULL DEFAULT 0, investigador_id INTEGER REFERENCES funcionarios(id), tipo_investigacao TEXT DEFAULT 'OBSERVACAO', resumo_fechamento TEXT, licoes_aprendidas_json TEXT)"
+      },
+      {
+        "name": "sgso_avaliacao_risco",
+        "sql": "CREATE TABLE sgso_avaliacao_risco (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,                       \n  empresa_id INTEGER NOT NULL,                   \n\n  tipo_avaliacao TEXT NOT NULL CHECK (tipo_avaliacao IN (\n    'INICIAL',    \n    'RESIDUAL'    \n  )),\n\n  \n  probabilidade TEXT NOT NULL CHECK (probabilidade IN (\n    'A',  \n    'B',  \n    'C',  \n    'D',  \n    'E'   \n  )),\n  severidade INTEGER NOT NULL CHECK (severidade BETWEEN 1 AND 5),\n  \n\n  \n  nivel_risco TEXT NOT NULL CHECK (nivel_risco IN ('BAIXO', 'MEDIO', 'ALTO', 'CRITICO')),\n\n  \n  probabilidade_original TEXT,                   \n  elevado_por_fadiga INTEGER DEFAULT 0 CHECK (elevado_por_fadiga IN (0, 1)),\n  justificativa_elevacao TEXT,                   \n\n  \n  justificativa TEXT,                            \n\n  \n  avaliador_id INTEGER NOT NULL,                 \n  data_avaliacao TEXT NOT NULL DEFAULT (datetime('now')),\n\n  \n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "sgso_acoes_mitigacao",
+        "sql": "CREATE TABLE sgso_acoes_mitigacao (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n\n  \n  relato_id TEXT,                                \n  nc_id INTEGER,                                 \n\n  tipo TEXT NOT NULL CHECK (tipo IN (\n    'CORRETIVA',   \n    'PREVENTIVA'   \n  )),\n\n  \n  descricao TEXT NOT NULL,\n  categoria TEXT CHECK (categoria IN (\n    'TREINAMENTO',\n    'PROCEDIMENTO',\n    'EQUIPAMENTO',\n    'SUPERVISAO',\n    'COMUNICACAO',\n    'OUTRO'\n  )),\n\n  \n  responsavel_id INTEGER NOT NULL,               \n  prazo TEXT NOT NULL,                           \n\n  \n  status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (status IN (\n    'PENDENTE',\n    'EM_ANDAMENTO',\n    'CONCLUIDA',\n    'CANCELADA'\n  )),\n  percentual_conclusao INTEGER DEFAULT 0 CHECK (percentual_conclusao BETWEEN 0 AND 100),\n\n  \n  evidencia_url TEXT,                            \n  evidencia_descricao TEXT,\n  data_conclusao TEXT,                           \n  concluida_por INTEGER,                         \n\n  \n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "sgso_relatos_fatores_humanos",
+        "sql": "CREATE TABLE sgso_relatos_fatores_humanos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,                       \n  empresa_id INTEGER NOT NULL,                   \n\n  \n  nivel_hfacs TEXT NOT NULL CHECK (nivel_hfacs IN (\n    'ACOES_INSEGURAS',              \n    'PRECONDICOES',                 \n    'SUPERVISAO',                   \n    'INFLUENCIAS_ORGANIZACIONAIS'   \n  )),\n\n  \n  categoria TEXT NOT NULL,\n  \n  \n  \n  \n  \n\n  subcategoria TEXT,                             \n  descricao TEXT,                                \n\n  \n  efetividade_cognitiva_capturada REAL,          \n  fonte_automatica INTEGER DEFAULT 0 CHECK (fonte_automatica IN (0, 1)),\n  \n\n  \n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "sgso_relatos_arquivos",
+        "sql": "CREATE TABLE sgso_relatos_arquivos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,                       \n  empresa_id INTEGER NOT NULL,\n\n  \n  url TEXT NOT NULL,                             \n  nome_original TEXT NOT NULL,                   \n  tipo_mime TEXT,                                \n  tamanho_bytes INTEGER,\n\n  \n  tipo_documento TEXT CHECK (tipo_documento IN (\n    'FOTO_OCORRENCIA',\n    'FOTO_RAMPA',\n    'LAUDO_TECNICO',\n    'REGISTRO_MANUTENCAO',\n    'EVIDENCIA_ACAO',\n    'OUTRO'\n  )),\n  descricao TEXT,\n\n  \n  uploaded_by INTEGER,                           \n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "sgso_protocolo_sequencia",
+        "sql": "CREATE TABLE sgso_protocolo_sequencia (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  ano INTEGER NOT NULL,\n  ultimo_numero INTEGER NOT NULL DEFAULT 0,\n  UNIQUE(empresa_id, ano)\n)"
+      },
+      {
+        "name": "sgso_relatos_historico_status",
+        "sql": "CREATE TABLE sgso_relatos_historico_status (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,                       \n  empresa_id INTEGER NOT NULL,\n\n  status_anterior TEXT,                          \n  status_novo TEXT NOT NULL,\n  motivo TEXT,                                   \n  alterado_por INTEGER NOT NULL,                 \n  alterado_em TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "sgso_relatos_comentarios",
+        "sql": "CREATE TABLE sgso_relatos_comentarios (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,                       \n  empresa_id INTEGER NOT NULL,\n\n  texto TEXT NOT NULL,\n  interno INTEGER NOT NULL DEFAULT 1 CHECK (interno IN (0, 1)),\n  \n\n  autor_id INTEGER NOT NULL,                     \n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "sgso_auditorias",
+        "sql": "CREATE TABLE sgso_auditorias (\n  id TEXT PRIMARY KEY,                           \n  empresa_id INTEGER NOT NULL,\n\n  tipo TEXT NOT NULL CHECK (tipo IN (\n    'INTERNA',              \n    'EXTERNA',              \n    'RAMP_CHECK',           \n    'OPERACIONAL',          \n    'MANUTENCAO',           \n    'REVISAO_SGO',          \n    'FORNECEDORES'          \n  )),\n\n  titulo TEXT NOT NULL,\n  descricao TEXT,\n  template_id INTEGER,                           \n\n  \n  data_programada TEXT,                          \n  data_realizada TEXT,\n\n  \n  auditor_id INTEGER,                            \n  auditado_setor TEXT,                           \n\n  \n  status TEXT NOT NULL DEFAULT 'PROGRAMADA' CHECK (status IN (\n    'PROGRAMADA',\n    'EM_ANDAMENTO',\n    'CONCLUIDA',\n    'CANCELADA'\n  )),\n\n  \n  total_itens INTEGER DEFAULT 0,\n  itens_conformes INTEGER DEFAULT 0,\n  itens_nc_major INTEGER DEFAULT 0,\n  itens_nc_minor INTEGER DEFAULT 0,\n  itens_observacao INTEGER DEFAULT 0,\n  percentual_conformidade REAL,                  \n\n  observacoes_gerais TEXT,\n  relatorio_url TEXT,                            \n\n  \n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "sgso_auditoria_itens",
+        "sql": "CREATE TABLE sgso_auditoria_itens (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  auditoria_id TEXT NOT NULL,                    \n  empresa_id INTEGER NOT NULL,\n\n  numero_item INTEGER,                           \n  descricao TEXT NOT NULL,                       \n  rbac_referencia TEXT,                          \n  criterio_aceitacao TEXT,                       \n\n  \n  resultado TEXT CHECK (resultado IN (\n    'CONFORME',\n    'NC_MAJOR',        \n    'NC_MINOR',        \n    'OBSERVACAO',      \n    'NAO_APLICAVEL'\n  )),\n  evidencia TEXT,                                \n  evidencia_url TEXT,                            \n\n  \n  verificado_por INTEGER,                        \n  verificado_em TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "sgso_nao_conformidades",
+        "sql": "CREATE TABLE sgso_nao_conformidades (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n\n  \n  auditoria_id TEXT,                             \n  auditoria_item_id INTEGER,                     \n  relato_id TEXT,                                \n\n  tipo TEXT NOT NULL CHECK (tipo IN (\n    'MAJOR',        \n    'MINOR',        \n    'OBSERVACAO'    \n  )),\n\n  descricao TEXT NOT NULL,\n  rbac_referencia TEXT,                          \n  causa_raiz TEXT,                               \n\n  \n  responsavel_id INTEGER,                        \n  prazo_resolucao TEXT,                          \n\n  \n  status TEXT NOT NULL DEFAULT 'ABERTA' CHECK (status IN (\n    'ABERTA',\n    'EM_RESOLUCAO',\n    'AGUARDANDO_VERIFICACAO',\n    'FECHADA',\n    'CANCELADA'\n  )),\n\n  \n  fechada_por INTEGER,                           \n  fechada_em TEXT,\n  evidencia_fechamento TEXT,\n  evidencia_url TEXT,\n\n  \n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "sgso_spi_config",
+        "sql": "CREATE TABLE sgso_spi_config (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n\n  codigo TEXT NOT NULL,                          \n  nome TEXT NOT NULL,\n  descricao TEXT,\n  unidade TEXT,                                  \n\n  \n  meta_valor REAL,                               \n  meta_operador TEXT CHECK (meta_operador IN ('>=', '<=', '=', '>', '<')),\n  \n\n  alerta_valor REAL,                             \n  alerta_operador TEXT CHECK (alerta_operador IN ('>=', '<=', '=', '>', '<')),\n\n  ativo INTEGER DEFAULT 1 CHECK (ativo IN (0, 1)),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(empresa_id, codigo)\n)"
+      },
+      {
+        "name": "sgso_categorias_adrep",
+        "sql": "CREATE TABLE sgso_categorias_adrep (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  codigo TEXT NOT NULL UNIQUE,                   \n  nome_pt TEXT NOT NULL,                         \n  nome_en TEXT,                                  \n  categoria_pai_id INTEGER,                      \n  ativo INTEGER DEFAULT 1\n)"
+      },
+      {
+        "name": "licencas",
+        "sql": "CREATE TABLE \"licencas\" (\n  id          INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER NOT NULL,\n  tipo        TEXT NOT NULL,\n  numero      TEXT NOT NULL,\n  data_emissao TEXT NOT NULL,\n  data_vencimento TEXT NOT NULL,\n  observacoes TEXT,\n  created_at  TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  updated_at  TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),\n  deleted_at  TEXT DEFAULT NULL,\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "hospedagem",
+        "sql": "CREATE TABLE hospedagem (\n  id          INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id  INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  tipo        TEXT NOT NULL CHECK(tipo IN ('HOTEL','PLATAFORMA','BASE','OUTRO')),\n  local       TEXT NOT NULL,\n  cidade      TEXT,\n  estado      TEXT,\n  data_checkin  TEXT NOT NULL,   -- ISO date YYYY-MM-DD\n  data_checkout TEXT,            -- NULL = ainda hospedado\n  numero_quarto TEXT,\n  custo_diaria  REAL,\n  moeda         TEXT DEFAULT 'BRL',\n  escala_id     INTEGER,         -- vínculo opcional com escalas\n  observacoes   TEXT,\n  created_at  TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at  TEXT,\n  FOREIGN KEY (empresa_id)    REFERENCES empresas(id),\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),\n  FOREIGN KEY (escala_id)      REFERENCES escalas(id)\n)"
+      },
+      {
+        "name": "escala_confirmacoes",
+        "sql": "CREATE TABLE escala_confirmacoes (\n  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),\n  escala_id TEXT NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  confirmado_em TEXT NOT NULL DEFAULT (datetime('now')),\n  ip TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT DEFAULT NULL,\n  FOREIGN KEY (escala_id) REFERENCES escalas_mensais(id),\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "escala_voo_diaria",
+        "sql": "CREATE TABLE escala_voo_diaria (\n  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),\n  empresa_id INTEGER NOT NULL,\n  escala_id TEXT,                         -- FK opcional para escalas (EST mensal)\n  data TEXT NOT NULL,                     -- YYYY-MM-DD\n  status TEXT NOT NULL DEFAULT 'RASCUNHO',-- RASCUNHO | PUBLICADA | CANCELADA\n  \n  -- Tripulação\n  pic_id INTEGER,                         -- FK funcionarios\n  sic_id INTEGER,                         -- FK funcionarios\n  pic_funcao TEXT,                        -- PIC / IN / EC\n  sic_funcao TEXT,                        -- SIC / IN / EC\n  \n  -- Aeronave\n  aeronave_prefixo TEXT,\n  aeronave_modelo TEXT,\n  \n  -- Horários operacionais\n  hora_apresentacao TEXT,                 -- HH:MM\n  hora_decolagem_prevista TEXT,           -- HH:MM\n  hora_pouso_previsto TEXT,               -- HH:MM\n  hora_decolagem_real TEXT,               -- HH:MM (preenchido pós-voo)\n  hora_pouso_real TEXT,                   -- HH:MM (preenchido pós-voo)\n  hora_corte_motor TEXT,                  -- HH:MM (preenchido pós-voo)\n  \n  -- Repouso\n  repouso_anterior_minutos INTEGER,       -- minutos desde último corte motor\n  repouso_minimo_ok INTEGER DEFAULT 1,    -- 1 = ≥ 12h30, 0 = violação\n  \n  -- Rota / missão\n  origem TEXT,                            -- ICAO / base\n  destino TEXT,                           -- ICAO / base / plataforma\n  tipo_missao TEXT DEFAULT 'OFFSHORE',    -- OFFSHORE | INSTRUCAO | CHECK | FERRY | OUTRO\n  \n  -- Observações\n  observacoes TEXT,\n  \n  -- Audit\n  criado_por INTEGER,                     -- FK funcionarios (quem elaborou)\n  aprovado_por INTEGER,                   -- FK funcionarios (gestor ops)\n  aprovado_em TEXT,\n  \n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "solicitacoes_treinamento",
+        "sql": "CREATE TABLE solicitacoes_treinamento (\n  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),\n  empresa_id INTEGER NOT NULL,\n  \n  -- Quem solicita\n  solicitante_id INTEGER NOT NULL,        -- FK funcionarios\n  \n  -- Treinamento\n  qualificacao_id INTEGER,                -- FK qualificacoes_tipos (se for qualificação específica)\n  tipo_treinamento TEXT NOT NULL,         -- INICIAL | RECORRENTE | UPGRADE | ESPECIFICO\n  titulo TEXT NOT NULL,\n  descricao TEXT,\n  justificativa TEXT,\n  \n  -- Workflow\n  status TEXT NOT NULL DEFAULT 'SOLICITADA', -- SOLICITADA | APROVADA_GESTOR | APROVADA_OPS | AGENDADA | CONCLUIDA | REJEITADA\n  aprovado_gestor_por INTEGER,            -- FK funcionarios\n  aprovado_gestor_em TEXT,\n  aprovado_ops_por INTEGER,               -- FK funcionarios\n  aprovado_ops_em TEXT,\n  motivo_rejeicao TEXT,\n  rejeitado_por INTEGER,\n  rejeitado_em TEXT,\n  \n  -- Agendamento (pós aprovação)\n  data_prevista TEXT,                     -- YYYY-MM-DD\n  data_realizada TEXT,                    -- YYYY-MM-DD\n  sessao_simulador_id TEXT,              -- FK simulador_agendamentos (se aplicável)\n  \n  -- Prioridade\n  prioridade TEXT NOT NULL DEFAULT 'NORMAL', -- BAIXA | NORMAL | ALTA | URGENTE\n  \n  -- Audit\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, lms_matricula_id INTEGER REFERENCES lms_matriculas(id), treinamento_planejado_id INTEGER, status_pre_agendamento TEXT)"
+      },
+      {
+        "name": "sgso_relato_capturas",
+        "sql": "CREATE TABLE sgso_relato_capturas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n\n  client_submission_id TEXT NOT NULL,\n  canal_origem TEXT NOT NULL CHECK (canal_origem IN (\n    'WEB',\n    'MOBILE',\n    'TABLET',\n    'API',\n    'IMPORTACAO'\n  )),\n  sync_status TEXT NOT NULL DEFAULT 'RECEBIDO' CHECK (sync_status IN (\n    'RECEBIDO',\n    'PROCESSADO',\n    'CONCILIADO',\n    'REJEITADO'\n  )),\n  sync_tentativas INTEGER NOT NULL DEFAULT 0,\n  offline_capturado_em TEXT,\n  sincronizado_em TEXT,\n\n  -- Friccao zero: espelho dos campos essenciais capturados primeiro\n  o_que_resumo TEXT NOT NULL,\n  onde_resumo TEXT NOT NULL,\n  quando_resumo TEXT NOT NULL,\n  timezone_offset_minutos INTEGER,\n\n  -- Metadados operacionais e geolocalizacao da captura\n  dispositivo_id TEXT,\n  dispositivo_tipo TEXT,\n  app_versao TEXT,\n  latitude REAL,\n  longitude REAL,\n  precisao_metros REAL,\n  metadata_json TEXT,\n\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(empresa_id, client_submission_id),\n  UNIQUE(relato_id)\n)"
+      },
+      {
+        "name": "sgso_relato_privacidade",
+        "sql": "CREATE TABLE sgso_relato_privacidade (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n\n  modo_sigilo TEXT NOT NULL DEFAULT 'CONFIDENCIAL' CHECK (modo_sigilo IN (\n    'IDENTIFICADO',\n    'CONFIDENCIAL',\n    'ANONIMIZADO'\n  )),\n  consentimento_contato INTEGER NOT NULL DEFAULT 0 CHECK (consentimento_contato IN (0, 1)),\n\n  relator_ciphertext TEXT,\n  relator_nonce TEXT,\n  relator_hash_busca TEXT,\n  contato_ciphertext TEXT,\n  contato_nonce TEXT,\n  chave_versao TEXT,\n  politica_acesso_json TEXT,\n\n  ultimo_acesso_em TEXT,\n  ultimo_acesso_por INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(relato_id)\n)"
+      },
+      {
+        "name": "sgso_relatos_midias_metadados",
+        "sql": "CREATE TABLE sgso_relatos_midias_metadados (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  arquivo_id INTEGER NOT NULL,\n  relato_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n\n  geotag_latitude REAL,\n  geotag_longitude REAL,\n  geotag_precisao_metros REAL,\n  capturado_em TEXT,\n  origem_dispositivo TEXT,\n  hash_arquivo TEXT,\n  metadados_exif_json TEXT,\n\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  UNIQUE(arquivo_id)\n)"
+      },
+      {
+        "name": "sgso_relato_ia_triagem",
+        "sql": "CREATE TABLE sgso_relato_ia_triagem (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n\n  provedor_modelo TEXT,\n  nome_modelo TEXT,\n  prompt_versao TEXT,\n\n  clareza_status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (clareza_status IN (\n    'PENDENTE',\n    'APROVADO',\n    'REVISAO_MANUAL',\n    'REJEITADO'\n  )),\n  clareza_score REAL,\n  resumo_normalizado TEXT,\n  recomendacao_reescrita TEXT,\n\n  adrep_codigo_sugerido TEXT,\n  adrep_confianca REAL,\n  eccairs2_codigo_sugerido TEXT,\n  eccairs2_confianca REAL,\n  taxonomia_json TEXT,\n\n  fingerprint_semantico TEXT,\n  cluster_tendencia TEXT,\n  casos_similares_qtd INTEGER DEFAULT 0,\n  casos_similares_json TEXT,\n  sinal_tendencia TEXT CHECK (sinal_tendencia IN (\n    'SEM_SINAL',\n    'EM_OBSERVACAO',\n    'TENDENCIA',\n    'SURTO'\n  )),\n\n  revisado_por INTEGER,\n  revisado_em TEXT,\n  decisao_final TEXT CHECK (decisao_final IN (\n    'ACEITA',\n    'AJUSTADA',\n    'DESCARTADA'\n  )),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(relato_id)\n)"
+      },
+      {
+        "name": "sgso_perigos",
+        "sql": "CREATE TABLE sgso_perigos (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  codigo TEXT NOT NULL,\n  titulo TEXT NOT NULL,\n  descricao TEXT,\n  categoria_principal TEXT,\n  fonte_principal TEXT CHECK (fonte_principal IN (\n    'RELPREV',\n    'AUDITORIA',\n    'FRAT',\n    'SPI',\n    'MANUAL'\n  )),\n  status TEXT NOT NULL DEFAULT 'ATIVO' CHECK (status IN (\n    'ATIVO',\n    'EM_MONITORAMENTO',\n    'MITIGADO',\n    'ARQUIVADO'\n  )),\n  responsavel_id INTEGER,\n  primeira_ocorrencia_em TEXT,\n  ultima_ocorrencia_em TEXT,\n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n\n  UNIQUE(empresa_id, codigo)\n)"
+      },
+      {
+        "name": "sgso_relato_perigos",
+        "sql": "CREATE TABLE sgso_relato_perigos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,\n  perigo_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  origem_vinculo TEXT NOT NULL DEFAULT 'MANUAL' CHECK (origem_vinculo IN (\n    'MANUAL',\n    'IA',\n    'REGRA',\n    'AUDITORIA'\n  )),\n  confianca REAL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  UNIQUE(relato_id, perigo_id)\n)"
+      },
+      {
+        "name": "sgso_bowtie_cenarios",
+        "sql": "CREATE TABLE sgso_bowtie_cenarios (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  perigo_id TEXT NOT NULL,\n  codigo TEXT NOT NULL,\n  evento_central TEXT NOT NULL,\n  descricao TEXT,\n  perfil_matriz_id INTEGER,\n  owner_id INTEGER,\n  status TEXT NOT NULL DEFAULT 'ATIVO' CHECK (status IN (\n    'ATIVO',\n    'EM_REVISAO',\n    'ARQUIVADO'\n  )),\n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT, probabilidade_base REAL NOT NULL DEFAULT 1.0,\n\n  UNIQUE(empresa_id, codigo)\n)"
+      },
+      {
+        "name": "sgso_bowtie_nos",
+        "sql": "CREATE TABLE sgso_bowtie_nos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  cenario_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  tipo_no TEXT NOT NULL CHECK (tipo_no IN (\n    'AMEACA',\n    'CONSEQUENCIA'\n  )),\n  codigo TEXT,\n  titulo TEXT NOT NULL,\n  descricao TEXT,\n  ordem_exibicao INTEGER DEFAULT 0,\n  origem_relato_id TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n\n  UNIQUE(cenario_id, tipo_no, codigo)\n)"
+      },
+      {
+        "name": "sgso_bowtie_barreiras",
+        "sql": "CREATE TABLE sgso_bowtie_barreiras (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  cenario_id TEXT NOT NULL,\n  codigo TEXT NOT NULL,\n  nome TEXT NOT NULL,\n  descricao TEXT,\n  tipo_barreira TEXT NOT NULL CHECK (tipo_barreira IN (\n    'PREVENTIVA',\n    'RECUPERACAO'\n  )),\n  origem_tipo TEXT CHECK (origem_tipo IN (\n    'PROCEDIMENTO',\n    'TREINAMENTO',\n    'AUDITORIA',\n    'FRAT',\n    'SISTEMA',\n    'OUTRO'\n  )),\n  origem_ref_id TEXT,\n  owner_id INTEGER,\n  status_saude TEXT NOT NULL DEFAULT 'OPERANTE' CHECK (status_saude IN (\n    'OPERANTE',\n    'DEGRADADA',\n    'INOPERANTE',\n    'EM_REVISAO'\n  )),\n  efetividade_percentual REAL,\n  verificado_em TEXT,\n  vence_em TEXT,\n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n\n  UNIQUE(empresa_id, codigo)\n)"
+      },
+      {
+        "name": "sgso_bowtie_barreira_vinculos",
+        "sql": "CREATE TABLE sgso_bowtie_barreira_vinculos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  barreira_id TEXT NOT NULL,\n  no_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  UNIQUE(barreira_id, no_id)\n)"
+      },
+      {
+        "name": "sgso_bowtie_barreira_historico",
+        "sql": "CREATE TABLE sgso_bowtie_barreira_historico (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  barreira_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  status_anterior TEXT,\n  status_novo TEXT NOT NULL CHECK (status_novo IN (\n    'OPERANTE',\n    'DEGRADADA',\n    'INOPERANTE',\n    'EM_REVISAO'\n  )),\n  motivo_tipo TEXT CHECK (motivo_tipo IN (\n    'AUDITORIA',\n    'NC',\n    'ACAO_MITIGACAO',\n    'SISTEMA',\n    'MANUAL'\n  )),\n  motivo_ref_id TEXT,\n  observacao TEXT,\n  alterado_por INTEGER,\n  alterado_em TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "sgso_matriz_risco_perfis",
+        "sql": "CREATE TABLE sgso_matriz_risco_perfis (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL DEFAULT 0,\n  codigo TEXT NOT NULL,\n  nome TEXT NOT NULL,\n  descricao TEXT,\n  tamanho INTEGER NOT NULL DEFAULT 5 CHECK (tamanho = 5),\n  ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),\n  padrao INTEGER NOT NULL DEFAULT 0 CHECK (padrao IN (0, 1)),\n  elevar_fadiga INTEGER NOT NULL DEFAULT 1 CHECK (elevar_fadiga IN (0, 1)),\n  exigir_aprovacao_alto INTEGER NOT NULL DEFAULT 1 CHECK (exigir_aprovacao_alto IN (0, 1)),\n  exigir_aprovacao_critico INTEGER NOT NULL DEFAULT 1 CHECK (exigir_aprovacao_critico IN (0, 1)),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(empresa_id, codigo)\n)"
+      },
+      {
+        "name": "sgso_matriz_risco_celulas",
+        "sql": "CREATE TABLE sgso_matriz_risco_celulas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  perfil_id INTEGER NOT NULL,\n  codigo_probabilidade TEXT NOT NULL CHECK (codigo_probabilidade IN ('A', 'B', 'C', 'D', 'E')),\n  ordem_probabilidade INTEGER NOT NULL CHECK (ordem_probabilidade BETWEEN 1 AND 5),\n  severidade INTEGER NOT NULL CHECK (severidade BETWEEN 1 AND 5),\n  score INTEGER NOT NULL,\n  nivel_risco TEXT NOT NULL CHECK (nivel_risco IN ('BAIXO', 'MEDIO', 'ALTO', 'CRITICO')),\n  token_cor TEXT,\n  prazo_resposta_horas INTEGER,\n  exige_aprovacao INTEGER NOT NULL DEFAULT 0 CHECK (exige_aprovacao IN (0, 1)),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(perfil_id, codigo_probabilidade, severidade)\n)"
+      },
+      {
+        "name": "sgso_avaliacao_risco_contexto",
+        "sql": "CREATE TABLE sgso_avaliacao_risco_contexto (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  avaliacao_risco_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  perfil_id INTEGER NOT NULL,\n  score_calculado INTEGER NOT NULL,\n  apetite_violado INTEGER NOT NULL DEFAULT 0 CHECK (apetite_violado IN (0, 1)),\n  exige_aprovacao INTEGER NOT NULL DEFAULT 0 CHECK (exige_aprovacao IN (0, 1)),\n  aprovacao_status TEXT NOT NULL DEFAULT 'NAO_APLICAVEL' CHECK (aprovacao_status IN (\n    'NAO_APLICAVEL',\n    'PENDENTE',\n    'APROVADO',\n    'REJEITADO'\n  )),\n  aprovado_por INTEGER,\n  aprovado_em TEXT,\n  justificativa_aprovacao TEXT,\n  snapshot_json TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(avaliacao_risco_id)\n)"
+      },
+      {
+        "name": "sgso_frat_modelos",
+        "sql": "CREATE TABLE sgso_frat_modelos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL DEFAULT 0,\n  codigo TEXT NOT NULL,\n  nome TEXT NOT NULL,\n  descricao TEXT,\n  categoria_operacao TEXT CHECK (categoria_operacao IN (\n    'ASA_FIXA',\n    'HELICOPTERO',\n    'OFFSHORE',\n    'UTI_AEREA',\n    'GERAL'\n  )),\n  ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),\n  exige_aprovacao_risco_alto INTEGER NOT NULL DEFAULT 1 CHECK (exige_aprovacao_risco_alto IN (0, 1)),\n  exige_aprovacao_risco_critico INTEGER NOT NULL DEFAULT 1 CHECK (exige_aprovacao_risco_critico IN (0, 1)),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(empresa_id, codigo)\n)"
+      },
+      {
+        "name": "sgso_frat_fatores",
+        "sql": "CREATE TABLE sgso_frat_fatores (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  modelo_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL DEFAULT 0,\n  codigo TEXT NOT NULL,\n  categoria TEXT NOT NULL,\n  pergunta TEXT NOT NULL,\n  tipo_resposta TEXT NOT NULL CHECK (tipo_resposta IN (\n    'BINARIA',\n    'ESCALA',\n    'NUMERICA',\n    'LISTA'\n  )),\n  peso_base REAL NOT NULL DEFAULT 1,\n  ordem_exibicao INTEGER NOT NULL DEFAULT 0,\n  opcoes_json TEXT,\n  regra_score_json TEXT,\n  ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(modelo_id, codigo)\n)"
+      },
+      {
+        "name": "sgso_frat_avaliacoes",
+        "sql": "CREATE TABLE sgso_frat_avaliacoes (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  modelo_id INTEGER NOT NULL,\n  escala_id TEXT,\n  alocacao_id INTEGER,\n  tripulante_id INTEGER,\n  aeronave_id INTEGER,\n  data_operacao TEXT NOT NULL,\n  score_total REAL NOT NULL DEFAULT 0,\n  nivel_risco TEXT NOT NULL CHECK (nivel_risco IN ('BAIXO', 'MEDIO', 'ALTO', 'CRITICO')),\n  status TEXT NOT NULL DEFAULT 'RASCUNHO' CHECK (status IN (\n    'RASCUNHO',\n    'SUBMETIDO',\n    'APROVADO',\n    'REJEITADO',\n    'EXPIRADO'\n  )),\n  exige_aprovacao INTEGER NOT NULL DEFAULT 0 CHECK (exige_aprovacao IN (0, 1)),\n  aprovado_por INTEGER,\n  aprovado_em TEXT,\n  despacho_bloqueado INTEGER NOT NULL DEFAULT 0 CHECK (despacho_bloqueado IN (0, 1)),\n  justificativa TEXT,\n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, nivel_aprovacao_atual TEXT NOT NULL DEFAULT 'L1', origem_vinculo TEXT NOT NULL DEFAULT 'MANUAL', frms_fadiga_checkin_id TEXT)"
+      },
+      {
+        "name": "sgso_frat_respostas",
+        "sql": "CREATE TABLE sgso_frat_respostas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  avaliacao_id TEXT NOT NULL,\n  fator_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  resposta_texto TEXT,\n  resposta_numero REAL,\n  score_aplicado REAL NOT NULL DEFAULT 0,\n  observacao TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE(avaliacao_id, fator_id)\n)"
+      },
+      {
+        "name": "sgso_frat_aprovacoes",
+        "sql": "CREATE TABLE sgso_frat_aprovacoes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  avaliacao_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  decisao TEXT NOT NULL CHECK (decisao IN (\n    'APROVAR',\n    'REJEITAR',\n    'SOLICITAR_REVISAO'\n  )),\n  aprovador_id INTEGER NOT NULL,\n  motivo TEXT,\n  despacho_liberado INTEGER NOT NULL DEFAULT 0 CHECK (despacho_liberado IN (0, 1)),\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n, nivel TEXT NOT NULL DEFAULT 'L1')"
+      },
+      {
+        "name": "sgso_relato_workflow_eventos",
+        "sql": "CREATE TABLE sgso_relato_workflow_eventos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  tipo_evento TEXT NOT NULL CHECK (tipo_evento IN (\n    'RECEBIMENTO',\n    'TRIAGEM',\n    'CLASSIFICACAO_IA',\n    'ANALISE_RISCO',\n    'PLANO_ACAO',\n    'NOTIFICACAO_RELATOR',\n    'ESCALONAMENTO',\n    'ENCERRAMENTO'\n  )),\n  status_evento TEXT NOT NULL CHECK (status_evento IN (\n    'PENDENTE',\n    'EM_PROCESSAMENTO',\n    'CONCLUIDO',\n    'FALHA'\n  )),\n  visivel_relator INTEGER NOT NULL DEFAULT 1 CHECK (visivel_relator IN (0, 1)),\n  payload_json TEXT,\n  ator_id INTEGER,\n  criado_em TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "sgso_relato_notificacoes",
+        "sql": "CREATE TABLE sgso_relato_notificacoes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,\n  workflow_evento_id INTEGER,\n  empresa_id INTEGER NOT NULL,\n  template_codigo TEXT NOT NULL,\n  canal TEXT NOT NULL CHECK (canal IN (\n    'EMAIL',\n    'PUSH',\n    'INAPP',\n    'WEBHOOK'\n  )),\n  destino_tipo TEXT NOT NULL CHECK (destino_tipo IN (\n    'RELATOR',\n    'GSO',\n    'GESTOR_OPERACIONAL',\n    'SISTEMA'\n  )),\n  status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (status IN (\n    'PENDENTE',\n    'ENVIADA',\n    'FALHA',\n    'LIDA'\n  )),\n  referencia_externa TEXT,\n  payload_json TEXT,\n  enviada_em TEXT,\n  lida_em TEXT,\n  erro_ultimo_envio TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "sgso_audit_trail",
+        "sql": "CREATE TABLE sgso_audit_trail (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  agregado_tipo TEXT NOT NULL,\n  agregado_id TEXT NOT NULL,\n  acao TEXT NOT NULL,\n  ator_id INTEGER,\n  origem TEXT CHECK (origem IN (\n    'API',\n    'WORKER',\n    'CRON',\n    'IA',\n    'MANUAL'\n  )),\n  payload_hash TEXT,\n  payload_json TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "sgso_sla_config",
+        "sql": "CREATE TABLE sgso_sla_config (\n  id                  INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),\n  fase                TEXT    NOT NULL CHECK (fase IN ('TRIAGEM', 'INVESTIGACAO', 'RESOLUCAO')),\n  horas_prazo         INTEGER NOT NULL DEFAULT 24,\n  horas_alerta_previa INTEGER NOT NULL DEFAULT 4,\n  ativo               INTEGER NOT NULL DEFAULT 1,\n  created_at          TEXT    NOT NULL DEFAULT (datetime('now')),\n  updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),\n  UNIQUE (empresa_id, fase)\n)"
+      },
+      {
+        "name": "sgso_licoes_aprendidas",
+        "sql": "CREATE TABLE sgso_licoes_aprendidas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  relato_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  titulo TEXT NOT NULL,\n  resumo TEXT,\n  licoes_json TEXT NOT NULL,\n  investigation_type TEXT NOT NULL,\n  status_publicacao TEXT NOT NULL DEFAULT 'PENDENTE',\n  edapp_course_id TEXT,\n  edapp_publicado_em TEXT,\n  erro_publicacao TEXT,\n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  UNIQUE(relato_id)\n)"
+      },
+      {
+        "name": "sgso_moc_registros",
+        "sql": "CREATE TABLE sgso_moc_registros (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  titulo TEXT NOT NULL,\n  descricao_mudanca TEXT NOT NULL,\n  motivo TEXT NOT NULL,\n  impacto_operacional TEXT NOT NULL,\n  risco_nivel TEXT NOT NULL CHECK (risco_nivel IN ('BAIXO', 'MEDIO', 'ALTO', 'CRITICO')),\n  status TEXT NOT NULL DEFAULT 'RASCUNHO' CHECK (status IN (\n    'RASCUNHO',\n    'EM_AVALIACAO',\n    'APROVADO',\n    'IMPLEMENTADO',\n    'REJEITADO',\n    'CANCELADO'\n  )),\n  data_planejada TEXT,\n  owner_id INTEGER,\n  aprovado_por INTEGER,\n  aprovado_em TEXT,\n  areas_afetadas_json TEXT,\n  mitigacoes_planejadas_json TEXT,\n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "sgso_moc_aprovacoes",
+        "sql": "CREATE TABLE sgso_moc_aprovacoes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  moc_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  status_novo TEXT NOT NULL,\n  observacao TEXT,\n  aprovador_id INTEGER NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "horas_voo_saldo_inicial",
+        "sql": "CREATE TABLE horas_voo_saldo_inicial (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  horas_total_min INTEGER DEFAULT 0,\n  horas_pic_min INTEGER DEFAULT 0,\n  horas_sic_min INTEGER DEFAULT 0,\n  horas_noturna_min INTEGER DEFAULT 0,\n  horas_instrumento_min INTEGER DEFAULT 0,\n  horas_simulador_min INTEGER DEFAULT 0,\n  horas_instrucao_min INTEGER DEFAULT 0,\n  horas_aw139_min INTEGER DEFAULT 0,\n  horas_sk76_min INTEGER DEFAULT 0,\n  horas_outros_modelos_min INTEGER DEFAULT 0,\n  data_referencia TEXT NOT NULL,\n  observacoes TEXT,\n  criado_por INTEGER,\n  atualizado_por INTEGER,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  UNIQUE(funcionario_id, empresa_id)\n)"
+      },
+      {
+        "name": "horas_voo_lancamentos",
+        "sql": "CREATE TABLE horas_voo_lancamentos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  data_voo TEXT NOT NULL,\n  aeronave_id INTEGER,\n  modelo_aeronave TEXT,\n  prefixo_aeronave TEXT,\n  origem TEXT,\n  destino TEXT,\n  duracao_total_min INTEGER NOT NULL DEFAULT 0,\n  duracao_pic_min INTEGER DEFAULT 0,\n  duracao_sic_min INTEGER DEFAULT 0,\n  duracao_noturna_min INTEGER DEFAULT 0,\n  duracao_instrumento_min INTEGER DEFAULT 0,\n  duracao_instrucao_min INTEGER DEFAULT 0,\n  pousos_dia INTEGER DEFAULT 0,\n  pousos_noite INTEGER DEFAULT 0,\n  hoist_cycles INTEGER DEFAULT 0,\n  funcao TEXT NOT NULL,\n  tipo_operacao TEXT,\n  is_simulador INTEGER DEFAULT 0,\n  origem_registro TEXT NOT NULL,\n  frms_jornada_id INTEGER,\n  sessao_simulador_id INTEGER,\n  fira_importacao_id INTEGER,\n  observacoes TEXT,\n  numero_voo TEXT,\n  criado_por INTEGER,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "frms_fadiga_config_empresa",
+        "sql": "CREATE TABLE frms_fadiga_config_empresa (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL UNIQUE,\n  ativo INTEGER NOT NULL DEFAULT 1,\n  janela_inicio TEXT NOT NULL DEFAULT '04:00',\n  janela_fim TEXT NOT NULL DEFAULT '11:00',\n  threshold_amarelo INTEGER NOT NULL DEFAULT 40,\n  threshold_vermelho INTEGER NOT NULL DEFAULT 60,\n  peso_kss REAL NOT NULL DEFAULT 0.35,\n  peso_sono_duracao REAL NOT NULL DEFAULT 0.25,\n  peso_sono_qualidade REAL NOT NULL DEFAULT 0.2,\n  peso_sintomas REAL NOT NULL DEFAULT 0.2,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "frms_fadiga_checkin",
+        "sql": "CREATE TABLE frms_fadiga_checkin (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  data_checkin TEXT NOT NULL,\n  hora_checkin TEXT NOT NULL,\n  kss_score INTEGER NOT NULL,\n  horas_sono REAL NOT NULL,\n  qualidade_sono INTEGER NOT NULL,\n  sintomas_json TEXT,\n  observacoes TEXT,\n  score_fadiga INTEGER NOT NULL,\n  nivel_fadiga TEXT NOT NULL,\n  status_operacional TEXT NOT NULL,\n  recomendacao TEXT,\n  apto INTEGER NOT NULL DEFAULT 1,\n  requires_frat_review INTEGER NOT NULL DEFAULT 0,\n  frat_sugerido_nivel TEXT,\n  associado_frat_avaliacao_id TEXT,\n  created_by INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n, jornada_inicio_prevista TEXT, jornada_fim_prevista TEXT, horas_acordado REAL, meds_ult_12h INTEGER NOT NULL DEFAULT 0, alcool_ult_12h INTEGER NOT NULL DEFAULT 0, risco_autoavaliado INTEGER, origem_registro TEXT NOT NULL DEFAULT 'TRIPULANTE', horas_sono_48h REAL, wake_time TEXT, subjective_fatigue_level INTEGER, sleepiness_level INTEGER, fit_for_duty INTEGER, computed_risk_level TEXT NOT NULL DEFAULT 'normal', requires_operational_review INTEGER NOT NULL DEFAULT 0, report_source TEXT NOT NULL DEFAULT 'CREW_REPORTED', submitted_at TEXT)"
+      },
+      {
+        "name": "frms_fadiga_evento",
+        "sql": "CREATE TABLE frms_fadiga_evento (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  checkin_id TEXT,\n  tipo TEXT NOT NULL,\n  payload_json TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "frms_fadiga_avaliacao_gestor",
+        "sql": "CREATE TABLE frms_fadiga_avaliacao_gestor (\n  id TEXT PRIMARY KEY,\n  checkin_id TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  avaliador_id INTEGER NOT NULL,\n  decisao TEXT NOT NULL CHECK (decisao IN ('APTO', 'MONITORADO', 'RESTRITO', 'NAO_APTO')),\n  mitigacoes_json TEXT,\n  observacoes TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "bkp_qual_historico_20260325",
+        "sql": "CREATE TABLE bkp_qual_historico_20260325(\n  id INT,\n  funcionario_id INT,\n  qualificacao_id INT,\n  tipo_codigo TEXT,\n  codigo TEXT,\n  categoria TEXT,\n  validade TEXT,\n  numero_certificado TEXT,\n  observacoes TEXT,\n  arquivo_url TEXT,\n  created_at TEXT,\n  updated_at TEXT,\n  deleted_at TEXT,\n  data_conclusao TEXT,\n  validade_meses INT,\n  instrutor TEXT,\n  nota REAL,\n  carga_horaria REAL,\n  data_vencimento TEXT,\n  renovada INT,\n  certificado_arquivo_id INT,\n  funcionario_cpf TEXT,\n  qualificacao_codigo TEXT,\n  empresa_id INT,\n  status TEXT,\n  tipo_check_id INT,\n  sessao_id INT,\n  tipo TEXT,\n  data_confirmacao TEXT,\n  confirmada_por INT\n)"
+      },
+      {
+        "name": "bkp_qual_tipos_20260325",
+        "sql": "CREATE TABLE bkp_qual_tipos_20260325(\n  id INT,\n  tipo TEXT,\n  codigo TEXT,\n  nome TEXT,\n  descricao TEXT,\n  categoria TEXT,\n  carga_horaria REAL,\n  validade INT,\n  vencimento_fim_mes INT,\n  observacoes TEXT,\n  ativo INT,\n  created_at NUM,\n  updated_at NUM,\n  deleted_at NUM,\n  empresa_id INT,\n  is_check INT\n)"
+      },
+      {
+        "name": "convites_usuarios",
+        "sql": "CREATE TABLE convites_usuarios (\n  id         INTEGER PRIMARY KEY AUTOINCREMENT,\n  token      TEXT    NOT NULL UNIQUE,\n  usuario_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  email      TEXT    NOT NULL,\n  role       TEXT,\n  created_by INTEGER,\n  expires_at TEXT    NOT NULL,\n  used_at    TEXT,\n  created_at TEXT    NOT NULL DEFAULT (datetime('now')),\n  FOREIGN KEY (usuario_id) REFERENCES usuarios(id),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "usuario_permissoes",
+        "sql": "CREATE TABLE usuario_permissoes (\n  id          INTEGER PRIMARY KEY AUTOINCREMENT,\n  usuario_id  INTEGER NOT NULL,\n  permissao   TEXT    NOT NULL,\n  tipo        TEXT    NOT NULL DEFAULT 'GRANT'\n              CHECK(tipo IN ('GRANT', 'DENY')),\n  created_by  INTEGER,\n  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),\n  UNIQUE(usuario_id, permissao),\n  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,\n  FOREIGN KEY (created_by) REFERENCES usuarios(id)\n)"
+      },
+      {
+        "name": "usuarios",
+        "sql": "CREATE TABLE \"usuarios\" (\n  id                     INTEGER PRIMARY KEY AUTOINCREMENT,\n  email                  TEXT    NOT NULL UNIQUE,\n  password_hash          TEXT    NOT NULL,\n  nome                   TEXT    NOT NULL,\n  perfil                 TEXT    NOT NULL DEFAULT 'ALUNO'\n                         CHECK(perfil IN (\n                           'ADMIN','ADMINISTRADOR',\n                           'GESTOR',\n                           'INSTRUTOR',\n                           'ALUNO',\n                           'COMPLIANCE',\n                           'USUARIO'\n                         )),\n  funcionario_id         INTEGER,\n  deleted_at             TEXT    DEFAULT NULL,\n  created_at             TEXT    DEFAULT (datetime('now')),\n  updated_at             TEXT    DEFAULT (datetime('now')),\n  active                 INTEGER DEFAULT 1,\n  last_login             TEXT,\n  failed_login_attempts  INTEGER DEFAULT 0,\n  locked_until           TEXT\n)"
+      },
+      {
+        "name": "modelos_sessao_checks",
+        "sql": "CREATE TABLE modelos_sessao_checks (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  modelo_id INTEGER NOT NULL REFERENCES modelos_sessao(id),\n  qualificacao_tipo_id INTEGER NOT NULL REFERENCES qualificacoes_tipos(id),\n  created_at DATETIME DEFAULT (datetime('now')),\n  updated_at DATETIME DEFAULT (datetime('now')),\n  deleted_at DATETIME NULL,\n  UNIQUE(modelo_id, qualificacao_tipo_id)\n)"
+      },
+      {
+        "name": "alertas_whatsapp_delivery",
+        "sql": "CREATE TABLE alertas_whatsapp_delivery (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER,\n  qualificacao_historico_id INTEGER,\n  funcionario_id INTEGER,\n  provider TEXT NOT NULL,\n  provider_message_id TEXT NOT NULL UNIQUE,\n  telefone_destino TEXT,\n  telefone_origem TEXT,\n  status TEXT NOT NULL,\n  error_code TEXT,\n  error_message TEXT,\n  payload_json TEXT,\n  accepted_at TEXT,\n  delivered_at TEXT,\n  failed_at TEXT,\n  last_event_at TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "alertas_whatsapp_templates",
+        "sql": "CREATE TABLE alertas_whatsapp_templates (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  template_key TEXT NOT NULL UNIQUE,\n  provider TEXT NOT NULL DEFAULT 'twilio',\n  friendly_name TEXT NOT NULL,\n  template_name TEXT NOT NULL,\n  category TEXT NOT NULL DEFAULT 'UTILITY',\n  language TEXT NOT NULL DEFAULT 'pt_BR',\n  body_text TEXT NOT NULL,\n  variables_json TEXT NOT NULL,\n  twilio_content_sid TEXT,\n  approval_status TEXT,\n  approval_error TEXT,\n  approval_payload_json TEXT,\n  last_synced_at TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "qualificacoes_historico",
+        "sql": "CREATE TABLE qualificacoes_historico (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  funcionario_id INTEGER,\n  qualificacao_id INTEGER,\n  tipo_codigo TEXT,\n  codigo TEXT,\n  categoria TEXT,\n  validade TEXT,\n  numero_certificado TEXT,\n  observacoes TEXT,\n  arquivo_url TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  data_conclusao TEXT,\n  validade_meses INTEGER,\n  instrutor TEXT,\n  nota REAL,\n  carga_horaria REAL,\n  data_vencimento TEXT,\n  renovada INTEGER DEFAULT 0,\n  certificado_arquivo_id INTEGER,\n  funcionario_cpf TEXT,\n  qualificacao_codigo TEXT,\n  empresa_id INTEGER DEFAULT 1,\n  status TEXT,\n  tipo_check_id INTEGER,\n  sessao_id INTEGER,\n  tipo TEXT,\n  data_confirmacao TEXT,\n  confirmada_por INTEGER,\n  tipo_treinamento TEXT CHECK(tipo_treinamento IN ('INICIAL', 'RECORRENTE', 'SEMESTRAL', 'UPGRADE', 'ESPECIFICO')),\n  renovacao_de INTEGER DEFAULT NULL\n, lms_matricula_id INTEGER REFERENCES lms_matriculas(id), origem_tipo TEXT\n  CHECK(origem_tipo IS NULL OR origem_tipo IN ('LMS', 'PRESENCIAL', 'SIMULADOR', 'IMPORTADO_EDAPP', 'MANUAL')), lms_matricula_ciclo_id INTEGER REFERENCES lms_matricula_ciclos(id))"
+      },
+      {
+        "name": "notificacoes_log",
+        "sql": "CREATE TABLE notificacoes_log (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  config_id INTEGER REFERENCES notificacoes_config(id),\n  qualificacao_historico_id INTEGER REFERENCES qualificacoes_historico(id),\n  funcionario_cpf VARCHAR(11),\n  tipo VARCHAR(50),\n  destinatario TEXT,\n  assunto TEXT,\n  corpo TEXT,\n  status VARCHAR(20),\n  erro_mensagem TEXT,\n  enviado_em TEXT,\n  created_at TEXT DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "name": "qualificacoes_historico_reclass_queue",
+        "sql": "CREATE TABLE qualificacoes_historico_reclass_queue (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  historico_id INTEGER NOT NULL,\n  current_codigo TEXT,\n  target_tipo_id TEXT,\n  status TEXT NOT NULL DEFAULT 'PENDING',\n  reason TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  UNIQUE(historico_id),\n  FOREIGN KEY(historico_id) REFERENCES qualificacoes_historico(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "name": "notificacoes_sistema",
+        "sql": "CREATE TABLE notificacoes_sistema (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  tipo TEXT NOT NULL,\n  prioridade TEXT DEFAULT 'MEDIA',\n  titulo TEXT NOT NULL,\n  mensagem TEXT NOT NULL,\n  dados TEXT,\n  grupo TEXT,\n  funcionario_id INTEGER,\n  qualificacao_historico_id INTEGER,\n  link TEXT,\n  acao_primaria TEXT,\n  lida INTEGER DEFAULT 0,\n  lida_em TEXT,\n  lida_por INTEGER,\n  user_id TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),\n  FOREIGN KEY (qualificacao_historico_id) REFERENCES qualificacoes_historico(id)\n)"
+      },
+      {
+        "name": "lms_matriculas",
+        "sql": "CREATE TABLE lms_matriculas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  curso_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n\n  -- Status do ciclo de vida\n  -- 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'REPROVADO' | 'CANCELADO'\n  status TEXT NOT NULL DEFAULT 'NAO_INICIADO',\n\n  -- Progresso\n  progresso_pct INTEGER DEFAULT 0,         -- 0 a 100\n  score_final INTEGER,                     -- score de conclusão do SCORM (0-100)\n  tentativas INTEGER NOT NULL DEFAULT 0,\n\n  -- Datas\n  data_inicio TEXT,                        -- quando o aluno acessou pela primeira vez\n  data_conclusao TEXT,                     -- quando status = CONCLUIDO ou REPROVADO\n  data_expiracao TEXT,                     -- prazo para conclusão (opcional)\n  data_matricula TEXT NOT NULL DEFAULT (datetime('now')),\n\n  -- Geração de qualificação\n  qualificacao_historico_id INTEGER,       -- FK para qualificacoes_historico.id (se gerada)\n\n  -- Quem matriculou\n  matriculado_por INTEGER,                 -- funcionario_id do gestor/admin que matriculou\n\n  -- Metadados\n  observacoes TEXT,\n\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT, ultimo_slide INTEGER DEFAULT 0, ultima_pagina INTEGER DEFAULT 0,\n\n  UNIQUE (curso_id, funcionario_id, empresa_id),\n\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (curso_id) REFERENCES lms_cursos(id),\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "lms_progresso_scorm",
+        "sql": "CREATE TABLE lms_progresso_scorm (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  matricula_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,             -- desnormalizado para eficiência de queries\n\n  -- Campos SCORM 1.2 / 2004 essenciais\n  lesson_status TEXT,                      -- SCORM 1.2: 'passed'|'failed'|'completed'|'incomplete'|'not attempted'|'browsed'\n  completion_status TEXT,                  -- SCORM 2004: 'completed'|'incomplete'|'not attempted'|'unknown'\n  success_status TEXT,                     -- SCORM 2004: 'passed'|'failed'|'unknown'\n  score_raw INTEGER,\n  score_max INTEGER,\n  score_min INTEGER,\n  score_scaled REAL,                       -- SCORM 2004: -1.0 a 1.0\n\n  -- Tempo e sessão\n  session_time TEXT,                       -- CMITimespan (PT1H2M3S ou HH:MM:SS)\n  total_time TEXT,                         -- acumulado de session_time\n  session_count INTEGER NOT NULL DEFAULT 1,\n\n  -- Suspend data (bookmark / estado do conteúdo)\n  suspend_data TEXT,                       -- até 4096 chars (SCORM 1.2) / 64000 (2004)\n  launch_data TEXT,                        -- lido apenas\n\n  -- Dados completos (JSON do CMI inteiro para reconstrução)\n  cmi_json TEXT,                           -- JSON com todo o objeto CMI\n\n  -- Controle\n  last_commit_at TEXT NOT NULL DEFAULT (datetime('now')),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  UNIQUE (matricula_id),\n\n  FOREIGN KEY (matricula_id) REFERENCES lms_matriculas(id),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "lms_h5p_conteudos",
+        "sql": "CREATE TABLE lms_h5p_conteudos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  titulo TEXT NOT NULL,\n  -- Tipo H5P: ex. 'InteractiveVideo', 'CoursePresentation', 'QuestionSet', 'Column'\n  tipo_h5p TEXT NOT NULL DEFAULT 'CoursePresentation',\n  r2_key TEXT,                              -- chave R2 do .h5p descompactado: lms/h5p/{empresa_id}/{id}/\n  versao TEXT,                              -- versão da biblioteca H5P, ex: 'H5P.CoursePresentation 1.24'\n  ativo INTEGER NOT NULL DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "lms_xapi_statements",
+        "sql": "CREATE TABLE lms_xapi_statements (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  matricula_id INTEGER NOT NULL,            -- FK → lms_matriculas.id\n\n  -- Campos xAPI principais (armazenados como TEXT/JSON para flexibilidade)\n  actor_json TEXT NOT NULL,                 -- { \"mbox\": \"mailto:...\", \"name\": \"...\" }\n  verb_id TEXT NOT NULL,                    -- ex: \"http://adlnet.gov/expapi/verbs/completed\"\n  verb_display TEXT,                        -- label localizado, ex: \"completou\"\n  object_id TEXT NOT NULL,                  -- IRI do objeto (curso/atividade)\n  object_type TEXT DEFAULT 'Activity',      -- 'Activity' | 'Agent' | 'Group' | 'StatementRef'\n  result_json TEXT,                         -- { \"success\": true, \"completion\": true, \"score\": {...} }\n  context_json TEXT,                        -- { \"contextActivities\": {...}, ... }\n  timestamp TEXT,                           -- ISO 8601 do momento da ação no cliente\n\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (matricula_id) REFERENCES lms_matriculas(id)\n)"
+      },
+      {
+        "name": "perfis_permissoes",
+        "sql": "CREATE TABLE perfis_permissoes (\n  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),\n  empresa_id INTEGER NOT NULL,\n  perfil TEXT NOT NULL CHECK(perfil IN ('GESTOR','INSTRUTOR','ALUNO')),\n  modulo TEXT NOT NULL,\n  acao TEXT NOT NULL,\n  permitido INTEGER NOT NULL DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  UNIQUE(empresa_id, perfil, modulo, acao),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "audit_logs",
+        "sql": "CREATE TABLE audit_logs ( id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, old_values TEXT, new_values TEXT, ip_address TEXT, user_agent TEXT, empresa_id INTEGER, usuario_id INTEGER, acao TEXT, tabela TEXT, registro_id INTEGER, detalhes TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT, deleted_at TEXT )"
+      },
+      {
+        "name": "lms_cursos",
+        "sql": "CREATE TABLE \"lms_cursos\" (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  titulo TEXT NOT NULL,\n  descricao TEXT,\n  categoria TEXT,\n  carga_horaria_minutos INTEGER DEFAULT 0,\n  idioma TEXT DEFAULT 'pt-BR',\n  thumbnail_r2_key TEXT,\n  scorm_versao TEXT CHECK (scorm_versao IN ('1.2', '2004', NULL)),\n  scorm_package_r2_prefix TEXT,\n  scorm_launch_file TEXT,\n  scorm_mastery_score INTEGER DEFAULT 70,\n  qualificacao_tipo_id INTEGER,\n  gerar_qualificacao_ao_concluir INTEGER NOT NULL DEFAULT 0,\n  ativo INTEGER NOT NULL DEFAULT 1,\n  publicado INTEGER NOT NULL DEFAULT 0,\n  version_tag TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  tipo_conteudo TEXT NOT NULL DEFAULT 'scorm'\n    CHECK (tipo_conteudo IN ('scorm', 'h5p', 'video', 'pdf', 'pptx')),\n  conteudo_programatico TEXT,\n  observacoes TEXT,\n  carga_horaria_inicial_horas REAL,\n  carga_horaria_recorrente_horas REAL,\n  -- Novas colunas para conteúdo PDF e PPTX\n  pdf_r2_key TEXT,\n  pptx_r2_key TEXT,\n  pptx_slide_count INTEGER DEFAULT 0, conteudo_arquivo_nome TEXT,\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (qualificacao_tipo_id) REFERENCES qualificacoes_tipos(id)\n)"
+      },
+      {
+        "name": "lms_historico_importado",
+        "sql": "CREATE TABLE lms_historico_importado (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  fonte TEXT NOT NULL DEFAULT 'EDAPP',\n  integracao_evento_id INTEGER,\n  funcionario_id INTEGER,\n  funcionario_nome TEXT,\n  curso_id INTEGER,\n  curso_titulo TEXT NOT NULL,\n  curso_categoria TEXT,\n  tipo_conteudo TEXT,\n  status TEXT NOT NULL DEFAULT 'CONCLUIDO',\n  progresso_pct INTEGER NOT NULL DEFAULT 100,\n  score_final REAL,\n  qualificacao_codigo TEXT,\n  qualificacao_historico_id INTEGER,\n  edapp_user_id TEXT,\n  edapp_course_id TEXT,\n  edapp_course_external_id TEXT,\n  edapp_course_title TEXT,\n  completed_at TEXT,\n  data_conclusao TEXT,\n  funcionario_match_type TEXT,\n  curso_match_type TEXT,\n  payload_json TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT, lms_matricula_ciclo_id INTEGER REFERENCES lms_matricula_ciclos(id),\n  UNIQUE(empresa_id, fonte, integracao_evento_id)\n)"
+      },
+      {
+        "name": "requisitos_compliance",
+        "sql": "CREATE TABLE requisitos_compliance (\n  id          INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id  INTEGER NOT NULL,\n  funcao      TEXT    NOT NULL, -- ex: 'Comandante', 'Copiloto', 'Comissário'\n  tipo_recurso TEXT   NOT NULL  -- 'qualificacao' | 'licenca' | 'curso_lms'\n    CHECK(tipo_recurso IN ('qualificacao', 'licenca', 'curso_lms')),\n  referencia  TEXT    NOT NULL, -- qualificacao_codigo, licenca.tipo ou lms_curso_id (para curso_lms)\n  descricao   TEXT,\n  obrigatorio INTEGER DEFAULT 1 NOT NULL CHECK(obrigatorio IN (0, 1)),\n  deleted_at  TEXT,\n  created_at  TEXT    DEFAULT (datetime('now')),\n  updated_at  TEXT    DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "lms_matricula_ciclos",
+        "sql": "CREATE TABLE lms_matricula_ciclos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  matricula_id INTEGER REFERENCES lms_matriculas(id),\n  historico_importado_id INTEGER REFERENCES lms_historico_importado(id),\n  curso_id INTEGER,\n  funcionario_id INTEGER,\n  numero_ciclo INTEGER NOT NULL DEFAULT 1,\n  origem TEXT NOT NULL DEFAULT 'LMS'\n    CHECK (origem IN ('LMS', 'MANUAL', 'AUTO_RENOVACAO', 'IMPORTADO_EDAPP')),\n  status TEXT NOT NULL DEFAULT 'NAO_INICIADO'\n    CHECK (status IN ('NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'REPROVADO', 'CANCELADO', 'PENDENTE_VINCULO')),\n  ciclo_atual INTEGER NOT NULL DEFAULT 1,\n  observacoes TEXT,\n  data_matricula TEXT,\n  data_inicio TEXT,\n  data_conclusao TEXT,\n  data_expiracao TEXT,\n  progresso_pct INTEGER NOT NULL DEFAULT 0,\n  score_final REAL,\n  tentativas INTEGER NOT NULL DEFAULT 0,\n  qualificacao_historico_id INTEGER REFERENCES qualificacoes_historico(id),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  CHECK (matricula_id IS NOT NULL OR historico_importado_id IS NOT NULL)\n)"
+      },
+      {
+        "name": "integracoes_edapp_config",
+        "sql": "CREATE TABLE integracoes_edapp_config (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER REFERENCES empresas(id),\n  chave TEXT NOT NULL,\n  valor TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "treinamentos_planejados",
+        "sql": "CREATE TABLE treinamentos_planejados (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        empresa_id INTEGER NOT NULL,\n        qualificacao_tipo_id INTEGER NOT NULL,\n        data_prevista TEXT NOT NULL,\n        hora_inicio TEXT,\n        hora_fim TEXT,\n        status TEXT NOT NULL DEFAULT 'PLANEJADO' CHECK(status IN ('PLANEJADO', 'CONFIRMADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'CANCELADO')),\n        instrutor_id INTEGER,\n        simulador_id INTEGER,\n        aeronave_id INTEGER,\n        local TEXT,\n        carga_horaria_prevista INTEGER,\n        titulo TEXT,\n        descricao TEXT,\n        observacoes TEXT,\n        motivo_cancelamento TEXT,\n        efetivado_em TEXT,\n        efetivado_por INTEGER,\n        sessao_id INTEGER,\n        created_by INTEGER,\n        created_at TEXT DEFAULT (datetime('now')),\n        updated_at TEXT DEFAULT (datetime('now')),\n        deleted_at TEXT\n      , codigo_turma TEXT, modalidade TEXT NOT NULL DEFAULT 'TEORICO', data_inicio TEXT, data_fim TEXT, base TEXT, sala TEXT, equipamento_descricao TEXT, limite_participantes INTEGER)"
+      },
+      {
+        "name": "treinamentos_participantes",
+        "sql": "CREATE TABLE treinamentos_participantes (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        treinamento_id INTEGER NOT NULL,\n        funcionario_id INTEGER NOT NULL,\n        confirmado INTEGER DEFAULT 0,\n        presente INTEGER,\n        aprovado INTEGER,\n        nota REAL,\n        observacoes TEXT,\n        qualificacao_historico_id INTEGER,\n        created_at TEXT DEFAULT (datetime('now')),\n        updated_at TEXT DEFAULT (datetime('now')), status_participacao TEXT NOT NULL DEFAULT 'MATRICULADO', resultado TEXT, conceito TEXT, data_conclusao_efetiva TEXT, concluido_em TEXT, concluido_por INTEGER,\n        UNIQUE(treinamento_id, funcionario_id)\n      )"
+      },
+      {
+        "name": "integracoes_sigvoos_config",
+        "sql": "CREATE TABLE integracoes_sigvoos_config (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        empresa_id INTEGER,\n        chave TEXT NOT NULL,\n        valor TEXT,\n        created_at TEXT NOT NULL DEFAULT (datetime('now')),\n        updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n        deleted_at TEXT\n      , notificar_falha_email TEXT)"
+      },
+      {
+        "name": "integracoes_sigvoos_eventos",
+        "sql": "CREATE TABLE integracoes_sigvoos_eventos (\n        id TEXT PRIMARY KEY,\n        empresa_id INTEGER,\n        tipo_evento TEXT NOT NULL,\n        status TEXT NOT NULL,\n        payload_json TEXT,\n        resposta_json TEXT,\n        erro_ultima TEXT,\n        created_at TEXT NOT NULL,\n        updated_at TEXT NOT NULL,\n        deleted_at TEXT\n      )"
+      },
+      {
+        "name": "habilitacoes",
+        "sql": "CREATE TABLE habilitacoes (\n\tid INTEGER PRIMARY KEY AUTOINCREMENT,\n\tnome TEXT NOT NULL,\n\tdescricao TEXT,\n\tativo INTEGER DEFAULT 1,\n\tcreated_at TEXT DEFAULT (datetime('now')),\n\tupdated_at TEXT DEFAULT (datetime('now')),\n\tdeleted_at TEXT\n, habilitacao_anterior_id INTEGER, eh_renovada INTEGER DEFAULT 0, renovada_em TEXT)"
+      },
+      {
+        "name": "frms_jornada",
+        "sql": "CREATE TABLE \"frms_jornada\" (\n  id                          TEXT PRIMARY KEY,\n  tripulante_id               INTEGER NOT NULL REFERENCES funcionarios(id),\n  data                        TEXT NOT NULL,\n  status                      TEXT NOT NULL CHECK(status IN (\n                                'ES','TS','TV','EX','RE','SA',\n                                'FE','FR','FS','AM','DM','OT'\n                              )),\n  hora_apresentacao           TEXT,\n  hora_termino                TEXT,\n  duracao_jornada_minutos     INTEGER,\n  horas_voo_minutos           INTEGER,\n  hora_primeiro_acionamento   TEXT,\n  hora_primeira_decolagem     TEXT,\n  hora_ultimo_pouso           TEXT,\n  hora_corte_motor            TEXT,\n  repouso_plataforma_inicio   TEXT,\n  repouso_plataforma_fim      TEXT,\n  repouso_plataforma_valido   INTEGER DEFAULT 0,\n  observacao                  TEXT,\n  registrado_por              TEXT NOT NULL,\n  origem                      TEXT DEFAULT 'MANUAL' CHECK(origem IN (\n                                'MANUAL','APUS','SIMULADOR','FIRA','SIGVOOS'\n                              )),\n  created_at                  TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at                  TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at                  TEXT,\n  tipo_base                   TEXT DEFAULT 'HOME' CHECK(tipo_base IN ('HOME','AWAY')),\n  tripulacao_aumentada        INTEGER DEFAULT 0,\n  classe_cabine               TEXT DEFAULT NULL CHECK(classe_cabine IN ('ECONOMY','BUSINESS',NULL)),\n  aclimatado                  INTEGER DEFAULT 1,\n  local_base                  TEXT DEFAULT NULL\n, matricula_aeronave TEXT, tempo_noturno_str TEXT, tempo_ifr_str TEXT, fonte_resolucao_sigvoos TEXT, hora_dormiu TEXT, hora_acordou TEXT, sono_efetivo_min INTEGER, fonte_sono TEXT DEFAULT 'PADRAO', acordou_na_wocl INTEGER DEFAULT 0, repouso_regulatorio_min INTEGER, empresa_id INTEGER, fator_basica_pct REAL DEFAULT 0, fator_apresentacao_pct REAL DEFAULT 0, fator_repouso_pct REAL DEFAULT 0, horas_voo_noturno_min INTEGER DEFAULT 0, horas_voo_ifr_min INTEGER DEFAULT 0, fonte_resolucao TEXT)"
+      },
+      {
+        "name": "integracoes_sigvoos_mapeamentos",
+        "sql": "CREATE TABLE integracoes_sigvoos_mapeamentos (\n        id TEXT PRIMARY KEY,\n        empresa_id INTEGER,\n        nome_sigvoos TEXT NOT NULL,\n        canac_sigvoos TEXT,\n        funcionario_id INTEGER NOT NULL,\n        created_at TEXT NOT NULL,\n        updated_at TEXT NOT NULL,\n        deleted_at TEXT\n      )"
+      },
+      {
+        "name": "sigvoos_mapeamento_manual",
+        "sql": "CREATE TABLE sigvoos_mapeamento_manual (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER,\n  nome_sigvoos TEXT NOT NULL,\n  inscricao_sigvoos TEXT,\n  canac_sigvoos TEXT,\n  funcionario_id INTEGER NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "frms_jornada_pendente",
+        "sql": "CREATE TABLE frms_jornada_pendente (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER,\n  importacao_id TEXT,\n  nome_sigvoos TEXT NOT NULL,\n  identificador_sigvoos TEXT,\n  canac_sigvoos TEXT,\n  competencia TEXT NOT NULL,\n  jornadas INTEGER NOT NULL DEFAULT 0,\n  motivo TEXT NOT NULL,\n  payload_json TEXT,\n  status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK(status IN ('PENDENTE', 'RESOLVIDO')),\n  resolved_funcionario_id INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (resolved_funcionario_id) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "token_blocklist",
+        "sql": "CREATE TABLE token_blocklist (\n  jti TEXT PRIMARY KEY,\n  expires_at TEXT NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "rate_limit_store",
+        "sql": "CREATE TABLE rate_limit_store (\n  key TEXT PRIMARY KEY,\n  count INTEGER NOT NULL DEFAULT 0,\n  reset_at TEXT NOT NULL\n, window_start TEXT DEFAULT (datetime('now')))"
+      },
+      {
+        "name": "password_reset_tokens",
+        "sql": "CREATE TABLE password_reset_tokens (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, email TEXT NOT NULL, token_hash TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, FOREIGN KEY (user_id) REFERENCES usuarios(id))"
+      },
+      {
+        "name": "frms_justificativas",
+        "sql": "CREATE TABLE frms_justificativas (\n  id TEXT PRIMARY KEY,\n  tripulante_id TEXT NOT NULL,\n  data_voo TEXT NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  gerado_por_id TEXT NOT NULL,\n  gerado_por_nome TEXT NOT NULL,\n  decisao_tomada TEXT NOT NULL,\n  observacoes TEXT,\n  documento_json TEXT NOT NULL,\n  assinatura_hash TEXT NOT NULL,\n  created_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "frms_explicacao_dia_cache",
+        "sql": "CREATE TABLE frms_explicacao_dia_cache (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER,\n  tripulante_id TEXT NOT NULL,\n  data_ref TEXT NOT NULL,\n  origem_tela TEXT NOT NULL DEFAULT 'desconhecida',\n  payload_json TEXT NOT NULL,\n  provider TEXT,\n  model TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  expires_at TEXT,\n  deleted_at TEXT,\n  UNIQUE (empresa_id, tripulante_id, data_ref, origem_tela)\n)"
+      },
+      {
+        "name": "notificacoes_convocacao_email_config",
+        "sql": "CREATE TABLE notificacoes_convocacao_email_config (\n  empresa_id INTEGER PRIMARY KEY,\n  smtp_host TEXT,\n  smtp_port INTEGER,\n  smtp_security TEXT DEFAULT 'TLS',\n  smtp_user TEXT,\n  smtp_password TEXT,\n  smtp_password_encrypted TEXT,\n  sender_name TEXT,\n  reply_to TEXT,\n  assunto_padrao TEXT,\n  assinatura_html TEXT,\n  template_html TEXT,\n  batch_size INTEGER DEFAULT 50,\n  batch_interval_ms INTEGER DEFAULT 1000,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "notificacoes_convocacao_cc_gestores",
+        "sql": "CREATE TABLE notificacoes_convocacao_cc_gestores (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  nome TEXT NOT NULL,\n  email TEXT NOT NULL,\n  cargo TEXT,\n  empresa TEXT,\n  ativo INTEGER NOT NULL DEFAULT 1,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "treinamentos_convocacoes_email",
+        "sql": "CREATE TABLE treinamentos_convocacoes_email (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  treinamento_id INTEGER NOT NULL,\n  disparado_por INTEGER,\n  disparado_por_nome TEXT,\n  assunto TEXT NOT NULL,\n  template_html_snapshot TEXT,\n  reply_to TEXT,\n  cc_json TEXT,\n  avisos_json TEXT,\n  destinatarios_total INTEGER NOT NULL DEFAULT 0,\n  enviados_sucesso INTEGER NOT NULL DEFAULT 0,\n  enviados_falha INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "treinamentos_convocacoes_email_itens",
+        "sql": "CREATE TABLE treinamentos_convocacoes_email_itens (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  convocacao_id INTEGER NOT NULL,\n  treinamento_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  email_destino TEXT,\n  status TEXT NOT NULL,\n  erro_mensagem TEXT,\n  provider_message_id TEXT,\n  payload_json TEXT,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "name": "setores_gestores",
+        "sql": "CREATE TABLE setores_gestores (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  setor_id INTEGER NOT NULL,\n  gestor_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  role TEXT DEFAULT 'manager', \n  ativo INTEGER NOT NULL DEFAULT 1,\n  created_at TEXT DEFAULT (datetime('now')),\n  updated_at TEXT DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  \n  \n  FOREIGN KEY (setor_id) REFERENCES setores(id),\n  FOREIGN KEY (gestor_id) REFERENCES notificacoes_convocacao_cc_gestores(id),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "matriz_treinamento_funcao",
+        "sql": "CREATE TABLE matriz_treinamento_funcao (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  funcao_id INTEGER NOT NULL,\n  qualificacao_tipo_id INTEGER NOT NULL,\n  obrigatoriedade TEXT NOT NULL DEFAULT 'OBRIGATORIA' CHECK (obrigatoriedade IN ('OBRIGATORIA', 'RECOMENDADA', 'NAO_APLICA')),\n  nivel_requerido INTEGER DEFAULT NULL,\n  critico_operacional INTEGER NOT NULL DEFAULT 0,\n  origem TEXT NOT NULL DEFAULT 'REGULATORIO' CHECK (origem IN ('REGULATORIO', 'SGSO', 'RH', 'CLIENTE', 'OUTRO')),\n  observacoes TEXT DEFAULT NULL,\n  ativo INTEGER NOT NULL DEFAULT 1,\n  created_at DATETIME NOT NULL DEFAULT (datetime('now')),\n  updated_at DATETIME NOT NULL DEFAULT (datetime('now')),\n  deleted_at DATETIME DEFAULT NULL,\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (funcao_id) REFERENCES funcoes(id),\n  FOREIGN KEY (qualificacao_tipo_id) REFERENCES qualificacoes_tipos(id)\n)"
+      },
+      {
+        "name": "frms_fonte_calculo_competencia",
+        "sql": "CREATE TABLE frms_fonte_calculo_competencia (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER,\n  tripulante_id INTEGER NOT NULL,\n  ano INTEGER NOT NULL,\n  mes INTEGER NOT NULL,\n  fonte_escolhida TEXT NOT NULL CHECK (fonte_escolhida IN ('SIGVOOS', 'FIRA')),\n  escolhido_por TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "fichas_sessao_edicoes",
+        "sql": "CREATE TABLE fichas_sessao_edicoes (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  ficha_id INTEGER NOT NULL,\n  empresa_id INTEGER,\n  status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE', 'APROVADA', 'REJEITADA', 'CANCELADA')),\n\n  solicitante_usuario_id TEXT,\n  solicitante_funcionario_id INTEGER NOT NULL,\n  motivo TEXT NOT NULL,\n\n  snapshot_antes_json TEXT NOT NULL,\n  alteracoes_json TEXT NOT NULL,\n\n  aprovador_usuario_id TEXT,\n  decisao_observacoes TEXT,\n  aprovado_em TEXT,\n  rejeitado_em TEXT,\n\n  ip_address TEXT,\n  user_agent TEXT,\n\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n\n  FOREIGN KEY (ficha_id) REFERENCES fichas_sessao(id),\n  FOREIGN KEY (solicitante_funcionario_id) REFERENCES funcionarios(id)\n)"
+      },
+      {
+        "name": "simulador_agendamentos",
+        "sql": "CREATE TABLE simulador_agendamentos (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uuid TEXT UNIQUE NOT NULL,\n  simulador_id INTEGER,\n  funcionario_id INTEGER NOT NULL,\n  instrutor_id INTEGER NOT NULL,\n  checador_id INTEGER,\n  template_id INTEGER,\n  data DATE NOT NULL,\n  hora_inicio TIME NOT NULL,\n  hora_fim TIME NOT NULL,\n  duracao_minutos INTEGER,\n  status TEXT DEFAULT 'AGENDADO',\n  tipo_sessao TEXT,\n  observacoes TEXT,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TIMESTAMP,\n  nome TEXT,\n  examinador_id INTEGER NULL,\n  is_check INTEGER NOT NULL DEFAULT 0,\n  empresa_id INTEGER REFERENCES empresas(id),\n  tipo_dispositivo TEXT NOT NULL DEFAULT 'SIMULADOR'\n    CHECK (tipo_dispositivo IN ('SIMULADOR', 'AERONAVE')),\n  aeronave_id INTEGER REFERENCES aeronaves(id)\n)"
+      },
+      {
+        "name": "sessoes_checks",
+        "sql": "CREATE TABLE sessoes_checks (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  sessao_id INTEGER NOT NULL,\n  qualificacao_tipo_id INTEGER NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (sessao_id) REFERENCES simulador_agendamentos(id),\n  FOREIGN KEY (qualificacao_tipo_id) REFERENCES qualificacoes_tipos(id)\n)"
+      },
+      {
+        "name": "sessoes_checks_resultados",
+        "sql": "CREATE TABLE sessoes_checks_resultados (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  sessao_check_id INTEGER NOT NULL,\n  aprovado INTEGER NOT NULL DEFAULT 0,\n  observacoes TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (sessao_check_id) REFERENCES sessoes_checks(id)\n)"
+      },
+      {
+        "name": "escala_voo_diaria_justificativas",
+        "sql": "CREATE TABLE escala_voo_diaria_justificativas (\n  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),\n  empresa_id INTEGER NOT NULL,\n  escala_voo_diaria_id TEXT NOT NULL,\n  funcionario_id INTEGER,\n  papel TEXT,\n  origem_alerta TEXT NOT NULL,     -- FRMS | REPOUSO | DUPLICIDADE | OPERACIONAL | OUTRO\n  tipo_alerta TEXT,\n  nivel_alerta TEXT,\n  decisao TEXT NOT NULL,           -- MANTER_ESCALA | SUBSTITUIR | ACIONAR_STANDBY | ADICIONAR_OBSERVACAO | OUTRO\n  justificativa TEXT NOT NULL,\n  alerta_ref_id TEXT,\n  criado_por TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT\n)"
+      },
+      {
+        "name": "escala_voo_diaria_publicacoes",
+        "sql": "CREATE TABLE escala_voo_diaria_publicacoes (\n  id TEXT PRIMARY KEY,\n  empresa_id TEXT NOT NULL,\n  data_ref TEXT NOT NULL,\n  revisao INTEGER NOT NULL,\n  status TEXT NOT NULL DEFAULT 'PUBLICADA',\n  payload_json TEXT NOT NULL,\n  checksum TEXT NOT NULL,\n  observacoes TEXT,\n  publicado_por TEXT,\n  publicado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  deleted_at TEXT,\n  UNIQUE (empresa_id, data_ref, revisao)\n)"
+      },
+      {
+        "name": "frms_read_ack_events",
+        "sql": "CREATE TABLE frms_read_ack_events (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  data_operacional TEXT NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  event_type TEXT NOT NULL,\n  severity TEXT NOT NULL,\n  source TEXT NOT NULL DEFAULT 'OPERATIONAL_SNAPSHOT',\n  lifecycle_status TEXT NOT NULL DEFAULT 'PENDING',\n  snapshot_status TEXT,\n  snapshot_alertas_json TEXT,\n  data_sources_json TEXT,\n  limitations_json TEXT,\n  snapshot_payload_json TEXT,\n  event_hash TEXT,\n  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  created_by INTEGER,\n  acknowledged_at TEXT,\n  acknowledged_by INTEGER,\n  ack_note TEXT,\n  archived_at TEXT,\n  archived_by INTEGER,\n  archive_reason TEXT,\n  schema_version INTEGER NOT NULL DEFAULT 1\n)"
+      },
+      {
+        "name": "frms_read_ack_event_audit",
+        "sql": "CREATE TABLE frms_read_ack_event_audit (\n  id TEXT PRIMARY KEY,\n  empresa_id INTEGER NOT NULL,\n  event_id TEXT NOT NULL,\n  action TEXT NOT NULL,\n  actor_user_id INTEGER,\n  action_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  note TEXT,\n  payload_before_json TEXT,\n  payload_after_json TEXT,\n  schema_version INTEGER NOT NULL DEFAULT 1\n)"
+      },
+      {
+        "name": "audit_events_v2",
+        "sql": "CREATE TABLE audit_events_v2 (\n  id TEXT PRIMARY KEY,\n  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\n  empresa_id INTEGER,\n  target_empresa_id INTEGER,\n\n  actor_user_id INTEGER,\n  actor_empresa_id INTEGER,\n  actor_role TEXT,\n  actor_type TEXT NOT NULL DEFAULT 'user',\n\n  support_mode INTEGER NOT NULL DEFAULT 0,\n  support_reason TEXT,\n\n  request_id TEXT,\n  correlation_id TEXT,\n\n  ip_hash TEXT,\n  user_agent_hash TEXT,\n\n  event_category TEXT NOT NULL,\n  event_action TEXT NOT NULL,\n  entity_type TEXT,\n  entity_id TEXT,\n\n  risk_level TEXT NOT NULL DEFAULT 'low',\n  success INTEGER NOT NULL DEFAULT 1,\n  failure_reason_code TEXT,\n\n  metadata_sanitized_json TEXT,\n  retention_class TEXT NOT NULL DEFAULT 'standard'\n)"
+      },
+      {
+        "name": "user_platform_roles",
+        "sql": "CREATE TABLE user_platform_roles (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  user_id INTEGER NOT NULL,\n  role_code TEXT NOT NULL\n    CHECK(role_code IN ('platform_admin', 'support_read_only', 'support_elevated')),\n  granted_by_user_id INTEGER,\n  granted_reason TEXT NOT NULL,\n  expires_at TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  revoked_at TEXT,\n  revoked_by_user_id INTEGER,\n  revoked_reason TEXT,\n  FOREIGN KEY (user_id) REFERENCES usuarios(id),\n  FOREIGN KEY (granted_by_user_id) REFERENCES usuarios(id),\n  FOREIGN KEY (revoked_by_user_id) REFERENCES usuarios(id)\n)"
+      },
+      {
+        "name": "support_access_grants",
+        "sql": "CREATE TABLE support_access_grants (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  user_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  access_level TEXT NOT NULL\n    CHECK(access_level IN ('read_only', 'elevated')),\n  granted_by_user_id INTEGER,\n  granted_reason TEXT NOT NULL,\n  expires_at TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  revoked_at TEXT,\n  revoked_by_user_id INTEGER,\n  revoked_reason TEXT,\n  FOREIGN KEY (user_id) REFERENCES usuarios(id),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (granted_by_user_id) REFERENCES usuarios(id),\n  FOREIGN KEY (revoked_by_user_id) REFERENCES usuarios(id)\n)"
+      },
+      {
+        "name": "support_access_sessions",
+        "sql": "CREATE TABLE support_access_sessions (\n  id TEXT PRIMARY KEY,\n  user_id INTEGER NOT NULL,\n  empresa_id INTEGER NOT NULL,\n  access_level TEXT NOT NULL\n    CHECK(access_level IN ('read_only', 'elevated')),\n  support_reason TEXT NOT NULL,\n  request_id TEXT,\n  correlation_id TEXT,\n  started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  ended_at TEXT,\n  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  FOREIGN KEY (user_id) REFERENCES usuarios(id),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id)\n)"
+      },
+      {
+        "name": "treinamentos_dias",
+        "sql": "CREATE TABLE treinamentos_dias (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  treinamento_id INTEGER NOT NULL,\n  data TEXT NOT NULL,\n  hora_inicio TEXT NOT NULL DEFAULT '08:00',\n  hora_fim TEXT NOT NULL DEFAULT '17:00',\n  local TEXT,\n  instrutor_id INTEGER,\n  simulador_id INTEGER,\n  aeronave_id INTEGER,\n  sessao_id INTEGER,\n  status TEXT NOT NULL DEFAULT 'ATIVO'\n    CHECK(status IN ('ATIVO', 'CANCELADO', 'SUBSTITUIDO')),\n  observacoes TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  deleted_at TEXT,\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (treinamento_id) REFERENCES treinamentos_planejados(id) ON DELETE CASCADE,\n  FOREIGN KEY (instrutor_id) REFERENCES funcionarios(id),\n  FOREIGN KEY (simulador_id) REFERENCES simuladores(id),\n  UNIQUE(treinamento_id, data)\n)"
+      },
+      {
+        "name": "treinamentos_instrutores",
+        "sql": "CREATE TABLE treinamentos_instrutores (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  treinamento_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  papel TEXT NOT NULL DEFAULT 'INSTRUTOR',\n  principal INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (treinamento_id) REFERENCES treinamentos_planejados(id) ON DELETE CASCADE,\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),\n  UNIQUE(treinamento_id, funcionario_id)\n)"
+      },
+      {
+        "name": "treinamentos_presencas",
+        "sql": "CREATE TABLE treinamentos_presencas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  treinamento_dia_id INTEGER NOT NULL,\n  participante_id INTEGER NOT NULL,\n  status TEXT NOT NULL DEFAULT 'PENDENTE'\n    CHECK(status IN ('PENDENTE', 'PRESENTE', 'AUSENTE', 'PARCIAL', 'DISPENSADO')),\n  minutos_presentes INTEGER,\n  observacoes TEXT,\n  registrado_por INTEGER,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (treinamento_dia_id) REFERENCES treinamentos_dias(id) ON DELETE CASCADE,\n  FOREIGN KEY (participante_id) REFERENCES treinamentos_participantes(id) ON DELETE CASCADE,\n  FOREIGN KEY (registrado_por) REFERENCES usuarios(id),\n  UNIQUE(treinamento_dia_id, participante_id)\n)"
+      },
+      {
+        "name": "treinamentos_qualificacoes_geradas",
+        "sql": "CREATE TABLE treinamentos_qualificacoes_geradas (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  empresa_id INTEGER NOT NULL,\n  treinamento_id INTEGER NOT NULL,\n  participante_id INTEGER NOT NULL,\n  funcionario_id INTEGER NOT NULL,\n  qualificacao_tipo_id INTEGER NOT NULL,\n  qualificacao_historico_id INTEGER NOT NULL,\n  data_conclusao_efetiva TEXT NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  FOREIGN KEY (empresa_id) REFERENCES empresas(id),\n  FOREIGN KEY (treinamento_id) REFERENCES treinamentos_planejados(id) ON DELETE CASCADE,\n  FOREIGN KEY (participante_id) REFERENCES treinamentos_participantes(id) ON DELETE CASCADE,\n  FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),\n  FOREIGN KEY (qualificacao_tipo_id) REFERENCES qualificacoes_tipos(id),\n  FOREIGN KEY (qualificacao_historico_id) REFERENCES qualificacoes_historico(id),\n  UNIQUE(empresa_id, treinamento_id, participante_id, qualificacao_tipo_id, data_conclusao_efetiva),\n  UNIQUE(qualificacao_historico_id)\n)"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.6796
+      },
+      "duration": 0.6796,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 78180352,
+      "rows_read": 1044,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]
