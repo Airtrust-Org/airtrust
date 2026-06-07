@@ -138,8 +138,11 @@ export default function Qualificacoes() {
     const parsedId = Number(rawId);
     return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
   }, [searchParams]);
+  const VALID_TABS = ['historico', 'tipos', 'categorias', 'turmas'] as const;
   const [activeTab, setActiveTab] = useState<'historico' | 'tipos' | 'categorias' | 'turmas'>(
-    initialPrefs.activeTab ?? 'historico',
+    VALID_TABS.includes(initialPrefs.activeTab as (typeof VALID_TABS)[number])
+      ? (initialPrefs.activeTab as (typeof VALID_TABS)[number])
+      : 'historico',
   );
   const [turmasViewMode, setTurmasViewMode] = useState<'list' | 'calendar'>(
     initialPrefs.turmasViewMode ?? 'list',
