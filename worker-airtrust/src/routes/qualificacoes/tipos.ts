@@ -276,6 +276,7 @@ router.post(
   requireRole('admin', 'manager'),
   safe(async (c) => {
     const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const body = await c.req.json();
@@ -304,10 +305,11 @@ router.post(
       .prepare(
         `SELECT id, empresa_id, deleted_at
            FROM qualificacoes_tipos
-          WHERE UPPER(TRIM(codigo)) = ?
+         WHERE UPPER(TRIM(codigo)) = ?
+           AND empresa_id = ?
           LIMIT 1`,
       )
-      .bind(codigo)
+      .bind(codigo, empresaId)
       .first();
 
     const existingRow = existing as TipoExistenteRow | null;
@@ -329,11 +331,11 @@ router.post(
     // Inserir
     const insertSql = hasIsCheck
       ? `INSERT INTO qualificacoes_tipos 
-         (tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, is_check, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`
+         (tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, is_check, empresa_id, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`
       : `INSERT INTO qualificacoes_tipos 
-         (tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`;
+         (tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, empresa_id, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`;
 
     const insertBinds: unknown[] = [
       deriveModeloTipo(validade, categoria),
@@ -351,6 +353,7 @@ router.post(
       ativo,
     ];
     if (hasIsCheck) insertBinds.push(isCheck);
+    insertBinds.push(empresaId);
 
     if (existing?.deleted_at) {
       const restoreSql = hasIsCheck
@@ -371,7 +374,7 @@ router.post(
                   is_check = ?,
                   deleted_at = NULL,
                   updated_at = datetime('now')
-            WHERE id = ?`
+            WHERE id = ? AND empresa_id = ?`
         : `UPDATE qualificacoes_tipos
               SET tipo = ?,
                   codigo = ?,
@@ -388,9 +391,9 @@ router.post(
                   ativo = ?,
                   deleted_at = NULL,
                   updated_at = datetime('now')
-            WHERE id = ?`;
+            WHERE id = ? AND empresa_id = ?`;
 
-      const restoreBinds = [...insertBinds, existing.id];
+      const restoreBinds = [...insertBinds.slice(0, -1), existing.id, empresaId];
 
       await db
         .prepare(restoreSql)
@@ -401,9 +404,9 @@ router.post(
         .prepare(
           `SELECT id, empresa_id, tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, ${
             hasIsCheck ? 'is_check' : '0 as is_check'
-          }, created_at, updated_at FROM qualificacoes_tipos WHERE id = ? LIMIT 1`,
+          }, created_at, updated_at FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? LIMIT 1`,
         )
-        .bind(existing.id)
+        .bind(existing.id, empresaId)
         .first();
 
       await logAuditoria(db, 'qualificacoes_tipos', String(existing.id), 'RESTORE');
@@ -453,9 +456,9 @@ router.post(
       .prepare(
         `SELECT id, empresa_id, tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
-        }, created_at, updated_at FROM qualificacoes_tipos WHERE id = ? LIMIT 1`,
+        }, created_at, updated_at FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? LIMIT 1`,
       )
-      .bind(newId)
+      .bind(newId, empresaId)
       .first();
 
     // Auditoria
@@ -486,6 +489,7 @@ router.put(
   requireRole('admin', 'manager'),
   safe(async (c) => {
     const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
     const id = c.req.param('id');
@@ -509,8 +513,10 @@ router.put(
 
     // Verificar se tipo existe
     const existing = await db
-      .prepare('SELECT id FROM qualificacoes_tipos WHERE id = ? AND deleted_at IS NULL LIMIT 1')
-      .bind(id)
+      .prepare(
+        'SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+      )
+      .bind(id, empresaId)
       .first();
 
     if (!existing) {
@@ -521,9 +527,9 @@ router.put(
     if (data.codigo) {
       const codigoExistente = await db
         .prepare(
-          'SELECT id FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND id != ? AND deleted_at IS NULL LIMIT 1',
+          'SELECT id FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND id != ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
         )
-        .bind(normalizeTipoCodigo(data.codigo), id)
+        .bind(normalizeTipoCodigo(data.codigo), id, empresaId)
         .first();
 
       if (codigoExistente) {
@@ -533,9 +539,9 @@ router.put(
 
     const rowAtual = (await db
       .prepare(
-        'SELECT empresa_id, categoria, validade FROM qualificacoes_tipos WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+        'SELECT empresa_id, categoria, validade FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
       )
-      .bind(id)
+      .bind(id, empresaId)
       .first()) as { empresa_id: number; categoria: string | null; validade: number | null } | null;
 
     const categoriaFinal =
@@ -620,8 +626,8 @@ router.put(
     updateParts.push("updated_at = datetime('now')");
     const sql = `UPDATE qualificacoes_tipos SET ${updateParts.join(
       ', ',
-    )} WHERE id = ? AND deleted_at IS NULL`;
-    binds.push(id);
+    )} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`;
+    binds.push(id, empresaId);
 
     let result;
     try {
@@ -648,10 +654,10 @@ router.put(
           `SELECT id, codigo, nome, categoria, validade, vencimento_fim_mes,
                   carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
              FROM qualificacoes_tipos
-            WHERE id = ? AND deleted_at IS NULL
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
             LIMIT 1`,
         )
-        .bind(id)
+        .bind(id, empresaId)
         .first()) as TipoAtualizadoRow | null;
 
       if (tipoAtualizado) {
@@ -679,9 +685,10 @@ router.put(
                FROM qualificacoes_historico qh
                LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
               WHERE qh.qualificacao_id = ?
+                AND qh.empresa_id = ?
                 AND qh.deleted_at IS NULL`,
           )
-          .bind(tipoAtualizado.codigo, tipoAtualizado.codigo, id)
+          .bind(tipoAtualizado.codigo, tipoAtualizado.codigo, id, empresaId)
           .all()) as { results?: HistoricoTipoSyncRow[] };
 
         const tipoSnapshot: QualificacaoTipoSnapshot = {
@@ -719,6 +726,7 @@ router.put(
                       carga_horaria = ?,
                       updated_at = datetime('now')
                 WHERE id = ?
+                  AND empresa_id = ?
                   AND deleted_at IS NULL`,
             )
             .bind(
@@ -729,6 +737,7 @@ router.put(
               snapshot.dataVencimento,
               snapshot.cargaHoraria,
               historico.id,
+              empresaId,
             );
         });
 
@@ -782,6 +791,7 @@ router.delete(
   requireRole('admin', 'manager'),
   safe(async (c) => {
     const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
 
     if (!id || id.trim() === '') {
@@ -790,9 +800,9 @@ router.delete(
 
     const existing = await db
       .prepare(
-        'SELECT id, nome, empresa_id FROM qualificacoes_tipos WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+        'SELECT id, nome, empresa_id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
       )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
 
     if (!existing) {
@@ -802,9 +812,9 @@ router.delete(
     // Soft delete
     const result = await db
       .prepare(
-        "UPDATE qualificacoes_tipos SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+        "UPDATE qualificacoes_tipos SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
       )
-      .bind(id)
+      .bind(id, empresaId)
       .run();
 
     if (result.meta.changes === 0) {

@@ -176,9 +176,28 @@ app.put('/participantes/:id', async (c) => {
     const a = await getParticipanteScoped(c.env.DB, id, empresaId);
     if (!a) return c.json({ success: false, error: 'Não encontrado' }, 404);
     await c.env.DB.prepare(
-      "UPDATE sessoes_participantes SET funcao=?,presente=?,updated_at=datetime('now') WHERE id=? AND sessao_id=? AND deleted_at IS NULL",
+      `UPDATE sessoes_participantes
+          SET funcao=?,
+              presente=?,
+              updated_at=datetime('now')
+        WHERE id=?
+          AND sessao_id=?
+          AND deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1
+              FROM simulador_agendamentos sa
+             WHERE sa.id = sessoes_participantes.sessao_id
+               AND sa.empresa_id = ?
+               AND sa.deleted_at IS NULL
+          )`,
     )
-      .bind(b.funcao || a.funcao, b.presente !== undefined ? b.presente : a.presente, id, a.sessao_id)
+      .bind(
+        b.funcao || a.funcao,
+        b.presente !== undefined ? b.presente : a.presente,
+        id,
+        a.sessao_id,
+        empresaId,
+      )
       .run();
     const u = await getParticipanteScoped(c.env.DB, id, empresaId);
     return c.json({ success: true, data: u });
@@ -199,9 +218,20 @@ app.delete('/participantes/:id', async (c) => {
     if (!participante) return c.json({ success: false, error: 'Participante não encontrado' }, 404);
 
     await c.env.DB.prepare(
-      "UPDATE sessoes_participantes SET deleted_at=datetime('now') WHERE id=? AND sessao_id=? AND deleted_at IS NULL",
+      `UPDATE sessoes_participantes
+          SET deleted_at=datetime('now')
+        WHERE id=?
+          AND sessao_id=?
+          AND deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1
+              FROM simulador_agendamentos sa
+             WHERE sa.id = sessoes_participantes.sessao_id
+               AND sa.empresa_id = ?
+               AND sa.deleted_at IS NULL
+          )`,
     )
-      .bind(id, participante.sessao_id)
+      .bind(id, participante.sessao_id, empresaId)
       .run();
 
     await removeManagedEscalaEvents({

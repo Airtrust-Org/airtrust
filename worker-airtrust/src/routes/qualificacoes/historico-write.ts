@@ -162,13 +162,16 @@ writeRouter.post(
                 qh.data_conclusao, qh.data_vencimento, qh.observacoes, qh.renovada, 
                 qh.validade_meses as hist_validade_meses, qh.tipo_codigo, qh.codigo,
                   qh.categoria, qh.numero_certificado, qh.instrutor, qh.carga_horaria,
-                  qt.validade as tipo_validade, qt.nome as tipo_nome, qt.categoria as tipo_categoria,
+                qt.validade as tipo_validade, qt.nome as tipo_nome, qt.categoria as tipo_categoria,
                   qt.carga_horaria as tipo_carga_horaria,
                   qt.carga_horaria_inicial as tipo_carga_horaria_inicial,
                   qt.carga_horaria_recorrente as tipo_carga_horaria_recorrente
          FROM qualificacoes_historico qh
          INNER JOIN funcionarios f ON f.id = qh.funcionario_id
-         LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id OR qt.codigo = qh.qualificacao_codigo
+         LEFT JOIN qualificacoes_tipos qt
+           ON (qt.id = qh.qualificacao_id OR qt.codigo = qh.qualificacao_codigo)
+          AND qt.empresa_id = f.empresa_id
+          AND qt.deleted_at IS NULL
          WHERE qh.id = ?
            AND qh.deleted_at IS NULL
            AND f.deleted_at IS NULL
@@ -367,8 +370,9 @@ writeRouter.post(
            (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, 
             data_conclusao, data_vencimento, validade_meses, observacoes, 
             renovada, numero_certificado, instrutor, carga_horaria, tipo_treinamento, status,
+            empresa_id,
             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
         )
         .bind(
           original.funcionario_id,
@@ -384,6 +388,7 @@ writeRouter.post(
           cargaHorariaEfetiva,
           tipoTreinamento,
           renovacaoResolvida.status,
+          tenantCtx.empresaId,
         )
         .run();
 
@@ -538,12 +543,23 @@ writeRouter.post(
       funcionario_id = func.id;
     }
 
+    const funcionarioTenant = await db
+      .prepare('SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(funcionario_id, tenantCtx.empresaId)
+      .first<{ id: number }>();
+
+    if (!funcionarioTenant) {
+      return c.json({ success: false, error: 'Funcionário não encontrado neste tenant' }, 404);
+    }
+
     // Buscar qualificacao_id pelo código
     const tipo = await db
       .prepare(
-        'SELECT id, categoria, validade, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente FROM qualificacoes_tipos WHERE codigo = ?',
+        `SELECT id, categoria, validade, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
+           FROM qualificacoes_tipos
+          WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
-      .bind(qualificacao_codigo)
+      .bind(qualificacao_codigo, tenantCtx.empresaId)
       .first<{
         id: number;
         categoria: string;
@@ -694,8 +710,8 @@ writeRouter.post(
           `INSERT INTO qualificacoes_historico 
            (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, 
             data_conclusao, data_vencimento, validade_meses, instrutor, observacoes, 
-            status, renovada, carga_horaria, tipo_treinamento, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, datetime('now'), datetime('now'))`,
+            status, renovada, carga_horaria, tipo_treinamento, empresa_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, datetime('now'), datetime('now'))`,
         )
         .bind(
           funcionario_id,
@@ -712,6 +728,7 @@ writeRouter.post(
           statusFinal,
           cargaHorariaEfetiva,
           tipoTreinamento,
+          tenantCtx.empresaId,
         )
         .run();
     } catch (insertErr: unknown) {
@@ -1414,9 +1431,9 @@ writeRouter.delete(
     // Soft delete (padrão do sistema)
     await db
       .prepare(
-        'UPDATE qualificacoes_historico SET deleted_at = datetime("now") WHERE id = ? AND deleted_at IS NULL',
+        'UPDATE qualificacoes_historico SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
-      .bind(id)
+      .bind(id, tenantCtx.empresaId)
       .run();
 
     // Invalidar cache

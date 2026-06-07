@@ -29,6 +29,7 @@ interface D1Like {
 
 interface ImportOptions {
   db: D1Like;
+  empresaId: number;
   dryRun?: boolean;
   log?: (msg: string) => void;
 }
@@ -36,9 +37,20 @@ interface ImportOptions {
 const logDefault = (m: string) => console.log(`[IMPORT] ${m}`);
 
 // Dedup helpers
-async function mapFuncionarioMatriculas(db: D1Like): Promise<Record<string, number>> {
+function assertEmpresaId(empresaId: number): number {
+  if (!Number.isFinite(empresaId) || empresaId <= 0) {
+    throw new Error('TENANT_CONTEXT_REQUIRED');
+  }
+  return empresaId;
+}
+
+async function mapFuncionarioMatriculas(
+  db: D1Like,
+  empresaId: number,
+): Promise<Record<string, number>> {
   const { results } = await db
-    .prepare('SELECT id, matricula FROM funcionarios WHERE deleted_at IS NULL')
+    .prepare('SELECT id, matricula FROM funcionarios WHERE empresa_id = ? AND deleted_at IS NULL')
+    .bind(empresaId)
     .all();
   const map: Record<string, number> = {};
   results.forEach((r) => {
@@ -49,9 +61,13 @@ async function mapFuncionarioMatriculas(db: D1Like): Promise<Record<string, numb
   return map;
 }
 
-async function mapQualificacaoCodigos(db: D1Like): Promise<Record<string, number>> {
+async function mapQualificacaoCodigos(
+  db: D1Like,
+  empresaId: number,
+): Promise<Record<string, number>> {
   const { results } = await db
-    .prepare('SELECT id, codigo FROM qualificacoes_tipos WHERE deleted_at IS NULL')
+    .prepare('SELECT id, codigo FROM qualificacoes_tipos WHERE empresa_id = ? AND deleted_at IS NULL')
+    .bind(empresaId)
     .all();
   const map: Record<string, number> = {};
   results.forEach((r) => {
@@ -66,10 +82,11 @@ async function mapQualificacaoCodigos(db: D1Like): Promise<Record<string, number
 async function insertFuncionario(
   db: D1Like,
   row: z.infer<typeof FuncionarioStagingSchema>,
+  empresaId: number,
 ): Promise<number> {
   const stmt =
-    db.prepare(`INSERT INTO funcionarios (nome, guerra, cpf, matricula, email, telefone, funcao, cargo, setor, codigo_anac, status, ativo, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))`);
+    db.prepare(`INSERT INTO funcionarios (nome, guerra, cpf, matricula, email, telefone, funcao, cargo, setor, codigo_anac, status, ativo, empresa_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, datetime('now'), datetime('now'))`);
   const res = await stmt
     .bind(
       row.nome,
@@ -83,6 +100,7 @@ async function insertFuncionario(
       row.setor ?? null,
       row.codigo_anac ?? null,
       row.status,
+      empresaId,
     )
     .run();
   // D1 run() returns { success, meta } -> meta.last_row_id
@@ -93,6 +111,7 @@ async function insertFuncionario(
 interface EnrichedHistoricoRow {
   funcionario_id: number;
   qualificacao_id: number;
+  empresa_id: number;
   data_conclusao: string | null;
   data_vencimento: string | null;
   validade_meses: number | null;
@@ -113,12 +132,13 @@ async function insertQualificacaoHistorico(
   enriched: EnrichedHistoricoRow,
 ): Promise<number> {
   const stmt =
-    db.prepare(`INSERT INTO qualificacoes_historico (funcionario_id, qualificacao_id, data_conclusao, data_vencimento, validade_meses, codigo, categoria, numero_certificado, observacoes, arquivo_url, nota, instrutor, carga_horaria, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'VALIDA', datetime('now'), datetime('now'))`);
+    db.prepare(`INSERT INTO qualificacoes_historico (funcionario_id, qualificacao_id, empresa_id, data_conclusao, data_vencimento, validade_meses, codigo, categoria, numero_certificado, observacoes, arquivo_url, nota, instrutor, carga_horaria, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'VALIDA', datetime('now'), datetime('now'))`);
   const res = await stmt
     .bind(
       enriched.funcionario_id,
       enriched.qualificacao_id,
+      enriched.empresa_id,
       enriched.data_conclusao ?? null,
       enriched.data_vencimento ?? null,
       enriched.validade_meses ?? null,
@@ -135,7 +155,13 @@ async function insertQualificacaoHistorico(
   return res.meta?.last_row_id ?? 0;
 }
 
-export async function importFuncionarios({ db, dryRun = false, log = logDefault }: ImportOptions) {
+export async function importFuncionarios({
+  db,
+  empresaId: rawEmpresaId,
+  dryRun = false,
+  log = logDefault,
+}: ImportOptions) {
+  const empresaId = assertEmpresaId(rawEmpresaId);
   log('Iniciando import de funcionarios staging');
   const { results } = await db
     .prepare('SELECT * FROM import_funcionarios_staging WHERE imported = 0')
@@ -147,7 +173,7 @@ export async function importFuncionarios({ db, dryRun = false, log = logDefault 
   const { valid, errors } = validateBatch(FuncionarioStagingSchema, results);
   if (errors.length) log(`Erros de validação: ${errors.length}`);
 
-  const matriculaMap = await mapFuncionarioMatriculas(db);
+  const matriculaMap = await mapFuncionarioMatriculas(db, empresaId);
 
   let imported = 0;
   for (const raw of valid) {
@@ -164,7 +190,7 @@ export async function importFuncionarios({ db, dryRun = false, log = logDefault 
       continue;
     }
     if (!dryRun) {
-      const newId = await insertFuncionario(db, row);
+      const newId = await insertFuncionario(db, row, empresaId);
       if (row.id)
         await db
           .prepare('UPDATE import_funcionarios_staging SET imported=1 WHERE id=?')
@@ -177,7 +203,13 @@ export async function importFuncionarios({ db, dryRun = false, log = logDefault 
   log(`Funcionarios importados: ${imported}`);
 }
 
-export async function importQualificacoes({ db, dryRun = false, log = logDefault }: ImportOptions) {
+export async function importQualificacoes({
+  db,
+  empresaId: rawEmpresaId,
+  dryRun = false,
+  log = logDefault,
+}: ImportOptions) {
+  const empresaId = assertEmpresaId(rawEmpresaId);
   log('Iniciando import de qualificacoes staging');
   const { results } = await db
     .prepare('SELECT * FROM import_qualificacoes_staging WHERE imported = 0')
@@ -189,8 +221,8 @@ export async function importQualificacoes({ db, dryRun = false, log = logDefault
   const { valid, errors } = validateBatch(QualificacaoStagingSchema, results);
   if (errors.length) log(`Erros de validação: ${errors.length}`);
 
-  const matriculaMap = await mapFuncionarioMatriculas(db);
-  const qualMap = await mapQualificacaoCodigos(db);
+  const matriculaMap = await mapFuncionarioMatriculas(db, empresaId);
+  const qualMap = await mapQualificacaoCodigos(db, empresaId);
 
   let imported = 0;
   for (const raw of valid) {
@@ -211,6 +243,7 @@ export async function importQualificacoes({ db, dryRun = false, log = logDefault
     const enriched: EnrichedHistoricoRow = {
       funcionario_id: funcId,
       qualificacao_id: qualId,
+      empresa_id: empresaId,
       data_conclusao: row.data_conclusao ?? null,
       data_vencimento: row.data_vencimento ?? null,
       validade_meses: row.validade_meses ?? null,
@@ -233,9 +266,10 @@ export async function importQualificacoes({ db, dryRun = false, log = logDefault
 }
 
 // Orquestrador
-export async function runFullImport(db: D1Like, opts?: { dryRun?: boolean }) {
+export async function runFullImport(db: D1Like, opts: { empresaId: number; dryRun?: boolean }) {
   const dryRun = opts?.dryRun ?? false;
-  await importFuncionarios({ db, dryRun });
-  await importQualificacoes({ db, dryRun });
+  const empresaId = assertEmpresaId(opts.empresaId);
+  await importFuncionarios({ db, empresaId, dryRun });
+  await importQualificacoes({ db, empresaId, dryRun });
   return 'IMPORT_COMPLETO';
 }

@@ -56,7 +56,7 @@ function getImportService(entidade: string, db: D1Database, empresaId?: number) 
       return new FuncionarioImportacaoService(db);
     case 'qualificacoes_tipos':
     case 'tipos':
-      return new QualificacaoTipoImportacaoService(db);
+      return new QualificacaoTipoImportacaoService(db, empresaId);
     case 'qualificacoes_historico':
     case 'historico':
       return new QualificacaoHistoricoImportacaoService(db, empresaId);

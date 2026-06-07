@@ -266,17 +266,18 @@ status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) =
       try {
         const voosRows = await db
           .prepare(
-            `SELECT ee.id, ee.funcionario_id, ee.data_inicio, ee.data_fim, ee.turno, ee.observacoes
-             FROM escala_eventos ee
-             JOIN escalas_mensais em ON em.id = ee.escala_id
+	            `SELECT ee.id, ee.funcionario_id, em.empresa_id, ee.data_inicio, ee.data_fim, ee.turno, ee.observacoes
+	             FROM escala_eventos ee
+	             JOIN escalas_mensais em ON em.id = ee.escala_id
              WHERE ee.escala_id = ? AND em.empresa_id = ? AND em.deleted_at IS NULL
                AND ee.tipo_evento = 'voo' AND ee.deleted_at IS NULL`,
           )
           .bind(id, empresaId)
-          .all<{
-            id: string;
-            funcionario_id: string;
-            data_inicio: string;
+	          .all<{
+	            id: string;
+	            funcionario_id: string;
+	            empresa_id: number | null;
+	            data_inicio: string;
             data_fim: string;
             turno: string | null;
             observacoes: string | null;
@@ -291,15 +292,16 @@ status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) =
             const duracaoMin = fimMs > inicioMs ? Math.round((fimMs - inicioMs) / 60000) : 0;
             const obs = `[ESCALA:${id}][EVENTO:${voo.id}]${voo.observacoes ? ` ${voo.observacoes}` : ''}`;
             return db
-              .prepare(
-                `INSERT OR IGNORE INTO frms_jornada
-                   (id, tripulante_id, data, status, horas_voo_minutos, observacao, registrado_por, origem, created_at, updated_at)
-                 VALUES (?, ?, ?, 'ES', ?, ?, ?, 'MANUAL', ?, ?)`,
-              )
-              .bind(
-                jornId,
-                voo.funcionario_id,
-                voo.data_inicio.slice(0, 10),
+	              .prepare(
+	                `INSERT OR IGNORE INTO frms_jornada
+	                   (id, tripulante_id, empresa_id, data, status, horas_voo_minutos, observacao, registrado_por, origem, created_at, updated_at)
+	                 VALUES (?, ?, ?, ?, 'ES', ?, ?, ?, 'MANUAL', ?, ?)`,
+	              )
+	              .bind(
+	                jornId,
+	                voo.funcionario_id,
+	                voo.empresa_id ?? empresaId,
+	                voo.data_inicio.slice(0, 10),
                 duracaoMin > 0 ? duracaoMin : null,
                 obs.slice(0, 500),
                 userId,

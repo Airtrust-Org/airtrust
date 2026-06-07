@@ -41,7 +41,10 @@ export interface ImportResult {
 // ===== SERVICE =====
 
 export class QualificacaoTipoImportacaoService {
-  constructor(private db: D1Database) {}
+  constructor(
+    private db: D1Database,
+    private tenantEmpresaId?: number,
+  ) {}
 
   /**
    * Valida batch completo sem inserir
@@ -69,7 +72,12 @@ export class QualificacaoTipoImportacaoService {
   async import(
     rows: Record<string, unknown>[],
     mode: 'INSERT' | 'UPDATE' | 'UPSERT' | 'REPLACE_ALL' = 'UPSERT',
+    empresaId = this.tenantEmpresaId,
   ): Promise<ImportResult> {
+    if (!empresaId || empresaId <= 0) {
+      throw new Error('TENANT_CONTEXT_REQUIRED');
+    }
+
     const result: ImportResult = {
       success: false,
       totalRows: rows.length,
@@ -85,8 +93,9 @@ export class QualificacaoTipoImportacaoService {
       try {
         await this.db
           .prepare(
-            "UPDATE qualificacoes_tipos SET deleted_at = datetime('now') WHERE deleted_at IS NULL",
+            "UPDATE qualificacoes_tipos SET deleted_at = datetime('now') WHERE empresa_id = ? AND deleted_at IS NULL",
           )
+          .bind(empresaId)
           .run();
         console.log('[DEBUG] Soft delete (Tipos) concluído');
       } catch (e) {
@@ -126,8 +135,10 @@ export class QualificacaoTipoImportacaoService {
 
         // Verificar se já existe (incluindo soft deleted)
         const existing = await this.db
-          .prepare('SELECT id, deleted_at FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?)')
-          .bind(codigo)
+          .prepare(
+            'SELECT id, deleted_at FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND empresa_id = ?',
+          )
+          .bind(codigo, empresaId)
           .first<{ id: number; deleted_at: string | null }>();
 
         if (existing && mode === 'INSERT' && !existing.deleted_at) {
@@ -154,7 +165,7 @@ export class QualificacaoTipoImportacaoService {
                 observacoes = ?,
                 deleted_at = NULL,
                 updated_at = CURRENT_TIMESTAMP
-              WHERE UPPER(codigo) = UPPER(?)
+              WHERE UPPER(codigo) = UPPER(?) AND empresa_id = ?
             `,
             )
             .bind(
@@ -166,6 +177,7 @@ export class QualificacaoTipoImportacaoService {
               validade,
               row.observacoes || null,
               codigo,
+              empresaId,
             )
             .run();
 
@@ -178,8 +190,8 @@ export class QualificacaoTipoImportacaoService {
               `
               INSERT INTO qualificacoes_tipos (
                 id, tipo, codigo, nome, descricao, categoria,
-                carga_horaria, validade, observacoes, created_at, updated_at, deleted_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)
+                carga_horaria, validade, observacoes, empresa_id, created_at, updated_at, deleted_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)
             `,
             )
             .bind(
@@ -192,6 +204,7 @@ export class QualificacaoTipoImportacaoService {
               cargaHoraria,
               validade,
               row.observacoes || null,
+              empresaId,
             )
             .run();
 

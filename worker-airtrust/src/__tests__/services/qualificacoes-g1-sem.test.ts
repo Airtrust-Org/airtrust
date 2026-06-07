@@ -107,7 +107,8 @@ describe('qualificacoes-g1-sem', () => {
         (call) =>
           call.method === 'run' &&
           call.query.includes("VALUES (?, ?, 'G1-SEM',") &&
-          call.args[1] === 206,
+          call.args[1] === 206 &&
+          call.args[10] === 6,
       ),
     ).toBe(true);
     expect(
@@ -116,7 +117,8 @@ describe('qualificacoes-g1-sem', () => {
           call.method === 'run' &&
           call.query.includes('SET renovada = 1,') &&
           call.args[0] === 41 &&
-          call.args[2] === '2026-03-29',
+          call.args[1] === 6 &&
+          call.args[3] === '2026-03-29',
       ),
     ).toBe(true);
   });
@@ -171,7 +173,8 @@ describe('qualificacoes-g1-sem', () => {
         (call) =>
           call.method === 'run' &&
           call.query.includes('SET renovada = 1,') &&
-          call.args[1] === 9010,
+          call.args[1] === 6 &&
+          call.args[2] === 9010,
       ),
     ).toBe(true);
   });

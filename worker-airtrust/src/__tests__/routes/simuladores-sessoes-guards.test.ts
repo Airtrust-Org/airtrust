@@ -48,9 +48,13 @@ type SessionDbOptions = {
 function createSessionDb(opts: SessionDbOptions = {}) {
   const db = {
     prepare: vi.fn((query: string) => {
-      if (query.includes('SELECT * FROM simulador_agendamentos WHERE id=? AND deleted_at IS NULL')) {
+      if (
+        query.includes(
+          'SELECT * FROM simulador_agendamentos WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
+        )
+      ) {
         return {
-          bind: (_id: unknown) => ({
+          bind: (_id: unknown, _empresaId: unknown) => ({
             first: async () => {
               if (opts.throwOnSelect) {
                 throw new Error('db unavailable');

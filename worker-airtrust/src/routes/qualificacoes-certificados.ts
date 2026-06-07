@@ -245,9 +245,9 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
       // 1. Soft delete na tabela documentos
       await db
         .prepare(
-          "UPDATE documentos SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+          "UPDATE documentos SET deleted_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
         )
-        .bind(certId)
+        .bind(certId, empresaId)
         .run();
     } else {
       console.log(
@@ -261,9 +261,9 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
     const pastaVirtualResult = pastaVirtualHasDocumentoId
       ? await db
           .prepare(
-            "UPDATE pasta_virtual SET deleted_at = datetime('now') WHERE documento_id = ? AND deleted_at IS NULL",
+            "UPDATE pasta_virtual SET deleted_at = datetime('now') WHERE documento_id = ? AND empresa_id = ? AND deleted_at IS NULL",
           )
-          .bind(certId)
+          .bind(certId, empresaId)
           .run()
       : await db
           .prepare(
@@ -272,9 +272,10 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
               WHERE funcionario_id = ?
                 AND caminho_arquivo = ?
                 AND nome_arquivo = ?
+                AND empresa_id = ?
                 AND deleted_at IS NULL`,
           )
-          .bind(documento.funcionario_id, documento.r2_key, documento.nome_arquivo)
+          .bind(documento.funcionario_id, documento.r2_key, documento.nome_arquivo, empresaId)
           .run();
 
     if (pastaVirtualResult.meta.changes > 0) {
@@ -295,9 +296,10 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
                 numero_certificado = NULL,
                 updated_at = datetime('now')
           WHERE certificado_arquivo_id = ?
+            AND empresa_id = ?
             AND deleted_at IS NULL`,
       )
-      .bind(certId)
+      .bind(certId, empresaId)
       .run();
 
     if (historicoResult.meta.changes > 0) {

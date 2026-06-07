@@ -12,7 +12,7 @@ import { Hono } from 'hono';
 import { jsonOk, jsonError } from '../middleware/response';
 import { AppError } from '../utils/errors';
 import type { Env, ApiResponse, PaginatedResponse } from '../types';
-import { softDelete, calculatePagination } from '../utils/db';
+import { calculatePagination } from '../utils/db';
 import { notFound, badRequest } from '../middleware/error-handler';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -382,16 +382,26 @@ app.delete('/delete/:id', auth(), async (c) => {
 
     // EXCLUSÃO EM CASCATA:
     // 1. Soft delete na tabela principal (documentos ou pasta_virtual)
-    await softDelete(db, tabela, id);
+    await db
+      .prepare(
+        `UPDATE ${tabela}
+            SET deleted_at = datetime('now'),
+                updated_at = datetime('now')
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL`,
+      )
+      .bind(id, empresaId)
+      .run();
 
     // 2. Se for documentos, também soft delete em pasta_virtual
     if (tabela === 'documentos' && pastaVirtualHasDocumentoId) {
       console.log(`🗑️  [CASCATA] Verificando pasta_virtual para documento ID ${id}...`);
       const pastaVirtualResult = await db
         .prepare(
-          "UPDATE pasta_virtual SET deleted_at = datetime('now') WHERE documento_id = ? AND deleted_at IS NULL",
+          "UPDATE pasta_virtual SET deleted_at = datetime('now') WHERE documento_id = ? AND empresa_id = ? AND deleted_at IS NULL",
         )
-        .bind(id)
+        .bind(id, empresaId)
         .run();
 
       if (pastaVirtualResult.meta.changes > 0) {
@@ -406,9 +416,9 @@ app.delete('/delete/:id', auth(), async (c) => {
       );
       const historicoResult = await db
         .prepare(
-          'UPDATE qualificacoes_historico SET certificado_arquivo_id = NULL WHERE certificado_arquivo_id = ? AND deleted_at IS NULL',
+          'UPDATE qualificacoes_historico SET certificado_arquivo_id = NULL WHERE certificado_arquivo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
         )
-        .bind(id)
+        .bind(id, empresaId)
         .run();
 
       if (historicoResult.meta.changes > 0) {
@@ -421,9 +431,9 @@ app.delete('/delete/:id', auth(), async (c) => {
 
       const historicoResult = await db
         .prepare(
-          'UPDATE qualificacoes_historico SET certificado_arquivo_id = NULL WHERE certificado_arquivo_id = ? AND deleted_at IS NULL',
+          'UPDATE qualificacoes_historico SET certificado_arquivo_id = NULL WHERE certificado_arquivo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
         )
-        .bind(id)
+        .bind(id, empresaId)
         .run();
 
       if (historicoResult.meta.changes > 0) {
@@ -434,20 +444,27 @@ app.delete('/delete/:id', auth(), async (c) => {
     } else if (pastaVirtualHasDocumentoId) {
       // Se for pasta_virtual, verificar se há documento relacionado
       const pvDocRef = await db
-        .prepare('SELECT documento_id FROM pasta_virtual WHERE id = ? AND deleted_at IS NOT NULL')
-        .bind(id)
+        .prepare(
+          'SELECT documento_id FROM pasta_virtual WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL',
+        )
+        .bind(id, empresaId)
         .first<{ documento_id: number | null }>();
 
       if (pvDocRef?.documento_id) {
         console.log(`🗑️  [CASCATA] Removendo documento relacionado ID ${pvDocRef.documento_id}...`);
-        await softDelete(db, 'documentos', pvDocRef.documento_id);
+        await db
+          .prepare(
+            "UPDATE documentos SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
+          )
+          .bind(pvDocRef.documento_id, empresaId)
+          .run();
 
         // Limpar referência em qualificacoes_historico
         await db
           .prepare(
-            'UPDATE qualificacoes_historico SET certificado_arquivo_id = NULL WHERE certificado_arquivo_id = ? AND deleted_at IS NULL',
+            'UPDATE qualificacoes_historico SET certificado_arquivo_id = NULL WHERE certificado_arquivo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
           )
-          .bind(pvDocRef.documento_id)
+          .bind(pvDocRef.documento_id, empresaId)
           .run();
       }
     } else {
@@ -486,7 +503,7 @@ app.delete('/delete/:id', auth(), async (c) => {
     try {
       const userId = String((c.get as any)('userId') || '0');
       await publishDomainEvent(db, 'pasta_virtual', 'DOCUMENTO_EXCLUIDO', {
-        empresa_id: String((c.get as any)('empresaId') || 0),
+        empresa_id: String(empresaId),
         origem_modulo: 'pasta_virtual',
         origem_usuario_id: userId,
         funcionario_id: documento?.funcionario_id ? String(documento.funcionario_id) : undefined,
@@ -639,9 +656,10 @@ app.post('/upload', auth(), async (c) => {
     }
 
     // Buscar funcionário dentro do tenant antes de qualquer operação R2.
+    const empresaId = getEmpresaId(c);
     const funcionario = await db
       .prepare('SELECT cpf, nome FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
-      .bind(funcionarioId, getEmpresaId(c))
+      .bind(funcionarioId, empresaId)
       .first<{ cpf: string; nome: string }>();
 
     if (!funcionario) {
@@ -736,9 +754,9 @@ app.post('/upload', auth(), async (c) => {
     const query = `
       INSERT INTO documentos (
         uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, 
-        descricao, sha256_hash, created_at, updated_at
+        descricao, sha256_hash, empresa_id, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `;
 
     let result;
@@ -754,6 +772,7 @@ app.post('/upload', auth(), async (c) => {
           r2Key,
           descricao,
           hashHex,
+          empresaId,
         )
         .run();
     } catch (insertError) {
@@ -766,13 +785,22 @@ app.post('/upload', auth(), async (c) => {
         const queryNoHash = `
           INSERT INTO documentos (
             uuid, funcionario_id, nome_arquivo, tipo, tamanho, r2_key, 
-            descricao, created_at, updated_at
+            descricao, empresa_id, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `;
         result = await db
           .prepare(queryNoHash)
-          .bind(uuid, funcionarioId, nomeArquivoPadronizado, fileType, fileSize, r2Key, descricao)
+          .bind(
+            uuid,
+            funcionarioId,
+            nomeArquivoPadronizado,
+            fileType,
+            fileSize,
+            r2Key,
+            descricao,
+            empresaId,
+          )
           .run();
       } else {
         throw insertError;
@@ -806,10 +834,9 @@ app.post('/upload', auth(), async (c) => {
     }
 
     try {
-      const empresaId = String((c.get as any)('empresaId') || 0);
       const userId = String((c.get as any)('userId') || '0');
       await publishDomainEvent(db, 'pasta_virtual', 'DOCUMENTO_ENVIADO', {
-        empresa_id: empresaId,
+        empresa_id: String(empresaId),
         origem_modulo: 'pasta_virtual',
         origem_usuario_id: userId,
         funcionario_id: String(funcionarioId),
@@ -1048,7 +1075,12 @@ app.delete('/:id', auth(), requireRole('admin'), async (c) => {
 
   try {
     // Soft delete no D1
-    await softDelete(db, 'documentos', id);
+    await db
+      .prepare(
+        "UPDATE documentos SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
+      )
+      .bind(id, empresaId)
+      .run();
 
     // Delete físico no R2
     await bucket.delete(documento.r2_key);

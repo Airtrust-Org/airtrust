@@ -248,7 +248,13 @@ describe('qualificacoes historico write router', () => {
   it('cria uma qualificacao com data futura como planejada', async () => {
     const { db, calls } = createMockDb([
       [
-        'SELECT id, categoria, validade, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente FROM qualificacoes_tipos WHERE codigo = ?',
+        'SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        {
+          first: () => ({ id: 42 }),
+        },
+      ],
+      [
+        'FROM qualificacoes_tipos',
         {
           first: () => ({
             id: 19,
@@ -315,6 +321,7 @@ describe('qualificacoes historico write router', () => {
       'PLANEJADA',
       8,
       'INICIAL',
+      1,
     ]);
     expect(publishQualificacaoEventMock).toHaveBeenCalledWith(
       db,

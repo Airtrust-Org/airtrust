@@ -534,6 +534,7 @@ app.get('/sessoes', async (c) => {
  */
 app.post('/sessoes', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const b = await c.req.json();
     const {
       simulador_id,
@@ -590,6 +591,38 @@ app.post('/sessoes', async (c) => {
 
     if (!participantes || participantes.length === 0) {
       return c.json({ success: false, error: 'Adicione pelo menos 1 participante' }, 400);
+    }
+
+    const funcionarioIdsSessao = Array.from(
+      new Set(
+        [
+          instrutor_id,
+          examinador_id,
+          ...participantes.map((part: any) => part?.funcionario_id),
+        ]
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value > 0),
+      ),
+    );
+    if (funcionarioIdsSessao.length === 0) {
+      return c.json({ success: false, error: 'Funcionários inválidos' }, 400);
+    }
+
+    const funcionariosValidos = await c.env.DB.prepare(
+      `SELECT COUNT(DISTINCT id) AS total
+         FROM funcionarios
+        WHERE id IN (${funcionarioIdsSessao.map(() => '?').join(',')})
+          AND empresa_id = ?
+          AND deleted_at IS NULL`,
+    )
+      .bind(...funcionarioIdsSessao, empresaId)
+      .first<{ total: number }>();
+
+    if (Number(funcionariosValidos?.total || 0) !== funcionarioIdsSessao.length) {
+      return c.json(
+        { success: false, error: 'Instrutor, examinador ou participante fora do tenant' },
+        400,
+      );
     }
 
     // Validação de horário
@@ -666,9 +699,10 @@ app.post('/sessoes', async (c) => {
          FROM funcionarios
          WHERE id = ?
            AND ${examinadorFlagExpr}
+           AND empresa_id = ?
            AND deleted_at IS NULL`,
       )
-        .bind(examinador_id)
+        .bind(examinador_id, empresaId)
         .first();
       if (!examinador) {
         return c.json({ success: false, error: 'Examinador inválido' }, 400);
@@ -703,7 +737,7 @@ app.post('/sessoes', async (c) => {
         templateIdFinal,
         observacoes || null,
         tema_sessao || null,
-        (c as any).get('empresaId') || null,
+        empresaId,
       ];
     } else {
       insertSql = `INSERT INTO simulador_agendamentos (
@@ -725,7 +759,7 @@ app.post('/sessoes', async (c) => {
         templateIdFinal,
         observacoes || null,
         tema_sessao || null,
-        (c as any).get('empresaId') || null,
+        empresaId,
       ];
     }
 
@@ -819,7 +853,7 @@ app.post('/sessoes', async (c) => {
     }
 
     await syncSessaoEscalaEventos(c.env.DB, {
-      empresaId: (c as any).get('empresaId') || null,
+      empresaId,
       sessaoId: sessao_id,
       simuladorId: simulador_id,
       data,
@@ -997,14 +1031,13 @@ app.post('/sessoes', async (c) => {
     }
     if (modeloIdParaQual) {
       try {
-        const empresaIdQual = Number((c as any).get('empresaId') || 0);
         await criarQualificacoesPlanejadas(c.env.DB, {
           sessaoId: sessao_id,
           modeloId: modeloIdParaQual,
           tipoSessao: tipo_sessao,
           data,
           participantes,
-          empresaId: empresaIdQual,
+          empresaId,
         });
       } catch (err) {
         // Não bloquear o fluxo principal — apenas registrar
@@ -1013,31 +1046,27 @@ app.post('/sessoes', async (c) => {
     }
 
     try {
-      const empresaId = Number((c as any).get('empresaId') || 0);
-      if (empresaId > 0) {
-        await Promise.allSettled(
-          participantes.map((participante: any) =>
-            publishDomainEvent(c.env.DB, 'simuladores', 'SIMULADOR_AGENDADO', {
-              funcionario_id: String(participante.funcionario_id),
-              empresa_id: empresaId,
-              origem_modulo: 'simuladores',
-              sessao_id: String(sessao_id),
-              data_sessao: data,
-              tipo_sessao,
-              tipo_aeronave: tipo_aeronave || null,
-            }),
-          ),
-        );
-      }
+      await Promise.allSettled(
+        participantes.map((participante: any) =>
+          publishDomainEvent(c.env.DB, 'simuladores', 'SIMULADOR_AGENDADO', {
+            funcionario_id: String(participante.funcionario_id),
+            empresa_id: empresaId,
+            origem_modulo: 'simuladores',
+            sessao_id: String(sessao_id),
+            data_sessao: data,
+            tipo_sessao,
+            tipo_aeronave: tipo_aeronave || null,
+          }),
+        ),
+      );
     } catch (error) {
       console.error('domain_event_error', error);
     }
 
-    const notificationEmpresaId = Number((c as any).get('empresaId') || 0);
     c.executionCtx?.waitUntil(
       sendSimulatorSessionEmailNotifications(c.env, c.env.DB, Number(sessao_id), {
         reason: 'created',
-        empresaId: notificationEmpresaId || undefined,
+        empresaId,
       })
         .then((results) => {
           const sent = results.filter((item) => item.status === 'sent').length;
@@ -1259,7 +1288,7 @@ app.post('/sessoes/:id/notificacoes', async (c) => {
       );
     }
 
-    const empresaId = Number((c as any).get('empresaId') || 0);
+    const { empresaId } = getTenantContext(c);
     const sessao = await c.env.DB.prepare(
       `SELECT
          sa.id,
@@ -1285,9 +1314,9 @@ app.post('/sessoes/:id/notificacoes', async (c) => {
        LEFT JOIN funcionarios fe ON fe.id = sa.examinador_id
        WHERE sa.id = ?
          AND sa.deleted_at IS NULL
-         AND (? = 0 OR sa.empresa_id = ?)`,
+         AND sa.empresa_id = ?`,
     )
-      .bind(sessaoId, empresaId, empresaId)
+      .bind(sessaoId, empresaId)
       .first<{
         id: number;
         data: string;
