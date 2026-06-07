@@ -351,7 +351,9 @@ export default function ModalNovaSessao({
 
     // Build merged session data: sessaoDetalhe is authoritative for DB-level fields,
     // falling back to the sessao prop for fields the detail endpoint doesn't return.
-    const merged = sessaoDetalhe
+    // If sessaoDetalhe has _fallback flag (detail fetch failed), use prop data directly.
+    const detailIsFallback = sessaoDetalhe?._fallback === true;
+    const merged = sessaoDetalhe && !detailIsFallback
       ? {
           ...sessao,
           // Map detail DB columns → frontend field names, preferring detail over prop
@@ -415,7 +417,7 @@ export default function ModalNovaSessao({
         tema_sessao: merged.tema_sessao,
         tipo_dispositivo: merged.tipo_dispositivo,
         aeronave_id: merged.aeronave_id,
-        hasDetail: !!sessaoDetalhe,
+        hasDetail: !!(sessaoDetalhe && !(sessaoDetalhe as any)._fallback),
       });
 
       setTipoDispositivo(tipoDisp);
@@ -691,14 +693,14 @@ export default function ModalNovaSessao({
         cache: 'no-store',
       });
       if (!res.ok) {
-        console.error('[fetchSessaoDetalhe] Erro HTTP:', res.status);
-        setEditHydrating(false);
+        console.error('[fetchSessaoDetalhe] Erro HTTP:', res.status, '— fallback to calendar data');
+        setSessaoDetalhe({ _fallback: true }); // signal to use prop data
         return;
       }
       const data = await res.json();
       if (!data?.success || !data?.sessao) {
-        console.error('[fetchSessaoDetalhe] Resposta inválida:', data);
-        setEditHydrating(false);
+        console.error('[fetchSessaoDetalhe] Resposta inválida — fallback to calendar data');
+        setSessaoDetalhe({ _fallback: true }); // signal to use prop data
         return;
       }
       console.log('✅ [fetchSessaoDetalhe] Detalhe carregado:', {
@@ -711,8 +713,8 @@ export default function ModalNovaSessao({
       });
       setSessaoDetalhe(data.sessao);
     } catch (error) {
-      console.error('[fetchSessaoDetalhe] Erro:', error);
-      setEditHydrating(false);
+      console.error('[fetchSessaoDetalhe] Erro:', error, '— fallback to calendar data');
+      setSessaoDetalhe({ _fallback: true }); // signal to use prop data
     }
   }
 
