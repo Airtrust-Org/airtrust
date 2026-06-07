@@ -1,4 +1,4 @@
-type OrigemEventoExterno = 'simuladores' | 'funcionario_ferias';
+type OrigemEventoExterno = 'simuladores' | 'funcionario_ferias' | 'treinamento';
 
 interface ReplaceManagedEscalaEventsParams {
   db: D1Database;
@@ -270,4 +270,79 @@ export async function syncFuncionarioFeriasForMonth(
   }
 
   return total;
+}
+
+/**
+ * Sync a treinamentos_planejados record into escala_eventos so it appears
+ * in the monthly crew grid (GradeTripulantes via buildSyntheticAlocacoesFromEventos).
+ *
+ * Called after every POST/PATCH/cancellation in the training module.
+ * If status is CANCELADO or the participants list is empty the existing events
+ * are removed; otherwise they are replaced with the current date range.
+ */
+export async function syncTreinamentoToEscalaEventos(params: {
+  db: D1Database;
+  empresaId: string | number | null | undefined;
+  treinamentoId: number;
+  dataInicio: string;
+  dataFim: string;
+  status: string;
+  titulo: string | null;
+  codigoTurma: string | null;
+  participanteIds: number[];
+  removedParticipantIds?: number[];
+  createdBy: string;
+}): Promise<void> {
+  const {
+    db,
+    empresaId,
+    treinamentoId,
+    dataInicio,
+    dataFim,
+    status,
+    titulo,
+    codigoTurma,
+    participanteIds,
+    removedParticipantIds = [],
+    createdBy,
+  } = params;
+
+  const linkId = `treinamento:${treinamentoId}`;
+  const observacoes = [titulo, codigoTurma ? `[${codigoTurma}]` : null].filter(Boolean).join(' ') || null;
+
+  // Remove events for participants who left the training
+  for (const funcionarioId of removedParticipantIds) {
+    await removeManagedEscalaEvents({ db, funcionarioId, origem: 'treinamento', linkId });
+  }
+
+  if (status === 'CANCELADO') {
+    // Remove events for all current participants on cancellation
+    for (const funcionarioId of participanteIds) {
+      await removeManagedEscalaEvents({ db, funcionarioId, origem: 'treinamento', linkId });
+    }
+    return;
+  }
+
+  const statusEvento: 'confirmado' | 'pendente' =
+    status === 'CONFIRMADO' || status === 'EM_ANDAMENTO' || status === 'CONCLUIDO'
+      ? 'confirmado'
+      : 'pendente';
+
+  for (const funcionarioId of participanteIds) {
+    await replaceManagedEscalaEvents({
+      db,
+      empresaId,
+      funcionarioId,
+      origem: 'treinamento',
+      linkId,
+      tipoEvento: 'treinamento_solo',
+      dataInicio,
+      dataFim,
+      createdBy,
+      status: statusEvento,
+      observacoes,
+      motivoAutomatico:
+        'Gerado automaticamente a partir do treinamento planejado. Gerencie no módulo Treinamentos.',
+    });
+  }
 }

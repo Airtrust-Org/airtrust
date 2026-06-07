@@ -13,6 +13,7 @@ import {
   sqlStatusEqualsAny,
 } from '../lib/status/status-codes';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
+import { syncTreinamentoToEscalaEventos } from '../shared/syncEscalaEventosExternos';
 
 type EventoContextRow = {
   id: number;
@@ -26,6 +27,8 @@ type EventoContextRow = {
   qualificacao_carga_horaria_inicial: number | null;
   qualificacao_carga_horaria_recorrente: number | null;
   data_prevista: string;
+  data_inicio: string | null;
+  data_fim: string | null;
   status: string;
   instrutor_id: number | null;
   instrutor_nome: string | null;
@@ -36,6 +39,7 @@ type EventoContextRow = {
   descricao: string | null;
   observacoes: string | null;
   codigo_turma: string | null;
+  created_by: number | null;
 };
 
 type ParticipanteContextRow = {
@@ -175,6 +179,8 @@ async function loadEventoContext(
                 qt.carga_horaria_inicial AS qualificacao_carga_horaria_inicial,
                 qt.carga_horaria_recorrente AS qualificacao_carga_horaria_recorrente,
                 t.data_prevista,
+                t.data_inicio,
+                t.data_fim,
                 t.status,
                 t.instrutor_id,
                 instr.nome AS instrutor_nome,
@@ -184,7 +190,8 @@ async function loadEventoContext(
                 t.titulo,
                 t.descricao,
                 t.observacoes,
-                t.codigo_turma
+                t.codigo_turma,
+                t.created_by
            FROM treinamentos_planejados t
            LEFT JOIN qualificacoes_tipos qt ON qt.id = t.qualificacao_tipo_id AND qt.deleted_at IS NULL
            LEFT JOIN funcionarios instr ON instr.id = t.instrutor_id AND instr.deleted_at IS NULL
@@ -394,7 +401,7 @@ async function findHistoricoPlanejadoCandidate(
             AND deleted_at IS NULL
             AND COALESCE(renovada, 0) = 0
             AND (
-              (${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)} AND date(COALESCE(data_conclusao, '1900-01-01')) = date(?))
+              (${sqlStatusEqualsAny('status', [...PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA, QUALIFICACAO_STATUS.CANCELADA])} AND date(COALESCE(data_conclusao, '1900-01-01')) = date(?))
               OR COALESCE(observacoes, '') LIKE ?
             )
           ORDER BY CASE WHEN COALESCE(observacoes, '') LIKE ? THEN 0 ELSE 1 END,
@@ -990,6 +997,7 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
   // M3: ciclo de vida da turma. Resultado final = APROVADO/REPROVADO/CANCELADO.
   // INCOMPLETO é tratado como pendência (reposição) e mantém a turma EM_ANDAMENTO.
   // Só avançamos o status (nunca rebaixamos CONCLUIDO automaticamente).
+  let finalStatus = evento.status;
   if (evento.status !== 'CANCELADO' && currentParticipants.length > 0) {
     const isFinalResult = (resultado: string | null) =>
       ['APROVADO', 'REPROVADO', 'CANCELADO'].includes(String(resultado || '').trim().toUpperCase());
@@ -1011,12 +1019,34 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
         .bind(desiredStatus, treinamentoId, empresaId)
         .run();
       historicoChanged = true;
+      finalStatus = desiredStatus;
     }
   }
 
   if (historicoChanged) {
     await invalidateMaterializedStats(db);
   }
+
+  const dataInicio = evento.data_inicio || evento.data_prevista;
+  const dataFim = evento.data_fim || evento.data_prevista;
+  const createdBy = String(evento.created_by || 'system');
+
+  await syncTreinamentoToEscalaEventos({
+    db,
+    empresaId,
+    treinamentoId,
+    dataInicio,
+    dataFim,
+    status: finalStatus,
+    titulo: evento.titulo,
+    codigoTurma: evento.codigo_turma,
+    participanteIds: currentParticipants.map((p) => p.funcionario_id),
+    removedParticipantIds: removedParticipants.map((p) => p.funcionario_id),
+    createdBy,
+  }).catch((err) => {
+    // Escala sync is non-critical — a failure here should not block training operations.
+    console.error('treinamento_escala_sync_failed', { treinamentoId, error: (err as Error)?.message });
+  });
 }
 
 export async function sincronizarSolicitacaoAgendadaComTreinamentoPlanejado(params: {
