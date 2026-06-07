@@ -1031,16 +1031,48 @@ export async function syncTreinamentoPlanejadoIntegration(params: {
   const dataFim = evento.data_fim || evento.data_prevista;
   const createdBy = String(evento.created_by || 'system');
 
+  // R1: load instructors; R2: load effective days — both loaded in a single batch query.
+  const [instrutorRows, diasRows] = await Promise.all([
+    db
+      .prepare(
+        `SELECT ti.funcionario_id
+           FROM treinamentos_instrutores ti
+          WHERE ti.treinamento_id = ? AND ti.empresa_id = ?
+          UNION
+         SELECT t.instrutor_id AS funcionario_id
+           FROM treinamentos_planejados t
+          WHERE t.id = ? AND t.empresa_id = ? AND t.instrutor_id IS NOT NULL AND t.deleted_at IS NULL`,
+      )
+      .bind(treinamentoId, empresaId, treinamentoId, empresaId)
+      .all<{ funcionario_id: number }>(),
+    db
+      .prepare(
+        `SELECT data
+           FROM treinamentos_dias
+          WHERE treinamento_id = ? AND empresa_id = ? AND deleted_at IS NULL AND status = 'ATIVO'
+          ORDER BY data`,
+      )
+      .bind(treinamentoId, empresaId)
+      .all<{ data: string }>(),
+  ]);
+
+  const instrutorIds = [
+    ...new Set((instrutorRows.results || []).map((r) => Number(r.funcionario_id)).filter(Boolean)),
+  ];
+  const diasEfetivos = (diasRows.results || []).map((r) => r.data).filter(Boolean);
+
   await syncTreinamentoToEscalaEventos({
     db,
     empresaId,
     treinamentoId,
     dataInicio,
     dataFim,
+    diasEfetivos: diasEfetivos.length > 0 ? diasEfetivos : undefined,
     status: finalStatus,
     titulo: evento.titulo,
     codigoTurma: evento.codigo_turma,
     participanteIds: currentParticipants.map((p) => p.funcionario_id),
+    instrutorIds,
     removedParticipantIds: removedParticipants.map((p) => p.funcionario_id),
     createdBy,
   }).catch((err) => {

@@ -79,6 +79,15 @@ function getMonthsBetween(dataInicio: string, dataFim: string) {
   return months;
 }
 
+function monthKey(ano: number, mes: number): string {
+  return `${ano}-${String(mes).padStart(2, '0')}`;
+}
+
+function monthKeyFromDate(dateIso: string): string {
+  const d = parseIsoDate(dateIso);
+  return monthKey(d.getUTCFullYear(), d.getUTCMonth() + 1);
+}
+
 async function getEscalaMensalId(
   db: D1Database,
   empresaId: string | number | null | undefined,
@@ -101,6 +110,37 @@ async function getEscalaMensalId(
 
   return row?.id || null;
 }
+
+/**
+ * Pre-fetch all escala IDs needed for a set of dates (Fix R3: N+1 elimination).
+ * Returns a Map keyed by 'yyyy-MM' → escalaId | null.
+ */
+async function buildMonthEscalaMap(
+  db: D1Database,
+  empresaId: string | number | null | undefined,
+  dates: string[],
+): Promise<Map<string, string | null>> {
+  const uniqueKeys = new Set(dates.map(monthKeyFromDate));
+  const map = new Map<string, string | null>();
+
+  await Promise.all(
+    [...uniqueKeys].map(async (key) => {
+      const [ano, mes] = key.split('-').map(Number);
+      const id = await getEscalaMensalId(db, empresaId, ano, mes);
+      map.set(key, id);
+    }),
+  );
+
+  return map;
+}
+
+const INSERT_ESCALA_EVENTO_SQL = `
+  INSERT INTO escala_eventos
+  (id, escala_id, tripulacao_id, funcionario_id, tipo_evento, data_inicio, data_fim,
+   turno, local, aeronave, simulador_id, gerado_automaticamente, motivo_automatico, status,
+   origem, observacoes, created_by, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, 'dia_todo', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+`;
 
 export async function removeManagedEscalaEvents(
   params: RemoveManagedEscalaEventsParams,
@@ -179,13 +219,7 @@ export async function replaceManagedEscalaEvents(
     }
 
     await params.db
-      .prepare(
-        `INSERT INTO escala_eventos
-         (id, escala_id, tripulacao_id, funcionario_id, tipo_evento, data_inicio, data_fim,
-          turno, local, aeronave, simulador_id, gerado_automaticamente, motivo_automatico, status,
-          origem, observacoes, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'dia_todo', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
-      )
+      .prepare(INSERT_ESCALA_EVENTO_SQL)
       .bind(
         crypto.randomUUID(),
         escalaId,
@@ -273,24 +307,38 @@ export async function syncFuncionarioFeriasForMonth(
 }
 
 /**
- * Sync a treinamentos_planejados record into escala_eventos so it appears
- * in the monthly crew grid (GradeTripulantes via buildSyntheticAlocacoesFromEventos).
+ * Sync a treinamentos_planejados record into escala_eventos so it appears in
+ * the monthly crew grid (GradeTripulantes via buildSyntheticAlocacoesFromEventos).
+ *
+ * Covers participants AND instructors (Fix R1).
+ * Uses per-day events when diasEfetivos are supplied (Fix R2).
+ * Pre-caches escala IDs and batches INSERTs (Fix R3 — N+1 elimination).
  *
  * Called after every POST/PATCH/cancellation in the training module.
- * If status is CANCELADO or the participants list is empty the existing events
- * are removed; otherwise they are replaced with the current date range.
  */
 export async function syncTreinamentoToEscalaEventos(params: {
   db: D1Database;
   empresaId: string | number | null | undefined;
   treinamentoId: number;
+  /** Fallback date range when diasEfetivos is absent (legacy single-day trainings). */
   dataInicio: string;
   dataFim: string;
+  /**
+   * Specific effective days from treinamentos_dias. When provided the sync
+   * creates one event PER DAY instead of a continuous range — avoids marking
+   * gaps between days as CURSO in the monthly grid. (Fix R2)
+   */
+  diasEfetivos?: string[];
   status: string;
   titulo: string | null;
   codigoTurma: string | null;
+  /** Enrolled participants. */
   participanteIds: number[];
+  /** Instructors from treinamentos_instrutores + legacy instrutor_id. (Fix R1) */
+  instrutorIds?: number[];
   removedParticipantIds?: number[];
+  /** Instructors removed from the training. (Fix R1) */
+  removedInstrutorIds?: number[];
   createdBy: string;
 }): Promise<void> {
   const {
@@ -299,50 +347,159 @@ export async function syncTreinamentoToEscalaEventos(params: {
     treinamentoId,
     dataInicio,
     dataFim,
+    diasEfetivos,
     status,
     titulo,
     codigoTurma,
     participanteIds,
+    instrutorIds = [],
     removedParticipantIds = [],
+    removedInstrutorIds = [],
     createdBy,
   } = params;
 
   const linkId = `treinamento:${treinamentoId}`;
-  const observacoes = [titulo, codigoTurma ? `[${codigoTurma}]` : null].filter(Boolean).join(' ') || null;
+  const observacoes =
+    [titulo, codigoTurma ? `[${codigoTurma}]` : null].filter(Boolean).join(' ') || null;
 
-  // Remove events for participants who left the training
-  for (const funcionarioId of removedParticipantIds) {
-    await removeManagedEscalaEvents({ db, funcionarioId, origem: 'treinamento', linkId });
-  }
+  // Deduplicate: a person who is both participant and instructor needs only one event.
+  const allCurrentIds = [...new Set([...participanteIds, ...instrutorIds])];
+  const allRemovedIds = [...new Set([...removedParticipantIds, ...removedInstrutorIds])];
+
+  // --- Step 1: Remove events for people who left the training (Fix R1 includes instructors) ---
+  await Promise.all(
+    allRemovedIds.map((funcionarioId) =>
+      removeManagedEscalaEvents({ db, funcionarioId, origem: 'treinamento', linkId }),
+    ),
+  );
 
   if (status === 'CANCELADO') {
-    // Remove events for all current participants on cancellation
-    for (const funcionarioId of participanteIds) {
-      await removeManagedEscalaEvents({ db, funcionarioId, origem: 'treinamento', linkId });
-    }
+    await Promise.all(
+      allCurrentIds.map((funcionarioId) =>
+        removeManagedEscalaEvents({ db, funcionarioId, origem: 'treinamento', linkId }),
+      ),
+    );
     return;
   }
+
+  if (allCurrentIds.length === 0) return;
 
   const statusEvento: 'confirmado' | 'pendente' =
     status === 'CONFIRMADO' || status === 'EM_ANDAMENTO' || status === 'CONCLUIDO'
       ? 'confirmado'
       : 'pendente';
 
-  for (const funcionarioId of participanteIds) {
-    await replaceManagedEscalaEvents({
-      db,
-      empresaId,
-      funcionarioId,
-      origem: 'treinamento',
-      linkId,
-      tipoEvento: 'treinamento_solo',
-      dataInicio,
-      dataFim,
-      createdBy,
-      status: statusEvento,
-      observacoes,
-      motivoAutomatico:
-        'Gerado automaticamente a partir do treinamento planejado. Gerencie no módulo Treinamentos.',
-    });
+  // --- Step 2: Remove existing events for all current people (before re-creating) ---
+  await Promise.all(
+    allCurrentIds.map((funcionarioId) =>
+      removeManagedEscalaEvents({ db, funcionarioId, origem: 'treinamento', linkId }),
+    ),
+  );
+
+  // --- Step 3: Pre-cache escala IDs (Fix R3 — one DB round-trip per month, not N×M) ---
+  const effectiveDates: string[] =
+    diasEfetivos && diasEfetivos.length > 0
+      ? diasEfetivos
+      : buildRangeDates(dataInicio, dataFim);
+
+  if (effectiveDates.length === 0) return;
+
+  const monthEscalaMap = await buildMonthEscalaMap(db, empresaId, effectiveDates);
+
+  // --- Step 4: Collect INSERT statements for every (person × date) pair ---
+  const now = new Date().toISOString();
+  const motivoAutomatico =
+    'Gerado automaticamente a partir do treinamento planejado. Gerencie no módulo Treinamentos.';
+
+  const insertStmts: ReturnType<D1Database['prepare']>[] = [];
+
+  if (diasEfetivos && diasEfetivos.length > 0) {
+    // Per-day events: one event per person per effective day (Fix R2)
+    for (const data of diasEfetivos) {
+      const escalaId = monthEscalaMap.get(monthKeyFromDate(data));
+      if (!escalaId) continue;
+
+      for (const funcionarioId of allCurrentIds) {
+        insertStmts.push(
+          db.prepare(INSERT_ESCALA_EVENTO_SQL).bind(
+            crypto.randomUUID(),
+            escalaId,
+            linkId,
+            String(funcionarioId),
+            'treinamento_solo',
+            data,
+            data, // data_inicio === data_fim for a single-day slot
+            null, // local
+            null, // aeronave
+            null, // simulador_id
+            motivoAutomatico,
+            statusEvento,
+            'treinamento',
+            observacoes,
+            createdBy,
+            now,
+            now,
+          ),
+        );
+      }
+    }
+  } else {
+    // Range events: one event per month per person (legacy / single-day trainings)
+    const months = getMonthsBetween(dataInicio, dataFim);
+    for (const monthRef of months) {
+      const escalaId = monthEscalaMap.get(monthKey(monthRef.ano, monthRef.mes));
+      if (!escalaId) continue;
+
+      const segment = getSegmentBounds(dataInicio, dataFim, monthRef.ano, monthRef.mes);
+      if (!segment) continue;
+
+      for (const funcionarioId of allCurrentIds) {
+        insertStmts.push(
+          db.prepare(INSERT_ESCALA_EVENTO_SQL).bind(
+            crypto.randomUUID(),
+            escalaId,
+            linkId,
+            String(funcionarioId),
+            'treinamento_solo',
+            segment.dataInicio,
+            segment.dataFim,
+            null,
+            null,
+            null,
+            motivoAutomatico,
+            statusEvento,
+            'treinamento',
+            observacoes,
+            createdBy,
+            now,
+            now,
+          ),
+        );
+      }
+    }
   }
+
+  // --- Step 5: Batch-execute all INSERTs (Fix R3 — single round-trip) ---
+  if (insertStmts.length > 0) {
+    // D1 batch limit is 100 statements; chunk if needed.
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < insertStmts.length; i += BATCH_SIZE) {
+      await db.batch(insertStmts.slice(i, i + BATCH_SIZE) as Parameters<typeof db.batch>[0]);
+    }
+  }
+}
+
+/**
+ * Expand a date range into individual ISO-date strings.
+ * Used as fallback when no explicit diasEfetivos are provided.
+ */
+function buildRangeDates(dataInicio: string, dataFim: string): string[] {
+  const dates: string[] = [];
+  const cursor = parseIsoDate(dataInicio);
+  const end = parseIsoDate(dataFim);
+  while (cursor <= end) {
+    dates.push(formatIsoDate(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
 }
