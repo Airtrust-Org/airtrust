@@ -1081,14 +1081,38 @@ app.post('/sessoes', async (c) => {
 app.get('/sessoes/:id', async (c) => {
   try {
     const id = c.req.param('id');
+    const empresaId = (c as unknown as { get: (k: string) => unknown }).get('empresaId') as number | undefined;
 
-    // 1. Buscar sessão com dados do simulador
+    // 1. Buscar sessão com dados completos: simulador, modelo, tipo, aeronave, examinador
     const s = await c.env.DB.prepare(
-      'SELECT sa.*,s.nome as simulador_nome FROM simulador_agendamentos sa LEFT JOIN simuladores s ON sa.simulador_id=s.id WHERE sa.id=? AND sa.deleted_at IS NULL',
+      `SELECT
+        sa.*,
+        s.nome as simulador_nome,
+        s.modelo as simulador_modelo,
+        s.tipo as simulador_tipo,
+        s.aeronave_codigo as simulador_aeronave_codigo,
+        ms.tipo_sessao_id as tipo_sessao_id,
+        ts_ref.codigo as tipo_sessao_codigo,
+        ts_ref.nome as tipo_sessao_nome,
+        ae.prefixo as aeronave_prefixo,
+        ae.modelo as aeronave_modelo,
+        fe.nome as examinador_nome
+      FROM simulador_agendamentos sa
+      LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
+      LEFT JOIN modelos_sessao ms ON sa.template_id = ms.id AND ms.deleted_at IS NULL
+      LEFT JOIN tipos_sessao ts_ref ON ms.tipo_sessao_id = ts_ref.id AND ts_ref.deleted_at IS NULL
+      LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
+      LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
+      WHERE sa.id = ? AND sa.deleted_at IS NULL`,
     )
       .bind(id)
       .first();
     if (!s) return c.json({ success: false, error: 'Não encontrada' }, 404);
+
+    // Tenant isolation: verify empresa_id matches auth context
+    if (empresaId && s.empresa_id && Number(s.empresa_id) !== Number(empresaId)) {
+      return c.json({ success: false, error: 'Não encontrada' }, 404);
+    }
 
     // 2. Buscar participantes
     const p = await c.env.DB.prepare(
@@ -1128,6 +1152,7 @@ app.get('/sessoes/:id', async (c) => {
 
     return c.json({ success: true, sessao });
   } catch (e: any) {
+    console.error('[GET /sessoes/:id] Erro:', e);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });

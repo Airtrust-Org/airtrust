@@ -114,8 +114,8 @@ const historicoActionDangerButtonClass =
 const QUALIFICACOES_PREFS_KEY = 'qualificacoes_prefs_v1';
 
 interface QualificacoesPrefs {
-  activeTab?: 'historico' | 'tipos' | 'categorias' | 'turmas';
-  turmasViewMode?: 'list' | 'calendar';
+  activeTab?: 'historico' | 'planejados' | 'tipos' | 'categorias';
+  plannedView?: 'lista' | 'calendario' | 'turmas';
   limit?: number;
   searchTerm?: string;
   sortColumn?: string | null;
@@ -138,15 +138,28 @@ export default function Qualificacoes() {
     const parsedId = Number(rawId);
     return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
   }, [searchParams]);
-  const VALID_TABS = ['historico', 'tipos', 'categorias', 'turmas'] as const;
-  const [activeTab, setActiveTab] = useState<'historico' | 'tipos' | 'categorias' | 'turmas'>(
-    VALID_TABS.includes(initialPrefs.activeTab as (typeof VALID_TABS)[number])
-      ? (initialPrefs.activeTab as (typeof VALID_TABS)[number])
-      : 'historico',
-  );
-  const [turmasViewMode, setTurmasViewMode] = useState<'list' | 'calendar'>(
-    initialPrefs.turmasViewMode ?? 'list',
-  );
+  const VALID_TABS = ['historico', 'planejados', 'tipos', 'categorias'] as const;
+  const VALID_PLANNED_VIEWS = ['lista', 'calendario', 'turmas'] as const;
+
+  // Migrate legacy preference: 'turmas' was briefly used as a main tab value in
+  // a previous deploy. Map it back to 'planejados' + plannedView='turmas'.
+  const rawStoredTab = initialPrefs.activeTab as string | undefined;
+  const rawStoredView = initialPrefs.plannedView as string | undefined;
+  const migratedTab: (typeof VALID_TABS)[number] =
+    rawStoredTab === 'turmas'
+      ? 'planejados'
+      : VALID_TABS.includes(rawStoredTab as (typeof VALID_TABS)[number])
+        ? (rawStoredTab as (typeof VALID_TABS)[number])
+        : 'historico';
+  const migratedPlannedView: (typeof VALID_PLANNED_VIEWS)[number] =
+    rawStoredTab === 'turmas'
+      ? 'turmas'
+      : VALID_PLANNED_VIEWS.includes(rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
+        ? (rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
+        : 'lista';
+
+  const [activeTab, setActiveTab] = useState<(typeof VALID_TABS)[number]>(migratedTab);
+  const [plannedView, setPlannedView] = useState<(typeof VALID_PLANNED_VIEWS)[number]>(migratedPlannedView);
   const [limit, setLimit] = useState(initialPrefs.limit ?? 50); // Paginação: 50 registros por página
   const [page, setPage] = useState(1); // Página atual
   const [searchTerm, setSearchTerm] = useState(''); // Termo de busca
@@ -209,13 +222,14 @@ export default function Qualificacoes() {
   );
 
   const isHistoricoTab = activeTab === 'historico';
-  const isTurmasTab = activeTab === 'turmas';
-  const usesHistoricoDataset = isHistoricoTab;
+  const isPlanejadosTab = activeTab === 'planejados';
+  // Historico dataset (API + filters) is used by Histórico and Planejados > Lista subview
+  const usesHistoricoDataset = isHistoricoTab || (isPlanejadosTab && plannedView === 'lista');
 
   useEffect(() => {
     writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
       activeTab,
-      turmasViewMode,
+      plannedView,
       limit,
       searchTerm,
       sortColumn: sortConfig.column,
@@ -226,7 +240,7 @@ export default function Qualificacoes() {
     });
   }, [
     activeTab,
-    turmasViewMode,
+    plannedView,
     limit,
     searchTerm,
     sortConfig.column,
@@ -297,8 +311,17 @@ export default function Qualificacoes() {
   // 🔍 Aplicar filtros da URL ao montar componente
   useEffect(() => {
     const tabParam = searchParams.get('tab');
+    const viewParam = searchParams.get('view');
+
     if (tabParam === 'turmas') {
-      setActiveTab('turmas');
+      // Legacy URL: /qualificacoes?tab=turmas → Planejados > Turmas subview
+      setActiveTab('planejados');
+      setPlannedView('turmas');
+    } else if (tabParam === 'planejados') {
+      setActiveTab('planejados');
+      if (viewParam === 'lista' || viewParam === 'calendario' || viewParam === 'turmas') {
+        setPlannedView(viewParam);
+      }
     }
 
     if (highlightedHistoricoId) {
@@ -2343,18 +2366,18 @@ export default function Qualificacoes() {
                 Histórico
               </button>
               <button
-                onClick={() => setActiveTab('turmas')}
+                onClick={() => setActiveTab('planejados')}
                 className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
-                  activeTab === 'turmas'
+                  isPlanejadosTab
                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
                 <CalendarDays
                   size={16}
-                  className={activeTab === 'turmas' ? 'text-blue-600' : ''}
+                  className={isPlanejadosTab ? 'text-blue-600' : ''}
                 />
-                Turmas
+                Planejados
               </button>
               <button
                 onClick={() => setActiveTab('tipos')}
@@ -2486,9 +2509,9 @@ export default function Qualificacoes() {
                   <span>Novo Modelo</span>
                 </button>
               )}
-              {isTurmasTab && (
+              {isPlanejadosTab && plannedView === 'turmas' && (
                 <span className="text-xs text-slate-400 italic">
-                  Use o botão <strong>+ Novo treinamento</strong> abaixo para criar turmas multi-dia.
+                  Use o botão <strong>+ Novo treinamento</strong> na aba Turmas para criar turmas multi-dia.
                 </span>
               )}
               {activeTab === 'categorias' && (
@@ -3233,19 +3256,101 @@ export default function Qualificacoes() {
             </div>
           )}
 
-          {isTurmasTab && (
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center py-20">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                </div>
-              }
-            >
-              <TreinamentosPlanejadosPage asTab={true} />
-            </Suspense>
-          )}
+          {isPlanejadosTab && (
+            <div className="space-y-0">
+              {/* Sub-tabs: Lista | Calendário | Turmas */}
+              <div className="flex items-center gap-1 border-b border-slate-100 px-4 pt-2 pb-0">
+                {(['lista', 'calendario', 'turmas'] as const).map((view) => {
+                  const labels: Record<string, string> = {
+                    lista: 'Lista',
+                    calendario: 'Calendário',
+                    turmas: 'Turmas',
+                  };
+                  return (
+                    <button
+                      key={view}
+                      onClick={() => setPlannedView(view)}
+                      className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        plannedView === view
+                          ? 'border-blue-600 text-blue-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {labels[view]}
+                    </button>
+                  );
+                })}
+              </div>
 
-          {/* Planejados DataTable removed — now handled by TreinamentosPlanejadosPage in Turmas tab */}
+              {/* Lista: planejados individuais */}
+              {plannedView === 'lista' && (
+                <DataTable
+                  key="planejados-lista"
+                  tableId="qualificacoes-historico"
+                  data={planejadosHistorico}
+                  columns={historicoColumns}
+                  rowClassName={(row) => {
+                    const item = row as HistoricoItem;
+                    return isPlanejadaVencida(item) ? 'bg-amber-50 border-l-4 border-amber-400' : '';
+                  }}
+                  loading={planejadosTableLoading}
+                  columnConfigOpen={columnConfigOpen === 'historico'}
+                  onColumnConfigOpenChange={(open) => setColumnConfigOpen(open ? 'historico' : null)}
+                  showInternalColumnConfigButton={false}
+                  sortConfig={sortConfig}
+                  onSortChange={(newSortConfig) => {
+                    setSortConfig(newSortConfig);
+                    setPage(1);
+                  }}
+                  emptyState={
+                    <div className="text-center py-12">
+                      <ShieldCheck className="mx-auto mb-4 text-slate-300" size={60} />
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                        Nenhum treinamento planejado
+                      </h3>
+                      <p className="text-sm text-slate-600 mb-4">
+                        Adicione uma qualificação com status PLANEJADA ou crie uma turma.
+                      </p>
+                    </div>
+                  }
+                />
+              )}
+
+              {/* Calendário: visão mensal de planejamentos */}
+              {plannedView === 'calendario' && (
+                <div className="p-4">
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center py-20">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      </div>
+                    }
+                  >
+                    <QualificacoesCalendario
+                      qualificacoes={planejadosHistorico}
+                      onOpenQualificacao={(q) => {
+                        const item = q as HistoricoItem;
+                        if (item) abrirModalPlanejada(item);
+                      }}
+                    />
+                  </Suspense>
+                </div>
+              )}
+
+              {/* Turmas: gestão multi-dia via TreinamentosPlanejadosPage */}
+              {plannedView === 'turmas' && (
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center py-20">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    </div>
+                  }
+                >
+                  <TreinamentosPlanejadosPage asTab={true} />
+                </Suspense>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

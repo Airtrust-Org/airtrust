@@ -102,12 +102,15 @@ calendario.get('/:id/calendario', auth(), async (c) => {
         .all(),
       gerarAlertasCMA(db, id),
       // Direct projection: simulator sessions not yet in escala_eventos.
-      // Sessions created before the sync feature was deployed lack escala_eventos
-      // entries. This query adds them without requiring backfill or edits.
+      // Covers participants (UNION) and instructors.
+      // Cancelled and soft-deleted sessions are excluded server-side.
+      // Tenant validated: f.empresa_id = sa.empresa_id for every person join.
+      // NOT EXISTS prevents duplication with already-synced escala_eventos rows.
       db
         .prepare(
-          `SELECT
-             'direct-sim-' || CAST(sa.id AS TEXT) || '-' || CAST(sp.funcionario_id AS TEXT) AS id,
+          `-- PARTICIPANTS
+           SELECT
+             'direct-sim-' || CAST(sa.id AS TEXT) || '-p-' || CAST(sp.funcionario_id AS TEXT) AS id,
              ? AS escala_id,
              'sim_sessao:' || CAST(sa.id AS TEXT) AS tripulacao_id,
              CAST(sp.funcionario_id AS TEXT) AS funcionario_id,
@@ -119,9 +122,8 @@ calendario.get('/:id/calendario', auth(), async (c) => {
              NULL AS aeronave,
              CAST(sa.simulador_id AS TEXT) AS simulador_id,
              1 AS gerado_automaticamente,
-             'Projetado da sessão de simulador (sem backfill). Gerencie no módulo Simuladores.' AS motivo_automatico,
-             CASE WHEN UPPER(COALESCE(sa.status, '')) LIKE '%CANCEL%' THEN 'cancelado'
-                  WHEN UPPER(COALESCE(sa.status, '')) LIKE '%PEND%' THEN 'pendente'
+             'Projetado da sessão de simulador (participante). Gerencie no módulo Simuladores.' AS motivo_automatico,
+             CASE WHEN UPPER(COALESCE(sa.status,'')) LIKE '%PEND%' THEN 'pendente'
                   ELSE 'confirmado' END AS status,
              'simuladores' AS origem,
              COALESCE(sa.nome, sa.tipo_sessao) AS observacoes,
@@ -134,11 +136,14 @@ calendario.get('/:id/calendario', auth(), async (c) => {
            JOIN sessoes_participantes sp
              ON sp.sessao_id = sa.id AND sp.deleted_at IS NULL
            LEFT JOIN funcionarios f
-             ON f.id = sp.funcionario_id AND f.deleted_at IS NULL
+             ON CAST(f.id AS TEXT) = CAST(sp.funcionario_id AS TEXT)
+             AND (f.empresa_id IS NULL OR f.empresa_id = sa.empresa_id)
+             AND f.deleted_at IS NULL
            LEFT JOIN simuladores sim
              ON sim.id = sa.simulador_id AND sim.deleted_at IS NULL
            WHERE sa.empresa_id = ?
              AND sa.deleted_at IS NULL
+             AND UPPER(COALESCE(sa.status,'')) NOT LIKE '%CANCEL%'
              AND sa.data >= ?
              AND sa.data <= ?
              AND NOT EXISTS (
@@ -147,9 +152,62 @@ calendario.get('/:id/calendario', auth(), async (c) => {
                  AND ee.tripulacao_id = 'sim_sessao:' || CAST(sa.id AS TEXT)
                  AND ee.funcionario_id = CAST(sp.funcionario_id AS TEXT)
                  AND ee.deleted_at IS NULL
+             )
+
+           UNION ALL
+
+           -- INSTRUCTOR (when not already listed as participant)
+           SELECT
+             'direct-sim-' || CAST(sa.id AS TEXT) || '-i-' || CAST(sa.instrutor_id AS TEXT) AS id,
+             ? AS escala_id,
+             'sim_sessao:' || CAST(sa.id AS TEXT) AS tripulacao_id,
+             CAST(sa.instrutor_id AS TEXT) AS funcionario_id,
+             'treinamento_simulador' AS tipo_evento,
+             sa.data AS data_inicio,
+             sa.data AS data_fim,
+             'dia_todo' AS turno,
+             sim2.nome AS local,
+             NULL AS aeronave,
+             CAST(sa.simulador_id AS TEXT) AS simulador_id,
+             1 AS gerado_automaticamente,
+             'Projetado da sessão de simulador (instrutor). Gerencie no módulo Simuladores.' AS motivo_automatico,
+             CASE WHEN UPPER(COALESCE(sa.status,'')) LIKE '%PEND%' THEN 'pendente'
+                  ELSE 'confirmado' END AS status,
+             'simuladores' AS origem,
+             COALESCE(sa.nome, sa.tipo_sessao) AS observacoes,
+             fi.nome AS funcionario_nome,
+             fi.matricula AS funcionario_matricula,
+             fi.cargo AS funcionario_cargo,
+             NULL AS tripulacao_aeronave,
+             NULL AS tripulacao_base
+           FROM simulador_agendamentos sa
+           LEFT JOIN funcionarios fi
+             ON CAST(fi.id AS TEXT) = CAST(sa.instrutor_id AS TEXT)
+             AND (fi.empresa_id IS NULL OR fi.empresa_id = sa.empresa_id)
+             AND fi.deleted_at IS NULL
+           LEFT JOIN simuladores sim2
+             ON sim2.id = sa.simulador_id AND sim2.deleted_at IS NULL
+           WHERE sa.empresa_id = ?
+             AND sa.deleted_at IS NULL
+             AND sa.instrutor_id IS NOT NULL
+             AND UPPER(COALESCE(sa.status,'')) NOT LIKE '%CANCEL%'
+             AND sa.data >= ?
+             AND sa.data <= ?
+             AND NOT EXISTS (
+               SELECT 1 FROM sessoes_participantes sp2
+               WHERE sp2.sessao_id = sa.id
+                 AND CAST(sp2.funcionario_id AS TEXT) = CAST(sa.instrutor_id AS TEXT)
+                 AND sp2.deleted_at IS NULL
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM escala_eventos ee
+               WHERE ee.origem = 'simuladores'
+                 AND ee.tripulacao_id = 'sim_sessao:' || CAST(sa.id AS TEXT)
+                 AND ee.funcionario_id = CAST(sa.instrutor_id AS TEXT)
+                 AND ee.deleted_at IS NULL
              )`,
         )
-        .bind(id, empresaId, rangeInicio, rangeFim)
+        .bind(id, empresaId, rangeInicio, rangeFim, id, empresaId, rangeInicio, rangeFim)
         .all(),
     ]);
 
