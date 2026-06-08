@@ -986,8 +986,12 @@ export default function ModalNovaSessao({
           modeloSessaoId &&
           !modelosAtualizados.some((modelo: ModeloSessao) => modelo.id === modeloSessaoId)
         ) {
+          // Clear the FK reference (model no longer exists/matches) but PRESERVE
+          // temaSessao — the saved theme name is still valid even when the template
+          // is not in the current filtered list. Clearing it causes false
+          // "Nenhum modelo cadastrado" for sessions that already have a theme.
           setModeloSessaoId(null);
-          setTemaSessao('');
+          // Do NOT setTemaSessao('') — legacy theme name stays visible and editable.
         }
 
         console.log(`✅ [${origem}] ${modelosAtualizados.length} modelos carregados`);
@@ -1674,8 +1678,28 @@ export default function ModalNovaSessao({
                   </option>
                 ))}
               </select>
+            ) : isEditMode && temaSessao ? (
+              // Edit mode: session has a saved theme name but the matching template
+              // is not in the loaded list (e.g. template filtered out or deleted).
+              // Show an editable text input so the user can see/change the theme
+              // without a false "no models" error blocking the form.
+              <div className="space-y-1.5">
+                <input
+                  type="text"
+                  value={temaSessao}
+                  onChange={(e) => setTemaSessao(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                  placeholder="Tema da sessão"
+                  disabled={loading}
+                  data-testid="tema-sessao-legado-input"
+                />
+                <p className="text-xs text-amber-600">
+                  ⚠️ Tema preservado da sessão. Modelo original não encontrado nos cadastros atuais — verifique
+                  em <strong>Gestão → Modelos de Sessão</strong>.
+                </p>
+              </div>
             ) : (
-              // Mensagem quando não há modelos (mas apenas se tipo + aeronave já estão selecionados)
+              // No models and no saved theme
               <div className="w-full px-4 py-3 border border-amber-300 rounded-lg bg-amber-50 text-amber-700 text-sm">
                 {tipoSessaoId
                   ? '⚠️ Nenhum modelo cadastrado para esta combinação. Cadastre um modelo primeiro em '
