@@ -9,12 +9,68 @@
 -- Decisão operacional:
 --   - os dados legados atuais pertencem ao tenant Costa do Sol (empresa_id = 6)
 --   - manter soft-delete reutilizável via índices UNIQUE parciais por empresa
+--   - D1 não permite desarmar foreign key enforcement em migrations; usar defer_foreign_keys
+--   - existem fichas assinadas apontando para manobras já removidas; preservar integridade
+--     referencial com placeholders soft-deleted antes do rebuild da tabela pai
 
-PRAGMA foreign_keys = OFF;
+PRAGMA defer_foreign_keys = on;
 
 -- ============================================================================
 -- MANOBRAS
 -- ============================================================================
+
+INSERT INTO manobras (
+  id,
+  codigo,
+  nome,
+  categoria,
+  descricao,
+  nivel_dificuldade,
+  tempo_estimado,
+  pontuacao_minima,
+  created_at,
+  updated_at,
+  deleted_at,
+  tipo_sessao,
+  tipo_aeronave,
+  ordem
+)
+SELECT
+  orphan.manobra_id,
+  'LEGACY-ORPHAN-' || orphan.manobra_id,
+  'Manobra legada orfa #' || orphan.manobra_id,
+  'LEGADO',
+  'Placeholder tecnico criado pela migration 0394 para preservar fichas assinadas com referencia historica.',
+  NULL,
+  NULL,
+  NULL,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP,
+  'TREINAMENTO',
+  'AW139',
+  9999
+FROM (
+  SELECT DISTINCT f.manobra_id
+  FROM ficha_manobras_avaliacao f
+  LEFT JOIN manobras m ON m.id = f.manobra_id
+  WHERE m.id IS NULL
+
+  UNION
+
+  SELECT DISTINCT h.manobra_id
+  FROM fichas_manobras_historico h
+  LEFT JOIN manobras m ON m.id = h.manobra_id
+  WHERE m.id IS NULL
+
+  UNION
+
+  SELECT DISTINCT msm.manobra_id
+  FROM modelos_sessao_manobras msm
+  LEFT JOIN manobras m ON m.id = msm.manobra_id
+  WHERE m.id IS NULL
+) AS orphan
+WHERE orphan.manobra_id IS NOT NULL;
 
 CREATE TABLE manobras__tenant_0394 (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -293,4 +349,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_modelos_aeronave_empresa_modelo_active
   ON modelos_aeronave(empresa_id, modelo)
   WHERE deleted_at IS NULL;
 
-PRAGMA foreign_keys = ON;
+PRAGMA defer_foreign_keys = off;
