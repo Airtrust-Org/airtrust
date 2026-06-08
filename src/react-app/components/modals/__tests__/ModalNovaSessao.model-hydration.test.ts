@@ -126,6 +126,12 @@ describe('ModalNovaSessao — model/theme hydration (source-code contracts)', ()
     expect(modalSrc).toContain('Same: only clear if there were no models before');
   });
 
+  it('simulador_modal_prioriza_resposta_filtrada_backend — does not hide valid models when local filter diverges', () => {
+    expect(modalSrc).toContain('respostaFiltradaBackend');
+    expect(modalSrc).toContain('priorizamos a resposta filtrada do');
+    expect(modalSrc).toContain('endpoint para não esconder modelos válidos');
+  });
+
   it('simulador_modal_nao_finaliza_hidratacao_prematuramente — cascade guard prevents premature hydration end', () => {
     // The auto-select effect must not set editHydrating=false until the cascade
     // has actually triggered a model fetch (tipoSessaoId set AND aeronaveCodigo set).

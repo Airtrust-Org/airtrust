@@ -60,6 +60,92 @@ function buildModeloAeronaveSqlMatchExpression(expr: string): string {
   END`;
 }
 
+function normalizeTipoSessaoToken(value: unknown): string {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+  const compact = normalized.replace(/[^A-Z0-9]/g, '');
+  if (!compact) return '';
+  if (compact === 'INI' || compact.includes('INICIAL')) return 'INI';
+  if (compact === 'PER' || compact.includes('PERIOD') || compact.includes('RECORR')) return 'PER';
+  if (compact === 'OPC' || compact.includes('PROFICIENCY') || compact.includes('CHECK')) return 'OPC';
+  if (compact === 'SEM' || compact.includes('SEMEST')) return 'SEM';
+  if (compact === 'EXA' || compact.includes('EXAM')) return 'EXA';
+  if (compact === 'INS' || compact.includes('INSTR')) return 'INS';
+  return compact;
+}
+
+function buildTipoSessaoFallbackSql(
+  tipoSessaoCodigo: string,
+  tipoSessaoNome: string,
+): { clauses: string[]; params: any[] } {
+  const canonical = normalizeTipoSessaoToken(tipoSessaoCodigo || tipoSessaoNome);
+  if (!canonical) return { clauses: [], params: [] };
+
+  const clauses: string[] = [];
+  const params: any[] = [];
+  const compactExprTsCodigo =
+    "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(TRIM(COALESCE(ts.codigo, ''))), ' ', ''), '-', ''), '_', ''), '/', ''), '.', '')";
+  const compactExprTsNome =
+    "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(TRIM(COALESCE(ts.nome, ''))), ' ', ''), '-', ''), '_', ''), '/', ''), '.', '')";
+  const compactExprMsTipo =
+    "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(TRIM(COALESCE(ms.tipo, ''))), ' ', ''), '-', ''), '_', ''), '/', ''), '.', '')";
+
+  const addCompactMatches = (values: string[]) => {
+    values.forEach((value) => {
+      clauses.push(`${compactExprTsCodigo} = ?`);
+      params.push(value);
+      clauses.push(`${compactExprTsNome} = ?`);
+      params.push(value);
+      clauses.push(`${compactExprMsTipo} = ?`);
+      params.push(value);
+    });
+  };
+
+  const addLikeMatches = (patterns: string[]) => {
+    patterns.forEach((pattern) => {
+      clauses.push("UPPER(TRIM(COALESCE(ts.nome, ''))) LIKE ?");
+      params.push(pattern);
+      clauses.push("UPPER(TRIM(COALESCE(ms.tipo, ''))) LIKE ?");
+      params.push(pattern);
+    });
+  };
+
+  switch (canonical) {
+    case 'INI':
+      addCompactMatches(['INI', 'INICIAL', 'TREINAMENTOINICIAL']);
+      addLikeMatches(['INI%', '%INICIAL%']);
+      break;
+    case 'PER':
+      addCompactMatches(['PER', 'PERIODICO', 'RECORRENTE', 'RECURRENTE']);
+      addLikeMatches(['PER%', '%PERIOD%', 'RECORR%']);
+      break;
+    case 'OPC':
+      addCompactMatches(['OPC', 'PROFICIENCYCHECK']);
+      addLikeMatches(['OPC%', '%PROFICIENCY%', '%CHECK%']);
+      break;
+    case 'SEM':
+      addCompactMatches(['SEM', 'SEMESTRAL']);
+      addLikeMatches(['SEM%', '%SEMEST%']);
+      break;
+    case 'EXA':
+      addCompactMatches(['EXA', 'EXAMINADOR', 'EXAME']);
+      addLikeMatches(['EXA%', '%EXAM%']);
+      break;
+    case 'INS':
+      addCompactMatches(['INS', 'INSTRUTOR', 'INSTRUCAO']);
+      addLikeMatches(['INS%', '%INSTR%']);
+      break;
+    default:
+      addCompactMatches([canonical]);
+      break;
+  }
+
+  return { clauses, params };
+}
+
 // ==========================================================================
 // CRUD: TIPOS DE SESSÃO
 // ==========================================================================
@@ -115,7 +201,9 @@ app.post('/tipos-sessao', async (c) => {
         400,
       );
     }
-    const { codigo, nome, descricao } = parsed.data;
+    const { codigo, nome, descricao, cor } = parsed.data;
+    const tiposCols = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
+    const hasCorCol = (tiposCols.results || []).some((row: any) => String(row?.name || '') === 'cor');
 
     // Verificar duplicidade
     const existe = await c.env.DB.prepare(
@@ -129,22 +217,28 @@ app.post('/tipos-sessao', async (c) => {
     }
 
     // Inserir
-    const result = await c.env.DB.prepare(
-      "INSERT INTO tipos_sessao (codigo, nome, descricao, empresa_id, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
-    )
-      .bind(codigo, nome, descricao || null, empresaId)
-      .run();
+    const result = hasCorCol
+      ? await c.env.DB.prepare(
+          "INSERT INTO tipos_sessao (codigo, nome, descricao, cor, empresa_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+        )
+          .bind(codigo, nome, descricao || null, cor || null, empresaId)
+          .run()
+      : await c.env.DB.prepare(
+          "INSERT INTO tipos_sessao (codigo, nome, descricao, empresa_id, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
+        )
+          .bind(codigo, nome, descricao || null, empresaId)
+          .run();
 
     await audit(c.env.DB, {
       tabela: 'tipos_sessao',
       acao: 'INSERT',
       registro_id: result.meta.last_row_id,
-      dados_novos: { codigo, nome, descricao },
+      dados_novos: { codigo, nome, descricao, cor: cor || null },
     });
 
     return c.json({
       success: true,
-      data: { id: result.meta.last_row_id, codigo, nome, descricao },
+      data: { id: result.meta.last_row_id, codigo, nome, descricao, cor: cor || null },
     });
   } catch (e: any) {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
@@ -163,7 +257,9 @@ app.put('/tipos-sessao/:id', async (c) => {
         400,
       );
     }
-    const { codigo, nome, descricao } = parsed.data;
+    const { codigo, nome, descricao, cor } = parsed.data;
+    const tiposCols = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
+    const hasCorCol = (tiposCols.results || []).some((row: any) => String(row?.name || '') === 'cor');
 
     // Buscar dados anteriores
     const anterior = await c.env.DB.prepare(
@@ -188,21 +284,29 @@ app.put('/tipos-sessao/:id', async (c) => {
     }
 
     // Atualizar
-    await c.env.DB.prepare(
-      "UPDATE tipos_sessao SET codigo = ?, nome = ?, descricao = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
-    )
-      .bind(codigo, nome, descricao || null, id, empresaId)
-      .run();
+    if (hasCorCol) {
+      await c.env.DB.prepare(
+        "UPDATE tipos_sessao SET codigo = ?, nome = ?, descricao = ?, cor = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
+      )
+        .bind(codigo, nome, descricao || null, cor || null, id, empresaId)
+        .run();
+    } else {
+      await c.env.DB.prepare(
+        "UPDATE tipos_sessao SET codigo = ?, nome = ?, descricao = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
+      )
+        .bind(codigo, nome, descricao || null, id, empresaId)
+        .run();
+    }
 
     await audit(c.env.DB, {
       tabela: 'tipos_sessao',
       acao: 'UPDATE',
       registro_id: id,
       dados_anteriores: anterior,
-      dados_novos: { codigo, nome, descricao },
+      dados_novos: { codigo, nome, descricao, cor: cor || null },
     });
 
-    return c.json({ success: true, data: { id, codigo, nome, descricao } });
+    return c.json({ success: true, data: { id, codigo, nome, descricao, cor: cor || null } });
   } catch (e: any) {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
@@ -449,10 +553,10 @@ app.get('/modelos-sessao', async (c) => {
         params.push(tipoSessaoNome);
       }
 
-      if (tipoSessaoCodigo === 'INI' || tipoSessaoCodigo === 'INICIAL' || tipoSessaoNome === 'INICIAL') {
-        tipoClauses.push("UPPER(TRIM(COALESCE(ts.codigo, ''))) IN ('INI', 'INICIAL')");
-        tipoClauses.push("UPPER(TRIM(COALESCE(ts.nome, ''))) = 'INICIAL'");
-        tipoClauses.push("UPPER(TRIM(COALESCE(ms.tipo, ''))) = 'INICIAL'");
+      const fallbackTipo = buildTipoSessaoFallbackSql(tipoSessaoCodigo, tipoSessaoNome);
+      if (fallbackTipo.clauses.length > 0) {
+        tipoClauses.push(...fallbackTipo.clauses);
+        params.push(...fallbackTipo.params);
       }
 
       query += ` AND (${tipoClauses.join(' OR ')})`;

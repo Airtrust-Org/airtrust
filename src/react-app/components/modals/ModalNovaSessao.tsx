@@ -958,12 +958,20 @@ export default function ModalNovaSessao({
       console.log(`📦 [${origem}] Resposta recebida:`, data);
 
       if (data.success) {
+        const respostaFiltradaBackend = Array.isArray(data.data) ? data.data : [];
         let modelosAtualizados = filtrarModelosSessaoModal(
-          data.data || [],
+          respostaFiltradaBackend,
           tipoSessaoIdParam,
           codigoAeronave,
           tipo,
         );
+
+        // Se o backend já retornou itens para a combinação solicitada, mas o filtro local
+        // zerou por divergência de metadados legados, priorizamos a resposta filtrada do
+        // endpoint para não esconder modelos válidos (sem abrir lista global).
+        if (modelosAtualizados.length === 0 && respostaFiltradaBackend.length > 0) {
+          modelosAtualizados = respostaFiltradaBackend;
+        }
 
         if (modelosAtualizados.length === 0) {
           const fallbackUrl = buildModelosSessaoUrl(tipoSessaoIdParam, codigoAeronave, tipo, false);
