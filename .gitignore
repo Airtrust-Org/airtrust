@@ -180,6 +180,9 @@ scripts/validation/audit-endpoint-matrix.mjs
 
 # ========== SENSITIVE SQL DUMPS / BACKUPS ==========
 # Scoped to avoid hiding official migrations in worker-airtrust/migrations/
+artifacts/db-backups/
+artifacts/sanitization/
+artifacts/validation/*.png
 scripts/**/*dump*.sql
 scripts/**/*backup*.sql
 scripts/**/*prod*.sql

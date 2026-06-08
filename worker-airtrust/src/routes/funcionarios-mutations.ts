@@ -11,7 +11,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, ApiResponse } from '../types';
-import { softDelete } from '../utils/db';
 import { notFound, badRequest } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
@@ -133,7 +132,7 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     )
   `;
 
-  const insertEmpresaId = getEmpresaIdSafe(c) ?? null;
+  const insertEmpresaId = getEmpresaId(c);
 
   const result = await db
     .prepare(query)
@@ -258,10 +257,12 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     badRequest('ID inválido');
   }
 
+  const empresaId = getEmpresaId(c);
+
   // Verificar se existe
   const existing = await db
-    .prepare('SELECT * FROM funcionarios WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .bind(id, empresaId)
     .first();
 
   if (!existing) {
@@ -558,11 +559,11 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 
   updates.push("updated_at = datetime('now')");
 
-  const query = `UPDATE funcionarios SET ${updates.join(', ')} WHERE id = ?`;
+  const query = `UPDATE funcionarios SET ${updates.join(', ')} WHERE id = ? AND empresa_id = ?`;
 
   await db
     .prepare(query)
-    .bind(...bindings, id)
+    .bind(...bindings, id, empresaId)
     .run();
 
   // Buscar dados atualizados para auditoria
@@ -619,17 +620,28 @@ app.delete('/:id', auth(), requireRole('admin'), async (c) => {
     badRequest('ID inválido');
   }
 
+  const empresaId = getEmpresaId(c);
+
   // Buscar dados antes de deletar para auditoria
   const funcionario = await db
-    .prepare('SELECT * FROM funcionarios WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .bind(id, empresaId)
     .first();
 
   if (!funcionario) {
     notFound('Funcionário não encontrado');
   }
 
-  const result = await softDelete(db, 'funcionarios', id);
+  const result = await db
+    .prepare(
+      `
+      UPDATE funcionarios
+      SET deleted_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+    `,
+    )
+    .bind(id, empresaId)
+    .run();
 
   if (result.meta.changes === 0) {
     notFound('Funcionário não encontrado');
