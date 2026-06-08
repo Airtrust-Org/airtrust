@@ -4,8 +4,7 @@
  * These are static-analysis tests that verify:
  *   1. tenant-scoped simuladores routes no longer use optionalAuth().
  *   2. empresa_id filters are present in tenant-scoped simuladores queries.
- *   3. the only preserved simuladores optionalAuth runtime exception is the
- *      global catalog route backed by global reference tables.
+ *   3. simuladores catalog no longer preserves optionalAuth runtime exceptions.
  */
 
 import { readFileSync } from 'node:fs';
@@ -103,16 +102,8 @@ describe('tenant-scoped tables: empresa_id filter present in GET queries', () =>
 });
 
 describe('preserved optionalAuth usages: simuladores allowlist', () => {
-  const KNOWN_OPTIONAL_AUTH_RUNTIME_FILES = ['routes/simuladores-catalogo.ts'] as const;
-
-  it('pins the complete simuladores list that still invokes optionalAuth()', () => {
-    expect([...KNOWN_OPTIONAL_AUTH_RUNTIME_FILES]).toEqual(['routes/simuladores-catalogo.ts']);
+  it('simuladores-catalogo.ts no longer invokes optionalAuth()', () => {
+    const source = src('routes/simuladores-catalogo.ts');
+    expect(source).not.toMatch(/optionalAuth\(\)/);
   });
-
-  for (const file of KNOWN_OPTIONAL_AUTH_RUNTIME_FILES) {
-    it(`${file} still invokes optionalAuth() for global catalog reads`, () => {
-      const source = src(file);
-      expect(source).toMatch(/optionalAuth\(\)/);
-    });
-  }
 });

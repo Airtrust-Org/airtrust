@@ -433,12 +433,17 @@ app.get('/fichas/:id', async (c) => {
         fsm.observacoes,
         COALESCE(fsm.tripulante, 'AB') as tripulante
       FROM fichas_sessao_manobras fsm
-      LEFT JOIN (SELECT codigo, MIN(nome) as nome, MIN(descricao) as descricao FROM manobras WHERE deleted_at IS NULL GROUP BY codigo) man
+      LEFT JOIN (
+        SELECT codigo, MIN(nome) as nome, MIN(descricao) as descricao
+        FROM manobras
+        WHERE deleted_at IS NULL AND empresa_id = ?
+        GROUP BY codigo
+      ) man
         ON man.codigo = fsm.codigo
       WHERE fsm.ficha_id = ? AND fsm.deleted_at IS NULL
       ORDER BY fsm.ordem ASC`,
     )
-      .bind(id)
+      .bind(tenantEmpresaId, id)
       .all();
 
     // ============================================================
@@ -463,11 +468,16 @@ app.get('/fichas/:id', async (c) => {
             COALESCE(man.descricao, fsm.descricao) as descricao,
             fsm.categoria, fsm.resultado, fsm.observacoes, COALESCE(fsm.tripulante, 'AB') as tripulante
            FROM fichas_sessao_manobras fsm
-           LEFT JOIN (SELECT codigo, MIN(nome) as nome, MIN(descricao) as descricao FROM manobras WHERE deleted_at IS NULL GROUP BY codigo) man
+           LEFT JOIN (
+             SELECT codigo, MIN(nome) as nome, MIN(descricao) as descricao
+             FROM manobras
+             WHERE deleted_at IS NULL AND empresa_id = ?
+             GROUP BY codigo
+           ) man
              ON man.codigo = fsm.codigo
            WHERE fsm.ficha_id = ? AND fsm.deleted_at IS NULL ORDER BY fsm.ordem ASC`,
         )
-          .bind(id)
+          .bind(tenantEmpresaId, id)
           .all();
 
       // Helper para inserir manobras a partir do modelo
@@ -477,10 +487,10 @@ app.get('/fichas/:id', async (c) => {
                   msm.ordem, COALESCE(msm.tripulante, 'AB') as tripulante
            FROM modelos_sessao_manobras msm
            INNER JOIN manobras man ON msm.manobra_id = man.id
-           WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL AND man.deleted_at IS NULL
+           WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL AND man.deleted_at IS NULL AND man.empresa_id = ?
            ORDER BY msm.ordem ASC LIMIT 22`,
         )
-          .bind(modeloIdFinal)
+          .bind(modeloIdFinal, tenantEmpresaId)
           .all();
 
         if (manobrasModelo.results && manobrasModelo.results.length > 0) {
@@ -563,9 +573,9 @@ app.get('/fichas/:id', async (c) => {
           modeloCorreto = (await c.env.DB.prepare(
             `SELECT ms.id FROM modelos_sessao ms
              INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
-             WHERE ts.codigo = ? AND ms.modelo_aeronave = ? AND ms.deleted_at IS NULL LIMIT 1`,
+             WHERE ts.codigo = ? AND ms.modelo_aeronave = ? AND ms.empresa_id = ? AND ms.deleted_at IS NULL LIMIT 1`,
           )
-            .bind(fichaCtx.tipo_sessao, fichaCtx.tipo_aeronave)
+            .bind(fichaCtx.tipo_sessao, fichaCtx.tipo_aeronave, tenantEmpresaId)
             .first()) as any;
         }
       }
@@ -591,10 +601,10 @@ app.get('/fichas/:id', async (c) => {
           const primeiraModoelo = await c.env.DB.prepare(
             `SELECT man.codigo FROM modelos_sessao_manobras msm
              INNER JOIN manobras man ON msm.manobra_id = man.id
-             WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL AND man.deleted_at IS NULL
+             WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL AND man.deleted_at IS NULL AND man.empresa_id = ?
              ORDER BY msm.ordem ASC LIMIT 1`,
           )
-            .bind(modeloCorreto.id)
+            .bind(modeloCorreto.id, tenantEmpresaId)
             .first<any>();
 
           if (primeiraModoelo && primeiraModoelo.codigo !== (m.results[0] as any).codigo) {

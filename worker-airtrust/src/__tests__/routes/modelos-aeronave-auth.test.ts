@@ -17,6 +17,18 @@ vi.mock('../../middleware/auth', () => ({
     },
 }));
 
+vi.mock('../../middleware/tenant', () => ({
+  getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
+  getTenantContext: (c: any) => ({
+    empresaId: Number(c.get('empresaId') || 0),
+    empresaCodigo: 'empresa-teste',
+    empresaNome: 'Empresa Teste',
+    role: c.get('userRole') || 'admin',
+    plano: 'pro',
+    permissions: ['read', 'write'],
+  }),
+}));
+
 vi.mock('../../middleware/rbac', () => ({
   requireRole:
     (...requiredRoles: string[]) =>
@@ -46,12 +58,19 @@ function createApp() {
   return app;
 }
 
-type ModeloRow = { id: number; modelo: string; codigo: string; nome: string; deleted_at: string | null };
+type ModeloRow = {
+  id: number;
+  empresa_id: number;
+  modelo: string;
+  codigo: string;
+  nome: string;
+  deleted_at: string | null;
+};
 
 function createMockEnv() {
   const modelos: ModeloRow[] = [
-    { id: 1, modelo: 'SK76', codigo: 'SK76', nome: 'Sikorsky S-76', deleted_at: null },
-    { id: 2, modelo: 'AW139', codigo: 'AW139', nome: 'AgustaWestland AW139', deleted_at: null },
+    { id: 1, empresa_id: 1, modelo: 'SK76', codigo: 'SK76', nome: 'Sikorsky S-76', deleted_at: null },
+    { id: 2, empresa_id: 1, modelo: 'AW139', codigo: 'AW139', nome: 'AgustaWestland AW139', deleted_at: null },
   ];
 
   const runs: Array<{ query: string; args: unknown[] }> = [];
@@ -60,16 +79,23 @@ function createMockEnv() {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
-          if (query.includes('modelos_aeronave') && query.includes('WHERE id = ?')) {
+          if (
+            query.includes('modelos_aeronave')
+            && query.includes('WHERE id = ? AND empresa_id = ?')
+          ) {
             const id = Number(args[0]);
-            return modelos.find((m) => m.id === id && !m.deleted_at) || null;
+            const empresaId = Number(args[1]);
+            return modelos.find((m) => m.id === id && m.empresa_id === empresaId && !m.deleted_at) || null;
           }
-          if (query.includes('modelos_aeronave') && query.includes('WHERE modelo = ?')) {
+          if (
+            query.includes('modelos_aeronave')
+            && query.includes('UPPER(TRIM(COALESCE(modelo, codigo, nome)))')
+          ) {
             return null; // no duplicate
           }
           return null;
         },
-        all: async () => ({ results: modelos }),
+        all: async () => ({ results: modelos.filter((item) => item.empresa_id === Number(args[0] || 1)) }),
         run: async () => {
           runs.push({ query, args });
           return { meta: { changes: 1, last_row_id: 99 } };

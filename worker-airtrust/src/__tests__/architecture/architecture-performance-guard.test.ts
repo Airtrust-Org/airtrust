@@ -42,7 +42,6 @@ const CRITICAL_SELECT_STAR_CAPS = {
   'routes/frms-fadiga-checkin.ts': 3,
   'routes/funcionarios-mutations.ts': 4,
   'routes/lms-matriculas.ts': 5,
-  'routes/simuladores-catalogo.ts': 6,
   // Acknowledged growth: schema-guarded legacy simulator equipment compatibility.
   'routes/simuladores-equipamentos.ts': 11,
   'routes/simuladores-fichas-acoes.ts': 3,

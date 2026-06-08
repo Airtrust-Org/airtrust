@@ -15,6 +15,7 @@ import { Hono } from 'hono';
 import type { Env, PaginatedResponse } from '../types';
 import { calculatePagination } from '../utils/db';
 import { auth } from '../middleware/auth';
+import { getEmpresaId } from '../middleware/tenant';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -36,34 +37,30 @@ const app = new Hono<{ Bindings: Env }>();
 app.get('/', auth(), async (c) => {
   try {
     const db = c.env.DB;
+    const empresaId = getEmpresaId(c);
 
-    const funcionarioId = c.req.query('funcionario_id');
-    const qualificacaoId = c.req.query('qualificacao_id');
-    const status = c.req.query('status');
+    const search = c.req.query('search');
+    const ativo = c.req.query('ativo');
     const ehRenovada = c.req.query('eh_renovada');
     const page = parseInt(c.req.query('page') || '1');
     const limit = parseInt(c.req.query('limit') || '50');
 
-    const whereClauses: string[] = ['h.deleted_at IS NULL'];
-    const bindings: unknown[] = [];
+    const whereClauses: string[] = ['deleted_at IS NULL', 'empresa_id = ?'];
+    const bindings: unknown[] = [empresaId];
 
-    if (funcionarioId) {
-      whereClauses.push('h.funcionario_id = ?');
-      bindings.push(funcionarioId); // TEXT em produção
+    if (search) {
+      const pattern = `%${search}%`;
+      whereClauses.push('(nome LIKE ? OR descricao LIKE ?)');
+      bindings.push(pattern, pattern);
     }
 
-    if (qualificacaoId) {
-      whereClauses.push('h.qualificacao_id = ?');
-      bindings.push(qualificacaoId); // TEXT em produção
-    }
-
-    if (status) {
-      whereClauses.push('h.status = ?');
-      bindings.push(status);
+    if (ativo !== undefined) {
+      whereClauses.push('ativo = ?');
+      bindings.push(ativo === '0' ? 0 : 1);
     }
 
     if (ehRenovada !== undefined) {
-      whereClauses.push('h.eh_renovada = ?');
+      whereClauses.push('eh_renovada = ?');
       bindings.push(ehRenovada === '1' ? 1 : 0);
     }
 
@@ -72,7 +69,7 @@ app.get('/', auth(), async (c) => {
     // Contar total
     const totalQuery = `
     SELECT COUNT(*) as total
-    FROM habilitacoes h
+    FROM habilitacoes
     WHERE ${whereClause}
   `;
 
@@ -84,17 +81,22 @@ app.get('/', auth(), async (c) => {
     const total = totalResult?.total || 0;
     const pagination = calculatePagination({ page, limit }, total);
 
-    // Query principal - SELECT * para descobrir schema real em produção
     const query = `
     SELECT 
-      h.*,
-      f.nome as funcionario_nome,
-      f.matricula as funcionario_matricula,
-      f.cargo as funcionario_cargo
-    FROM habilitacoes h
-    LEFT JOIN funcionarios f ON h.funcionario_id = CAST(f.id AS TEXT) AND f.deleted_at IS NULL
+      id,
+      nome,
+      descricao,
+      ativo,
+      created_at,
+      updated_at,
+      deleted_at,
+      habilitacao_anterior_id,
+      eh_renovada,
+      renovada_em,
+      empresa_id
+    FROM habilitacoes
     WHERE ${whereClause}
-    ORDER BY h.data_vencimento DESC NULLS LAST, h.created_at DESC
+    ORDER BY nome ASC, created_at DESC
     LIMIT ? OFFSET ?
   `;
 

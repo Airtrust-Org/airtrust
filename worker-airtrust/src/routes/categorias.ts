@@ -10,8 +10,8 @@
 
 import { Hono } from 'hono';
 import type { Env, QualificacaoCategoria, ApiResponse } from '../types';
-import { softDelete } from '../utils/db';
 import { auth } from '../middleware/auth';
+import { getEmpresaId } from '../middleware/tenant';
 import { requireRole } from '../middleware/rbac';
 import { generateColorFromName, slugify } from '../utils/colors';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
@@ -26,16 +26,18 @@ app.use('*', auth());
  */
 app.get('/', async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
 
   const { results } = await db
     .prepare(
       `
     SELECT id, nome, cor, descricao, ativo, created_at, updated_at
     FROM qualificacoes_categorias
-    WHERE deleted_at IS NULL
+    WHERE empresa_id = ? AND deleted_at IS NULL
     ORDER BY id ASC
   `,
     )
+    .bind(empresaId)
     .all<any>();
 
   // Mapear para tipo esperado
@@ -64,6 +66,7 @@ app.get('/', async (c) => {
  */
 app.post('/', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
 
   try {
     const body = await c.req.json();
@@ -78,8 +81,17 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
 
     // Verificar se categoria já existe
     const { results: existing } = await db
-      .prepare('SELECT id FROM qualificacoes_categorias WHERE nome = ? AND deleted_at IS NULL')
-      .bind(nome)
+      .prepare(
+        `SELECT id
+         FROM qualificacoes_categorias
+         WHERE empresa_id = ?
+           AND deleted_at IS NULL
+           AND (
+             UPPER(TRIM(nome)) = UPPER(TRIM(?))
+             OR UPPER(TRIM(codigo)) = UPPER(TRIM(?))
+           )`,
+      )
+      .bind(empresaId, nome, codigo)
       .all();
 
     if (existing && existing.length > 0) {
@@ -89,11 +101,20 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     const result = await db
       .prepare(
         `
-        INSERT INTO qualificacoes_categorias (nome, codigo, cor, descricao, ativo, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+        INSERT INTO qualificacoes_categorias (
+          empresa_id,
+          nome,
+          codigo,
+          cor,
+          descricao,
+          ativo,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
       `,
       )
-      .bind(nome, codigo, cor, descricao || null)
+      .bind(empresaId, nome, codigo, cor, descricao || null)
       .run();
 
     const novaCategoria: QualificacaoCategoria = {
@@ -136,6 +157,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
  */
 app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const id = parseInt(c.req.param('id'));
 
   if (isNaN(id)) {
@@ -147,13 +169,36 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     const { nome, descricao, cor } = body;
 
     // Verificar se categoria existe
-    const { results: existing } = await db
-      .prepare('SELECT id FROM qualificacoes_categorias WHERE id = ? AND deleted_at IS NULL')
-      .bind(id)
-      .all();
+    const existing = await db
+      .prepare('SELECT * FROM qualificacoes_categorias WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(id, empresaId)
+      .first<any>();
 
-    if (!existing || existing.length === 0) {
+    if (!existing) {
       return c.json({ success: false, error: 'Categoria não encontrada' }, 404);
+    }
+
+    const nextNome = nome !== undefined && nome.trim().length > 0 ? nome : existing.nome;
+    const nextCodigo = slugify(nextNome).toUpperCase();
+
+    const duplicate = await db
+      .prepare(
+        `SELECT id
+         FROM qualificacoes_categorias
+         WHERE empresa_id = ?
+           AND id <> ?
+           AND deleted_at IS NULL
+           AND (
+             UPPER(TRIM(nome)) = UPPER(TRIM(?))
+             OR UPPER(TRIM(codigo)) = UPPER(TRIM(?))
+           )
+         LIMIT 1`,
+      )
+      .bind(empresaId, id, nextNome, nextCodigo)
+      .first();
+
+    if (duplicate) {
+      return c.json({ success: false, error: 'Categoria já existe' }, 409);
     }
 
     const updates: string[] = [];
@@ -161,7 +206,9 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
 
     if (nome !== undefined && nome.trim().length > 0) {
       updates.push('nome = ?');
-      params.push(nome);
+      params.push(nextNome);
+      updates.push('codigo = ?');
+      params.push(nextCodigo);
     }
 
     if (descricao !== undefined) {
@@ -179,13 +226,13 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     }
 
     updates.push('updated_at = datetime("now")');
-    params.push(id);
+    params.push(id, empresaId);
 
     const result = await db
       .prepare(
         `UPDATE qualificacoes_categorias SET ${updates.join(
           ', ',
-        )} WHERE id = ? AND deleted_at IS NULL`,
+        )} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
       .bind(...params)
       .run();
@@ -222,6 +269,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
  */
 app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const id = parseInt(c.req.param('id'));
 
   if (isNaN(id)) {
@@ -229,7 +277,14 @@ app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   }
 
   try {
-    const result = await softDelete(db, 'qualificacoes_categorias', id);
+    const result = await db
+      .prepare(
+        `UPDATE qualificacoes_categorias
+         SET deleted_at = datetime('now'), updated_at = datetime('now')
+         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(id, empresaId)
+      .run();
 
     if (result.meta.changes === 0) {
       return c.json({ success: false, error: 'Categoria não encontrada' }, 404);
