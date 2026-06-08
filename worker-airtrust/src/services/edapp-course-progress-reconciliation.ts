@@ -468,6 +468,7 @@ export async function reconcileEdAppCourseProgress(
           result.created += 1;
           if (createNotifications) {
             await createEdAppQualificacaoNotification(options.db, {
+              empresaId: options.empresaId ?? null,
               funcionarioId: funcionario.funcionario_id,
               funcionarioNome: funcionario.funcionario_nome,
               qualificacaoCodigo: qualificacao.qualificacao_codigo,

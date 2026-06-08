@@ -391,14 +391,15 @@ export async function enqueueSlaAlerts(env: Env): Promise<{
       await db
         .prepare(
           `INSERT INTO notificacoes_sistema
-           (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
+           (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
            VALUES ('ALERTA_SGSO_BARREIRAS', 'ALTA',
                    'Barreiras de seguranca degradadas',
-                   ?, 'sgso', ?, datetime('now'), datetime('now'))`,
+                   ?, 'sgso', ?, ?, datetime('now'), datetime('now'))`,
         )
         .bind(
           `${bRow.total} barreira(s) DEGRADADA/INOPERANTE sem atualiza\u00e7\u00e3o h\u00e1 mais de 48h (empresa ${bRow.empresa_id})`,
           JSON.stringify({ empresa_id: bRow.empresa_id, count: bRow.total }),
+          bRow.empresa_id,
         )
         .run();
       alertasBarreiras += 1;

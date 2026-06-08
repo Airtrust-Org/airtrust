@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
+import { getEmpresaId } from '../middleware/tenant';
 import { processarNotificacoes } from '../cron/notificacoes';
 import { createLogger, toError } from '../utils/logger';
 import type { Env } from '../types';
@@ -10,6 +11,78 @@ import {
 } from '../utils/alert-whatsapp-templates-store';
 
 const app = new Hono<{ Bindings: Env }>();
+
+const GLOBAL_NOTIFICATION_TYPES = ['ALERTA_DADOS', 'ALERTA_SEMANAL_QUALIFICACOES'] as const;
+const GLOBAL_NOTIFICATION_GROUPS = ['auditoria', 'qualificacoes'] as const;
+
+function isGlobalNotificationAllowed(tipo?: string | null, grupo?: string | null): boolean {
+  const normalizedTipo = String(tipo || '').trim().toUpperCase();
+  const normalizedGrupo = String(grupo || '').trim().toLowerCase();
+
+  return (
+    GLOBAL_NOTIFICATION_TYPES.includes(normalizedTipo as (typeof GLOBAL_NOTIFICATION_TYPES)[number]) ||
+    GLOBAL_NOTIFICATION_GROUPS.includes(
+      normalizedGrupo as (typeof GLOBAL_NOTIFICATION_GROUPS)[number],
+    )
+  );
+}
+
+function buildAllowedGlobalNotificationSql(alias: string): string {
+  const prefix = alias ? `${alias}.` : '';
+  const tipos = GLOBAL_NOTIFICATION_TYPES.map(() => '?').join(', ');
+  const grupos = GLOBAL_NOTIFICATION_GROUPS.map(() => '?').join(', ');
+
+  return `(
+    UPPER(COALESCE(${prefix}tipo, '')) IN (${tipos})
+    OR LOWER(COALESCE(${prefix}grupo, '')) IN (${grupos})
+  )`;
+}
+
+function buildSystemNotificationScope(alias: string, empresaId: number, userId: string | null) {
+  const prefix = alias ? `${alias}.` : '';
+  const clause = `(
+    (${prefix}empresa_id = ? AND (${prefix}user_id = ? OR ${prefix}user_id IS NULL))
+    OR
+    (
+      ${prefix}empresa_id IS NULL
+      AND (
+        ${prefix}user_id = ?
+        OR (
+          ${prefix}user_id IS NULL
+          AND ${buildAllowedGlobalNotificationSql(alias)}
+        )
+      )
+    )
+  )`;
+
+  return {
+    clause,
+    params: [
+      empresaId,
+      userId,
+      userId,
+      ...GLOBAL_NOTIFICATION_TYPES,
+      ...GLOBAL_NOTIFICATION_GROUPS,
+    ] as unknown[],
+  };
+}
+
+function getNotificationUserId(c: {
+  get: (key: string) => unknown;
+}): { userId: string | null; lidaPor: string | number | null } {
+  const rawUserId = c.get('userId');
+  if (rawUserId === null || rawUserId === undefined || String(rawUserId).trim() === '') {
+    return { userId: null, lidaPor: null };
+  }
+
+  const normalized = String(rawUserId);
+  const numeric = Number(normalized);
+
+  return {
+    userId: normalized,
+    lidaPor: Number.isFinite(numeric) ? numeric : normalized,
+  };
+}
 
 function notificacoesErrorResponse(
   c: Record<string, any>,
@@ -370,17 +443,12 @@ app.get('/sistema', auth(), async (c) => {
   try {
     const db = c.env.DB;
     const { lidas = 'false', limit = '50', tipo = '' } = c.req.query();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const userId = String((c as any).get('userId') || '');
+    const empresaId = getEmpresaId(c);
+    const { userId } = getNotificationUserId(c as unknown as { get: (key: string) => unknown });
+    const scope = buildSystemNotificationScope('n', empresaId, userId);
 
-    const conditions: string[] = ['n.deleted_at IS NULL'];
-    const params: unknown[] = [];
-
-    // Filter: global notifications (user_id IS NULL) OR targeted to this user
-    if (userId) {
-      conditions.push('(n.user_id IS NULL OR n.user_id = ?)');
-      params.push(userId);
-    }
+    const conditions: string[] = ['n.deleted_at IS NULL', scope.clause];
+    const params: unknown[] = [empresaId, ...scope.params];
 
     if (lidas === 'false') {
       conditions.push('n.lida = 0');
@@ -402,7 +470,10 @@ app.get('/sistema', auth(), async (c) => {
         f.nome as funcionario_nome,
         f.matricula as funcionario_matricula
       FROM notificacoes_sistema n
-      LEFT JOIN funcionarios f ON f.id = n.funcionario_id
+      LEFT JOIN funcionarios f
+        ON f.id = n.funcionario_id
+       AND f.empresa_id = ?
+       AND f.deleted_at IS NULL
       WHERE ${whereClause}
       ORDER BY 
         CASE n.prioridade
@@ -421,20 +492,25 @@ app.get('/sistema', auth(), async (c) => {
       .bind(...params, limitNum)
       .all();
 
-    const countParams: unknown[] = [];
-    let countWhere = 'lida = 0 AND deleted_at IS NULL';
-    if (userId) {
-      countWhere += ' AND (user_id IS NULL OR user_id = ?)';
-      countParams.push(userId);
-    }
+    const countScope = buildSystemNotificationScope('', empresaId, userId);
+    const countParams: unknown[] = [...countScope.params];
+    const countWhere = `lida = 0 AND deleted_at IS NULL AND ${countScope.clause}`;
     const countResult = await db
       .prepare(`SELECT COUNT(*) as total FROM notificacoes_sistema WHERE ${countWhere}`)
       .bind(...countParams)
       .first<{ total: number }>();
 
+    const sanitizedResults = (results || []).filter((row) =>
+      row.empresa_id === empresaId ||
+      row.user_id === userId ||
+      (row.empresa_id === null &&
+        row.user_id === null &&
+        isGlobalNotificationAllowed(row.tipo, row.grupo)),
+    );
+
     return c.json({
       success: true,
-      data: results,
+      data: sanitizedResults,
       total_nao_lidas: countResult?.total || 0,
     });
   } catch (error) {
@@ -457,15 +533,12 @@ app.get('/sistema', auth(), async (c) => {
 app.get('/sistema/contador', auth(), async (c) => {
   try {
     const db = c.env.DB;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const userId = String((c as any).get('userId') || '');
+    const empresaId = getEmpresaId(c);
+    const { userId } = getNotificationUserId(c as unknown as { get: (key: string) => unknown });
+    const scope = buildSystemNotificationScope('', empresaId, userId);
 
-    let whereClause = 'lida = 0 AND deleted_at IS NULL';
-    const params: unknown[] = [];
-    if (userId) {
-      whereClause += ' AND (user_id IS NULL OR user_id = ?)';
-      params.push(userId);
-    }
+    const whereClause = `lida = 0 AND deleted_at IS NULL AND ${scope.clause}`;
+    const params: unknown[] = [...scope.params];
 
     const result = await db
       .prepare(`SELECT COUNT(*) as total FROM notificacoes_sistema WHERE ${whereClause}`)
@@ -497,21 +570,29 @@ app.put('/sistema/:id/marcar-lida', auth(), async (c) => {
   try {
     const db = c.env.DB;
     const id = parseInt(c.req.param('id'), 10);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const userId = (c as any).get('userId') as number | undefined;
-    const user = userId ? { id: userId } : undefined;
+    const empresaId = getEmpresaId(c);
+    const { userId, lidaPor } = getNotificationUserId(
+      c as unknown as { get: (key: string) => unknown },
+    );
+    const scope = buildSystemNotificationScope('', empresaId, userId);
 
-    await db
+    const result = await db
       .prepare(
         `UPDATE notificacoes_sistema 
          SET lida = 1, 
              lida_em = datetime('now'),
              lida_por = ?,
              updated_at = datetime('now')
-         WHERE id = ? AND deleted_at IS NULL`,
+         WHERE id = ?
+           AND deleted_at IS NULL
+           AND ${scope.clause}`,
       )
-      .bind(user?.id || null, id)
+      .bind(lidaPor, id, ...scope.params)
       .run();
+
+    if (result.meta.changes === 0) {
+      return c.json({ success: false, error: 'Notificação não encontrada' }, 404);
+    }
 
     return c.json({ success: true });
   } catch (error) {
@@ -535,9 +616,11 @@ app.put('/sistema/:id/marcar-lida', auth(), async (c) => {
 app.put('/sistema/marcar-todas-lidas', auth(), async (c) => {
   try {
     const db = c.env.DB;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const userId = (c as any).get('userId') as number | undefined;
-    const user = userId ? { id: userId } : undefined;
+    const empresaId = getEmpresaId(c);
+    const { userId, lidaPor } = getNotificationUserId(
+      c as unknown as { get: (key: string) => unknown },
+    );
+    const scope = buildSystemNotificationScope('', empresaId, userId);
 
     const result = await db
       .prepare(
@@ -546,9 +629,11 @@ app.put('/sistema/marcar-todas-lidas', auth(), async (c) => {
              lida_em = datetime('now'),
              lida_por = ?,
              updated_at = datetime('now')
-         WHERE lida = 0 AND deleted_at IS NULL`,
+         WHERE lida = 0
+           AND deleted_at IS NULL
+           AND ${scope.clause}`,
       )
-      .bind(user?.id || null)
+      .bind(lidaPor, ...scope.params)
       .run();
 
     return c.json({

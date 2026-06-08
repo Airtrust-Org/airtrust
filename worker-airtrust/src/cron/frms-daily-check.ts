@@ -162,12 +162,13 @@ export async function notificarCheckinFadigaPendente(
     await db
       .prepare(
         `INSERT INTO notificacoes_sistema
-         (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
-         VALUES ('FADIGA_CHECKIN_PENDENTE', 'MEDIA', 'Check-in de fadiga pendente', ?, 'frms', ?, datetime('now'), datetime('now'))`,
+         (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+         VALUES ('FADIGA_CHECKIN_PENDENTE', 'MEDIA', 'Check-in de fadiga pendente', ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
       )
       .bind(
         `${trip.nome} (#${trip.id}) possui jornada hoje e ainda não realizou check-in de fadiga.`,
         JSON.stringify({ empresa_id: empresaId, funcionario_id: trip.id, data_checkin: hoje }),
+        empresaId,
       )
       .run();
 

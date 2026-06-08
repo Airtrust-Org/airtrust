@@ -1284,8 +1284,8 @@ router.post('/fadiga-checkin', async (c) => {
     if (dailyRiskLevel !== 'normal' || finalNivel === 'LARANJA' || finalNivel === 'VERMELHO') {
       await c.env.DB.prepare(
         `INSERT INTO notificacoes_sistema
-           (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
-           VALUES ('FRMS_CHECKIN_FADIGA', 'ALTA', 'Check-in de fadiga em atenção', ?, 'frms', ?, datetime('now'), datetime('now'))`,
+           (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+           VALUES ('FRMS_CHECKIN_FADIGA', 'ALTA', 'Check-in de fadiga em atenção', ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
       )
         .bind(
           `Tripulante #${funcionarioId} registrou risco ${dailyRiskLevel} em ${dataCheckin}. Revisão operacional necessária.`,
@@ -1298,6 +1298,7 @@ router.post('/fadiga-checkin', async (c) => {
             computed_risk_level: dailyRiskLevel,
             requires_operational_review: requiresOperationalReview,
           }),
+          empresaId,
         )
         .run();
 
@@ -1795,16 +1796,18 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requireRole('manager'), asyn
 
     await c.env.DB.prepare(
       `INSERT INTO notificacoes_sistema
-         (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
-         VALUES ('FRMS_FEEDBACK_GESTOR', 'MEDIA', 'Resposta do gestor ao check-in de fadiga', ?, 'frms', ?, datetime('now'), datetime('now'))`,
+         (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+         VALUES ('FRMS_FEEDBACK_GESTOR', 'MEDIA', 'Resposta do gestor ao check-in de fadiga', ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
     )
       .bind(
         parsed.data.resposta,
         JSON.stringify({
+          empresa_id: empresaId,
           checkin_id: checkin.id,
           funcionario_id: checkin.funcionario_id,
           gestor_id: gestorId,
         }),
+        empresaId,
       )
       .run();
 

@@ -1196,6 +1196,7 @@ export async function renovarQualificacao(
 export async function createEdAppQualificacaoNotification(
   db: D1Database,
   params: {
+    empresaId: number | null;
     funcionarioId: number;
     funcionarioNome: string | null;
     qualificacaoCodigo: string;
@@ -1214,9 +1215,9 @@ export async function createEdAppQualificacaoNotification(
     .prepare(
       `INSERT INTO notificacoes_sistema (
         tipo, prioridade, titulo, mensagem, dados, grupo,
-        funcionario_id, qualificacao_historico_id, link, acao_primaria,
+        funcionario_id, qualificacao_historico_id, link, acao_primaria, empresa_id,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     )
     .bind(
       'EDAPP_QUALIFICACAO',
@@ -1232,12 +1233,14 @@ export async function createEdAppQualificacaoNotification(
         courseId: params.courseId,
         renovacao: params.renovacao || false,
         origem: params.origem,
+        empresa_id: params.empresaId,
       }),
       grupoNotificacao,
       params.funcionarioId,
       params.qualificacaoHistoricoId,
       `/qualificacoes?id=${params.qualificacaoHistoricoId}`,
       'Ver Qualificação',
+      params.empresaId,
     )
     .run();
 }

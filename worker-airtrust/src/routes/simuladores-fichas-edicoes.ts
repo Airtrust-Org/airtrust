@@ -180,6 +180,7 @@ function serializeEdicao(row: EdicaoRow) {
 
 async function notifyUsers(
   db: D1Database,
+  empresaId: string | number,
   userIds: string[],
   payload: {
     tipo: string;
@@ -198,8 +199,8 @@ async function notifyUsers(
     db
       .prepare(
         `INSERT INTO notificacoes_sistema (
-           tipo, titulo, mensagem, dados, link, user_id, prioridade, acao_primaria, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+           tipo, titulo, mensagem, dados, link, empresa_id, user_id, prioridade, acao_primaria, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
       )
       .bind(
         payload.tipo,
@@ -207,6 +208,7 @@ async function notifyUsers(
         payload.mensagem,
         payload.dados ? JSON.stringify(payload.dados) : null,
         payload.link,
+        String(empresaId),
         userId,
         payload.prioridade || 'MEDIA',
         payload.acaoPrimaria || null,
@@ -410,7 +412,7 @@ app.post('/fichas/:id/edicoes', async (c) => {
     });
 
     const gestores = await listGestoresUsuarios(c.env.DB, ficha.empresa_id || empresaId);
-    await notifyUsers(c.env.DB, gestores, {
+    await notifyUsers(c.env.DB, ficha.empresa_id || empresaId, gestores, {
       tipo: 'FICHA_EDICAO_PENDENTE',
       titulo: 'Edição de ficha aguardando aprovação',
       mensagem: `${ficha.instrutor_nome || 'Instrutor'} solicitou alteração de observações na ficha #${fichaId}.`,
@@ -621,7 +623,7 @@ app.post('/fichas-edicoes/:edicaoId/aprovar', async (c) => {
       edicao.solicitante_funcionario_id,
     );
     if (solicitanteUserId) {
-      await notifyUsers(c.env.DB, [solicitanteUserId], {
+      await notifyUsers(c.env.DB, empresaId, [solicitanteUserId], {
         tipo: 'FICHA_EDICAO_APROVADA',
         titulo: 'Edição de ficha aprovada',
         mensagem: `Sua solicitação de edição da ficha #${edicao.ficha_id} foi aprovada e aplicada.`,
@@ -696,7 +698,7 @@ app.post('/fichas-edicoes/:edicaoId/rejeitar', async (c) => {
       edicao.solicitante_funcionario_id,
     );
     if (solicitanteUserId) {
-      await notifyUsers(c.env.DB, [solicitanteUserId], {
+      await notifyUsers(c.env.DB, empresaId, [solicitanteUserId], {
         tipo: 'FICHA_EDICAO_REJEITADA',
         titulo: 'Edição de ficha rejeitada',
         mensagem: `Sua solicitação de edição da ficha #${edicao.ficha_id} foi rejeitada.`,

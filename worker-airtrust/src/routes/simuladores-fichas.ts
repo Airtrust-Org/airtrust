@@ -108,6 +108,7 @@ async function getFuncionarioUserInfo(
 async function criarNotificacaoFicha(
   db: D1Database,
   {
+    empresaId,
     userId,
     tipo,
     titulo,
@@ -117,6 +118,7 @@ async function criarNotificacaoFicha(
     acaoPrimaria,
     dados,
   }: {
+    empresaId: string | number;
     userId: string;
     tipo: string;
     titulo: string;
@@ -137,13 +139,14 @@ async function criarNotificacaoFicha(
           mensagem,
           dados,
           link,
+          empresa_id,
           user_id,
           prioridade,
           acao_primaria,
           created_at,
           updated_at
         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
       )
       .bind(
         tipo,
@@ -151,6 +154,7 @@ async function criarNotificacaoFicha(
         mensagem,
         dados ? JSON.stringify(dados) : null,
         link,
+        String(empresaId),
         userId,
         prioridade,
         acaoPrimaria || null,
@@ -1055,6 +1059,7 @@ app.put('/fichas/:id', async (c) => {
         );
         const instrutorNome = instrutorInfo?.nome || 'O instrutor';
         await criarNotificacaoFicha(c.env.DB, {
+          empresaId,
           userId: alunoInfo.userId,
           tipo: 'FICHA_AGUARDANDO_ALUNO',
           titulo: 'Ficha pronta para sua assinatura',
