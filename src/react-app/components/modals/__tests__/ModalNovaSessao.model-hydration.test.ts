@@ -66,6 +66,12 @@ function modeloResolutionFixed(
 // ---------------------------------------------------------------------------
 
 describe('ModalNovaSessao — model/theme hydration (source-code contracts)', () => {
+  it('simulador_modal_hidratacao_nao_usa_setSessaoDetalhe_recursivo — phase1 merge uses ref, not sessaoDetalhe mutation loop', () => {
+    expect(modalSrc).toContain('const phase1MergedRef = useRef<any>(null)');
+    expect(modalSrc).toContain('phase1MergedRef.current = merged;');
+    expect(modalSrc).not.toContain('_phase1Merged');
+  });
+
   it('simulador_modal_nao_zera_modelo_quando_modelos_endpoint_vazio — fix comment present in carregarModelosSessao', () => {
     // The fixed code has an explicit comment in carregarModelosSessao documenting
     // why setTemaSessao('') is NOT called. If this comment is absent, the fix
@@ -132,6 +138,11 @@ describe('ModalNovaSessao — model/theme hydration (source-code contracts)', ()
     // When fetchModelos/fetchModelosComCodigo is called with empty codigo,
     // only clear models if they were never loaded.
     expect(modalSrc).toContain('Only clear models if they were never loaded');
+  });
+
+  it('simulador_modal_encerra_loading_quando_tipo_nao_resolve — unresolved session type must finish edit hydration', () => {
+    expect(modalSrc).toContain('Tipo de sessão NÃO encontrado');
+    expect(modalSrc).toContain('setEditHydrating(false);');
   });
 });
 

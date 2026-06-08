@@ -14,7 +14,7 @@
  * - ✅ Destinatários automáticos (participantes + instrutor)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Plus, Trash2, Mail, MessageCircle, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
@@ -171,6 +171,7 @@ export default function ModalNovaSessao({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editHydrating, setEditHydrating] = useState(false); // Loading state for edit mode hydration
   const [sessaoDetalhe, setSessaoDetalhe] = useState<any>(null); // Complete session data from GET /sessoes/:id
+  const phase1MergedRef = useRef<any>(null); // merged edit payload across hydration phases
 
   // ========== FLUXO EM CASCATA ==========
   const [tipoDispositivo, setTipoDispositivo] = useState<'SIMULADOR' | 'AERONAVE'>('SIMULADOR');
@@ -235,6 +236,7 @@ export default function ModalNovaSessao({
       setTipoSessaoId(null);
       setModeloSessaoId(null);
       setSessaoDetalhe(null);
+      phase1MergedRef.current = null;
       fetchAeronaves();
       fetchAeronavesReais();
       fetchSimuladores();
@@ -259,6 +261,7 @@ export default function ModalNovaSessao({
     } else {
       // Modal fechando: limpar estado de hidratação
       setEditHydrating(false);
+      phase1MergedRef.current = null;
     }
   }, [isOpen]);
 
@@ -405,13 +408,9 @@ export default function ModalNovaSessao({
     }
     setTipoDispositivo(sessao?.tipo_dispositivo || 'SIMULADOR');
 
-    // Store merged data for Phase 2 to use when lists arrive
-    setSessaoDetalhe((prev: any) => {
-      if (prev && !prev._fallback) {
-        return { ...prev, _phase1Merged: merged };
-      }
-      return { _fallback: true, _phase1Merged: merged };
-    });
+    // Store merged data for Phase 2 to use when lists arrive (without mutating sessaoDetalhe)
+    // to avoid re-hydration loops while editing.
+    phase1MergedRef.current = merged;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isEditMode, sessao, sessaoDetalhe]);
 
@@ -426,7 +425,7 @@ export default function ModalNovaSessao({
     const detailIsFallback = sessaoDetalhe?._fallback === true;
 
     // Build merged from stored Phase 1 data or fallback
-    const phase1Merged = (sessaoDetalhe as any)?._phase1Merged;
+    const phase1Merged = phase1MergedRef.current;
     const merged = phase1Merged || (detailIsFallback ? sessao : {
       ...sessao,
       data: sessaoDetalhe.data || sessao!.data,
@@ -591,6 +590,9 @@ export default function ModalNovaSessao({
       const codigoParaModelos = aeronaveEncontrada?.modelo ?? modeloDirecto;
       if (codigoParaModelos) {
         fetchModelosComCodigo(tipoSessao.id, codigoParaModelos, tipoDisp);
+      } else {
+        // There is no way to load model options without equipment code.
+        setEditHydrating(false);
       }
     } else {
       console.warn('⚠️ [PHASE 2] Tipo de sessão NÃO encontrado:', {
@@ -601,6 +603,7 @@ export default function ModalNovaSessao({
       });
       // Non-cascading fields are already populated from Phase 1.
       // User will see tipo select empty and can choose manually.
+      setEditHydrating(false);
     }
 
     // Finish hydration if no session type info to trigger model loading
