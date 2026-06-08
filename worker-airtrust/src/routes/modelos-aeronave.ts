@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
+import { getEmpresaId } from '../middleware/tenant';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
@@ -11,7 +12,7 @@ function normalizeModeloAeronaveValue(value: unknown): unknown {
   if (typeof value !== 'string') return value;
   const trimmed = value.trim();
   if (!trimmed) return value;
-  return ['S76', 'SK76'].includes(trimmed.toUpperCase()) ? 'SK76' : value;
+  return ['S76', 'SK76'].includes(trimmed.toUpperCase()) ? 'SK76' : trimmed;
 }
 
 function normalizeModeloAeronavePayload<T extends Record<string, unknown>>(payload: T): T {
@@ -26,6 +27,7 @@ function normalizeModeloAeronavePayload<T extends Record<string, unknown>>(paylo
 // GET /modelos-aeronave - Lista todos os modelos
 modelosAeronave.get('/', auth(), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
 
   const result = await db
     .prepare(
@@ -44,10 +46,11 @@ modelosAeronave.get('/', auth(), async (c) => {
         updated_at,
         deleted_at
       FROM modelos_aeronave
-      WHERE deleted_at IS NULL
-      ORDER BY modelo ASC
+      WHERE empresa_id = ? AND deleted_at IS NULL
+      ORDER BY COALESCE(modelo, codigo, nome) ASC
     `,
     )
+    .bind(empresaId)
     .all();
 
   return c.json({ success: true, data: result.results });
@@ -56,6 +59,7 @@ modelosAeronave.get('/', auth(), async (c) => {
 // GET /modelos-aeronave/:id - Busca um modelo por ID
 modelosAeronave.get('/:id', auth(), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
 
   const result = await db
@@ -75,10 +79,10 @@ modelosAeronave.get('/:id', auth(), async (c) => {
         updated_at,
         deleted_at
       FROM modelos_aeronave
-      WHERE id = ? AND deleted_at IS NULL
+      WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
     `,
     )
-    .bind(id)
+    .bind(id, empresaId)
     .first();
 
   if (!result) {
@@ -91,6 +95,7 @@ modelosAeronave.get('/:id', auth(), async (c) => {
 // POST /modelos-aeronave - Cria um novo modelo
 modelosAeronave.post('/', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const body = normalizeModeloAeronavePayload((await c.req.json()) as Record<string, unknown>) as any;
 
   const { modelo, fabricante, tipo, categoria, descricao } = body;
@@ -99,10 +104,19 @@ modelosAeronave.post('/', auth(), requireRole('admin'), async (c) => {
     throw new ApiError('Modelo é obrigatório', 400);
   }
 
+  const modeloNormalizado = String(modelo).trim();
+
   // Verifica se o modelo já existe
   const existe = await db
-    .prepare(`SELECT id FROM modelos_aeronave WHERE modelo = ? AND deleted_at IS NULL`)
-    .bind(modelo)
+    .prepare(
+      `SELECT id
+       FROM modelos_aeronave
+       WHERE empresa_id = ?
+         AND deleted_at IS NULL
+         AND UPPER(TRIM(COALESCE(modelo, codigo, nome))) = UPPER(TRIM(?))
+       LIMIT 1`,
+    )
+    .bind(empresaId, modeloNormalizado)
     .first();
 
   if (existe) {
@@ -112,10 +126,19 @@ modelosAeronave.post('/', auth(), requireRole('admin'), async (c) => {
   const result = await db
     .prepare(
       `INSERT INTO modelos_aeronave 
-       (modelo, fabricante, tipo, categoria, descricao, ativo, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))`,
+       (empresa_id, codigo, nome, modelo, fabricante, tipo, categoria, descricao, ativo, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))`,
     )
-    .bind(modelo, fabricante, tipo, categoria, descricao)
+    .bind(
+      empresaId,
+      modeloNormalizado,
+      modeloNormalizado,
+      modeloNormalizado,
+      fabricante,
+      tipo,
+      categoria,
+      descricao,
+    )
     .run();
 
   const newId = result.meta.last_row_id;
@@ -135,24 +158,47 @@ modelosAeronave.post('/', auth(), requireRole('admin'), async (c) => {
 // PUT /modelos-aeronave/:id - Atualiza um modelo
 modelosAeronave.put('/:id', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
   const body = normalizeModeloAeronavePayload((await c.req.json()) as Record<string, unknown>) as any;
 
   // Verifica se existe
   const existe = await db
-    .prepare(`SELECT id FROM modelos_aeronave WHERE id = ? AND deleted_at IS NULL`)
-    .bind(id)
-    .first();
+    .prepare(`SELECT * FROM modelos_aeronave WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+    .bind(id, empresaId)
+    .first<any>();
 
   if (!existe) {
     throw new ApiError('Modelo de aeronave não encontrado', 404);
+  }
+
+  if (body.modelo !== undefined) {
+    const modeloNormalizado = String(body.modelo).trim();
+    const duplicate = await db
+      .prepare(
+        `SELECT id
+         FROM modelos_aeronave
+         WHERE empresa_id = ?
+           AND id <> ?
+           AND deleted_at IS NULL
+           AND UPPER(TRIM(COALESCE(modelo, codigo, nome))) = UPPER(TRIM(?))
+         LIMIT 1`,
+      )
+      .bind(empresaId, id, modeloNormalizado)
+      .first();
+    if (duplicate) {
+      throw new ApiError('Modelo já cadastrado', 409);
+    }
+    body.codigo = modeloNormalizado;
+    body.nome = modeloNormalizado;
+    body.modelo = modeloNormalizado;
   }
 
   // Monta a query dinamicamente com os campos fornecidos
   const campos: string[] = [];
   const valores: any[] = [];
 
-  const camposPermitidos = ['modelo', 'fabricante', 'tipo', 'categoria', 'descricao', 'ativo'];
+  const camposPermitidos = ['codigo', 'nome', 'modelo', 'fabricante', 'tipo', 'categoria', 'descricao', 'ativo'];
 
   camposPermitidos.forEach((campo) => {
     if (body[campo] !== undefined) {
@@ -166,10 +212,10 @@ modelosAeronave.put('/:id', auth(), requireRole('admin'), async (c) => {
   }
 
   campos.push('updated_at = datetime("now")');
-  valores.push(id);
+  valores.push(id, empresaId);
 
   await db
-    .prepare(`UPDATE modelos_aeronave SET ${campos.join(', ')} WHERE id = ?`)
+    .prepare(`UPDATE modelos_aeronave SET ${campos.join(', ')} WHERE id = ? AND empresa_id = ?`)
     .bind(...valores)
     .run();
 
@@ -189,12 +235,13 @@ modelosAeronave.put('/:id', auth(), requireRole('admin'), async (c) => {
 // DELETE /modelos-aeronave/:id - Soft delete
 modelosAeronave.delete('/:id', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
 
   // Verifica se existe
   const existe = await db
-    .prepare(`SELECT id FROM modelos_aeronave WHERE id = ? AND deleted_at IS NULL`)
-    .bind(id)
+    .prepare(`SELECT id FROM modelos_aeronave WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+    .bind(id, empresaId)
     .first();
 
   if (!existe) {
@@ -202,8 +249,8 @@ modelosAeronave.delete('/:id', auth(), requireRole('admin'), async (c) => {
   }
 
   await db
-    .prepare(`UPDATE modelos_aeronave SET deleted_at = datetime('now') WHERE id = ?`)
-    .bind(id)
+    .prepare(`UPDATE modelos_aeronave SET deleted_at = datetime('now') WHERE id = ? AND empresa_id = ?`)
+    .bind(id, empresaId)
     .run();
 
   const ua3 = extrairUsuarioAuditoria(c);

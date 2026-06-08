@@ -585,11 +585,14 @@ app.get('/modelos-sessao/:id/manobras', async (c) => {
         ON ms.id = msm.modelo_id
        AND ms.deleted_at IS NULL
        AND ms.empresa_id = ?
-      INNER JOIN manobras m ON msm.manobra_id = m.id
+      INNER JOIN manobras m
+        ON msm.manobra_id = m.id
+       AND m.deleted_at IS NULL
+       AND m.empresa_id = ?
       WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL
       ORDER BY msm.ordem ASC`,
     )
-      .bind(empresaId, id)
+      .bind(empresaId, empresaId, id)
       .all();
 
     return c.json({ success: true, data: result.results });
@@ -899,9 +902,9 @@ app.post('/modelos-sessao/:id/manobras', async (c) => {
 
       // Validar se manobra existe
       const manobraExiste = await c.env.DB.prepare(
-        'SELECT id FROM manobras WHERE id = ? AND deleted_at IS NULL',
+        'SELECT id FROM manobras WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
-        .bind(m.manobra_id)
+        .bind(m.manobra_id, empresaId)
         .first();
 
       if (!manobraExiste) {
@@ -1229,10 +1232,10 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
       let manobra = await c.env.DB.prepare(
         `SELECT id, codigo, nome
          FROM manobras
-         WHERE UPPER(TRIM(codigo)) = ? AND deleted_at IS NULL
+         WHERE UPPER(TRIM(codigo)) = ? AND deleted_at IS NULL AND empresa_id = ?
          LIMIT 1`,
       )
-        .bind(manobraCodigo)
+        .bind(manobraCodigo, empresaId)
         .first<any>();
 
       if (!manobra) {
@@ -1252,10 +1255,11 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
 
         const insertManobra = await c.env.DB.prepare(
           `INSERT INTO manobras (
-            codigo, nome, descricao, categoria, tipo_sessao, tempo_estimado, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+            empresa_id, codigo, nome, descricao, categoria, tipo_sessao, tempo_estimado, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
         )
           .bind(
+            empresaId,
             manobraCodigo,
             manobraNome,
             manobraDescricao,

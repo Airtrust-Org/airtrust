@@ -10,6 +10,7 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { getEmpresaId } from '../middleware/tenant';
 import {
   gerarQualificacaoDaFicha,
   getQualificacaoGeracaoErrorStatus,
@@ -35,6 +36,7 @@ app.get('/fichas-simulador/:id/manobras', async (c) => {
 // ✅ Uses ordem (1-22) instead of individual ID
 app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     const { fichaId, ordem } = c.req.param();
     const b = await c.req.json();
 
@@ -73,10 +75,11 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
          INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
          WHERE ts.codigo = ?
            AND ms.modelo_aeronave = ?
+           AND ms.empresa_id = ?
            AND ms.deleted_at IS NULL
          LIMIT 1`,
       )
-        .bind(tipoSessao, tipoAeronave)
+        .bind(tipoSessao, tipoAeronave, empresaId)
         .first();
 
       if (modelo) {
@@ -88,9 +91,10 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
              AND msm.ordem = ?
              AND msm.deleted_at IS NULL
              AND m.deleted_at IS NULL
+             AND m.empresa_id = ?
            LIMIT 1`,
         )
-          .bind(modelo.id, ordem)
+          .bind(modelo.id, ordem, empresaId)
           .first();
 
         const codigo = m?.codigo || `ORD-${ordem}`;
@@ -172,6 +176,7 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
 // Order 1-11 = left column | 12-22 = right column
 app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     const fid = c.req.param('id');
     const f = await c.env.DB.prepare(
       'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
@@ -181,9 +186,9 @@ app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
     const m = await c.env.DB.prepare(
-      'SELECT codigo, COALESCE(nome, descricao) AS descricao, categoria, ordem FROM manobras WHERE tipo_sessao=? AND tipo_aeronave=? AND deleted_at IS NULL ORDER BY ordem LIMIT 22',
+      'SELECT codigo, COALESCE(nome, descricao) AS descricao, categoria, ordem FROM manobras WHERE empresa_id = ? AND tipo_sessao=? AND tipo_aeronave=? AND deleted_at IS NULL ORDER BY ordem LIMIT 22',
     )
-      .bind(f.tipo_sessao, f.tipo_aeronave || '')
+      .bind(empresaId, f.tipo_sessao, f.tipo_aeronave || '')
       .all();
 
     if (m.results.length < 22) {

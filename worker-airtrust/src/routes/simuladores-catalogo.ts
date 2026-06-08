@@ -6,7 +6,8 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { auth, optionalAuth } from '../middleware/auth';
+import { auth } from '../middleware/auth';
+import { getEmpresaId } from '../middleware/tenant';
 import {
   CategoriaSimuladoresSchema,
   ManobraSchema,
@@ -15,12 +16,12 @@ import {
 } from './simuladores-shared';
 
 const app = new Hono<{ Bindings: Env }>();
-app.use('*', async (c, next) => {
-  if (c.req.method === 'GET') {
-    return optionalAuth()(c, next);
-  }
-  return auth()(c, next);
-});
+app.use('*', auth());
+
+const MANOBRA_CATEGORIA_SELECT =
+  'id, empresa_id, codigo, nome, descricao, cor, icone, ordem, ativo, created_at, updated_at, deleted_at';
+const MANOBRA_SELECT =
+  'id, empresa_id, codigo, nome, descricao, categoria, tipo_sessao, tipo_aeronave, ordem, nivel_dificuldade, tempo_estimado, pontuacao_minima, created_at, updated_at, deleted_at';
 
 // ==========================================================================
 // CRUD: CATEGORIAS DE MANOBRAS
@@ -29,9 +30,16 @@ app.use('*', async (c, next) => {
 // GET /api/simuladores/categorias - Listar categorias
 app.get('/categorias', async (c) => {
   try {
-    const result = await c.env.DB.prepare(
-      'SELECT * FROM manobras_categorias WHERE deleted_at IS NULL ORDER BY ordem, nome',
-    ).all();
+    const empresaId = getEmpresaId(c);
+    const result = await c.env.DB
+      .prepare(
+        `SELECT ${MANOBRA_CATEGORIA_SELECT}
+         FROM manobras_categorias
+         WHERE empresa_id = ? AND deleted_at IS NULL
+         ORDER BY ordem, nome`,
+      )
+      .bind(empresaId)
+      .all();
     return c.json({ success: true, data: result.results });
   } catch (e: any) {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
@@ -41,6 +49,7 @@ app.get('/categorias', async (c) => {
 // POST /api/simuladores/categorias - Criar categoria
 app.post('/categorias', async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     const parsed = CategoriaSimuladoresSchema.safeParse(await c.req.json());
     if (!parsed.success) {
       return c.json(
@@ -52,11 +61,37 @@ app.post('/categorias', async (c) => {
     // Gerar código a partir do nome se não fornecido
     const codigo = parsed.data.codigo || nome.toUpperCase().replace(/[^A-Z0-9]/g, '_');
 
+    const existing = await c.env.DB
+      .prepare(
+        `SELECT id
+         FROM manobras_categorias
+         WHERE empresa_id = ?
+           AND deleted_at IS NULL
+           AND (
+             UPPER(TRIM(codigo)) = UPPER(TRIM(?))
+             OR UPPER(TRIM(nome)) = UPPER(TRIM(?))
+           )
+         LIMIT 1`,
+      )
+      .bind(empresaId, codigo, nome)
+      .first();
+
+    if (existing) {
+      return c.json({ success: false, error: 'Categoria já cadastrada para esta empresa' }, 409);
+    }
+
     const result = await c.env.DB.prepare(
-      `INSERT INTO manobras_categorias (codigo, nome, descricao, cor, created_at, updated_at) 
-       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      `INSERT INTO manobras_categorias (
+         empresa_id,
+         codigo,
+         nome,
+         descricao,
+         cor,
+         created_at,
+         updated_at
+       ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
     )
-      .bind(codigo, nome, descricao, cor)
+      .bind(empresaId, codigo, nome, descricao, cor)
       .run();
 
     return c.json({ success: true, data: { ...parsed.data, id: result.meta.last_row_id } });
@@ -68,23 +103,71 @@ app.post('/categorias', async (c) => {
 // PUT /api/simuladores/categorias/:id - Atualizar categoria
 app.put('/categorias/:id', async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     const id = c.req.param('id');
-    const body = await c.req.json();
-    const { nome, descricao, cor } = body;
+    const parsed = CategoriaSimuladoresSchema.partial().safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: parsed.error.errors[0]?.message ?? 'Dados inválidos' },
+        400,
+      );
+    }
 
-    await c.env.DB.prepare(
-      `UPDATE manobras_categorias 
-       SET nome = ?, descricao = ?, cor = ?, updated_at = datetime('now') 
-       WHERE id = ?`,
-    )
-      .bind(nome, descricao, cor, id)
+    const atual = await c.env.DB
+      .prepare(
+        `SELECT ${MANOBRA_CATEGORIA_SELECT}
+         FROM manobras_categorias
+         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(id, empresaId)
+      .first<any>();
+
+    if (!atual) {
+      return c.json({ success: false, error: 'Categoria não encontrada' }, 404);
+    }
+
+    const nome = parsed.data.nome ?? atual.nome;
+    const descricao = parsed.data.descricao ?? atual.descricao;
+    const cor = parsed.data.cor ?? atual.cor;
+    const codigo = parsed.data.codigo
+      || (parsed.data.nome ? parsed.data.nome.toUpperCase().replace(/[^A-Z0-9]/g, '_') : atual.codigo);
+
+    const duplicate = await c.env.DB
+      .prepare(
+        `SELECT id
+         FROM manobras_categorias
+         WHERE empresa_id = ?
+           AND id <> ?
+           AND deleted_at IS NULL
+           AND (
+             UPPER(TRIM(codigo)) = UPPER(TRIM(?))
+             OR UPPER(TRIM(nome)) = UPPER(TRIM(?))
+           )
+         LIMIT 1`,
+      )
+      .bind(empresaId, id, codigo, nome)
+      .first();
+
+    if (duplicate) {
+      return c.json({ success: false, error: 'Categoria já cadastrada para esta empresa' }, 409);
+    }
+
+    await c.env.DB
+      .prepare(
+        `UPDATE manobras_categorias
+         SET codigo = ?, nome = ?, descricao = ?, cor = ?, updated_at = datetime('now')
+         WHERE id = ? AND empresa_id = ?`,
+      )
+      .bind(codigo, nome, descricao, cor, id, empresaId)
       .run();
 
     // Busca a categoria atualizada
     const { results: categoriaAtualizada } = await c.env.DB.prepare(
-      'SELECT * FROM manobras_categorias WHERE id = ? AND deleted_at IS NULL',
+      `SELECT ${MANOBRA_CATEGORIA_SELECT}
+       FROM manobras_categorias
+       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
-      .bind(id)
+      .bind(id, empresaId)
       .all();
 
     return c.json({
@@ -102,12 +185,16 @@ app.delete('/categorias/:id', async (c) => {
     const denied = requireAdminForDelete(c);
     if (denied) return denied;
 
+    const empresaId = getEmpresaId(c);
     const id = c.req.param('id');
-    await c.env.DB.prepare(
-      "UPDATE manobras_categorias SET deleted_at = datetime('now') WHERE id = ?",
+    const result = await c.env.DB.prepare(
+      "UPDATE manobras_categorias SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
     )
-      .bind(id)
+      .bind(id, empresaId)
       .run();
+    if (!result.meta.changes) {
+      return c.json({ success: false, error: 'Categoria não encontrada' }, 404);
+    }
     return c.json({ success: true, message: 'Categoria excluída' });
   } catch (e: any) {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
@@ -120,11 +207,12 @@ app.delete('/categorias/:id', async (c) => {
 
 app.get('/manobras', async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     const ts = c.req.query('tipo_sessao') || '';
     const ta = c.req.query('tipo_aeronave') || c.req.query('modelo_aeronave') || '';
     const cat = c.req.query('categoria') || '';
-    let q = 'SELECT * FROM manobras WHERE deleted_at IS NULL';
-    const ps: any[] = [];
+    let q = `SELECT ${MANOBRA_SELECT} FROM manobras WHERE empresa_id = ? AND deleted_at IS NULL`;
+    const ps: any[] = [empresaId];
     if (ts) {
       q += ' AND tipo_sessao=?';
       ps.push(ts);
@@ -149,6 +237,7 @@ app.get('/manobras', async (c) => {
 
 app.post('/manobras', async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     const parsed = ManobraSchema.safeParse(await c.req.json());
     if (!parsed.success) {
       return c.json(
@@ -157,10 +246,25 @@ app.post('/manobras', async (c) => {
       );
     }
     const b = parsed.data;
+    const duplicate = await c.env.DB
+      .prepare(
+        `SELECT id
+         FROM manobras
+         WHERE empresa_id = ?
+           AND deleted_at IS NULL
+           AND UPPER(TRIM(codigo)) = UPPER(TRIM(?))
+         LIMIT 1`,
+      )
+      .bind(empresaId, b.codigo)
+      .first();
+    if (duplicate) {
+      return c.json({ success: false, error: 'Código já cadastrado para esta empresa' }, 409);
+    }
     const r = await c.env.DB.prepare(
-      'INSERT INTO manobras(codigo,nome,descricao,categoria,tipo_sessao,tipo_aeronave,ordem)VALUES(?,?,?,?,?,?,?)',
+      'INSERT INTO manobras(empresa_id,codigo,nome,descricao,categoria,tipo_sessao,tipo_aeronave,ordem)VALUES(?,?,?,?,?,?,?,?)',
     )
       .bind(
+        empresaId,
         b.codigo,
         b.nome,
         b.descricao || null,
@@ -170,8 +274,12 @@ app.post('/manobras', async (c) => {
         b.ordem || 1,
       )
       .run();
-    const m = await c.env.DB.prepare('SELECT * FROM manobras WHERE id=? AND deleted_at IS NULL')
-      .bind(r.meta.last_row_id)
+    const m = await c.env.DB.prepare(
+      `SELECT ${MANOBRA_SELECT}
+       FROM manobras
+       WHERE id=? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(r.meta.last_row_id, empresaId)
       .first();
     return c.json({ success: true, data: m }, 201);
   } catch (e: any) {
@@ -181,17 +289,40 @@ app.post('/manobras', async (c) => {
 
 app.put('/manobras/:id', async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     const id = c.req.param('id');
     const b = await c.req.json();
-    const ant = await c.env.DB.prepare('SELECT * FROM manobras WHERE id=? AND deleted_at IS NULL')
-      .bind(id)
+    const ant = await c.env.DB.prepare(
+      `SELECT ${MANOBRA_SELECT}
+       FROM manobras
+       WHERE id=? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(id, empresaId)
       .first();
     if (!ant) return c.json({ success: false, error: 'Não encontrada' }, 404);
+    const nextCodigo = b.codigo !== undefined ? b.codigo : ant.codigo;
+    if (String(nextCodigo).trim().toUpperCase() !== String(ant.codigo).trim().toUpperCase()) {
+      const duplicate = await c.env.DB
+        .prepare(
+          `SELECT id
+           FROM manobras
+           WHERE empresa_id = ?
+             AND id <> ?
+             AND deleted_at IS NULL
+             AND UPPER(TRIM(codigo)) = UPPER(TRIM(?))
+           LIMIT 1`,
+        )
+        .bind(empresaId, id, nextCodigo)
+        .first();
+      if (duplicate) {
+        return c.json({ success: false, error: 'Código já cadastrado para esta empresa' }, 409);
+      }
+    }
     await c.env.DB.prepare(
-      'UPDATE manobras SET codigo=?,nome=?,descricao=?,categoria=?,tipo_sessao=?,tipo_aeronave=?,ordem=?,nivel_dificuldade=?,tempo_estimado=?,pontuacao_minima=?,updated_at=datetime("now") WHERE id=?',
+      'UPDATE manobras SET codigo=?,nome=?,descricao=?,categoria=?,tipo_sessao=?,tipo_aeronave=?,ordem=?,nivel_dificuldade=?,tempo_estimado=?,pontuacao_minima=?,updated_at=datetime("now") WHERE id=? AND empresa_id = ?',
     )
       .bind(
-        b.codigo !== undefined ? b.codigo : ant.codigo,
+        nextCodigo,
         b.nome !== undefined ? b.nome : ant.nome,
         b.descricao !== undefined ? b.descricao : ant.descricao,
         b.categoria !== undefined ? b.categoria : ant.categoria,
@@ -202,10 +333,15 @@ app.put('/manobras/:id', async (c) => {
         b.tempo_estimado !== undefined ? b.tempo_estimado : ant.tempo_estimado,
         b.pontuacao_minima !== undefined ? b.pontuacao_minima : ant.pontuacao_minima,
         id,
+        empresaId,
       )
       .run();
-    const atu = await c.env.DB.prepare('SELECT * FROM manobras WHERE id=? AND deleted_at IS NULL')
-      .bind(id)
+    const atu = await c.env.DB.prepare(
+      `SELECT ${MANOBRA_SELECT}
+       FROM manobras
+       WHERE id=? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(id, empresaId)
       .first();
     await audit(c.env.DB, {
       tabela: 'manobras',
@@ -225,10 +361,15 @@ app.delete('/manobras/:id', async (c) => {
     const denied = requireAdminForDelete(c);
     if (denied) return denied;
 
+    const empresaId = getEmpresaId(c);
     const id = c.req.param('id');
-    await c.env.DB.prepare('UPDATE manobras SET deleted_at=datetime("now") WHERE id=?')
-      .bind(id)
+    const result = await c.env.DB
+      .prepare('UPDATE manobras SET deleted_at=datetime("now"), updated_at=datetime("now") WHERE id=? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(id, empresaId)
       .run();
+    if (!result.meta.changes) {
+      return c.json({ success: false, error: 'Não encontrada' }, 404);
+    }
     return c.json({ success: true, message: 'Manobra excluída' });
   } catch (e: any) {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);

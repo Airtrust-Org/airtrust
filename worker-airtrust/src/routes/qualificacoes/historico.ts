@@ -339,7 +339,10 @@ router.get(
     LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
     LEFT JOIN documentos cert_doc ON cert_doc.id = qh.certificado_arquivo_id AND cert_doc.deleted_at IS NULL
     LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
-    LEFT JOIN qualificacoes_categorias qc ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria))) AND qc.deleted_at IS NULL
+    LEFT JOIN qualificacoes_categorias qc
+      ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
+     AND qc.deleted_at IS NULL
+     AND qc.empresa_id = f.empresa_id
     WHERE ${whereClause}
     ORDER BY ${buildOrderByClause(orderBy, order)}
     LIMIT ? OFFSET ?`;
