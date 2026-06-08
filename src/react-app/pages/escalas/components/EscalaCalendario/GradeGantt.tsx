@@ -22,6 +22,7 @@ import LinhaSituacao, {
   CabecalhoDiasSituacao,
   type LinhaSituacaoTripulante,
 } from './LinhaSituacao';
+import { buildSyntheticAlocacoesFromEventos } from './GradeTripulantes.utils';
 
 export { EVENTO_CONFIG, TIPOS_EVENTO_ATIVOS };
 
@@ -655,10 +656,26 @@ export default function GradeGantt({
     });
   }, [diasDoMes, filtroQuinzena, quinzenas, escala.mes, escala.ano]);
 
-  const fonteAlocacoes = useMemo(
-    () => (alocacoes && alocacoes.length > 0 ? alocacoes : mapTripulacoesLegadas(tripulacoes)),
-    [alocacoes, tripulacoes],
-  );
+  // Build synthetic alocacoes from escala_eventos (CRM, simulator) so they appear
+  // in LinhaSituacao rows — same bridge used by GradeTripulantes.
+  const syntheticAlocacoes = useMemo(() => {
+    if (!eventos || eventos.length === 0) return [] as EscalaAlocacao[];
+    const ids = new Set((tripulantesCobertura || []).map((t) => t.id));
+    if (ids.size === 0) return [] as EscalaAlocacao[];
+    return buildSyntheticAlocacoesFromEventos({
+      eventos,
+      escalaId: escala.id,
+      tripulanteIds: ids,
+    });
+  }, [eventos, tripulantesCobertura, escala.id]);
+
+  const fonteAlocacoes = useMemo(() => {
+    const base = alocacoes && alocacoes.length > 0 ? alocacoes : mapTripulacoesLegadas(tripulacoes);
+    if (syntheticAlocacoes.length === 0) return base;
+    // Prepend synthetic — real alocacoes win in conflict resolution because
+    // grupos skips items with situacao_tipo, and situacoes deduplicates by chave.
+    return [...syntheticAlocacoes, ...base];
+  }, [alocacoes, tripulacoes, syntheticAlocacoes]);
 
   const quinzenasMes = useMemo(
     () =>

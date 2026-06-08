@@ -4,9 +4,11 @@ import {
   buildTripulantesSemAeronaveRows,
   collectFuncionariosComAeronaveAtiva,
 } from '../GradeGantt';
+import { buildSyntheticAlocacoesFromEventos } from '../GradeTripulantes.utils';
 import type {
   EscalaAlocacao,
   EscalaCoberturaTripulante,
+  EscalaEvento,
   QuinzenaEscala,
 } from '../../../hooks/queries/useEscalasQuery';
 
@@ -156,6 +158,155 @@ describe('collectFuncionariosComAeronaveAtiva', () => {
     );
 
     expect(resultado.size).toBe(0);
+  });
+});
+
+function createEvento(partial: Partial<EscalaEvento>): EscalaEvento {
+  return {
+    id: partial.id || 'evt-1',
+    escala_id: partial.escala_id || 'escala-1',
+    tripulacao_id: partial.tripulacao_id ?? null,
+    funcionario_id: partial.funcionario_id || 'func-1',
+    funcionario_nome: partial.funcionario_nome || 'Tripulante',
+    funcionario_matricula: partial.funcionario_matricula || '001',
+    funcionario_cargo: partial.funcionario_cargo ?? null,
+    tipo_evento: partial.tipo_evento || 'treinamento_solo',
+    data_inicio: partial.data_inicio || '2026-06-15',
+    data_fim: partial.data_fim || '2026-06-16',
+    gerado_automaticamente: partial.gerado_automaticamente ?? 0,
+    status: partial.status || 'pendente',
+    origem: partial.origem ?? 'treinamento',
+    observacoes: partial.observacoes ?? null,
+  };
+}
+
+describe('GradeGantt synthetic bridge — CRM/simulator eventos → LinhaSituacao', () => {
+  it('grade_gantt_usa_bridge — buildSyntheticAlocacoesFromEventos está importado em GradeGantt', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(resolve(dir, '../GradeGantt.tsx'), 'utf8');
+    expect(src).toContain("import { buildSyntheticAlocacoesFromEventos } from './GradeTripulantes.utils'");
+    expect(src).toContain('syntheticAlocacoes');
+    expect(src).toContain('buildSyntheticAlocacoesFromEventos({');
+  });
+
+  it('crm_15_16_junho_aparece_em_linhaSituacao_via_grade_gantt — escala_eventos treinamento_solo geram CURSO nas linhas', () => {
+    const escalaId = 'c9767640-01aa-4714-a6ba-7b4635ffb3c4';
+    const eventosCRM: EscalaEvento[] = [
+      createEvento({ id: 'evt-crm-1', escala_id: escalaId, funcionario_id: '66', funcionario_nome: 'Vargas', tipo_evento: 'treinamento_solo', data_inicio: '2026-06-15', data_fim: '2026-06-15' }),
+      createEvento({ id: 'evt-crm-2', escala_id: escalaId, funcionario_id: '66', funcionario_nome: 'Vargas', tipo_evento: 'treinamento_solo', data_inicio: '2026-06-16', data_fim: '2026-06-16' }),
+      createEvento({ id: 'evt-crm-3', escala_id: escalaId, funcionario_id: '67', funcionario_nome: 'Monteiro', tipo_evento: 'treinamento_solo', data_inicio: '2026-06-15', data_fim: '2026-06-15' }),
+    ];
+
+    const synthetic = buildSyntheticAlocacoesFromEventos({
+      eventos: eventosCRM,
+      escalaId,
+      tripulanteIds: new Set(['66', '67']),
+    });
+
+    expect(synthetic.length).toBeGreaterThanOrEqual(3);
+    expect(synthetic.every((s) => s.situacao_tipo === 'CURSO')).toBe(true);
+    expect(synthetic.some((s) => s.funcionario_id === '66')).toBe(true);
+    expect(synthetic.some((s) => s.funcionario_id === '67')).toBe(true);
+
+    // Feed into buildTripulantesSemAeronaveRows → linhas de situação
+    const coberturas: EscalaCoberturaTripulante[] = [
+      createCoberturaTripulante({ id: '66', nome: 'Vargas', cargo: 'copiloto' }),
+      createCoberturaTripulante({ id: '67', nome: 'Monteiro', cargo: 'copiloto' }),
+    ];
+    const rows = buildTripulantesSemAeronaveRows({
+      situacoes: synthetic,
+      tripulantesCobertura: coberturas,
+      funcionariosComAeronaveAtiva: new Set(),
+      filtroNomeNormalizado: '',
+      filtroModeloNormalizado: '',
+      quinzenasMes: QUINZENAS_MES,
+      intervaloVisivelInicio: '2026-06-01',
+      intervaloVisivelFim: '2026-06-30',
+    });
+
+    expect(rows).toHaveLength(2);
+    const vargas = rows.find((r) => r.funcionarioId === '66');
+    expect(vargas).toBeDefined();
+    expect(vargas!.situacoes.length).toBeGreaterThanOrEqual(1);
+    expect(vargas!.situacoes.every((s) => s.situacao_tipo === 'CURSO')).toBe(true);
+  });
+
+  it('antonio_25_06_aparece_em_linhaSituacao_via_grade_gantt — sessoesDiretas treinamento_simulador geram SIM nas linhas', () => {
+    const escalaId = 'c9767640-01aa-4714-a6ba-7b4635ffb3c4';
+    const eventoSimulador: EscalaEvento[] = [
+      createEvento({ id: 'sim-75-3', escala_id: escalaId, funcionario_id: '3', funcionario_nome: 'Antônio', tipo_evento: 'treinamento_simulador', data_inicio: '2026-06-25', data_fim: '2026-06-25' }),
+    ];
+
+    const synthetic = buildSyntheticAlocacoesFromEventos({
+      eventos: eventoSimulador,
+      escalaId,
+      tripulanteIds: new Set(['3']),
+    });
+
+    expect(synthetic).toHaveLength(1);
+    expect(synthetic[0].situacao_tipo).toBe('SIM');
+    expect(synthetic[0].funcionario_id).toBe('3');
+
+    const coberturas: EscalaCoberturaTripulante[] = [
+      createCoberturaTripulante({ id: '3', nome: 'Antônio', cargo: 'comandante' }),
+    ];
+    const rows = buildTripulantesSemAeronaveRows({
+      situacoes: synthetic,
+      tripulantesCobertura: coberturas,
+      funcionariosComAeronaveAtiva: new Set(),
+      filtroNomeNormalizado: '',
+      filtroModeloNormalizado: '',
+      quinzenasMes: QUINZENAS_MES,
+      intervaloVisivelInicio: '2026-06-01',
+      intervaloVisivelFim: '2026-06-30',
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].funcionarioId).toBe('3');
+    expect(rows[0].situacoes.some((s) => s.situacao_tipo === 'SIM')).toBe(true);
+  });
+
+  it('sem_situacao_registrada_nao_aparece_quando_eventos_existem — com synthetic, linhas têm situações', () => {
+    const escalaId = 'escala-test';
+    const eventos: EscalaEvento[] = [
+      createEvento({ id: 'e1', escala_id: escalaId, funcionario_id: 'pilot-1', funcionario_nome: 'Piloto', tipo_evento: 'treinamento_solo', data_inicio: '2026-06-10', data_fim: '2026-06-10' }),
+    ];
+    const synthetic = buildSyntheticAlocacoesFromEventos({
+      eventos,
+      escalaId,
+      tripulanteIds: new Set(['pilot-1']),
+    });
+    const rows = buildTripulantesSemAeronaveRows({
+      situacoes: synthetic,
+      tripulantesCobertura: [createCoberturaTripulante({ id: 'pilot-1', nome: 'Piloto' })],
+      funcionariosComAeronaveAtiva: new Set(),
+      filtroNomeNormalizado: '',
+      filtroModeloNormalizado: '',
+      quinzenasMes: QUINZENAS_MES,
+      intervaloVisivelInicio: '2026-06-01',
+      intervaloVisivelFim: '2026-06-30',
+    });
+    // Row exists and has at least one situacao → no "Sem situação registrada"
+    expect(rows).toHaveLength(1);
+    expect(rows[0].situacoes.length).toBeGreaterThan(0);
+  });
+
+  it('synthetic_nao_polui_funcionariosComAeronaveAtiva — itens com situacao_tipo nao sao marcados como tendo aeronave', () => {
+    const escalaId = 'escala-test';
+    const eventos: EscalaEvento[] = [
+      createEvento({ id: 'e1', escala_id: escalaId, funcionario_id: 'pilot-1', funcionario_nome: 'Piloto', tipo_evento: 'treinamento_solo', data_inicio: '2026-06-10', data_fim: '2026-06-10' }),
+    ];
+    const synthetic = buildSyntheticAlocacoesFromEventos({
+      eventos,
+      escalaId,
+      tripulanteIds: new Set(['pilot-1']),
+    });
+    // collectFuncionariosComAeronaveAtiva should NOT include pilot-1 because synthetic items have situacao_tipo
+    const result = collectFuncionariosComAeronaveAtiva(synthetic, '2026-06-01', '2026-06-30');
+    expect(result.has('pilot-1')).toBe(false);
   });
 });
 
