@@ -9,7 +9,6 @@
  */
 
 import { Hono } from 'hono';
-import type { Context } from 'hono';
 import type { Env, ApiResponse } from '../types';
 import { notFound, badRequest } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
@@ -32,13 +31,6 @@ function flagToInt(value: unknown): number {
   return 0;
 }
 
-function getEmpresaIdSafe(c: Context<{ Bindings: Env }>): number | undefined {
-  try {
-    return getEmpresaId(c);
-  } catch {
-    return undefined;
-  }
-}
 
 function normalizeFuncionarioStatus(value?: string | null): string {
   const normalized = (value || '').trim().toUpperCase();
@@ -85,11 +77,13 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     badRequest('CPF inválido');
   }
 
-  // Verificar se matricula já existe (APENAS se fornecida)
+  const empresaId = getEmpresaId(c);
+
+  // Verificar se matricula já existe no tenant (APENAS se fornecida)
   if (body.matricula) {
     const existing = await db
-      .prepare('SELECT id FROM funcionarios WHERE matricula = ? AND deleted_at IS NULL')
-      .bind(body.matricula)
+      .prepare('SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(body.matricula, empresaId)
       .first();
 
     if (existing) {
@@ -131,8 +125,6 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
       datetime('now'), datetime('now')
     )
   `;
-
-  const insertEmpresaId = getEmpresaId(c);
 
   const result = await db
     .prepare(query)
@@ -191,7 +183,7 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
           : 0,
       flagToInt(body.is_instrutor),
       flagToInt(body.is_checador),
-      insertEmpresaId,
+      empresaId,
     )
     .run();
 
@@ -277,11 +269,11 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     badRequest('Email inválido');
   }
 
-  // Verificar duplicatas de matrícula (excluindo próprio registro)
+  // Verificar duplicatas de matrícula dentro do tenant (excluindo próprio registro)
   if (body.matricula) {
     const duplicateMatricula = await db
-      .prepare('SELECT id FROM funcionarios WHERE matricula = ? AND id != ? AND deleted_at IS NULL')
-      .bind(body.matricula, id)
+      .prepare('SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL')
+      .bind(body.matricula, empresaId, id)
       .first();
 
     if (duplicateMatricula) {
@@ -686,7 +678,7 @@ app.delete('/:id', auth(), requireRole('admin'), async (c) => {
 app.get('/:id/escalas', auth(), async (c) => {
   const { id } = c.req.param();
   const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
+  const empresaId = getEmpresaId(c);
   const limit = Number(c.req.query('limit') || '20');
   const offset = Number(c.req.query('offset') || '0');
   const status = c.req.query('status'); // rascunho|publicada|encerrada

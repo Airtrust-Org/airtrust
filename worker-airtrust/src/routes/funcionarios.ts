@@ -23,15 +23,7 @@ import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
-import type { Context } from 'hono';
 
-function getEmpresaIdSafe(c: Context<{ Bindings: Env }>): number | undefined {
-  try {
-    return getEmpresaId(c);
-  } catch {
-    return undefined;
-  }
-}
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { syncFuncionarioCertificacoes } from '../services/sync-certificacoes-funcionarios';
 import { publishDomainEvent } from '../shared/domainEvents';
@@ -154,13 +146,11 @@ app.get('/', auth(), async (c) => {
   const whereClausesCount: string[] = [];
   const bindings: unknown[] = [];
 
-  // Filtro por empresa (multi-tenant)
-  const empresaId = getEmpresaIdSafe(c);
-  if (empresaId !== undefined) {
-    whereClausesQuery.push('f.empresa_id = ?');
-    whereClausesCount.push('empresa_id = ?');
-    bindings.push(empresaId);
-  }
+  // Filtro por empresa (multi-tenant) — fail-closed: sempre exige tenant
+  const empresaId = getEmpresaId(c);
+  whereClausesQuery.push('f.empresa_id = ?');
+  whereClausesCount.push('empresa_id = ?');
+  bindings.push(empresaId);
 
   // Busca textual
   if (search) {
@@ -357,7 +347,7 @@ app.get('/', auth(), async (c) => {
  */
 app.get('/stats', auth(), async (c) => {
   const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
+  const empresaId = getEmpresaId(c);
 
   // Descobrir schema real (status TEXT vs. ativo INTEGER)
   const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
@@ -410,7 +400,7 @@ app.get('/stats', auth(), async (c) => {
 app.get('/stats/dashboard', auth(), async (c) => {
   try {
     const db = c.env.DB;
-    const empresaId = getEmpresaIdSafe(c);
+    const empresaId = getEmpresaId(c);
     const aeronaveSelectExpr = buildFuncionarioAeronaveDisplayExpr('f');
 
     // Descobrir schema real
@@ -438,10 +428,10 @@ app.get('/stats/dashboard', auth(), async (c) => {
         SUM(CASE WHEN NOT (${ativoExpr}) THEN 1 ELSE 0 END) as inativos
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
-        AND (? IS NULL OR f.empresa_id = ?)
+        AND f.empresa_id = ?
     `,
       )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .first<{ total: number; ativos: number; inativos: number }>();
 
     // Funcionários por aeronave
@@ -471,7 +461,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
          AND instr(',' || REPLACE(COALESCE(f.modelo_aeronave_id, ''), ' ', '') || ',', ',' || CAST(ma.id AS TEXT) || ',') > 0
         WHERE f.deleted_at IS NULL
           AND ${ativoExpr}
-          AND (? IS NULL OR f.empresa_id = ?)
+          AND f.empresa_id = ?
 
         UNION ALL
 
@@ -484,7 +474,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
         FROM funcionarios f
         WHERE f.deleted_at IS NULL
           AND ${ativoExpr}
-          AND (? IS NULL OR f.empresa_id = ?)
+          AND f.empresa_id = ?
           AND NULLIF(TRIM(COALESCE(f.aeronave, '')), '') IS NOT NULL
           AND NOT EXISTS (
             SELECT 1
@@ -499,7 +489,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
       LIMIT 10
     `,
       )
-      .bind(empresaId ?? null, empresaId ?? null, empresaId ?? null, empresaId ?? null)
+      .bind(empresaId, empresaId)
       .all<{ aeronave: string; total: number; ativos: number }>();
 
     // Funcionários por função
@@ -513,13 +503,13 @@ app.get('/stats/dashboard', auth(), async (c) => {
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
         AND ${ativoExpr}
-        AND (? IS NULL OR f.empresa_id = ?)
+        AND f.empresa_id = ?
       GROUP BY UPPER(TRIM(COALESCE(f.funcao, '')))
       ORDER BY total DESC
       LIMIT 10
     `,
       )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .all<{ funcao: string; total: number; ativos: number }>();
 
     // Funcionários por setor
@@ -533,13 +523,13 @@ app.get('/stats/dashboard', auth(), async (c) => {
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
         AND ${ativoExpr}
-        AND (? IS NULL OR f.empresa_id = ?)
+        AND f.empresa_id = ?
       GROUP BY UPPER(TRIM(COALESCE(f.setor, '')))
       ORDER BY total DESC
       LIMIT 10
     `,
       )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .all<{ setor: string; total: number; ativos: number }>();
 
     // Distribuição por status (detalhada)
@@ -551,12 +541,12 @@ app.get('/stats/dashboard', auth(), async (c) => {
         COUNT(*) as total
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
-        AND (? IS NULL OR f.empresa_id = ?)
+        AND f.empresa_id = ?
       GROUP BY ${buildNormalizedFuncionarioStatusExpr('f')}
       ORDER BY total DESC
     `,
       )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .all<{ status: string; total: number }>();
 
     const qualificacoesStats = await db
@@ -586,7 +576,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
         WHERE qh.deleted_at IS NULL
           AND COALESCE(qh.renovada, 0) = 0
           AND ${ativoExpr}
-          AND (? IS NULL OR f.empresa_id = ?)
+          AND f.empresa_id = ?
           AND qh.id IN (
             SELECT MAX(sub.id)
             FROM qualificacoes_historico sub
@@ -615,7 +605,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
       FROM qualificacoes_ativas
     `,
       )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .first<{
         funcionarios_com_qualificacoes: number;
         total_qualificacoes: number;
@@ -673,7 +663,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
 app.get('/:fid/ferias', auth(), async (c) => {
   const db = c.env.DB;
   const funcionarioId = c.req.param('fid');
-  const empresaId = getEmpresaIdSafe(c);
+  const empresaId = getEmpresaId(c);
 
   const rows = await db
     .prepare(
@@ -692,10 +682,10 @@ app.get('/:fid/ferias', auth(), async (c) => {
        LEFT JOIN escalas_mensais em ON em.id = ea.escala_id AND em.deleted_at IS NULL
        WHERE ff.funcionario_id = ?
          AND ff.deleted_at IS NULL
-         AND (? IS NULL OR f.empresa_id = ?)
+         AND f.empresa_id = ?
        ORDER BY ff.data_inicio DESC`,
     )
-    .bind(funcionarioId, empresaId ?? null, empresaId ?? null)
+    .bind(funcionarioId, empresaId)
     .all<{
       id: string;
       funcionario_id: string;
@@ -721,7 +711,7 @@ app.get('/:fid/ferias', auth(), async (c) => {
 app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const funcionarioId = c.req.param('fid');
-  const empresaId = getEmpresaIdSafe(c);
+  const empresaId = getEmpresaId(c);
   const userId = String(extrairUsuarioAuditoria(c) || 'system');
   const body = (await c.req.json().catch(() => null)) as {
     data_inicio?: string;
@@ -747,10 +737,10 @@ app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
   const funcionario = await db
     .prepare(
       `SELECT id FROM funcionarios
-        WHERE id = ? AND deleted_at IS NULL AND (? IS NULL OR empresa_id = ?)
+        WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
         LIMIT 1`,
     )
-    .bind(funcionarioId, empresaId ?? null, empresaId ?? null)
+    .bind(funcionarioId, empresaId)
     .first<{ id: string }>();
 
   if (!funcionario) {
@@ -832,7 +822,7 @@ app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), as
   const db = c.env.DB;
   const funcionarioId = c.req.param('fid');
   const feriasId = c.req.param('feriasId');
-  const empresaId = getEmpresaIdSafe(c);
+  const empresaId = getEmpresaId(c);
 
   const periodo = await db
     .prepare(
@@ -848,10 +838,10 @@ app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), as
        WHERE ff.id = ?
          AND ff.funcionario_id = ?
          AND ff.deleted_at IS NULL
-         AND (? IS NULL OR f.empresa_id = ?)
+         AND f.empresa_id = ?
        LIMIT 1`,
     )
-    .bind(feriasId, funcionarioId, empresaId ?? null, empresaId ?? null)
+    .bind(feriasId, funcionarioId, empresaId)
     .first<{
       id: string;
       funcionario_id: string;
@@ -952,10 +942,10 @@ app.get('/:id', auth(), async (c) => {
       created_at, updated_at
     FROM funcionarios
     WHERE id = ? AND deleted_at IS NULL
-      AND (? IS NULL OR empresa_id = ?)
+      AND empresa_id = ?
   `,
     )
-    .bind(id, getEmpresaIdSafe(c) ?? null, getEmpresaIdSafe(c) ?? null)
+    .bind(id, getEmpresaId(c))
     .first<Funcionario>();
 
   if (!funcionario) {
@@ -1038,7 +1028,7 @@ app.get('/:id', auth(), async (c) => {
        ) treinamentos
        ORDER BY datetime(ordem_data) DESC, id DESC`,
     )
-    .bind(id, getEmpresaIdSafe(c), id, getEmpresaIdSafe(c))
+    .bind(id, getEmpresaId(c), id, getEmpresaId(c))
     .all<Record<string, unknown>>();
 
   const response: ApiResponse = {
