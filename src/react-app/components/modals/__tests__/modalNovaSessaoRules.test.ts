@@ -173,6 +173,26 @@ describe('modalNovaSessaoRules', () => {
         tipo_sessao_nome: 'Instrutor',
         modelo_aeronave: 'SK76',
       },
+      {
+        id: 7,
+        codigo: 'GLOBAL-EXA-01',
+        nome: 'Credenciamento Examinador',
+        tipo: 'RECORRENTE',
+        tipo_sessao_id: 23,
+        tipo_sessao_codigo: 'EXA',
+        tipo_sessao_nome: 'Examinador',
+        modelo_aeronave: null,
+      },
+      {
+        id: 8,
+        codigo: 'GLOBAL-INS-01',
+        nome: 'Treinamento Instrutor',
+        tipo: 'RECORRENTE',
+        tipo_sessao_id: 22,
+        tipo_sessao_codigo: 'INS',
+        tipo_sessao_nome: 'Instrutor',
+        modelo_aeronave: null,
+      },
     ];
 
     it('normaliza aliases de equipamento SK76', () => {
@@ -243,7 +263,18 @@ describe('modalNovaSessaoRules', () => {
         tipoDispositivo: 'SIMULADOR',
       });
 
-      expect(result.map((modelo) => modelo.codigo)).toEqual(['SK76-INS-01']);
+      expect(result.map((modelo) => modelo.codigo)).toEqual(['SK76-INS-01', 'GLOBAL-INS-01']);
+    });
+
+    it('permite modelo generico sem equipamento para tipos globais', () => {
+      const result = filterModelosSessaoForModal({
+        modelos,
+        tipoSessao: { codigo: 'EXA', nome: 'Examinador' },
+        equipamento: 'AW139',
+        tipoDispositivo: 'SIMULADOR',
+      });
+
+      expect(result.map((modelo) => modelo.codigo)).toEqual(['GLOBAL-EXA-01']);
     });
   });
 });

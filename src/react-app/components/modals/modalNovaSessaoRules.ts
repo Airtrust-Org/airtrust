@@ -155,6 +155,10 @@ function isModeloEquipamentoCompativel(
     modelo.dispositivo,
   ].map(normalizeModeloSessaoEquipamento);
 
+  if (candidatos.every((candidato) => !candidato)) {
+    return true;
+  }
+
   return candidatos.some((candidato) => candidato === esperado);
 }
 
