@@ -18,6 +18,7 @@ app.use('*', auth());
 interface Licenca {
   id: number;
   funcionario_id: number;
+  empresa_id?: number;
   tipo: string;
   numero: string;
   data_emissao: string;
@@ -28,6 +29,17 @@ interface Licenca {
   deleted_at?: string;
   funcionario_nome?: string;
   funcionario_matricula?: string;
+}
+
+async function findFuncionarioDaEmpresa(
+  db: D1Database,
+  funcionarioId: number,
+  empresaId: number,
+) {
+  return db
+    .prepare('SELECT id, empresa_id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .bind(funcionarioId, empresaId)
+    .first<{ id: number; empresa_id: number } | null>();
 }
 
 /**
@@ -48,16 +60,17 @@ app.get('/', async (c) => {
   let query = `
     SELECT 
       l.id, l.funcionario_id, l.tipo, l.numero,
-      l.data_emissao, l.data_vencimento, l.observacoes,
+      l.empresa_id, l.data_emissao, l.data_vencimento, l.observacoes,
       l.created_at, l.updated_at,
       f.nome as funcionario_nome,
       f.matricula as funcionario_matricula
     FROM licencas l
     INNER JOIN funcionarios f ON l.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
     WHERE l.deleted_at IS NULL
+      AND l.empresa_id = ?
   `;
 
-  const bindings: unknown[] = [empresaId];
+  const bindings: unknown[] = [empresaId, empresaId];
 
   if (funcionario_id) {
     query += ' AND l.funcionario_id = ?';
@@ -99,6 +112,7 @@ app.get('/', async (c) => {
  */
 app.get('/:id', async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const id = parseInt(c.req.param('id'));
 
   if (isNaN(id)) {
@@ -114,10 +128,10 @@ app.get('/:id', async (c) => {
       f.matricula as funcionario_matricula
     FROM licencas l
     INNER JOIN funcionarios f ON l.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
-    WHERE l.id = ? AND l.deleted_at IS NULL
+    WHERE l.id = ? AND l.empresa_id = ? AND l.deleted_at IS NULL
   `,
     )
-    .bind(getEmpresaId(c), id)
+    .bind(empresaId, id, empresaId)
     .first();
 
   if (!licenca) {
@@ -138,6 +152,7 @@ app.get('/:id', async (c) => {
  */
 app.post('/', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const body = await c.req.json();
 
   // Validações
@@ -154,10 +169,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   }
 
   // Verificar se funcionário existe
-  const funcionarioExiste = await db
-    .prepare('SELECT id FROM funcionarios WHERE id = ? AND deleted_at IS NULL')
-    .bind(body.funcionario_id)
-    .first();
+  const funcionarioExiste = await findFuncionarioDaEmpresa(db, Number(body.funcionario_id), empresaId);
 
   if (!funcionarioExiste) {
     return badRequest('Funcionário não encontrado');
@@ -166,9 +178,9 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   // Verificar duplicata (mesmo funcionário + tipo + número)
   const duplicata = await db
     .prepare(
-      'SELECT id FROM licencas WHERE funcionario_id = ? AND tipo = ? AND numero = ? AND deleted_at IS NULL',
+      'SELECT id FROM licencas WHERE funcionario_id = ? AND empresa_id = ? AND tipo = ? AND numero = ? AND deleted_at IS NULL',
     )
-    .bind(body.funcionario_id, body.tipo.toUpperCase(), body.numero)
+    .bind(body.funcionario_id, empresaId, body.tipo.toUpperCase(), body.numero)
     .first();
 
   if (duplicata) {
@@ -180,12 +192,13 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     .prepare(
       `
     INSERT INTO licencas (
-      funcionario_id, tipo, numero, data_emissao, data_vencimento, observacoes
-    ) VALUES (?, ?, ?, ?, ?, ?)
+      funcionario_id, empresa_id, tipo, numero, data_emissao, data_vencimento, observacoes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `,
     )
     .bind(
       body.funcionario_id,
+      empresaId,
       body.tipo.toUpperCase(),
       body.numero,
       body.data_emissao,
@@ -197,7 +210,10 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   const id = result.meta.last_row_id;
 
   // Buscar licença criada para auditoria
-  const created = await db.prepare('SELECT * FROM licencas WHERE id = ?').bind(id).first();
+  const created = await db
+    .prepare('SELECT * FROM licencas WHERE id = ? AND empresa_id = ?')
+    .bind(id, empresaId)
+    .first();
 
   // Registrar auditoria
   await registrarAuditoria({
@@ -223,6 +239,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
  */
 app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const id = parseInt(c.req.param('id'));
   const body = await c.req.json();
 
@@ -232,8 +249,8 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
 
   // Verificar se licença existe
   const licencaExistente = await db
-    .prepare('SELECT * FROM licencas WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare('SELECT * FROM licencas WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .bind(id, empresaId)
     .first();
 
   if (!licencaExistente) {
@@ -275,15 +292,18 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
 
   updates.push("updated_at = datetime('now')");
 
-  const query = `UPDATE licencas SET ${updates.join(', ')} WHERE id = ?`;
+  const query = `UPDATE licencas SET ${updates.join(', ')} WHERE id = ? AND empresa_id = ?`;
 
   await db
     .prepare(query)
-    .bind(...bindings, id)
+    .bind(...bindings, id, empresaId)
     .run();
 
   // Buscar licença atualizada para auditoria
-  const updated = await db.prepare('SELECT * FROM licencas WHERE id = ?').bind(id).first();
+  const updated = await db
+    .prepare('SELECT * FROM licencas WHERE id = ? AND empresa_id = ?')
+    .bind(id, empresaId)
+    .first();
 
   // Registrar auditoria
   await registrarAuditoria({
@@ -309,6 +329,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
  */
 app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
   const id = parseInt(c.req.param('id'));
 
   if (isNaN(id)) {
@@ -317,8 +338,8 @@ app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
 
   // Buscar licença antes de deletar para auditoria
   const antiga = await db
-    .prepare('SELECT * FROM licencas WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
+    .prepare('SELECT * FROM licencas WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    .bind(id, empresaId)
     .first();
 
   if (!antiga) {
@@ -326,8 +347,10 @@ app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   }
 
   const result = await db
-    .prepare("UPDATE licencas SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL")
-    .bind(id)
+    .prepare(
+      "UPDATE licencas SET deleted_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
+    )
+    .bind(id, empresaId)
     .run();
 
   if (result.meta.changes === 0) {
@@ -357,11 +380,13 @@ app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
  */
 app.get('/dashboard/licencas', async (c) => {
   const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
 
   try {
     // Total ativas
     const totalAtivas = await db
-      .prepare('SELECT COUNT(*) as total FROM licencas WHERE deleted_at IS NULL')
+      .prepare('SELECT COUNT(*) as total FROM licencas WHERE empresa_id = ? AND deleted_at IS NULL')
+      .bind(empresaId)
       .first();
 
     // Vencidas
@@ -371,9 +396,11 @@ app.get('/dashboard/licencas', async (c) => {
         SELECT COUNT(*) as total
         FROM licencas
         WHERE date(data_vencimento) < date('now')
+        AND empresa_id = ?
         AND deleted_at IS NULL
       `,
       )
+      .bind(empresaId)
       .first();
 
     // A vencer em 60 dias
@@ -383,9 +410,11 @@ app.get('/dashboard/licencas', async (c) => {
         SELECT COUNT(*) as total
         FROM licencas
         WHERE date(data_vencimento) BETWEEN date('now') AND date('now', '+60 days')
+        AND empresa_id = ?
         AND deleted_at IS NULL
       `,
       )
+      .bind(empresaId)
       .first();
 
     // Válidas (mais de 60 dias)
@@ -395,9 +424,11 @@ app.get('/dashboard/licencas', async (c) => {
         SELECT COUNT(*) as total
         FROM licencas
         WHERE date(data_vencimento) > date('now', '+60 days')
+        AND empresa_id = ?
         AND deleted_at IS NULL
       `,
       )
+      .bind(empresaId)
       .first();
 
     // Por tipo
@@ -407,10 +438,12 @@ app.get('/dashboard/licencas', async (c) => {
         SELECT tipo, COUNT(*) as total
         FROM licencas
         WHERE deleted_at IS NULL
+          AND empresa_id = ?
         GROUP BY tipo
         ORDER BY total DESC
       `,
       )
+      .bind(empresaId)
       .all();
 
     const response: ApiResponse = {
