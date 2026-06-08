@@ -164,6 +164,7 @@ describe('simuladores modelos dropdown + tipo cor', () => {
     expect(json.success).toBe(true);
     expect(json.data).toHaveLength(1);
     expect(state.lastModelosQuery).toContain('ms.empresa_id = ?');
+    expect(state.lastModelosQuery).toContain('ms.tipo_sessao_id IS NULL');
     expect(state.lastModelosQuery).toContain("UPPER(TRIM(COALESCE(ms.tipo, ''))) LIKE ?");
     expect(state.lastModelosQuery).toContain("UPPER(TRIM(COALESCE(ts.nome, ''))) LIKE ?");
     expect(state.lastModelosBinds).toContain('RECORR%');
@@ -187,6 +188,7 @@ describe('simuladores modelos dropdown + tipo cor', () => {
     expect(json.data).toHaveLength(1);
     expect(json.data[0].codigo).toBe('SK76-INI-01');
     expect(state.lastModelosBinds).toContain('INI');
+    expect(state.lastModelosQuery).toContain('ms.tipo_sessao_id IS NULL');
   });
 
   it('tipo inválido retorna vazio controlado sem erro HTTP', async () => {
