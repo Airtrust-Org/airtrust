@@ -132,6 +132,18 @@ describe('ModalNovaSessao — model/theme hydration (source-code contracts)', ()
     expect(modalSrc).toContain('endpoint para não esconder modelos válidos');
   });
 
+  it('simulador_modal_timeout_de_request_encerra_loading — loader path uses timeout + abort handling', () => {
+    expect(modalSrc).toContain('fetchJsonComTimeout');
+    expect(modalSrc).toContain('Tempo esgotado ao carregar modelos de sessão');
+    expect(modalSrc).toContain('window.clearTimeout(timeoutId)');
+  });
+
+  it('simulador_modal_mostra_erro_claro_quando_fetch_falha — render has explicit modelos error state', () => {
+    expect(modalSrc).toContain('erroModelosSessao');
+    expect(modalSrc).toContain('⚠️ {erroModelosSessao}');
+    expect(modalSrc).toContain('Não foi possível carregar os modelos de sessão para esta combinação');
+  });
+
   it('simulador_modal_nao_finaliza_hidratacao_prematuramente — cascade guard prevents premature hydration end', () => {
     // The auto-select effect must not set editHydrating=false until the cascade
     // has actually triggered a model fetch (tipoSessaoId set AND aeronaveCodigo set).
