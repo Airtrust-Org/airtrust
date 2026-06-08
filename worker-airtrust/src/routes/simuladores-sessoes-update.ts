@@ -380,6 +380,7 @@ app.put('/sessoes/:id', async (c) => {
     });
 
     const templateIdFinal = await resolveTemplateIdSessao(c.env.DB, {
+      empresaId,
       templateId: templateIdBody !== undefined ? templateIdBody : (a as any).template_id,
       temaSessao: b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
       tipoSessaoCodigo: b.tipo_sessao !== undefined ? b.tipo_sessao : a.tipo_sessao,
@@ -475,15 +476,19 @@ app.put('/sessoes/:id', async (c) => {
         let fallbackModelo = await c.env.DB.prepare(
           `SELECT ms.id, ms.nome
            FROM modelos_sessao ms
-           INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+           INNER JOIN tipos_sessao ts
+             ON ms.tipo_sessao_id = ts.id
+            AND ts.empresa_id = ?
+            AND ts.deleted_at IS NULL
            WHERE ts.codigo = ?
              AND ms.modelo_aeronave = ?
              AND ms.deleted_at IS NULL
+             AND ms.empresa_id = ?
              AND ms.gera_qualificacao = 1
            ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
            LIMIT 1`,
         )
-          .bind(tipoSessaoPut, modeloAeronaveSessao, upperNome)
+          .bind(empresaId, tipoSessaoPut, modeloAeronaveSessao, empresaId, upperNome)
           .first<{ id: number; nome: string }>();
 
         // Priority 2: any model matching tipo_sessao + modelo_aeronave (prefer name match)
@@ -491,14 +496,18 @@ app.put('/sessoes/:id', async (c) => {
           fallbackModelo = await c.env.DB.prepare(
             `SELECT ms.id, ms.nome
              FROM modelos_sessao ms
-             INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+             INNER JOIN tipos_sessao ts
+               ON ms.tipo_sessao_id = ts.id
+              AND ts.empresa_id = ?
+              AND ts.deleted_at IS NULL
              WHERE ts.codigo = ?
                AND ms.modelo_aeronave = ?
                AND ms.deleted_at IS NULL
+               AND ms.empresa_id = ?
              ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
              LIMIT 1`,
           )
-            .bind(tipoSessaoPut, modeloAeronaveSessao, upperNome)
+            .bind(empresaId, tipoSessaoPut, modeloAeronaveSessao, empresaId, upperNome)
             .first<{ id: number; nome: string }>();
         }
 

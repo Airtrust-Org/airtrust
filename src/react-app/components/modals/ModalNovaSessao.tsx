@@ -980,6 +980,48 @@ export default function ModalNovaSessao({
           }
         }
 
+        // Ensure the session's saved template model is always present in the list,
+        // even if client-side filtering would exclude it. This fixes the case where
+        // a model exists in Gestão but is not returned by the filtered endpoint
+        // due to mismatched equipamento/tipo fields.
+        const savedTemplateId = isEditMode ? sessao?.template_id : null;
+        if (
+          savedTemplateId &&
+          !modelosAtualizados.some((m: ModeloSessao) => m.id === savedTemplateId)
+        ) {
+          try {
+            const singleRes = await fetch(
+              `${API_BASE_URL}/simuladores/modelos-sessao/${savedTemplateId}`,
+              { headers: _authHeaders(), cache: 'no-store' },
+            );
+            if (singleRes.ok) {
+              const singleData = await singleRes.json();
+              if (singleData?.success && singleData?.data) {
+                const fetched = singleData.data;
+                // Normalize to the shape expected by the dropdown (ModeloSessao interface):
+                // { id, codigo, nome, tipo_sessao_id, tipo_aeronave, tipo, modelo_aeronave,
+                //   codigo_aeronave, tipo_sessao_codigo, tipo_sessao_nome }
+                const injected: ModeloSessao = {
+                  id: fetched.id,
+                  codigo: fetched.codigo || '',
+                  nome: fetched.nome || '',
+                  tipo_sessao_id: fetched.tipo_sessao_id ?? tipoSessaoIdParam,
+                  tipo_aeronave: fetched.tipo_aeronave || fetched.modelo_aeronave || codigoAeronave,
+                  tipo: fetched.tipo || null,
+                  modelo_aeronave: fetched.modelo_aeronave || codigoAeronave || null,
+                  codigo_aeronave: fetched.codigo_aeronave || null,
+                  tipo_sessao_codigo: fetched.tipo_sessao_codigo || null,
+                  tipo_sessao_nome: fetched.tipo_sessao_nome || null,
+                };
+                modelosAtualizados = [injected, ...modelosAtualizados];
+                console.log(`🔧 [${origem}] Modelo salvo #${savedTemplateId} injetado na lista`);
+              }
+            }
+          } catch (e) {
+            console.warn(`⚠️ [${origem}] Falha ao buscar modelo #${savedTemplateId}:`, e);
+          }
+        }
+
         setModelos(modelosAtualizados);
 
         if (
@@ -997,11 +1039,18 @@ export default function ModalNovaSessao({
         console.log(`✅ [${origem}] ${modelosAtualizados.length} modelos carregados`);
       } else {
         console.error(`❌ [${origem}] API retornou success=false`);
-        setModelos([]);
+        // Preserve existing modelos on error to avoid flashing empty state
+        // that triggers the legacy warning prematurely
+        if (modelos.length === 0) {
+          setModelos([]);
+        }
       }
     } catch (error) {
       console.error(`❌ [${origem}] Erro:`, error);
-      setModelos([]);
+      // Same: only clear if there were no models before
+      if (modelos.length === 0) {
+        setModelos([]);
+      }
     } finally {
       setLoadingModelos(false);
     }
@@ -1011,7 +1060,8 @@ export default function ModalNovaSessao({
   async function fetchModelos(tipoSessaoIdParam: number) {
     if (!aeronaveCodigo) {
       console.warn('⚠️ [fetchModelos] aeronaveCodigo vazio!');
-      setModelos([]);
+      // Only clear models if they were never loaded — preserves existing list
+      if (modelos.length === 0) setModelos([]);
       return;
     }
 
@@ -1026,7 +1076,8 @@ export default function ModalNovaSessao({
   ) {
     if (!codigoAeronave) {
       console.error('❌ [fetchModelosComCodigo] codigoAeronave vazio!');
-      setModelos([]);
+      // Only clear models if they were never loaded — preserves existing list
+      if (modelos.length === 0) setModelos([]);
       return;
     }
 
@@ -1055,9 +1106,13 @@ export default function ModalNovaSessao({
       if (modelos.length > 0 && !loadingModelos) {
         setEditHydrating(false);
       }
-      // If models loaded and they're empty (genuinely no models), also finish hydration
-      // BUT only if cascading hydration has been attempted (tipoSessaoId was set)
-      if (modelos.length === 0 && !loadingModelos && detailDone) {
+      // If models are empty and no fetch is in flight, finish hydration ONLY if the
+      // cascade has actually triggered a model load. tipoSessaoId !== null means Phase 2
+      // has identified the session type and called fetchModelosComCodigo.
+      // Without this guard, editHydrating can end prematurely (before models have a
+      // chance to load), which causes the legacy warning to flash or stick.
+      const cascadeTriggeredFetch = tipoSessaoId !== null && aeronaveCodigo !== '';
+      if (modelos.length === 0 && !loadingModelos && detailDone && cascadeTriggeredFetch) {
         setEditHydrating(false);
       }
       return;

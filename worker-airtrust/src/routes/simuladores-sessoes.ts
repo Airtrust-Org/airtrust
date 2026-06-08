@@ -352,8 +352,14 @@ app.get('/sessoes', async (c) => {
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       ${aeronaveJoin}
-      LEFT JOIN modelos_sessao ms ON sa.template_id = ms.id AND ms.deleted_at IS NULL
-      LEFT JOIN tipos_sessao ts_ref ON ms.tipo_sessao_id = ts_ref.id AND ts_ref.deleted_at IS NULL
+      LEFT JOIN modelos_sessao ms
+        ON sa.template_id = ms.id
+       AND ms.deleted_at IS NULL
+       AND ms.empresa_id = sa.empresa_id
+      LEFT JOIN tipos_sessao ts_ref
+        ON ms.tipo_sessao_id = ts_ref.id
+       AND ts_ref.deleted_at IS NULL
+       AND ts_ref.empresa_id = sa.empresa_id
       INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
       WHERE sa.deleted_at IS NULL
@@ -414,8 +420,14 @@ app.get('/sessoes', async (c) => {
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       ${aeronaveJoin}
-      LEFT JOIN modelos_sessao ms ON sa.template_id = ms.id AND ms.deleted_at IS NULL
-      LEFT JOIN tipos_sessao ts_ref ON ms.tipo_sessao_id = ts_ref.id AND ts_ref.deleted_at IS NULL
+      LEFT JOIN modelos_sessao ms
+        ON sa.template_id = ms.id
+       AND ms.deleted_at IS NULL
+       AND ms.empresa_id = sa.empresa_id
+      LEFT JOIN tipos_sessao ts_ref
+        ON ms.tipo_sessao_id = ts_ref.id
+       AND ts_ref.deleted_at IS NULL
+       AND ts_ref.empresa_id = sa.empresa_id
       INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
       -- LEFT JOIN participantes
@@ -564,6 +576,7 @@ app.post('/sessoes', async (c) => {
       normalizeModeloAeronave(tipo_aeronave) ||
       (await getSimuladorModeloAeronave(c.env.DB, simulador_id));
     const templateIdFinal = await resolveTemplateIdSessao(c.env.DB, {
+      empresaId,
       templateId: template_id,
       modeloSessaoId: modelo_sessao_id,
       temaSessao: tema_sessao,
@@ -912,13 +925,17 @@ app.post('/sessoes', async (c) => {
         const modeloEncontrado = await c.env.DB.prepare(
           `SELECT ms.id 
            FROM modelos_sessao ms
-           INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+           INNER JOIN tipos_sessao ts
+             ON ms.tipo_sessao_id = ts.id
+            AND ts.empresa_id = ?
+            AND ts.deleted_at IS NULL
            WHERE ts.codigo = ?
              AND ms.modelo_aeronave = ?
              AND ms.deleted_at IS NULL
+             AND ms.empresa_id = ?
            LIMIT 1`,
         )
-          .bind(tipo_sessao, tipo_aeronave)
+          .bind(empresaId, tipo_sessao, tipo_aeronave, empresaId)
           .first();
 
         if (modeloEncontrado) {
@@ -1000,15 +1017,19 @@ app.post('/sessoes', async (c) => {
       let fallbackModelo = await c.env.DB.prepare(
         `SELECT ms.id
          FROM modelos_sessao ms
-         INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+         INNER JOIN tipos_sessao ts
+           ON ms.tipo_sessao_id = ts.id
+          AND ts.empresa_id = ?
+          AND ts.deleted_at IS NULL
          WHERE ts.codigo = ?
            AND ms.modelo_aeronave = ?
            AND ms.deleted_at IS NULL
+           AND ms.empresa_id = ?
            AND ms.gera_qualificacao = 1
          ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
          LIMIT 1`,
       )
-        .bind(tipo_sessao, modeloAeronaveSessao, upperNome)
+        .bind(empresaId, tipo_sessao, modeloAeronaveSessao, empresaId, upperNome)
         .first<{ id: number }>();
 
       // Priority 2: any matching model, prefer name match
@@ -1016,14 +1037,18 @@ app.post('/sessoes', async (c) => {
         fallbackModelo = await c.env.DB.prepare(
           `SELECT ms.id
            FROM modelos_sessao ms
-           INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+           INNER JOIN tipos_sessao ts
+             ON ms.tipo_sessao_id = ts.id
+            AND ts.empresa_id = ?
+            AND ts.deleted_at IS NULL
            WHERE ts.codigo = ?
              AND ms.modelo_aeronave = ?
              AND ms.deleted_at IS NULL
+             AND ms.empresa_id = ?
            ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
            LIMIT 1`,
         )
-          .bind(tipo_sessao, modeloAeronaveSessao, upperNome)
+          .bind(empresaId, tipo_sessao, modeloAeronaveSessao, empresaId, upperNome)
           .first<{ id: number }>();
       }
 
@@ -1145,8 +1170,14 @@ app.get('/sessoes/:id', async (c) => {
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
       ${aeronaveJoin}
-      LEFT JOIN modelos_sessao ms ON sa.template_id = ms.id AND ms.deleted_at IS NULL
-      LEFT JOIN tipos_sessao ts_ref ON ms.tipo_sessao_id = ts_ref.id AND ts_ref.deleted_at IS NULL
+      LEFT JOIN modelos_sessao ms
+        ON sa.template_id = ms.id
+       AND ms.deleted_at IS NULL
+       AND ms.empresa_id = sa.empresa_id
+      LEFT JOIN tipos_sessao ts_ref
+        ON ms.tipo_sessao_id = ts_ref.id
+       AND ts_ref.deleted_at IS NULL
+       AND ts_ref.empresa_id = sa.empresa_id
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
       WHERE sa.id = ? AND sa.deleted_at IS NULL`,
     )
