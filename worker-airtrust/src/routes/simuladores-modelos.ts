@@ -555,7 +555,12 @@ app.get('/modelos-sessao', async (c) => {
 
       const fallbackTipo = buildTipoSessaoFallbackSql(tipoSessaoCodigo, tipoSessaoNome);
       if (fallbackTipo.clauses.length > 0) {
-        tipoClauses.push(...fallbackTipo.clauses);
+        tipoClauses.push(
+          `(
+            ms.tipo_sessao_id IS NULL AND
+            (${fallbackTipo.clauses.join(' OR ')})
+          )`,
+        );
         params.push(...fallbackTipo.params);
       }
 
