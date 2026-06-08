@@ -5,6 +5,8 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardList,
+  Edit2,
+  Eye,
   FileClock,
   Mail,
   Plus,
@@ -63,6 +65,8 @@ interface TipoQualificacaoOption {
   id: number;
   nome: string;
   codigo?: string | null;
+  carga_horaria_inicial?: number | null;
+  carga_horaria_recorrente?: number | null;
 }
 
 interface TreinamentoFormState {
@@ -95,6 +99,7 @@ interface TreinamentoFormState {
   sala: string;
   equipamento_descricao: string;
   limite_participantes: string;
+  tipo_treinamento: 'INICIAL' | 'RECORRENTE';
   dias: Array<{ data: string; hora_inicio: string; hora_fim: string }>;
 }
 
@@ -211,6 +216,13 @@ function formatDateLabel(value?: string | null): string {
   }).format(date);
 }
 
+function formatDateRange(inicio?: string | null, fim?: string | null): string {
+  if (!inicio) return 'Sem data';
+  const label = formatDateLabel(inicio);
+  if (!fim || fim === inicio) return label;
+  return `${label} → ${formatDateLabel(fim)}`;
+}
+
 function formatDateTimeLabel(value?: string | null): string {
   if (!value) return 'Sem registro';
   const date = new Date(value);
@@ -267,7 +279,9 @@ function getParticipantNames(item: TreinamentoPlanejado): string[] {
   return [
     ...new Set(
       (item.participantes || [])
-        .map((participant) => participant.funcionario_nome?.trim())
+        .map((participant) =>
+          (participant.funcionario_guerra || participant.funcionario_nome)?.trim(),
+        )
         .filter((name): name is string => Boolean(name)),
     ),
   ];
@@ -279,7 +293,9 @@ function getEventoTitulo(item: TreinamentoPlanejado): string {
     ...new Set(
       (item.participantes || [])
         .filter((participant) => Boolean(participant.qualificacao_historico_id))
-        .map((participant) => participant.funcionario_nome?.trim())
+        .map((participant) =>
+          (participant.funcionario_guerra || participant.funcionario_nome)?.trim(),
+        )
         .filter((name): name is string => Boolean(name)),
     ),
   ];
@@ -472,6 +488,7 @@ function createEmptyForm(today: string): TreinamentoFormState {
     sala: '',
     equipamento_descricao: '',
     limite_participantes: '',
+    tipo_treinamento: 'RECORRENTE',
     dias: [{ data: today, hora_inicio: '08:00', hora_fim: '17:00' }],
   };
 }
@@ -500,6 +517,7 @@ function mapTreinamentoToForm(item: TreinamentoPlanejado): TreinamentoFormState 
     sala: item.sala || '',
     equipamento_descricao: item.equipamento_descricao || '',
     limite_participantes: item.limite_participantes ? String(item.limite_participantes) : '',
+    tipo_treinamento: 'RECORRENTE',
     dias:
       item.dias && item.dias.length > 0
         ? item.dias
@@ -575,6 +593,9 @@ export default function TreinamentosPlanejadosPage({
   const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
   const navigate = useNavigate();
   const canManage = !isAluno && (isAdmin || isGestor || isInstrutor || can('qualificacoes.view'));
+
+  const planejadosActionButtonClass =
+    'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
   const today = useMemo(() => getTodayYmd(), []);
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(forcedTab || 'calendario');
   const [mesReferencia, setMesReferencia] = useState(today.slice(0, 7));
@@ -1031,6 +1052,7 @@ export default function TreinamentosPlanejadosPage({
       limite_participantes: formState.limite_participantes
         ? Number(formState.limite_participantes)
         : null,
+      tipo_treinamento: formState.tipo_treinamento,
       instrutor_ids: formState.instrutor_id ? [Number(formState.instrutor_id)] : [],
       dias: dias.map((dia) => ({
         ...dia,
@@ -1633,7 +1655,7 @@ export default function TreinamentosPlanejadosPage({
                             data-sessao-id={simulatorSessionId || undefined}
                           >
                             <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                              {formatDateLabel(item.data_prevista)}
+                              {formatDateRange(item.data_prevista, item.data_fim)}
                             </td>
                             <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                               {formatHourRange(item.hora_inicio, item.hora_fim)}
@@ -1658,24 +1680,6 @@ export default function TreinamentosPlanejadosPage({
                             </td>
                             <td className="max-w-[220px] px-4 py-3 text-slate-600">
                               <p>{participantSummary}</p>
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {item.participantes.slice(0, 3).map((participante) => (
-                                  <FuncionarioLink
-                                    key={`${item.id}-${participante.funcionario_id}`}
-                                    funcionarioId={participante.funcionario_id}
-                                    nome={
-                                      participante.funcionario_guerra ||
-                                      participante.funcionario_nome
-                                    }
-                                    className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
-                                  />
-                                ))}
-                                {item.participantes.length > 3 && (
-                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                    +{item.participantes.length - 3}
-                                  </span>
-                                )}
-                              </div>
                             </td>
                             <td className="px-4 py-3 text-slate-600">
                               <FuncionarioLink
@@ -1691,27 +1695,35 @@ export default function TreinamentosPlanejadosPage({
                               <StatusBadge status={item.status} />
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  variant="secondary"
-                                  icon="visibility"
+                              <div className="flex justify-end gap-1">
+                                <button
+                                  type="button"
                                   onClick={() => abrirDetalhes(item)}
+                                  title={
+                                    simulatorSessionId
+                                      ? 'Editar sessão'
+                                      : item.read_only
+                                        ? 'Abrir origem'
+                                        : 'Detalhes'
+                                  }
+                                  className={planejadosActionButtonClass}
                                   data-testid={
                                     simulatorSessionId
                                       ? `simulador-editar-sessao-${simulatorSessionId}`
                                       : `treinamento-detalhes-${item.id}`
                                   }
                                 >
-                                  {simulatorSessionId
-                                    ? 'Editar sessão'
-                                    : item.read_only
-                                      ? 'Abrir origem'
-                                      : 'Detalhes'}
-                                </Button>
+                                  <Eye className="w-4 h-4 text-slate-600" />
+                                </button>
                                 {!item.read_only ? (
-                                  <Button variant="ghost" icon="edit" onClick={() => abrirEditor(item)}>
-                                    Editar
-                                  </Button>
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirEditor(item)}
+                                    title="Editar"
+                                    className={planejadosActionButtonClass}
+                                  >
+                                    <Edit2 className="w-4 h-4 text-indigo-600" />
+                                  </button>
                                 ) : null}
                               </div>
                             </td>
@@ -1880,11 +1892,19 @@ export default function TreinamentosPlanejadosPage({
                     const tipo = (tiposQualificacao as TipoQualificacaoOption[]).find(
                       (item) => String(item.id) === selectedId,
                     );
-                    setFormState((current) => ({
-                      ...current,
-                      qualificacao_tipo_id: selectedId,
-                      titulo: current.titulo || tipo?.nome || '',
-                    }));
+                    setFormState((current) => {
+                      const cargaHoraria =
+                        current.tipo_treinamento === 'INICIAL'
+                          ? tipo?.carga_horaria_inicial
+                          : tipo?.carga_horaria_recorrente;
+                      return {
+                        ...current,
+                        qualificacao_tipo_id: selectedId,
+                        titulo: current.titulo || tipo?.nome || '',
+                        carga_horaria_prevista:
+                          cargaHoraria != null ? String(cargaHoraria) : current.carga_horaria_prevista,
+                      };
+                    });
                   }}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
                 >
@@ -1916,6 +1936,80 @@ export default function TreinamentosPlanejadosPage({
                   ))}
                 </select>
               </label>
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Tipo de treinamento</span>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                    formState.tipo_treinamento === 'INICIAL'
+                      ? 'border-amber-300 bg-amber-50'
+                      : 'border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="tipo_treinamento_form"
+                    checked={formState.tipo_treinamento === 'INICIAL'}
+                    onChange={() => {
+                      setFormState((current) => {
+                        const tipo = (tiposQualificacao as TipoQualificacaoOption[]).find(
+                          (item) => String(item.id) === current.qualificacao_tipo_id,
+                        );
+                        const cargaHoraria = tipo?.carga_horaria_inicial;
+                        return {
+                          ...current,
+                          tipo_treinamento: 'INICIAL',
+                          carga_horaria_prevista:
+                            cargaHoraria != null ? String(cargaHoraria) : current.carga_horaria_prevista,
+                        };
+                      });
+                    }}
+                    className="mt-1 h-4 w-4 border-slate-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="flex flex-col">
+                    <span className="text-sm font-medium text-slate-900">Inicial</span>
+                    <span className="text-xs text-slate-500">
+                      Primeira concessão ou formação inicial da qualificação.
+                    </span>
+                  </span>
+                </label>
+                <label
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                    formState.tipo_treinamento === 'RECORRENTE'
+                      ? 'border-blue-300 bg-blue-50'
+                      : 'border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="tipo_treinamento_form"
+                    checked={formState.tipo_treinamento === 'RECORRENTE'}
+                    onChange={() => {
+                      setFormState((current) => {
+                        const tipo = (tiposQualificacao as TipoQualificacaoOption[]).find(
+                          (item) => String(item.id) === current.qualificacao_tipo_id,
+                        );
+                        const cargaHoraria = tipo?.carga_horaria_recorrente;
+                        return {
+                          ...current,
+                          tipo_treinamento: 'RECORRENTE',
+                          carga_horaria_prevista:
+                            cargaHoraria != null ? String(cargaHoraria) : current.carga_horaria_prevista,
+                        };
+                      });
+                    }}
+                    className="mt-1 h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="flex flex-col">
+                    <span className="text-sm font-medium text-slate-900">Periódico</span>
+                    <span className="text-xs text-slate-500">
+                      Recorrência, reciclagem ou atualização de qualificação existente.
+                    </span>
+                  </span>
+                </label>
+              </div>
             </div>
 
             <label className="space-y-1.5">

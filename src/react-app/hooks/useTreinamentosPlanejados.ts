@@ -273,6 +273,7 @@ export interface TreinamentoPlanejadoInput {
   sala?: string | null;
   equipamento_descricao?: string | null;
   limite_participantes?: number | null;
+  tipo_treinamento?: 'INICIAL' | 'RECORRENTE';
   instrutor_ids?: number[];
   dias?: Array<{
     data: string;

@@ -153,6 +153,7 @@ const eventoSchema = z.object({
   sala: z.string().trim().max(120).optional().nullable(),
   equipamento_descricao: z.string().trim().max(200).optional().nullable(),
   limite_participantes: z.number().int().min(1).max(1000).optional().nullable(),
+  tipo_treinamento: z.enum(['INICIAL', 'RECORRENTE']).optional(),
   instrutor_ids: z.array(z.number().int().positive()).optional().default([]),
   dias: z.array(diaSchema).min(1).max(90).optional(),
 });
