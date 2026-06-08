@@ -11,6 +11,10 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { Env, Variables } from '../types';
 import { AppError } from '../utils/errors';
 import { hasUsuariosEmpresasTable } from '../utils/db-schema';
+import {
+  isPlatformAdminAccess,
+  resolvePlatformAccessState,
+} from '../lib/rbac/platform-access';
 
 function isDevAuthBypassEnabled(env: Env): boolean {
   return env.ENVIRONMENT === 'development' && env.ENABLE_DEV_AUTH_BYPASS === 'true';
@@ -53,8 +57,11 @@ export function isAirtrustPlatformTenant(
 export function isPlatformAdminContext(
   c: Context<{ Bindings: Env; Variables: Variables }>,
 ): boolean {
-  const tenantCtx = getTenantContext(c);
-  return isAirtrustPlatformTenant(tenantCtx) || isLegacyPlatformAdminUserId(c.get('userId'));
+  const accessState = c.get('platformAccessState');
+  if (accessState) {
+    return isPlatformAdminAccess(accessState);
+  }
+  return isLegacyPlatformAdminUserId(c.get('userId'));
 }
 
 // Roles hierarchy para verificação de permissões
@@ -209,6 +216,8 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
     const userId = c.get('userId');
     const empresaIdFromJwt = c.get('empresaId');
     const userRoleFromJwt = c.get('userRole');
+    const platformAccessState = await resolvePlatformAccessState(c.env.DB, userId);
+    c.set('platformAccessState', platformAccessState);
 
     if (!empresaIdFromJwt) {
       throw new AppError('Empresa não identificada no token', 401, 'TENANT_REQUIRED');
@@ -270,7 +279,7 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
     if (!result) {
       const userIdNumber = normalizeContextUserId(userId);
 
-      if (isLegacyPlatformAdminUserId(userIdNumber)) {
+      if (isPlatformAdminAccess(platformAccessState)) {
         const platformFallbackAtivo = await db
           .prepare(
             `
@@ -346,7 +355,7 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
 
           c.set('tenantContext', tenantContext);
           console.log(
-            `[TENANT] platform fallback empresa=${platformFallback.codigo} user=${userIdNumber}`,
+            `[TENANT] platform fallback empresa=${platformFallback.codigo} user=${userIdNumber} source=${platformAccessState.source}`,
           );
 
           return next();

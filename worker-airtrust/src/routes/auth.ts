@@ -22,7 +22,7 @@ import { logAudit } from '../utils/db'; // SECURITY: Import audit logging
 import { buildAuditMetadata } from '../lib/audit/context';
 import { enviarEmailAlert } from '../cron/notificacoes';
 import { isAdminRole, normalizeAirtrustRole } from '../utils/role-resolution';
-import { isLegacyPlatformAdminUserId } from '../middleware/tenant';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 
 // Tipar variáveis adicionadas ao contexto pelo middleware auth()
 type AuthVars = {
@@ -107,7 +107,8 @@ async function resolveUserEmpresaId(db: D1Database, userId: number): Promise<num
     .first<{ empresa_id: number }>();
 
   if (!empresa?.empresa_id) {
-    if (isLegacyPlatformAdminUserId(userId)) {
+    const platformAccessState = await resolvePlatformAccessState(db, userId);
+    if (isPlatformAdminAccess(platformAccessState)) {
       const fallbackEmpresaAtiva = await db
         .prepare(
           `
@@ -1237,7 +1238,8 @@ authRoutes.get('/empresas', auth(), async (c) => {
 
   const db = c.env.DB;
   const empresaIdAtual = await resolveUserEmpresaId(db, userId);
-  const isPlatformAdmin = isLegacyPlatformAdminUserId(userId);
+  const platformAccessState = await resolvePlatformAccessState(db, userId);
+  const isPlatformAdmin = isPlatformAdminAccess(platformAccessState);
 
   const empresas = await db
     .prepare(
@@ -1328,7 +1330,8 @@ authRoutes.post('/select-empresa', auth(), async (c) => {
   const userIdRaw = c.get('userId');
   const userId = typeof userIdRaw === 'string' ? Number(userIdRaw) : (userIdRaw as number);
   const db = c.env.DB;
-  const isPlatformAdmin = isLegacyPlatformAdminUserId(userId);
+  const platformAccessState = await resolvePlatformAccessState(db, userId);
+  const isPlatformAdmin = isPlatformAdminAccess(platformAccessState);
 
   const vinculo = await db
     .prepare(

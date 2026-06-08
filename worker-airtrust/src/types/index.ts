@@ -1,5 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { PlatformAccessState } from '../lib/rbac/platform-access';
+
 /**
  * TYPES - Definições de tipos globais do Worker
  *
@@ -271,6 +273,7 @@ export interface Variables {
   userEmail: string;
   userRole: string;
   funcionarioId?: number | null;
+  platformAccessState?: PlatformAccessState;
   tenantContext: {
     empresaId: number;
     empresaCodigo: string;
