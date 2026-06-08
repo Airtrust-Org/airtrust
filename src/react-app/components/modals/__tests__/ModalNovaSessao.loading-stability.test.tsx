@@ -72,8 +72,12 @@ function buildFetchMock(options: TestOptions = {}) {
   const tiposSessao = {
     success: true,
     data: [
+      { id: 23, codigo: 'EXA', nome: 'Examinador' },
       { id: 14, codigo: 'INI', nome: 'Inicial' },
+      { id: 22, codigo: 'INS', nome: 'Instrutor' },
+      { id: 2, codigo: 'OPC', nome: 'Operator Proficiency Check' },
       { id: 9, codigo: 'PER', nome: 'Periódico' },
+      { id: 21, codigo: 'SEM', nome: 'Semestral' },
     ],
   };
 
@@ -130,6 +134,59 @@ function buildFetchMock(options: TestOptions = {}) {
     ],
   };
 
+  const modelosSem = {
+    success: true,
+    data: [
+      {
+        id: 75,
+        codigo: 'SK76-S-01/02',
+        nome: 'SK76 - SEMESTRAL - 01/02: LOFT e OPERAÇÃO NOTURNA',
+        tipo_sessao_id: 21,
+        tipo_sessao_codigo: 'SEM',
+        tipo_sessao_nome: 'Semestral',
+        modelo_aeronave: 'SK76',
+      },
+      {
+        id: 76,
+        codigo: 'SK76-S-02/02',
+        nome: 'SK76 - SEMESTRAL - 02/02: LOFT e CHECK DE IFR',
+        tipo_sessao_id: 21,
+        tipo_sessao_codigo: 'SEM',
+        tipo_sessao_nome: 'Semestral',
+        modelo_aeronave: 'SK76',
+      },
+    ],
+  };
+
+  const modelosGlobais = {
+    success: true,
+    data: [
+      {
+        id: 54,
+        codigo: 'TRE-INST',
+        nome: 'TREINAMENTO DE INSTRUTOR DE VOO',
+        tipo: 'RECORRENTE',
+        tipo_sessao_id: 22,
+        tipo_sessao_codigo: 'INS',
+        tipo_sessao_nome: 'Instrutor',
+        modelo_aeronave: null,
+      },
+      {
+        id: 55,
+        codigo: 'CRED-EXA',
+        nome: 'CREDENCIAMENTO DE EXAMINADOR',
+        tipo: 'RECORRENTE',
+        tipo_sessao_id: 23,
+        tipo_sessao_codigo: 'EXA',
+        tipo_sessao_nome: 'Examinador',
+        modelo_aeronave: null,
+      },
+      ...modelosIni.data,
+      ...modelosPer.data,
+      ...modelosSem.data,
+    ],
+  };
+
   function jsonResponse(body: unknown, delayMs = 0): Promise<Response> {
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -155,8 +212,13 @@ function buildFetchMock(options: TestOptions = {}) {
     if (url.includes('/simuladores/modelos-sessao?')) {
       modelRequestUrls.push(url);
       const tipoSessaoId = new URL(url).searchParams.get('tipo_sessao_id');
+      if (!tipoSessaoId) return jsonResponse(modelosGlobais);
       if (tipoSessaoId === '14') return jsonResponse(modelosIni, iniDelayMs);
       if (tipoSessaoId === '9') return jsonResponse(modelosPer, perDelayMs);
+      if (tipoSessaoId === '21') return jsonResponse(modelosSem);
+      if (tipoSessaoId === '22' || tipoSessaoId === '23' || tipoSessaoId === '2') {
+        return jsonResponse({ success: true, data: [] });
+      }
       throw new Error(`tipo_sessao_id inesperado: ${tipoSessaoId}`);
     }
     if (url.endsWith('/simuladores')) return jsonResponse(simuladores);
@@ -255,5 +317,57 @@ describe('ModalNovaSessao loading stability', () => {
 
     expect(modelRequestUrls.filter((url) => url.includes('tipo_sessao_id=14'))).toHaveLength(1);
     expect(modelRequestUrls.filter((url) => url.includes('tipo_sessao_id=9'))).toHaveLength(1);
+  });
+
+  it('usa_fallback_global_para_exa_e_ins_sem_misturar_sem_e_vazio_opc', async () => {
+    const { fetchMock, modelRequestUrls } = buildFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    renderModal();
+
+    await selecionarFluxoSk76(user);
+
+    const tipoSelect = screen.getAllByRole('combobox')[2];
+
+    await user.selectOptions(tipoSelect, '23');
+    await waitFor(() => {
+      const modeloSelect = screen.getAllByRole('combobox')[3] as HTMLSelectElement;
+      const optionLabels = Array.from(modeloSelect.options).map((option) => option.textContent);
+      expect(optionLabels).toContain('CRED-EXA - CREDENCIAMENTO DE EXAMINADOR');
+    });
+
+    await user.selectOptions(tipoSelect, '22');
+    await waitFor(() => {
+      const modeloSelect = screen.getAllByRole('combobox')[3] as HTMLSelectElement;
+      const optionLabels = Array.from(modeloSelect.options).map((option) => option.textContent);
+      expect(optionLabels).toContain('TRE-INST - TREINAMENTO DE INSTRUTOR DE VOO');
+    });
+
+    await user.selectOptions(tipoSelect, '21');
+    await waitFor(() => {
+      const modeloSelect = screen.getAllByRole('combobox')[3] as HTMLSelectElement;
+      const optionLabels = Array.from(modeloSelect.options).map((option) => option.textContent);
+      expect(optionLabels).toContain('SK76-S-01/02 - SK76 - SEMESTRAL - 01/02: LOFT e OPERAÇÃO NOTURNA');
+      expect(optionLabels.some((label) => label?.includes('TREINAMENTO DE INSTRUTOR'))).toBe(false);
+    });
+
+    await user.selectOptions(tipoSelect, '2');
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Nenhum modelo cadastrado para esta combinação/i),
+      ).toBeInTheDocument();
+    });
+
+    const countByTipoSessaoId = (tipoSessaoId: string) =>
+      modelRequestUrls.filter(
+        (url) => new URL(url).searchParams.get('tipo_sessao_id') === tipoSessaoId,
+      ).length;
+
+    expect(countByTipoSessaoId('23')).toBe(1);
+    expect(countByTipoSessaoId('22')).toBe(1);
+    expect(countByTipoSessaoId('21')).toBe(1);
+    expect(countByTipoSessaoId('2')).toBe(1);
+    expect(modelRequestUrls.filter((url) => !url.includes('tipo_sessao_id='))).toHaveLength(3);
   });
 });
