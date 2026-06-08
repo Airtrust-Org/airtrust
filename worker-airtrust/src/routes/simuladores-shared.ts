@@ -22,6 +22,7 @@ export const TipoSessaoSchema = z.object({
   codigo: z.string().min(1, 'Código obrigatório').max(20),
   nome: z.string().min(1, 'Nome obrigatório').max(100),
   descricao: z.string().max(500).nullish(),
+  cor: z.string().max(20).nullish(),
 });
 
 export const ModeloSessaoSchema = z.object({

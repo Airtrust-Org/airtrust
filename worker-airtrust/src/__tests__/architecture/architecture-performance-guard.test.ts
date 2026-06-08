@@ -17,8 +17,8 @@ const LARGE_FILE_LINE_CAPS = {
 } as const;
 
 const SQL_PREPARE_CAPS = {
-  // Acknowledged growth: schema guards for mixed local/prod model catalogs.
-  'routes/simuladores-modelos.ts': 65,
+  // Acknowledged growth: tipo_sessao fallback normalization + tipos_sessao cor persistence guard.
+  'routes/simuladores-modelos.ts': 69,
   'routes/auth.ts': 52,
   'routes/simuladores-sessoes-update.ts': 48,
   'routes/lms-cursos.ts': 44,

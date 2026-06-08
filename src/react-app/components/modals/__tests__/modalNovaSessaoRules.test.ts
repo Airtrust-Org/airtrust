@@ -163,6 +163,16 @@ describe('modalNovaSessaoRules', () => {
         tipo_sessao_nome: 'Inicial',
         modelo_aeronave: 'SK76',
       },
+      {
+        id: 6,
+        codigo: 'SK76-INS-01',
+        nome: 'SK76 Instrutor',
+        tipo: 'INSTRUTOR',
+        tipo_sessao_id: 30,
+        tipo_sessao_codigo: 'INS',
+        tipo_sessao_nome: 'Instrutor',
+        modelo_aeronave: 'SK76',
+      },
     ];
 
     it('normaliza aliases de equipamento SK76', () => {
@@ -223,6 +233,17 @@ describe('modalNovaSessaoRules', () => {
       });
 
       expect(result.map((modelo) => modelo.codigo)).not.toContain('SK76-AER-01');
+    });
+
+    it('suporta tipos adicionais (INS) sem misturar outros tipos', () => {
+      const result = filterModelosSessaoForModal({
+        modelos,
+        tipoSessao: { codigo: 'INS', nome: 'Instrutor' },
+        equipamento: 'SK76',
+        tipoDispositivo: 'SIMULADOR',
+      });
+
+      expect(result.map((modelo) => modelo.codigo)).toEqual(['SK76-INS-01']);
     });
   });
 });
