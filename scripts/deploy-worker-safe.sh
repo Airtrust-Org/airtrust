@@ -20,8 +20,25 @@ if [[ "$HEAD_SHA" != "$ORIGIN_MAIN_SHA" ]]; then
   exit 1
 fi
 
-DEPLOY_VERSION="${APP_VERSION:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")-$(git -C "$ROOT_DIR" rev-parse --short HEAD)}"
-BUILD_TIME="${APP_BUILD_TIME:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
+# DPLY-1: Abort if APP_VERSION is set externally without an explicit override flag.
+# A stale exported APP_VERSION silently stamps deployed code with the wrong hash.
+if [[ -n "${APP_VERSION:-}" && "${AIRTRUST_ALLOW_APP_VERSION_OVERRIDE:-0}" != "1" ]]; then
+  echo "❌ APP_VERSION externo detectado: '$APP_VERSION'" >&2
+  echo "   Isso pode causar version stamp obsoleto no deploy." >&2
+  echo "   Remova a variável antes de prosseguir:" >&2
+  echo "     unset APP_VERSION && npm run deploy:worker:safe" >&2
+  echo "   Ou force override explícito (use com consciência):" >&2
+  echo "     AIRTRUST_ALLOW_APP_VERSION_OVERRIDE=1 npm run deploy:worker:safe" >&2
+  exit 1
+fi
+
+# Always generate a fresh stamp from the current HEAD.
+DEPLOY_VERSION="$(date -u +"%Y-%m-%dT%H:%M:%SZ")-$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
+# Allow intentional manual stamp only when override is explicitly set.
+if [[ "${AIRTRUST_ALLOW_APP_VERSION_OVERRIDE:-0}" == "1" && -n "${APP_VERSION:-}" ]]; then
+  DEPLOY_VERSION="$APP_VERSION"
+fi
+BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 TMP_WRANGLER="$(mktemp "$WORKER_DIR/wrangler.safe-deploy.XXXXXX.toml")"
 
 cleanup() {
