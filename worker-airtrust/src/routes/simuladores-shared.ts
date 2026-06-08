@@ -363,6 +363,7 @@ export function isFullAccessRole(role: string): boolean {
 export async function resolveTemplateIdSessao(
   db: D1Database,
   params: {
+    empresaId: number;
     templateId?: unknown;
     modeloSessaoId?: unknown;
     temaSessao?: unknown;
@@ -387,15 +388,27 @@ export async function resolveTemplateIdSessao(
     .prepare(
       `SELECT ms.id
        FROM modelos_sessao ms
-       LEFT JOIN tipos_sessao ts ON ts.id = ms.tipo_sessao_id AND ts.deleted_at IS NULL
+       LEFT JOIN tipos_sessao ts
+         ON ts.id = ms.tipo_sessao_id
+        AND ts.deleted_at IS NULL
+        AND ts.empresa_id = ?
        WHERE ms.deleted_at IS NULL
+         AND ms.empresa_id = ?
          AND ms.nome = ?
          AND (? = '' OR UPPER(COALESCE(ts.codigo, '')) = ?)
          AND (? = '' OR UPPER(COALESCE(ms.modelo_aeronave, '')) = ?)
        ORDER BY ms.id DESC
        LIMIT 1`,
     )
-    .bind(temaSessao, tipoSessaoCodigo, tipoSessaoCodigo, modeloAeronave, modeloAeronave)
+    .bind(
+      params.empresaId,
+      params.empresaId,
+      temaSessao,
+      tipoSessaoCodigo,
+      tipoSessaoCodigo,
+      modeloAeronave,
+      modeloAeronave,
+    )
     .first<{ id: number }>();
 
   return result?.id ? Number(result.id) : null;

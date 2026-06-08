@@ -291,6 +291,7 @@ app.get('/sessoes/:id/checks', async (c) => {
     const templateIdSessao =
       sessao.template_id ||
       (await resolveTemplateIdSessao(c.env.DB, {
+        empresaId,
         temaSessao: sessao.nome,
         tipoSessaoCodigo: sessao.tipo_sessao,
         modeloAeronave: modeloAeronaveSessao,

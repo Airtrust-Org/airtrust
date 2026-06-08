@@ -6,6 +6,7 @@ import {
   ensureValidAccessToken,
 } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
+import { queryClient } from '@/react-app/lib/query-client';
 import { AuthContext, type AuthContextType, type User, type UsuarioEmpresa } from './auth-context';
 import { getDevLoginCredentials } from '@/react-app/utils/devCredentials';
 
@@ -370,6 +371,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    queryClient.clear();
     setToken(null);
     setUser(null);
     setEmpresas([]);
@@ -414,6 +416,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const novoToken = String(json.data.accessToken);
+      queryClient.clear();
       setToken(novoToken);
       setTokens(novoToken, readAuthStorage(REFRESH_TOKEN_KEY) || undefined);
       writeAuthStorage(TOKEN_KEY, novoToken);

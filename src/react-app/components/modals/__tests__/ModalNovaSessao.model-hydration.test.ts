@@ -100,6 +100,39 @@ describe('ModalNovaSessao — model/theme hydration (source-code contracts)', ()
     // It also includes modelo_sessao_id (which may be null if no match, but that is ok)
     expect(modalSrc).toContain('modelo_sessao_id: modeloSessaoId');
   });
+
+  it('simulador_modal_injeta_modelo_template_salvo — fetches model by ID when not in filtered list', () => {
+    // The carregarModelosSessao function must inject the session's saved template
+    // model into the list even if client-side filtering would exclude it.
+    expect(modalSrc).toContain('Modelo salvo');
+    expect(modalSrc).toContain('injetado na lista');
+    // Must use the saved template_id from the sessao prop
+    expect(modalSrc).toContain('sessao?.template_id');
+    // Must call the single-model endpoint
+    expect(modalSrc).toContain('/simuladores/modelos-sessao/${savedTemplateId}');
+  });
+
+  it('simulador_modal_nao_limpa_modelos_em_erro — preserves models on fetch error if already loaded', () => {
+    // On API error, the code must NOT clear models if they were already loaded.
+    // This prevents the legacy warning from flashing when a retry/slow fetch fails.
+    expect(modalSrc).toContain('Preserve existing modelos on error');
+    expect(modalSrc).toContain('if (modelos.length === 0)');
+    expect(modalSrc).toContain('Same: only clear if there were no models before');
+  });
+
+  it('simulador_modal_nao_finaliza_hidratacao_prematuramente — cascade guard prevents premature hydration end', () => {
+    // The auto-select effect must not set editHydrating=false until the cascade
+    // has actually triggered a model fetch (tipoSessaoId set AND aeronaveCodigo set).
+    expect(modalSrc).toContain('cascadeTriggeredFetch');
+    expect(modalSrc).toContain('tipoSessaoId !== null && aeronaveCodigo !== \'\'');
+    expect(modalSrc).toContain('editHydrating can end prematurely');
+  });
+
+  it('simulador_modal_nao_limpa_modelos_codigo_vazio — preserves models on empty aeronaveCodigo', () => {
+    // When fetchModelos/fetchModelosComCodigo is called with empty codigo,
+    // only clear models if they were never loaded.
+    expect(modalSrc).toContain('Only clear models if they were never loaded');
+  });
 });
 
 describe('ModalNovaSessao — model resolution logic (pure logic tests)', () => {

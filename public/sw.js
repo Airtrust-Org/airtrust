@@ -4,8 +4,8 @@
  * Estratégia:
  * 1. index.html → network-first (sempre atualizar)
  * 2. assets com hash (*.js, *.css) → cache-first (imutáveis)
- * 3. API calls → network-first com fallback cache
- * 4. /escalas/minha-escala → offline-first (stale-while-revalidate)
+ * 3. API calls → network-only (sem cache autenticado)
+ * 4. /escalas/minha-escala → app shell offline, dados sempre via rede
  * 5. Notificar cliente quando nova versão disponível
  *
  * Como usar:
@@ -14,11 +14,9 @@
  * - Cliente recebe {type: 'AIRTRUST_UPDATE_AVAILABLE'} quando SW atualizou
  */
 
-const CACHE_VERSION = 'airtrust-v8';
+const CACHE_VERSION = 'airtrust-v9';
 const ASSETS_CACHE = `${CACHE_VERSION}-assets`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
-const API_CACHE = `${CACHE_VERSION}-api`;
-const MINHA_ESCALA_CACHE = `${CACHE_VERSION}-minha-escala`;
 
 // Assets que devem ser cacheados (com hash = imutáveis)
 const ASSET_PATTERNS = [
@@ -36,25 +34,16 @@ const ASSET_PATTERNS = [
   /\.ico$/,
 ];
 
-// API patterns que podem usar cache
-const API_PATTERNS = [/^https?:\/\/.*\/api\/(?!auth|login|logout)/];
-
-// Padrões de API exclusivos de "Minha Escala" → offline-first (stale-while-revalidate)
-const MINHA_ESCALA_API_PATTERNS = [
-  /\/api\/escalas\/minha-escala/,
-  /\/api\/escalas\/[^/]+\/meus-eventos/,
-];
-
 // Rotas SPA de Minha Escala → offline-first navigation
 const MINHA_ESCALA_NAV_PATTERNS = [/\/escalas\/minha-escala/];
 
 const LMS_PLAYER_NAV_PATTERNS = [/^\/lms\/player\//];
-const LMS_API_BYPASS_PATHS = [/^\/api\/lms\//];
+const API_BYPASS_PATHS = [/^\/api\//];
 
 function shouldBypassAirTrustCaching(request) {
   const url = new URL(request.url);
 
-  if (LMS_API_BYPASS_PATHS.some((pattern) => pattern.test(url.pathname))) {
+  if (API_BYPASS_PATHS.some((pattern) => pattern.test(url.pathname))) {
     return true;
   }
 
@@ -127,9 +116,7 @@ self.addEventListener('install', (event) => {
           if (
             cacheName !== CACHE_VERSION &&
             cacheName !== ASSETS_CACHE &&
-            cacheName !== RUNTIME_CACHE &&
-            cacheName !== API_CACHE &&
-            cacheName !== MINHA_ESCALA_CACHE
+            cacheName !== RUNTIME_CACHE
           ) {
             console.log(`[SW] Deletando cache antigo: ${cacheName}`);
             return caches.delete(cacheName);
@@ -167,7 +154,7 @@ self.addEventListener('activate', (event) => {
  * Fetch: estratégia mista
  * - index.html: network-first (sempre tentar servidor)
  * - assets com hash: cache-first (imutáveis)
- * - API: network-first com fallback cache
+ * - API: network-only (sem cache)
  * - Outros: cache-first com fallback network
  */
 self.addEventListener('fetch', (event) => {
@@ -197,32 +184,7 @@ self.addEventListener('fetch', (event) => {
   const isNavigationRequest =
     request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html');
 
-  // ===== ESTRATÉGIA 0: Minha Escala API → stale-while-revalidate (offline-first) =====
-  if (MINHA_ESCALA_API_PATTERNS.some((p) => p.test(url))) {
-    event.respondWith(
-      caches.open(MINHA_ESCALA_CACHE).then((cache) =>
-        cache.match(request).then((cached) => {
-          const networkFetch = fetch(request)
-            .then((response) => {
-              if (response.ok) cache.put(request, response.clone());
-              return response;
-            })
-            .catch(
-              () =>
-                cached ||
-                new Response(JSON.stringify({ error: 'Offline' }), {
-                  status: 503,
-                  headers: { 'Content-Type': 'application/json' },
-                }),
-            );
-          return cached || networkFetch;
-        }),
-      ),
-    );
-    return;
-  }
-
-  // ===== ESTRATÉGIA 0b: Minha Escala navegação → offline-first (app shell) =====
+  // ===== ESTRATÉGIA 0: Minha Escala navegação → offline-first (app shell) =====
   if (isNavigationRequest && MINHA_ESCALA_NAV_PATTERNS.some((p) => p.test(url))) {
     event.respondWith(
       caches.match('/index.html').then((cached) => {
@@ -310,37 +272,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ===== ESTRATÉGIA 3: API calls → network-first com timeout =====
-  if (API_PATTERNS.some((pattern) => pattern.test(url))) {
-    event.respondWith(
-      Promise.race([
-        fetch(request),
-        new Promise((_, reject) => setTimeout(reject, 10000)), // 10s timeout
-      ])
-        .then((response) => {
-          // ✅ IMPORTANTE: clonar ANTES de retornar ou armazenar
-          if (response.ok) {
-            const responseToCache = response.clone();
-            caches.open(API_CACHE).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
-          return response;
-        })
-        .catch(() => {
-          // Se network falhar, tentar cache
-          return caches.match(request).catch(() => {
-            return new Response(JSON.stringify({ error: 'Offline' }), {
-              status: 503,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          });
-        }),
-    );
-    return;
-  }
-
-  // ===== ESTRATÉGIA 4: Outros (fallback) → cache-first =====
+  // ===== ESTRATÉGIA 3: Outros (fallback) → cache-first =====
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       return (

@@ -24,11 +24,18 @@ describe('service worker cache guard', () => {
     expect(serviceWorkerSource).toContain('return isValidJavaScriptResponse(response);');
   });
 
-  it('ignora cache do service worker para player LMS e API LMS autenticada', () => {
+  it('nao cacheia nenhuma API autenticada ou mutavel no service worker', () => {
+    expect(serviceWorkerSource).toContain('const API_BYPASS_PATHS = [/^\\/api\\//];');
+    expect(serviceWorkerSource).not.toContain('const API_CACHE');
+    expect(serviceWorkerSource).not.toContain('caches.open(API_CACHE)');
+    expect(serviceWorkerSource).not.toContain('MINHA_ESCALA_API_PATTERNS');
+  });
+
+  it('ignora cache do service worker para player LMS e APIs', () => {
     expect(serviceWorkerSource).toContain(
       'const LMS_PLAYER_NAV_PATTERNS = [/^\\/lms\\/player\\//];',
     );
-    expect(serviceWorkerSource).toContain('const LMS_API_BYPASS_PATHS = [/^\\/api\\/lms\\//];');
+    expect(serviceWorkerSource).toContain('const API_BYPASS_PATHS = [/^\\/api\\//];');
     expect(serviceWorkerSource).toContain('if (shouldBypassAirTrustCaching(request)) {');
     expect(serviceWorkerSource).toContain('event.respondWith(fetch(request));');
   });
