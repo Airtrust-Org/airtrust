@@ -1580,11 +1580,24 @@ export default function TreinamentosPlanejadosPage({
             <div className="mt-4 space-y-4">
               {treinamentosQuery.isLoading && listaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  Carregando quadro operacional...
+                  {sourceFilter === 'TURMA' ? 'Carregando turmas...' : 'Carregando treinamentos...'}
+                </div>
+              ) : treinamentosQuery.isError && listaTreinamentos.length === 0 ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-700">
+                  <p className="font-medium">Erro ao carregar {sourceFilter === 'TURMA' ? 'turmas' : 'treinamentos'}.</p>
+                  <button
+                    type="button"
+                    onClick={() => treinamentosQuery.refetch()}
+                    className="mt-3 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                  >
+                    Tentar novamente
+                  </button>
                 </div>
               ) : listaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  Nenhum treinamento planejado encontrado para os filtros atuais.
+                  {sourceFilter === 'TURMA'
+                    ? 'Nenhuma turma planejada no período. Crie uma nova turma acima.'
+                    : 'Nenhum treinamento planejado encontrado para os filtros atuais.'}
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
