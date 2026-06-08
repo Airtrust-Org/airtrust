@@ -134,9 +134,9 @@ describe('Qualificacoes — Planejadas tab', () => {
     expect(qualificacoesSource).toContain('hideActions={true}');
   });
 
-  it('planejadas_turmas_e_gestao_real — Turmas filters source=TURMA and does not duplicate calendar', () => {
+  it('planejadas_turmas_e_gestao_real — Turmas filters source=TREINAMENTOS and does not duplicate calendar', () => {
     expect(qualificacoesSource).toContain("(['lista', 'calendario', 'turmas'] as const)");
-    expect(qualificacoesSource).toContain('sourceFilter="TURMA"');
+    expect(qualificacoesSource).toContain('sourceFilter="TREINAMENTOS"');
     expect(qualificacoesSource).toContain('forcedTab="quadro"');
     expect(qualificacoesSource).toContain('hideTabNav={true}');
     expect(qualificacoesSource).not.toContain('Voltar ao Calendário');
@@ -149,7 +149,7 @@ describe('Qualificacoes — Planejadas tab', () => {
 
   it('botao_novo_treinamento_nao_aparece_duplicado — embedded calendar/list hide inner actions while turma view uses Nova turma', () => {
     expect(treinamentosSource).toContain('hideActions?: boolean;');
-    expect(treinamentosSource).toContain("const primaryActionLabel = sourceFilter === 'TURMA' ? 'Nova turma' : 'Novo treinamento';");
+    expect(treinamentosSource).toContain("const primaryActionLabel = isTurmasView ? 'Nova turma' : 'Novo treinamento';");
     expect(treinamentosSource).toContain('!hideActions ? <div className="flex justify-end pb-2">{actionButtons}</div> : null');
   });
 

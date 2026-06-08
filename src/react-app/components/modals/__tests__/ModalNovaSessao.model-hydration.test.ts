@@ -196,8 +196,8 @@ describe('ModalNovaSessao — model resolution logic (pure logic tests)', () => 
 
 describe('TreinamentosPlanejadosPage — Turmas tab loading/error states', () => {
   it('planejadas_turmas_nao_renderiza_quadro_operacional — loading text is context-aware for TURMA source', () => {
-    // The loading message must not say "quadro operacional" when sourceFilter=TURMA
-    expect(treinamentosPageSrc).toContain("sourceFilter === 'TURMA' ? 'Carregando turmas...' : 'Carregando treinamentos...'");
+    // The loading message must not say "quadro operacional" when sourceFilter=TURMA/TREINAMENTOS
+    expect(treinamentosPageSrc).toContain("isTurmasView ? 'Carregando turmas...' : 'Carregando treinamentos...'");
   });
 
   it('planejadas_turmas_nao_fica_loading_infinito — isError state is handled in quadro tab', () => {
@@ -216,7 +216,7 @@ describe('TreinamentosPlanejadosPage — Turmas tab loading/error states', () =>
   });
 
   it('planejadas_turmas_tem_botao_nova_turma — primaryActionLabel is Nova turma for TURMA source', () => {
-    expect(treinamentosPageSrc).toContain("sourceFilter === 'TURMA' ? 'Nova turma' : 'Novo treinamento'");
+    expect(treinamentosPageSrc).toContain("isTurmasView ? 'Nova turma' : 'Novo treinamento'");
   });
 
   it('planejadas_turmas_nao_mostra_novo_treinamento_duplicado — hideActions prevents duplicate button in embedded mode', () => {

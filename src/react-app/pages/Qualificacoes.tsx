@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, Suspense, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -125,6 +126,7 @@ interface QualificacoesPrefs {
 }
 
 export default function Qualificacoes() {
+  const queryClient = useQueryClient();
   const initialPrefs = useMemo(
     () => readUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {}),
     [],
@@ -713,6 +715,8 @@ export default function Qualificacoes() {
 
     if (sucessos > 0) {
       await carregarHistorico();
+      // Invalidate consolidated training list so Turmas tab reflects new records immediately
+      void queryClient.invalidateQueries({ queryKey: ['treinamentos-planejados'] });
       try {
         const statsResponse = await fetch(
           `${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`,
@@ -3362,7 +3366,7 @@ export default function Qualificacoes() {
                     asTab={true}
                     forcedTab="quadro"
                     hideTabNav={true}
-                    sourceFilter="TURMA"
+                    sourceFilter="TREINAMENTOS"
                   />
                 </Suspense>
               )}
@@ -4025,11 +4029,11 @@ export default function Qualificacoes() {
                   )
                 }
                 options={[
-                  { value: 'INICIAL', label: 'Inicial' },
-                  { value: 'RECORRENTE', label: 'Periodico' },
+                  { value: 'INICIAL', label: 'Treinamento Inicial' },
+                  { value: 'RECORRENTE', label: 'Treinamento Periódico' },
                   { value: 'SEMESTRAL', label: 'Semestral' },
                   { value: 'UPGRADE', label: 'Upgrade' },
-                  { value: 'ESPECIFICO', label: 'Especifico' },
+                  { value: 'ESPECIFICO', label: 'Específico' },
                 ]}
               />
             </FormField>

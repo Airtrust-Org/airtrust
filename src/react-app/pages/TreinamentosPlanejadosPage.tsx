@@ -562,7 +562,7 @@ interface TreinamentosPlanejadosPageProps {
   forcedTab?: AbaAtiva;
   hideTabNav?: boolean;
   hideActions?: boolean;
-  sourceFilter?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
+  sourceFilter?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA' | 'TREINAMENTOS';
 }
 
 export default function TreinamentosPlanejadosPage({
@@ -1317,7 +1317,8 @@ export default function TreinamentosPlanejadosPage({
   const enviandoConvocacao = previewConvocacao.isPending || enviarConvocacao.isPending;
 
   const convocacaoDisabledReason = getConvocacaoDisabledReason(detalheTreinamento);
-  const primaryActionLabel = sourceFilter === 'TURMA' ? 'Nova turma' : 'Novo treinamento';
+  const isTurmasView = sourceFilter === 'TURMA' || sourceFilter === 'TREINAMENTOS';
+  const primaryActionLabel = isTurmasView ? 'Nova turma' : 'Novo treinamento';
 
   const actionButtons = (
     <div className="flex flex-wrap items-center gap-2">
@@ -1580,11 +1581,11 @@ export default function TreinamentosPlanejadosPage({
             <div className="mt-4 space-y-4">
               {treinamentosQuery.isLoading && listaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  {sourceFilter === 'TURMA' ? 'Carregando turmas...' : 'Carregando treinamentos...'}
+                  {isTurmasView ? 'Carregando turmas...' : 'Carregando treinamentos...'}
                 </div>
               ) : treinamentosQuery.isError && listaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-700">
-                  <p className="font-medium">Erro ao carregar {sourceFilter === 'TURMA' ? 'turmas' : 'treinamentos'}.</p>
+                  <p className="font-medium">Erro ao carregar {isTurmasView ? 'turmas' : 'treinamentos'}.</p>
                   <button
                     type="button"
                     onClick={() => treinamentosQuery.refetch()}
@@ -1595,7 +1596,7 @@ export default function TreinamentosPlanejadosPage({
                 </div>
               ) : listaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  {sourceFilter === 'TURMA'
+                  {isTurmasView
                     ? 'Nenhuma turma planejada no período. Crie uma nova turma acima.'
                     : 'Nenhum treinamento planejado encontrado para os filtros atuais.'}
                 </div>
