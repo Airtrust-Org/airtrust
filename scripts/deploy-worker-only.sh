@@ -4,8 +4,21 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKER_DIR="$ROOT_DIR/worker-airtrust"
-DEPLOY_VERSION="${APP_VERSION:-${1:-$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)}}"
-BUILD_TIME="${APP_BUILD_TIME:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
+# DPLY-1: Abort if APP_VERSION is set externally without an explicit override flag.
+if [[ -n "${APP_VERSION:-}" && "${AIRTRUST_ALLOW_APP_VERSION_OVERRIDE:-0}" != "1" ]]; then
+  echo "❌ APP_VERSION externo detectado: '$APP_VERSION'" >&2
+  echo "   Isso pode causar version stamp obsoleto no deploy." >&2
+  echo "   Remova a variável ou use AIRTRUST_ALLOW_APP_VERSION_OVERRIDE=1 conscientemente." >&2
+  exit 1
+fi
+
+# Always generate a fresh stamp; accept positional arg $1 as intentional override.
+_HEAD_SHORT="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+DEPLOY_VERSION="${1:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")-$_HEAD_SHORT}"
+if [[ "${AIRTRUST_ALLOW_APP_VERSION_OVERRIDE:-0}" == "1" && -n "${APP_VERSION:-}" ]]; then
+  DEPLOY_VERSION="$APP_VERSION"
+fi
+BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 TMP_WRANGLER="$(mktemp "$WORKER_DIR/wrangler.deploy.XXXXXX.toml")"
 CONFIRM_MIGRATIONS_TEXT="I understand this applies production D1 migrations before worker deploy"
 
