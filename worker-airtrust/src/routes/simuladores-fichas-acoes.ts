@@ -167,6 +167,7 @@ async function getFuncionarioUserInfo(
 async function criarNotificacaoFicha(
   db: D1Database,
   {
+    empresaId,
     userId,
     tipo,
     titulo,
@@ -176,6 +177,7 @@ async function criarNotificacaoFicha(
     acaoPrimaria,
     dados,
   }: {
+    empresaId: string | number;
     userId: string;
     tipo: string;
     titulo: string;
@@ -196,13 +198,14 @@ async function criarNotificacaoFicha(
           mensagem,
           dados,
           link,
+          empresa_id,
           user_id,
           prioridade,
           acao_primaria,
           created_at,
           updated_at
         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
       )
       .bind(
         tipo,
@@ -210,6 +213,7 @@ async function criarNotificacaoFicha(
         mensagem,
         dados ? JSON.stringify(dados) : null,
         link,
+        String(empresaId),
         userId,
         prioridade,
         acaoPrimaria || null,
@@ -284,6 +288,7 @@ app.post('/fichas/:id/assinar', async (c) => {
       if (instrutorInfo?.userId) {
         const alunoNome = alunoInfo?.nome || 'O aluno';
         await criarNotificacaoFicha(c.env.DB, {
+          empresaId,
           userId: instrutorInfo.userId,
           tipo: 'FICHA_AGUARDANDO_INSTRUTOR',
           titulo: 'Ficha aguardando sua assinatura final',
@@ -360,6 +365,7 @@ app.post('/fichas/:id/assinar', async (c) => {
       if (alunoInfo?.userId) {
         const resultadoTexto = aprovadoInstrutor ? '✅ APROVADO' : '❌ NÃO APROVADO';
         await criarNotificacaoFicha(c.env.DB, {
+          empresaId,
           userId: alunoInfo.userId,
           tipo: 'FICHA_CONCLUIDA',
           titulo: `Ficha concluída — ${resultadoTexto}`,

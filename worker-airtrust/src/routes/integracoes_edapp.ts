@@ -177,6 +177,7 @@ edappRouter.post('/webhook', async (c: Context) => {
 
     if (resultado.created !== false && resultado.qualificacao_id) {
       await createEdAppQualificacaoNotification(c.env.DB, {
+        empresaId,
         funcionarioId: funcionario.funcionario_id,
         funcionarioNome: funcionario.funcionario_nome,
         qualificacaoCodigo: qualificacao.qualificacao_codigo,
@@ -1082,6 +1083,7 @@ edappRouter.post('/processar', async (c) => {
           } else if (resultadoQual.qualificacao_id) {
             resultado.qualificacoes_criadas++;
             await createEdAppQualificacaoNotification(c.env.DB, {
+              empresaId,
               funcionarioId: funcionario.funcionario_id,
               funcionarioNome: funcionario.funcionario_nome,
               qualificacaoCodigo: qualificacao.qualificacao_codigo,

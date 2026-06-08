@@ -731,10 +731,11 @@ export async function runScheduledJobs(
           `[CRON] ⚠️ AUDITORIA SOFT-DELETE: ${suspeitos.results.length} funcionário(s) com qualificações todas deletadas: ${nomes}`,
         );
 
+        // Global/platform audit notification: keep empresa_id NULL intentionally.
         await env.DB.prepare(
           `
-          INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
-          VALUES ('ALERTA_DADOS', 'ALTA', 'Auditoria: Qualificações removidas em massa', ?, 'auditoria', ?, datetime('now'), datetime('now'))
+          INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+          VALUES ('ALERTA_DADOS', 'ALTA', 'Auditoria: Qualificações removidas em massa', ?, 'auditoria', ?, NULL, datetime('now'), datetime('now'))
         `,
         )
           .bind(
@@ -759,9 +760,10 @@ export async function runScheduledJobs(
           audit.rollingSemJornadaRecente;
 
         if (totalAnomalias > 0) {
+          // Global/platform audit notification: keep empresa_id NULL intentionally.
           await env.DB.prepare(
-            `INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
-             VALUES ('ALERTA_DADOS', 'ALTA', 'Auditoria diária FRMS: inconsistências detectadas', ?, 'auditoria', ?, datetime('now'), datetime('now'))`,
+            `INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+             VALUES ('ALERTA_DADOS', 'ALTA', 'Auditoria diária FRMS: inconsistências detectadas', ?, 'auditoria', ?, NULL, datetime('now'), datetime('now'))`,
           )
             .bind(
               `FRMS detectou inconsistências: ${audit.jornadasSemFatorizacao} jornada(s) sem fatorização, ${audit.jornadasLancadasForaQuinzena} jornada(s) lançada(s) fora da quinzena (tolerância ±2 dias), ${audit.rollingSemJornadaRecente} linha(s) de rolling sem jornada nos últimos 120 dias.`,
@@ -858,12 +860,13 @@ export async function runScheduledJobs(
             )
             .join('\n');
 
+          // Global/platform weekly summary: keep empresa_id NULL intentionally.
           await env.DB.prepare(
-            `INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
+            `INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
                VALUES ('ALERTA_SEMANAL_QUALIFICACOES', 'ALTA',
                  'Resumo semanal: qualificações expirando em ≤90 dias',
                  ?, 'qualificacoes',
-                 ?, datetime('now'), datetime('now'))`,
+                 ?, NULL, datetime('now'), datetime('now'))`,
           )
             .bind(
               `${items.length} qualificações expiram nos próximos 90 dias (${criticos.length} críticas ≤30d, ${alertas.length} alerta ≤60d, ${avisos.length} aviso ≤90d).\n\n${linhas}`,

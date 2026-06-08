@@ -63,8 +63,8 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
     await db
       .prepare(
         `INSERT INTO notificacoes_sistema
-         (tipo, prioridade, titulo, mensagem, grupo, dados, created_at, updated_at)
-         VALUES ('FRMS_CHECKIN_REMINDER', 'MEDIA', 'Check-in de fadiga pendente', ?, 'frms', ?, datetime('now'), datetime('now'))`,
+         (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+         VALUES ('FRMS_CHECKIN_REMINDER', 'MEDIA', 'Check-in de fadiga pendente', ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
       )
       .bind(
         `${semCheckin.results.length} tripulante(s) sem check-in de fadiga em ${hoje}. ${preview}`,
@@ -73,6 +73,7 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
           data_checkin: hoje,
           pendentes: semCheckin.results,
         }),
+        empresaId,
       )
       .run();
 
