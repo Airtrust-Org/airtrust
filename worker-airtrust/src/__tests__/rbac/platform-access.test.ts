@@ -92,6 +92,21 @@ describe('platform access foundation', () => {
     expect(canPerformSupportMutation(state, 7, 'ticket-4812')).toBe(false);
   });
 
+  it('grants platform admin by persisted role even when user is not legacy id=1', async () => {
+    const state = await resolvePlatformAccessState(
+      createDb({
+        roles: ['platform_admin'],
+      }),
+      99,
+    );
+
+    expect(state.userId).toBe(99);
+    expect(state.isLegacyPlatformAdmin).toBe(false);
+    expect(state.hasPersistedPlatformAdmin).toBe(true);
+    expect(state.source).toBe('persisted');
+    expect(isPlatformAdminAccess(state)).toBe(true);
+  });
+
   it('requires elevated role plus elevated grant for support mutations', async () => {
     const state = await resolvePlatformAccessState(
       createDb({

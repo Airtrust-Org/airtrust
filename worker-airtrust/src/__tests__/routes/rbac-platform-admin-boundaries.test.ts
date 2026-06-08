@@ -2,15 +2,16 @@ import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import type { Env, Variables } from '../../types';
 import {
-  isAirtrustPlatformTenant,
   isLegacyPlatformAdminUserId,
   isPlatformAdminContext,
 } from '../../middleware/tenant';
+import type { PlatformAccessState } from '../../lib/rbac/platform-access';
 
 function buildPlatformProbeApp(params: {
   empresaCodigo: string;
   userId: number | string;
   role?: 'admin' | 'manager' | 'viewer';
+  platformAccessState?: PlatformAccessState;
 }) {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -24,6 +25,9 @@ function buildPlatformProbeApp(params: {
       plano: 'pro',
       permissions: ['*'],
     });
+    if (params.platformAccessState) {
+      c.set('platformAccessState', params.platformAccessState);
+    }
     await next();
   });
 
@@ -40,6 +44,7 @@ async function hitPlatformProbe(params: {
   empresaCodigo: string;
   userId: number | string;
   role?: 'admin' | 'manager' | 'viewer';
+  platformAccessState?: PlatformAccessState;
 }) {
   const app = buildPlatformProbeApp(params);
   const response = await app.request('/platform-probe', {}, { ENVIRONMENT: 'test' } as unknown as Env);
@@ -47,9 +52,9 @@ async function hitPlatformProbe(params: {
 }
 
 describe('RBAC platform admin boundaries', () => {
-  it('keeps the AirTrust tenant as platform-admin context', async () => {
+  it('does not promote all users in airtrust tenant to platform admin', async () => {
     await expect(hitPlatformProbe({ empresaCodigo: 'airtrust', userId: 42 })).resolves.toEqual({
-      platform: true,
+      platform: false,
     });
   });
 
@@ -64,10 +69,28 @@ describe('RBAC platform admin boundaries', () => {
   });
 
   it('does not treat regular tenant admins as platform admins', async () => {
-    expect(isAirtrustPlatformTenant({ empresaCodigo: 'tenant-a' })).toBe(false);
-
     await expect(hitPlatformProbe({ empresaCodigo: 'tenant-a', userId: 42 })).resolves.toEqual({
       platform: false,
+    });
+  });
+
+  it('accepts explicit persisted platform role via context state', async () => {
+    await expect(
+      hitPlatformProbe({
+        empresaCodigo: 'tenant-a',
+        userId: 42,
+        platformAccessState: {
+          userId: 42,
+          isLegacyPlatformAdmin: false,
+          hasPersistedPlatformAdmin: true,
+          hasSupportReadOnlyRole: false,
+          hasSupportElevatedRole: false,
+          supportGrants: [],
+          source: 'persisted',
+        },
+      }),
+    ).resolves.toEqual({
+      platform: true,
     });
   });
 });
