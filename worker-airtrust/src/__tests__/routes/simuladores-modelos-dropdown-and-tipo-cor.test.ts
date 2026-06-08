@@ -91,18 +91,39 @@ function createDbMock() {
               if (sql.includes('FROM modelos_sessao ms')) {
                 state.lastModelosQuery = sql;
                 state.lastModelosBinds = args;
+                const hasInvalidTipo = args.some(
+                  (arg) => String(arg).toUpperCase() === 'TIPOINVALIDO',
+                );
+                const hasIniTipo = args.some(
+                  (arg) => String(arg).toUpperCase() === 'INI',
+                );
+                if (hasInvalidTipo) {
+                  return { results: [] };
+                }
                 return {
-                  results: [
-                    {
-                      id: 1,
-                      codigo: 'SK76-PER-01',
-                      nome: 'SK76 Periódico',
-                      tipo_sessao_id: 9,
-                      tipo: 'PERIODICO',
-                      modelo_aeronave: 'SK76',
-                      total_manobras: 2,
-                    },
-                  ],
+                  results: hasIniTipo
+                    ? [
+                        {
+                          id: 2,
+                          codigo: 'SK76-INI-01',
+                          nome: 'SK76 Inicial',
+                          tipo_sessao_id: 14,
+                          tipo: 'INICIAL',
+                          modelo_aeronave: 'SK76',
+                          total_manobras: 2,
+                        },
+                      ]
+                    : [
+                        {
+                          id: 1,
+                          codigo: 'SK76-PER-01',
+                          nome: 'SK76 Periódico',
+                          tipo_sessao_id: 9,
+                          tipo: 'PERIODICO',
+                          modelo_aeronave: 'SK76',
+                          total_manobras: 2,
+                        },
+                      ],
                 };
               }
               return { results: [] };
@@ -148,6 +169,41 @@ describe('simuladores modelos dropdown + tipo cor', () => {
     expect(state.lastModelosBinds).toContain('RECORR%');
     expect(state.lastModelosBinds).toContain('PERIODICO');
     expect(state.lastModelosBinds).toContain('SK76');
+  });
+
+  it('retorna modelos para SK76 + INI com filtros canônicos', async () => {
+    const { db, state } = createDbMock();
+    const response = await simuladoresModelosRoutes.fetch(
+      new Request(
+        'http://localhost/modelos-sessao?tipo_sessao_id=14&tipo_sessao_codigo=INI&tipo_sessao_nome=Inicial&tipo=SIMULADOR&modelo_aeronave=SK76',
+      ),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.success).toBe(true);
+    expect(json.data).toHaveLength(1);
+    expect(json.data[0].codigo).toBe('SK76-INI-01');
+    expect(state.lastModelosBinds).toContain('INI');
+  });
+
+  it('tipo inválido retorna vazio controlado sem erro HTTP', async () => {
+    const { db } = createDbMock();
+    const response = await simuladoresModelosRoutes.fetch(
+      new Request(
+        'http://localhost/modelos-sessao?tipo_sessao_codigo=TIPOINVALIDO&tipo=SIMULADOR&modelo_aeronave=SK76',
+      ),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.success).toBe(true);
+    expect(Array.isArray(json.data)).toBe(true);
+    expect(json.data).toHaveLength(0);
   });
 
   it('persist cor no POST e no PUT de tipos_sessao quando coluna existe', async () => {

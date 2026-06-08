@@ -164,6 +164,7 @@ export default function ModalNovaSessao({
   const [tiposCheck, setTiposCheck] = useState<TipoCheck[]>([]);
   const [modelos, setModelos] = useState<ModeloSessao[]>([]);
   const [loadingModelos, setLoadingModelos] = useState(false);
+  const [erroModelosSessao, setErroModelosSessao] = useState<string | null>(null);
   const [conflitoModal, setConflitoModal] = useState<{ isOpen: boolean; message: string }>({
     isOpen: false,
     message: '',
@@ -232,6 +233,7 @@ export default function ModalNovaSessao({
     if (isOpen) {
       setTiposSessao([]);
       setModelos([]);
+      setErroModelosSessao(null);
       setSimuladoresFiltrados([]);
       setTipoSessaoId(null);
       setModeloSessaoId(null);
@@ -618,6 +620,42 @@ export default function ModalNovaSessao({
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
+  async function fetchJsonComTimeout(url: string, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        headers: _authHeaders(),
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Resposta inválida ao carregar modelos de sessão.');
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          data?.error || `Falha ao carregar modelos de sessão (HTTP ${res.status}).`,
+        );
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(
+          'Tempo esgotado ao carregar modelos de sessão. Tente novamente.',
+        );
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
   async function fetchAeronaves() {
     try {
       const res = await fetch(`${API_BASE_URL}/modelos-aeronave`, { headers: _authHeaders() });
@@ -815,6 +853,7 @@ export default function ModalNovaSessao({
     setModeloSessaoId(null);
     setTemaSessao('');
     setModelos([]);
+    setErroModelosSessao(null);
     setChecksSelecionados([]);
     setGerarFichaInstrutor(false);
     setGerarFichaExaminador(false);
@@ -850,6 +889,7 @@ export default function ModalNovaSessao({
     setModeloSessaoId(null);
     setTemaSessao('');
     setModelos([]);
+    setErroModelosSessao(null);
     setChecksSelecionados([]);
     setGerarFichaInstrutor(false);
     setGerarFichaExaminador(false);
@@ -863,6 +903,7 @@ export default function ModalNovaSessao({
     setModeloSessaoId(null);
     setTemaSessao('');
     setModelos([]);
+    setErroModelosSessao(null);
     setChecksSelecionados([]);
     setGerarFichaInstrutor(false);
     setGerarFichaExaminador(false);
@@ -877,6 +918,7 @@ export default function ModalNovaSessao({
     setModeloSessaoId(null);
     setTemaSessao('');
     setModelos([]);
+    setErroModelosSessao(null);
     setChecksSelecionados([]);
     setGerarFichaInstrutor(false);
     setGerarFichaExaminador(false);
@@ -889,6 +931,7 @@ export default function ModalNovaSessao({
     // Reset cascata
     setModeloSessaoId(null);
     setTemaSessao('');
+    setErroModelosSessao(null);
     setChecksSelecionados([]);
     setGerarFichaInstrutor(false);
     setGerarFichaExaminador(false);
@@ -941,6 +984,7 @@ export default function ModalNovaSessao({
   ) {
     try {
       setLoadingModelos(true);
+      setErroModelosSessao(null);
       const url = buildModelosSessaoUrl(tipoSessaoIdParam, codigoAeronave, tipo);
 
       console.log(`🔍 [${origem}] Buscando modelos:`, {
@@ -949,11 +993,7 @@ export default function ModalNovaSessao({
         url,
       });
 
-      const res = await fetch(url, {
-        headers: _authHeaders(),
-        cache: 'no-store',
-      });
-      const data = await res.json();
+      const data = await fetchJsonComTimeout(url);
 
       console.log(`📦 [${origem}] Resposta recebida:`, data);
 
@@ -975,11 +1015,7 @@ export default function ModalNovaSessao({
 
         if (modelosAtualizados.length === 0) {
           const fallbackUrl = buildModelosSessaoUrl(tipoSessaoIdParam, codigoAeronave, tipo, false);
-          const fallbackRes = await fetch(fallbackUrl, {
-            headers: _authHeaders(),
-            cache: 'no-store',
-          });
-          const fallbackData = await fallbackRes.json();
+          const fallbackData = await fetchJsonComTimeout(fallbackUrl);
 
           if (fallbackData.success) {
             modelosAtualizados = filtrarModelosSessaoModal(
@@ -1050,6 +1086,9 @@ export default function ModalNovaSessao({
         console.log(`✅ [${origem}] ${modelosAtualizados.length} modelos carregados`);
       } else {
         console.error(`❌ [${origem}] API retornou success=false`);
+        setErroModelosSessao(
+          data?.error || 'Não foi possível carregar os modelos de sessão para esta combinação.',
+        );
         // Preserve existing modelos on error to avoid flashing empty state
         // that triggers the legacy warning prematurely
         if (modelos.length === 0) {
@@ -1058,6 +1097,11 @@ export default function ModalNovaSessao({
       }
     } catch (error) {
       console.error(`❌ [${origem}] Erro:`, error);
+      setErroModelosSessao(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao carregar modelos de sessão.',
+      );
       // Same: only clear if there were no models before
       if (modelos.length === 0) {
         setModelos([]);
@@ -1458,6 +1502,7 @@ export default function ModalNovaSessao({
     setTipoSessaoId(null);
     setModeloSessaoId(null);
     setModelos([]);
+    setErroModelosSessao(null);
     setTemaSessao('');
     setData('');
     setDataInvalida(false);
@@ -1744,6 +1789,10 @@ export default function ModalNovaSessao({
                   </option>
                 ))}
               </select>
+            ) : erroModelosSessao ? (
+              <div className="w-full px-4 py-3 border border-red-300 rounded-lg bg-red-50 text-red-700 text-sm">
+                ⚠️ {erroModelosSessao}
+              </div>
             ) : isEditMode && temaSessao ? (
               // Edit mode: session has a saved theme name but the matching template
               // is not in the loaded list (e.g. template filtered out or deleted).
