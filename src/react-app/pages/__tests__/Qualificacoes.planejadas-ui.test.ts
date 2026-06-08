@@ -184,7 +184,8 @@ describe('Qualificacoes — Antônio SK76 FFS on June 25', () => {
   it('planejada_antonio_25_06_renderiza_dentro_do_dia_25 — simulator-linked qualification title includes participant name and qualification', () => {
     expect(treinamentosSource).toContain("if (item.source === 'SIMULADOR' && qualificationLabel && linkedParticipantNames.length > 0)");
     expect(treinamentosSource).toContain('return `${leadName}${extraCount > 0 ? ` +${extraCount}` : \'\'} — ${qualificationLabel}`;');
-    expect(treinamentosSource).toContain('getEventoLinkedSessionLabel(evento)');
+    // Calendar cell density reduced (M5): linked session label moved to Quadro view only
+    expect(treinamentosSource).toContain('getEventoLinkedSessionLabel(item)');
   });
 
   it('historico_planejado_tem_campos_necessarios — item has all fields needed for calendar pill display', () => {
@@ -240,8 +241,10 @@ describe('Qualificacoes — Simulator sessions June 2026', () => {
     expect(visible.every((s) => normalizeStatus(s.status) === 'PLANEJADO')).toBe(true);
   });
 
-  it('simuladores_junho_renderizam_dentro_dos_dias_corretos — calendar cards show participant summary inside the day cell', () => {
-    expect(treinamentosSource).toContain('getEventoParticipantSummary(evento)');
+  it('simuladores_junho_renderizam_dentro_dos_dias_corretos — calendar cards show titles and empty-state text inside the day cell', () => {
+    // Calendar cell density reduced (M5): max 2 events, title + status badge + time only.
+    // Participant summary moved to detail modal. Function still used in Quadro view.
+    expect(treinamentosSource).toContain('getEventoParticipantSummary(item)');
     expect(treinamentosSource).toContain('Sem treinamentos planejados');
   });
 

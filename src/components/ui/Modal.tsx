@@ -54,7 +54,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', footer }:
       <div className="flex min-h-[calc(100dvh-1.5rem)] w-full items-center justify-center sm:min-h-[calc(100dvh-2rem)]">
         <div
           data-modal-container
-          className={`relative flex w-full flex-col ${cfg.widthClass} overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out`}
+          className={`relative flex w-full flex-col ${cfg.widthClass} overflow-hidden rounded-2xl bg-white shadow-2xl motion-safe:transition-all motion-safe:duration-200 ease-out`}
           style={{ maxHeight: cfg.maxHeight }}
           role="dialog"
           aria-modal="true"
@@ -68,9 +68,9 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', footer }:
             <button
               onClick={onClose}
               aria-label="Fechar"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
             >
-              <span className="material-symbols-outlined text-xl">close</span>
+              <span className="material-symbols-outlined text-xl" aria-hidden="true">close</span>
             </button>
           </div>
 

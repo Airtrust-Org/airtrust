@@ -23,9 +23,10 @@ import {
   BadgeCheck,
   ShieldCheck,
   Tag,
-  Palette,
   CalendarDays,
   Grid3x3,
+  ClipboardList,
+  Users,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
@@ -163,6 +164,7 @@ export default function Qualificacoes() {
 
   const [activeTab, setActiveTab] = useState<(typeof VALID_TABS)[number]>(migratedTab);
   const [plannedView, setPlannedView] = useState<(typeof VALID_PLANNED_VIEWS)[number]>(migratedPlannedView);
+  const [autoOpenTurmasModal, setAutoOpenTurmasModal] = useState(false);
   const [limit, setLimit] = useState(initialPrefs.limit ?? 50); // Paginação: 50 registros por página
   const [page, setPage] = useState(1); // Página atual
   const [searchTerm, setSearchTerm] = useState(''); // Termo de busca
@@ -2351,9 +2353,9 @@ export default function Qualificacoes() {
           <>
             <button
               onClick={handleNew}
-              className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary/90"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer transition-colors"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4" aria-hidden="true" />
               Incluir Qualificação
             </button>
           </>
@@ -2365,21 +2367,25 @@ export default function Qualificacoes() {
         {/* Tabs + Search + Configurar Colunas */}
         <div className="border-b border-slate-200 dark:border-slate-800">
           <div className="flex flex-wrap items-start gap-4 p-4 xl:flex-nowrap xl:items-center">
-            <div className="flex min-w-0 flex-wrap items-center gap-1">
+            <div role="tablist" aria-label="Seções de qualificações" className="flex min-w-0 flex-wrap items-center gap-1">
               <button
+                role="tab"
+                aria-selected={activeTab === 'historico'}
                 onClick={() => setActiveTab('historico')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
                   activeTab === 'historico'
                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
-                <History size={16} className={activeTab === 'historico' ? 'text-blue-600' : ''} />
+                <History size={16} className={activeTab === 'historico' ? 'text-blue-600' : ''} aria-hidden="true" />
                 Histórico de Qualificações
               </button>
               <button
+                role="tab"
+                aria-selected={isPlanejadosTab}
                 onClick={() => setActiveTab('planejados')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
                   isPlanejadosTab
                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
@@ -2388,23 +2394,28 @@ export default function Qualificacoes() {
                 <CalendarDays
                   size={16}
                   className={isPlanejadosTab ? 'text-blue-600' : ''}
+                  aria-hidden="true"
                 />
                 Treinamentos Planejados
               </button>
               <button
+                role="tab"
+                aria-selected={activeTab === 'tipos'}
                 onClick={() => setActiveTab('tipos')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
                   activeTab === 'tipos'
                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
-                <Bookmark size={16} className={activeTab === 'tipos' ? 'text-blue-600' : ''} />
+                <Bookmark size={16} className={activeTab === 'tipos' ? 'text-blue-600' : ''} aria-hidden="true" />
                 Modelos
               </button>
               <button
+                role="tab"
+                aria-selected={activeTab === 'categorias'}
                 onClick={() => setActiveTab('categorias')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
                   activeTab === 'categorias'
                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
@@ -2413,6 +2424,7 @@ export default function Qualificacoes() {
                 <FolderOpen
                   size={16}
                   className={activeTab === 'categorias' ? 'text-blue-600' : ''}
+                  aria-hidden="true"
                 />
                 Categorias
               </button>
@@ -2429,7 +2441,7 @@ export default function Qualificacoes() {
                   placeholder="Buscar por nome, código ANAC, qualificação, equipamento..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
+                  className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </div>
             )}
@@ -2444,7 +2456,7 @@ export default function Qualificacoes() {
                   placeholder="Buscar modelos por nome, código ou categoria..."
                   value={searchTipos}
                   onChange={(e) => setSearchTipos(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
+                  className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </div>
             )}
@@ -2528,16 +2540,19 @@ export default function Qualificacoes() {
                       void carregarHistorico();
                       treinamentosPlanejadosConvocacaoQuery.refetch();
                     }}
-                    className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer transition-colors min-h-[44px]"
                   >
-                    <RefreshCw className="w-4 h-4" />
+                    <RefreshCw className="w-4 h-4" aria-hidden="true" />
                     <span>Atualizar</span>
                   </button>
                   <button
-                    onClick={() => setPlannedView('turmas')}
-                    className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                    onClick={() => {
+                      setPlannedView('turmas');
+                      setAutoOpenTurmasModal(true);
+                    }}
+                    className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer transition-colors min-h-[44px]"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-4 h-4" aria-hidden="true" />
                     <span>Nova turma</span>
                   </button>
                 </div>
@@ -3274,7 +3289,7 @@ export default function Qualificacoes() {
 
               {categorias.length === 0 && (
                 <div className="text-center py-12">
-                  <Palette className="mx-auto mb-4 text-slate-300" size={60} />
+                  <FolderOpen className="mx-auto mb-4 text-slate-300" size={60} aria-hidden="true" />
                   <h3 className="text-lg font-semibold text-slate-900 mb-2">
                     Nenhuma categoria encontrada
                   </h3>
@@ -3286,43 +3301,55 @@ export default function Qualificacoes() {
 
           {isPlanejadosTab && (
             <div className="space-y-0">
-              {/* Tags de resumo globais — sempre vindas da API, nunca da página local */}
-              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100">
-                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700">
-                  Total <strong>{Math.max(globalPlanejadas, plannedItemsCount)}</strong>
-                </span>
-              </div>
-
-              {/* Sub-tabs visíveis: Lista | Calendário | Turmas */}
-              <div className="flex items-center gap-1 border-b border-slate-100 px-4 pt-2 pb-0">
+              {/* Sub-tabs: Lista | Calendário | Turmas — pill style matching main tabs */}
+              <div
+                role="tablist"
+                aria-label="Visualizações de treinamentos planejados"
+                className="flex items-center gap-1 border-b border-slate-100 px-4 pt-3 pb-3"
+              >
                 {(['lista', 'calendario', 'turmas'] as const).map((view) => {
                   const labels: Record<string, string> = {
                     lista: 'Lista',
                     calendario: 'Calendário',
                     turmas: 'Turmas',
                   };
+                  const icons: Record<string, React.ReactNode> = {
+                    lista: <ClipboardList size={14} aria-hidden="true" />,
+                    calendario: <CalendarDays size={14} aria-hidden="true" />,
+                    turmas: <Users size={14} aria-hidden="true" />,
+                  };
+                  const isActive = plannedView === view;
                   return (
                     <button
                       key={view}
-                      onClick={() => setPlannedView(view)}
-                      className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                        plannedView === view
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => {
+                        setPlannedView(view);
+                        writeUserPreference('qualificacoes_prefs_v1', {
+                          activeTab: 'planejados',
+                          plannedView: view,
+                        });
+                      }}
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                       }`}
                     >
+                      {icons[view]}
                       {labels[view]}
                     </button>
                   );
                 })}
               </div>
 
-              {/* Lista: dataset consolidado vindo de /api/treinamentos/planejados */}
-              {plannedView === 'lista' && (
+              {/* Lista: dataset consolidado — kept mounted via CSS hidden for instant switching */}
+              <div className={plannedView === 'lista' ? '' : 'hidden'}>
                 <Suspense
                   fallback={
                     <div className="flex items-center justify-center py-20">
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent motion-safe:animate-spin" />
                     </div>
                   }
                 >
@@ -3333,14 +3360,14 @@ export default function Qualificacoes() {
                     hideTabNav={true}
                   />
                 </Suspense>
-              )}
+              </div>
 
-              {/* Calendário: mesmo dataset consolidado da lista */}
-              {plannedView === 'calendario' && (
+              {/* Calendário: kept mounted via CSS hidden for instant switching */}
+              <div className={plannedView === 'calendario' ? '' : 'hidden'}>
                 <Suspense
                   fallback={
                     <div className="flex items-center justify-center py-20">
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent motion-safe:animate-spin" />
                     </div>
                   }
                 >
@@ -3351,14 +3378,14 @@ export default function Qualificacoes() {
                     hideTabNav={true}
                   />
                 </Suspense>
-              )}
+              </div>
 
-              {/* Turmas: gestão cadastral real, filtrada por TURMA, sem duplicar Calendário */}
-              {plannedView === 'turmas' && (
+              {/* Turmas: gestão cadastral real, filtrada por TREINAMENTOS */}
+              <div className={plannedView === 'turmas' ? '' : 'hidden'}>
                 <Suspense
                   fallback={
                     <div className="flex items-center justify-center py-20">
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent motion-safe:animate-spin" />
                     </div>
                   }
                 >
@@ -3367,9 +3394,11 @@ export default function Qualificacoes() {
                     forcedTab="quadro"
                     hideTabNav={true}
                     sourceFilter="TREINAMENTOS"
+                    autoOpenForm={autoOpenTurmasModal}
+                    onAutoOpenFormHandled={() => setAutoOpenTurmasModal(false)}
                   />
                 </Suspense>
-              )}
+              </div>
             </div>
           )}
         </div>

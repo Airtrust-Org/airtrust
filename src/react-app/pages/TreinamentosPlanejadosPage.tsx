@@ -2,12 +2,17 @@ import { useDeferredValue, useEffect, useMemo, useState, useCallback } from 'rea
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
+  Ban,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
+  Clock,
   Edit2,
   Eye,
   FileClock,
+  Flag,
   Mail,
   Plus,
   ShieldCheck,
@@ -581,6 +586,8 @@ interface TreinamentosPlanejadosPageProps {
   hideTabNav?: boolean;
   hideActions?: boolean;
   sourceFilter?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA' | 'TREINAMENTOS';
+  autoOpenForm?: boolean;
+  onAutoOpenFormHandled?: () => void;
 }
 
 export default function TreinamentosPlanejadosPage({
@@ -589,13 +596,15 @@ export default function TreinamentosPlanejadosPage({
   hideTabNav = false,
   hideActions = false,
   sourceFilter,
+  autoOpenForm = false,
+  onAutoOpenFormHandled,
 }: TreinamentosPlanejadosPageProps) {
   const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
   const navigate = useNavigate();
   const canManage = !isAluno && (isAdmin || isGestor || isInstrutor || can('qualificacoes.view'));
 
   const planejadosActionButtonClass =
-    'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
+    'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors';
   const today = useMemo(() => getTodayYmd(), []);
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(forcedTab || 'calendario');
   const [mesReferencia, setMesReferencia] = useState(today.slice(0, 7));
@@ -1342,6 +1351,15 @@ export default function TreinamentosPlanejadosPage({
   const isTurmasView = sourceFilter === 'TURMA' || sourceFilter === 'TREINAMENTOS';
   const primaryActionLabel = isTurmasView ? 'Nova turma' : 'Novo treinamento';
 
+  // H7: When parent header "Nova turma" button is clicked, auto-open the creation modal
+  useEffect(() => {
+    if (autoOpenForm && tiposQualificacao.length > 0 && funcionarios.length > 0) {
+      abrirNovoTreinamento();
+      onAutoOpenFormHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenForm, tiposQualificacao.length, funcionarios.length]);
+
   const actionButtons = (
     <div className="flex flex-wrap items-center gap-2">
       <Button variant="secondary" icon="refresh" onClick={() => treinamentosQuery.refetch()}>
@@ -1375,35 +1393,41 @@ export default function TreinamentosPlanejadosPage({
           </div>
         )}
 
-        {/* Summary tags — same visual pattern as Historico header bar */}
+        {/* Summary tags — icons ensure status is distinguishable beyond color alone */}
         <section className="flex flex-wrap gap-2 px-1" aria-label="Resumo dos treinamentos">
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-slate-100 text-slate-700 text-sm">
+            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Total</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.total}</strong>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-purple-50 text-purple-700 text-sm">
+            <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Planejados</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.planejados}</strong>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-emerald-50 text-emerald-700 text-sm">
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Confirmados</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.confirmadosEventos}</strong>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-amber-50 text-amber-700 text-sm">
+            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Em andamento</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.emAndamento}</strong>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-blue-50 text-blue-700 text-sm">
+            <Flag className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Concluídos</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.concluidos}</strong>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-rose-50 text-rose-700 text-sm">
+            <Ban className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Cancelados</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.cancelados}</strong>
           </span>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <section className="sticky top-0 z-10 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="grid gap-3 lg:grid-cols-[1.2fr,0.9fr,0.9fr,1.1fr]">
             <label className="space-y-1.5">
               <span className="text-sm font-medium text-slate-700">Mes de referencia</span>
@@ -1411,7 +1435,7 @@ export default function TreinamentosPlanejadosPage({
                 type="month"
                 value={mesReferencia}
                 onChange={(event) => setMesReferencia(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-0 transition focus:border-primary-500"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
               />
             </label>
 
@@ -1420,7 +1444,7 @@ export default function TreinamentosPlanejadosPage({
               <select
                 value={statusFiltro}
                 onChange={(event) => setStatusFiltro(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
               >
                 {STATUS_OPTIONS.map((option) => (
                   <option key={option.value || 'all'} value={option.value}>
@@ -1435,7 +1459,7 @@ export default function TreinamentosPlanejadosPage({
               <select
                 value={instrutorFiltro}
                 onChange={(event) => setInstrutorFiltro(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
               >
                 <option value="">Todos</option>
                 {instrutores.map((instrutor) => (
@@ -1453,7 +1477,7 @@ export default function TreinamentosPlanejadosPage({
                 value={busca}
                 onChange={(event) => setBusca(event.target.value)}
                 placeholder="Titulo, qualificação, local ou instrutor"
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
               />
             </label>
           </div>
@@ -1461,7 +1485,7 @@ export default function TreinamentosPlanejadosPage({
 
         <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           {!hideTabNav && (
-            <div className="flex flex-wrap gap-2">
+            <div role="tablist" aria-label="Modos de visualização" className="flex flex-wrap gap-2">
               {[
                 { id: 'calendario', label: 'Calendario', icon: CalendarDays },
                 { id: 'quadro', label: 'Quadro', icon: ClipboardList },
@@ -1473,14 +1497,16 @@ export default function TreinamentosPlanejadosPage({
                   <button
                     key={tab.id}
                     type="button"
+                    role="tab"
+                    aria-selected={active}
                     onClick={() => setAbaAtiva(tab.id as AbaAtiva)}
-                    className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                    className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition min-h-[44px] ${
                       active
-                        ? 'bg-primary-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                        ? 'bg-primary-600 text-white shadow-sm focus-visible:ring-primary-400'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 focus-visible:ring-primary-400'
+                    } motion-safe:transition-colors`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-4 w-4" aria-hidden="true" />
                     {tab.label}
                   </button>
                 );
@@ -1491,15 +1517,41 @@ export default function TreinamentosPlanejadosPage({
           {abaAtiva === 'calendario' && (
             <div className="mt-4 space-y-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-lg font-semibold text-slate-900 capitalize">
-                    {formatMonthLabel(mesReferencia)}
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    {calendarioQuery.data?.periodo.inicio && calendarioQuery.data?.periodo.fim
-                      ? `${formatDateLabel(calendarioQuery.data.periodo.inicio)} a ${formatDateLabel(calendarioQuery.data.periodo.fim)}`
-                      : 'Sem periodo definido'}
-                  </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const [year, month] = mesReferencia.split('-').map(Number);
+                      const prev = new Date(year, month - 2, 1);
+                      setMesReferencia(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+                    }}
+                    aria-label="Mês anterior"
+                    className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer motion-safe:transition-colors"
+                  >
+                    <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                  <div>
+                    <p className="text-lg font-semibold text-slate-900 capitalize">
+                      {formatMonthLabel(mesReferencia)}
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      {calendarioQuery.data?.periodo.inicio && calendarioQuery.data?.periodo.fim
+                        ? `${formatDateLabel(calendarioQuery.data.periodo.inicio)} a ${formatDateLabel(calendarioQuery.data.periodo.fim)}`
+                        : 'Sem periodo definido'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const [year, month] = mesReferencia.split('-').map(Number);
+                      const next = new Date(year, month, 1);
+                      setMesReferencia(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                    }}
+                    aria-label="Próximo mês"
+                    className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer motion-safe:transition-colors"
+                  >
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                  </button>
                 </div>
                 <p className="text-sm text-slate-500">
                   {calendarioQuery.isLoading
@@ -1508,7 +1560,8 @@ export default function TreinamentosPlanejadosPage({
                 </p>
               </div>
 
-              <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
+              <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 min-w-[640px] sm:min-w-0">
                 {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'].map((label) => (
                   <div key={label} className="rounded-xl bg-slate-100 px-2 py-2">
                     {label}
@@ -1516,7 +1569,7 @@ export default function TreinamentosPlanejadosPage({
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
+              <div className="grid grid-cols-7 gap-2 min-w-[640px] sm:min-w-0">
                 {calendarCells.map((cell) => {
                   const eventos = eventosPorDia.get(cell.date) || [];
                   const isToday = cell.date === today;
@@ -1544,50 +1597,35 @@ export default function TreinamentosPlanejadosPage({
                         )}
                       </div>
 
-                      <div className="space-y-2">
-                        {eventos.slice(0, 3).map((evento) => (
+                      <div className="space-y-1.5">
+                        {eventos.slice(0, 2).map((evento) => (
                           <button
                             key={evento.id}
                             type="button"
                             onClick={() => abrirDetalhes(evento)}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-primary-200 hover:bg-primary-50"
+                            aria-label={`${getEventoTitulo(evento)}, ${formatHourRange(evento.hora_inicio, evento.hora_fim)}`}
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left transition hover:border-primary-200 hover:bg-primary-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer motion-safe:transition-colors"
                           >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-semibold text-slate-900">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <p className="truncate text-xs font-semibold text-slate-900 leading-tight">
                                 {getEventoTitulo(evento)}
                               </p>
                               <StatusBadge status={evento.status} />
                             </div>
-                            <p className="mt-1 text-xs text-slate-500">
+                            <p className="mt-0.5 text-[11px] text-slate-500">
                               {formatHourRange(evento.hora_inicio, evento.hora_fim)}
-                            </p>
-                            {getEventoParticipantSummary(evento) ? (
-                              <p className="mt-1 text-xs text-slate-500">
-                                {getEventoParticipantSummary(evento)}
-                              </p>
-                            ) : null}
-                            {getEventoLinkedSessionLabel(evento) ? (
-                              <p className="mt-1 text-xs text-slate-500">
-                                {getEventoLinkedSessionLabel(evento)}
-                              </p>
-                            ) : null}
-                            {evento.source_label ? (
-                              <p className="mt-1 text-xs text-slate-500">{evento.source_label}</p>
-                            ) : null}
-                            <p className="mt-1 text-xs text-slate-500">
-                              {evento.convocados_total} convocados
                             </p>
                           </button>
                         ))}
 
-                        {eventos.length > 3 && (
-                          <p className="px-1 text-xs font-medium text-slate-500">
-                            +{eventos.length - 3} evento(s) neste dia
+                        {eventos.length > 2 && (
+                          <p className="px-1 text-[11px] font-medium text-slate-500">
+                            +{eventos.length - 2} evento(s) neste dia
                           </p>
                         )}
 
                         {eventos.length === 0 && !cell.outside && (
-                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-400">
+                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-400 text-center">
                             Sem treinamentos planejados
                           </div>
                         )}
@@ -1595,6 +1633,7 @@ export default function TreinamentosPlanejadosPage({
                     </div>
                   );
                 })}
+              </div>
               </div>
             </div>
           )}
@@ -1618,9 +1657,17 @@ export default function TreinamentosPlanejadosPage({
                 </div>
               ) : listaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  {isTurmasView
-                    ? 'Nenhuma turma planejada no período. Crie uma nova turma acima.'
-                    : 'Nenhum treinamento planejado encontrado para os filtros atuais.'}
+                  <ClipboardList className="mx-auto mb-3 h-10 w-10 text-slate-300" aria-hidden="true" />
+                  <p className="font-medium text-slate-700">
+                    {isTurmasView
+                      ? 'Nenhuma turma planejada no período'
+                      : 'Nenhum treinamento planejado encontrado'}
+                  </p>
+                  <p className="mt-1">
+                    {isTurmasView
+                      ? 'Crie uma nova turma acima.'
+                      : 'Ajuste os filtros ou crie um novo treinamento.'}
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
@@ -1628,7 +1675,7 @@ export default function TreinamentosPlanejadosPage({
                     className="min-w-[1080px] divide-y divide-slate-200 text-sm"
                     data-testid="treinamentos-planejados-table"
                   >
-                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 sticky top-0 z-[1]">
                       <tr>
                         <th className="px-4 py-3 text-left">Data</th>
                         <th className="px-4 py-3 text-left">Horário</th>
@@ -1699,6 +1746,13 @@ export default function TreinamentosPlanejadosPage({
                                 <button
                                   type="button"
                                   onClick={() => abrirDetalhes(item)}
+                                  aria-label={
+                                    simulatorSessionId
+                                      ? 'Editar sessão'
+                                      : item.read_only
+                                        ? 'Abrir origem'
+                                        : 'Ver detalhes'
+                                  }
                                   title={
                                     simulatorSessionId
                                       ? 'Editar sessão'
@@ -1713,16 +1767,17 @@ export default function TreinamentosPlanejadosPage({
                                       : `treinamento-detalhes-${item.id}`
                                   }
                                 >
-                                  <Eye className="w-4 h-4 text-slate-600" />
+                                  <Eye className="w-4 h-4 text-slate-600" aria-hidden="true" />
                                 </button>
                                 {!item.read_only ? (
                                   <button
                                     type="button"
                                     onClick={() => abrirEditor(item)}
+                                    aria-label="Editar"
                                     title="Editar"
                                     className={planejadosActionButtonClass}
                                   >
-                                    <Edit2 className="w-4 h-4 text-indigo-600" />
+                                    <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
                                   </button>
                                 ) : null}
                               </div>
@@ -1778,7 +1833,9 @@ export default function TreinamentosPlanejadosPage({
                 </div>
               ) : auditoriaTreinamentos.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  Nenhum treinamento com trilha de auditoria encontrado neste periodo.
+                  <FileClock className="mx-auto mb-3 h-10 w-10 text-slate-300" aria-hidden="true" />
+                  <p className="font-medium text-slate-700">Nenhum treinamento com trilha de auditoria</p>
+                  <p className="mt-1">Nenhum evento encontrado neste período.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1811,7 +1868,8 @@ export default function TreinamentosPlanejadosPage({
 
                       <div className="mt-4 space-y-3">
                         {(item.auditoria || []).length === 0 ? (
-                          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+                          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500 text-center">
+                            <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-slate-300" aria-hidden="true" />
                             Sem eventos auditados ainda.
                           </div>
                         ) : (
@@ -1906,7 +1964,7 @@ export default function TreinamentosPlanejadosPage({
                       };
                     });
                   }}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 >
                   <option value="">Selecione</option>
                   {(tiposQualificacao as TipoQualificacaoOption[]).map((tipo) => (
@@ -1927,7 +1985,7 @@ export default function TreinamentosPlanejadosPage({
                       status: event.target.value as TreinamentoPlanejadoStatus,
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 >
                   {STATUS_OPTIONS.filter((option) => option.value).map((option) => (
                     <option key={option.value} value={option.value}>
@@ -2021,7 +2079,7 @@ export default function TreinamentosPlanejadosPage({
                   setFormState((current) => ({ ...current, titulo: event.target.value }))
                 }
                 placeholder="Ex.: Reciclagem anual de CRM"
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
               />
             </label>
 
@@ -2035,7 +2093,7 @@ export default function TreinamentosPlanejadosPage({
                     setFormState((current) => ({ ...current, codigo_turma: event.target.value }))
                   }
                   placeholder="Ex.: CRM-2026-06-A"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
 
@@ -2049,7 +2107,7 @@ export default function TreinamentosPlanejadosPage({
                       modalidade: event.target.value as TreinamentoFormState['modalidade'],
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 >
                   <option value="TEORICO">Teórico</option>
                   <option value="SALA">Sala de aula</option>
@@ -2072,7 +2130,7 @@ export default function TreinamentosPlanejadosPage({
                   onChange={(event) =>
                     setFormState((current) => ({ ...current, base: event.target.value }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
 
@@ -2089,7 +2147,7 @@ export default function TreinamentosPlanejadosPage({
                       limite_participantes: event.target.value,
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
             </div>
@@ -2107,7 +2165,7 @@ export default function TreinamentosPlanejadosPage({
                       formState.data_fim < nextStart ? nextStart : formState.data_fim;
                     atualizarIntervalo(nextStart, nextEnd);
                   }}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
 
@@ -2120,7 +2178,7 @@ export default function TreinamentosPlanejadosPage({
                   onChange={(event) =>
                     atualizarIntervalo(formState.data_prevista, event.target.value)
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
 
@@ -2135,7 +2193,7 @@ export default function TreinamentosPlanejadosPage({
                       dias: current.dias.map((dia) => ({ ...dia, hora_inicio: value })),
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
 
@@ -2150,7 +2208,7 @@ export default function TreinamentosPlanejadosPage({
                       dias: current.dias.map((dia) => ({ ...dia, hora_fim: value })),
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
 
@@ -2167,7 +2225,7 @@ export default function TreinamentosPlanejadosPage({
                       carga_horaria_prevista: event.target.value,
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
             </div>
@@ -2236,7 +2294,7 @@ export default function TreinamentosPlanejadosPage({
                   onChange={(event) =>
                     setFormState((current) => ({ ...current, sala: event.target.value }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
               <label className="space-y-1.5">
@@ -2251,7 +2309,7 @@ export default function TreinamentosPlanejadosPage({
                     }))
                   }
                   placeholder="Projetor, mockup ou equipamento específico"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
             </div>
@@ -2264,7 +2322,7 @@ export default function TreinamentosPlanejadosPage({
                   onChange={(event) =>
                     setFormState((current) => ({ ...current, instrutor_id: event.target.value }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 >
                   <option value="">Nao definido</option>
                   {instrutores.map((instrutor) => (
@@ -2284,7 +2342,7 @@ export default function TreinamentosPlanejadosPage({
                     setFormState((current) => ({ ...current, local: event.target.value }))
                   }
                   placeholder="Sala, simulador, base ou plataforma"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                 />
               </label>
             </div>
@@ -2298,7 +2356,7 @@ export default function TreinamentosPlanejadosPage({
                   onChange={(event) =>
                     setFormState((current) => ({ ...current, descricao: event.target.value }))
                   }
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                   placeholder="Objetivo, publico alvo, observacoes do instrutor..."
                 />
               </label>
@@ -2311,7 +2369,7 @@ export default function TreinamentosPlanejadosPage({
                   onChange={(event) =>
                     setFormState((current) => ({ ...current, observacoes: event.target.value }))
                   }
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-primary-500"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
                   placeholder="Requisitos previos, sala reservada, dependencia de frota..."
                 />
               </label>
@@ -2330,7 +2388,7 @@ export default function TreinamentosPlanejadosPage({
                   value={buscaConvocados}
                   onChange={(event) => setBuscaConvocados(event.target.value)}
                   placeholder="Buscar por nome, guerra, matricula"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 sm:max-w-xs"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors sm:max-w-xs"
                 />
               </div>
 
