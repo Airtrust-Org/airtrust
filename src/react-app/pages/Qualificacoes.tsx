@@ -2375,7 +2375,7 @@ export default function Qualificacoes() {
                 }`}
               >
                 <History size={16} className={activeTab === 'historico' ? 'text-blue-600' : ''} />
-                Histórico
+                Histórico de Qualificações
               </button>
               <button
                 onClick={() => setActiveTab('planejados')}
@@ -2389,7 +2389,7 @@ export default function Qualificacoes() {
                   size={16}
                   className={isPlanejadosTab ? 'text-blue-600' : ''}
                 />
-                Planejadas
+                Treinamentos Planejados
               </button>
               <button
                 onClick={() => setActiveTab('tipos')}

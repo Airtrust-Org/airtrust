@@ -124,7 +124,19 @@ function mergeObservacoes(
 
 function resolveTipoTreinamento(
   validade: number | null,
+  cargaHorariaPrevista?: number | null,
+  cargaHorariaInicial?: number | null,
 ): 'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO' {
+  // Se a carga horária prevista bate com a carga horária inicial da qualificação,
+  // é um treinamento inicial (primeira concessão/formação).
+  if (
+    cargaHorariaInicial != null &&
+    cargaHorariaInicial > 0 &&
+    cargaHorariaPrevista != null &&
+    cargaHorariaPrevista === cargaHorariaInicial
+  ) {
+    return 'INICIAL';
+  }
   const normalized = normalizeTipoTreinamento(validade === 6 ? 'SEMESTRAL' : 'RECORRENTE');
   return normalized || 'RECORRENTE';
 }
@@ -450,7 +462,11 @@ async function upsertHistoricoPlanejadoForParticipante(
   }
 
   const marker = buildOrigemMarker(evento.id);
-  const tipoTreinamento = resolveTipoTreinamento(evento.qualificacao_validade);
+  const tipoTreinamento = resolveTipoTreinamento(
+    evento.qualificacao_validade,
+    evento.carga_horaria_prevista,
+    evento.qualificacao_carga_horaria_inicial,
+  );
   const cargaHoraria =
     evento.carga_horaria_prevista ??
     resolveCargaHorariaByTipo({
