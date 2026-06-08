@@ -173,6 +173,13 @@ export default function ModalNovaSessao({
   const [editHydrating, setEditHydrating] = useState(false); // Loading state for edit mode hydration
   const [sessaoDetalhe, setSessaoDetalhe] = useState<any>(null); // Complete session data from GET /sessoes/:id
   const phase1MergedRef = useRef<any>(null); // merged edit payload across hydration phases
+  const modelosRequestSeqRef = useRef(0);
+  const modelosInFlightRef = useRef<{
+    requestId: number;
+    comboKey: string;
+    controller: AbortController;
+  } | null>(null);
+  const modelosLoadedComboRef = useRef<string | null>(null);
 
   // ========== FLUXO EM CASCATA ==========
   const [tipoDispositivo, setTipoDispositivo] = useState<'SIMULADOR' | 'AERONAVE'>('SIMULADOR');
@@ -228,9 +235,25 @@ export default function ModalNovaSessao({
     return `${hh}:${mm}`;
   }
 
+  function getModelosComboKey(
+    tipoSessaoIdParam: number,
+    codigoAeronave: string,
+    tipo?: 'SIMULADOR' | 'AERONAVE',
+  ) {
+    return `${tipo || tipoDispositivo}:${codigoAeronave}:${tipoSessaoIdParam}`;
+  }
+
+  function invalidateModelosCache() {
+    modelosInFlightRef.current?.controller.abort();
+    modelosInFlightRef.current = null;
+    modelosLoadedComboRef.current = null;
+    setLoadingModelos(false);
+  }
+
   // ========== LOAD DATA INICIAL ==========
   useEffect(() => {
     if (isOpen) {
+      invalidateModelosCache();
       setTiposSessao([]);
       setModelos([]);
       setErroModelosSessao(null);
@@ -262,6 +285,7 @@ export default function ModalNovaSessao({
       setHorarioFimFoiEditado(isEditMode);
     } else {
       // Modal fechando: limpar estado de hidratação
+      invalidateModelosCache();
       setEditHydrating(false);
       phase1MergedRef.current = null;
     }
@@ -620,9 +644,24 @@ export default function ModalNovaSessao({
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  async function fetchJsonComTimeout(url: string, timeoutMs = 12000) {
+  async function fetchJsonComTimeout(
+    url: string,
+    options?: { timeoutMs?: number; signal?: AbortSignal },
+  ) {
+    const timeoutMs = options?.timeoutMs ?? 12000;
     const controller = new AbortController();
+    const externalSignal = options?.signal;
+    const abortFromExternal = () => controller.abort();
     const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener('abort', abortFromExternal, { once: true });
+      }
+    }
+
     try {
       const res = await fetch(url, {
         headers: _authHeaders(),
@@ -652,6 +691,9 @@ export default function ModalNovaSessao({
       }
       throw error;
     } finally {
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', abortFromExternal);
+      }
       window.clearTimeout(timeoutId);
     }
   }
@@ -708,6 +750,7 @@ export default function ModalNovaSessao({
     if (editHydrating) return;
     if (tiposSessao.some((tipo) => tipo.id === tipoSessaoId)) return;
 
+    invalidateModelosCache();
     setTipoSessaoId(null);
     setModeloSessaoId(null);
     setModelos([]);
@@ -845,6 +888,7 @@ export default function ModalNovaSessao({
   function handleAeronaveChange(id: number, modelo: string) {
     setAeronaveId(id);
     setAeronaveCodigo(modelo);
+    invalidateModelosCache();
 
     // Reset cascata
     setSimuladorId(null);
@@ -883,6 +927,7 @@ export default function ModalNovaSessao({
   // ========== FLUXO 2b: SELECIONAR AERONAVE REAL (modo AERONAVE) ==========
   function handleAeronaveRealChange(id: number) {
     setAeronaveRealId(id);
+    invalidateModelosCache();
 
     // Reset cascata
     setTipoSessaoId(null);
@@ -897,6 +942,7 @@ export default function ModalNovaSessao({
 
   function handleTipoDispositivoChange(tipo: 'SIMULADOR' | 'AERONAVE') {
     setTipoDispositivo(tipo);
+    invalidateModelosCache();
     setSimuladorId(null);
     setAeronaveRealId(null);
     setTipoSessaoId(null);
@@ -912,6 +958,7 @@ export default function ModalNovaSessao({
   // ========== FLUXO 2: SELECIONAR SIMULADOR ==========
   function handleSimuladorChange(id: number) {
     setSimuladorId(id);
+    invalidateModelosCache();
 
     // Reset cascata
     setTipoSessaoId(null);
@@ -927,6 +974,7 @@ export default function ModalNovaSessao({
   // ========== FLUXO 3: SELECIONAR TIPO DE SESSÃO ==========
   function handleTipoSessaoChange(id: number) {
     setTipoSessaoId(id);
+    invalidateModelosCache();
 
     // Reset cascata
     setModeloSessaoId(null);
@@ -982,18 +1030,41 @@ export default function ModalNovaSessao({
     origem: 'fetchModelos' | 'fetchModelosComCodigo',
     tipo?: 'SIMULADOR' | 'AERONAVE',
   ) {
+    const tipoEfetivo = tipo || tipoDispositivo;
+    const comboKey = getModelosComboKey(tipoSessaoIdParam, codigoAeronave, tipoEfetivo);
+
+    if (modelosInFlightRef.current?.comboKey === comboKey) {
+      console.log(`⏭️ [${origem}] Requisição já em andamento para`, comboKey);
+      return;
+    }
+
+    if (modelosLoadedComboRef.current === comboKey && !erroModelosSessao) {
+      console.log(`⏭️ [${origem}] Modelos já carregados para`, comboKey);
+      return;
+    }
+
+    modelosInFlightRef.current?.controller.abort();
+    const controller = new AbortController();
+    const requestId = ++modelosRequestSeqRef.current;
+    modelosInFlightRef.current = { requestId, comboKey, controller };
+
     try {
       setLoadingModelos(true);
       setErroModelosSessao(null);
-      const url = buildModelosSessaoUrl(tipoSessaoIdParam, codigoAeronave, tipo);
+      const url = buildModelosSessaoUrl(tipoSessaoIdParam, codigoAeronave, tipoEfetivo);
 
       console.log(`🔍 [${origem}] Buscando modelos:`, {
+        requestId,
         tipoSessaoIdParam,
         modelo_aeronave: codigoAeronave,
         url,
       });
 
-      const data = await fetchJsonComTimeout(url);
+      const data = await fetchJsonComTimeout(url, { signal: controller.signal });
+
+      if (modelosInFlightRef.current?.requestId !== requestId) {
+        return;
+      }
 
       console.log(`📦 [${origem}] Resposta recebida:`, data);
 
@@ -1003,7 +1074,7 @@ export default function ModalNovaSessao({
           respostaFiltradaBackend,
           tipoSessaoIdParam,
           codigoAeronave,
-          tipo,
+          tipoEfetivo,
         );
 
         // Se o backend já retornou itens para a combinação solicitada, mas o filtro local
@@ -1014,15 +1085,26 @@ export default function ModalNovaSessao({
         }
 
         if (modelosAtualizados.length === 0) {
-          const fallbackUrl = buildModelosSessaoUrl(tipoSessaoIdParam, codigoAeronave, tipo, false);
-          const fallbackData = await fetchJsonComTimeout(fallbackUrl);
+          const fallbackUrl = buildModelosSessaoUrl(
+            tipoSessaoIdParam,
+            codigoAeronave,
+            tipoEfetivo,
+            false,
+          );
+          const fallbackData = await fetchJsonComTimeout(fallbackUrl, {
+            signal: controller.signal,
+          });
+
+          if (modelosInFlightRef.current?.requestId !== requestId) {
+            return;
+          }
 
           if (fallbackData.success) {
             modelosAtualizados = filtrarModelosSessaoModal(
               fallbackData.data || [],
               tipoSessaoIdParam,
               codigoAeronave,
-              tipo,
+              tipoEfetivo,
             );
           }
         }
@@ -1069,6 +1151,7 @@ export default function ModalNovaSessao({
           }
         }
 
+        modelosLoadedComboRef.current = comboKey;
         setModelos(modelosAtualizados);
 
         if (
@@ -1086,6 +1169,7 @@ export default function ModalNovaSessao({
         console.log(`✅ [${origem}] ${modelosAtualizados.length} modelos carregados`);
       } else {
         console.error(`❌ [${origem}] API retornou success=false`);
+        modelosLoadedComboRef.current = null;
         setErroModelosSessao(
           data?.error || 'Não foi possível carregar os modelos de sessão para esta combinação.',
         );
@@ -1096,7 +1180,12 @@ export default function ModalNovaSessao({
         }
       }
     } catch (error) {
+      if (controller.signal.aborted) {
+        console.log(`🛑 [${origem}] Request ${requestId} abortada (obsoleta)`);
+        return;
+      }
       console.error(`❌ [${origem}] Erro:`, error);
+      modelosLoadedComboRef.current = null;
       setErroModelosSessao(
         error instanceof Error
           ? error.message
@@ -1107,7 +1196,10 @@ export default function ModalNovaSessao({
         setModelos([]);
       }
     } finally {
-      setLoadingModelos(false);
+      if (modelosInFlightRef.current?.requestId === requestId) {
+        modelosInFlightRef.current = null;
+        setLoadingModelos(false);
+      }
     }
   }
 
@@ -1492,6 +1584,7 @@ export default function ModalNovaSessao({
   }
 
   function resetForm() {
+    invalidateModelosCache();
     setTipoDispositivo('SIMULADOR');
     setAeronaveId(null);
     setAeronaveCodigo('');
@@ -1774,11 +1867,6 @@ export default function ModalNovaSessao({
               <select
                 value={modeloSessaoId || ''}
                 onChange={(e) => handleModeloChange(e.target.value)}
-                onFocus={() => {
-                  if (tipoSessaoId && aeronaveCodigo) {
-                    void fetchModelosComCodigo(tipoSessaoId, aeronaveCodigo);
-                  }
-                }}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                 disabled={loading}
               >
