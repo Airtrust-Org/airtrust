@@ -147,7 +147,7 @@ describe('modalNovaSessaoRules', () => {
         id: 4,
         codigo: 'AW139-PER-01',
         nome: 'AW139 Periodico',
-        tipo: 'SIMULADOR',
+        tipo: 'Treinamento Inicial',
         tipo_sessao_id: 20,
         tipo_sessao_codigo: 'PER',
         tipo_sessao_nome: 'Periodico',
@@ -221,6 +221,17 @@ describe('modalNovaSessaoRules', () => {
       });
 
       expect(result.map((modelo) => modelo.codigo)).toEqual(['AW139-I-01']);
+    });
+
+    it('prioriza metadado canonico do tipo e ignora legado ambiguo', () => {
+      const result = filterModelosSessaoForModal({
+        modelos,
+        tipoSessao: { codigo: 'INI', nome: 'Inicial' },
+        equipamento: 'AW139',
+        tipoDispositivo: 'SIMULADOR',
+      });
+
+      expect(result.map((modelo) => modelo.codigo)).not.toContain('AW139-PER-01');
     });
 
     it('mantem filtro por tipo Periodico sem misturar Inicial', () => {

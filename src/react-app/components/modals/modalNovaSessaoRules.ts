@@ -131,10 +131,16 @@ function isModeloTipoSessaoCompativel(
   }
 
   const tipoLegado = normalizeTipoDispositivo(modelo.tipo);
+  const temMetadadoCanonico =
+    Boolean(modelo.tipo_sessao_id) ||
+    Boolean(normalizeTipoSessao(modelo.tipo_sessao_codigo)) ||
+    Boolean(normalizeTipoSessao(modelo.tipo_sessao_nome));
   const candidatos = [
     modelo.tipo_sessao_codigo,
     modelo.tipo_sessao_nome,
-    tipoLegado !== 'SIMULADOR' && tipoLegado !== 'AERONAVE' ? modelo.tipo : null,
+    !temMetadadoCanonico && tipoLegado !== 'SIMULADOR' && tipoLegado !== 'AERONAVE'
+      ? modelo.tipo
+      : null,
   ].map(normalizeTipoSessao);
 
   return candidatos.some((candidato) => esperado.has(candidato));

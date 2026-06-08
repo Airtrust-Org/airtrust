@@ -120,7 +120,7 @@ function buildFetchMock(options: TestOptions = {}) {
         codigo: 'S76-P-C1/VFR',
         nome: 'SK76 - PERIÓDICO - 01/03 - CICLO 1: VFR',
         tipo_sessao_id: 9,
-        tipo: 'PERIODICO',
+        tipo: 'Treinamento Inicial',
         modelo_aeronave: 'SK76',
       },
       {
@@ -128,7 +128,7 @@ function buildFetchMock(options: TestOptions = {}) {
         codigo: 'S76-P-C1/IFR',
         nome: 'SK76 - PERIÓDICO - 02/03 - CICLO 1: IFR',
         tipo_sessao_id: 9,
-        tipo: 'PERIODICO',
+        tipo: 'Treinamento Inicial',
         modelo_aeronave: 'SK76',
       },
     ],
@@ -369,5 +369,26 @@ describe('ModalNovaSessao loading stability', () => {
     expect(countByTipoSessaoId('21')).toBe(1);
     expect(countByTipoSessaoId('2')).toBe(1);
     expect(modelRequestUrls.filter((url) => !url.includes('tipo_sessao_id='))).toHaveLength(3);
+  });
+
+  it('nao_mistura_periodico_em_inicial_quando_tipo_legado_vem_ambiguo', async () => {
+    const { fetchMock } = buildFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    renderModal();
+
+    await selecionarFluxoSk76(user);
+    await user.selectOptions(screen.getAllByRole('combobox')[2], '14');
+
+    await waitFor(() => {
+      const modeloSelect = screen.getAllByRole('combobox')[3] as HTMLSelectElement;
+      const optionLabels = Array.from(modeloSelect.options).map((option) => option.textContent);
+      expect(optionLabels).toContain(
+        'SK76-I-01/12 - SK76 - INICIAL - 01/12 - FAMILIARIZAÇÃO VFR',
+      );
+      expect(optionLabels).not.toContain('S76-P-C1/VFR - SK76 - PERIÓDICO - 01/03 - CICLO 1: VFR');
+      expect(optionLabels).not.toContain('S76-P-C1/IFR - SK76 - PERIÓDICO - 02/03 - CICLO 1: IFR');
+    });
   });
 });
