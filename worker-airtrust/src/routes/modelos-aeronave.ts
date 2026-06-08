@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 
@@ -88,7 +89,7 @@ modelosAeronave.get('/:id', auth(), async (c) => {
 });
 
 // POST /modelos-aeronave - Cria um novo modelo
-modelosAeronave.post('/', auth(), async (c) => {
+modelosAeronave.post('/', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const body = normalizeModeloAeronavePayload((await c.req.json()) as Record<string, unknown>) as any;
 
@@ -132,7 +133,7 @@ modelosAeronave.post('/', auth(), async (c) => {
 });
 
 // PUT /modelos-aeronave/:id - Atualiza um modelo
-modelosAeronave.put('/:id', auth(), async (c) => {
+modelosAeronave.put('/:id', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const body = normalizeModeloAeronavePayload((await c.req.json()) as Record<string, unknown>) as any;
@@ -186,7 +187,7 @@ modelosAeronave.put('/:id', auth(), async (c) => {
 });
 
 // DELETE /modelos-aeronave/:id - Soft delete
-modelosAeronave.delete('/:id', auth(), async (c) => {
+modelosAeronave.delete('/:id', auth(), requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
 
