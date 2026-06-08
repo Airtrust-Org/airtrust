@@ -143,6 +143,7 @@
     "guard:tracked-secrets": "bash scripts/check-tracked-secrets.sh",
     "check:demo-data": "bash scripts/ci-demo-data-check.sh && bash scripts/production-audit-check.sh",
     "lint:api-base": "chmod +x scripts/lint-api-base.sh && ./scripts/lint-api-base.sh",
-    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries"
+    "guard:empresa-default1": "bash scripts/guard-no-new-empresa-default1.sh",
+    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1"
   }
 }
