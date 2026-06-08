@@ -9,7 +9,10 @@ function getBuildVersion(): string {
 
   try {
     const gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
-    const dirty = execSync('git status --porcelain', { encoding: 'utf8' }).trim().length > 0;
+    const dirty =
+      execSync('git status --porcelain --untracked-files=no', {
+        encoding: 'utf8',
+      }).trim().length > 0;
     return dirty ? `${gitHash}-dirty` : gitHash;
   } catch {
     return 'dev';
