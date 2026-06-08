@@ -26,7 +26,7 @@ import {
   UserX,
   X,
 } from 'lucide-react';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import { EmptyState } from '@/react-app/components/UI/EmptyState';
@@ -39,6 +39,7 @@ import { MESES, MESES_CURTOS } from '../EscalaPageContext';
 import { useEscalaPageCtx } from '../EscalaPageContext';
 import FiltroQuinzena from '../components/Filtros/FiltroQuinzena';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { parseSyntheticId } from '../components/EscalaCalendario/GradeTripulantes.utils';
 
 const PainelTripulacoes = lazyWithRetry(
   () => import('../components/Paineis/PainelTripulacoes'),
@@ -315,6 +316,18 @@ export default function EscalasDetalheView() {
 
     return [...unique.values()].sort((a, b) => a.modelo.localeCompare(b.modelo, 'pt-BR'));
   }, [coberturaOperacional, coberturaOperacionalFiltrada]);
+
+  const handleEditarSituacao = useCallback(
+    (situacaoId: string) => {
+      const parsed = parseSyntheticId(situacaoId);
+      if (parsed) {
+        abrirModal({ tipo: 'detalhes-evento', eventoId: parsed.eventoId });
+      } else {
+        abrirSituacao(situacaoId);
+      }
+    },
+    [abrirModal, abrirSituacao],
+  );
 
   const abrirExportacaoPdf = async (payload: {
     mode: 'current-view' | 'equipment';
@@ -1402,9 +1415,14 @@ export default function EscalasDetalheView() {
                             }),
                           )
                         }
-                        onEditarSituacao={(situacaoId) =>
-                          interceptarSePublicada(() => abrirSituacao(situacaoId))
-                        }
+                        onEditarSituacao={(situacaoId) => {
+                          const parsed = parseSyntheticId(situacaoId);
+                          if (parsed) {
+                            abrirModal({ tipo: 'detalhes-evento', eventoId: parsed.eventoId });
+                          } else {
+                            interceptarSePublicada(() => abrirSituacao(situacaoId));
+                          }
+                        }}
                         onEditarFuncionario={abrirEdicaoFuncionario}
                         onFocarAlocacaoAeronave={focarAlocacaoAeronave}
                       />
@@ -1463,7 +1481,7 @@ export default function EscalasDetalheView() {
                             nome,
                           })
                         }
-                        onEditarSituacao={(situacaoId) => abrirSituacao(situacaoId)}
+                        onEditarSituacao={handleEditarSituacao}
                         onRegistrarSituacao={(payload) => abrirSituacao(undefined, payload)}
                         onRemoverSituacao={(situacaoId, nome) =>
                           setConfirmarRemoverSituacao({

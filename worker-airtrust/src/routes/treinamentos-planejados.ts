@@ -49,9 +49,14 @@ async function hasColumn(db: D1Database, table: string, column: string): Promise
   }
 }
 
+// Module-level cache for schema capabilities — avoids 10+ PRAGMA calls per request.
+// Worker isolates restart regularly so this never holds stale data for long.
+let _capabilitiesCache: TreinamentoSchemaCapabilities | null = null;
+
 async function detectTreinamentoSchemaCapabilities(
   db: D1Database,
 ): Promise<TreinamentoSchemaCapabilities> {
+  if (_capabilitiesCache) return _capabilitiesCache;
   const [hasModalidade, hasCodigoTurma, hasDataInicio, hasDataFim, hasBase, hasSala, hasEquipamentoDescricao, hasLimiteParticipantes] =
     await Promise.all([
       hasColumn(db, 'treinamentos_planejados', 'modalidade'),
@@ -67,7 +72,7 @@ async function detectTreinamentoSchemaCapabilities(
     tableExists(db, 'treinamentos_instrutores'),
     tableExists(db, 'treinamentos_dias'),
   ]);
-  return {
+  _capabilitiesCache = {
     hasModalidade,
     hasCodigoTurma,
     hasDataInicio,
@@ -79,6 +84,7 @@ async function detectTreinamentoSchemaCapabilities(
     hasInstrutoresTable,
     hasDiasTable,
   };
+  return _capabilitiesCache;
 }
 
 const treinamentosPlanejadosRoutes = new Hono<{ Bindings: Env }>();
@@ -283,7 +289,8 @@ type AuditoriaRow = {
   created_at: string;
 };
 
-type ConsolidatedSource = 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
+// 'TREINAMENTOS' is a virtual combined filter: TURMA + QUALIFICACAO_PLANEJADA (excludes SIMULADOR)
+type ConsolidatedSource = 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA' | 'TREINAMENTOS';
 
 type PlannedQualificationRow = {
   id: number;
@@ -352,7 +359,7 @@ type ConsolidatedTrainingItem = Omit<
   read_only: boolean;
 };
 
-const SOURCE_VALUES = ['TURMA', 'SIMULADOR', 'QUALIFICACAO_PLANEJADA'] as const;
+const SOURCE_VALUES = ['TURMA', 'SIMULADOR', 'QUALIFICACAO_PLANEJADA', 'TREINAMENTOS'] as const;
 
 async function resolveGestoresCcByParticipantes(
   db: D1Database,
@@ -1638,7 +1645,13 @@ async function listEventos(
     simulador: 'skipped',
   };
 
-  if (!sourceFilter || sourceFilter === 'TURMA') {
+  // TREINAMENTOS = combined filter: TURMA + QUALIFICACAO_PLANEJADA (excludes SIMULADOR)
+  const wantTurma = !sourceFilter || sourceFilter === 'TURMA' || sourceFilter === 'TREINAMENTOS';
+  const wantQualificacaoPlanejada =
+    !sourceFilter || sourceFilter === 'QUALIFICACAO_PLANEJADA' || sourceFilter === 'TREINAMENTOS';
+  const wantSimulador = !sourceFilter || sourceFilter === 'SIMULADOR';
+
+  if (wantTurma) {
     try {
       const turmaCapabilities = capabilities || await detectTreinamentoSchemaCapabilities(db);
       items.push(
@@ -1651,7 +1664,7 @@ async function listEventos(
     }
   }
 
-  if (!filters.treinamentoId && (!sourceFilter || sourceFilter === 'QUALIFICACAO_PLANEJADA')) {
+  if (!filters.treinamentoId && wantQualificacaoPlanejada) {
     try {
       items.push(
         ...(await loadStandalonePlannedQualificationItems(db, empresaId, filters)),
@@ -1663,7 +1676,7 @@ async function listEventos(
     }
   }
 
-  if (!filters.treinamentoId && (!sourceFilter || sourceFilter === 'SIMULADOR')) {
+  if (!filters.treinamentoId && wantSimulador) {
     try {
       items.push(
         ...(await loadSimulatorSessionItems(db, empresaId, filters)),
