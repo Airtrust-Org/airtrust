@@ -2345,7 +2345,7 @@ export default function Qualificacoes() {
       {/* Page Header */}
       <PageHeader
         className="mb-8"
-        title="Qualificações e Certificações"
+        title="Qualificações e Treinamentos"
         subtitle="Gerencie qualificações, certificações e treinamentos dos funcionários."
         actions={
           <>
