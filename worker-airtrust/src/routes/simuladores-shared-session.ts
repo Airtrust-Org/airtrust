@@ -154,13 +154,12 @@ async function assertEntityOwnership(
       `SELECT id
        FROM simuladores
        WHERE id = ?
-         AND empresa_id = ?
          AND deleted_at IS NULL`,
     )
-    .bind(payload.simulador_id, empresaId)
+    .bind(payload.simulador_id)
     .first();
   if (!simulador) {
-    throw new Error('Simulador fora do tenant');
+    throw new Error('Simulador não encontrado');
   }
 
   const modeloIds = payload.participantes
