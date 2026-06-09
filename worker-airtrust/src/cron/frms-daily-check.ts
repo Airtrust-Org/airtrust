@@ -195,16 +195,8 @@ export async function frmsDailyCheck(env: Env): Promise<{
 
   for (const trip of tripulantes) {
     try {
-      // Resolver empresa do tripulante para scoping de notificações
-      const tripEmpresa = await db
-        .prepare(
-          `SELECT empresa_id FROM frms_jornada
-           WHERE tripulante_id = ? AND deleted_at IS NULL
-           ORDER BY data DESC LIMIT 1`,
-        )
-        .bind(trip.id)
-        .first<{ empresa_id: number | null }>();
-      const tripEmpresaId = tripEmpresa?.empresa_id ?? null;
+      // empresa_id vem de funcionarios.empresa_id — fonte autoritativa de tenant
+      const tripEmpresaId = trip.empresa_id ?? null;
 
       // 1. Recalcular acúmulo rolling
       const acumulo = await recalcularAcumuloRolling(db, trip.id, hoje, limites);

@@ -115,14 +115,22 @@ export async function despacharNotificacoes(
 
     if (cargosElegiveis.length === 0) return;
 
-    // Buscar funcionários dos cargos elegíveis — com tenant scoping quando disponível
+    // Fail-closed: notificações privadas exigem tenant scoping
+    if (empresaId == null) {
+      console.warn(
+        '[FRMS][NOTIFICACAO] empresaId ausente — notificação privada não pode ser despachada sem tenant',
+        { alertaId, nivelAlerta, tripulanteId },
+      );
+      return;
+    }
+
+    // Buscar funcionários dos cargos elegíveis do tenant correto
     const placeholders = cargosElegiveis.map(() => '?').join(', ');
-    const tenantFilter = empresaId != null ? ' AND f.empresa_id = ?' : '';
     const funcionarios = await db
       .prepare(
-        `SELECT f.id, f.cargo FROM funcionarios f WHERE f.cargo IN (${placeholders}) AND (f.ativo = 1 OR f.status = 'ATIVO') AND f.deleted_at IS NULL${tenantFilter}`,
+        `SELECT f.id, f.cargo FROM funcionarios f WHERE f.cargo IN (${placeholders}) AND (f.ativo = 1 OR f.status = 'ATIVO') AND f.deleted_at IS NULL AND f.empresa_id = ?`,
       )
-      .bind(...(empresaId != null ? [...cargosElegiveis, empresaId] : cargosElegiveis))
+      .bind(...cargosElegiveis, empresaId)
       .all<{ id: number; cargo: string }>();
 
     // Montar set de destinatários únicos (cargo PILOTO inclui o próprio tripulante)

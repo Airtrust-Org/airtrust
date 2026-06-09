@@ -611,8 +611,14 @@ export async function persistirAlerta(db: D1Database, alerta: AlertaGerado): Pro
     )
     .run();
 
-  // Despachar notificações por cargo
-  await despacharNotificacoes(db, id, alerta.nivel, alerta.tripulante_id);
+  // Despachar notificações por cargo — resolve empresa do tripulante
+  const alertaEmpresa = await db
+    .prepare(
+      `SELECT empresa_id FROM funcionarios WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(alerta.tripulante_id)
+    .first<{ empresa_id: number | null }>();
+  await despacharNotificacoes(db, id, alerta.nivel, alerta.tripulante_id, alertaEmpresa?.empresa_id ?? null);
 
   return id;
 }
@@ -1290,18 +1296,20 @@ export async function importarSimulador(
 
 export async function listarTripulantesAtivos(
   db: D1Database,
-): Promise<Array<{ id: number; nome: string }>> {
-  // Buscar tripulantes que têm jornadas FRMS registradas
+): Promise<Array<{ id: number; nome: string; empresa_id: number | null }>> {
+  // Buscar tripulantes que têm jornadas FRMS registradas,
+  // incluindo empresa_id do funcionário como fonte autoritativa de tenant
   const rows = await db
     .prepare(
       `SELECT DISTINCT j.tripulante_id as id,
-              COALESCE(p.nome, 'Tripulante #' || j.tripulante_id) as nome
+              COALESCE(p.nome, 'Tripulante #' || j.tripulante_id) as nome,
+              p.empresa_id
        FROM frms_jornada j
-       LEFT JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER)
+       LEFT JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER) AND p.deleted_at IS NULL
        WHERE j.deleted_at IS NULL
        ORDER BY nome`,
     )
-    .all<{ id: number; nome: string }>();
+    .all<{ id: number; nome: string; empresa_id: number | null }>();
   return rows.results || [];
 }
 
