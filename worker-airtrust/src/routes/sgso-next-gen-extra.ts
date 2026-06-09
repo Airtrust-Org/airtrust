@@ -1,6 +1,22 @@
 /**
  * SGSO Next-Gen — Extra routes
- * Routes extracted from sgso-next-gen.ts:
+ *
+ * ## Multi-tenant design: FRAT global template pattern
+ *
+ * `sgso_frat_modelos`, `sgso_frat_fatores`, and `sgso_matriz_risco_perfis`
+ * use `empresa_id = 0` as a sentinel for **global templates**. These are:
+ * - Seeded once by migration 0281 (`empresa_id NOT NULL DEFAULT 0`).
+ * - Cloned per active company by migration 0282.
+ * - Read by all tenants via `WHERE (empresa_id = ? OR empresa_id = 0)`.
+ * - **Never writable by tenants** — FRAT evaluations/approvals are strictly
+ *   tenant-scoped (`WHERE a.empresa_id = ?`).
+ *
+ * This gives every tenant a set of default risk-matrix profiles and FRAT
+ * models, plus the ability to create company-specific overrides. The `0`
+ * sentinel is intentional, not an orphan or a leak — no tenant data lives
+ * under `empresa_id = 0`.
+ *
+ * Routes:
  *   GET  /frat/modelos
  *   GET  /frat/avaliacoes
  *   POST /frat/avaliacoes
