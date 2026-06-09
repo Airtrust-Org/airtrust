@@ -208,6 +208,33 @@ describe('simuladores modelos dropdown + tipo cor', () => {
     expect(json.data).toHaveLength(0);
   });
 
+  it('filtra modelos pela qualificação do treinamento planejado', async () => {
+    const { db, state } = createDbMock();
+    const response = await simuladoresModelosRoutes.fetch(
+      new Request(
+        'http://localhost/modelos-sessao?tipo_sessao_codigo=INI&tipo=SIMULADOR&modelo_aeronave=SK76&qualificacao_tipo_id=40',
+      ),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(state.lastModelosQuery).toContain('ms.qualificacao_tipo_id = ?');
+    expect(state.lastModelosBinds).toContain(40);
+  });
+
+  it('rejeita qualificacao_tipo_id inválido sem consultar modelos', async () => {
+    const { db, state } = createDbMock();
+    const response = await simuladoresModelosRoutes.fetch(
+      new Request('http://localhost/modelos-sessao?qualificacao_tipo_id=abc'),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    expect(state.lastModelosQuery).toBe('');
+  });
+
   it('persist cor no POST e no PUT de tipos_sessao quando coluna existe', async () => {
     const { db, state } = createDbMock();
     const postResponse = await simuladoresModelosRoutes.fetch(

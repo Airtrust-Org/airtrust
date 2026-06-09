@@ -11,6 +11,7 @@ import {
 } from './simuladores-shared';
 import {
   calculateSharedSessionParticipantSummaries,
+  createSharedCurricularSignature,
   type NormalizedSharedSessionRequest,
   validateAndNormalizeSharedSessionRequest,
 } from './simuladores-shared-session-logic';
@@ -165,16 +166,18 @@ async function assertEntityOwnership(
   const modeloIds = payload.participantes
     .map((item) => Number(item.modelo_sessao_id || 0))
     .filter((id) => Number.isInteger(id) && id > 0);
+  const uniqueModeloIds = Array.from(new Set(modeloIds));
   const modelosMap = await loadModelosSessaoMap(db, empresaId, modeloIds);
-  if (modelosMap.size !== modeloIds.length) {
+  if (modelosMap.size !== uniqueModeloIds.length) {
     throw new Error('Modelo de sessão fora do tenant');
   }
 
   const treinamentoIds = payload.participantes
     .map((item) => Number(item.treinamento_planejado_id || 0))
     .filter((id) => Number.isInteger(id) && id > 0);
-  if (treinamentoIds.length > 0) {
-    const placeholders = treinamentoIds.map(() => '?').join(',');
+  const uniqueTreinamentoIds = Array.from(new Set(treinamentoIds));
+  if (uniqueTreinamentoIds.length > 0) {
+    const placeholders = uniqueTreinamentoIds.map(() => '?').join(',');
     const trainings = await db
       .prepare(
         `SELECT COUNT(DISTINCT id) AS total
@@ -183,9 +186,9 @@ async function assertEntityOwnership(
            AND empresa_id = ?
            AND deleted_at IS NULL`,
       )
-      .bind(...treinamentoIds, empresaId)
+      .bind(...uniqueTreinamentoIds, empresaId)
       .first<{ total: number }>();
-    if (Number(trainings?.total || 0) !== treinamentoIds.length) {
+    if (Number(trainings?.total || 0) !== uniqueTreinamentoIds.length) {
       throw new Error('Treinamento planejado fora do tenant');
     }
   }
@@ -714,13 +717,6 @@ async function buildSharedSessionBatchPlan(
     statements.push(
       prepareStatement(
         db,
-        "UPDATE qualificacoes_historico SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE sessao_id = ? AND deleted_at IS NULL",
-        existingSessaoId,
-      ),
-    );
-    statements.push(
-      prepareStatement(
-        db,
         `UPDATE simulador_agendamentos
          SET data = ?,
              hora_inicio = ?,
@@ -1030,6 +1026,197 @@ async function createSharedSessionStructureTransactional(
   return { sessaoId, persistence: plan.persistence };
 }
 
+async function updateSharedSessionStructureTransactional(
+  db: D1Database,
+  empresaId: number,
+  sessaoId: number,
+  payload: NormalizedSharedSessionRequest,
+  modelosMap: Map<number, ModeloSessaoMapRow>,
+  current: any,
+): Promise<void> {
+  const participantIdByFuncionario = new Map<number, number>(
+    (current.participantes || []).map((participante: any) => [
+      Number(participante.funcionario_id),
+      Number(participante.id),
+    ]),
+  );
+  const assignmentIdByFuncionario = new Map<number, number>(
+    (current.atribuicoes || []).map((atribuicao: any) => [
+      Number(atribuicao.funcionario_id),
+      Number(atribuicao.id),
+    ]),
+  );
+  const primaryParticipant = payload.participantes[0];
+  const primaryAssignment =
+    payload.participantes.find((participante) => participante.cumpre_treinamento) ||
+    primaryParticipant;
+  const primaryModel = primaryAssignment.modelo_sessao_id
+    ? modelosMap.get(Number(primaryAssignment.modelo_sessao_id))
+    : null;
+  const simulatorModel = await getSimuladorModeloAeronave(db, payload.simulador_id);
+  const durationMinutes = payload.segmentos.reduce(
+    (sum, segmento) => sum + Number(segmento.duracao_minutos || 0),
+    0,
+  );
+  const statements: D1PreparedStatement[] = [
+    prepareStatement(
+      db,
+      "UPDATE simulador_segmento_participantes SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE segmento_id IN (SELECT id FROM simulador_agendamento_segmentos WHERE agendamento_id = ? AND deleted_at IS NULL) AND deleted_at IS NULL",
+      sessaoId,
+    ),
+    prepareStatement(
+      db,
+      "UPDATE simulador_agendamento_segmentos SET deleted_at = datetime('now'), updated_at = datetime('now'), status = 'CANCELADO' WHERE agendamento_id = ? AND deleted_at IS NULL",
+      sessaoId,
+    ),
+    prepareStatement(
+      db,
+      `UPDATE simulador_agendamentos
+       SET data = ?,
+           hora_inicio = ?,
+           hora_fim = ?,
+           duracao_minutos = ?,
+           simulador_id = ?,
+           instrutor_id = ?,
+           funcionario_id = ?,
+           tipo_sessao = ?,
+           template_id = ?,
+           nome = ?,
+           observacoes = ?,
+           updated_at = datetime('now')
+       WHERE id = ?
+         AND empresa_id = ?`,
+      payload.data,
+      payload.hora_inicio,
+      payload.hora_fim,
+      durationMinutes,
+      payload.simulador_id,
+      payload.instrutor_id,
+      primaryParticipant.funcionario_id,
+      primaryModel?.tipo_sessao_codigo || primaryModel?.codigo || 'SHARED',
+      primaryModel?.id || null,
+      payload.tema_sessao || 'Sessão compartilhada',
+      payload.observacoes || null,
+      sessaoId,
+      empresaId,
+    ),
+  ];
+
+  for (const [index, participant] of payload.participantes.entries()) {
+    const participantId = participantIdByFuncionario.get(participant.funcionario_id);
+    if (!participantId) {
+      throw new Error(`Participante ${participant.funcionario_id} não pertence à sessão compartilhada`);
+    }
+    statements.push(
+      prepareStatement(
+        db,
+        "UPDATE sessoes_participantes SET funcao = ?, status = 'CONFIRMADO' WHERE id = ? AND deleted_at IS NULL",
+        index === 0 ? 'PIC' : 'SIC',
+        participantId,
+      ),
+    );
+  }
+
+  for (const summary of payload.resumo_participantes) {
+    const participant = payload.participantes.find(
+      (item) => item.funcionario_id === summary.funcionario_id,
+    );
+    if (!participant?.cumpre_treinamento) {
+      continue;
+    }
+    const assignmentId = assignmentIdByFuncionario.get(summary.funcionario_id);
+    if (!assignmentId) {
+      throw new Error(`Atribuição curricular de ${summary.funcionario_id} não pertence à sessão`);
+    }
+    const model = participant.modelo_sessao_id
+      ? modelosMap.get(Number(participant.modelo_sessao_id))
+      : null;
+    statements.push(
+      prepareStatement(
+        db,
+        `UPDATE simulador_atribuicoes_curriculares
+         SET carga_horaria_total_minutos = ?,
+             updated_at = datetime('now')
+         WHERE id = ?
+           AND empresa_id = ?
+           AND deleted_at IS NULL`,
+        summary.curricular_minutos,
+        assignmentId,
+        empresaId,
+      ),
+      prepareStatement(
+        db,
+        `UPDATE fichas_sessao
+         SET instrutor_id = ?,
+             tipo_sessao = ?,
+             tipo_aeronave = ?,
+             data_sessao = ?,
+             template_id = ?,
+             updated_at = datetime('now')
+         WHERE atribuicao_curricular_id = ?
+           AND empresa_id = ?
+           AND deleted_at IS NULL`,
+        payload.instrutor_id,
+        model?.codigo || primaryModel?.codigo || 'SHARED',
+        simulatorModel,
+        payload.data,
+        participant.modelo_sessao_id || null,
+        assignmentId,
+        empresaId,
+      ),
+    );
+  }
+
+  for (const segmento of payload.segmentos) {
+    const segmentoUuid = crypto.randomUUID();
+    const assignmentId = segmento.atribuicao_funcionario_id
+      ? assignmentIdByFuncionario.get(segmento.atribuicao_funcionario_id) || null
+      : null;
+    statements.push(
+      prepareStatement(
+        db,
+        `INSERT INTO simulador_agendamento_segmentos
+           (uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, atribuicao_curricular_id, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ATIVO')`,
+        segmentoUuid,
+        empresaId,
+        sessaoId,
+        segmento.ordem,
+        segmento.inicio,
+        segmento.fim,
+        segmento.duracao_minutos,
+        assignmentId,
+      ),
+    );
+
+    for (const funcao of segmento.funcoes) {
+      const participantId = participantIdByFuncionario.get(funcao.funcionario_id);
+      if (!participantId) {
+        throw new Error(`Participante ${funcao.funcionario_id} não pertence à sessão compartilhada`);
+      }
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO simulador_segmento_participantes
+               (uuid, empresa_id, segmento_id, participante_id, funcao, duracao_minutos, atribuicao_curricular_id)
+             VALUES (?, ?, (SELECT id FROM simulador_agendamento_segmentos WHERE uuid = ?), ?, ?, ?, ?)`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            empresaId,
+            segmentoUuid,
+            participantId,
+            funcao.funcao,
+            segmento.duracao_minutos,
+            segmento.atribuicao_funcionario_id === funcao.funcionario_id ? assignmentId : null,
+          ),
+      );
+    }
+  }
+
+  await db.batch(statements);
+}
+
 async function createSharedSessionStructure(
   db: D1Database,
   empresaId: number,
@@ -1294,20 +1481,30 @@ app.post('/sessoes/compartilhada', async (c) => {
 
     const created = await createSharedSessionStructureTransactional(c.env.DB, empresaId, payload, modelosMap);
 
-    for (const participante of payload.participantes) {
-      const modelo = participante.modelo_sessao_id
-        ? modelosMap.get(Number(participante.modelo_sessao_id))
-        : null;
-      if (participante.modelo_sessao_id && modelo?.gera_qualificacao) {
-        await criarQualificacoesPlanejadas(c.env.DB, {
-          sessaoId: created.sessaoId,
-          modeloId: Number(participante.modelo_sessao_id),
-          tipoSessao: modelo?.tipo_sessao_codigo || modelo?.codigo || 'SHARED',
-          data: payload.data,
-          participantes: [{ funcionario_id: participante.funcionario_id }],
-          empresaId,
-        });
+    // Phase 2: qualification creation (after core batch).
+    // Compensation: if any qualification fails, rollback the entire shared session.
+    try {
+      for (const participante of payload.participantes) {
+        const modelo = participante.modelo_sessao_id
+          ? modelosMap.get(Number(participante.modelo_sessao_id))
+          : null;
+        if (participante.modelo_sessao_id && modelo?.gera_qualificacao) {
+          await criarQualificacoesPlanejadas(c.env.DB, {
+            sessaoId: created.sessaoId,
+            modeloId: Number(participante.modelo_sessao_id),
+            tipoSessao: modelo?.tipo_sessao_codigo || modelo?.codigo || 'SHARED',
+            data: payload.data,
+            participantes: [{ funcionario_id: participante.funcionario_id }],
+            empresaId,
+          });
+        }
       }
+    } catch (qualError: any) {
+      await cleanupFailedSharedCreate(c.env.DB, created.sessaoId).catch(() => {});
+      return c.json(
+        { success: false, error: 'Falha ao criar qualificacoes planejadas: ' + String(qualError?.message || 'erro desconhecido') + '. Sessao revertida.' },
+        500,
+      );
     }
 
     await audit(c.env.DB, {
@@ -1375,26 +1572,42 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
     }
 
     const payload = validateAndNormalizeSharedSessionRequest(await c.req.json());
+    const currentCurricularSignature = createSharedCurricularSignature(
+      current.participantes || [],
+      current.atribuicoes || [],
+    );
+    const requestedCurricularSignature = createSharedCurricularSignature(
+      payload.participantes,
+      payload.participantes
+        .filter((participante) => participante.cumpre_treinamento)
+        .map((participante) => ({
+          funcionario_id: participante.funcionario_id,
+          treinamento_planejado_id: participante.treinamento_planejado_id || null,
+          modelo_sessao_id: participante.modelo_sessao_id || null,
+          gera_ficha: participante.gera_ficha,
+        })),
+    );
+    if (currentCurricularSignature !== requestedCurricularSignature) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'A edição segura permite alterar horários, segmentos, PF/PM e observações. Participantes, treinamentos, modelos e fichas não podem ser alterados.',
+        },
+        409,
+      );
+    }
     const modelosMap = await assertEntityOwnership(c.env.DB, empresaId, payload);
     await assertNoExternalConflicts(c.env.DB, empresaId, payload, id);
 
-    await createSharedSessionStructureTransactional(c.env.DB, empresaId, payload, modelosMap, id);
-
-    for (const participante of payload.participantes) {
-      const modelo = participante.modelo_sessao_id
-        ? modelosMap.get(Number(participante.modelo_sessao_id))
-        : null;
-      if (participante.modelo_sessao_id && modelo?.gera_qualificacao) {
-        await criarQualificacoesPlanejadas(c.env.DB, {
-          sessaoId: id,
-          modeloId: Number(participante.modelo_sessao_id),
-          tipoSessao: modelo?.tipo_sessao_codigo || modelo?.codigo || 'SHARED',
-          data: payload.data,
-          participantes: [{ funcionario_id: participante.funcionario_id }],
-          empresaId,
-        });
-      }
-    }
+    await updateSharedSessionStructureTransactional(
+      c.env.DB,
+      empresaId,
+      id,
+      payload,
+      modelosMap,
+      current,
+    );
 
     await audit(c.env.DB, {
       tabela: 'simulador_agendamentos',

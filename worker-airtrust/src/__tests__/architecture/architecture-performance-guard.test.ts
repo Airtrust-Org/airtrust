@@ -21,6 +21,8 @@ const SQL_PREPARE_CAPS = {
   'routes/simuladores-modelos.ts': 69,
   'routes/auth.ts': 52,
   'routes/simuladores-sessoes-update.ts': 48,
+  // Acknowledged growth: shared-session create, safe edit, detail, conflicts, and cancellation.
+  'routes/simuladores-shared-session.ts': 41,
   'routes/lms-cursos.ts': 44,
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
   // +10 prepare calls for schema introspection guards (migration-0390 compatibility).

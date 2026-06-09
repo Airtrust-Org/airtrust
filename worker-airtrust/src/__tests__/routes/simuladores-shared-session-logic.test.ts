@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateSharedSessionParticipantSummaries,
+  createSharedCurricularSignature,
   validateAndNormalizeSharedSessionRequest,
 } from '../../routes/simuladores-shared-session-logic';
 
@@ -238,5 +239,44 @@ describe('simuladores shared session logic', () => {
         gera_ficha: false,
       },
     ]);
+  });
+
+  it('normalizes curricular signatures while detecting material curriculum changes', () => {
+    const current = createSharedCurricularSignature(
+      [{ funcionario_id: 102 }, { funcionario_id: 101 }],
+      [
+        {
+          funcionario_id: 101,
+          treinamento_planejado_id: 1001,
+          modelo_sessao_id: 2001,
+          gera_ficha: 1,
+        },
+      ],
+    );
+    const reordered = createSharedCurricularSignature(
+      [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+      [
+        {
+          funcionario_id: 101,
+          treinamento_planejado_id: 1001,
+          modelo_sessao_id: 2001,
+          gera_ficha: true,
+        },
+      ],
+    );
+    const changedModel = createSharedCurricularSignature(
+      [{ funcionario_id: 101 }, { funcionario_id: 102 }],
+      [
+        {
+          funcionario_id: 101,
+          treinamento_planejado_id: 1001,
+          modelo_sessao_id: 2002,
+          gera_ficha: true,
+        },
+      ],
+    );
+
+    expect(reordered).toBe(current);
+    expect(changedModel).not.toBe(current);
   });
 });

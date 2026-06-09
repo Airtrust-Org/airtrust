@@ -52,6 +52,7 @@ export interface Sessao {
   observacoes?: string;
   participantes: Participante[];
   fichas: Ficha[];
+  modo_compartilhado?: number | boolean;
 }
 
 interface SessaoCardProps {
@@ -173,6 +174,11 @@ export default function SessaoCard({ sessao, onEdit, onDelete, onVerFichas }: Se
             {sessao.tema_sessao || sessao.tipo_sessao || 'Sessão de Treinamento'}
           </h3>
           <p className="text-sm text-slate-500 mt-0.5">{sessao.simulador_nome}</p>
+          {Boolean(sessao.modo_compartilhado) && (
+            <span className="mt-1 inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+              Compartilhada
+            </span>
+          )}
           <div className="flex items-center gap-2 text-sm text-slate-600 mt-1 flex-wrap">
             <span className="font-medium">{formatarData(sessao.data)}</span>
             <span>•</span>

@@ -106,6 +106,9 @@ interface FichaDetalhada {
   examinador_nome?: string | null;
   sessao_id?: number | null; // ID da sessão para endpoints de checks
   modelo_sessao_id?: number | null;
+  atribuicao_curricular_id?: number | null;
+  modo_compartilhado?: number;
+  tripulacao_nomes?: string | null;
   edicao_pendente?: boolean;
   edicoes_pendentes_count?: number;
 }
@@ -1937,8 +1940,12 @@ export default function FichaDetalhe() {
                         tipoSessaoPDF.includes('INSTRUTOR') ||
                         tipoSessaoPDF.includes('EXAMINADOR') ||
                         tipoSessaoPDF.includes('CHECK');
+                      const isSharedPDF =
+                        Number(ficha.modo_compartilhado || 0) === 1 ||
+                        Boolean(ficha.atribuicao_curricular_id);
+                      const showOperationalHoursPDF = !isInstrExamPDF || isSharedPDF;
 
-                      const cargaHorariaTotalStr = isInstrExamPDF
+                      const cargaHorariaTotalStr = !showOperationalHoursPDF
                         ? ficha.carga_horaria_total || `${formatarHoras(cargaPF + cargaPM)} h`
                         : `${ficha.carga_horaria_total || formatarHoras(cargaPF + cargaPM) + ' h'} (PF: ${formatarHoras(cargaPF)} h / PM: ${formatarHoras(cargaPM)} h)`;
 
@@ -1965,8 +1972,9 @@ export default function FichaDetalhe() {
                           ficha.horario_fim && ficha.horario_fim !== 'N/A' ? ficha.horario_fim : '',
                         simulador: ficha.simulador_codigo,
                         carga_horaria_total: cargaHorariaTotalStr,
-                        carga_horaria_pf: isInstrExamPDF ? '' : formatarHoras(cargaPF),
-                        carga_horaria_pm: isInstrExamPDF ? '' : formatarHoras(cargaPM),
+                        carga_horaria_pf: showOperationalHoursPDF ? formatarHoras(cargaPF) : '',
+                        carga_horaria_pm: showOperationalHoursPDF ? formatarHoras(cargaPM) : '',
+                        tripulacao_nomes: isSharedPDF ? ficha.tripulacao_nomes || '' : '',
                         status: ficha.status,
                         observacoes_gerais: ficha.observacoes_gerais || '',
                         assinatura_aluno_timestamp: ficha.assinatura_aluno_timestamp,

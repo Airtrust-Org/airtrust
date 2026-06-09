@@ -508,6 +508,16 @@ app.get('/modelos-sessao', async (c) => {
       .toUpperCase();
     const tipoSessaoNome = String(c.req.query('tipo_sessao_nome') || '').trim().toUpperCase();
     const tipo = c.req.query('tipo'); // SIMULADOR | AERONAVE
+    const qualificacaoTipoIdRaw = c.req.query('qualificacao_tipo_id');
+    const qualificacaoTipoId = qualificacaoTipoIdRaw
+      ? Number(qualificacaoTipoIdRaw)
+      : null;
+    if (
+      qualificacaoTipoIdRaw &&
+      (!Number.isInteger(qualificacaoTipoId) || Number(qualificacaoTipoId) <= 0)
+    ) {
+      return c.json({ success: false, error: 'qualificacao_tipo_id inválido' }, 400);
+    }
     const modelo_aeronave =
       c.req.query('modelo_aeronave') ||
       c.req.query('codigo_aeronave') ||
@@ -578,6 +588,15 @@ app.get('/modelos-sessao', async (c) => {
     if (modeloAeronaveNormalizado) {
       query += ` AND ${buildModeloAeronaveSqlMatchExpression(modeloAeronaveExpr)} = ?`;
       params.push(modeloAeronaveNormalizado);
+    }
+
+    if (qualificacaoTipoId) {
+      if (hasQualificacaoTipoId) {
+        query += ' AND ms.qualificacao_tipo_id = ?';
+        params.push(qualificacaoTipoId);
+      } else {
+        query += ' AND 1 = 0';
+      }
     }
 
     query += ' ORDER BY ms.codigo';

@@ -101,6 +101,7 @@ interface ModeloSessao {
 
 interface SessaoParaEditar {
   id: number;
+  modo_compartilhado?: number | boolean;
   template_id?: number | null;
   simulador_id?: number | null; // null for AERONAVE sessions
   simulador_nome?: string;
@@ -210,6 +211,7 @@ export default function ModalNovaSessao({
   const [observacoes, setObservacoes] = useState<string>('');
   const [participantes, setParticipantes] = useState<Participante[]>(participantesIniciais());
   const [modoCompartilhado, setModoCompartilhado] = useState(false);
+  const [sharedSessionsEnabled, setSharedSessionsEnabled] = useState(false);
 
   const {
     hasFap07Selecionada,
@@ -265,6 +267,7 @@ export default function ModalNovaSessao({
       setModeloSessaoId(null);
       setSessaoDetalhe(null);
       phase1MergedRef.current = null;
+      isSharedSessionsEnabled().then(setSharedSessionsEnabled).catch(() => setSharedSessionsEnabled(false));
       fetchAeronaves();
       fetchAeronavesReais();
       fetchSimuladores();
@@ -392,6 +395,8 @@ export default function ModalNovaSessao({
           aeronave_modelo: sessaoDetalhe.aeronave_modelo || sessao!.aeronave_modelo,
           examinador_nome: sessaoDetalhe.examinador_nome || sessao!.examinador_nome,
           observacoes: sessaoDetalhe.observacoes ?? sessao!.observacoes,
+          modo_compartilhado:
+            sessaoDetalhe.modo_compartilhado ?? sessao!.modo_compartilhado,
           participantes:
             sessaoDetalhe.alunos?.length > 0
               ? sessaoDetalhe.alunos.map((a: any) => ({
@@ -424,6 +429,7 @@ export default function ModalNovaSessao({
     setHorarioFimFoiEditado(true);
     setInstrutorId(merged.instrutor_id);
     setObservacoes(merged.observacoes || '');
+    setModoCompartilhado(Boolean(merged.modo_compartilhado));
     if (merged.tema_sessao) {
       setTemaSessao(merged.tema_sessao);
     }
@@ -468,6 +474,8 @@ export default function ModalNovaSessao({
       aeronave_modelo: sessaoDetalhe.aeronave_modelo || sessao!.aeronave_modelo,
       examinador_nome: sessaoDetalhe.examinador_nome || sessao!.examinador_nome,
       observacoes: sessaoDetalhe.observacoes ?? sessao!.observacoes,
+      modo_compartilhado:
+        sessaoDetalhe.modo_compartilhado ?? sessao!.modo_compartilhado,
       participantes:
         sessaoDetalhe.alunos?.length > 0
           ? sessaoDetalhe.alunos.map((a: any) => ({
@@ -1611,6 +1619,7 @@ export default function ModalNovaSessao({
     setGerarFichaExaminador(false);
     setObservacoes('');
     setParticipantes(participantesIniciais());
+    setModoCompartilhado(false);
   }
 
   // ========== AÇÕES EXTRAS (EMAIL, WHATSAPP, DELETE, FICHAS) ==========
@@ -1713,7 +1722,7 @@ export default function ModalNovaSessao({
         {/* ========== FORM ========== */}
         <div className="p-4 sm:p-6 space-y-6">
           {/* MODALITY TOGGLE — only in create mode, only when feature is enabled */}
-          {!isEditMode && isSharedSessionsEnabled() && !editHydrating && (
+          {!isEditMode && sharedSessionsEnabled && !editHydrating && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Modalidade da sessão
@@ -1733,7 +1742,12 @@ export default function ModalNovaSessao({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setModoCompartilhado(true)}
+                  onClick={() => {
+                    setModoCompartilhado(true);
+                    if (tipoDispositivo !== 'SIMULADOR') {
+                      handleTipoDispositivoChange('SIMULADOR');
+                    }
+                  }}
                   disabled={loading}
                   className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-all flex items-center justify-center gap-1 ${
                     modoCompartilhado
@@ -1748,24 +1762,6 @@ export default function ModalNovaSessao({
             </div>
           )}
 
-          {/* ===== SHARED SESSION FORM ===== */}
-          {modoCompartilhado && !isEditMode ? (
-            <SharedSessionForm
-              onClose={onClose}
-              onSuccess={onSuccess}
-              simuladorId={simuladorId}
-              data={data}
-              horarioInicio={horarioInicio}
-              horarioFim={horarioFim}
-              instrutorId={instrutorId}
-              temaSessao={temaSessao}
-              observacoes={observacoes}
-              funcionarios={funcionarios}
-              modelos={modelos}
-              treinamentos={[]}
-            />
-          ) : (
-          <>
           {/* 0️⃣ TIPO DE DISPOSITIVO */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1787,7 +1783,7 @@ export default function ModalNovaSessao({
               <button
                 type="button"
                 onClick={() => handleTipoDispositivoChange('AERONAVE')}
-                disabled={loading}
+                disabled={loading || modoCompartilhado}
                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-all ${
                   tipoDispositivo === 'AERONAVE'
                     ? 'bg-sky-600 text-white border-sky-600'
@@ -1797,6 +1793,11 @@ export default function ModalNovaSessao({
                 ✈️ Aeronave Real
               </button>
             </div>
+            {modoCompartilhado && (
+              <p className="mt-1 text-xs text-slate-500">
+                Sessões compartilhadas usam uma única reserva de simulador.
+              </p>
+            )}
           </div>
 
           {/* 1️⃣ EQUIPAMENTO */}
@@ -1878,6 +1879,8 @@ export default function ModalNovaSessao({
             </div>
           )}
 
+          {!modoCompartilhado && (
+          <>
           {/* 3️⃣ TIPO DE SESSÃO */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1968,6 +1971,8 @@ export default function ModalNovaSessao({
               </div>
             )}
           </div>
+          </>
+          )}
 
           {/* 4. DATA E HORÁRIOS */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2054,6 +2059,8 @@ export default function ModalNovaSessao({
             )}
           </div>
 
+          {!modoCompartilhado && (
+          <>
           {/* 5.1 EXAMINADOR (OPCIONAL) + CHECKS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -2247,6 +2254,8 @@ export default function ModalNovaSessao({
               Ao escolher a aeronave, a lista mostra apenas os tripulantes cadastrados para ela.
             </p>
           </div>
+          </>
+          )}
 
           {/* 7. OBSERVAÇÕES (OPCIONAL) */}
           <div>
@@ -2262,7 +2271,22 @@ export default function ModalNovaSessao({
               disabled={loading}
             />
           </div>
-          </>
+
+          {modoCompartilhado && (
+            <SharedSessionForm
+              onClose={onClose}
+              onSuccess={onSuccess}
+              simuladorId={simuladorId}
+              simuladorModelo={aeronaveCodigo || null}
+              data={data}
+              horarioInicio={horarioInicio}
+              horarioFim={horarioFim}
+              instrutorId={instrutorId}
+              temaSessao={temaSessao}
+              observacoes={observacoes}
+              funcionarios={funcionarios}
+              editSessionId={isEditMode ? sessao?.id : null}
+            />
           )}
         </div>
 

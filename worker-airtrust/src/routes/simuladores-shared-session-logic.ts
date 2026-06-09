@@ -46,6 +46,33 @@ export type SharedSessionSummary = {
   gera_ficha: boolean;
 };
 
+export function createSharedCurricularSignature(
+  participantes: Array<{ funcionario_id: number }>,
+  atribuicoes: Array<{
+    funcionario_id: number;
+    treinamento_planejado_id?: number | null;
+    modelo_sessao_id?: number | null;
+    gera_ficha?: boolean | number;
+  }>,
+): string {
+  return JSON.stringify(
+    participantes
+      .map((participante) => {
+        const atribuicao = atribuicoes.find(
+          (item) => Number(item.funcionario_id) === Number(participante.funcionario_id),
+        );
+        return {
+          funcionario_id: Number(participante.funcionario_id),
+          cumpre_treinamento: Boolean(atribuicao),
+          treinamento_planejado_id: atribuicao?.treinamento_planejado_id || null,
+          modelo_sessao_id: atribuicao?.modelo_sessao_id || null,
+          gera_ficha: Boolean(atribuicao?.gera_ficha),
+        };
+      })
+      .sort((left, right) => left.funcionario_id - right.funcionario_id),
+  );
+}
+
 export type NormalizedSharedSessionRequest = Omit<
   SharedSessionRequest,
   'participantes' | 'segmentos'
