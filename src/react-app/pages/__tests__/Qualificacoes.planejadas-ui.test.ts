@@ -150,7 +150,7 @@ describe('Qualificacoes — Planejadas tab', () => {
   it('botao_novo_treinamento_nao_aparece_duplicado — embedded calendar/list hide inner actions while turma view uses Nova turma', () => {
     expect(treinamentosSource).toContain('hideActions?: boolean;');
     expect(treinamentosSource).toContain("const primaryActionLabel = isTurmasView ? 'Nova turma' : 'Novo treinamento';");
-    expect(treinamentosSource).toContain('!hideActions ? <div className="flex justify-end pb-2">{actionButtons}</div> : null');
+    expect(treinamentosSource).toContain('{asTab && !hideActions && (');
   });
 
   it('planejadas_lista_renderiza_tabela_operacional — Lista uses compact table instead of cards', () => {

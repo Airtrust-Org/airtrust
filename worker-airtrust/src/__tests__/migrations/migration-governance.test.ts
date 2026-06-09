@@ -83,6 +83,7 @@ const EXPECTED_FOREIGN_KEYS_OFF_FILES = [
   '0396_harden_empresa_id_wave1.sql',
   '0397_harden_empresa_id_wave2.sql',
   '0399_harden_empresa_id_wave3.sql',
+  '0402_harden_empresa_id_wave4.sql',
 ] as const;
 
 function listCanonicalMigrationFiles(): string[] {
@@ -126,7 +127,7 @@ describe('migration governance', () => {
     const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
     const highPrefixes = files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file));
 
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(401);
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(402);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
   });
 
