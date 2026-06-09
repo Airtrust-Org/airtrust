@@ -2,7 +2,7 @@
 
 ## Classificacao
 
-`LOCAL_FUNCTIONAL_CORE_COMPLETE_READY_FOR_FINAL_REVIEW`
+`LOCAL_COMMIT_REPRODUCIBLE_READY_FOR_RELEASE_REVIEW`
 
 Escopo validado exclusivamente no ambiente local:
 
@@ -225,11 +225,60 @@ worker compartilhado/modelos/horas: 16 testes PASS
 - A abertura da reserva compartilhada pelo calendario usa a visao rica de edicao segura, nao uma
   pagina read-only separada.
 
+## Clean Commit Reproduction (2026-06-09 18:24 UTC-3)
+
+### Commit
+
+- **Hash**: `2b6483dab23686373310919de0ccae614fdef408`
+- **Branch**: `main`
+- **HEAD at time**: `6b975ee6` (checkpoint shared session local workflow)
+- **origin/main at time**: `c75e9bf9` (add shared session backend model)
+- **24 arquivos**: 20 modificados + 4 novos testes
+
+### Worktree limpo
+
+- Worktree criado a partir de `HEAD` (`2b6483da`) em `/tmp/airtrust-shared-session-clean-*`
+- `git status --short` → limpo (zero modificacoes)
+- Dependencias instaladas via `npm ci` (root) + `npm install` (worker-airtrust)
+
+### Validacoes no worktree limpo
+
+| Check | Resultado |
+|---|---|
+| `npx tsc --noEmit` | ✓ Limpo |
+| `npx tsc -p worker-airtrust/tsconfig.json --noEmit` | ✓ Limpo |
+| `npm run lint` (4 guards) | ✓ PASS |
+| `npm run test:run` | ✓ 75 passed, 757 tests, 3 skipped |
+| `npm run test:worker` | ✓ 173 passed, 1157 tests |
+| `npm run build` | ✓ Built in 6.14s |
+| `git status --short` (pos-build) | ✓ Limpo (dist/ e node_modules/ via .gitignore) |
+
+### Smoke local
+
+- Worker iniciado com `wrangler dev --port 9797`
+- `.dev.vars` copiado do repo principal (flag `SIMULATOR_SHARED_SESSIONS_ENABLED=true`)
+- `GET /api/capabilities` → `200 OK`, `simulador_shared_sessions: true`
+- `GET /api/health` → `200 OK`
+- `GET /api/simuladores/sessoes`, `/modelos-sessao`, `/sessoes/compartilhada/:id` → 500 (D1 sem tabelas, esperado)
+- Todas as rotas registradas e respondendo
+
+### Confirmacao de ausencia de arquivos omitidos
+
+- Nenhum `.sqlite`, `.db`, `.sql`, `.pdf`, `.env`, `.dev.vars` no commit
+- Nenhum artefato de validacao no commit
+- Nenhum PII, token, secret ou path pessoal no commit
+- `.claude/launch.json` excluido (alteracao pessoal de path)
+- IDs locais (104-107, 213-218) restritos ao relatorio
+
+### Conclusao
+
+O commit `2b6483da` e autossuficiente e reproduzivel. Nenhum arquivo necessario ficou de fora.
+Nenhuma dependencia de estado local do desenvolvedor.
+
 ## Estado de Entrega
 
-- Alteracoes somente locais.
-- Sem commit automatico.
-- Sem push.
-- Sem deploy.
-- Sem D1 remoto.
-- Aguardando revisao final e autorizacao explicita antes de qualquer commit.
+- Commit local criado: `2b6483da`
+- Nao houve push.
+- Nao houve deploy.
+- Nao houve D1 remoto.
+- Classificacao final: `LOCAL_COMMIT_REPRODUCIBLE_READY_FOR_RELEASE_REVIEW`
