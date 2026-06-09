@@ -78,6 +78,8 @@ export interface Env {
   ENABLE_MANUAL_MIGRATIONS?: string;
   // Gate for certificate/admin debug endpoints (never set in production/staging)
   ENABLE_ADMIN_DEBUG_ROUTES?: string;
+  // Feature flag for additive shared simulator session backend
+  SIMULATOR_SHARED_SESSIONS_ENABLED?: string;
 }
 
 // ===== API RESPONSE TYPES =====

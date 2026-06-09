@@ -16,6 +16,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import equipamentos from './simuladores-equipamentos';
 import sessoes from './simuladores-sessoes';
+import sharedSessions from './simuladores-shared-session';
 import fichas from './simuladores-fichas';
 import fichasEdicoes from './simuladores-fichas-edicoes';
 import fichasExtras from './simuladores-fichas-extras';
@@ -26,6 +27,7 @@ import relatorios from './simuladores-relatorios';
 const app = new Hono<{ Bindings: Env }>();
 
 app.route('/relatorios', relatorios);
+app.route('/', sharedSessions);
 app.route('/', sessoes);
 app.route('/', fichas);
 app.route('/', fichasEdicoes);

@@ -676,12 +676,44 @@ app.get('/fichas/:id', async (c) => {
       }
     }
 
-    const carga_horaria_total = f.duracao_minutos
-      ? `${(f.duracao_minutos / 60).toFixed(1)}h`
-      : 'N/A';
-    const carga_horaria_horas = f.duracao_minutos ? f.duracao_minutos / 60 : 0;
-    const carga_horaria_pf = carga_horaria_horas > 0 ? (carga_horaria_horas / 2).toFixed(1) : '0.0';
-    const carga_horaria_pm = carga_horaria_horas > 0 ? (carga_horaria_horas / 2).toFixed(1) : '0.0';
+    let duracaoTotalMinutos = Number(f.duracao_minutos || 0);
+    let cargaPfMinutos = duracaoTotalMinutos > 0 ? duracaoTotalMinutos / 2 : 0;
+    let cargaPmMinutos = duracaoTotalMinutos > 0 ? duracaoTotalMinutos / 2 : 0;
+
+    if (f.atribuicao_curricular_id) {
+      const horasCompartilhadas = await c.env.DB.prepare(
+        `SELECT
+           COALESCE(SUM(ssp.duracao_minutos), 0) AS total_minutos,
+           COALESCE(SUM(CASE WHEN ssp.funcao = 'PF' THEN ssp.duracao_minutos ELSE 0 END), 0) AS pf_minutos,
+           COALESCE(SUM(CASE WHEN ssp.funcao = 'PM' THEN ssp.duracao_minutos ELSE 0 END), 0) AS pm_minutos
+         FROM simulador_segmento_participantes ssp
+         INNER JOIN simulador_agendamento_segmentos sas
+           ON sas.id = ssp.segmento_id
+          AND sas.deleted_at IS NULL
+         WHERE sas.agendamento_id = ?
+           AND ssp.deleted_at IS NULL
+           AND ssp.participante_id IN (
+             SELECT id
+             FROM sessoes_participantes
+             WHERE sessao_id = ?
+               AND funcionario_id = ?
+               AND deleted_at IS NULL
+           )`,
+      )
+        .bind(f.agendamento_slot_id, f.agendamento_slot_id, f.colaborador_id_aluno)
+        .first<{ total_minutos: number; pf_minutos: number; pm_minutos: number }>()
+        .catch(() => null);
+
+      if (horasCompartilhadas) {
+        duracaoTotalMinutos = Number(horasCompartilhadas.total_minutos || 0);
+        cargaPfMinutos = Number(horasCompartilhadas.pf_minutos || 0);
+        cargaPmMinutos = Number(horasCompartilhadas.pm_minutos || 0);
+      }
+    }
+
+    const carga_horaria_total = duracaoTotalMinutos ? `${(duracaoTotalMinutos / 60).toFixed(1)}h` : 'N/A';
+    const carga_horaria_pf = (cargaPfMinutos / 60).toFixed(1);
+    const carga_horaria_pm = (cargaPmMinutos / 60).toFixed(1);
 
     const fichaTipoCodigo = String(f.ficha_tipo_sessao || f.tipo_sessao || '').toUpperCase();
     const isFichaEspecial = fichaTipoCodigo === 'CRED-EXA' || fichaTipoCodigo === 'TRE-INST';
@@ -721,7 +753,7 @@ app.get('/fichas/:id', async (c) => {
       carga_horaria_total,
       carga_horaria_pf,
       carga_horaria_pm,
-      duracao_minutos: f.duracao_minutos,
+      duracao_minutos: duracaoTotalMinutos,
       status: f.status,
       aprovado: f.aprovado,
       nota_final: f.nota_final,

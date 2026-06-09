@@ -48,6 +48,7 @@ export async function gerarQualificacaoDaFicha(
       `SELECT f.*, aluno.nome as aluno_nome,
               aluno.empresa_id as aluno_empresa_id,
               sa.template_id as sessao_template_id,
+              sac.modelo_sessao_id as atribuicao_modelo_sessao_id,
               ms.id as modelo_id,
               ms.qualificacao_tipo_id as modelo_qualificacao_tipo_id,
               qt.codigo as modelo_qualificacao_codigo,
@@ -56,10 +57,14 @@ export async function gerarQualificacaoDaFicha(
        FROM fichas_sessao f
        LEFT JOIN funcionarios aluno ON f.colaborador_id_aluno = aluno.id
        LEFT JOIN simulador_agendamentos sa ON sa.id = f.agendamento_slot_id AND sa.deleted_at IS NULL
+       LEFT JOIN simulador_atribuicoes_curriculares sac
+         ON sac.id = f.atribuicao_curricular_id
+        AND sac.deleted_at IS NULL
        LEFT JOIN modelos_sessao ms ON (
-         (f.template_id IS NOT NULL AND ms.id = f.template_id)
-         OR (f.template_id IS NULL AND sa.template_id IS NOT NULL AND ms.id = sa.template_id)
-         OR (f.template_id IS NULL AND sa.template_id IS NULL AND ms.codigo = f.tipo_sessao)
+         (sac.modelo_sessao_id IS NOT NULL AND ms.id = sac.modelo_sessao_id)
+         OR (sac.modelo_sessao_id IS NULL AND f.template_id IS NOT NULL AND ms.id = f.template_id)
+         OR (sac.modelo_sessao_id IS NULL AND f.template_id IS NULL AND sa.template_id IS NOT NULL AND ms.id = sa.template_id)
+         OR (sac.modelo_sessao_id IS NULL AND f.template_id IS NULL AND sa.template_id IS NULL AND ms.codigo = f.tipo_sessao)
        ) AND ms.deleted_at IS NULL
        LEFT JOIN qualificacoes_tipos qt ON qt.id = ms.qualificacao_tipo_id AND qt.deleted_at IS NULL
        WHERE f.id = ? AND f.deleted_at IS NULL`,

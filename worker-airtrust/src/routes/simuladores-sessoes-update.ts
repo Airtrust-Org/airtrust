@@ -39,6 +39,10 @@ import { getTenantContext } from '../middleware/tenant';
 
 const app = new Hono<{ Bindings: Env }>();
 
+async function runUpdate(db: D1Database, sql: string, ...args: unknown[]) {
+  return db.prepare(sql).bind(...args).run();
+}
+
 app.put('/sessoes/:id', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
@@ -1033,11 +1037,12 @@ app.delete('/sessoes/:id', async (c) => {
       .all<{ funcionario_id: string | number }>();
 
     // Soft delete da sessão
-    await c.env.DB.prepare(
+    await runUpdate(
+      c.env.DB,
       "UPDATE simulador_agendamentos SET deleted_at=datetime('now') WHERE id=? AND empresa_id = ?",
-    )
-      .bind(id, empresaId)
-      .run();
+      id,
+      empresaId,
+    );
 
     // Soft delete dos participantes
     await c.env.DB.prepare(
@@ -1053,6 +1058,39 @@ app.delete('/sessoes/:id', async (c) => {
     )
       .bind(id, empresaId)
       .run();
+
+    // Soft delete da estrutura compartilhada aditiva, quando existir
+    await runUpdate(
+      c.env.DB,
+      `UPDATE simulador_segmento_participantes
+       SET deleted_at=datetime('now'), updated_at=datetime('now')
+       WHERE segmento_id IN (
+         SELECT id
+         FROM simulador_agendamento_segmentos
+         WHERE agendamento_id = ?
+           AND deleted_at IS NULL
+       )
+         AND deleted_at IS NULL`,
+      id,
+    ).catch(() => undefined);
+
+    await runUpdate(
+      c.env.DB,
+      `UPDATE simulador_agendamento_segmentos
+       SET deleted_at=datetime('now'), updated_at=datetime('now'), status='CANCELADO'
+       WHERE agendamento_id = ?
+         AND deleted_at IS NULL`,
+      id,
+    ).catch(() => undefined);
+
+    await runUpdate(
+      c.env.DB,
+      `UPDATE simulador_atribuicoes_curriculares
+       SET deleted_at=datetime('now'), updated_at=datetime('now'), status='CANCELADA'
+       WHERE agendamento_id = ?
+         AND deleted_at IS NULL`,
+      id,
+    ).catch(() => undefined);
 
     // Soft delete das fichas vinculadas à sessão
     await c.env.DB.prepare(
