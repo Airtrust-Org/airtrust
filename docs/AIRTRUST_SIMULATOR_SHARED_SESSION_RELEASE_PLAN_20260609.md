@@ -267,10 +267,67 @@
 - production version/health snapshot
 - remote migration ledger snapshot
 
+## Code Deployment with Feature Disabled (2026-06-09 23:06 UTC)
+
+### Push
+
+- Pushed 5 commits to `origin/main`:
+  - `6b975ee6` — `feat(simuladores): checkpoint shared session local workflow`
+  - `2b6483da` — `feat(simuladores): complete shared session workflow`
+  - `3640dd87` — `docs(simuladores): record clean shared session validation`
+  - `cc24e367` — `docs(simuladores): finalize shared session release evidence`
+  - `207d8f1c` — `docs(simuladores): add shared session release plan`
+- `origin/main` advanced from `c75e9bf9` → `207d8f1c`
+- Push type: fast-forward only
+- No force-push, no rewrite
+
+### Worker Deployment
+
+- Command: `npm run deploy:worker:safe`
+- Worker: `airtrust-api-production`
+- Version: `2026-06-09T23:06:58Z-207d8f1c`
+- No migrations applied (0405 already present)
+- Bindings: DB, BUCKET, AI, ENVIRONMENT, APP_VERSION, APP_BUILD_TIME
+- Upload: 5932.86 KiB / gzip: 1156.82 KiB
+
+### Pages Deployment
+
+- Triggered by push to `origin/main` (Cloudflare Pages Git integration)
+- Frontend: `airtrust.online` serving HTTP 200
+- JS bundle: accessible, content-hash updated
+
+### Post-Deploy Verification
+
+| Check | Result |
+|---|---|
+| `/api/version` | `207d8f1c` ✅ |
+| `/api/health` | healthy (DB ok, Storage ok) ✅ |
+| `/api/capabilities` | `simulador_shared_sessions: false` ✅ |
+| Migration ledger | `No migrations to apply!` ✅ |
+| Frontend HTTP | 200 ✅ |
+| JS bundle | accessible ✅ |
+| Simulator routes | 401 (auth gated) ✅ |
+| Shared-session endpoint | 401 (auth gated) ✅ |
+
+### Feature State
+
+- Feature: **DISABLED** (`SIMULATOR_SHARED_SESSIONS_ENABLED` not set)
+- Shared modality: hidden (capability `false`)
+- Simple session: independent, unaffected
+- No shared-session records created
+- No remote D1 writes performed
+
+### Rollback
+
+- Not needed
+- Rollback plan remains documented above
+
 ## Release Decision
 
 - Recommended status: `READY_FOR_CONTROLLED_RELEASE`
+- Deployed status: `CODE_DEPLOYED_FEATURE_DISABLED_READY_FOR_ACTIVATION_REVIEW`
 - This status remains valid only while:
   - the reviewed commit chain stays unchanged
   - production health remains green
   - no unrelated files are added to the publication diff
+  - `SIMULATOR_SHARED_SESSIONS_ENABLED` remains unset/false
