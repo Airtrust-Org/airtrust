@@ -276,32 +276,59 @@ app.get('/fichas', async (c) => {
 
 app.post('/fichas', async (c) => {
   try {
+    const empresaId = getEmpresaId(c);
     const b = await c.req.json();
     if (!b.colaborador_id_aluno || !b.tipo_sessao)
       return c.json(
         { success: false, error: 'colaborador_id_aluno,tipo_sessao obrigatórios' },
         400,
       );
+    const colaboradorId = Number(b.colaborador_id_aluno);
+    const instrutorId = b.instrutor_id != null ? Number(b.instrutor_id) : null;
+
+    if (!Number.isInteger(colaboradorId) || colaboradorId <= 0) {
+      return c.json({ success: false, error: 'colaborador_id_aluno inválido' }, 400);
+    }
+    if (instrutorId !== null && (!Number.isInteger(instrutorId) || instrutorId <= 0)) {
+      return c.json({ success: false, error: 'instrutor_id inválido' }, 400);
+    }
+
+    const funcionarioIds = [colaboradorId, ...(instrutorId ? [instrutorId] : [])];
+    const ownership = await c.env.DB.prepare(
+      `SELECT COUNT(DISTINCT id) AS total
+         FROM funcionarios
+        WHERE id IN (${funcionarioIds.map(() => '?').join(',')})
+          AND empresa_id = ?
+          AND deleted_at IS NULL`,
+    )
+      .bind(...funcionarioIds, empresaId)
+      .first<{ total: number }>();
+
+    if (Number(ownership?.total || 0) !== funcionarioIds.length) {
+      return c.json({ success: false, error: 'Aluno ou instrutor fora do tenant' }, 400);
+    }
+
     const uuid = crypto.randomUUID();
     const r = await c.env.DB.prepare(
-      'INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,tipo_sessao,tipo_aeronave,status,data_sessao,aprovado)VALUES(?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,tipo_sessao,tipo_aeronave,status,data_sessao,aprovado,empresa_id)VALUES(?,?,?,?,?,?,?,?,?,?)',
     )
       .bind(
         uuid,
         b.agendamento_slot_id || null,
-        b.colaborador_id_aluno,
-        b.instrutor_id || null,
+        colaboradorId,
+        instrutorId,
         b.tipo_sessao,
         b.tipo_aeronave || null,
         b.status || 'AVALIACAO_PENDENTE',
         b.data_sessao || new Date().toISOString(),
         b.aprovado !== undefined ? b.aprovado : 0,
+        empresaId,
       )
       .run();
     const f = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(r.meta.last_row_id)
+      .bind(r.meta.last_row_id, empresaId)
       .first();
     return c.json({ success: true, data: f }, 201);
   } catch (e: any) {
@@ -331,6 +358,7 @@ app.get('/fichas/:id', async (c) => {
     const userId = String(ctx.get('userId') || '');
     const role = String(ctx.get('userRole') || '');
     const empresaId = String(ctx.get('empresaId') || '');
+    const tenantEmpresaId = getEmpresaId(c);
 
     const f = await c.env.DB.prepare(
       `SELECT 
@@ -395,10 +423,10 @@ app.get('/fichas/:id', async (c) => {
       LEFT JOIN modelos_sessao tpl ON COALESCE(fs.template_id, sa.template_id) = tpl.id AND tpl.deleted_at IS NULL
       LEFT JOIN funcionarios fex ON sa.examinador_id = fex.id AND fex.deleted_at IS NULL
       LEFT JOIN modelos_sessao mf ON fs.tipo_sessao = mf.codigo AND mf.deleted_at IS NULL
-      WHERE fs.id = ? AND fs.deleted_at IS NULL
+      WHERE fs.id = ? AND fs.deleted_at IS NULL AND fs.empresa_id = ?
       `,
     )
-      .bind(id)
+      .bind(id, tenantEmpresaId)
       .first<any>();
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
@@ -728,6 +756,7 @@ app.get('/fichas/:id', async (c) => {
 app.post('/fichas/:id/pdf', async (c) => {
   try {
     const fichaId = c.req.param('id');
+    const tenantEmpresaId = getEmpresaId(c);
 
     const f = await c.env.DB.prepare(
       `SELECT 
@@ -760,10 +789,10 @@ app.post('/fichas/:id/pdf', async (c) => {
       LEFT JOIN sessoes_participantes sp ON sp.sessao_id = sa.id
         AND sp.funcionario_id = ft.id
         AND sp.deleted_at IS NULL
-      WHERE fs.id = ? AND fs.deleted_at IS NULL
+      WHERE fs.id = ? AND fs.deleted_at IS NULL AND fs.empresa_id = ?
       `,
     )
-      .bind(fichaId)
+      .bind(fichaId, tenantEmpresaId)
       .first<any>();
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
@@ -937,11 +966,12 @@ app.post('/fichas/:id/pdf', async (c) => {
 app.put('/fichas/:id', async (c) => {
   try {
     const id = c.req.param('id');
+    const tenantEmpresaId = getEmpresaId(c);
     const b = await c.req.json();
     const a = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(id)
+      .bind(id, tenantEmpresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
@@ -1034,14 +1064,14 @@ app.put('/fichas/:id', async (c) => {
 
     // 4) Update header
     await c.env.DB.prepare(
-      "UPDATE fichas_sessao SET status=?,observacoes=?,updated_at=datetime('now') WHERE id=?",
+      "UPDATE fichas_sessao SET status=?,observacoes=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?",
     )
-      .bind(newStatus, b.observacoes !== undefined ? b.observacoes : a.observacoes, id)
+      .bind(newStatus, b.observacoes !== undefined ? b.observacoes : a.observacoes, id, tenantEmpresaId)
       .run();
     const u = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(id)
+      .bind(id, tenantEmpresaId)
       .first();
     await audit(c.env.DB, {
       tabela: 'fichas_sessao',
@@ -1051,9 +1081,8 @@ app.put('/fichas/:id', async (c) => {
       dados_novos: u,
     });
 
-    const empresaId = Number(c.get('empresaId' as never) || 0);
-    if (empresaId && String(newStatus).toUpperCase() === 'CONCLUIDA') {
-      await syncHorasVooFromSimulador(c.env.DB, Number(id), empresaId);
+    if (tenantEmpresaId && String(newStatus).toUpperCase() === 'CONCLUIDA') {
+      await syncHorasVooFromSimulador(c.env.DB, Number(id), tenantEmpresaId);
     }
 
     // Notificar aluno quando avaliação for concluída e aguardar assinatura
@@ -1069,7 +1098,7 @@ app.put('/fichas/:id', async (c) => {
         );
         const instrutorNome = instrutorInfo?.nome || 'O instrutor';
         await criarNotificacaoFicha(c.env.DB, {
-          empresaId,
+          empresaId: tenantEmpresaId,
           userId: alunoInfo.userId,
           tipo: 'FICHA_AGUARDANDO_ALUNO',
           titulo: 'Ficha pronta para sua assinatura',
@@ -1111,14 +1140,15 @@ app.delete('/fichas/:id', async (c) => {
     if (denied) return denied;
 
     const id = c.req.param('id');
+    const tenantEmpresaId = getEmpresaId(c);
     const a = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(id)
+      .bind(id, tenantEmpresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
-    await c.env.DB.prepare("UPDATE fichas_sessao SET deleted_at=datetime('now') WHERE id=?")
-      .bind(id)
+    await c.env.DB.prepare("UPDATE fichas_sessao SET deleted_at=datetime('now') WHERE id=? AND empresa_id = ?")
+      .bind(id, tenantEmpresaId)
       .run();
     await audit(c.env.DB, {
       tabela: 'fichas_sessao',

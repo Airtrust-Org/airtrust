@@ -831,8 +831,8 @@ app.post('/sessoes', async (c) => {
           await c.env.DB.prepare(
             `INSERT INTO fichas_sessao
                (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
-                tipo_sessao, tipo_aeronave, data_sessao, status, template_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?)`,
+                tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?)`,
           )
             .bind(
               crypto.randomUUID(),
@@ -843,6 +843,7 @@ app.post('/sessoes', async (c) => {
               tipo_aeronave,
               data,
               tplMap.get(especial.modelo) ?? null,
+              empresaId,
             )
             .run();
         }
@@ -895,8 +896,9 @@ app.post('/sessoes', async (c) => {
           tipo_sessao,
           tipo_aeronave,
           data_sessao,
-          status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE')`,
+          status,
+          empresa_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?)`,
       )
         .bind(
           fichaUuid,
@@ -906,6 +908,7 @@ app.post('/sessoes', async (c) => {
           tipo_sessao,
           tipo_aeronave,
           data,
+          empresaId,
         )
         .run();
 
