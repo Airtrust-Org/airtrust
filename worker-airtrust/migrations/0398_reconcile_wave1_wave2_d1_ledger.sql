@@ -5,7 +5,7 @@
 -- Safety model:
 -- - Only records 0396 if Wave 1 schema shape is already present.
 -- - Only records 0397 if Wave 2 schema shape is already present.
--- - Records itself so future `wrangler d1 migrations apply` runs stay clean.
+-- - The wrangler migration runner records 0398 itself after successful apply.
 
 INSERT INTO d1_migrations (name, applied_at)
 SELECT '0396_harden_empresa_id_wave1.sql', datetime('now')
@@ -49,14 +49,3 @@ AND EXISTS (
   WHERE name = 'empresa_id' AND "notnull" = 1 AND dflt_value IS NULL
 );
 
-INSERT INTO d1_migrations (name, applied_at)
-SELECT '0398_reconcile_wave1_wave2_d1_ledger.sql', datetime('now')
-WHERE NOT EXISTS (
-  SELECT 1 FROM d1_migrations WHERE name = '0398_reconcile_wave1_wave2_d1_ledger.sql'
-)
-AND EXISTS (
-  SELECT 1 FROM d1_migrations WHERE name = '0396_harden_empresa_id_wave1.sql'
-)
-AND EXISTS (
-  SELECT 1 FROM d1_migrations WHERE name = '0397_harden_empresa_id_wave2.sql'
-);
