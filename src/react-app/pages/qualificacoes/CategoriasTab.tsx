@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, Search, RotateCcw, SearchX } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, SearchX, X } from 'lucide-react';
 import { Card, CardContent, EmptyState, Badge } from '@/react-app/components/UI';
 import Button from '@/react-app/components/Button';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
@@ -66,16 +66,37 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* HEADER COM BOTÃO E VIEW TOGGLE */}
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">
+      {/* HEADER COM BUSCA INLINE + BOTÕES */}
+      <div className="flex flex-wrap items-center gap-3">
+        <h3 className="text-lg font-semibold text-slate-900">
           Categorias ({categoriasFiltrais.length})
         </h3>
-        <div className="flex gap-2">
+
+        {/* Filtro inline: Nome */}
+        <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar categoria..."
+            value={filtroNome}
+            onChange={(e) => setFiltroNome(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary-600"
+          />
+        </div>
+
+        {filtroNome && (
+          <Button variant="ghost" size="sm" onClick={limparFiltros} aria-label="Limpar filtros" className="min-h-[44px]">
+            <X className="w-4 h-4 mr-2" aria-hidden="true" />
+            Limpar
+          </Button>
+        )}
+
+        <div className="flex gap-2 ml-auto">
           <Button
             variant={viewMode === 'grid' ? 'primary' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('grid')}
+            className="min-h-[44px]"
           >
             Grade
           </Button>
@@ -83,43 +104,14 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
             variant={viewMode === 'table' ? 'primary' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('table')}
+            className="min-h-[44px]"
           >
             Tabela
           </Button>
-          <Button variant="primary" size="md" onClick={() => onAdd?.()}>
-            <Plus className="w-4 h-4 mr-2" />
+          <Button variant="primary" size="md" onClick={() => onAdd?.()} className="min-h-[44px]">
+            <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
             Nova Categoria
           </Button>
-        </div>
-      </div>
-
-      {/* FILTROS */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900">Filtros</h3>
-
-        <div className="flex gap-4 items-end">
-          {/* Filtro: Nome */}
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nome</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar categoria..."
-                value={filtroNome}
-                onChange={(e) => setFiltroNome(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-            </div>
-          </div>
-
-          {/* Botão Limpar Filtros */}
-          {filtroNome && (
-            <Button variant="ghost" size="sm" onClick={limparFiltros}>
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Limpar
-            </Button>
-          )}
         </div>
       </div>
 
@@ -127,18 +119,25 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {categoriasFiltrais.map((cat) => (
-            <Card key={cat.id} className="hover:shadow-lg transition-shadow">
+            <Card key={cat.id} className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-gray-900">{cat.nome}</h4>
+                    <h4 className="text-sm font-semibold text-slate-900">{cat.nome}</h4>
                     <Badge variant="default" size="sm" className="mt-2">
                       {cat.codigo}
                     </Badge>
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => onEdit?.(cat)} title="Editar">
-                      <Edit2 className="w-4 h-4 text-indigo-600" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onEdit?.(cat)}
+                      title="Editar"
+                      aria-label="Editar categoria"
+                      className="min-h-[44px] min-w-[44px]"
+                    >
+                      <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -149,23 +148,25 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
                         }
                       }}
                       title="Deletar"
+                      aria-label="Excluir categoria"
+                      className="min-h-[44px] min-w-[44px]"
                     >
-                      <Trash2 className="w-4 h-4 text-red-600" />
+                      <Trash2 className="w-4 h-4 text-red-600" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
 
                 {cat.descricao && (
-                  <p className="text-xs text-gray-600 mb-4 line-clamp-2">{cat.descricao}</p>
+                  <p className="text-xs text-slate-600 mb-4 line-clamp-2">{cat.descricao}</p>
                 )}
 
                 {cat.cor && (
-                  <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+                  <div className="flex items-center gap-2 pt-3 border-t border-slate-200">
                     <div
-                      className="w-4 h-4 rounded border border-gray-300"
+                      className="w-4 h-4 rounded border border-slate-300"
                       style={{ backgroundColor: cat.cor }}
                     />
-                    <span className="text-xs text-gray-500">{cat.cor}</span>
+                    <span className="text-xs text-slate-500">{cat.cor}</span>
                   </div>
                 )}
               </CardContent>
@@ -176,30 +177,30 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
 
       {/* VISTA EM TABELA */}
       {viewMode === 'table' && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-12">
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider w-12">
                   Ações
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Nome
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Código
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Cor
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Descrição
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-slate-200">
               {categoriasFiltrais.map((cat) => (
-                <tr key={cat.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={cat.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex gap-1">
                       <Button
@@ -207,8 +208,10 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
                         size="sm"
                         onClick={() => onEdit?.(cat)}
                         title="Editar"
+                        aria-label="Editar categoria"
+                        className="min-h-[44px] min-w-[44px]"
                       >
-                        <Edit2 className="w-4 h-4 text-indigo-600" />
+                        <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -219,12 +222,14 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
                           }
                         }}
                         title="Deletar"
+                        aria-label="Excluir categoria"
+                        className="min-h-[44px] min-w-[44px]"
                       >
-                        <Trash2 className="w-4 h-4 text-red-600" />
+                        <Trash2 className="w-4 h-4 text-red-600" aria-hidden="true" />
                       </Button>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                     {cat.nome}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -235,13 +240,13 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <div
-                        className="w-6 h-6 rounded border border-gray-300"
+                        className="w-6 h-6 rounded border border-slate-300"
                         style={{ backgroundColor: cat.cor || '#6B7280' }}
                       />
-                      <span className="text-xs text-gray-500">{cat.cor || '-'}</span>
+                      <span className="text-xs text-slate-500">{cat.cor || '-'}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                  <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate">
                     {cat.descricao || '-'}
                   </td>
                 </tr>

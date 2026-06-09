@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Edit2, Download, FileUp, Trash2, RotateCcw, FileText } from 'lucide-react';
+import { Search, Edit2, Download, FileUp, Trash2, RotateCcw, FileText, X, AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
 import { EmptyState, VirtualTable } from '@/react-app/components/UI';
 import Button from '@/react-app/components/Button';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
@@ -65,10 +65,10 @@ const formatarDataBR = (data?: string) => {
 };
 
 const tableActionButtonClass =
-  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
+  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400';
 
 const tableActionDangerButtonClass =
-  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 shadow-sm transition hover:bg-rose-50';
+  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 shadow-sm transition hover:bg-rose-50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400';
 
 export const HistoricoTab: React.FC<HistoricoTabProps> = ({
   habilitacoes = [],
@@ -147,32 +147,32 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
   return (
     <div className="space-y-4">
       {/* FILTROS */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900">Filtros</h3>
+      <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-4">
+        <h3 className="text-sm font-semibold text-slate-900">Filtros</h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Filtro: Funcionário */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Funcionário</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Funcionário</label>
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Buscar funcionário..."
                 value={filtroFuncionario}
                 onChange={(e) => setFiltroFuncionario(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
           </div>
 
           {/* Filtro: Status */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
             <select
               value={filtroStatus}
               onChange={(e) => setFiltroStatus(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
             >
               <option value="">Todos os status</option>
               <option value="VIGENTE">Vigente</option>
@@ -185,8 +185,8 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
 
         {/* Botão Limpar Filtros */}
         {(filtroFuncionario || filtroStatus) && (
-          <Button variant="ghost" size="sm" onClick={limparFiltros}>
-            <RotateCcw className="w-4 h-4 mr-2" />
+          <Button variant="ghost" size="sm" onClick={limparFiltros} aria-label="Limpar filtros">
+            <X className="w-4 h-4 mr-2" aria-hidden="true" />
             Limpar Filtros
           </Button>
         )}
@@ -212,9 +212,10 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                       type="button"
                       onClick={() => onRenovar?.(hab)}
                       title="Renovar"
+                      aria-label="Renovar qualificação"
                       className={tableActionButtonClass}
                     >
-                      <RotateCcw className="w-4 h-4 text-purple-600" />
+                      <RotateCcw className="w-4 h-4 text-purple-600" aria-hidden="true" />
                     </button>
                   )}
                   {hab.certificado_url && (
@@ -222,32 +223,36 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                       type="button"
                       onClick={() => onDownload?.(hab.certificado_url!)}
                       title="Download Certificado"
+                      aria-label="Download certificado"
                       className={tableActionButtonClass}
                     >
-                      <Download className="w-4 h-4 text-primary" />
+                      <Download className="w-4 h-4 text-primary" aria-hidden="true" />
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => onUploadCertificado?.(hab)}
                     title="Upload/Gerir Certificado"
+                    aria-label="Gerenciar certificado"
                     className={tableActionButtonClass}
                   >
                     <FileUp
                       className={`w-4 h-4 ${
                         hab.total_certificados && hab.total_certificados > 0
                           ? 'text-green-600'
-                          : 'text-gray-400'
+                          : 'text-slate-400'
                       }`}
+                      aria-hidden="true"
                     />
                   </button>
                   <button
                     type="button"
                     onClick={() => onEdit?.(hab)}
                     title="Editar"
+                    aria-label="Editar qualificação"
                     className={tableActionButtonClass}
                   >
-                    <Edit2 className="w-4 h-4 text-indigo-600" />
+                    <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -257,9 +262,10 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                       }
                     }}
                     title="Deletar"
+                    aria-label="Excluir qualificação"
                     className={tableActionDangerButtonClass}
                   >
-                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <Trash2 className="w-4 h-4 text-red-600" aria-hidden="true" />
                   </button>
                 </div>
               ),
@@ -272,7 +278,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                 <FuncionarioLink
                   funcionarioId={hab.funcionario_id}
                   nome={hab.funcionario_nome || '-'}
-                  className="font-medium text-gray-900"
+                  className="font-medium text-slate-900"
                 />
               ),
             },
@@ -281,7 +287,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
               header: 'Categoria',
               width: '15%',
               render: (hab: Habilitacao) => (
-                <span className="text-gray-600">{hab.categoria_nome || '-'}</span>
+                <span className="text-slate-600">{hab.categoria_nome || '-'}</span>
               ),
             },
             {
@@ -289,7 +295,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
               header: 'Código',
               width: '10%',
               render: (hab: Habilitacao) => (
-                <span className="text-gray-600">{hab.qualificacao_codigo || '-'}</span>
+                <span className="text-slate-600">{hab.qualificacao_codigo || '-'}</span>
               ),
             },
             {
@@ -297,7 +303,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
               header: 'Qualificação',
               width: '18%',
               render: (hab: Habilitacao) => (
-                <span className="text-gray-900">{hab.qualificacao_nome || '-'}</span>
+                <span className="text-slate-900">{hab.qualificacao_nome || '-'}</span>
               ),
             },
             {
@@ -305,7 +311,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
               header: 'Conclusão',
               width: '12%',
               render: (hab: Habilitacao) => (
-                <span className="text-gray-600">{formatarDataBR(hab.data_conclusao)}</span>
+                <span className="text-slate-600">{formatarDataBR(hab.data_conclusao)}</span>
               ),
             },
             {
@@ -313,28 +319,37 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
               header: 'Validade',
               width: '12%',
               render: (hab: Habilitacao) => (
-                <span className="text-gray-600">{formatarDataBR(hab.validade_calculada)}</span>
+                <span className="text-slate-600">{formatarDataBR(hab.validade_calculada)}</span>
               ),
             },
             {
               key: 'dias_restantes',
               header: 'Dias Restantes',
               width: '12%',
-              render: (hab: Habilitacao) => (
-                <span
-                  className={`font-medium ${
-                    hab.dias_restantes && hab.dias_restantes < 0
-                      ? 'text-red-600'
-                      : hab.dias_restantes && hab.dias_restantes <= 30
-                        ? 'text-yellow-600'
-                        : 'text-green-600'
-                  }`}
-                >
-                  {hab.dias_restantes !== null && hab.dias_restantes !== undefined
-                    ? `${hab.dias_restantes} d`
-                    : '-'}
-                </span>
-              ),
+              render: (hab: Habilitacao) => {
+                const dias = hab.dias_restantes;
+                if (dias === null || dias === undefined) {
+                  return <span className="text-sm text-slate-400">-</span>;
+                }
+                const isVencido = dias < 0;
+                const isProximo = dias <= 30 && dias >= 0;
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1 text-sm font-medium ${
+                      isVencido ? 'text-red-600' : isProximo ? 'text-yellow-600' : 'text-green-600'
+                    }`}
+                  >
+                    {isVencido ? (
+                      <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                    ) : isProximo ? (
+                      <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    )}
+                    {isVencido ? `Vencido há ${Math.abs(dias)} d` : `${dias} d`}
+                  </span>
+                );
+              },
             },
             {
               key: 'status',
@@ -353,12 +368,12 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-12">
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider w-12">
                   Ações
                 </th>
                 <th
-                  className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
                   onClick={() => handleSort('funcionario_nome')}
                 >
                   <div className="flex items-center gap-2">
@@ -368,32 +383,32 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                     )}
                   </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Categoria
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Código
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Qualificação
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Conclusão
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Validade
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Dias Restantes
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Status
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-slate-200">
               {habilitacoesFiltrais.map((hab) => (
-                <tr key={hab.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={hab.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex gap-1">
                       {hab.certificado_url && (
@@ -401,32 +416,36 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                           type="button"
                           onClick={() => onDownload?.(hab.certificado_url!)}
                           title="Download Certificado"
+                          aria-label="Download certificado"
                           className={tableActionButtonClass}
                         >
-                          <Download className="w-4 h-4 text-primary" />
+                          <Download className="w-4 h-4 text-primary" aria-hidden="true" />
                         </button>
                       )}
                       <button
                         type="button"
                         onClick={() => onUploadCertificado?.(hab)}
                         title="Upload/Gerir Certificado"
+                        aria-label="Gerenciar certificado"
                         className={tableActionButtonClass}
                       >
                         <FileUp
                           className={`w-4 h-4 ${
                             hab.total_certificados && hab.total_certificados > 0
                               ? 'text-green-600'
-                              : 'text-gray-400'
+                              : 'text-slate-400'
                           }`}
+                          aria-hidden="true"
                         />
                       </button>
                       <button
                         type="button"
                         onClick={() => onEdit?.(hab)}
                         title="Editar"
+                        aria-label="Editar qualificação"
                         className={tableActionButtonClass}
                       >
-                        <Edit2 className="w-4 h-4 text-indigo-600" />
+                        <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
                       </button>
                       <button
                         type="button"
@@ -436,48 +455,60 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                           }
                         }}
                         title="Deletar"
+                        aria-label="Excluir qualificação"
                         className={tableActionDangerButtonClass}
                       >
-                        <Trash2 className="w-4 h-4 text-red-600" />
+                        <Trash2 className="w-4 h-4 text-red-600" aria-hidden="true" />
                       </button>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                     <FuncionarioLink
                       funcionarioId={hab.funcionario_id}
                       nome={hab.funcionario_nome || '-'}
-                      className="font-medium text-gray-900"
+                      className="font-medium text-slate-900"
                     />
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                     {hab.categoria_nome || '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                     {hab.qualificacao_codigo || '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
+                  <td className="px-6 py-4 text-sm text-slate-900">
                     {hab.qualificacao_nome || '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                     {formatarDataBR(hab.data_conclusao)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                     {formatarDataBR(hab.validade_calculada)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`text-sm font-medium ${
-                        hab.dias_restantes && hab.dias_restantes < 0
-                          ? 'text-red-600'
-                          : hab.dias_restantes && hab.dias_restantes <= 30
-                            ? 'text-yellow-600'
-                            : 'text-green-600'
-                      }`}
-                    >
-                      {hab.dias_restantes !== null && hab.dias_restantes !== undefined
-                        ? `${hab.dias_restantes} d`
-                        : '-'}
-                    </span>
+                    {(() => {
+                      const dias = hab.dias_restantes;
+                      if (dias === null || dias === undefined) {
+                        return <span className="text-sm text-slate-400">-</span>;
+                      }
+                      const isVencido = dias < 0;
+                      const isProximo = dias <= 30 && dias >= 0;
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1 text-sm font-medium ${
+                            isVencido ? 'text-red-600' : isProximo ? 'text-yellow-600' : 'text-green-600'
+                          }`}
+                        >
+                          {isVencido ? (
+                            <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                          ) : isProximo ? (
+                            <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          )}
+                          {isVencido ? `Vencido há ${Math.abs(dias)} d` : `${dias} d`}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={getStatusBadgeClass(hab.status || 'VIGENTE')}>

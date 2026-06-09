@@ -107,10 +107,10 @@ const ALL_STATUS_VALUES = [
 ] as const;
 
 const historicoActionButtonClass =
-  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
+  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400';
 
 const historicoActionDangerButtonClass =
-  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 shadow-sm transition hover:bg-rose-50';
+  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 shadow-sm transition hover:bg-rose-50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400';
 
 const QUALIFICACOES_PREFS_KEY = 'qualificacoes_prefs_v1';
 
@@ -2372,60 +2372,52 @@ export default function Qualificacoes() {
                 role="tab"
                 aria-selected={activeTab === 'historico'}
                 onClick={() => setActiveTab('historico')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 min-h-[44px] transition-colors ${
                   activeTab === 'historico'
-                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                    ? 'bg-primary-600 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
-                <History size={16} className={activeTab === 'historico' ? 'text-blue-600' : ''} aria-hidden="true" />
-                Histórico de Qualificações
+                <History size={16} aria-hidden="true" />
+                Histórico
               </button>
               <button
                 role="tab"
                 aria-selected={isPlanejadosTab}
                 onClick={() => setActiveTab('planejados')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 min-h-[44px] transition-colors ${
                   isPlanejadosTab
-                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                    ? 'bg-primary-600 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
-                <CalendarDays
-                  size={16}
-                  className={isPlanejadosTab ? 'text-blue-600' : ''}
-                  aria-hidden="true"
-                />
-                Treinamentos Planejados
+                <CalendarDays size={16} aria-hidden="true" />
+                Planejados
               </button>
               <button
                 role="tab"
                 aria-selected={activeTab === 'tipos'}
                 onClick={() => setActiveTab('tipos')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 min-h-[44px] transition-colors ${
                   activeTab === 'tipos'
-                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                    ? 'bg-primary-600 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
-                <Bookmark size={16} className={activeTab === 'tipos' ? 'text-blue-600' : ''} aria-hidden="true" />
+                <Bookmark size={16} aria-hidden="true" />
                 Modelos
               </button>
               <button
                 role="tab"
                 aria-selected={activeTab === 'categorias'}
                 onClick={() => setActiveTab('categorias')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 min-h-[44px] transition-colors ${
                   activeTab === 'categorias'
-                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 font-semibold'
+                    ? 'bg-primary-600 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
-                <FolderOpen
-                  size={16}
-                  className={activeTab === 'categorias' ? 'text-blue-600' : ''}
-                  aria-hidden="true"
-                />
+                <FolderOpen size={16} aria-hidden="true" />
                 Categorias
               </button>
             </div>
