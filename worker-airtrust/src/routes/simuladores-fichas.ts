@@ -573,26 +573,26 @@ app.get('/fichas/:id', async (c) => {
         // Estratégia 0: vínculo explícito do modelo salvo na sessão
         if (fichaCtx.sessao_template_id) {
           modeloCorreto = (await c.env.DB.prepare(
-            `SELECT id FROM modelos_sessao WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
+            `SELECT id FROM modelos_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
           )
-            .bind(fichaCtx.sessao_template_id)
+            .bind(fichaCtx.sessao_template_id, tenantEmpresaId)
             .first()) as any;
         }
 
         // Estratégia 1: código direto do modelo (fichas especiais: CHECK-CRED-EXAMINADOR, etc.)
         modeloCorreto =
           ((await c.env.DB.prepare(
-            `SELECT id FROM modelos_sessao WHERE codigo = ? AND deleted_at IS NULL LIMIT 1`,
+            `SELECT id FROM modelos_sessao WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
           )
-            .bind(fichaCtx.ficha_tipo_sessao)
+            .bind(fichaCtx.ficha_tipo_sessao, tenantEmpresaId)
             .first()) as any) || modeloCorreto;
 
         // Estratégia 2: nome exato da sessão (mais precisa para fichas regulares com múltiplos modelos)
         if (!modeloCorreto && fichaCtx.sessao_nome) {
           modeloCorreto = (await c.env.DB.prepare(
-            `SELECT id FROM modelos_sessao WHERE nome = ? AND deleted_at IS NULL LIMIT 1`,
+            `SELECT id FROM modelos_sessao WHERE nome = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
           )
-            .bind(fichaCtx.sessao_nome)
+            .bind(fichaCtx.sessao_nome, tenantEmpresaId)
             .first()) as any;
         }
 
@@ -600,10 +600,13 @@ app.get('/fichas/:id', async (c) => {
         if (!modeloCorreto) {
           modeloCorreto = (await c.env.DB.prepare(
             `SELECT ms.id FROM modelos_sessao ms
-             INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
+             INNER JOIN tipos_sessao ts
+               ON ms.tipo_sessao_id = ts.id
+              AND ts.empresa_id = ?
+              AND ts.deleted_at IS NULL
              WHERE ts.codigo = ? AND ms.modelo_aeronave = ? AND ms.empresa_id = ? AND ms.deleted_at IS NULL LIMIT 1`,
           )
-            .bind(fichaCtx.tipo_sessao, fichaCtx.tipo_aeronave, tenantEmpresaId)
+            .bind(tenantEmpresaId, fichaCtx.tipo_sessao, fichaCtx.tipo_aeronave, tenantEmpresaId)
             .first()) as any;
         }
       }

@@ -77,6 +77,16 @@ describe('tenant-aware write paths', () => {
     expect(pastaVirtual).toContain('WHERE documento_id = ? AND empresa_id = ?');
   });
 
+  it('setores and funcoes updates/deletes remain tenant-scoped at write time', () => {
+    const setores = compact('routes/setores.ts');
+    const funcoes = compact('routes/funcoes.ts');
+
+    expect(setores).toContain('WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL');
+    expect(funcoes).toContain('WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL');
+    expect(setores).toContain('UPDATE setores SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL');
+    expect(funcoes).toContain('UPDATE funcoes SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL');
+  });
+
   it('FRMS and simulator operational writers do not create tenantless parent rows', () => {
     const frms = compact('lib/frms/db-service-jornadas.ts');
     const escalasStatus = compact('routes/escalas-status.ts');
@@ -95,5 +105,8 @@ describe('tenant-aware write paths', () => {
     expect(fichas).toMatch(/INSERT INTO fichas_sessao.*empresa_id/i);
     expect(fichas).toContain('Aluno ou instrutor fora do tenant');
     expect(fichas).toContain('WHERE id=? AND empresa_id = ? AND deleted_at IS NULL');
+    expect(fichas).toContain('SELECT id FROM modelos_sessao WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1');
+    expect(fichas).toContain('SELECT id FROM modelos_sessao WHERE nome = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1');
+    expect(fichas).toContain('AND ts.empresa_id = ?');
   });
 });
