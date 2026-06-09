@@ -177,7 +177,7 @@ edappRouter.post('/webhook', async (c: Context) => {
 
     if (resultado.created !== false && resultado.qualificacao_id) {
       await createEdAppQualificacaoNotification(c.env.DB, {
-        empresaId,
+        empresaId: null,
         funcionarioId: funcionario.funcionario_id,
         funcionarioNome: funcionario.funcionario_nome,
         qualificacaoCodigo: qualificacao.qualificacao_codigo,

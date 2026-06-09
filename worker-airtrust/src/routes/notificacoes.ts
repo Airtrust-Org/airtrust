@@ -490,7 +490,13 @@ app.get('/sistema', auth(), async (c) => {
     const { results } = await db
       .prepare(query)
       .bind(...params, limitNum)
-      .all();
+      .all<{
+        empresa_id: number | null;
+        user_id: string | null;
+        tipo: string | null;
+        grupo: string | null;
+        [key: string]: unknown;
+      }>();
 
     const countScope = buildSystemNotificationScope('', empresaId, userId);
     const countParams: unknown[] = [...countScope.params];

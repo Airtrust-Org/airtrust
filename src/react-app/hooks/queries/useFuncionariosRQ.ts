@@ -4,15 +4,18 @@ import { Funcionario, FiltrosFuncionarios, PaginacaoParams } from '@/types';
 
 /**
  * React Query Keys for Funcionários queries
- * Used for caching, invalidation, and deduplication
+ * Used for caching, invalidation, and deduplication.
+ *
+ * All keys accept an optional empresaId for tenant scoping.
+ * When provided, cache is automatically namespaced per tenant.
  */
 export const funcionariosKeys = {
-  all: ['funcionarios'] as const,
-  lists: () => [...funcionariosKeys.all, 'list'] as const,
-  list: (filters: FiltrosFuncionarios = {}, pagination: PaginacaoParams = {}) =>
-    [...funcionariosKeys.lists(), { filters, pagination }] as const,
-  details: () => [...funcionariosKeys.all, 'detail'] as const,
-  detail: (id: string) => [...funcionariosKeys.details(), id] as const,
+  all: (empresaId?: number | null) => ['tenant', empresaId ?? 0, 'funcionarios'] as const,
+  lists: (empresaId?: number | null) => [...funcionariosKeys.all(empresaId), 'list'] as const,
+  list: (filters: FiltrosFuncionarios = {}, pagination: PaginacaoParams = {}, empresaId?: number | null) =>
+    [...funcionariosKeys.lists(empresaId), { filters, pagination }] as const,
+  details: (empresaId?: number | null) => [...funcionariosKeys.all(empresaId), 'detail'] as const,
+  detail: (id: string, empresaId?: number | null) => [...funcionariosKeys.details(empresaId), id] as const,
 };
 
 type ListResponse = { data: Funcionario[]; total: number; page: number };
