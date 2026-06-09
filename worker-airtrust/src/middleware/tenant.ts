@@ -74,7 +74,7 @@ const ROLE_HIERARCHY = {
   viewer: 10,
 } as const;
 
-function normalizeTenantRole(role: unknown): TenantContext['role'] {
+export function normalizeTenantRole(role: unknown): TenantContext['role'] {
   switch (
     String(role || '')
       .trim()
@@ -90,9 +90,12 @@ function normalizeTenantRole(role: unknown): TenantContext['role'] {
     case 'editor':
       return 'editor';
     case 'instructor':
+    case 'instrutor':
       return 'instructor';
     case 'student':
     case 'usuario':
+    case 'aluno':
+    case 'member':
       return 'student';
     case 'viewer':
       return 'viewer';
