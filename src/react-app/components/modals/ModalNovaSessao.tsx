@@ -15,7 +15,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Plus, Trash2, Mail, MessageCircle, FileText } from 'lucide-react';
+import { X, Plus, Trash2, Mail, MessageCircle, FileText, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import TimeInput from '@/react-app/components/TimeInput';
@@ -35,6 +35,8 @@ import {
   resolveEditModeloSelection,
 } from './modalNovaSessaoRules';
 import { enviarNotificacaoSessao, montarResumoCanal } from '@/react-app/utils/sessaoNotificacoes';
+import { isSharedSessionsEnabled } from '@/react-app/config/sharedSessions';
+import SharedSessionForm from './SharedSessionForm';
 
 interface ModeloAeronave {
   id: number;
@@ -207,6 +209,7 @@ export default function ModalNovaSessao({
   const [gerarFichaExaminador, setGerarFichaExaminador] = useState(false);
   const [observacoes, setObservacoes] = useState<string>('');
   const [participantes, setParticipantes] = useState<Participante[]>(participantesIniciais());
+  const [modoCompartilhado, setModoCompartilhado] = useState(false);
 
   const {
     hasFap07Selecionada,
@@ -1709,6 +1712,60 @@ export default function ModalNovaSessao({
 
         {/* ========== FORM ========== */}
         <div className="p-4 sm:p-6 space-y-6">
+          {/* MODALITY TOGGLE — only in create mode, only when feature is enabled */}
+          {!isEditMode && isSharedSessionsEnabled() && !editHydrating && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Modalidade da sessão
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModoCompartilhado(false)}
+                  disabled={loading}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-all ${
+                    !modoCompartilhado
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  Sessão simples
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoCompartilhado(true)}
+                  disabled={loading}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-all flex items-center justify-center gap-1 ${
+                    modoCompartilhado
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  Sessão compartilhada
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ===== SHARED SESSION FORM ===== */}
+          {modoCompartilhado && !isEditMode ? (
+            <SharedSessionForm
+              onClose={onClose}
+              onSuccess={onSuccess}
+              simuladorId={simuladorId}
+              data={data}
+              horarioInicio={horarioInicio}
+              horarioFim={horarioFim}
+              instrutorId={instrutorId}
+              temaSessao={temaSessao}
+              observacoes={observacoes}
+              funcionarios={funcionarios}
+              modelos={modelos}
+              treinamentos={[]}
+            />
+          ) : (
+          <>
           {/* 0️⃣ TIPO DE DISPOSITIVO */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2205,9 +2262,12 @@ export default function ModalNovaSessao({
               disabled={loading}
             />
           </div>
+          </>
+          )}
         </div>
 
-        {/* ========== FOOTER ========== */}
+          {/* ========== FOOTER ========== */}
+          {!modoCompartilhado && (
         <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center gap-2">
           {isEditMode && (
             <>
@@ -2268,6 +2328,7 @@ export default function ModalNovaSessao({
                 : 'Criar Sessão'}
           </button>
         </div>
+          )}
       </div>
 
       {/* Modal de confirmação de exclusão */}
