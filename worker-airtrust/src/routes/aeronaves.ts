@@ -101,12 +101,14 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     throw new ApiError('Modelo da aeronave é obrigatório', 400);
   }
 
+  const empresaId = getEmpresaIdSafe(c);
+
   try {
     const result = await db
       .prepare(
         `
-        INSERT INTO aeronaves (codigo, modelo, prefixo, ano_fabricacao, status, observacoes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        INSERT INTO aeronaves (codigo, modelo, prefixo, ano_fabricacao, status, observacoes, empresa_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `,
       )
       .bind(
@@ -116,6 +118,7 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
         body.ano_fabricacao || null,
         body.status || 'ATIVO',
         body.observacoes || null,
+        empresaId,
       )
       .run();
 
