@@ -15,6 +15,7 @@ import {
   Flag,
   Mail,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   Users,
@@ -1377,9 +1378,7 @@ export default function TreinamentosPlanejadosPage({
         className={asTab ? 'space-y-4' : 'mx-auto max-w-7xl space-y-6'}
         data-testid="treinamentos-planejados-page"
       >
-        {asTab ? (
-          !hideActions ? <div className="flex justify-end pb-2">{actionButtons}</div> : null
-        ) : (
+        {asTab ? null : (
           <PageHeader
             title="Planejamento e Gestão de Treinamentos"
             subtitle="Calendario, quadro operacional e auditoria dos treinamentos futuros e seus convocados."
@@ -1393,8 +1392,9 @@ export default function TreinamentosPlanejadosPage({
           </div>
         )}
 
-        {/* Summary tags — icons ensure status is distinguishable beyond color alone */}
-        <section className="flex flex-wrap gap-2 px-1" aria-label="Resumo dos treinamentos">
+        {/* Summary tags + action buttons in same row */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <section className="flex flex-wrap gap-2" aria-label="Resumo dos treinamentos">
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-slate-100 text-slate-700 text-sm">
             <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Total</span>
@@ -1426,6 +1426,25 @@ export default function TreinamentosPlanejadosPage({
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.cancelados}</strong>
           </span>
         </section>
+          {asTab && !hideActions && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => treinamentosQuery.refetch()}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" aria-hidden="true" /> Atualizar
+              </button>
+              <button
+                type="button"
+                onClick={abrirNovoTreinamento}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" aria-hidden="true" /> {primaryActionLabel}
+              </button>
+            </div>
+          )}
+        </div>
 
         <section className="sticky top-0 z-10 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="grid gap-3 lg:grid-cols-[1.2fr,0.9fr,0.9fr,1.1fr]">
@@ -1500,10 +1519,10 @@ export default function TreinamentosPlanejadosPage({
                     role="tab"
                     aria-selected={active}
                     onClick={() => setAbaAtiva(tab.id as AbaAtiva)}
-                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition min-h-[44px] ${
+                    className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                       active
-                        ? 'border-b-2 border-primary-600 text-primary-700 bg-primary-50/50'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        ? 'border-primary text-blue-600 dark:text-blue-300'
+                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                     } motion-safe:transition-colors`}
                   >
                     <Icon className="h-4 w-4" aria-hidden="true" />

@@ -508,7 +508,7 @@ export default function PastaVirtual() {
               onClick={() => setAbaAtiva('documentos')}
               className={`flex-1 px-6 py-4 font-medium transition flex items-center justify-center gap-2 ${
                 abaAtiva === 'documentos'
-                  ? 'border-b-2 border-primary text-primary bg-primary/10'
+                  ? 'border-primary text-blue-600 dark:text-blue-300'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
@@ -520,7 +520,7 @@ export default function PastaVirtual() {
               onClick={() => setAbaAtiva('desempenho')}
               className={`flex-1 px-6 py-4 font-medium transition flex items-center justify-center gap-2 ${
                 abaAtiva === 'desempenho'
-                  ? 'border-b-2 border-primary text-primary bg-primary/10'
+                  ? 'border-primary text-blue-600 dark:text-blue-300'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
@@ -533,7 +533,7 @@ export default function PastaVirtual() {
                 onClick={() => setAbaAtiva('caderneta')}
                 className={`flex-1 px-6 py-4 font-medium transition flex items-center justify-center gap-2 ${
                   abaAtiva === 'caderneta'
-                    ? 'border-b-2 border-primary text-primary bg-primary/10'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
