@@ -65,10 +65,10 @@ const formatarDataBR = (data?: string) => {
 };
 
 const tableActionButtonClass =
-  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400';
+  'inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400';
 
 const tableActionDangerButtonClass =
-  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 shadow-sm transition hover:bg-rose-50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400';
+  'inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400';
 
 export const HistoricoTab: React.FC<HistoricoTabProps> = ({
   habilitacoes = [],
@@ -215,7 +215,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                       aria-label="Renovar qualificação"
                       className={tableActionButtonClass}
                     >
-                      <RotateCcw className="w-4 h-4 text-purple-600" aria-hidden="true" />
+                      <RotateCcw className="w-3.5 h-3.5 text-purple-600" aria-hidden="true" />
                     </button>
                   )}
                   {hab.certificado_url && (
@@ -226,7 +226,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                       aria-label="Download certificado"
                       className={tableActionButtonClass}
                     >
-                      <Download className="w-4 h-4 text-primary" aria-hidden="true" />
+                      <Download className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
                     </button>
                   )}
                   <button
@@ -252,7 +252,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                     aria-label="Editar qualificação"
                     className={tableActionButtonClass}
                   >
-                    <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                    <Edit2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -265,7 +265,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                     aria-label="Excluir qualificação"
                     className={tableActionDangerButtonClass}
                   >
-                    <Trash2 className="w-4 h-4 text-red-600" aria-hidden="true" />
+                    <Trash2 className="w-3.5 h-3.5 text-red-600" aria-hidden="true" />
                   </button>
                 </div>
               ),
@@ -369,11 +369,11 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider w-12">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-12">
                   Ações
                 </th>
                 <th
-                  className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
+                  className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
                   onClick={() => handleSort('funcionario_nome')}
                 >
                   <div className="flex items-center gap-2">
@@ -383,25 +383,25 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                     )}
                   </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Categoria
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Código
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Qualificação
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Conclusão
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Validade
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Dias Restantes
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Status
                 </th>
               </tr>
@@ -409,7 +409,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
             <tbody className="divide-y divide-slate-200">
               {habilitacoesFiltrais.map((hab) => (
                 <tr key={hab.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-2.5 whitespace-nowrap">
                     <div className="flex gap-1">
                       {hab.certificado_url && (
                         <button
@@ -419,7 +419,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                           aria-label="Download certificado"
                           className={tableActionButtonClass}
                         >
-                          <Download className="w-4 h-4 text-primary" aria-hidden="true" />
+                          <Download className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
                         </button>
                       )}
                       <button
@@ -445,7 +445,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                         aria-label="Editar qualificação"
                         className={tableActionButtonClass}
                       >
-                        <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                        <Edit2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
                       </button>
                       <button
                         type="button"
@@ -458,33 +458,33 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                         aria-label="Excluir qualificação"
                         className={tableActionDangerButtonClass}
                       >
-                        <Trash2 className="w-4 h-4 text-red-600" aria-hidden="true" />
+                        <Trash2 className="w-3.5 h-3.5 text-red-600" aria-hidden="true" />
                       </button>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
+                  <td className="px-4 py-2.5 whitespace-nowrap text-sm font-medium text-slate-900">
                     <FuncionarioLink
                       funcionarioId={hab.funcionario_id}
                       nome={hab.funcionario_nome || '-'}
                       className="font-medium text-slate-900"
                     />
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                  <td className="px-4 py-2.5 whitespace-nowrap text-sm text-slate-600">
                     {hab.categoria_nome || '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                  <td className="px-4 py-2.5 whitespace-nowrap text-sm text-slate-600">
                     {hab.qualificacao_codigo || '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-900">
+                  <td className="px-4 py-2.5 text-sm text-slate-900">
                     {hab.qualificacao_nome || '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                  <td className="px-4 py-2.5 whitespace-nowrap text-sm text-slate-600">
                     {formatarDataBR(hab.data_conclusao)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                  <td className="px-4 py-2.5 whitespace-nowrap text-sm text-slate-600">
                     {formatarDataBR(hab.validade_calculada)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-2.5 whitespace-nowrap">
                     {(() => {
                       const dias = hab.dias_restantes;
                       if (dias === null || dias === undefined) {
@@ -510,7 +510,7 @@ export const HistoricoTab: React.FC<HistoricoTabProps> = ({
                       );
                     })()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-2.5 whitespace-nowrap">
                     <span className={getStatusBadgeClass(hab.status || 'VIGENTE')}>
                       {hab.status || 'N/A'}
                     </span>
