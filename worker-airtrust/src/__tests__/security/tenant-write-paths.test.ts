@@ -82,12 +82,18 @@ describe('tenant-aware write paths', () => {
     const escalasStatus = compact('routes/escalas-status.ts');
     const sessoes = compact('routes/simuladores-sessoes.ts');
     const sessoesUpdate = compact('routes/simuladores-sessoes-update.ts');
+    const fichas = compact('routes/simuladores-fichas.ts');
 
     expect(frms).toMatch(/INSERT INTO frms_jornada .* empresa_id/i);
     expect(frms).toMatch(/INSERT OR IGNORE INTO frms_jornada .* empresa_id/i);
     expect(escalasStatus).toMatch(/INSERT OR IGNORE INTO frms_jornada .* empresa_id/i);
     expect(sessoes).toMatch(/INSERT INTO simulador_agendamentos .* empresa_id/i);
+    expect(sessoes).toMatch(/INSERT INTO fichas_sessao .* empresa_id/i);
     expect(sessoes).toContain('const { empresaId } = getTenantContext(c)');
+    expect(sessoesUpdate).toMatch(/INSERT INTO fichas_sessao .* empresa_id/i);
     expect(sessoesUpdate).toContain('WHERE id=? AND empresa_id = ? AND deleted_at IS NULL');
+    expect(fichas).toMatch(/INSERT INTO fichas_sessao.*empresa_id/i);
+    expect(fichas).toContain('Aluno ou instrutor fora do tenant');
+    expect(fichas).toContain('WHERE id=? AND empresa_id = ? AND deleted_at IS NULL');
   });
 });

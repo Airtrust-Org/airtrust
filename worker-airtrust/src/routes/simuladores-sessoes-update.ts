@@ -301,8 +301,8 @@ app.put('/sessoes/:id', async (c) => {
             await c.env.DB.prepare(
               `INSERT INTO fichas_sessao
                  (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
-                  tipo_sessao, tipo_aeronave, data_sessao, status, template_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?)`,
+                  tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?)`,
             )
               .bind(
                 crypto.randomUUID(),
@@ -313,6 +313,7 @@ app.put('/sessoes/:id', async (c) => {
                 tipoAeronaveEsp,
                 dataEsp,
                 tplMap.get(esp.modelo) ?? null,
+                empresaId,
               )
               .run();
           }
@@ -727,8 +728,8 @@ app.put('/sessoes/:id', async (c) => {
           }
 
           const resultFicha = await c.env.DB.prepare(
-            `INSERT INTO fichas_sessao (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE')`,
+            `INSERT INTO fichas_sessao (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, empresa_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?)`,
           )
             .bind(
               fichaUuid,
@@ -738,6 +739,7 @@ app.put('/sessoes/:id', async (c) => {
               tipoSessao,
               tipoAeronave,
               dataFichaFinal,
+              empresaId,
             )
             .run();
 
