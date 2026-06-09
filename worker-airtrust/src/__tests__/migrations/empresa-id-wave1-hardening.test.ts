@@ -464,7 +464,7 @@ describe('Wave 1 — empresa_id DEFAULT 1 removal', () => {
 
     const content = readFileSync(migrationPath, 'utf-8');
     expect(content).toContain('empresa_id INTEGER NOT NULL');
-    expect(content).toContain('PRAGMA defer_foreign_keys = ON');
+    expect(content).toContain('PRAGMA foreign_keys = OFF');
     expect(content).toContain('PRAGMA foreign_key_check');
     // Must NOT contain DEFAULT 1 for empresa_id in new tables
     expect(content.match(/empresa_id INTEGER DEFAULT 1/g)?.length || 0).toBe(0);
