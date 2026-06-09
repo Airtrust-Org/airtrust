@@ -2364,10 +2364,10 @@ export default function Qualificacoes() {
 
       {/* Main content container */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        {/* Tabs + Search + Configurar Colunas */}
+        {/* Tabs row */}
         <div className="border-b border-slate-200 dark:border-slate-800">
-          <div className="flex flex-wrap items-start gap-4 p-4 xl:flex-nowrap xl:items-center">
-            <div role="tablist" aria-label="Seções de qualificações" className="flex min-w-0 flex-wrap items-center">
+          <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
+            <div role="tablist" aria-label="Seções de qualificações" className="flex min-w-0 items-center">
               <button
                 role="tab"
                 aria-selected={activeTab === 'historico'}
