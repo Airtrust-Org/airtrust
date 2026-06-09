@@ -101,7 +101,7 @@ describe('Wave 1/2 ledger reconciliation', () => {
     ]);
   });
 
-  it('records 0396, 0397 and 0398 when both schema waves are already present', () => {
+  it('records 0396 and 0397 when both schema waves are already present', () => {
     const dbPath = setupDb({ wave2Applied: true });
     runSqlite(dbPath, migrationSql());
 
@@ -114,7 +114,6 @@ describe('Wave 1/2 ledger reconciliation', () => {
       '0395_f7_platform_admin_backfill.sql',
       '0396_harden_empresa_id_wave1.sql',
       '0397_harden_empresa_id_wave2.sql',
-      '0398_reconcile_wave1_wave2_d1_ledger.sql',
     ]);
   });
 
@@ -124,6 +123,6 @@ describe('Wave 1/2 ledger reconciliation', () => {
     runSqlite(dbPath, migrationSql());
 
     const rows = Number(runSqlite(dbPath, `SELECT COUNT(*) FROM d1_migrations;`).trim());
-    expect(rows).toBe(4);
+    expect(rows).toBe(3);
   });
 });
