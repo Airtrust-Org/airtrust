@@ -9,7 +9,11 @@ Escopo validado exclusivamente no ambiente local:
 - frontend: `http://localhost:3000`
 - worker: `http://localhost:8787`
 - tenant local: empresa `6`
-- nenhum push, commit, deploy, D1 remoto ou alteracao da migration `0405`
+- commit local funcional: `2b6483da`
+- push: nao
+- deploy: nao
+- D1 remoto: nao
+- migration `0405`: nao alterada
 - nenhuma request observada para `api.airtrust.online`
 
 ## Arquitetura Final
@@ -253,7 +257,7 @@ worker compartilhado/modelos/horas: 16 testes PASS
 | `npm run build` | ✓ Built in 6.14s |
 | `git status --short` (pos-build) | ✓ Limpo (dist/ e node_modules/ via .gitignore) |
 
-### Smoke local
+### Smoke local no worktree limpo
 
 - Worker iniciado com `wrangler dev --port 9797`
 - `.dev.vars` copiado do repo principal (flag `SIMULATOR_SHARED_SESSIONS_ENABLED=true`)
@@ -261,6 +265,18 @@ worker compartilhado/modelos/horas: 16 testes PASS
 - `GET /api/health` → `200 OK`
 - `GET /api/simuladores/sessoes`, `/modelos-sessao`, `/sessoes/compartilhada/:id` → 500 (D1 sem tabelas, esperado)
 - Todas as rotas registradas e respondendo
+
+### Escopo comprovado pela reproducao limpa
+
+- A reproducao limpa comprovou compilacao, testes e build em worktree isolado do commit `2b6483da`.
+- O smoke desse worktree validou bootstrap do worker, rota publica de capabilities e roteamento basico.
+- Esse smoke nao repetiu o E2E funcional completo porque o D1 desse worktree estava sem as tabelas locais importadas.
+
+### Escopo comprovado pelo E2E funcional anterior
+
+- A validacao E2E completa dos cenarios A e B foi executada anteriormente no ambiente local principal, com banco local importado e schema real da feature.
+- Essa validacao anterior e a fonte de verdade para criacao, edicao, fichas, PDF, cancelamento, integridade e preservacao da sessao simples.
+- Portanto, reproducao limpa e E2E funcional anterior nao devem ser descritos como uma unica validacao equivalente.
 
 ### Confirmacao de ausencia de arquivos omitidos
 
@@ -277,7 +293,7 @@ Nenhuma dependencia de estado local do desenvolvedor.
 
 ## Estado de Entrega
 
-- Commit local criado: `2b6483da`
+- Commit local funcional: `2b6483da`
 - Nao houve push.
 - Nao houve deploy.
 - Nao houve D1 remoto.
