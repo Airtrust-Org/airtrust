@@ -1,10 +1,10 @@
 -- Wave 1: Remove empresa_id DEFAULT 1 from critical tables
 -- Tables: aeronaves, modelos_sessao, funcionarios
--- Risk: ALTO — schema rebuild com PRAGMA defer_foreign_keys
+-- Risk: ALTO — schema rebuild com PRAGMA foreign_keys = OFF
 -- Backport: requer backup confirmado antes de aplicar
 -- Ver: docs/AIRTRUST_EMPRESA_ID_DEFAULT1_INVENTORY_20260608.md
 
-PRAGMA defer_foreign_keys = ON;
+PRAGMA foreign_keys = OFF;
 
 -- ===========================================================================
 -- 1. aeronaves (23 rows, 0 NULL, 0 empresa_id=1)
@@ -207,3 +207,4 @@ CREATE INDEX idx_funcionarios_quinzena ON funcionarios(quinzena) WHERE deleted_a
 -- ===========================================================================
 
 PRAGMA foreign_key_check;
+PRAGMA foreign_keys = ON;

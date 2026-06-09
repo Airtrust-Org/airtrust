@@ -80,6 +80,7 @@ const EXPECTED_FOREIGN_KEYS_OFF_FILES = [
   '0325_expand_tipo_treinamento_semestral.sql',
   '0341_lms_pdf_pptx.sql',
   '0351_frms_jornada_origem_sigvoos.sql',
+  '0396_harden_empresa_id_wave1.sql',
 ] as const;
 
 function listCanonicalMigrationFiles(): string[] {
