@@ -249,7 +249,7 @@ describe('TreinamentosPlanejadosPage — Turmas tab loading/error states', () =>
   });
 
   it('planejadas_turmas_nao_mostra_novo_treinamento_duplicado — hideActions prevents duplicate button in embedded mode', () => {
-    expect(treinamentosPageSrc).toContain('!hideActions ? <div className="flex justify-end pb-2">{actionButtons}</div> : null');
+    expect(treinamentosPageSrc).toContain('{asTab && !hideActions && (');
   });
 
   it('planejadas_turmas_tem_acoes_editar_e_cancelar_ou_excluir — action buttons are rendered per-row', () => {
