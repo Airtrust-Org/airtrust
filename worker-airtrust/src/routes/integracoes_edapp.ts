@@ -176,8 +176,14 @@ edappRouter.post('/webhook', async (c: Context) => {
       .run();
 
     if (resultado.created !== false && resultado.qualificacao_id) {
+      // Derivar empresa_id do funcionário mapeado para scoping da notificação
+      const funcEmpresa = (await c.env.DB.prepare(
+        `SELECT empresa_id FROM funcionarios WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
+      )
+        .bind(funcionario.funcionario_id)
+        .first()) as { empresa_id: number | null } | null;
       await createEdAppQualificacaoNotification(c.env.DB, {
-        empresaId: null,
+        empresaId: funcEmpresa?.empresa_id ?? null,
         funcionarioId: funcionario.funcionario_id,
         funcionarioNome: funcionario.funcionario_nome,
         qualificacaoCodigo: qualificacao.qualificacao_codigo,
