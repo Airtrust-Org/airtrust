@@ -2517,12 +2517,14 @@ export default function Qualificacoes() {
                 </div>
               </>
             )}
-            <button
-              onClick={() => setColumnConfigOpen((prev) => prev === (activeTab === 'tipos' ? 'tipos' : 'historico') ? null : activeTab === 'tipos' ? 'tipos' : 'historico')}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
-            >
-              <Columns2 className="w-3.5 h-3.5" /> Colunas
-            </button>
+            {(activeTab === 'historico' || activeTab === 'tipos') && (
+              <button
+                onClick={() => setColumnConfigOpen(activeTab === 'tipos' ? 'tipos' : 'historico')}
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Columns2 className="w-3.5 h-3.5" /> Colunas
+              </button>
+            )}
           </div>
 
           {isHistoricoTab && (
