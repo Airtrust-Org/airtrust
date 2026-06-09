@@ -2364,299 +2364,165 @@ export default function Qualificacoes() {
 
       {/* Main content container */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        {/* Tabs row */}
+        {/* Tab bar */}
         <div className="border-b border-slate-200 dark:border-slate-800">
-          <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
+          {/* Row 1: Tabs + primary action button */}
+          <div className="flex items-center justify-between px-4 pt-2">
             <div role="tablist" aria-label="Seções de qualificações" className="flex min-w-0 items-center">
               <button
                 role="tab"
                 aria-selected={activeTab === 'historico'}
                 onClick={() => setActiveTab('historico')}
-                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
+                className={`flex items-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   activeTab === 'historico'
                     ? 'border-primary text-blue-600 dark:text-blue-300'
                     : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <History size={16} aria-hidden="true" />
-                Histórico de Qualificações
+                <History size={15} aria-hidden="true" />
+                Histórico
               </button>
               <button
                 role="tab"
                 aria-selected={isPlanejadosTab}
                 onClick={() => setActiveTab('planejados')}
-                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
+                className={`flex items-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   isPlanejadosTab
                     ? 'border-primary text-blue-600 dark:text-blue-300'
                     : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <CalendarDays size={16} aria-hidden="true" />
-                Treinamentos Planejados
+                <CalendarDays size={15} aria-hidden="true" />
+                Planejados
               </button>
               <button
                 role="tab"
                 aria-selected={activeTab === 'tipos'}
                 onClick={() => setActiveTab('tipos')}
-                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
+                className={`flex items-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   activeTab === 'tipos'
                     ? 'border-primary text-blue-600 dark:text-blue-300'
                     : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <Bookmark size={16} aria-hidden="true" />
+                <Bookmark size={15} aria-hidden="true" />
                 Modelos
               </button>
               <button
                 role="tab"
                 aria-selected={activeTab === 'categorias'}
                 onClick={() => setActiveTab('categorias')}
-                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
+                className={`flex items-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   activeTab === 'categorias'
                     ? 'border-primary text-blue-600 dark:text-blue-300'
                     : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <FolderOpen size={16} aria-hidden="true" />
+                <FolderOpen size={15} aria-hidden="true" />
                 Categorias
               </button>
             </div>
-            {/* Search Bar */}
-            {usesHistoricoDataset && (
-              <div className="relative min-w-[260px] flex-1 xl:max-w-md">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  size={16}
-                />
-                <input
-                  type="text"
-                  placeholder="Buscar por nome, código ANAC, qualificação, equipamento..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
-                />
-              </div>
-            )}
+            {/* Primary action button — right side of tab bar */}
             {activeTab === 'tipos' && (
-              <div className="relative min-w-[260px] flex-1 xl:max-w-md">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  size={16}
-                />
+              <button
+                onClick={async () => { setEditingTipo({ id: '', nome: '', codigo: '', tipo: null, categoria: '', validade: null, observacoes: null, ativo: 1, descricao: null, conteudo_programatico: null, carga_horaria: null, carga_horaria_inicial: null, carga_horaria_recorrente: null, vencimento_fim_mes: 0, is_check: 0 }); setShowTipoModal(true); }}
+                className="flex items-center gap-1.5 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Novo Modelo
+              </button>
+            )}
+            {isPlanejadosTab && plannedView !== 'turmas' && (
+              <button
+                onClick={() => { setPlannedView('turmas'); setAutoOpenTurmasModal(true); }}
+                className="flex items-center gap-1.5 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Nova turma
+              </button>
+            )}
+            {activeTab === 'categorias' && (
+              <button
+                onClick={async () => { setEditingCategoria(null); setNovaCategoriaNome(''); setNovaCategoriaDesc(''); setShowCategoriaModal(true); }}
+                className="flex items-center gap-1.5 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Nova Categoria
+              </button>
+            )}
+          </div>
+
+          {/* Row 2: Search + filters bar */}
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2.5">
+            {(usesHistoricoDataset || activeTab === 'tipos') && (
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                 <input
                   type="text"
-                  placeholder="Buscar modelos por nome, código ou categoria..."
-                  value={searchTipos}
-                  onChange={(e) => setSearchTipos(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
+                  placeholder={activeTab === 'tipos' ? "Buscar modelos..." : "Buscar por nome, código, qualificação..."}
+                  value={activeTab === 'tipos' ? searchTipos : searchTerm}
+                  onChange={(e) => activeTab === 'tipos' ? setSearchTipos(e.target.value) : setSearchTerm(e.target.value)}
+                  className="w-full rounded-md border border-slate-300 pl-8 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
                 />
               </div>
             )}
-            {/* Botões de ação - Novo Modelo/Categoria + Configurar Colunas */}
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {/* Filtro de Equipamento e Exportação */}
-              {usesHistoricoDataset && (
-                <>
-                  <div className="relative">
-                    <select
-                      value={aeronaveFilter}
-                      onChange={(e) => {
-                        setAeronaveFilter(e.target.value);
-                        setPage(1);
-                      }}
-                      className="rounded-md border border-slate-300 px-3 py-1.5 pr-8 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600 bg-white appearance-none cursor-pointer"
-                    >
-                      <option value="">Todos os equipamentos</option>
-                      {aeronavesConfig.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.modelo || a.codigo || (a as { nome?: string }).nome || String(a.id)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="relative">
-                    <select
-                      value={categoriaFilter}
-                      onChange={(e) => {
-                        setCategoriaFilter(e.target.value);
-                        setPage(1);
-                      }}
-                      className="rounded-md border border-slate-300 px-3 py-1.5 pr-8 text-sm focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600 bg-white appearance-none cursor-pointer"
-                    >
-                      <option value="">Todas as categorias</option>
-                      {categorias
-                        .slice()
-                        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-                        .map((cat) => (
-                          <option key={cat.id ?? cat.nome} value={cat.nome}>
-                            {cat.nome}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </>
-              )}
-              {activeTab === 'tipos' && (
-                <button
-                  onClick={async () => {
-                    setEditingTipo({
-                      id: '',
-                      nome: '',
-                      codigo: '',
-                      tipo: null,
-                      categoria: '',
-                      validade: null,
-                      observacoes: null,
-                      ativo: 1,
-                      descricao: null,
-                      conteudo_programatico: null,
-                      carga_horaria: null,
-                      carga_horaria_inicial: null,
-                      carga_horaria_recorrente: null,
-                      vencimento_fim_mes: 0,
-                      is_check: 0,
-                    });
-                    setShowTipoModal(true);
-                  }}
-                  className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            {usesHistoricoDataset && (
+              <>
+                <select
+                  value={aeronaveFilter}
+                  onChange={(e) => { setAeronaveFilter(e.target.value); setPage(1); }}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Novo Modelo</span>
-                </button>
-              )}
-              {isPlanejadosTab && plannedView !== 'turmas' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      void carregarHistorico();
-                      treinamentosPlanejadosConvocacaoQuery.refetch();
-                    }}
-                    className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer transition-colors min-h-[44px]"
-                  >
-                    <RefreshCw className="w-4 h-4" aria-hidden="true" />
-                    <span>Atualizar</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPlannedView('turmas');
-                      setAutoOpenTurmasModal(true);
-                    }}
-                    className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer transition-colors min-h-[44px]"
-                  >
-                    <Plus className="w-4 h-4" aria-hidden="true" />
-                    <span>Nova turma</span>
-                  </button>
-                </div>
-              )}
-              {activeTab === 'categorias' && (
-                <button
-                  onClick={async () => {
-                    setEditingCategoria(null);
-                    setNovaCategoriaNome('');
-                    setNovaCategoriaDesc('');
-                    setShowCategoriaModal(true);
-                  }}
-                  className="flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                  <option value="">Equipamento</option>
+                  {aeronavesConfig.map((a) => (
+                    <option key={a.id} value={a.id}>{a.modelo || a.codigo || (a as { nome?: string }).nome || String(a.id)}</option>
+                  ))}
+                </select>
+                <select
+                  value={categoriaFilter}
+                  onChange={(e) => { setCategoriaFilter(e.target.value); setPage(1); }}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Nova Categoria</span>
-                </button>
-              )}
-              {isHistoricoTab && (
+                  <option value="">Categoria</option>
+                  {categorias.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map((cat) => (
+                    <option key={cat.id ?? cat.nome} value={cat.nome}>{cat.nome}</option>
+                  ))}
+                </select>
                 <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                    className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    <ListFilter className="w-4 h-4" />
-                    <span>Filtrar Status ({statusFiltro.size}/6)</span>
+                  <button type="button" onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                    className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer">
+                    <ListFilter className="w-3.5 h-3.5" />Status ({statusFiltro.size}/6)
                   </button>
-
                   {statusDropdownOpen && (
-                    <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-slate-200 shadow-lg p-3 min-w-[200px]">
+                    <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg border border-slate-200 shadow-lg p-3 min-w-[200px]">
                       <div className="text-xs font-medium text-slate-500 mb-2">Exibir status:</div>
                       {[
                         { key: 'VALIDA', label: 'Válidas', color: 'text-green-600' },
-                        {
-                          key: 'VENCENDO_30',
-                          label: 'Vencendo (30 dias)',
-                          color: 'text-amber-600',
-                        },
+                        { key: 'VENCENDO_30', label: 'Vencendo (30 dias)', color: 'text-amber-600' },
                         { key: 'VENCIDA', label: 'Vencidas', color: 'text-red-600' },
                         { key: 'RENOVADA', label: 'Renovadas', color: 'text-blue-600' },
                         { key: 'PLANEJADA', label: 'Planejadas', color: 'text-purple-600' },
                         { key: 'CANCELADA', label: 'Canceladas', color: 'text-slate-500' },
                       ].map(({ key, label, color }) => (
-                        <label
-                          key={key}
-                          className="flex items-center gap-2 py-1 cursor-pointer select-none hover:bg-slate-50 px-1 rounded"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={statusFiltro.has(key)}
-                            onChange={(e) => {
-                              const newSet = new Set(statusFiltro);
-                              if (e.target.checked) {
-                                newSet.add(key);
-                              } else {
-                                newSet.delete(key);
-                              }
-                              setStatusFiltro(newSet);
-                            }}
-                            className="w-4 h-4 rounded border-slate-300"
-                          />
+                        <label key={key} className="flex items-center gap-2 py-1 cursor-pointer select-none hover:bg-slate-50 px-1 rounded">
+                          <input type="checkbox" checked={statusFiltro.has(key)}
+                            onChange={(e) => { const s = new Set(statusFiltro); e.target.checked ? s.add(key) : s.delete(key); setStatusFiltro(s); }}
+                            className="w-4 h-4 rounded border-slate-300" />
                           <span className={`text-sm ${color}`}>{label}</span>
                         </label>
                       ))}
                       <div className="border-t border-slate-200 mt-2 pt-2 flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setStatusFiltro(
-                              new Set([
-                                'VALIDA',
-                                'VENCIDA',
-                                'VENCENDO_30',
-                                'RENOVADA',
-                                'PLANEJADA',
-                                'CANCELADA',
-                              ]),
-                            )
-                          }
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          Selecionar todos
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setStatusFiltro(new Set())}
-                          className="text-xs text-slate-500 hover:underline"
-                        >
-                          Limpar
-                        </button>
+                        <button type="button" onClick={() => setStatusFiltro(new Set(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','PLANEJADA','CANCELADA']))} className="text-xs text-blue-600 hover:underline">Todos</button>
+                        <button type="button" onClick={() => setStatusFiltro(new Set())} className="text-xs text-slate-500 hover:underline">Limpar</button>
                       </div>
                     </div>
                   )}
                 </div>
-              )}
-              <button
-                onClick={() =>
-                  setColumnConfigOpen((prev) =>
-                    prev === (activeTab === 'tipos' ? 'tipos' : 'historico')
-                      ? null
-                      : activeTab === 'tipos'
-                        ? 'tipos'
-                        : 'historico',
-                  )
-                }
-                className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <Columns2 className="w-4 h-4" />
-                <span>Configurar colunas</span>
-              </button>
-            </div>
+              </>
+            )}
+            <button
+              onClick={() => setColumnConfigOpen((prev) => prev === (activeTab === 'tipos' ? 'tipos' : 'historico') ? null : activeTab === 'tipos' ? 'tipos' : 'historico')}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              <Columns2 className="w-3.5 h-3.5" /> Colunas
+            </button>
           </div>
 
           {isHistoricoTab && (

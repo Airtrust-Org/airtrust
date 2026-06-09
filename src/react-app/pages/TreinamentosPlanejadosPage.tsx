@@ -1394,53 +1394,53 @@ export default function TreinamentosPlanejadosPage({
 
         {/* Summary tags + action buttons in same row */}
         <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-        <section className="flex flex-wrap gap-2" aria-label="Resumo dos treinamentos">
-          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-slate-100 text-slate-700 text-sm">
-            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+        <section className="flex flex-wrap items-center gap-1.5" aria-label="Resumo dos treinamentos">
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-slate-100 text-slate-700 text-xs">
+            <CalendarDays className="h-3 w-3" aria-hidden="true" />
             <span>Total</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.total}</strong>
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-purple-50 text-purple-700 text-sm">
-            <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-purple-50 text-purple-700 text-xs">
+            <ClipboardList className="h-3 w-3" aria-hidden="true" />
             <span>Planejados</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.planejados}</strong>
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-emerald-50 text-emerald-700 text-sm">
-            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs">
+            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
             <span>Confirmados</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.confirmadosEventos}</strong>
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-amber-50 text-amber-700 text-sm">
-            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-amber-50 text-amber-700 text-xs">
+            <Clock className="h-3 w-3" aria-hidden="true" />
             <span>Em andamento</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.emAndamento}</strong>
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-blue-50 text-blue-700 text-sm">
-            <Flag className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 text-xs">
+            <Flag className="h-3 w-3" aria-hidden="true" />
             <span>Concluídos</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.concluidos}</strong>
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-rose-50 text-rose-700 text-sm">
-            <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-rose-50 text-rose-700 text-xs">
+            <Ban className="h-3 w-3" aria-hidden="true" />
             <span>Cancelados</span>
             <strong>{treinamentosQuery.isLoading ? '...' : resumoLista.cancelados}</strong>
           </span>
         </section>
           {asTab && !hideActions && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => treinamentosQuery.refetch()}
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer"
+                className="inline-flex min-h-[36px] items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer"
               >
-                <RefreshCw className="w-4 h-4" aria-hidden="true" /> Atualizar
+                <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> Atualizar
               </button>
               <button
                 type="button"
                 onClick={abrirNovoTreinamento}
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer"
+                className="inline-flex min-h-[36px] items-center gap-1 rounded-md bg-primary-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer"
               >
-                <Plus className="w-4 h-4" aria-hidden="true" /> {primaryActionLabel}
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" /> {primaryActionLabel}
               </button>
             </div>
           )}
