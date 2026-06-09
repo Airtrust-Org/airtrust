@@ -80,6 +80,7 @@ export default function TabSessoesWrapper() {
       // Converter Sessao para SessaoParaEditar para compatibilidade com ModalNovaSessao
       const sessaoParaEditar = {
         id: sessao.id,
+        modo_compartilhado: sessao.modo_compartilhado,
         template_id: (sessao as any).template_id ?? null,
         simulador_id: sessao.simulador_id,
         simulador_nome: sessao.simulador_nome,

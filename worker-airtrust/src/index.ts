@@ -251,6 +251,7 @@ app.use('/api/*', async (c, next) => {
   const isPublicPath =
     pathname === '/api/health' ||
     pathname === '/api/version' ||
+    pathname === '/api/capabilities' ||
     pathname.startsWith('/api/public/') ||
     pathname.startsWith('/api/assets/') ||
     pathname.startsWith('/api/lms/scorm/assets/') ||
@@ -859,6 +860,19 @@ app.get('/api/historico', async (c) => {
 
   // Redirecionar para rota completa preservando query params
   return c.redirect(`/api/qualificacoes/historico${queryString}`, 301);
+});
+
+/**
+ * Rota de capabilities (flags não sensíveis expostas ao frontend)
+ */
+app.get('/api/capabilities', (c) => {
+  const env = c.env as Env;
+  return c.json({
+    success: true,
+    data: {
+      simulador_shared_sessions: env.SIMULATOR_SHARED_SESSIONS_ENABLED === 'true',
+    },
+  });
 });
 
 /**

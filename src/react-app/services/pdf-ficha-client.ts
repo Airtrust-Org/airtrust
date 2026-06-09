@@ -24,6 +24,7 @@ export interface FichaPDFData {
   carga_horaria_total?: string;
   carga_horaria_pf?: string;
   carga_horaria_pm?: string;
+  tripulacao_nomes?: string;
   status: string;
   observacoes_gerais?: string;
   assinatura_aluno_timestamp?: string | null;
@@ -452,7 +453,10 @@ export async function gerarPDFFichaCliente(
   // Linha 1: Data | Horário | Carga Horária | Simulador
   // Linha 2: Tripulante | ANAC | Função
   // Linha 3: Instrutor | ANAC
-  const SESSION_BOX_H = 20; // 3 linhas × 5.5mm + 2.5mm × 2 padding
+  const hasOperationalDetail = Boolean(
+    dados.tripulacao_nomes || dados.carga_horaria_pf || dados.carga_horaria_pm,
+  );
+  const SESSION_BOX_H = hasOperationalDetail ? 25.5 : 20;
   const SESSION_LINE_H = 5.5;
   doc.setDrawColor(COLORS.border);
   doc.setFillColor(COLORS.bgLight);
@@ -523,7 +527,25 @@ export async function gerarPDFFichaCliente(
     lineY,
   );
 
-  // Avançar currentY: session box (20mm) + gap (3mm)
+  if (hasOperationalDetail) {
+    lineY += SESSION_LINE_H;
+    drawInfoField(
+      'PF / PM:',
+      `${getDisplayValue(dados.carga_horaria_pf, '0')}h / ${getDisplayValue(dados.carga_horaria_pm, '0')}h`,
+      margin + 3,
+      15,
+      lineY,
+    );
+    drawInfoField(
+      'Tripulação:',
+      getDisplayValue(dados.tripulacao_nomes, dados.tripulante_nome),
+      margin + 65,
+      18,
+      lineY,
+    );
+  }
+
+  // Avançar currentY: session box + gap (3mm)
   currentY += SESSION_BOX_H + 3;
 
   // ── Header da tabela (compacto, 6mm) ─────────────────────────────────────

@@ -11,8 +11,15 @@
  * Does NOT test the full UI (no treinamentos dropdown, no edit, no calendar).
  */
 
-import { describe, expect, it } from 'vitest';
-import { isSharedSessionsEnabled, SHARED_SESSIONS_ENABLED } from '@/react-app/config/sharedSessions';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock the API module before sharedSessions imports it
+vi.mock('@/react-app/config/api', () => ({
+  API_BASE_URL: 'http://localhost:8787/api',
+  getAccessToken: () => 'token-teste',
+}));
+
+import { isSharedSessionsEnabled, isSharedSessionsEnabledSync, SHARED_SESSIONS_ENABLED, _resetCacheForTesting } from '@/react-app/config/sharedSessions';
 
 // ────────────────────────────────────────────────────────────
 // sharedSessions config tests
@@ -23,8 +30,88 @@ describe('sharedSessions config', () => {
     expect(typeof SHARED_SESSIONS_ENABLED).toBe('boolean');
   });
 
-  it('2. isSharedSessionsEnabled() returns SHARED_SESSIONS_ENABLED value', () => {
-    expect(isSharedSessionsEnabled()).toBe(SHARED_SESSIONS_ENABLED);
+  it('2. isSharedSessionsEnabledSync returns cached SHARED_SESSIONS_ENABLED value', () => {
+    // isSharedSessionsEnabled() is async and requires fetch.
+    // isSharedSessionsEnabledSync() returns the synchronously cached value.
+    expect(typeof isSharedSessionsEnabledSync()).toBe('boolean');
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// isSharedSessionsEnabled — fail-closed behavior tests
+// These tests mock global fetch to verify the async function
+// returns false in all error cases (fail-closed contract).
+// ────────────────────────────────────────────────────────────
+
+describe('isSharedSessionsEnabled fail-closed behavior', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    _resetCacheForTesting();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    _resetCacheForTesting();
+  });
+
+  it('A. returns true when backend responds with simulador_shared_sessions: true', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: { simulador_shared_sessions: true } }),
+    } as Response);
+
+    const result = await isSharedSessionsEnabled();
+    expect(result).toBe(true);
+  });
+
+  it('B. returns false when backend responds with simulador_shared_sessions: false', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: { simulador_shared_sessions: false } }),
+    } as Response);
+
+    const result = await isSharedSessionsEnabled();
+    expect(result).toBe(false);
+  });
+
+  it('C. returns false when backend returns 500', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ success: false, error: 'Internal Server Error' }),
+    } as Response);
+
+    const result = await isSharedSessionsEnabled();
+    expect(result).toBe(false);
+  });
+
+  it('D. returns false on network rejection', async () => {
+    fetchSpy.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const result = await isSharedSessionsEnabled();
+    expect(result).toBe(false);
+  });
+
+  it('E. returns false when response has invalid structure (no data field)', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ something_else: true }),
+    } as Response);
+
+    const result = await isSharedSessionsEnabled();
+    expect(result).toBe(false);
+  });
+
+  it('F. returns false when simulador_shared_sessions is not boolean true', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: { simulador_shared_sessions: 'yes' } }),
+    } as Response);
+
+    const result = await isSharedSessionsEnabled();
+    expect(result).toBe(false);
   });
 });
 

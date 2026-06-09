@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { API_BASE_URL } from '@/react-app/config/api';
-import { Search, User, CheckCircle, AlertCircle, XCircle, Loader2 } from 'lucide-react';
+import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { Search, User, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
 
 interface Funcionario {
   id: number;
@@ -26,6 +26,7 @@ interface Props {
   tipo?: 'instrutor' | 'checador' | '';
   placeholder?: string;
   required?: boolean;
+  disabled?: boolean;
 }
 
 export function FuncionarioCombobox({ 
@@ -33,41 +34,67 @@ export function FuncionarioCombobox({
   selected, 
   tipo = '',
   placeholder = 'Buscar funcionário...',
-  required = false
+  required = false,
+  disabled = false,
 }: Props) {
   const [query, setQuery] = useState('');
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const requestRef = useRef<AbortController | null>(null);
   
   useEffect(() => {
     if (query.length < 2) {
+      requestRef.current?.abort();
       setFuncionarios([]);
       setShowDropdown(false);
+      setError(null);
       return;
     }
     
     const timer = setTimeout(async () => {
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
       setLoading(true);
+      setError(null);
       try {
-        const url = `${API_BASE_URL}/funcionarios/search/search?q=${encodeURIComponent(query)}${tipo ? `&tipo=${tipo}` : ``}`;
-        const res = await fetch(url);
+        const params = new URLSearchParams({ search: query, limit: '20' });
+        if (tipo === 'checador') params.set('examinador', '1');
+        const url = `${API_BASE_URL}/funcionarios?${params}`;
+        const token = getAccessToken();
+        const res = await fetch(url, {
+          ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`Falha ao buscar funcionários (${res.status})`);
         const data = await res.json();
         
         if (data.success) {
           setFuncionarios(data.data || []);
           setShowDropdown(true);
+        } else {
+          throw new Error(data.error || 'Falha ao buscar funcionários');
         }
       } catch (error) {
+        if (controller.signal.aborted) return;
         console.error('Erro ao buscar funcionários:', error);
+        setFuncionarios([]);
+        setShowDropdown(true);
+        setError(error instanceof Error ? error.message : 'Falha ao buscar funcionários');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 300);
     
-    return () => clearTimeout(timer);
-  }, [query, tipo]);
+    return () => {
+      clearTimeout(timer);
+      requestRef.current?.abort();
+    };
+  }, [query, retryKey, tipo]);
   
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -124,6 +151,7 @@ export function FuncionarioCombobox({
           <button
             type="button"
             onClick={handleClear}
+            disabled={disabled}
             className="p-1 hover:bg-gray-200 rounded transition"
             title="Remover seleção"
           >
@@ -141,6 +169,7 @@ export function FuncionarioCombobox({
             onFocus={() => query.length >= 2 && setShowDropdown(true)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
             required={required}
+            disabled={disabled}
           />
           {loading && (
             <div className="absolute right-3 top-3">
@@ -179,9 +208,20 @@ export function FuncionarioCombobox({
       {/* Mensagem quando não encontra */}
       {showDropdown && query.length >= 2 && funcionarios.length === 0 && !loading && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4">
-          <div className="flex items-center gap-2 text-gray-500">
+          <div className={`flex items-start gap-2 ${error ? 'text-red-700' : 'text-gray-500'}`}>
             <AlertCircle className="h-5 w-5" />
-            <p className="text-sm">Nenhum funcionário encontrado</p>
+            <div className="text-sm">
+              <p>{error || 'Nenhum funcionário encontrado'}</p>
+              {error && (
+                <button
+                  type="button"
+                  onClick={() => setRetryKey((value) => value + 1)}
+                  className="mt-1 font-medium underline"
+                >
+                  Tentar novamente
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

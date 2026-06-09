@@ -43,6 +43,7 @@ import {
 
 interface Agendamento {
   id: number;
+  modo_compartilhado?: number | boolean;
   simulador_id: number;
   simulador_nome: string;
   simulador_tipo?: string;
@@ -757,6 +758,7 @@ export default function CalendarioAgendamentos() {
       try {
         const sessaoFormatada = {
           id: agendamento.id,
+          modo_compartilhado: agendamento.modo_compartilhado,
           template_id: agendamento.template_id ?? null,
           simulador_id: agendamento.simulador_id,
           simulador_nome: agendamento.simulador_nome,
@@ -833,6 +835,11 @@ export default function CalendarioAgendamentos() {
         >
           <div className={`font-semibold ${cores.text} truncate flex items-center gap-1`}>
             {agendamento.hora_inicio.substring(0, 5)}
+            {Boolean(agendamento.modo_compartilhado) && (
+              <span className="rounded bg-indigo-100 px-1 text-[8px] font-semibold uppercase text-indigo-700">
+                Compartilhada
+              </span>
+            )}
             {concluida && (
               <span title="Todas as fichas concluídas" className="text-[9px] text-slate-400">
                 ✓
@@ -861,6 +868,11 @@ export default function CalendarioAgendamentos() {
       >
         <div className={`font-bold ${cores.text} text-sm flex items-center gap-1`}>
           {agendamento.tema_sessao || agendamento.tipo_sessao || agendamento.simulador_nome}
+          {Boolean(agendamento.modo_compartilhado) && (
+            <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-indigo-700">
+              Compartilhada
+            </span>
+          )}
           {concluida && (
             <span title="Todas as fichas concluídas" className="ml-auto text-slate-400 text-xs">
               ✓

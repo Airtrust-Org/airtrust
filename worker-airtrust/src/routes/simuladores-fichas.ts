@@ -378,8 +378,10 @@ app.get('/fichas/:id', async (c) => {
         fs.assinatura_aluno_imagem,
         fs.assinatura_instrutor_imagem,
         fs.colaborador_id_aluno,
+        fs.atribuicao_curricular_id,
         fs.tipo_sessao as ficha_tipo_sessao,
         sa.tipo_sessao,
+        sa.modo_compartilhado,
         sa.nome as sessao_nome,
         sa.data,
         sa.hora_inicio as horario_inicio,
@@ -404,6 +406,19 @@ app.get('/fichas/:id', async (c) => {
         fex.nome as examinador_nome,
         mf.nome as ficha_modelo_nome,
         COALESCE(fs.template_id, sa.template_id, mf.id) as modelo_sessao_id,
+        (
+          SELECT GROUP_CONCAT(participante_nome, ' / ')
+          FROM (
+            SELECT participante.nome AS participante_nome
+            FROM sessoes_participantes participante_sessao
+            INNER JOIN funcionarios participante
+              ON participante.id = participante_sessao.funcionario_id
+             AND participante.deleted_at IS NULL
+            WHERE participante_sessao.sessao_id = sa.id
+              AND participante_sessao.deleted_at IS NULL
+            ORDER BY participante_sessao.id
+          )
+        ) as tripulacao_nomes,
         (
           SELECT COUNT(1)
           FROM fichas_sessao_edicoes fe
@@ -773,6 +788,9 @@ app.get('/fichas/:id', async (c) => {
       examinador_nome: f.examinador_nome || null,
       sessao_id: f.agendamento_slot_id || null,
       modelo_sessao_id: modeloSessaoResolvidoId,
+      atribuicao_curricular_id: f.atribuicao_curricular_id || null,
+      modo_compartilhado: Number(f.modo_compartilhado || 0),
+      tripulacao_nomes: f.tripulacao_nomes || null,
       edicoes_pendentes_count: Number(f.edicoes_pendentes_count || 0),
       edicao_pendente: Number(f.edicoes_pendentes_count || 0) > 0,
     };
