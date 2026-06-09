@@ -3,9 +3,9 @@
 **Date**: 2026-06-09
 **Model**: DeepSeek V4 Pro via Claude Code
 **Classification**: `PROVEN_READY_FOR_CONTROLLED_ONBOARDING`
-**Version**: 2.0 (limitations closed)
-**Commit**: `59cbf396`
-**Deploy**: Worker `2026-06-09T14:03:24Z-59cbf396` + Pages `28b9d9fd`
+**Version**: 3.0 (final — review corrections applied)
+**Commits**: `59cbf396` (runtime) + `f6b3159b` (harden notif/frms)
+**Deploy**: Worker `2026-06-09T14:22:01Z-f6b3159b` (Pages not re-deployed — no UI changes)
 
 ---
 
@@ -314,10 +314,16 @@ A tabela `sessoes` (1 registro, sem `empresa_id`) é **legacy/deprecated**. O si
 - Worker: EXIT 0 ✅ (21 erros corrigidos: 2 production + 19 test)
 - Arquivos corrigidos: `integracoes_edapp.ts`, `notificacoes.ts`, `catalogos-tenant-isolation.test.ts`, `simuladores-modelos-dropdown-and-tipo-cor.test.ts`
 
+### Review Corrections (commit `f6b3159b`)
+Após revisão corretiva, 3 problemas lógicos foram encontrados e corrigidos:
+- **EdApp webhook**: `empresaId: null` substituído por lookup de `funcionarios.empresa_id` via `funcionario_id`
+- **FRMS notificações**: fail-closed adicionado — `empresaId == null` faz early return (sem query global)
+- **frmsDailyCheck**: query N+1 removida — `listarTripulantesAtivos` agora retorna `empresa_id` de `funcionarios`
+
 ### Production Validation
-- Worker deploy: `2026-06-09T14:03:24Z-59cbf396` ✅
-- Pages deploy: `28b9d9fd` ✅
-- Health: healthy (DB + Storage OK) ✅
+- Worker deploy: `2026-06-09T14:22:01Z-f6b3159b` ✅
+- Pages deploy: não (sem alterações de UI) ✅
+- Health: healthy (DB 154ms + Storage 157ms) ✅
 - Empresa piloto: permanece inativa ✅
 - Fixtures: preservados ✅
 
@@ -347,7 +353,7 @@ Recomenda-se prosseguir com o onboarding controlado, mantendo monitoramento ativ
 **Relatório gerado por**: Claude Code (DeepSeek V4 Pro)
 **Data**: 2026-06-09
 **Versão**: 2.0
-**Commits**: `59cbf396` (runtime fixes)
-**Worker**: `2026-06-09T14:03:24Z-59cbf396`
-**Pages**: `28b9d9fd`
-**Status Git**: 11 files changed, 155 insertions, 83 deletions
+**Commits**: `59cbf396` (11 runtime files) + `f6b3159b` (4 hardened files)
+**Worker**: `2026-06-09T14:22:01Z-f6b3159b`
+**Pages**: not re-deployed (no UI changes since `59cbf396`)
+**Status Git**: 15 files changed across 3 commits
