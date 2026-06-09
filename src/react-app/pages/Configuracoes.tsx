@@ -101,15 +101,16 @@ export default function Configuracoes() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div className="flex gap-2 overflow-x-auto whitespace-nowrap pb-1">
+      <div className="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-200 dark:border-slate-800">
+          <div className="flex overflow-x-auto" role="tablist">
           {canAccessCompanyManagement && (
             <button
               onClick={() => setActiveTab('empresas')}
-              className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
                 activeTab === 'empresas'
-                  ? 'border-primary bg-slate-50 text-primary font-semibold'
-                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                  ? 'border-primary text-blue-600 dark:text-blue-300'
+                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <Globe className="w-4 h-4" />
@@ -119,10 +120,10 @@ export default function Configuracoes() {
 
           <button
             onClick={() => setActiveTab('usuarios')}
-            className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
               activeTab === 'usuarios'
-                ? 'border-primary bg-slate-50 text-primary font-semibold'
-                : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                ? 'border-primary text-blue-600 dark:text-blue-300'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -131,10 +132,10 @@ export default function Configuracoes() {
 
           <button
             onClick={() => setActiveTab('cadastros')}
-            className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
               activeTab === 'cadastros'
-                ? 'border-primary bg-slate-50 text-primary font-semibold'
-                : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                ? 'border-primary text-blue-600 dark:text-blue-300'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -143,10 +144,10 @@ export default function Configuracoes() {
 
           <button
             onClick={() => setActiveTab('setores-gestores')}
-            className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
               activeTab === 'setores-gestores'
-                ? 'border-primary bg-slate-50 text-primary font-semibold'
-                : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                ? 'border-primary text-blue-600 dark:text-blue-300'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Network className="w-4 h-4" />
@@ -156,10 +157,10 @@ export default function Configuracoes() {
           {canManageMatriz && (
             <button
               onClick={() => setActiveTab('matriz-treinamento')}
-              className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
                 activeTab === 'matriz-treinamento'
-                  ? 'border-primary bg-slate-50 text-primary font-semibold'
-                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                  ? 'border-primary text-blue-600 dark:text-blue-300'
+                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <BookOpen className="w-4 h-4" />
@@ -169,7 +170,7 @@ export default function Configuracoes() {
 
           <button
             onClick={() => setActiveTab('backup')}
-            className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
               activeTab === 'backup'
                 ? 'border-primary bg-slate-50 text-primary font-semibold'
                 : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
@@ -181,7 +182,7 @@ export default function Configuracoes() {
 
           <button
             onClick={() => setActiveTab('importacao')}
-            className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
               activeTab === 'importacao'
                 ? 'border-primary bg-slate-50 text-primary font-semibold'
                 : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
@@ -193,7 +194,7 @@ export default function Configuracoes() {
 
           <button
             onClick={() => setActiveTab('integracoes')}
-            className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
               activeTab === 'integracoes'
                 ? 'border-primary bg-slate-50 text-primary font-semibold'
                 : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
@@ -206,10 +207,10 @@ export default function Configuracoes() {
           {(isAdmin || isGestor) && (
             <button
               onClick={() => setActiveTab('sistema')}
-              className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
                 activeTab === 'sistema'
-                  ? 'border-primary bg-slate-50 text-primary font-semibold'
-                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                  ? 'border-primary text-blue-600 dark:text-blue-300'
+                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <Settings2 className="w-4 h-4" />
@@ -220,10 +221,10 @@ export default function Configuracoes() {
           {isAdmin && (
             <button
               onClick={() => setActiveTab('danger-zone')}
-              className={`flex min-h-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
                 activeTab === 'danger-zone'
-                  ? 'border-red-600 bg-red-50 text-red-600 font-semibold'
-                  : 'border-transparent text-red-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700'
+                  ? 'border-red-600 text-red-600 dark:text-red-400'
+                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <AlertTriangle className="w-4 h-4" />

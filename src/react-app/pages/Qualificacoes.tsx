@@ -2367,41 +2367,41 @@ export default function Qualificacoes() {
         {/* Tabs + Search + Configurar Colunas */}
         <div className="border-b border-slate-200 dark:border-slate-800">
           <div className="flex flex-wrap items-start gap-4 p-4 xl:flex-nowrap xl:items-center">
-            <div role="tablist" aria-label="Seções de qualificações" className="flex min-w-0 flex-wrap items-center gap-1">
+            <div role="tablist" aria-label="Seções de qualificações" className="flex min-w-0 flex-wrap items-center">
               <button
                 role="tab"
                 aria-selected={activeTab === 'historico'}
                 onClick={() => setActiveTab('historico')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 min-h-[44px] transition-colors ${
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   activeTab === 'historico'
-                    ? 'bg-primary-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <History size={16} aria-hidden="true" />
-                Histórico
+                Histórico de Qualificações
               </button>
               <button
                 role="tab"
                 aria-selected={isPlanejadosTab}
                 onClick={() => setActiveTab('planejados')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 min-h-[44px] transition-colors ${
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   isPlanejadosTab
-                    ? 'bg-primary-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <CalendarDays size={16} aria-hidden="true" />
-                Planejados
+                Treinamentos Planejados
               </button>
               <button
                 role="tab"
                 aria-selected={activeTab === 'tipos'}
                 onClick={() => setActiveTab('tipos')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 min-h-[44px] transition-colors ${
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   activeTab === 'tipos'
-                    ? 'bg-primary-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <Bookmark size={16} aria-hidden="true" />
@@ -2411,10 +2411,10 @@ export default function Qualificacoes() {
                 role="tab"
                 aria-selected={activeTab === 'categorias'}
                 onClick={() => setActiveTab('categorias')}
-                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 min-h-[44px] transition-colors ${
+                className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   activeTab === 'categorias'
-                    ? 'bg-primary-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <FolderOpen size={16} aria-hidden="true" />
