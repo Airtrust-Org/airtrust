@@ -1446,61 +1446,43 @@ export default function TreinamentosPlanejadosPage({
           )}
         </div>
 
-        <section className="sticky top-0 z-10 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="grid gap-3 lg:grid-cols-[1.2fr,0.9fr,0.9fr,1.1fr]">
-            <label className="space-y-1.5">
-              <span className="text-sm font-medium text-slate-700">Mes de referencia</span>
-              <input
-                type="month"
-                value={mesReferencia}
-                onChange={(event) => setMesReferencia(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
-              />
-            </label>
-
-            <label className="space-y-1.5">
-              <span className="text-sm font-medium text-slate-700">Status</span>
-              <select
-                value={statusFiltro}
-                onChange={(event) => setStatusFiltro(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value || 'all'} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1.5">
-              <span className="text-sm font-medium text-slate-700">Instrutor</span>
-              <select
-                value={instrutorFiltro}
-                onChange={(event) => setInstrutorFiltro(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
-              >
-                <option value="">Todos</option>
-                {instrutores.map((instrutor) => (
-                  <option key={instrutor.id} value={instrutor.id}>
-                    {getPessoaLabel(instrutor.nome, instrutor.guerra, instrutor.matricula)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1.5">
-              <span className="text-sm font-medium text-slate-700">Buscar</span>
-              <input
-                type="search"
-                value={busca}
-                onChange={(event) => setBusca(event.target.value)}
-                placeholder="Titulo, qualificação, local ou instrutor"
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors"
-              />
-            </label>
-          </div>
-        </section>
+        {/* Filters bar — same inline format as Histórico */}
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="month"
+            value={mesReferencia}
+            onChange={(event) => setMesReferencia(event.target.value)}
+            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-900 focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
+          />
+          <select
+            value={statusFiltro}
+            onChange={(event) => setStatusFiltro(event.target.value)}
+            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value || 'all'} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <select
+            value={instrutorFiltro}
+            onChange={(event) => setInstrutorFiltro(event.target.value)}
+            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
+          >
+            <option value="">Todos os instrutores</option>
+            {instrutores.map((instrutor) => (
+              <option key={instrutor.id} value={instrutor.id}>
+                {getPessoaLabel(instrutor.nome, instrutor.guerra, instrutor.matricula)}
+              </option>
+            ))}
+          </select>
+          <input
+            type="search"
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+            placeholder="Buscar..."
+            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none min-w-[160px]"
+          />
+        </div>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           {!hideTabNav && (
@@ -1696,6 +1678,7 @@ export default function TreinamentosPlanejadosPage({
                   >
                     <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 sticky top-0 z-[1]">
                       <tr>
+                        <th className="px-4 py-3 text-left w-12">Ações</th>
                         <th className="px-4 py-3 text-left">Data</th>
                         <th className="px-4 py-3 text-left">Horário</th>
                         <th className="px-4 py-3 text-left">Fonte</th>
@@ -1704,7 +1687,6 @@ export default function TreinamentosPlanejadosPage({
                         <th className="px-4 py-3 text-left">Instrutor</th>
                         <th className="px-4 py-3 text-left">Equipamento / Local</th>
                         <th className="px-4 py-3 text-left">Status</th>
-                        <th className="px-4 py-3 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
@@ -1720,6 +1702,47 @@ export default function TreinamentosPlanejadosPage({
                             data-source={item.source || 'TURMA'}
                             data-sessao-id={simulatorSessionId || undefined}
                           >
+                            <td className="whitespace-nowrap px-4 py-3">
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => abrirDetalhes(item)}
+                                  aria-label={
+                                    simulatorSessionId
+                                      ? 'Editar sessão'
+                                      : item.read_only
+                                        ? 'Abrir origem'
+                                        : 'Ver detalhes'
+                                  }
+                                  title={
+                                    simulatorSessionId
+                                      ? 'Editar sessão'
+                                      : item.read_only
+                                        ? 'Abrir origem'
+                                        : 'Detalhes'
+                                  }
+                                  className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+                                  data-testid={
+                                    simulatorSessionId
+                                      ? `simulador-editar-sessao-${simulatorSessionId}`
+                                      : `treinamento-detalhes-${item.id}`
+                                  }
+                                >
+                                  <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                                </button>
+                                {!item.read_only ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirEditor(item)}
+                                    aria-label="Editar"
+                                    title="Editar"
+                                    className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-indigo-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
                             <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                               {formatDateRange(item.data_prevista, item.data_fim)}
                             </td>
@@ -1759,47 +1782,6 @@ export default function TreinamentosPlanejadosPage({
                             </td>
                             <td className="px-4 py-3">
                               <StatusBadge status={item.status} />
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex justify-end gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => abrirDetalhes(item)}
-                                  aria-label={
-                                    simulatorSessionId
-                                      ? 'Editar sessão'
-                                      : item.read_only
-                                        ? 'Abrir origem'
-                                        : 'Ver detalhes'
-                                  }
-                                  title={
-                                    simulatorSessionId
-                                      ? 'Editar sessão'
-                                      : item.read_only
-                                        ? 'Abrir origem'
-                                        : 'Detalhes'
-                                  }
-                                  className={planejadosActionButtonClass}
-                                  data-testid={
-                                    simulatorSessionId
-                                      ? `simulador-editar-sessao-${simulatorSessionId}`
-                                      : `treinamento-detalhes-${item.id}`
-                                  }
-                                >
-                                  <Eye className="w-4 h-4 text-slate-600" aria-hidden="true" />
-                                </button>
-                                {!item.read_only ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => abrirEditor(item)}
-                                    aria-label="Editar"
-                                    title="Editar"
-                                    className={planejadosActionButtonClass}
-                                  >
-                                    <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                                  </button>
-                                ) : null}
-                              </div>
                             </td>
                           </tr>
                         );

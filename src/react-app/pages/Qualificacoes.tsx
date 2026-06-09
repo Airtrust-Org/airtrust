@@ -2517,9 +2517,9 @@ export default function Qualificacoes() {
                 </div>
               </>
             )}
-            {(activeTab === 'historico' || activeTab === 'tipos') && (
+            {activeTab === 'historico' && (
               <button
-                onClick={() => setColumnConfigOpen(activeTab === 'tipos' ? 'tipos' : 'historico')}
+                onClick={() => setColumnConfigOpen('historico')}
                 className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 <Columns2 className="w-3.5 h-3.5" /> Colunas

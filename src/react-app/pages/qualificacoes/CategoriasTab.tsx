@@ -117,31 +117,29 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
 
       {/* VISTA EM GRADE */}
       {viewMode === 'grid' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {categoriasFiltrais.map((cat) => (
-            <Card key={cat.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-slate-900">{cat.nome}</h4>
-                    <Badge variant="default" size="sm" className="mt-2">
+            <Card key={cat.id} className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-medium text-slate-900 truncate">{cat.nome}</h4>
+                    <Badge variant="default" size="sm" className="mt-1.5">
                       {cat.codigo}
                     </Badge>
                   </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                  <div className="flex gap-0.5 flex-shrink-0 ml-2">
+                    <button
+                      type="button"
                       onClick={() => onEdit?.(cat)}
                       title="Editar"
                       aria-label="Editar categoria"
-                      className="min-h-[44px] min-w-[44px]"
+                      className="inline-flex min-h-[32px] min-w-[32px] items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
                     >
-                      <Edit2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                      <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={async () => {
                         if (await confirmDialog('Tem certeza que deseja deletar?')) {
                           onDelete?.(cat.id);
@@ -149,24 +147,24 @@ export const CategoriasTab: React.FC<CategoriasTabProps> = ({
                       }}
                       title="Deletar"
                       aria-label="Excluir categoria"
-                      className="min-h-[44px] min-w-[44px]"
+                      className="inline-flex min-h-[32px] min-w-[32px] items-center justify-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
                     >
-                      <Trash2 className="w-4 h-4 text-red-600" aria-hidden="true" />
-                    </Button>
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
 
                 {cat.descricao && (
-                  <p className="text-xs text-slate-600 mb-4 line-clamp-2">{cat.descricao}</p>
+                  <p className="text-xs text-slate-500 mb-3 line-clamp-2">{cat.descricao}</p>
                 )}
 
                 {cat.cor && (
-                  <div className="flex items-center gap-2 pt-3 border-t border-slate-200">
+                  <div className="flex items-center gap-1.5 pt-2.5 border-t border-slate-100">
                     <div
-                      className="w-4 h-4 rounded border border-slate-300"
+                      className="w-4 h-4 rounded border border-slate-300 flex-shrink-0"
                       style={{ backgroundColor: cat.cor }}
                     />
-                    <span className="text-xs text-slate-500">{cat.cor}</span>
+                    <span className="text-xs text-slate-400">{cat.cor}</span>
                   </div>
                 )}
               </CardContent>
