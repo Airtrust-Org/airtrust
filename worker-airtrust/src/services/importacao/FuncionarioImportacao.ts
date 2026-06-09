@@ -49,7 +49,10 @@ export interface ImportResult {
 // ===== SERVICE =====
 
 export class FuncionarioImportacao {
-  constructor(private db: D1Database) {}
+  constructor(
+    private db: D1Database,
+    private empresaId: number,
+  ) {}
 
   /**
    * Valida batch completo sem inserir
@@ -255,8 +258,8 @@ export class FuncionarioImportacao {
               INSERT INTO funcionarios (
                 nome, guerra, funcao, aeronave, cpf,
                 nascimento, licenca, codigo_anac, sispat, prestserv,
-                email, telefone, admissao, matricula
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                email, telefone, admissao, matricula, empresa_id
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
             )
             .bind(
@@ -274,6 +277,7 @@ export class FuncionarioImportacao {
               row.Telefone || null,
               admissao,
               row.Matricula,
+              this.empresaId,
             )
             .run();
 

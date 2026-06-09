@@ -53,7 +53,7 @@ function tenantContextResponse(c: Context) {
 function getImportService(entidade: string, db: D1Database, empresaId?: number) {
   switch (entidade) {
     case 'funcionarios':
-      return new FuncionarioImportacaoService(db);
+      return new FuncionarioImportacaoService(db, empresaId!);
     case 'qualificacoes_tipos':
     case 'tipos':
       return new QualificacaoTipoImportacaoService(db, empresaId);

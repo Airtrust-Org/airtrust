@@ -197,14 +197,15 @@ lookup.post('/aeronaves', async (c) => {
   }
 
   try {
+    const empresaId = getEmpresaId(c);
     const query = `
-      INSERT INTO aeronaves (modelo, prefixo, created_at, updated_at)
-      VALUES (?, ?, datetime('now'), datetime('now'))
+      INSERT INTO aeronaves (modelo, prefixo, empresa_id, created_at, updated_at)
+      VALUES (?, ?, ?, datetime('now'), datetime('now'))
     `;
 
     const result = await db
       .prepare(query)
-      .bind(body.modelo, body.prefixo || null)
+      .bind(body.modelo, body.prefixo || null, empresaId)
       .run();
 
     return c.json({
