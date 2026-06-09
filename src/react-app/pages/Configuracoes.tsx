@@ -232,6 +232,7 @@ export default function Configuracoes() {
             </button>
           )}
         </div>
+        </div>
       </div>
 
       {activeTab === 'backup' && (
