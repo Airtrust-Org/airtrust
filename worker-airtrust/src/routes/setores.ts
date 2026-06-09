@@ -195,9 +195,9 @@ setores.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     }
 
     fields.push('updated_at = datetime("now")');
-    values.push(id);
+    values.push(id, getEmpresaId(c));
 
-    const query = `UPDATE setores SET ${fields.join(', ')} WHERE id = ?`;
+    const query = `UPDATE setores SET ${fields.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`;
 
     await db
       .prepare(query)
@@ -244,7 +244,10 @@ setores.delete('/:id', auth(), requireRole('admin'), async (c) => {
     }
 
     // Soft delete
-    await db.prepare('UPDATE setores SET deleted_at = datetime("now") WHERE id = ?').bind(id).run();
+    await db
+      .prepare('UPDATE setores SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(id, getEmpresaId(c))
+      .run();
 
     const ua3 = extrairUsuarioAuditoria(c);
     await registrarAuditoria({ db, tabela: 'setores', acao: 'DELETE', registro_id: id, ...ua3 });

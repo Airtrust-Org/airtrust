@@ -182,8 +182,10 @@ funcoes.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     fields.push('updated_at = datetime("now")');
     values.push(id);
 
+    values.push(empresaId);
+
     await db
-      .prepare(`UPDATE funcoes SET ${fields.join(', ')} WHERE id = ?`)
+      .prepare(`UPDATE funcoes SET ${fields.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`)
       .bind(...values)
       .run();
 
@@ -228,7 +230,10 @@ funcoes.delete('/:id', auth(), requireRole('admin'), async (c) => {
       throw new ApiError('Função não encontrada', 404);
     }
 
-    await db.prepare('UPDATE funcoes SET deleted_at = datetime("now") WHERE id = ?').bind(id).run();
+    await db
+      .prepare('UPDATE funcoes SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+      .bind(id, empresaId)
+      .run();
 
     const ua3 = extrairUsuarioAuditoria(c);
     await registrarAuditoria({ db, tabela: 'funcoes', acao: 'DELETE', registro_id: id, ...ua3 });
