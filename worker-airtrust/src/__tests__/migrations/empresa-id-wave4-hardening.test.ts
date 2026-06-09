@@ -242,16 +242,16 @@ describe('Wave 4 — empresa_id hardening', () => {
     const dbPath = setupTestDb();
     applyMigration(dbPath);
 
-    // The 2 empresa_id=1 rows (ids 3, 4) should be soft-deleted
-    expect(scalar(dbPath, 'SELECT deleted_at IS NOT NULL FROM sgso_spi_config WHERE id = 3;')).toBe('1');
-    expect(scalar(dbPath, 'SELECT deleted_at IS NOT NULL FROM sgso_spi_config WHERE id = 4;')).toBe('1');
+    // The 2 empresa_id=1 rows (ids 3, 4) should be deactivated (ativo=0)
+    expect(scalar(dbPath, 'SELECT ativo FROM sgso_spi_config WHERE id = 3;')).toBe('0');
+    expect(scalar(dbPath, 'SELECT ativo FROM sgso_spi_config WHERE id = 4;')).toBe('0');
 
-    // The 2 empresa_id=6 rows (ids 1, 2) should remain active
-    expect(scalar(dbPath, 'SELECT deleted_at IS NULL FROM sgso_spi_config WHERE id = 1;')).toBe('1');
-    expect(scalar(dbPath, 'SELECT deleted_at IS NULL FROM sgso_spi_config WHERE id = 2;')).toBe('1');
+    // The 2 empresa_id=6 rows (ids 1, 2) should remain active (ativo=1)
+    expect(scalar(dbPath, 'SELECT ativo FROM sgso_spi_config WHERE id = 1;')).toBe('1');
+    expect(scalar(dbPath, 'SELECT ativo FROM sgso_spi_config WHERE id = 2;')).toBe('1');
 
     // Zero active empresa_id=1 rows
-    expect(Number(scalar(dbPath, "SELECT COUNT(*) FROM sgso_spi_config WHERE empresa_id = 1 AND deleted_at IS NULL;"))).toBe(0);
+    expect(Number(scalar(dbPath, "SELECT COUNT(*) FROM sgso_spi_config WHERE empresa_id = 1 AND ativo = 1;"))).toBe(0);
   });
 
   it('rejects tenantless inserts on qualificacoes_tipos and importacoes_log', () => {
