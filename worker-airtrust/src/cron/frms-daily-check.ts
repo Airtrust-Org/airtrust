@@ -42,6 +42,7 @@ async function inserirAlertaComDedupe24h(
     valorAtualMin: number;
     valorLimiteMin: number;
     mensagem: string;
+    empresaId?: number | null;
   },
 ): Promise<boolean> {
   const existente = await db
@@ -84,7 +85,7 @@ async function inserirAlertaComDedupe24h(
     )
     .run();
 
-  await despacharNotificacoes(db, id, input.nivel, input.tripulanteId);
+  await despacharNotificacoes(db, id, input.nivel, input.tripulanteId, input.empresaId ?? null);
   return true;
 }
 
@@ -194,6 +195,17 @@ export async function frmsDailyCheck(env: Env): Promise<{
 
   for (const trip of tripulantes) {
     try {
+      // Resolver empresa do tripulante para scoping de notificações
+      const tripEmpresa = await db
+        .prepare(
+          `SELECT empresa_id FROM frms_jornada
+           WHERE tripulante_id = ? AND deleted_at IS NULL
+           ORDER BY data DESC LIMIT 1`,
+        )
+        .bind(trip.id)
+        .first<{ empresa_id: number | null }>();
+      const tripEmpresaId = tripEmpresa?.empresa_id ?? null;
+
       // 1. Recalcular acúmulo rolling
       const acumulo = await recalcularAcumuloRolling(db, trip.id, hoje, limites);
       const jornadaSigvoosHoje = await carregarJornadaSigvoosDoDia(db, trip.id, hoje);
@@ -258,7 +270,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
             )
             .run();
           // Despachar notificações para responsáveis (piloto, supervisor, ops)
-          await despacharNotificacoes(db, id, alerta.nivel, alerta.tripulante_id);
+          await despacharNotificacoes(db, id, alerta.nivel, alerta.tripulante_id, tripEmpresaId);
           alertasGerados++;
         }
       }
@@ -326,7 +338,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
                 timestamp,
               )
               .run();
-            await despacharNotificacoes(db, id, nivel, trip.id);
+            await despacharNotificacoes(db, id, nivel, trip.id, tripEmpresaId);
             alertasGerados++;
           }
         }

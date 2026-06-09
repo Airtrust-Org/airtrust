@@ -160,7 +160,7 @@ describe('simuladores modelos dropdown + tipo cor', () => {
     );
 
     expect(response.status).toBe(200);
-    const json = await response.json();
+    const json = (await response.json()) as any;
     expect(json.success).toBe(true);
     expect(json.data).toHaveLength(1);
     expect(state.lastModelosQuery).toContain('ms.empresa_id = ?');
@@ -183,7 +183,7 @@ describe('simuladores modelos dropdown + tipo cor', () => {
     );
 
     expect(response.status).toBe(200);
-    const json = await response.json();
+    const json = (await response.json()) as any;
     expect(json.success).toBe(true);
     expect(json.data).toHaveLength(1);
     expect(json.data[0].codigo).toBe('SK76-INI-01');
@@ -202,7 +202,7 @@ describe('simuladores modelos dropdown + tipo cor', () => {
     );
 
     expect(response.status).toBe(200);
-    const json = await response.json();
+    const json = (await response.json()) as any;
     expect(json.success).toBe(true);
     expect(Array.isArray(json.data)).toBe(true);
     expect(json.data).toHaveLength(0);
@@ -224,7 +224,7 @@ describe('simuladores modelos dropdown + tipo cor', () => {
       { DB: db } as unknown as Env,
       {} as ExecutionContext,
     );
-    const postJson = await postResponse.json();
+    const postJson = (await postResponse.json()) as any;
     expect(postResponse.status).toBe(200);
     expect(postJson.success).toBe(true);
     expect(postJson.data.cor).toBe('#22AA88');
@@ -244,7 +244,7 @@ describe('simuladores modelos dropdown + tipo cor', () => {
       { DB: db } as unknown as Env,
       {} as ExecutionContext,
     );
-    const putJson = await putResponse.json();
+    const putJson = (await putResponse.json()) as any;
     expect(putResponse.status).toBe(200);
     expect(putJson.success).toBe(true);
     expect(putJson.data.cor).toBe('#3344AA');

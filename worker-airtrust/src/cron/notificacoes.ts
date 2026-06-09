@@ -60,10 +60,10 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
   log.log('[NOTIFICACOES] Iniciando processamento...', { dataHora: new Date().toISOString() });
 
   try {
-    // 1. Buscar configurações ativas
+    // 1. Buscar configurações ativas (globais — notificacoes_config não tem empresa_id)
     const { results: configs } = await env.DB.prepare(
       `
-      SELECT 
+      SELECT
         id,
         tipo,
         ativo,
@@ -97,36 +97,55 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
       await seedLocalWhatsAppTemplateCatalog(env.DB);
     }
 
-    const qualificacoesBase = await carregarQualificacoesParaNotificar(env);
-    log.log('[NOTIFICACOES] Qualificacoes base carregadas', {
-      total: qualificacoesBase.length,
-    });
+    // 2. Listar empresas ativas para processamento tenant-aware
+    const { results: empresas } = await env.DB.prepare(
+      `SELECT id, codigo, nome FROM empresas WHERE ativo = 1 AND deleted_at IS NULL ORDER BY id`,
+    ).all<{ id: number; codigo: string; nome: string }>();
+
+    log.log('[NOTIFICACOES] Empresas ativas encontradas', { total: empresas.length });
 
     let totalEnviadas = 0;
     let totalErros = 0;
     const porTipo: ProcessamentoNotificacoesResumo['porTipo'] = {};
 
-    // 2. Processar cada configuração
-    for (const config of configs as unknown as NotificacaoConfig[]) {
-      log.log('[NOTIFICACOES] Processando configuracao', {
-        configId: config.id,
-        tipo: config.tipo,
-        diasAntes: config.dias_antes,
-      });
+    // 3. Processar cada empresa independentemente
+    for (const empresa of empresas) {
+      try {
+        log.log('[NOTIFICACOES] Processando empresa', {
+          empresaId: empresa.id,
+          empresaCodigo: empresa.codigo,
+        });
 
-      const resultado = await processarConfiguracao(env, config, qualificacoesBase);
-      totalEnviadas += resultado.enviadas;
-      totalErros += resultado.erros;
-      porTipo[normalizeTipoCanal(config.tipo)] = {
-        enviadas: (porTipo[normalizeTipoCanal(config.tipo)]?.enviadas || 0) + resultado.enviadas,
-        erros: (porTipo[normalizeTipoCanal(config.tipo)]?.erros || 0) + resultado.erros,
-      };
+        const qualificacoesBase = await carregarQualificacoesParaNotificar(env, empresa.id);
+        log.log('[NOTIFICACOES] Qualificacoes base carregadas para empresa', {
+          empresaId: empresa.id,
+          total: qualificacoesBase.length,
+        });
+
+        // Processar cada configuração para esta empresa
+        for (const config of configs as unknown as NotificacaoConfig[]) {
+          const resultado = await processarConfiguracao(env, config, qualificacoesBase);
+          totalEnviadas += resultado.enviadas;
+          totalErros += resultado.erros;
+          porTipo[normalizeTipoCanal(config.tipo)] = {
+            enviadas: (porTipo[normalizeTipoCanal(config.tipo)]?.enviadas || 0) + resultado.enviadas,
+            erros: (porTipo[normalizeTipoCanal(config.tipo)]?.erros || 0) + resultado.erros,
+          };
+        }
+      } catch (empresaError) {
+        log.error('[NOTIFICACOES] Erro ao processar empresa — continuando com proxima', empresaError, {
+          empresaId: empresa.id,
+          empresaCodigo: empresa.codigo,
+        });
+        // Não interrompe outras empresas — erro é registrado e o loop continua
+      }
     }
 
     log.log('[NOTIFICACOES] Processamento concluido', {
       totalEnviadas,
       totalErros,
       configsProcessadas: configs.length,
+      empresasProcessadas: empresas.length,
     });
     return {
       configsProcessadas: configs.length,
@@ -140,7 +159,7 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
   }
 }
 
-async function carregarQualificacoesParaNotificar(env: Env): Promise<QualificacaoParaNotificar[]> {
+async function carregarQualificacoesParaNotificar(env: Env, empresaId: number): Promise<QualificacaoParaNotificar[]> {
   const { results } = await env.DB.prepare(
     `
     SELECT
@@ -181,6 +200,8 @@ async function carregarQualificacoesParaNotificar(env: Env): Promise<Qualificaca
       AND qt.deleted_at IS NULL
       AND qh.data_vencimento IS NOT NULL
       AND COALESCE(qh.status, 'CONCLUIDA') != 'CANCELADA'
+      AND qh.empresa_id = ?
+      AND f.empresa_id = ?
       AND qh.id IN (
         -- Apenas o registro mais recente de cada qualificação por funcionário
         SELECT MAX(id)
@@ -189,7 +210,7 @@ async function carregarQualificacoesParaNotificar(env: Env): Promise<Qualificaca
         GROUP BY funcionario_id, qualificacao_id, qualificacao_codigo
       )
   `,
-  ).all<QualificacaoParaNotificar>();
+  ).bind(empresaId, empresaId).all<QualificacaoParaNotificar>();
 
   return results ?? [];
 }

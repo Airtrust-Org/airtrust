@@ -97,6 +97,7 @@ export async function despacharNotificacoes(
   alertaId: string,
   nivelAlerta: string,
   tripulanteId: number,
+  empresaId?: number | null,
 ): Promise<void> {
   try {
     // Buscar configs de notificação ativas
@@ -114,13 +115,14 @@ export async function despacharNotificacoes(
 
     if (cargosElegiveis.length === 0) return;
 
-    // Buscar todos os funcionários dos cargos elegíveis em uma única query (IN clause)
+    // Buscar funcionários dos cargos elegíveis — com tenant scoping quando disponível
     const placeholders = cargosElegiveis.map(() => '?').join(', ');
+    const tenantFilter = empresaId != null ? ' AND f.empresa_id = ?' : '';
     const funcionarios = await db
       .prepare(
-        `SELECT id, cargo FROM funcionarios WHERE cargo IN (${placeholders}) AND (ativo = 1 OR status = 'ATIVO') AND deleted_at IS NULL`,
+        `SELECT f.id, f.cargo FROM funcionarios f WHERE f.cargo IN (${placeholders}) AND (f.ativo = 1 OR f.status = 'ATIVO') AND f.deleted_at IS NULL${tenantFilter}`,
       )
-      .bind(...cargosElegiveis)
+      .bind(...(empresaId != null ? [...cargosElegiveis, empresaId] : cargosElegiveis))
       .all<{ id: number; cargo: string }>();
 
     // Montar set de destinatários únicos (cargo PILOTO inclui o próprio tripulante)

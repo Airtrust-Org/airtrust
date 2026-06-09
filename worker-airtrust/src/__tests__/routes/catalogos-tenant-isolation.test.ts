@@ -595,7 +595,7 @@ describe('catalogos tenant isolation', () => {
     );
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { data: Array<{ empresa_id: number; codigo: string }> };
     expect(body.data).toHaveLength(1);
     expect(body.data[0].empresa_id).toBe(1);
     expect(body.data[0].codigo).toBe('M-COMMON');
@@ -672,10 +672,10 @@ describe('catalogos tenant isolation', () => {
       ),
     ]);
 
-    expect((await catManobraRes.json()).data.map((item: any) => item.empresa_id)).toEqual([1]);
-    expect((await qualCatRes.json()).data.map((item: any) => item.id)).toEqual([1]);
-    expect((await habilRes.json()).data.map((item: any) => item.empresa_id)).toEqual([1]);
-    expect((await modelosRes.json()).data.map((item: any) => item.empresa_id)).toEqual([1]);
+    expect(((await catManobraRes.json()) as { data: Array<{ empresa_id: number }> }).data.map((item) => item.empresa_id)).toEqual([1]);
+    expect(((await qualCatRes.json()) as { data: Array<{ id: number }> }).data.map((item) => item.id)).toEqual([1]);
+    expect(((await habilRes.json()) as { data: Array<{ empresa_id: number }> }).data.map((item) => item.empresa_id)).toEqual([1]);
+    expect(((await modelosRes.json()) as { data: Array<{ empresa_id: number }> }).data.map((item) => item.empresa_id)).toEqual([1]);
   });
 
   it('mesmo codigo pode existir em empresas diferentes, mas duplicidade na mesma empresa eh bloqueada', async () => {

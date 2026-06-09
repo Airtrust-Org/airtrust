@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query'
 /**
  * React Query Client Configuration
  * Optimized for AirTrust performance
- * 
+ *
  * Cache Strategy:
  * - Static data (categorias): 1 hour
  * - Medium volatility (qualificacoes): 30 minutes
@@ -30,34 +30,48 @@ export const queryClient = new QueryClient({
 })
 
 /**
+ * Tenant-scoped query key helper.
+ * Prefixes any query key with the current empresaId so that switching
+ * tenants automatically creates a new cache namespace.
+ *
+ * Usage:
+ *   tenantQueryKey(empresaId, 'funcionarios', 'list', filters)
+ *   // => ['tenant', 8, 'funcionarios', 'list', filters]
+ */
+export function tenantQueryKey(empresaId: number | null | undefined, ...parts: unknown[]): readonly unknown[] {
+  return ['tenant', empresaId ?? 0, ...parts] as const;
+}
+
+/**
  * Query Key Factory
- * Standardized query keys for type-safe cache management
+ * Standardized query keys for type-safe cache management.
+ * All tenant-scoped keys accept an optional empresaId as first parameter.
  */
 export const queryKeys = {
   all: ['data'] as const,
-  
+
   // Categorias (1 hour cache - static)
-  categorias: () => [...queryKeys.all, 'categorias'] as const,
-  categoriasDetail: (id: string) => [...queryKeys.categorias(), id] as const,
-  
+  categorias: (empresaId?: number | null) => tenantQueryKey(empresaId, 'categorias'),
+  categoriasDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'categorias', id),
+
   // Qualificações (30 min cache - medium volatility)
-  qualificacoes: () => [...queryKeys.all, 'qualificacoes'] as const,
-  qualificacoesDetail: (id: string) => [...queryKeys.qualificacoes(), id] as const,
-  
+  qualificacoes: (empresaId?: number | null) => tenantQueryKey(empresaId, 'qualificacoes'),
+  qualificacoesDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'qualificacoes', id),
+
   // Funcionários (5 min cache - frequent changes)
-  funcionarios: () => [...queryKeys.all, 'funcionarios'] as const,
-  funcionariosDetail: (id: string) => [...queryKeys.funcionarios(), id] as const,
-  
+  funcionarios: (empresaId?: number | null) => tenantQueryKey(empresaId, 'funcionarios'),
+  funcionariosDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'funcionarios', id),
+
   // Histórico (3 min cache - audit data)
-  historico: () => [...queryKeys.all, 'historico'] as const,
-  historicoDetail: (id: string) => [...queryKeys.historico(), id] as const,
-  
+  historico: (empresaId?: number | null) => tenantQueryKey(empresaId, 'historico'),
+  historicoDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'historico', id),
+
   // Simuladores (30 sec - real-time)
-  simuladores: () => [...queryKeys.all, 'simuladores'] as const,
-  simuladoresDetail: (id: string) => [...queryKeys.simuladores(), id] as const,
-  
+  simuladores: (empresaId?: number | null) => tenantQueryKey(empresaId, 'simuladores'),
+  simuladoresDetail: (id: string, empresaId?: number | null) => tenantQueryKey(empresaId, 'simuladores', id),
+
   // Dashboard (30 sec - real-time)
-  dashboard: () => [...queryKeys.all, 'dashboard'] as const,
+  dashboard: (empresaId?: number | null) => tenantQueryKey(empresaId, 'dashboard'),
 }
 
 /**
