@@ -4,7 +4,7 @@
  */
 
 import { memo } from 'react';
-import { Plus, Upload, Settings, Download } from 'lucide-react';
+import { Plus, Upload, Settings, Download, LayoutList, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
 import PageHeader from '../../../components/shared/PageHeader';
 
 interface Stats {
@@ -22,6 +22,42 @@ interface QualificacoesHeaderProps {
   onExportar?: () => void;
 }
 
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  variant = 'neutral',
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  helper: string;
+  variant?: 'neutral' | 'success' | 'warning' | 'error';
+}) {
+  const iconBgMap = {
+    neutral: 'bg-slate-100 text-slate-600',
+    success: 'bg-emerald-100 text-emerald-700',
+    warning: 'bg-amber-100 text-amber-700',
+    error: 'bg-rose-100 text-rose-700',
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
+          <p className="mt-1 text-sm text-slate-500">{helper}</p>
+        </div>
+        <div className={`rounded-xl p-2 ${iconBgMap[variant]}`}>
+          <Icon className="w-5 h-5" aria-hidden="true" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const QualificacoesHeader = memo(function QualificacoesHeader({
   stats,
   onNovaQualificacao,
@@ -34,57 +70,45 @@ const QualificacoesHeader = memo(function QualificacoesHeader({
       <PageHeader title="Qualificações" subtitle="Gerenciamento de treinamentos, exames e checks" />
 
       {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="card card-neutral rounded-lg p-4">
-          <div className="text-sm text-gray-600">Total</div>
-          <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-        </div>
-        <div className="card card-success rounded-lg p-4">
-          <div className="text-sm text-gray-600">Válidas</div>
-          <div className="text-2xl font-bold text-gray-900">{stats.validas}</div>
-        </div>
-        <div className="card card-warning rounded-lg p-4">
-          <div className="text-sm text-gray-600">Vencendo</div>
-          <div className="text-2xl font-bold text-gray-900">{stats.vencendo}</div>
-        </div>
-        <div className="card card-error rounded-lg p-4">
-          <div className="text-sm text-gray-600">Vencidas</div>
-          <div className="text-2xl font-bold text-gray-900">{stats.vencidas}</div>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <KpiCard icon={LayoutList} label="Total" value={stats.total} helper="qualificações registradas" variant="neutral" />
+        <KpiCard icon={CheckCircle2} label="Válidas" value={stats.validas} helper="dentro da validade" variant="success" />
+        <KpiCard icon={AlertTriangle} label="Vencendo" value={stats.vencendo} helper="em até 30 dias" variant="warning" />
+        <KpiCard icon={AlertCircle} label="Vencidas" value={stats.vencidas} helper="ação necessária" variant="error" />
       </div>
 
       {/* Botões de Ação */}
       <div className="flex flex-wrap gap-3 mb-6">
         <button
           onClick={onNovaQualificacao}
-          className="flex items-center gap-2  py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+          className="inline-flex min-h-[44px] items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4" aria-hidden="true" />
           Nova Qualificação
         </button>
 
         <button
           onClick={onImportar}
-          className="flex items-center gap-2  py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          className="inline-flex min-h-[44px] items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 cursor-pointer"
         >
-          <Upload className="w-4 h-4" />
-          Importar (usar módulo /importacao)
+          <Upload className="w-4 h-4" aria-hidden="true" />
+          Importar
         </button>
 
         <button
           onClick={onConfigurarColunas}
-          className="flex items-center gap-2  py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          className="inline-flex min-h-[44px] items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 cursor-pointer"
         >
-          <Settings className="w-4 h-4" />
+          <Settings className="w-4 h-4" aria-hidden="true" />
           Configurar Colunas
         </button>
 
         {onExportar && (
           <button
             onClick={onExportar}
-            className="flex items-center gap-2 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+            className="inline-flex min-h-[44px] items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-4 h-4" aria-hidden="true" />
             Exportar
           </button>
         )}

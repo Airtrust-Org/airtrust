@@ -1500,10 +1500,10 @@ export default function TreinamentosPlanejadosPage({
                     role="tab"
                     aria-selected={active}
                     onClick={() => setAbaAtiva(tab.id as AbaAtiva)}
-                    className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition min-h-[44px] ${
+                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition min-h-[44px] ${
                       active
-                        ? 'bg-primary-600 text-white shadow-sm focus-visible:ring-primary-400'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 focus-visible:ring-primary-400'
+                        ? 'border-b-2 border-primary-600 text-primary-700 bg-primary-50/50'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     } motion-safe:transition-colors`}
                   >
                     <Icon className="h-4 w-4" aria-hidden="true" />

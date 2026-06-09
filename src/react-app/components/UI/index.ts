@@ -24,6 +24,8 @@ export { VirtualTable } from './VirtualTable';
 export { ColumnSelector } from './ColumnSelector';
 export { Input, TextArea, Select } from './Input';
 export { FormField } from './FormField';
+export { DropdownMenu } from './DropdownMenu';
+export type { DropdownMenuItem } from './DropdownMenu';
 
 /**
  * LEGACY COMPONENTS (to be migrated)
