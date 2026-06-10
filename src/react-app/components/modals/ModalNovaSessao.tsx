@@ -2300,10 +2300,12 @@ export default function ModalNovaSessao({
               onSuccess={onSuccess}
               simuladorId={simuladorId}
               simuladorModelo={aeronaveCodigo || null}
+              simuladorNome={simuladores.find((s) => s.id === simuladorId)?.nome || null}
               data={data}
               horarioInicio={horarioInicio}
               horarioFim={horarioFim}
               instrutorId={instrutorId}
+              instrutorNome={instrutores.find((i) => i.id === instrutorId)?.nome || null}
               temaSessao={temaSessao}
               observacoes={observacoes}
               funcionarios={funcionarios}
