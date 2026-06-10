@@ -57,10 +57,12 @@ interface SharedSessionFormProps {
   onSuccess: () => void;
   simuladorId: number | null;
   simuladorModelo: string | null;
+  simuladorNome?: string | null;
   data: string;
   horarioInicio: string;
   horarioFim: string;
   instrutorId: number | null;
+  instrutorNome?: string | null;
   temaSessao: string;
   observacoes: string;
   funcionarios: Funcionario[];
@@ -154,10 +156,12 @@ export default function SharedSessionForm({
   onSuccess,
   simuladorId,
   simuladorModelo,
+  simuladorNome,
   data,
   horarioInicio,
   horarioFim,
   instrutorId,
+  instrutorNome,
   temaSessao,
   observacoes,
   funcionarios,
@@ -655,11 +659,11 @@ export default function SharedSessionForm({
       <h3 className="text-sm font-semibold text-slate-800">Dados da reserva</h3>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600 sm:grid-cols-3">
         <div><span className="font-medium">Equipamento:</span> {simuladorModelo || '—'}</div>
-        <div><span className="font-medium">Simulador:</span> {simuladorId ? `#${simuladorId}` : '—'}</div>
+        <div><span className="font-medium">Simulador:</span> {simuladorNome || (simuladorId ? `#${simuladorId}` : '—')}</div>
         <div><span className="font-medium">Data:</span> {data || '—'}</div>
         <div><span className="font-medium">Início:</span> {horarioInicio || '—'}</div>
         <div><span className="font-medium">Fim:</span> {horarioFim || '—'}</div>
-        <div><span className="font-medium">Instrutor:</span> {instrutorId ? `#${instrutorId}` : '—'}</div>
+        <div><span className="font-medium">Instrutor:</span> {instrutorNome || (instrutorId ? `#${instrutorId}` : '—')}</div>
       </div>
       {!reservationReady && (
         <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
