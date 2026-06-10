@@ -69,11 +69,6 @@ function renderForm(overrides = {}) {
   return render(<SharedSessionForm {...BASE_PROPS} {...overrides} />);
 }
 
-async function goToCrew() {
-  await userEvent.click(screen.getByRole('button', { name: /Continuar para Tripulação/i }));
-  expect(screen.getByTestId('shared-step-tripulacao')).toBeTruthy();
-}
-
 async function goToSegments() {
   await userEvent.click(screen.getByRole('button', { name: /Continuar para Segmentos/i }));
   expect(screen.getByTestId('shared-step-segmentos')).toBeTruthy();
@@ -93,7 +88,6 @@ async function selectModel(index: 0 | 1, value: '63' | '64' = '63') {
 }
 
 async function completeTwoCurricularCrew() {
-  await goToCrew();
   await selectPilot(0, 'Ramos');
   await selectModel(0, '63');
   await selectPilot(1, 'Dieter');
@@ -101,7 +95,6 @@ async function completeTwoCurricularCrew() {
 }
 
 async function completeCurricularWithSupportCrew() {
-  await goToCrew();
   await selectPilot(0, 'Ramos');
   await selectModel(0, '63');
   await selectPilot(1, 'Dieter');
@@ -153,131 +146,240 @@ describe('SharedSessionForm rendered', () => {
     vi.restoreAllMocks();
   });
 
-  it('1. renders three real step buttons', () => {
+  // === STEPPER TESTS ===
+
+  it('1. stepper has two steps: Tripulação and Segmentos', () => {
     renderForm();
-    expect(screen.getByRole('button', { name: /1\. Reserva/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /2\. Tripulação/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /3\. Segmentos/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /1\. Tripulação/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /2\. Segmentos/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Reserva/ })).toBeNull();
   });
 
-  it('2. starts with Reserva active and Tripulação content hidden', () => {
+  it('2. Tripulação starts active and Segmentos content hidden', () => {
     renderForm();
-    expect(screen.getByRole('button', { name: /1\. Reserva/ })).toHaveAttribute('aria-current', 'step');
-    expect(screen.getByTestId('shared-step-reserva')).toBeTruthy();
-    expect(screen.queryByTestId('shared-step-tripulacao')).toBeNull();
-  });
-
-  it('3. clicking Tripulação with incomplete reservation shows a blocking message', async () => {
-    renderForm({ simuladorId: null });
-    await userEvent.click(screen.getByRole('button', { name: /2\. Tripulação/ }));
-    expect(screen.getAllByText('Complete os dados da reserva para configurar a tripulação.').length).toBeGreaterThan(0);
-    expect(screen.getByText('Selecione o simulador.')).toBeTruthy();
-  });
-
-  it('4. a valid reservation allows Tripulação by click', async () => {
-    renderForm();
-    await userEvent.click(screen.getByRole('button', { name: /2\. Tripulação/ }));
+    expect(screen.getByRole('button', { name: /1\. Tripulação/ })).toHaveAttribute('aria-current', 'step');
     expect(screen.getByTestId('shared-step-tripulacao')).toBeTruthy();
+    expect(screen.queryByTestId('shared-step-segmentos')).toBeNull();
   });
 
-  it('5. Continue button moves from Reserva to Tripulação', async () => {
+  it('3. reservation data is always visible at top', () => {
     renderForm();
-    await goToCrew();
-    expect(screen.getByRole('button', { name: /2\. Tripulação/ })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByTestId('shared-reservation-summary')).toBeTruthy();
+    expect(screen.getByText('SK76')).toBeTruthy();
+    expect(screen.getByText('2026-06-20')).toBeTruthy();
   });
 
-  it('6. Voltar returns from Tripulação to Reserva', async () => {
-    renderForm();
-    await goToCrew();
-    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }));
-    expect(screen.getByTestId('shared-step-reserva')).toBeTruthy();
+  it('4. reservation fields accept data from props', () => {
+    renderForm({ simuladorModelo: 'AW139', data: '2026-07-15' });
+    expect(screen.getByText('AW139')).toBeTruthy();
+    expect(screen.getByText('2026-07-15')).toBeTruthy();
   });
 
-  it('7. preserves crew state when navigating back and forward', async () => {
+  it('5. clicking Segmentos with incomplete crew shows blocking message', async () => {
     renderForm();
-    await goToCrew();
-    await selectPilot(0, 'Ramos');
-    await selectModel(0, '63');
-    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }));
-    await goToCrew();
-    expect(screen.getByText('Ramos')).toBeTruthy();
-    expect(screen.getByLabelText('Modelo de sessão do piloto 1')).toHaveValue('63');
-  });
-
-  it('8. Segmentos is blocked without pilots', async () => {
-    renderForm();
-    await userEvent.click(screen.getByRole('button', { name: /3\. Segmentos/ }));
+    await userEvent.click(screen.getByRole('button', { name: /2\. Segmentos/ }));
     expect(screen.getByText('Defina a tripulação e os modelos de sessão antes de configurar os segmentos.')).toBeTruthy();
     expect(screen.getByText('Piloto 1: selecione o piloto.')).toBeTruthy();
   });
 
-  it('9. Segmentos is blocked without Modelo de Sessão', async () => {
-    renderForm();
-    await goToCrew();
-    await selectPilot(0, 'Ramos');
-    await selectPilot(1, 'Dieter');
-    await userEvent.click(screen.getByRole('button', { name: /Continuar para Segmentos/i }));
-    expect(screen.getByText('Piloto 1: selecione o modelo de sessão.')).toBeTruthy();
-  });
-
-  it('10. after valid crew, Segmentos is reachable by step click', async () => {
-    renderForm();
-    await completeTwoCurricularCrew();
-    await userEvent.click(screen.getByRole('button', { name: /3\. Segmentos/ }));
-    expect(screen.getByLabelText('Horário de divisão dos segmentos')).toBeTruthy();
-  });
-
-  it('11. Continue button moves from Tripulação to Segmentos', async () => {
+  it('6. Continue moves from Tripulação to Segmentos', async () => {
     renderForm();
     await completeTwoCurricularCrew();
     await goToSegments();
-    expect(screen.getByRole('button', { name: /3\. Segmentos/ })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('button', { name: /2\. Segmentos/ })).toHaveAttribute('aria-current', 'step');
   });
 
-  it('12. Voltar from Segmentos preserves participants and models', async () => {
+  it('7. Voltar para Tripulação returns from Segmentos to Tripulação', async () => {
     renderForm();
     await completeTwoCurricularCrew();
     await goToSegments();
-    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }));
-    expect(screen.getByText('Ramos')).toBeTruthy();
-    expect(screen.getByLabelText('Modelo de sessão do piloto 2')).toHaveValue('64');
-  });
-
-  it('13. keyboard Enter activates a step button', async () => {
-    renderForm();
-    const tripStep = screen.getByRole('button', { name: /2\. Tripulação/ });
-    tripStep.focus();
-    await userEvent.keyboard('{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar para Tripulação' }));
     expect(screen.getByTestId('shared-step-tripulacao')).toBeTruthy();
   });
 
-  it('14. aria-current moves to the active step', async () => {
+  it('8. preserves crew state when navigating to Segmentos and back', async () => {
     renderForm();
-    await goToCrew();
-    expect(screen.getByRole('button', { name: /1\. Reserva/ })).not.toHaveAttribute('aria-current');
-    expect(screen.getByRole('button', { name: /2\. Tripulação/ })).toHaveAttribute('aria-current', 'step');
+    await completeTwoCurricularCrew();
+    await goToSegments();
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar para Tripulação' }));
+    expect(screen.getByText('Ramos')).toBeTruthy();
+    expect(screen.getByLabelText('Modelo de sessão do piloto 1')).toHaveValue('63');
+    expect(screen.getByLabelText('Modelo de sessão do piloto 2')).toHaveValue('64');
   });
 
-  it('15. support pilot does not require model and reaches Segmentos', async () => {
+  it('9. keyboard Enter activates the Segmentos step button', async () => {
+    renderForm();
+    await completeTwoCurricularCrew();
+    const segStep = screen.getByRole('button', { name: /2\. Segmentos/ });
+    segStep.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(screen.getByTestId('shared-step-segmentos')).toBeTruthy();
+  });
+
+  it('10. aria-current moves to the active step', async () => {
+    renderForm();
+    await completeTwoCurricularCrew();
+    await goToSegments();
+    expect(screen.getByRole('button', { name: /1\. Tripulação/ })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: /2\. Segmentos/ })).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('11. no step is decorative-only — both are buttons', () => {
+    renderForm();
+    const stepper = screen.getByRole('list', { name: 'Etapas da sessão compartilhada' });
+    const steps = within(stepper).getAllByRole('button');
+    expect(steps).toHaveLength(2);
+    for (const step of steps) {
+      expect(step.tagName).toBe('BUTTON');
+    }
+  });
+
+  // === CREW & ROLE TESTS ===
+
+  it('12. support pilot does not require model and reaches Segmentos', async () => {
     renderForm();
     await completeCurricularWithSupportCrew();
     await goToSegments();
     expect(screen.getAllByText('Dieter').length).toBeGreaterThan(0);
-    // Support pilot shows "—" for Modelo de Sessão and Qualificação columns
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('16. curricular pilot requires model', async () => {
+  it('13. curricular pilot requires model', async () => {
     renderForm();
-    await goToCrew();
     await selectPilot(0, 'Ramos');
     await selectPilot(1, 'Dieter');
     await userEvent.click(screen.getByRole('button', { name: /Continuar para Segmentos/i }));
-    expect(toast.error).not.toHaveBeenCalled();
     expect(screen.getByText('Piloto 1: selecione o modelo de sessão.')).toBeTruthy();
   });
 
-  it('17. submits two curricular pilots with distinct models and no planned training field', async () => {
+  it('14. unchecking curricular turns pilot to apoio and hides model', async () => {
+    renderForm();
+    await selectPilot(0, 'Ramos');
+    await waitFor(() => expect(screen.getByLabelText('Modelo de sessão do piloto 1')).toBeTruthy());
+    await selectModel(0, '63');
+    // Uncheck the curricular checkbox
+    const checkboxes = screen.getAllByRole('checkbox');
+    await userEvent.click(checkboxes[0]);
+    // Model select should disappear
+    expect(screen.queryByLabelText('Modelo de sessão do piloto 1')).toBeNull();
+    // Should show "Apoio" badge
+    expect(screen.getByText('Apoio')).toBeTruthy();
+  });
+
+  it('15. checking apoio turns pilot to curricular and requires model', async () => {
+    renderForm();
+    await selectPilot(0, 'Ramos');
+    const checkboxes = screen.getAllByRole('checkbox');
+    await userEvent.click(checkboxes[0]); // uncheck
+    expect(screen.queryByLabelText('Modelo de sessão do piloto 1')).toBeNull();
+    await userEvent.click(checkboxes[0]); // recheck
+    await waitFor(() => expect(screen.getByLabelText('Modelo de sessão do piloto 1')).toBeTruthy());
+    expect(screen.getAllByText('Curricular').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('16. curricular pilot shows qualification message based on model', async () => {
+    renderForm();
+    await selectPilot(0, 'Ramos');
+    await waitFor(() => expect(screen.getByLabelText('Modelo de sessão do piloto 1')).toBeTruthy());
+    // Model 63 has gera_qualificacao=0
+    await selectModel(0, '63');
+    expect(screen.getByText('Gera ficha. Este modelo não gera qualificação.')).toBeTruthy();
+  });
+
+  it('17. curricular pilot with check model shows qualification message', async () => {
+    // Override mock for this test to return a check model
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/simuladores/modelos-sessao')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: [
+              {
+                id: 63,
+                codigo: 'SK76-I-01/12',
+                nome: 'Inicial',
+                tipo_sessao_codigo: 'INI',
+                modelo_aeronave: 'SK76',
+                duracao_estimada: 120,
+                gera_qualificacao: 1,
+              },
+              {
+                id: 64,
+                codigo: 'SK76-P-02/03',
+                nome: 'Periódico',
+                tipo_sessao_codigo: 'PER',
+                modelo_aeronave: 'SK76',
+                duracao_estimada: 120,
+                gera_qualificacao: 1,
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({ success: true, data: [] }) } as Response;
+    });
+
+    renderForm();
+    await selectPilot(0, 'Ramos');
+    await waitFor(() => expect(screen.getByLabelText('Modelo de sessão do piloto 1')).toBeTruthy());
+    await selectModel(0, '63');
+    expect(screen.getByText('Gera ficha e qualificação.')).toBeTruthy();
+  });
+
+  it('18. fichaConcluida disables checkbox with explanatory message', async () => {
+    mockGetSharedSession.mockResolvedValue({
+      success: true,
+      data: {
+        participantes: [
+          { funcionario_id: 3, funcao: 'PIC', funcionario_nome: 'Ramos' },
+          { funcionario_id: 7, funcao: 'SIC', funcionario_nome: 'Dieter' },
+        ],
+        atribuicoes: [
+          { id: 31, funcionario_id: 3, modelo_sessao_id: 63, modelo_codigo: 'SK76-I-01/12', modelo_nome: 'Inicial', gera_ficha: 1 },
+          { id: 32, funcionario_id: 7, modelo_sessao_id: 64, modelo_codigo: 'SK76-P-02/03', modelo_nome: 'Periódico', gera_ficha: 1 },
+        ],
+        fichas: [
+          { id: 50, status: 'APROVADO', colaborador_id_aluno: 3 },
+          { id: 51, status: 'AVALIACAO_PENDENTE', colaborador_id_aluno: 7 },
+        ],
+        segmentos: [
+          {
+            inicio: '07:00', fim: '08:00', atribuicao_curricular_id: 31,
+            funcoes: [{ funcionario_id: 3, funcao: 'PF' }, { funcionario_id: 7, funcao: 'PM' }],
+          },
+          {
+            inicio: '08:00', fim: '09:00', atribuicao_curricular_id: 32,
+            funcoes: [{ funcionario_id: 7, funcao: 'PF' }, { funcionario_id: 3, funcao: 'PM' }],
+          },
+        ],
+      },
+    });
+
+    renderForm({ editSessionId: 100, funcionarios: [{ id: 3, nome: 'Ramos', matricula: '123' }, { id: 7, nome: 'Dieter', matricula: '456' }] });
+    await waitFor(() => expect(screen.queryByText(/Carregando dados/)).toBeNull());
+
+    // Piloto 1 (Ramos) has concluded ficha → checkbox disabled
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes[0]).toBeDisabled();
+    expect(screen.getByText(/A ficha deste piloto já foi concluída/)).toBeTruthy();
+    // Piloto 2 (Dieter) ficha is pending → checkbox enabled
+    expect(checkboxes[1]).not.toBeDisabled();
+  });
+
+  // === SUMMARY & PAYLOAD TESTS ===
+
+  it('19. summary shows Modelo de Sessão, Ficha, Qualificação columns', async () => {
+    renderForm();
+    await completeCurricularWithSupportCrew();
+    await goToSegments();
+    expect(screen.getByText('Modelo de Sessão')).toBeTruthy();
+    expect(screen.getByText('Ficha')).toBeTruthy();
+    expect(screen.getByText('Qualificação')).toBeTruthy();
+    expect(screen.queryByText(/Treinamento planejado/i)).toBeNull();
+  });
+
+  it('20. submits two curricular pilots with distinct models', async () => {
     renderForm();
     await completeTwoCurricularCrew();
     await goToSegments();
@@ -294,7 +396,7 @@ describe('SharedSessionForm rendered', () => {
     expect(payload.participantes[0]).not.toHaveProperty('treinamento_planejado_id');
   });
 
-  it('18. submits curricular plus support with support model null and no ficha', async () => {
+  it('21. submits curricular plus support with support having no model', async () => {
     renderForm();
     await completeCurricularWithSupportCrew();
     await goToSegments();
@@ -312,17 +414,9 @@ describe('SharedSessionForm rendered', () => {
     );
   });
 
-  it('19. summary shows Modelo de Sessão, Ficha, Qualificação, and no Treinamento planejado', async () => {
-    renderForm();
-    await completeCurricularWithSupportCrew();
-    await goToSegments();
-    expect(screen.getByText('Modelo de Sessão')).toBeTruthy();
-    expect(screen.getByText('Ficha')).toBeTruthy();
-    expect(screen.getByText('Qualificação')).toBeTruthy();
-    expect(screen.queryByText(/Treinamento planejado/i)).toBeNull();
-  });
+  // === EDIT MODE TESTS ===
 
-  it('20. hydrates edit data and exposes segment controls without training dropdown', async () => {
+  it('22. hydrates edit data and reaches Segmentos by step click', async () => {
     mockGetSharedSession.mockResolvedValue({
       success: true,
       data: {
@@ -336,22 +430,12 @@ describe('SharedSessionForm rendered', () => {
         ],
         segmentos: [
           {
-            inicio: '07:00',
-            fim: '08:00',
-            atribuicao_curricular_id: 31,
-            funcoes: [
-              { funcionario_id: 3, funcao: 'PF' },
-              { funcionario_id: 7, funcao: 'PM' },
-            ],
+            inicio: '07:00', fim: '08:00', atribuicao_curricular_id: 31,
+            funcoes: [{ funcionario_id: 3, funcao: 'PF' }, { funcionario_id: 7, funcao: 'PM' }],
           },
           {
-            inicio: '08:00',
-            fim: '09:00',
-            atribuicao_curricular_id: 32,
-            funcoes: [
-              { funcionario_id: 7, funcao: 'PF' },
-              { funcionario_id: 3, funcao: 'PM' },
-            ],
+            inicio: '08:00', fim: '09:00', atribuicao_curricular_id: 32,
+            funcoes: [{ funcionario_id: 7, funcao: 'PF' }, { funcionario_id: 3, funcao: 'PM' }],
           },
         ],
       },
@@ -360,22 +444,44 @@ describe('SharedSessionForm rendered', () => {
     renderForm({ editSessionId: 100 });
     expect(screen.getByText(/Carregando dados/)).toBeTruthy();
     await waitFor(() => expect(screen.queryByText(/Carregando dados/)).toBeNull());
-    await userEvent.click(screen.getByRole('button', { name: /3\. Segmentos/ }));
+    await userEvent.click(screen.getByRole('button', { name: /2\. Segmentos/ }));
     expect(screen.getByLabelText('PF do segmento 1')).toHaveValue('3');
     expect(screen.queryByLabelText(/Treinamento planejado/i)).toBeNull();
   });
 
-  it('21. no step is decorative-only', () => {
-    renderForm();
-    const stepper = screen.getByRole('list', { name: 'Etapas da sessão compartilhada' });
-    const steps = within(stepper).getAllByRole('button');
-    expect(steps).toHaveLength(3);
-    for (const step of steps) {
-      expect(step.tagName).toBe('BUTTON');
-    }
+  it('23. edit mode shows Salvar button instead of Criar', async () => {
+    mockGetSharedSession.mockResolvedValue({
+      success: true,
+      data: {
+        participantes: [
+          { funcionario_id: 3, funcao: 'PIC', funcionario_nome: 'Ramos' },
+          { funcionario_id: 7, funcao: 'SIC', funcionario_nome: 'Dieter' },
+        ],
+        atribuicoes: [
+          { id: 31, funcionario_id: 3, modelo_sessao_id: 63, modelo_codigo: 'SK76-I-01/12', modelo_nome: 'Inicial', gera_ficha: 1 },
+          { id: 32, funcionario_id: 7, modelo_sessao_id: 64, modelo_codigo: 'SK76-P-02/03', modelo_nome: 'Periódico', gera_ficha: 1 },
+        ],
+        segmentos: [
+          {
+            inicio: '07:00', fim: '08:00', atribuicao_curricular_id: 31,
+            funcoes: [{ funcionario_id: 3, funcao: 'PF' }, { funcionario_id: 7, funcao: 'PM' }],
+          },
+          {
+            inicio: '08:00', fim: '09:00', atribuicao_curricular_id: 32,
+            funcoes: [{ funcionario_id: 7, funcao: 'PF' }, { funcionario_id: 3, funcao: 'PM' }],
+          },
+        ],
+      },
+    });
+
+    renderForm({ editSessionId: 100 });
+    await waitFor(() => expect(screen.queryByText(/Carregando dados/)).toBeNull());
+    await completeTwoCurricularCrew();
+    await goToSegments();
+    expect(screen.getByRole('button', { name: 'Salvar sessão compartilhada' })).toBeTruthy();
   });
 
-  it('22. legacy simple-session label remains outside this component', () => {
+  it('24. simple-session label is not rendered in shared form', () => {
     renderForm();
     expect(screen.queryByText('Sessão simples')).toBeNull();
   });
