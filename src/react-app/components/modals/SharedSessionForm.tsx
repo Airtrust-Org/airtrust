@@ -10,7 +10,7 @@ import {
   type SharedSessionPayload,
 } from '@/react-app/config/sharedSessions';
 
-export type SharedSessionStep = 'reserva' | 'tripulacao' | 'segmentos';
+export type SharedSessionStep = 'tripulacao' | 'segmentos';
 
 interface Funcionario {
   id: number;
@@ -112,9 +112,8 @@ const EMPTY_SEGMENT: SegmentAssignment = {
 };
 
 const STEP_LABELS: Record<SharedSessionStep, string> = {
-  reserva: '1. Reserva',
-  tripulacao: '2. Tripulação',
-  segmentos: '3. Segmentos',
+  tripulacao: '1. Tripulação',
+  segmentos: '2. Segmentos',
 };
 
 function timeToMinutes(value: string): number {
@@ -166,7 +165,7 @@ export default function SharedSessionForm({
   activeStep: controlledActiveStep,
   onActiveStepChange,
 }: SharedSessionFormProps) {
-  const [internalActiveStep, setInternalActiveStep] = useState<SharedSessionStep>('reserva');
+  const [internalActiveStep, setInternalActiveStep] = useState<SharedSessionStep>('tripulacao');
   const activeStep = controlledActiveStep || internalActiveStep;
   const setActiveStep = useCallback(
     (step: SharedSessionStep) => {
@@ -193,6 +192,7 @@ export default function SharedSessionForm({
   const [loadingModelos, setLoadingModelos] = useState<[boolean, boolean]>([false, false]);
   const [modelos, setModelos] = useState<[ModeloSessao[], ModeloSessao[]]>([[], []]);
   const [modelosErro, setModelosErro] = useState<[string | null, string | null]>([null, null]);
+  const [fichaConcluida, setFichaConcluida] = useState<[boolean, boolean]>([false, false]);
 
   const participantIds = participants.map((participant) => participant.funcionario?.id ?? null);
 
@@ -438,7 +438,7 @@ export default function SharedSessionForm({
         const result = await getSharedSession(editSessionId);
         if (!mounted) return;
         if (!result.success || !result.data) throw new Error(result.error || 'Sessão não encontrada.');
-        const detail = result.data as SharedDetail;
+        const detail = result.data as SharedDetail & { fichas?: Array<{ id: number; status: string; colaborador_id_aluno?: number }> };
         const restored: [ParticipantState, ParticipantState] = [
           { ...EMPTY_PARTICIPANT },
           { ...EMPTY_PARTICIPANT },
@@ -474,6 +474,15 @@ export default function SharedSessionForm({
         }
         setParticipants(restored);
         setModelos(restoredModelos);
+        const protectedStatuses = new Set(['APROVADO', 'NAO_APROVADO', 'CONCLUIDA']);
+        setFichaConcluida([
+          (detail.fichas || []).some(
+            (ficha: any) => Number(ficha.colaborador_id_aluno) === restored[0].funcionario?.id && protectedStatuses.has(String(ficha.status || '').trim().toUpperCase()),
+          ),
+          (detail.fichas || []).some(
+            (ficha: any) => Number(ficha.colaborador_id_aluno) === restored[1].funcionario?.id && protectedStatuses.has(String(ficha.status || '').trim().toUpperCase()),
+          ),
+        ]);
         restored.forEach((participant, index) => {
           if (participant.funcionario && participant.cumpreTreinamento && reservationReady) {
             void fetchModelos(index as 0 | 1, participant.modeloSessaoId);
@@ -550,14 +559,9 @@ export default function SharedSessionForm({
   const requestStep = useCallback(
     (step: SharedSessionStep) => {
       setStepMessage(null);
-      if (step === 'reserva') {
-        setActiveStep('reserva');
-        return;
-      }
       if (step === 'tripulacao') {
         if (!reservationReady) {
-          markAttempted('reserva');
-          setActiveStep('reserva');
+          markAttempted('tripulacao');
           setStepMessage('Complete os dados da reserva para configurar a tripulação.');
           return;
         }
@@ -565,8 +569,8 @@ export default function SharedSessionForm({
         return;
       }
       if (!reservationReady) {
-        markAttempted('reserva');
-        setActiveStep('reserva');
+        markAttempted('tripulacao');
+        setActiveStep('tripulacao');
         setStepMessage('Complete os dados da reserva para configurar a tripulação.');
         return;
       }
@@ -583,11 +587,10 @@ export default function SharedSessionForm({
 
   const handleSubmit = async () => {
     setSubmitted(true);
-    setAttemptedSteps(new Set(['reserva', 'tripulacao', 'segmentos']));
+    setAttemptedSteps(new Set(['tripulacao', 'segmentos']));
     if (allErrors.length > 0) {
       toast.error(allErrors[0]);
-      if (reservationErrors.length > 0) setActiveStep('reserva');
-      else if (participantErrors.length > 0) setActiveStep('tripulacao');
+      if (participantErrors.length > 0) setActiveStep('tripulacao');
       else setActiveStep('segmentos');
       return;
     }
@@ -632,13 +635,11 @@ export default function SharedSessionForm({
     return <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500">Carregando dados da sessão compartilhada...</div>;
   }
 
-  const showReservationErrors = submitted || attemptedSteps.has('reserva');
   const showParticipantErrors = submitted || attemptedSteps.has('tripulacao');
   const showSegmentErrors = submitted || attemptedSteps.has('segmentos');
 
   const stepStatus = (step: SharedSessionStep) => {
     if (activeStep === step) return 'current';
-    if (step === 'reserva') return reservationReady ? 'completed' : showReservationErrors ? 'error' : 'idle';
     if (step === 'tripulacao') return crewReady ? 'completed' : showParticipantErrors ? 'error' : 'idle';
     return crewReady && segmentErrors.length === 0 ? 'completed' : showSegmentErrors ? 'error' : 'idle';
   };
@@ -649,30 +650,22 @@ export default function SharedSessionForm({
     </ul>
   );
 
-  const renderReservationStep = () => (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4" data-testid="shared-step-reserva">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-800">Reserva</h3>
-        <p className="text-xs text-slate-500">Revise equipamento, simulador, data, horários, instrutor e observações acima.</p>
+  const renderReservationSummary = () => (
+    <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="shared-reservation-summary">
+      <h3 className="text-sm font-semibold text-slate-800">Dados da reserva</h3>
+      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600 sm:grid-cols-3">
+        <div><span className="font-medium">Equipamento:</span> {simuladorModelo || '—'}</div>
+        <div><span className="font-medium">Simulador:</span> {simuladorId ? `#${simuladorId}` : '—'}</div>
+        <div><span className="font-medium">Data:</span> {data || '—'}</div>
+        <div><span className="font-medium">Início:</span> {horarioInicio || '—'}</div>
+        <div><span className="font-medium">Fim:</span> {horarioFim || '—'}</div>
+        <div><span className="font-medium">Instrutor:</span> {instrutorId ? `#${instrutorId}` : '—'}</div>
       </div>
-      {reservationReady ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Reserva completa para configurar a tripulação.
-        </div>
-      ) : (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Complete os dados da reserva para configurar a tripulação.
-          {showReservationErrors && renderErrorList(reservationErrors)}
+      {!reservationReady && (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Complete os dados da reserva acima para configurar a tripulação.
         </div>
       )}
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
-        <button type="button" onClick={onClose} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-          Cancelar
-        </button>
-        <button type="button" onClick={() => requestStep('tripulacao')} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-          Continuar para Tripulação
-        </button>
-      </div>
     </div>
   );
 
@@ -718,11 +711,12 @@ export default function SharedSessionForm({
             />
             {participant.funcionario && (
               <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
-                <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+                <label className={`flex items-start gap-2 text-sm text-slate-700 ${fichaConcluida[index] ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                   <input
                     type="checkbox"
                     checked={participant.cumpreTreinamento}
-                    disabled={Boolean(editSessionId)}
+                    disabled={fichaConcluida[index]}
+                    aria-disabled={fichaConcluida[index]}
                     onChange={(event) => {
                       const checked = event.target.checked;
                       updateParticipant(participantIndex, { cumpreTreinamento: checked });
@@ -733,9 +727,15 @@ export default function SharedSessionForm({
                   />
                   <span>
                     Cumpre treinamento nesta reserva
-                    <span className="block text-xs text-slate-500">
-                      Desmarque para apoio operacional sem ficha e sem progressão curricular.
-                    </span>
+                    {fichaConcluida[index] ? (
+                      <span className="block text-xs text-red-600 font-medium">
+                        A ficha deste piloto já foi concluída. A condição curricular não pode mais ser alterada.
+                      </span>
+                    ) : (
+                      <span className="block text-xs text-slate-500">
+                        Desmarque para apoio operacional sem ficha e sem progressão curricular.
+                      </span>
+                    )}
                   </span>
                 </label>
 
@@ -776,7 +776,11 @@ export default function SharedSessionForm({
 
                 <p className={`flex items-center gap-1 text-xs ${participant.cumpreTreinamento ? 'text-emerald-700' : 'text-amber-700'}`}>
                   {participant.cumpreTreinamento ? <FileText className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-                  {participant.cumpreTreinamento ? 'Gera ficha e progressão conforme o modelo e o segmento curricular.' : 'Apoio: não gera ficha nem progressão.'}
+                  {participant.cumpreTreinamento
+                    ? (participant.modeloSessaoId && modelById.get(participant.modeloSessaoId)?.gera_qualificacao === 1
+                      ? 'Gera ficha e qualificação.'
+                      : 'Gera ficha. Este modelo não gera qualificação.')
+                    : 'Apoio: não gera ficha nem qualificação. As horas PF/PM continuam registradas.'}
                 </p>
               </div>
             )}
@@ -789,8 +793,8 @@ export default function SharedSessionForm({
         </div>
       )}
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
-        <button type="button" onClick={() => requestStep('reserva')} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-          Voltar
+        <button type="button" onClick={onClose} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          Cancelar
         </button>
         <button type="button" onClick={() => requestStep('segmentos')} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           Continuar para Segmentos
@@ -959,7 +963,7 @@ export default function SharedSessionForm({
           <p className="mr-auto text-xs text-red-700">{allErrors.length} pendência(s) precisam ser corrigidas antes de salvar.</p>
         )}
         <button type="button" onClick={() => requestStep('tripulacao')} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-          Voltar
+          Voltar para Tripulação
         </button>
         <button type="button" onClick={handleSubmit} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {loading ? 'Salvando...' : editSessionId ? 'Salvar sessão compartilhada' : 'Criar sessão compartilhada'}
@@ -980,8 +984,8 @@ export default function SharedSessionForm({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="list" aria-label="Etapas da sessão compartilhada">
-        {(['reserva', 'tripulacao', 'segmentos'] as SharedSessionStep[]).map((step) => {
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="list" aria-label="Etapas da sessão compartilhada">
+        {(['tripulacao', 'segmentos'] as SharedSessionStep[]).map((step) => {
           const status = stepStatus(step);
           const isCurrent = activeStep === step;
           const icon = status === 'completed' ? '✓' : status === 'error' ? '!' : isCurrent ? '●' : '○';
@@ -991,7 +995,7 @@ export default function SharedSessionForm({
               type="button"
               onClick={() => requestStep(step)}
               aria-current={isCurrent ? 'step' : undefined}
-              aria-disabled={step === 'tripulacao' ? !reservationReady : step === 'segmentos' ? !crewReady : undefined}
+              aria-disabled={step === 'segmentos' ? !crewReady : undefined}
               className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                 status === 'completed'
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
@@ -1022,7 +1026,8 @@ export default function SharedSessionForm({
         </div>
       )}
 
-      {activeStep === 'reserva' && renderReservationStep()}
+      {renderReservationSummary()}
+
       {activeStep === 'tripulacao' && renderCrewStep()}
       {activeStep === 'segmentos' && renderSegmentsStep()}
     </section>

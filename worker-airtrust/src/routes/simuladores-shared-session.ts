@@ -1152,6 +1152,7 @@ async function updateSharedSessionStructureTransactional(
     );
   }
 
+  const newAssignmentUuids: string[] = [];
   for (const summary of payload.resumo_participantes) {
     const participant = payload.participantes.find(
       (item) => item.funcionario_id === summary.funcionario_id,
@@ -1159,93 +1160,232 @@ async function updateSharedSessionStructureTransactional(
     if (!participant?.cumpre_treinamento) {
       continue;
     }
-    const assignmentId = assignmentIdByFuncionario.get(summary.funcionario_id);
-    if (!assignmentId) {
-      throw new Error(`Atribuição curricular de ${summary.funcionario_id} não pertence à sessão`);
-    }
+    const existingAssignmentId = assignmentIdByFuncionario.get(summary.funcionario_id);
     const model = participant.modelo_sessao_id
       ? modelosMap.get(Number(participant.modelo_sessao_id))
       : null;
-    statements.push(
-      prepareStatement(
-        db,
-        `UPDATE simulador_atribuicoes_curriculares
-         SET carga_horaria_total_minutos = ?,
-             updated_at = datetime('now')
-         WHERE id = ?
-           AND empresa_id = ?
-           AND deleted_at IS NULL`,
-        summary.curricular_minutos,
-        assignmentId,
-        empresaId,
-      ),
-      prepareStatement(
-        db,
-        `UPDATE fichas_sessao
-         SET instrutor_id = ?,
-             tipo_sessao = ?,
-             tipo_aeronave = ?,
-             data_sessao = ?,
-             template_id = ?,
-             updated_at = datetime('now')
-         WHERE atribuicao_curricular_id = ?
-           AND empresa_id = ?
-           AND deleted_at IS NULL`,
-        payload.instrutor_id,
-        model?.codigo || primaryModel?.codigo || 'SHARED',
-        simulatorModel,
-        payload.data,
-        participant.modelo_sessao_id || null,
-        assignmentId,
-        empresaId,
-      ),
+
+    if (existingAssignmentId) {
+      // UPDATE existing curricular assignment
+      statements.push(
+        prepareStatement(
+          db,
+          `UPDATE simulador_atribuicoes_curriculares
+           SET carga_horaria_total_minutos = ?,
+               modelo_sessao_id = ?,
+               gera_ficha = ?,
+               updated_at = datetime('now')
+           WHERE id = ?
+             AND empresa_id = ?
+             AND deleted_at IS NULL`,
+          summary.curricular_minutos,
+          participant.modelo_sessao_id || null,
+          participant.gera_ficha ? 1 : 0,
+          existingAssignmentId,
+          empresaId,
+        ),
+        prepareStatement(
+          db,
+          `UPDATE fichas_sessao
+           SET instrutor_id = ?,
+               tipo_sessao = ?,
+               tipo_aeronave = ?,
+               data_sessao = ?,
+               template_id = ?,
+               updated_at = datetime('now')
+           WHERE atribuicao_curricular_id = ?
+             AND empresa_id = ?
+             AND deleted_at IS NULL`,
+          payload.instrutor_id,
+          model?.codigo || primaryModel?.codigo || 'SHARED',
+          simulatorModel,
+          payload.data,
+          participant.modelo_sessao_id || null,
+          existingAssignmentId,
+          empresaId,
+        ),
+      );
+    } else {
+      // CREATE new curricular assignment (apoio → curricular)
+      const participantId = participantIdByFuncionario.get(summary.funcionario_id);
+      if (!participantId) {
+        throw new Error(`Participante ${summary.funcionario_id} não pertence à sessão compartilhada`);
+      }
+      const newAssignmentUuid = crypto.randomUUID();
+      newAssignmentUuids.push(newAssignmentUuid);
+      statements.push(
+        prepareStatement(
+          db,
+          `INSERT INTO simulador_atribuicoes_curriculares
+             (uuid, empresa_id, agendamento_id, participante_id, treinamento_planejado_id, modelo_sessao_id, gera_ficha, carga_horaria_total_minutos, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ATIVA')`,
+          newAssignmentUuid,
+          empresaId,
+          sessaoId,
+          participantId,
+          participant.treinamento_planejado_id || null,
+          participant.modelo_sessao_id || null,
+          participant.gera_ficha ? 1 : 0,
+          summary.curricular_minutos,
+        ),
+      );
+
+      if (participant.gera_ficha && participant.modelo_sessao_id) {
+        const fichaUuid = crypto.randomUUID();
+        statements.push(
+          prepareStatement(
+            db,
+            `INSERT INTO fichas_sessao
+               (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id, atribuicao_curricular_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?, (SELECT id FROM simulador_atribuicoes_curriculares WHERE uuid = ?))`,
+            fichaUuid,
+            sessaoId,
+            participant.funcionario_id,
+            payload.instrutor_id,
+            model?.codigo || primaryModel?.codigo || 'SHARED',
+            simulatorModel,
+            payload.data,
+            participant.modelo_sessao_id,
+            empresaId,
+            newAssignmentUuid,
+          ),
+        );
+
+        const manobras = await loadFichaManobrasForModelo(db, Number(participant.modelo_sessao_id));
+        for (const manobra of manobras) {
+          statements.push(
+            prepareStatement(
+              db,
+              `INSERT INTO fichas_sessao_manobras
+                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
+               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
+              fichaUuid,
+              manobra.codigo,
+              manobra.nome,
+              manobra.descricao || manobra.nome,
+              manobra.categoria || 'GERAL',
+              manobra.ordem,
+              manobra.tripulante || 'AB',
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // Map to track new assignment UUIDs (apoio → curricular) for segment subqueries
+  const newAssignmentUuidByFuncionario = new Map<number, string>();
+  for (const summary of payload.resumo_participantes) {
+    const participant = payload.participantes.find(
+      (item) => item.funcionario_id === summary.funcionario_id,
     );
+    if (participant?.cumpre_treinamento && !assignmentIdByFuncionario.has(summary.funcionario_id)) {
+      // This assignment was created above with a UUID; we need to track it
+      // Find the UUID from the statements we already pushed
+      const lastAssignmentStmt = statements.filter(
+        (s: any) => s.statement?.query?.includes('INSERT INTO simulador_atribuicoes_curriculares') &&
+          (s.args as any[])?.some((a: any) => typeof a === 'string' && a.length === 36),
+      );
+      // We'll store assignment IDs differently: use subquery for new, direct ID for existing
+    }
   }
 
   for (const segmento of payload.segmentos) {
     const segmentoUuid = crypto.randomUUID();
-    const assignmentId = segmento.atribuicao_funcionario_id
+    const existingAssignmentId = segmento.atribuicao_funcionario_id
       ? assignmentIdByFuncionario.get(segmento.atribuicao_funcionario_id) || null
       : null;
-    statements.push(
-      prepareStatement(
-        db,
-        `INSERT INTO simulador_agendamento_segmentos
-           (uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, atribuicao_curricular_id, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ATIVO')`,
-        segmentoUuid,
-        empresaId,
-        sessaoId,
-        segmento.ordem,
-        segmento.inicio,
-        segmento.fim,
-        segmento.duracao_minutos,
-        assignmentId,
-      ),
-    );
+
+    if (segmento.atribuicao_funcionario_id && !existingAssignmentId) {
+      // New assignment (apoio → curricular): use dynamic subquery lookup
+      // Find the matching new assignment UUID from the INSERT we already pushed
+      statements.push(
+        prepareStatement(
+          db,
+          `INSERT INTO simulador_agendamento_segmentos
+             (uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, atribuicao_curricular_id, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT sac.id FROM simulador_atribuicoes_curriculares sac
+             INNER JOIN sessoes_participantes sp ON sp.id = sac.participante_id AND sp.deleted_at IS NULL
+             WHERE sac.agendamento_id = ? AND sp.funcionario_id = ? AND sac.deleted_at IS NULL
+             ORDER BY sac.id DESC LIMIT 1), 'ATIVO')`,
+          segmentoUuid,
+          empresaId,
+          sessaoId,
+          segmento.ordem,
+          segmento.inicio,
+          segmento.fim,
+          segmento.duracao_minutos,
+          sessaoId,
+          segmento.atribuicao_funcionario_id,
+        ),
+      );
+    } else {
+      statements.push(
+        prepareStatement(
+          db,
+          `INSERT INTO simulador_agendamento_segmentos
+             (uuid, empresa_id, agendamento_id, ordem, inicio, fim, duracao_minutos, atribuicao_curricular_id, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ATIVO')`,
+          segmentoUuid,
+          empresaId,
+          sessaoId,
+          segmento.ordem,
+          segmento.inicio,
+          segmento.fim,
+          segmento.duracao_minutos,
+          existingAssignmentId,
+        ),
+      );
+    }
 
     for (const funcao of segmento.funcoes) {
       const participantId = participantIdByFuncionario.get(funcao.funcionario_id);
       if (!participantId) {
         throw new Error(`Participante ${funcao.funcionario_id} não pertence à sessão compartilhada`);
       }
-      statements.push(
-        db
-          .prepare(
-            `INSERT INTO simulador_segmento_participantes
-               (uuid, empresa_id, segmento_id, participante_id, funcao, duracao_minutos, atribuicao_curricular_id)
-             VALUES (?, ?, (SELECT id FROM simulador_agendamento_segmentos WHERE uuid = ?), ?, ?, ?, ?)`,
-          )
-          .bind(
-            crypto.randomUUID(),
-            empresaId,
-            segmentoUuid,
-            participantId,
-            funcao.funcao,
-            segmento.duracao_minutos,
-            segmento.atribuicao_funcionario_id === funcao.funcionario_id ? assignmentId : null,
-          ),
-      );
+      const isCurricular = segmento.atribuicao_funcionario_id === funcao.funcionario_id;
+      if (isCurricular && !existingAssignmentId) {
+        // New assignment — use subquery
+        statements.push(
+          db
+            .prepare(
+              `INSERT INTO simulador_segmento_participantes
+                 (uuid, empresa_id, segmento_id, participante_id, funcao, duracao_minutos, atribuicao_curricular_id)
+               VALUES (?, ?, (SELECT id FROM simulador_agendamento_segmentos WHERE uuid = ?), ?, ?, ?, (SELECT sac.id FROM simulador_atribuicoes_curriculares sac
+                 INNER JOIN sessoes_participantes sp ON sp.id = sac.participante_id AND sp.deleted_at IS NULL
+                 WHERE sac.agendamento_id = ? AND sp.funcionario_id = ? AND sac.deleted_at IS NULL
+                 ORDER BY sac.id DESC LIMIT 1))`,
+            )
+            .bind(
+              crypto.randomUUID(),
+              empresaId,
+              segmentoUuid,
+              participantId,
+              funcao.funcao,
+              segmento.duracao_minutos,
+              sessaoId,
+              funcao.funcionario_id,
+            ),
+        );
+      } else {
+        statements.push(
+          db
+            .prepare(
+              `INSERT INTO simulador_segmento_participantes
+                 (uuid, empresa_id, segmento_id, participante_id, funcao, duracao_minutos, atribuicao_curricular_id)
+               VALUES (?, ?, (SELECT id FROM simulador_agendamento_segmentos WHERE uuid = ?), ?, ?, ?, ?)`,
+            )
+            .bind(
+              crypto.randomUUID(),
+              empresaId,
+              segmentoUuid,
+              participantId,
+              funcao.funcao,
+              segmento.duracao_minutos,
+              isCurricular ? existingAssignmentId : null,
+            ),
+        );
+      }
     }
   }
 

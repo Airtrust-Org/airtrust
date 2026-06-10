@@ -212,7 +212,7 @@ export default function ModalNovaSessao({
   const [participantes, setParticipantes] = useState<Participante[]>(participantesIniciais());
   const [modoCompartilhado, setModoCompartilhado] = useState(false);
   const [sharedSessionsEnabled, setSharedSessionsEnabled] = useState(false);
-  const [sharedSessionStep, setSharedSessionStep] = useState<SharedSessionStep>('reserva');
+  const [sharedSessionStep, setSharedSessionStep] = useState<SharedSessionStep>('tripulacao');
 
   const {
     hasFap07Selecionada,
@@ -1625,7 +1625,7 @@ export default function ModalNovaSessao({
     setObservacoes('');
     setParticipantes(participantesIniciais());
     setModoCompartilhado(false);
-    setSharedSessionStep('reserva');
+    setSharedSessionStep('tripulacao');
   }
 
   // ========== AÇÕES EXTRAS (EMAIL, WHATSAPP, DELETE, FICHAS) ==========
@@ -1693,7 +1693,7 @@ export default function ModalNovaSessao({
 
   if (!isOpen) return null;
 
-  const showSharedReservationFields = !modoCompartilhado || sharedSessionStep === 'reserva';
+  const showSharedReservationFields = true; // Always show — reservation data always visible
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
@@ -1740,7 +1740,7 @@ export default function ModalNovaSessao({
                   type="button"
                   onClick={() => {
                     setModoCompartilhado(false);
-                    setSharedSessionStep('reserva');
+                    setSharedSessionStep('tripulacao');
                   }}
                   disabled={loading}
                   className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-all ${
@@ -1755,7 +1755,7 @@ export default function ModalNovaSessao({
                   type="button"
                   onClick={() => {
                     setModoCompartilhado(true);
-                    setSharedSessionStep('reserva');
+                    setSharedSessionStep('tripulacao');
                     if (tipoDispositivo !== 'SIMULADOR') {
                       handleTipoDispositivoChange('SIMULADOR');
                     }
