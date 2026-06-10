@@ -64,7 +64,6 @@ export function createSharedCurricularSignature(
         return {
           funcionario_id: Number(participante.funcionario_id),
           cumpre_treinamento: Boolean(atribuicao),
-          treinamento_planejado_id: atribuicao?.treinamento_planejado_id || null,
           modelo_sessao_id: atribuicao?.modelo_sessao_id || null,
           gera_ficha: Boolean(atribuicao?.gera_ficha),
         };
@@ -167,6 +166,12 @@ export function validateAndNormalizeSharedSessionRequest(
     if (participante.cumpre_treinamento && !participante.modelo_sessao_id) {
       throw new Error(
         `Participante ${participante.funcionario_id} precisa informar modelo_sessao_id`,
+      );
+    }
+
+    if (!participante.cumpre_treinamento && participante.modelo_sessao_id) {
+      throw new Error(
+        `Participante ${participante.funcionario_id} não pode informar modelo_sessao_id como apoio`,
       );
     }
 

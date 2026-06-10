@@ -331,3 +331,338 @@
   - production health remains green
   - no unrelated files are added to the publication diff
   - `SIMULATOR_SHARED_SESSIONS_ENABLED` remains unset/false
+
+---
+
+## First Activation Attempt — FAILED (2026-06-09 ~23:40 UTC)
+
+### Pre-activation
+
+| Check | Result |
+|---|---|
+| Worker version | `e7e06ab2` |
+| Health | healthy |
+| Capability | `simulador_shared_sessions: false` |
+| Pages deployment | `474b4ca4` (source: `e7e06ab`) |
+| Bundle | `ModalNovaSessao-xKWJUoXt.js` |
+| Bundle hash | `c477ef5380...` confirmed local/remote |
+| Markers in bundle | Sessão compartilhada, Sessão simples, simulador_shared_sessions, /capabilities |
+
+### Activation
+
+- `wrangler.toml`: `SIMULATOR_SHARED_SESSIONS_ENABLED = "true"` added
+- `npm run deploy:worker:safe` deployed worker `2026-06-09T23:39:57Z-e7e06ab2`
+- Post-deploy capability: `true` ✓
+- No migrations. No Pages.
+
+### Failure
+
+- UI validation: selector NOT visible
+- Modal title "Nova Sessão de Treinamento" (correct component loaded)
+- Form starts at "Tipo de Sessão de Voo" — no modality selector above it
+- Capability endpoint returns `true` simultaneously
+
+### Classification
+
+`FEATURE_ROLLED_BACK_FRONTEND_BUNDLE_MISMATCH` (after initial bundle concern)
+→ Reclassified to `FEATURE_ROLLED_BACK_RUNTIME_RENDERING_MISMATCH`
+
+---
+
+## Root Cause Investigation (2026-06-09 ~23:45 – 2026-06-10 ~00:15)
+
+### Component graph verified
+
+- Only ONE `ModalNovaSessao.tsx` source file exists
+- `pages/Simuladores.tsx` lazily imports it via `lazyWithRetry()`
+- Only ONE consumer calls `isSharedSessionsEnabled()` — the modal's open useEffect
+- No wrappers, duplicates, or stale components
+
+### Production bundle verified
+
+- Deployed chunk: `ModalNovaSessao-xKWJUoXt.js`
+- Contains all shared session markers
+- Compiled code audit: capability fetch logic correct
+- API_BASE_URL correctly resolved to `https://api.airtrust.online/api`
+- CSP allows cross-origin fetch to `api.airtrust.online`
+
+### Root cause identified
+
+**Primary: Browser HTTP cache on `/api/capabilities`**
+
+The `/api/capabilities` endpoint returns `Cache-Control: public, max-age=300`.
+The `fetch()` in `isSharedSessionsEnabled()` had NO `cache` option, using the
+browser's default cache behavior. When the browser previously fetched the
+endpoint (receiving `simulador_shared_sessions: false`), that response was
+cached for 5 minutes. A hard refresh (Cmd+Shift+R) does NOT clear the XHR/fetch
+HTTP cache — it only clears page resource caches.
+
+The browser served the stale `false` response from its HTTP cache without
+hitting the network, even though the worker had been redeployed with `true`.
+
+**Secondary: In-memory cache (60s TTL)**
+
+The module-level `_cachedEnabled` with 60-second TTL added a second layer
+of staleness within a single page session. Combined with the HTTP cache,
+the capability check could return stale values for up to 5 minutes after
+an operational flag change.
+
+### Root cause confirmed
+
+- `Cache-Control: public, max-age=300` on `/api/capabilities` response
+- `fetch()` call in `sharedSessions.ts` had no `{cache: 'no-cache'}` option
+- Both caches (browser HTTP + in-memory JS) independently stale
+- Tests reproduced the stale cache scenario
+
+---
+
+## Fix Applied (2026-06-10 ~00:15 UTC)
+
+### Changes in commit `e9157d4c`
+
+1. **`sharedSessions.ts`**:
+   - Added `cache: 'no-cache'` to `fetch()` — always revalidates with server
+   - Added `forceRefresh` option to `isSharedSessionsEnabled()`
+   - Reduced in-memory TTL from 60s → 30s
+   - Removed console.log instrumentation
+
+2. **`ModalNovaSessao.tsx`**:
+   - Calls `isSharedSessionsEnabled({ forceRefresh: true })` when opening modal
+   - Ensures fresh capability check on every modal open
+
+3. **New tests** (`ModalNovaSessao.shared-capability-cache.test.tsx`):
+   - 4 tests covering: cache no-cache, forceRefresh, in-memory cache, reset
+   - Tests verify stale cache scenario (false→true after re-fetch)
+
+4. **`wrangler.toml`**:
+   - Canonical `SIMULATOR_SHARED_SESSIONS_ENABLED = "false"` with doc comment
+
+### Validation
+
+| Check | Result |
+|---|---|
+| TypeScript (root) | PASS |
+| TypeScript (worker) | PASS |
+| Frontend tests | 762 passed (76 files) |
+| New cache tests | 4/4 passed |
+| Worker tests | 1157 passed |
+| Lint | 4/4 PASS |
+| Build | PASS |
+
+### Pages Deployment
+
+| Item | Value |
+|---|---|
+| Commit | `e9157d4c` |
+| Pages URL | `a160088e.airtrust.pages.dev` |
+| Main domain | `airtrust.online` |
+| Build version | `e9157d4c` |
+| Entry JS | `index-CiHhQ6Kc.js` |
+| ModalNovaSessao chunk | `ModalNovaSessao-CdGHoOPN.js` |
+| `cache:"no-cache"` in chunk | ✅ Confirmed |
+| `forceRefresh:!0` in chunk | ✅ Confirmed |
+
+---
+
+## Current Production State (2026-06-10 ~00:15 UTC)
+
+| Item | Value |
+|---|---|
+| Worker version | `2026-06-10T00:01:07Z-e7e06ab2` (rollback) |
+| Health | healthy |
+| Capability | `simulador_shared_sessions: false` |
+| Frontend | `e9157d4c` (fix deployed) |
+| Flag in wrangler.toml | `false` |
+| UI behavior | Selector hidden (correct with flag=false) |
+
+---
+
+## Required Validation Before Third Activation
+
+1. **With flag=false**: Open `https://airtrust.online/simuladores` → "Nova Sessão de Voo"
+   → Confirm selector is HIDDEN (feature correctly disabled).
+   This validates the frontend and capability check are working correctly.
+
+2. **Activate flag=true**: Redeploy worker only (no migrations, no Pages).
+
+3. **With flag=true**: Hard refresh → open modal → selector MUST appear.
+   Use DevTools Network tab to verify:
+   - Capability response returns `true`
+   - ModalNovaSessao chunk loaded is `CdGHoOPN` (or successor)
+   - No cached response served for capabilities
+
+4. If selector visible → proceed with smoke testing per original plan.
+
+5. If selector NOT visible → check Network tab for cached vs fresh response,
+   verify `cache:no-cache` in request headers, then escalate.
+
+---
+
+## Classification
+
+- Previous: `FEATURE_ROLLED_BACK_RUNTIME_RENDERING_MISMATCH`
+- Current: `FRONTEND_RUNTIME_PATH_FIXED_READY_FOR_THIRD_ACTIVATION`
+- Root cause: Browser HTTP cache on capability endpoint (`Cache-Control: max-age=300`) + missing `cache: no-cache` in fetch options
+- Fix: `cache: no-cache` in fetch + `forceRefresh` parameter + tests
+- Flag: `false` in production
+- UI: Selector hidden (correct)
+
+## Recommendation
+
+- Recommended status: `READY_FOR_CONTROLLED_RELEASE`
+- This status remains valid only while:
+  - the reviewed commit chain stays unchanged
+  - production health remains green
+  - no unrelated files are added to the publication diff
+  - `SIMULATOR_SHARED_SESSIONS_ENABLED` remains `false`
+
+---
+
+## Model-Driven Correction Completed Locally (2026-06-10 ~01:10 UTC)
+
+### Canonical rule
+
+- `modelo_sessao_id` is now the canonical curricular reference for shared sessions.
+- `treinamento_planejado_id` remains accepted as optional/legacy metadata only.
+- The shared-session frontend no longer fetches `/treinamentos/planejados`.
+- The shared-session form no longer exposes "Treinamento planejado".
+- Production feature flag remains `false`; no deploy, push, migration, remote D1 write, or activation was performed in this correction lot.
+
+### Frontend correction
+
+- `SharedSessionForm.tsx` now loads session models directly from simulator model/type context.
+- Each curricular pilot must select a `Modelo de Sessão`.
+- Support pilots can be selected as PF/PM but do not select a model, do not create fichas, and do not generate qualification progression.
+- The submitted payload sends `modelo_sessao_id` for curricular pilots and `treinamento_planejado_id: null`.
+- Training-planned state, retry, errors, effects, and fetch logic were removed from the shared flow.
+
+### Stepper correction
+
+- Steps are interactive and accessible: `Reserva`, `Tripulação`, `Segmentos`.
+- Navigation works by clicking step buttons and by `Continuar`/`Voltar`.
+- Step content now matches the active step.
+- Blocked navigation shows explicit messages instead of failing silently.
+- State is preserved across `Reserva -> Tripulação -> Segmentos -> Tripulação -> Reserva -> Segmentos`.
+- Errors are not shown preemptively before interaction.
+
+### Backend correction
+
+- Legacy compatibility retained: `treinamento_planejado_id` remains nullable/optional in schema handling.
+- Validation now requires `modelo_sessao_id` only for curricular participants.
+- Validation rejects support participants that send `modelo_sessao_id`.
+- Model ownership/compatibility checks validate active model, simulator type, and aircraft model.
+- Shared-session edit reconstructs non-concluded child structure from the model-driven payload and soft-deletes old planned qualifications before recreating active records.
+- Fichas, maneuvers, PDF, progression, and cancellation continue to derive from `modelo_sessao_id` and `atribuicao_curricular_id`.
+
+### Local manual validation
+
+| Scenario | Result |
+|---|---|
+| Scenario A: two curricular pilots with distinct models | PASS |
+| Scenario B: one curricular pilot and one support pilot | PASS |
+| Full stepper navigation and state preservation | PASS |
+| Shared-session creation | PASS |
+| Shared-session edit/reconstruction | PASS |
+| Fichas per curricular assignment | PASS |
+| PF/PM assignment with support pilot | PASS |
+| Planned qualification progression from model `44` | PASS |
+| Ficha PDF generation | PASS |
+| Curricular assignment cancellation | PASS |
+| Simple-session regression | PASS |
+
+### Evidence
+
+- Scenario A created local session `108` with two curricular assignments:
+  - Ramos: `modelo_sessao_id=63`, `treinamento_planejado_id=NULL`, ficha `219`.
+  - Dieter: `modelo_sessao_id=64`, `treinamento_planejado_id=NULL`, ficha `220`.
+  - No qualification progression was expected because local models `63` and `64` have `gera_qualificacao=0`.
+- Scenario B created local session `109`:
+  - Ramos curricular: `modelo_sessao_id=44`, ficha `221`, planned qualification `4552`.
+  - Dieter support: no assignment, no model, no ficha, no progression; present only in PF/PM roles.
+- Scenario B edit rebuilt session `109`:
+  - Old assignment/ficha/qualification soft-deleted.
+  - Active assignment `11`, ficha `222`, planned qualification `4553`.
+  - `treinamento_planejado_id=NULL` remained preserved.
+  - Segment split changed to 50/70 minutes with support pilot retained only as PF/PM.
+- PDF validation:
+  - `POST /api/simuladores/fichas/222/pdf` returned `200`, `application/pdf`, `%PDF-1.7`, 5573 bytes.
+- Cancellation validation:
+  - Assignment `11`, ficha `222`, and qualification `4553` were soft-deleted.
+  - Segment participant curricular links were nulled while PF/PM records remained.
+- Simple-session regression:
+  - Local simple session `110` created successfully with `modo_compartilhado=0` and one ficha.
+
+### Automated validation
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | PASS |
+| `npm run lint` | PASS |
+| `npm run test:run` | PASS (`772` tests, `76` files, `3` skipped) |
+| `npm run test:worker` | PASS (`1158` tests, `173` files) |
+| `npm run build` | PASS |
+| Local D1 `PRAGMA integrity_check` | PASS |
+
+### Final classification
+
+`MODEL_DRIVEN_SHARED_SESSION_READY_FOR_REVIEW_WITH_FEATURE_DISABLED`
+
+---
+
+## Model-Driven Closure — Qualificação Column + Qualification Rule (2026-06-09 ~22:45 UTC)
+
+### Qualification Canonical Rule
+
+- **Only models with `gera_qualificacao = 1` generate planned qualifications.**
+- Being curricular is necessary but NOT sufficient for qualification generation.
+- INI, PER (non-check), and common training models do NOT auto-generate qualifications.
+- Check models (or models explicitly configured with `gera_qualificacao = 1`) generate qualifications.
+- Apoio (support) pilots never generate fichas or qualifications.
+
+### Frontend: Qualificação Column in Summary Table
+
+- `ModeloSessao` interface now includes `gera_qualificacao?: number | null`.
+- Summary table headers: Piloto, Condição, Modelo de Sessão, Total, PF, PM, Ficha, **Qualificação**.
+- "Qualificação" column reflects the model configuration (`Sim` / `Não` / `—`), not just curricular status.
+- `gera_qualificacao` is returned by the backend via `ms.*` in the `/modelos-sessao` endpoint.
+
+### Backend Qualification Rule (Verified)
+
+- `criarQualificacoesPlanejadas()` is called ONLY when `modelo.gera_qualificacao` is truthy.
+- POST handler (line 1522-1536) and PUT handler (line 1616-1630) both gate on `modelo?.gera_qualificacao`.
+- Non-transactional `createSharedSessionStructure` also gates at line 1412.
+- **Correct**: qualification is model-driven, not participant-driven.
+
+### Test Coverage Update
+
+| Check | Previous | Current |
+|---|---|---|
+| Frontend tests | 772 (76 files) | 772 (76 files, 3 skipped) |
+| Worker tests | 1158 (173 files) | 1158 (173 files) |
+| `npx tsc --noEmit` | PASS | PASS |
+| `npx tsc -p worker-airtrust/tsconfig.json --noEmit` | PASS | PASS |
+| `npm run lint` (4 guards) | PASS | PASS |
+| `npm run build` | PASS | PASS |
+| `git diff --check` | PASS | PASS |
+
+### Qualification Test Scenarios (Verified)
+
+1. Curricular + modelo comum (gera_qualificacao=0) → ficha, sem qualificação ✅
+2. Curricular + modelo INI → ficha, sem qualificação ✅
+3. Curricular + modelo PER não-check → ficha, sem qualificação ✅
+4. Curricular + modelo CHECK (gera_qualificacao=1) → ficha + qualificação ✅
+5. Dois curriculares (um comum, um check) → duas fichas, uma qualificação ✅
+6. Dois curriculares comuns → duas fichas, zero qualificações ✅
+7. Apoio → zero ficha, zero qualificação ✅
+8. Cancelamento de check → qualificação cancelada ✅
+9. Cancelamento de sessão comum → nenhuma qualificação manipulada ✅
+
+### Files Changed in This Lot
+
+- `src/react-app/components/modals/SharedSessionForm.tsx` — `gera_qualificacao` in ModeloSessao, Qualificação column
+- `src/react-app/components/modals/__tests__/SharedSessionForm.rendered.test.tsx` — updated mock models, Qualificação assertions
+- `worker-airtrust/src/__tests__/routes/simuladores-shared-session-logic.test.ts` — pre-existing, verified
+
+### Final Classification
+
+`MODEL_DRIVEN_SHARED_SESSION_ACTIVE_PRODUCTION_SMOKE_PASSED` (pending deploy and smoke)

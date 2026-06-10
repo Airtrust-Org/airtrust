@@ -201,6 +201,33 @@ describe('simuladores shared session logic', () => {
     ).toThrow('não pode gerar ficha sem atribuição curricular');
   });
 
+  it('rejects a support participant trying to send modelo_sessao_id', () => {
+    expect(() =>
+      validateAndNormalizeSharedSessionRequest({
+        data: '2026-06-15',
+        hora_inicio: '07:00',
+        hora_fim: '08:00',
+        simulador_id: 10,
+        instrutor_id: 20,
+        participantes: [
+          { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001 },
+          { funcionario_id: 102, cumpre_treinamento: false, modelo_sessao_id: 2002 },
+        ],
+        segmentos: [
+          {
+            inicio: '07:00',
+            fim: '08:00',
+            atribuicao_funcionario_id: 101,
+            funcoes: [
+              { funcionario_id: 101, funcao: 'PF' },
+              { funcionario_id: 102, funcao: 'PM' },
+            ],
+          },
+        ],
+      }),
+    ).toThrow('não pode informar modelo_sessao_id como apoio');
+  });
+
   it('keeps the summary helper deterministic outside route handlers', () => {
     const summaries = calculateSharedSessionParticipantSummaries(
       [

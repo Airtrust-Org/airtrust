@@ -298,3 +298,48 @@ Nenhuma dependencia de estado local do desenvolvedor.
 - Nao houve deploy.
 - Nao houve D1 remoto.
 - Classificacao final: `LOCAL_COMMIT_REPRODUCIBLE_READY_FOR_RELEASE_REVIEW`
+
+---
+
+## Model-Driven Closure — Qualificação Column + Qualification Rule (2026-06-09 ~22:45 UTC)
+
+### Qualification Canonical Rule
+
+- **Somente sessões/modelos de CHECK geram qualificação.**
+- A regra é `modelo.gera_qualificacao === 1`, não `participante.curricular === true`.
+- INI, PER (não-check) e treinamento comum não geram qualificação automática.
+- Apoio nunca gera ficha nem qualificação.
+
+### Qualificação Column in Summary Table
+
+- Coluna "Qualificação" adicionada à tabela de resumo.
+- Exibe "Sim" quando `modelo.gera_qualificacao === 1`, "Não" quando `0`, "—" para apoio.
+- Interface `ModeloSessao` atualizada com campo `gera_qualificacao`.
+- Backend já retorna `gera_qualificacao` via `ms.*` no endpoint `/modelos-sessao`.
+
+### Automated Validation (Final)
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | PASS |
+| `npx tsc -p worker-airtrust/tsconfig.json --noEmit` | PASS |
+| `npm run lint` (4 guards) | PASS |
+| `npm run test:run` | PASS (772 tests, 76 files, 3 skipped) |
+| `npm run test:worker` | PASS (1158 tests, 173 files) |
+| `npm run build` | PASS |
+| `git diff --check` | PASS |
+
+### Backend Qualification Verification
+
+- `criarQualificacoesPlanejadas()` chamada apenas quando `modelo.gera_qualificacao` é truthy.
+- POST/PUT handlers: Phase 2 com gate em `modelo?.gera_qualificacao`.
+- `createSharedSessionStructure` (não-transacional): gate em `modelo?.gera_qualificacao` (linha 1412).
+
+### Files Changed
+
+- `SharedSessionForm.tsx`: campo `gera_qualificacao` na interface, coluna "Qualificação"
+- `SharedSessionForm.rendered.test.tsx`: modelos mock com `gera_qualificacao`, assertions atualizadas
+
+### Final Classification
+
+`MODEL_DRIVEN_SHARED_SESSION_READY_FOR_DEPLOY_WITH_FEATURE_DISABLED`
