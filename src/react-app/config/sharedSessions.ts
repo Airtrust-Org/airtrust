@@ -12,19 +12,44 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 
 let _cachedEnabled: boolean | null = null;
 let _cacheTs = 0;
-const CACHE_TTL_MS = 60_000;
+const CACHE_TTL_MS = 30_000; // Reduced from 60s — operational flags must reflect quickly
 
 export let SHARED_SESSIONS_ENABLED = false;
 
-/** Check at runtime whether the shared-session feature is enabled for the current environment */
-export async function isSharedSessionsEnabled(): Promise<boolean> {
+export interface IsSharedSessionsEnabledOptions {
+  /** Bypass both the in-memory cache and the browser HTTP cache. Use when the
+   *  flag may have changed operationally (e.g. after a worker deploy). */
+  forceRefresh?: boolean;
+}
+
+/** Check at runtime whether the shared-session feature is enabled for the current environment.
+ *
+ *  ⚠️ Browser HTTP cache: the /api/capabilities endpoint may return
+ *  `Cache-Control: public, max-age=300`. Without `cache: 'no-cache'`, the
+ *  browser can serve a stale `false` from its HTTP cache long after the flag
+ *  has been activated on the server. We use `cache: 'no-cache'` to always
+ *  revalidate, while still allowing the CDN to cache the response.
+ *
+ *  The in-memory cache (CACHE_TTL_MS) prevents redundant fetches within a
+ *  single page session. Pass `forceRefresh: true` to bypass it. */
+export async function isSharedSessionsEnabled(
+  options: IsSharedSessionsEnabledOptions = {},
+): Promise<boolean> {
+  const { forceRefresh = false } = options;
   const now = Date.now();
-  if (_cachedEnabled !== null && now - _cacheTs < CACHE_TTL_MS) {
+
+  if (!forceRefresh && _cachedEnabled !== null && now - _cacheTs < CACHE_TTL_MS) {
     return _cachedEnabled;
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/capabilities`);
+    const res = await fetch(`${API_BASE_URL}/capabilities`, {
+      // cache: 'no-cache' tells the browser to always revalidate with the
+      // server (sends If-None-Match / If-Modified-Since if available).
+      // This prevents serving a stale `false` from the browser's HTTP cache
+      // after an operational flag change, while still allowing 304 responses.
+      cache: 'no-cache',
+    });
     if (res.ok) {
       const body = await res.json();
       _cachedEnabled = body?.data?.simulador_shared_sessions === true;

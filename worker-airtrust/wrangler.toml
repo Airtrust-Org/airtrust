@@ -78,6 +78,8 @@ ENVIRONMENT = "production"
 APP_VERSION = "managed-by-script"
 # Placeholder tracked in git. The real APP_BUILD_TIME is injected by scripts/deploy-worker-only.sh
 APP_BUILD_TIME = "managed-by-script"
+# Feature flag: shared simulator sessions (2026-06-09 controlled activation)
+SIMULATOR_SHARED_SESSIONS_ENABLED = "false"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env production
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env production
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env production
