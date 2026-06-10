@@ -267,7 +267,11 @@ export default function ModalNovaSessao({
       setModeloSessaoId(null);
       setSessaoDetalhe(null);
       phase1MergedRef.current = null;
-      isSharedSessionsEnabled().then(setSharedSessionsEnabled).catch(() => setSharedSessionsEnabled(false));
+      // forceRefresh: true — bypass browser HTTP cache. The flag may have
+      // changed operationally (worker deploy) since the last page load.
+      isSharedSessionsEnabled({ forceRefresh: true })
+        .then(setSharedSessionsEnabled)
+        .catch(() => setSharedSessionsEnabled(false));
       fetchAeronaves();
       fetchAeronavesReais();
       fetchSimuladores();

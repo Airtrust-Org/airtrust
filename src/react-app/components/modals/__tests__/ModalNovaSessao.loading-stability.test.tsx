@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ModalNovaSessao from '../ModalNovaSessao';
+import { _resetCacheForTesting } from '@/react-app/config/sharedSessions';
 
 vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:3000/api',
@@ -44,12 +45,16 @@ vi.mock('sonner', () => ({
 }));
 
 interface TestOptions {
+  capabilityEnabled?: boolean;
+  capabilityDelayMs?: number;
   iniDelayMs?: number;
   perDelayMs?: number;
 }
 
 function buildFetchMock(options: TestOptions = {}) {
   const modelRequestUrls: string[] = [];
+  const capabilityEnabled = options.capabilityEnabled ?? false;
+  const capabilityDelayMs = options.capabilityDelayMs ?? 0;
   const iniDelayMs = options.iniDelayMs ?? 0;
   const perDelayMs = options.perDelayMs ?? 0;
 
@@ -202,6 +207,12 @@ function buildFetchMock(options: TestOptions = {}) {
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
 
+    if (url.endsWith('/capabilities')) {
+      return jsonResponse(
+        { success: true, data: { simulador_shared_sessions: capabilityEnabled } },
+        capabilityDelayMs,
+      );
+    }
     if (url.includes('/modelos-aeronave')) return jsonResponse(aeronaves);
     if (url.includes('/aeronaves')) return jsonResponse({ success: true, data: [] });
     if (url.includes('/simuladores/tipos-sessao')) return jsonResponse(tiposSessao);
@@ -255,6 +266,7 @@ async function selecionarFluxoSk76(user: ReturnType<typeof userEvent.setup>) {
 
 describe('ModalNovaSessao loading stability', () => {
   beforeEach(() => {
+    _resetCacheForTesting();
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -262,6 +274,30 @@ describe('ModalNovaSessao loading stability', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    _resetCacheForTesting();
+  });
+
+  it('renderiza_seletor_compartilhado_apos_capability_true_sem_equipamento', async () => {
+    const { fetchMock } = buildFetchMock({ capabilityEnabled: true, capabilityDelayMs: 20 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderModal();
+
+    expect(screen.getByText(/Tipo de Sessão de Voo/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Sessão compartilhada/i })).not.toBeInTheDocument();
+
+    const equipamentoSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    expect(equipamentoSelect).toHaveValue('');
+
+    expect(await screen.findByRole('button', { name: /Sessão compartilhada/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sessão simples/i })).toBeInTheDocument();
+    expect(equipamentoSelect).toHaveValue('');
+
+    const modalidadeLabel = screen.getByText(/Modalidade da sessão/i);
+    const tipoSessaoLabel = screen.getByText(/Tipo de Sessão de Voo/i);
+    expect(
+      modalidadeLabel.compareDocumentPosition(tipoSessaoLabel) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('nao_refaz_request_ao_focar_tema_quando_a_combinacao_ja_foi_carregada', async () => {
