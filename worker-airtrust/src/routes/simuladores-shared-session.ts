@@ -7,11 +7,11 @@ import {
   criarQualificacoesPlanejadas,
   findSessaoConflict,
   getSimuladorModeloAeronave,
+  normalizeModeloAeronave,
   timeToMinutes,
 } from './simuladores-shared';
 import {
   calculateSharedSessionParticipantSummaries,
-  createSharedCurricularSignature,
   type NormalizedSharedSessionRequest,
   validateAndNormalizeSharedSessionRequest,
 } from './simuladores-shared-session-logic';
@@ -23,6 +23,9 @@ type ModeloSessaoMapRow = {
   tipo_sessao_codigo: string | null;
   gera_qualificacao: number | null;
   qualificacao_tipo_id: number | null;
+  ativo: number | null;
+  tipo: string | null;
+  modelo_aeronave: string | null;
 };
 
 type SharedPersistenceContext = {
@@ -92,6 +95,9 @@ async function loadModelosSessaoMap(
          ms.id,
          ms.codigo,
          ms.nome,
+         ms.ativo,
+         ms.tipo,
+         ms.modelo_aeronave,
          ts.codigo AS tipo_sessao_codigo,
          ms.gera_qualificacao,
          ms.qualificacao_tipo_id
@@ -170,6 +176,28 @@ async function assertEntityOwnership(
   const modelosMap = await loadModelosSessaoMap(db, empresaId, modeloIds);
   if (modelosMap.size !== uniqueModeloIds.length) {
     throw new Error('Modelo de sessão fora do tenant');
+  }
+
+  const simuladorModelo = normalizeModeloAeronave(await getSimuladorModeloAeronave(db, payload.simulador_id));
+  for (const participante of payload.participantes) {
+    if (!participante.cumpre_treinamento) {
+      continue;
+    }
+    const modelo = modelosMap.get(Number(participante.modelo_sessao_id));
+    if (!modelo) {
+      throw new Error('Modelo de sessão fora do tenant');
+    }
+    if (Number(modelo.ativo ?? 1) !== 1) {
+      throw new Error('Modelo de sessão inativo');
+    }
+    const tipoModelo = String(modelo.tipo || 'SIMULADOR').trim().toUpperCase();
+    if (tipoModelo === 'AERONAVE') {
+      throw new Error('Modelo de sessão incompatível com simulador');
+    }
+    const modeloAeronave = normalizeModeloAeronave(modelo.modelo_aeronave);
+    if (modeloAeronave && simuladorModelo && modeloAeronave !== simuladorModelo) {
+      throw new Error('Modelo de sessão incompatível com equipamento');
+    }
   }
 
   const treinamentoIds = payload.participantes
@@ -704,6 +732,13 @@ async function buildSharedSessionBatchPlan(
       prepareStatement(
         db,
         "UPDATE simulador_atribuicoes_curriculares SET deleted_at = datetime('now'), updated_at = datetime('now'), status = 'CANCELADA' WHERE agendamento_id = ? AND deleted_at IS NULL",
+        existingSessaoId,
+      ),
+    );
+    statements.push(
+      prepareStatement(
+        db,
+        "UPDATE qualificacoes_historico SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE sessao_id = ? AND deleted_at IS NULL AND COALESCE(status, 'PLANEJADA') = 'PLANEJADA'",
         existingSessaoId,
       ),
     );
@@ -1572,49 +1607,40 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
     }
 
     const payload = validateAndNormalizeSharedSessionRequest(await c.req.json());
-    const currentCurricularSignature = createSharedCurricularSignature(
-      current.participantes || [],
-      current.atribuicoes || [],
-    );
-    const requestedCurricularSignature = createSharedCurricularSignature(
-      payload.participantes,
-      payload.participantes
-        .filter((participante) => participante.cumpre_treinamento)
-        .map((participante) => ({
-          funcionario_id: participante.funcionario_id,
-          treinamento_planejado_id: participante.treinamento_planejado_id || null,
-          modelo_sessao_id: participante.modelo_sessao_id || null,
-          gera_ficha: participante.gera_ficha,
-        })),
-    );
-    if (currentCurricularSignature !== requestedCurricularSignature) {
-      return c.json(
-        {
-          success: false,
-          error:
-            'A edição segura permite alterar horários, segmentos, PF/PM e observações. Participantes, treinamentos, modelos e fichas não podem ser alterados.',
-        },
-        409,
-      );
-    }
     const modelosMap = await assertEntityOwnership(c.env.DB, empresaId, payload);
     await assertNoExternalConflicts(c.env.DB, empresaId, payload, id);
 
-    await updateSharedSessionStructureTransactional(
-      c.env.DB,
-      empresaId,
-      id,
-      payload,
-      modelosMap,
-      current,
-    );
+    const updated = await createSharedSessionStructureTransactional(c.env.DB, empresaId, payload, modelosMap, id);
+
+    try {
+      for (const participante of payload.participantes) {
+        const modelo = participante.modelo_sessao_id
+          ? modelosMap.get(Number(participante.modelo_sessao_id))
+          : null;
+        if (participante.modelo_sessao_id && modelo?.gera_qualificacao) {
+          await criarQualificacoesPlanejadas(c.env.DB, {
+            sessaoId: id,
+            modeloId: Number(participante.modelo_sessao_id),
+            tipoSessao: modelo?.tipo_sessao_codigo || modelo?.codigo || 'SHARED',
+            data: payload.data,
+            participantes: [{ funcionario_id: participante.funcionario_id }],
+            empresaId,
+          });
+        }
+      }
+    } catch (qualError: any) {
+      return c.json(
+        { success: false, error: 'Falha ao recriar qualificacoes planejadas: ' + String(qualError?.message || 'erro desconhecido') },
+        500,
+      );
+    }
 
     await audit(c.env.DB, {
       tabela: 'simulador_agendamentos',
       acao: 'UPDATE_SHARED',
       registro_id: id,
       dados_anteriores: current.sessao,
-      dados_novos: payload,
+      dados_novos: { ...payload, reconstruido: updated.persistence },
     }).catch(() => undefined);
 
     const detail = await loadSharedDetail(c.env.DB, empresaId, id);

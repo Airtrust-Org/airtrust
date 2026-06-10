@@ -245,7 +245,7 @@ describe('simuladores shared session routes', () => {
     });
   });
 
-  it('creates a shared session through a transactional batch', async () => {
+  it('creates a shared session through a transactional batch without planned training ids', async () => {
     const { db, batches } = createDbForSharedRoutes();
 
     const response = await sharedSessionRoutes.fetch(
@@ -262,14 +262,12 @@ describe('simuladores shared session routes', () => {
             {
               funcionario_id: 101,
               cumpre_treinamento: true,
-              treinamento_planejado_id: 1001,
               modelo_sessao_id: 2001,
               gera_ficha: true,
             },
             {
               funcionario_id: 102,
               cumpre_treinamento: true,
-              treinamento_planejado_id: 1002,
               modelo_sessao_id: 2002,
               gera_ficha: true,
             },

@@ -36,7 +36,7 @@ import {
 } from './modalNovaSessaoRules';
 import { enviarNotificacaoSessao, montarResumoCanal } from '@/react-app/utils/sessaoNotificacoes';
 import { isSharedSessionsEnabled } from '@/react-app/config/sharedSessions';
-import SharedSessionForm from './SharedSessionForm';
+import SharedSessionForm, { type SharedSessionStep } from './SharedSessionForm';
 
 interface ModeloAeronave {
   id: number;
@@ -212,6 +212,7 @@ export default function ModalNovaSessao({
   const [participantes, setParticipantes] = useState<Participante[]>(participantesIniciais());
   const [modoCompartilhado, setModoCompartilhado] = useState(false);
   const [sharedSessionsEnabled, setSharedSessionsEnabled] = useState(false);
+  const [sharedSessionStep, setSharedSessionStep] = useState<SharedSessionStep>('reserva');
 
   const {
     hasFap07Selecionada,
@@ -1624,6 +1625,7 @@ export default function ModalNovaSessao({
     setObservacoes('');
     setParticipantes(participantesIniciais());
     setModoCompartilhado(false);
+    setSharedSessionStep('reserva');
   }
 
   // ========== AÇÕES EXTRAS (EMAIL, WHATSAPP, DELETE, FICHAS) ==========
@@ -1691,6 +1693,8 @@ export default function ModalNovaSessao({
 
   if (!isOpen) return null;
 
+  const showSharedReservationFields = !modoCompartilhado || sharedSessionStep === 'reserva';
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
       <AlertModal
@@ -1734,7 +1738,10 @@ export default function ModalNovaSessao({
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setModoCompartilhado(false)}
+                  onClick={() => {
+                    setModoCompartilhado(false);
+                    setSharedSessionStep('reserva');
+                  }}
                   disabled={loading}
                   className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-all ${
                     !modoCompartilhado
@@ -1748,6 +1755,7 @@ export default function ModalNovaSessao({
                   type="button"
                   onClick={() => {
                     setModoCompartilhado(true);
+                    setSharedSessionStep('reserva');
                     if (tipoDispositivo !== 'SIMULADOR') {
                       handleTipoDispositivoChange('SIMULADOR');
                     }
@@ -1766,6 +1774,8 @@ export default function ModalNovaSessao({
             </div>
           )}
 
+          {showSharedReservationFields && (
+          <>
           {/* 0️⃣ TIPO DE DISPOSITIVO */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1882,6 +1892,8 @@ export default function ModalNovaSessao({
               )}
             </div>
           )}
+          </>
+          )}
 
           {!modoCompartilhado && (
           <>
@@ -1978,6 +1990,8 @@ export default function ModalNovaSessao({
           </>
           )}
 
+          {showSharedReservationFields && (
+          <>
           {/* 4. DATA E HORÁRIOS */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -2062,6 +2076,8 @@ export default function ModalNovaSessao({
               </p>
             )}
           </div>
+          </>
+          )}
 
           {!modoCompartilhado && (
           <>
@@ -2261,8 +2277,9 @@ export default function ModalNovaSessao({
           </>
           )}
 
-          {/* 7. OBSERVAÇÕES (OPCIONAL) */}
+          {showSharedReservationFields && (
           <div>
+          {/* 7. OBSERVAÇÕES (OPCIONAL) */}
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Observações (opcional)
             </label>
@@ -2275,6 +2292,7 @@ export default function ModalNovaSessao({
               disabled={loading}
             />
           </div>
+          )}
 
           {modoCompartilhado && (
             <SharedSessionForm
@@ -2290,6 +2308,8 @@ export default function ModalNovaSessao({
               observacoes={observacoes}
               funcionarios={funcionarios}
               editSessionId={isEditMode ? sessao?.id : null}
+              activeStep={sharedSessionStep}
+              onActiveStepChange={setSharedSessionStep}
             />
           )}
         </div>
