@@ -565,3 +565,181 @@ describe('Legacy session preservation', () => {
     expect(simpleSession.modo_compartilhado).not.toBe(sharedSession.modo_compartilhado);
   });
 });
+
+// ────────────────────────────────────────────────────────────
+// Split time consistency / regras de integridade
+// ────────────────────────────────────────────────────────────
+
+describe('Split time integrity rules', () => {
+  function timeToMinutes(t: string): number {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  function generateSegments(
+    horaInicio: string,
+    horaFim: string,
+    splitTime: string,
+    p0Curricular: boolean,
+    p1Curricular: boolean,
+    p0Id: number | null,
+    p1Id: number | null,
+  ) {
+    const start = timeToMinutes(horaInicio);
+    const end = timeToMinutes(horaFim);
+    const split = timeToMinutes(splitTime);
+
+    // Regra: split deve estar estritamente entre início e fim
+    if (!horaInicio || !horaFim || !splitTime) return [];
+    if (end <= start) return [];
+    if (split <= start || split >= end) return [];
+
+    return [
+      {
+        inicio: horaInicio,
+        fim: splitTime,
+        atribuicaoFuncionarioId: p0Curricular ? p0Id : null,
+        funcoes: [
+          { funcionario_id: p0Id ?? 0, funcao: 'PF' as const },
+          { funcionario_id: p1Id ?? 0, funcao: 'PM' as const },
+        ].filter((f) => f.funcionario_id > 0),
+      },
+      {
+        inicio: splitTime,
+        fim: horaFim,
+        atribuicaoFuncionarioId: p1Curricular ? p1Id : null,
+        funcoes: [
+          { funcionario_id: p1Id ?? 0, funcao: 'PF' as const },
+          { funcionario_id: p0Id ?? 0, funcao: 'PM' as const },
+        ].filter((f) => f.funcionario_id > 0),
+      },
+    ];
+  }
+
+  function calculateSummary(
+    participants: Array<{
+      funcionario: { id: number; nome: string } | null;
+      cumpreTreinamento: boolean;
+      geraFicha: boolean;
+    }>,
+    segments: ReturnType<typeof generateSegments>,
+  ) {
+    return participants
+      .filter((p) => p.funcionario)
+      .map((p) => {
+        const fid = p.funcionario!.id;
+        let totalMin = 0, pfMin = 0, pmMin = 0, curricMin = 0;
+
+        for (const seg of segments) {
+          const dur = Math.max(0, timeToMinutes(seg.fim) - timeToMinutes(seg.inicio));
+          for (const f of seg.funcoes) {
+            if (f.funcionario_id === fid) {
+              totalMin += dur;
+              if (f.funcao === 'PF') pfMin += dur;
+              else pmMin += dur;
+            }
+          }
+          if (seg.atribuicaoFuncionarioId === fid) curricMin += dur;
+        }
+
+        return {
+          funcionarioId: fid,
+          nome: p.funcionario!.nome,
+          totalMinutos: totalMin,
+          pfMinutos: pfMin,
+          pmMinutos: pmMin,
+          curricularMinutos: curricMin,
+          cumpreTreinamento: p.cumpreTreinamento,
+          geraFicha: p.geraFicha,
+        };
+      });
+  }
+
+  it('19. split válido 07:00-09:00 / 08:00: segmentos corretos 1h+1h', () => {
+    const segments = generateSegments('07:00', '09:00', '08:00', true, true, 10, 20);
+
+    expect(segments).toHaveLength(2);
+    expect(segments[0].inicio).toBe('07:00');
+    expect(segments[0].fim).toBe('08:00');
+    expect(segments[1].inicio).toBe('08:00');
+    expect(segments[1].fim).toBe('09:00');
+
+    const dur1 = timeToMinutes(segments[0].fim) - timeToMinutes(segments[0].inicio);
+    const dur2 = timeToMinutes(segments[1].fim) - timeToMinutes(segments[1].inicio);
+    expect(dur1).toBe(60);
+    expect(dur2).toBe(60);
+    expect(dur1 + dur2).toBe(120); // 2h
+  });
+
+  it('20. split 06:00 fora da reserva 07:00-09:00: segmentos não são gerados', () => {
+    const segments = generateSegments('07:00', '09:00', '06:00', true, true, 10, 20);
+    expect(segments).toHaveLength(0);
+  });
+
+  it('21. split 10:00 fora da reserva 07:00-09:00: segmentos não são gerados', () => {
+    const segments = generateSegments('07:00', '09:00', '10:00', true, true, 10, 20);
+    expect(segments).toHaveLength(0);
+  });
+
+  it('22. split no limite exato do início (07:00) é rejeitado', () => {
+    const segments = generateSegments('07:00', '09:00', '07:00', true, true, 10, 20);
+    expect(segments).toHaveLength(0);
+  });
+
+  it('23. split no limite exato do fim (09:00) é rejeitado', () => {
+    const segments = generateSegments('07:00', '09:00', '09:00', true, true, 10, 20);
+    expect(segments).toHaveLength(0);
+  });
+
+  it('24. sem splitTime definido: segmentos não são gerados', () => {
+    const segments = generateSegments('07:00', '09:00', '', true, true, 10, 20);
+    expect(segments).toHaveLength(0);
+  });
+
+  it('25. total de cada piloto nunca excede a duração da reserva', () => {
+    // Simula uma reserva de 2h com split no meio
+    const segments = generateSegments('07:00', '09:00', '08:00', true, true, 10, 20);
+
+    expect(segments).toHaveLength(2);
+
+    const reservaDuracao = timeToMinutes('09:00') - timeToMinutes('07:00'); // 120 min
+    const participants = [
+      { funcionario: { id: 10, nome: 'Piloto A' }, cumpreTreinamento: true, geraFicha: true },
+      { funcionario: { id: 20, nome: 'Piloto B' }, cumpreTreinamento: true, geraFicha: true },
+    ];
+
+    const summary = calculateSummary(participants, segments);
+
+    for (const entry of summary) {
+      expect(entry.totalMinutos).toBeLessThanOrEqual(reservaDuracao);
+      expect(entry.totalMinutos).toBe(reservaDuracao); // exactly equal when segments valid
+    }
+  });
+
+  it('26. PF + PM = total para cada piloto', () => {
+    const segments = generateSegments('07:00', '09:00', '08:00', true, true, 10, 20);
+
+    expect(segments).toHaveLength(2);
+
+    const participants = [
+      { funcionario: { id: 10, nome: 'Piloto A' }, cumpreTreinamento: true, geraFicha: true },
+      { funcionario: { id: 20, nome: 'Piloto B' }, cumpreTreinamento: true, geraFicha: true },
+    ];
+
+    const summary = calculateSummary(participants, segments);
+
+    for (const entry of summary) {
+      expect(entry.pfMinutos + entry.pmMinutos).toBe(entry.totalMinutos);
+    }
+  });
+
+  it('27. simulação de alteração de reserva: split antigo inválido retorna segmentos vazios', () => {
+    // Reserva original: 05:00-07:00 com split 06:00 (válido na época)
+    const oldSegments = generateSegments('05:00', '07:00', '06:00', true, true, 10, 20);
+    expect(oldSegments).toHaveLength(2); // válido na janela antiga
+
+    // Reserva editada para 07:00-09:00 — split 06:00 agora é inválido
+    const newSegments = generateSegments('07:00', '09:00', '06:00', true, true, 10, 20);
+    expect(newSegments).toHaveLength(0); // split fora da nova janela — rejeitado
+  });
+});

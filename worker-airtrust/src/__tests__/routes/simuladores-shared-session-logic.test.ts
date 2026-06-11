@@ -268,6 +268,274 @@ describe('simuladores shared session logic', () => {
     ]);
   });
 
+  // ═══════════════════════════════════════════════════════════
+  // Testes de consistência de split/segmentos
+  // ═══════════════════════════════════════════════════════════
+
+  describe('consistência de split e segmentos', () => {
+    it('Cenário 1: split válido 08:00 em reserva 07:00-09:00 resulta 1h+1h total 2h', () => {
+      const normalized = validateAndNormalizeSharedSessionRequest({
+        data: '2026-06-15',
+        hora_inicio: '07:00',
+        hora_fim: '09:00',
+        simulador_id: 10,
+        instrutor_id: 20,
+        participantes: [
+          { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001 },
+          { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002 },
+        ],
+        segmentos: [
+          {
+            inicio: '07:00',
+            fim: '08:00',
+            atribuicao_funcionario_id: 101,
+            funcoes: [
+              { funcionario_id: 101, funcao: 'PF' },
+              { funcionario_id: 102, funcao: 'PM' },
+            ],
+          },
+          {
+            inicio: '08:00',
+            fim: '09:00',
+            atribuicao_funcionario_id: 102,
+            funcoes: [
+              { funcionario_id: 102, funcao: 'PF' },
+              { funcionario_id: 101, funcao: 'PM' },
+            ],
+          },
+        ],
+      });
+
+      // Ambos os segmentos com 60 min
+      expect(normalized.segmentos[0].duracao_minutos).toBe(60);
+      expect(normalized.segmentos[1].duracao_minutos).toBe(60);
+
+      // Total de cada piloto = 120 min (2h)
+      for (const summary of normalized.resumo_participantes) {
+        expect(summary.total_minutos).toBe(120);
+      }
+    });
+
+    it('Cenário 2: reserva 07:00-09:00 com split 06:00 (fora da janela) é rejeitado', () => {
+      expect(() =>
+        validateAndNormalizeSharedSessionRequest({
+          data: '2026-06-15',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 20,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001 },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002 },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '06:00', // invertido — fim antes do início
+              atribuicao_funcionario_id: 101,
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '06:00',
+              fim: '09:00',
+              atribuicao_funcionario_id: 102,
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      ).toThrow(/Segmento 1 precisa terminar após o início/);
+    });
+
+    it('Cenário 3: split antes do início da reserva é rejeitado', () => {
+      expect(() =>
+        validateAndNormalizeSharedSessionRequest({
+          data: '2026-06-15',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 20,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001 },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002 },
+          ],
+          segmentos: [
+            {
+              inicio: '06:00', // antes do início da reserva (07:00)
+              fim: '08:00',
+              atribuicao_funcionario_id: 101,
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              atribuicao_funcionario_id: 102,
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      ).toThrow(/Segmento 1 está fora da janela da reserva/);
+    });
+
+    it('Cenário 4: split depois do fim da reserva é rejeitado', () => {
+      expect(() =>
+        validateAndNormalizeSharedSessionRequest({
+          data: '2026-06-15',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 20,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001 },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002 },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '08:00',
+              atribuicao_funcionario_id: 101,
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00',
+              fim: '10:00', // depois do fim da reserva (09:00)
+              atribuicao_funcionario_id: 102,
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      ).toThrow(/Segmento 2 está fora da janela da reserva/);
+    });
+
+    it('Cenário 5: soma PF+PM = duração total da reserva (120 min)', () => {
+      const normalized = validateAndNormalizeSharedSessionRequest({
+        data: '2026-06-15',
+        hora_inicio: '07:00',
+        hora_fim: '09:00',
+        simulador_id: 10,
+        instrutor_id: 20,
+        participantes: [
+          { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001 },
+          { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002 },
+        ],
+        segmentos: [
+          {
+            inicio: '07:00',
+            fim: '08:00',
+            atribuicao_funcionario_id: 101,
+            funcoes: [
+              { funcionario_id: 101, funcao: 'PF' },
+              { funcionario_id: 102, funcao: 'PM' },
+            ],
+          },
+          {
+            inicio: '08:00',
+            fim: '09:00',
+            atribuicao_funcionario_id: 102,
+            funcoes: [
+              { funcionario_id: 102, funcao: 'PF' },
+              { funcionario_id: 101, funcao: 'PM' },
+            ],
+          },
+        ],
+      });
+
+      for (const summary of normalized.resumo_participantes) {
+        // PF + PM deve ser igual ao total
+        expect(summary.pf_minutos + summary.pm_minutos).toBe(summary.total_minutos);
+        // Total = duração da reserva (07:00-09:00 = 120 min)
+        expect(summary.total_minutos).toBe(120);
+      }
+
+      // A duração total dos segmentos = duração da reserva
+      const segmentTotal = normalized.segmentos.reduce(
+        (sum, seg) => sum + seg.duracao_minutos,
+        0,
+      );
+      expect(segmentTotal).toBe(120);
+    });
+
+    it('rejeita segmento com início igual ao fim (duração zero)', () => {
+      expect(() =>
+        validateAndNormalizeSharedSessionRequest({
+          data: '2026-06-15',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 20,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001 },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002 },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '07:00', // início = fim
+              atribuicao_funcionario_id: 101,
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      ).toThrow(/Segmento 1 precisa terminar após o início/);
+    });
+
+    it('rejeita segmentos com gap (não cobrem continuamente a reserva)', () => {
+      expect(() =>
+        validateAndNormalizeSharedSessionRequest({
+          data: '2026-06-15',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 20,
+          participantes: [
+            { funcionario_id: 101, cumpre_treinamento: true, modelo_sessao_id: 2001 },
+            { funcionario_id: 102, cumpre_treinamento: true, modelo_sessao_id: 2002 },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '07:45',
+              atribuicao_funcionario_id: 101,
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00', // gap entre 07:45 e 08:00
+              fim: '09:00',
+              atribuicao_funcionario_id: 102,
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      ).toThrow(/cobertura contínua/);
+    });
+  });
+
   it('normalizes curricular signatures while detecting material curriculum changes', () => {
     const current = createSharedCurricularSignature(
       [{ funcionario_id: 102 }, { funcionario_id: 101 }],
