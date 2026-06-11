@@ -250,6 +250,11 @@ export default function SharedSessionForm({
 
   const segments = useMemo((): SegmentState[] => {
     if (!crewReady || !effectiveSplitTime) return [];
+    const split = timeToMinutes(effectiveSplitTime);
+    const start = timeToMinutes(horarioInicio);
+    const end = timeToMinutes(horarioFim);
+    // Nunca constrói segmentos com split inválido (fora da janela ou invertido)
+    if (split <= start || split >= end) return [];
     return [
       {
         inicio: horarioInicio,
@@ -296,6 +301,19 @@ export default function SharedSessionForm({
   }, [crewReady, effectiveSplitTime, horarioFim, horarioInicio, segmentAssignments]);
 
   const allErrors = [...reservationErrors, ...participantErrors, ...segmentErrors];
+
+  // Revalida o splitTime sempre que o início ou fim da reserva forem alterados.
+  // Se o split atual ficar fora da janela, limpa o estado para que o
+  // defaultSplitTime (ponto médio) assuma automaticamente.
+  useEffect(() => {
+    if (!splitTime) return;
+    const splitMin = timeToMinutes(splitTime);
+    const startMin = timeToMinutes(horarioInicio);
+    const endMin = timeToMinutes(horarioFim);
+    if (!horarioInicio || !horarioFim || splitMin <= startMin || splitMin >= endMin) {
+      setSplitTime('');
+    }
+  }, [horarioInicio, horarioFim]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearModelos = useCallback((index: 0 | 1) => {
     setModelos((previous) => {
@@ -493,7 +511,19 @@ export default function SharedSessionForm({
           }
         });
         const detailSegments = detail.segmentos || [];
-        if (detailSegments.length >= 2) setSplitTime(String(detailSegments[0].fim || '').slice(0, 5));
+        if (detailSegments.length >= 2) {
+          const hydratedSplit = String(detailSegments[0].fim || '').slice(0, 5);
+          const reservaInicio = String(detail.sessao?.hora_inicio || detail.sessao?.horario_inicio || '').slice(0, 5);
+          const reservaFim = String(detail.sessao?.hora_fim || detail.sessao?.horario_fim || '').slice(0, 5);
+          const splitMin = timeToMinutes(hydratedSplit);
+          const startMin = timeToMinutes(reservaInicio);
+          const endMin = timeToMinutes(reservaFim);
+          if (hydratedSplit && splitMin > startMin && splitMin < endMin) {
+            setSplitTime(hydratedSplit);
+          }
+          // Se o split carregado estiver fora da reserva atual, deixa vazio
+          // para que o defaultSplitTime (ponto médio) assuma automaticamente.
+        }
         const restoredSegments = detailSegments.slice(0, 2).map((segment) => {
           const pf = (segment.funcoes || []).find((role) => role.funcao === 'PF');
           const pm = (segment.funcoes || []).find((role) => role.funcao === 'PM');
@@ -547,10 +577,15 @@ export default function SharedSessionForm({
           }
           if (segment.atribuicaoFuncionarioId === funcionarioId) curricular += duration;
         }
+        // Garantia defensiva: o total nunca pode exceder a duração da reserva
+        const reservaDuracao = horarioInicio && horarioFim
+          ? Math.max(0, timeToMinutes(horarioFim) - timeToMinutes(horarioInicio))
+          : 0;
+        if (total > reservaDuracao) total = reservaDuracao;
         const model = participant.modeloSessaoId ? modelById.get(participant.modeloSessaoId) : null;
         return { participant, total, pf, pm, curricular, model };
       });
-  }, [modelById, participants, segments]);
+  }, [modelById, participants, segments, horarioInicio, horarioFim]);
 
   const markAttempted = useCallback((step: SharedSessionStep) => {
     setAttemptedSteps((previous) => {

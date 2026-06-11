@@ -61,6 +61,14 @@ app.put('/sessoes/:id', async (c) => {
       .bind(id, empresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
+    // Sessões compartilhadas devem ser editadas via PUT /sessoes/compartilhada/:id,
+    // que também atualiza os segmentos operacionais.
+    if (Number((a as any).modo_compartilhado || 0) === 1) {
+      return c.json(
+        { success: false, error: 'Sessão compartilhada deve ser editada pela rota de sessões compartilhadas' },
+        409,
+      );
+    }
     let participantesParaNotificacaoAlterados = false;
     const modeloAeronaveSessao =
       normalizeModeloAeronave(b.tipo_aeronave) ||

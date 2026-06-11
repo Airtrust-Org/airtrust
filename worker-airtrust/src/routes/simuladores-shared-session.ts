@@ -582,6 +582,22 @@ async function loadSharedDetail(
     .bind(sessaoId)
     .all<any>();
 
+  const resevaDuracao = Number(sessao.duracao_minutos || 0);
+  const rawSegmentos = segmentos.results || [];
+
+  // Detecta segmentos inconsistentes com a reserva (split fora da janela,
+  // durações que não somam ao total, etc.)
+  let segmentosInconsistentes = false;
+  if (rawSegmentos.length > 0 && resevaDuracao > 0) {
+    const segmentDurationTotal = rawSegmentos.reduce(
+      (sum, seg) => sum + Math.max(0, Number(seg.duracao_minutos || 0)),
+      0,
+    );
+    if (segmentDurationTotal !== resevaDuracao) {
+      segmentosInconsistentes = true;
+    }
+  }
+
   const summaries = calculateSharedSessionParticipantSummaries(
     (participantes.results || []).map((participante) => {
       const atribuicao = (atribuicoes.results || []).find(
@@ -593,7 +609,7 @@ async function loadSharedDetail(
         gera_ficha: Boolean(atribuicao?.gera_ficha),
       };
     }),
-    (segmentos.results || []).map((segmento) => ({
+    rawSegmentos.map((segmento) => ({
       duracao_minutos: Number(segmento.duracao_minutos || 0),
       atribuicao_funcionario_id:
         (atribuicoes.results || []).find((item) => Number(item.id) === Number(segmento.atribuicao_curricular_id))
@@ -607,6 +623,16 @@ async function loadSharedDetail(
     })),
   );
 
+  // Se os segmentos estão inconsistentes, força os totais para
+  // coincidirem com a duração real da reserva (defesa em leitura).
+  if (segmentosInconsistentes) {
+    for (const summary of summaries) {
+      if (summary.total_minutos !== resevaDuracao) {
+        summary.total_minutos = resevaDuracao;
+      }
+    }
+  }
+
   return {
     sessao,
     participantes: participantes.results || [],
@@ -619,6 +645,7 @@ async function loadSharedDetail(
     })),
     fichas: fichas.results || [],
     resumo_participantes: summaries,
+    segmentos_inconsistentes: segmentosInconsistentes || undefined,
   };
 }
 
