@@ -426,7 +426,7 @@ export const lmsKeys = {
 };
 
 function invalidateCursoCollections(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['lms', 'cursos'] });
+  qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
   qc.invalidateQueries({ queryKey: lmsKeys.adminStats() });
 }
 
@@ -754,7 +754,7 @@ export function useDeleteCurso() {
   return useMutation({
     mutationFn: (id: number) => lmsRequest<void>(`/cursos/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['lms', 'cursos'] });
+      qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
     },
   });
 }
@@ -806,7 +806,7 @@ export function useUploadScorm(cursoId: number) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
-      qc.invalidateQueries({ queryKey: ['lms', 'cursos'] });
+      qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
     },
   });
 }
@@ -841,7 +841,7 @@ export function useUploadH5p(cursoId: number) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
-      qc.invalidateQueries({ queryKey: ['lms', 'cursos'] });
+      qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
     },
   });
 }

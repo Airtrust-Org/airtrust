@@ -535,7 +535,7 @@ function ThumbnailDropzone({
         onChange={(e) => pick(e.target.files?.[0] ?? null)}
       />
       <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center">
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 aspect-[16/10]">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 aspect-[16/9]">
           {previewUrl ? (
             <img
               src={previewUrl}
@@ -1187,6 +1187,29 @@ function CourseDrawer({
 
 // ── Course card ─────────────────────────────────────────────────────────────
 
+function CourseCardSkeleton() {
+  return (
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="p-4 pb-0">
+        <div className="aspect-[16/9] w-full animate-pulse rounded-xl bg-slate-200 dark:bg-slate-800" />
+      </div>
+      <div className="flex flex-1 flex-col p-4 pt-3">
+        <div className="mb-2 space-y-2">
+          <div className="h-4 w-3/4 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
+          <div className="flex gap-1.5">
+            <div className="h-5 w-14 animate-pulse rounded-full bg-slate-200 dark:bg-slate-800" />
+            <div className="h-5 w-16 animate-pulse rounded-full bg-slate-200 dark:bg-slate-800" />
+            <div className="h-5 w-12 animate-pulse rounded-full bg-slate-200 dark:bg-slate-800" />
+          </div>
+        </div>
+        <div className="mt-auto space-y-2 pt-4">
+          <div className="h-9 w-full animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CourseCard({
   curso,
   matricula,
@@ -1236,11 +1259,11 @@ function CourseCard({
 
   return (
     <article
-      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900 dark:shadow-none ${
+      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg dark:bg-slate-900 dark:shadow-none ${
         complianceCourse ? 'border-amber-200' : 'border-slate-200'
       }`}
     >
-      <div className="p-3 pb-0">
+      <div className="p-4 pb-0">
         <LmsCourseArtwork
           curso={curso}
           progress={!canManage ? matricula?.progresso_pct : undefined}
@@ -1254,17 +1277,17 @@ function CourseCard({
             </h3>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${typeMeta.chipClass}`}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeMeta.chipClass}`}
               >
                 {typeMeta.icon}
                 {typeMeta.label}
               </span>
               {curso.categoria ? (
-                <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   {curso.categoria}
                 </span>
               ) : null}
-              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {formatMinutes(curso.carga_horaria_minutos)}
               </span>
             </div>
@@ -1272,13 +1295,13 @@ function CourseCard({
           <LmsStatPill status={statusMeta} />
         </div>
         {curso.descricao ? (
-          <p className="line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{curso.descricao}</p>
+          <p className="line-clamp-2 text-sm leading-5 text-slate-500 dark:text-slate-400">{curso.descricao}</p>
         ) : null}
         {complianceCourse && curso.qualificacao_tipo_nome ? (
-          <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-            Gera a qualificação {curso.qualificacao_tipo_nome}
-            {curso.qualificacao_tipo_codigo ? ` (${curso.qualificacao_tipo_codigo})` : ''} ao
-            concluir.
+          <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+            <BadgeCheck className="h-3.5 w-3.5 flex-shrink-0" />
+            Qualificação {curso.qualificacao_tipo_nome}
+            {curso.qualificacao_tipo_codigo ? ` (${curso.qualificacao_tipo_codigo})` : ''}
           </div>
         ) : null}
         {!canManage && matricula && matricula.status !== 'CANCELADO' ? (
@@ -1286,7 +1309,7 @@ function CourseCard({
             {deadlineMeta ? (
               <div>
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${deadlineMeta.className} ${deadlineMeta.pulseClassName}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${deadlineMeta.className} ${deadlineMeta.pulseClassName}`}
                 >
                   {deadlineMeta.icon}
                   {deadlineMeta.label}
@@ -1701,7 +1724,7 @@ export default function LmsCatalogo() {
       setEditingCourse(undefined);
       setUploadProgress(0);
       setUploadStatus('');
-      void qc.invalidateQueries({ queryKey: ['lms', 'cursos'] });
+      void qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao salvar curso');
       setUploadProgress(0);
@@ -1789,67 +1812,85 @@ export default function LmsCatalogo() {
           <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-950/60">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
               <label className="relative block">
+                <span className="sr-only">Buscar cursos</span>
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Buscar por título, categoria ou descrição"
+                  aria-label="Buscar cursos por título, categoria ou descrição"
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
               </label>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as 'all' | TipoConteudo)}
-                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="all">Todos os tipos</option>
-                <option value="scorm">SCORM</option>
-                <option value="h5p">H5P</option>
-                <option value="video">Vídeo</option>
-                <option value="pdf">PDF</option>
-                <option value="pptx">PowerPoint</option>
-              </select>
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="all">Todas as categorias</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={complianceFilter}
-                onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'critical')}
-                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="all">Todos os cursos</option>
-                <option value="critical">Impactam compliance</option>
-              </select>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | MatriculaStatus)}
-                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="all">Todos os status</option>
-                {!canManage ? <option value="NAO_INICIADO">Não iniciado</option> : null}
-                <option value="EM_ANDAMENTO">Em andamento</option>
-                <option value="CONCLUIDO">Concluído</option>
-                <option value="REPROVADO">Reprovado</option>
-              </select>
+              <label className="block">
+                <span className="sr-only">Filtrar por tipo de conteúdo</span>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value as 'all' | TipoConteudo)}
+                  aria-label="Filtrar por tipo de conteúdo"
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <option value="all">Todos os tipos</option>
+                  <option value="scorm">SCORM</option>
+                  <option value="h5p">H5P</option>
+                  <option value="video">Vídeo</option>
+                  <option value="pdf">PDF</option>
+                  <option value="pptx">PowerPoint</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="sr-only">Filtrar por categoria</span>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  aria-label="Filtrar por categoria"
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <option value="all">Todas as categorias</option>
+                  {categories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="sr-only">Filtrar por compliance</span>
+                <select
+                  value={complianceFilter}
+                  onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'critical')}
+                  aria-label="Filtrar por impacto em compliance"
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <option value="all">Todos os cursos</option>
+                  <option value="critical">Impactam compliance</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="sr-only">Filtrar por status</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as 'all' | MatriculaStatus)}
+                  aria-label="Filtrar por status da matrícula"
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <option value="all">Todos os status</option>
+                  {!canManage ? <option value="NAO_INICIADO">Não iniciado</option> : null}
+                  <option value="EM_ANDAMENTO">Em andamento</option>
+                  <option value="CONCLUIDO">Concluído</option>
+                  <option value="REPROVADO">Reprovado</option>
+                </select>
+              </label>
             </div>
           </div>
 
           {/* Course grid */}
           <div className="p-5 sm:p-6">
             {loadingCourses || loadingMatriculas ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="h-[420px] animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />
+                  <CourseCardSkeleton key={i} />
                 ))}
               </div>
             ) : visibleCourses.length === 0 ? (
