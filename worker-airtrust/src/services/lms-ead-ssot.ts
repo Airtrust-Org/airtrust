@@ -291,7 +291,7 @@ async function resolveUniqueQualificacaoTipoCode(
 
 export async function syncLmsCourseFromQualificacaoTipo(
   db: D1Database,
-  params: { empresaId: number; qualificacaoTipoId: number },
+  params: { empresaId: number; qualificacaoTipoId: string | number },
 ) {
   const tipo = await fetchQualificacaoTipo(db, params.empresaId, params.qualificacaoTipoId);
 
@@ -607,7 +607,7 @@ export async function syncQualificacaoTipoFromCurso(
 
 export async function softDeleteLmsCourseForQualificacaoTipo(
   db: D1Database,
-  params: { empresaId: number; qualificacaoTipoId: number },
+  params: { empresaId: number; qualificacaoTipoId: string | number },
 ) {
   await db
     .prepare(
@@ -751,39 +751,55 @@ export async function reconcileImportedEdappHistory(
   params: {
     empresaId: number;
     cursoId?: number;
-    qualificacaoTipoId?: number;
+    qualificacaoTipoId?: string | number;
     integracaoEventoId?: number;
   },
 ) {
-  const conditions = ['empresa_id = ?', "fonte = 'EDAPP'", 'deleted_at IS NULL'];
-  const bindings: Array<number> = [params.empresaId];
+  const conditions = ['lhi.empresa_id = ?', "lhi.fonte = 'EDAPP'", 'lhi.deleted_at IS NULL'];
+  const bindings: Array<string | number> = [params.empresaId];
 
   if (params.cursoId) {
-    conditions.push('(curso_id = ? OR curso_id IS NULL)');
+    conditions.push('(lhi.curso_id = ? OR lhi.curso_id IS NULL)');
     bindings.push(params.cursoId);
   }
 
   if (params.integracaoEventoId) {
-    conditions.push('integracao_evento_id = ?');
+    conditions.push('lhi.integracao_evento_id = ?');
     bindings.push(params.integracaoEventoId);
+  }
+
+  // ⚠️ Filtrar por qualificacaoTipoId quando disponível para evitar processar
+  // TODOS os registros EDAPP do tenant (causa hang com muitos registros).
+  // Faz JOIN com lms_cursos + qualificacoes_tipos para limitar ao tipo específico.
+  if (params.qualificacaoTipoId) {
+    conditions.push(
+      '(qt.id = ? OR lhi.curso_id IS NULL)',
+    );
+    bindings.push(String(params.qualificacaoTipoId));
   }
 
   const rows = await db
     .prepare(
-      `SELECT id,
-              empresa_id,
-              funcionario_id,
-              curso_id,
-              curso_titulo,
-              curso_categoria,
-              tipo_conteudo,
-              qualificacao_codigo,
-              qualificacao_historico_id,
-              data_conclusao,
-              integracao_evento_id
-         FROM lms_historico_importado
+      `SELECT lhi.id,
+              lhi.empresa_id,
+              lhi.funcionario_id,
+              lhi.curso_id,
+              lhi.curso_titulo,
+              lhi.curso_categoria,
+              lhi.tipo_conteudo,
+              lhi.qualificacao_codigo,
+              lhi.qualificacao_historico_id,
+              lhi.data_conclusao,
+              lhi.integracao_evento_id
+         FROM lms_historico_importado lhi
+         LEFT JOIN lms_cursos c
+           ON c.id = lhi.curso_id
+          AND c.deleted_at IS NULL
+         LEFT JOIN qualificacoes_tipos qt
+           ON qt.id = c.qualificacao_tipo_id
+          AND qt.deleted_at IS NULL
         WHERE ${conditions.join(' AND ')}
-        ORDER BY id ASC`,
+        ORDER BY lhi.id ASC`,
     )
     .bind(...bindings)
     .all<ImportedHistoryRow>();
