@@ -757,19 +757,28 @@ router.put(
     const categoriaEraEad = isEadCategoria(rowAtual?.categoria);
     const categoriaEhEad = isEadCategoria(categoriaFinal);
 
+    // ⚠️ qualificacoes_tipos.id é TEXT (UUID desde migration 0031) — usar string diretamente
+    const qualificacaoTipoId = String(id);
+
     if (rowAtual?.empresa_id && categoriaEhEad) {
+      console.log(
+        `[TIPOS_EAD] Sync EAD/LMS para tipo_id=${qualificacaoTipoId}, empresa=${rowAtual.empresa_id}`,
+      );
       await syncLmsCourseFromQualificacaoTipo(db, {
         empresaId: rowAtual.empresa_id,
-        qualificacaoTipoId: Number(id),
+        qualificacaoTipoId,
       });
       await reconcileImportedEdappHistory(db, {
         empresaId: rowAtual.empresa_id,
-        qualificacaoTipoId: Number(id),
+        qualificacaoTipoId,
       });
     } else if (rowAtual?.empresa_id && categoriaEraEad && !categoriaEhEad) {
+      console.log(
+        `[TIPOS_EAD] Soft-delete LMS para tipo_id=${qualificacaoTipoId} (não é mais EAD)`,
+      );
       await softDeleteLmsCourseForQualificacaoTipo(db, {
         empresaId: rowAtual.empresa_id,
-        qualificacaoTipoId: Number(id),
+        qualificacaoTipoId,
       });
     }
 
@@ -825,7 +834,7 @@ router.delete(
     await logAuditoria(db, 'qualificacoes_tipos', id, 'DELETE');
     await softDeleteLmsCourseForQualificacaoTipo(db, {
       empresaId: Number((existing as { empresa_id: number }).empresa_id),
-      qualificacaoTipoId: Number(id),
+      qualificacaoTipoId: String(id),
     });
 
     return c.json({ success: true, message: 'Tipo deletado com sucesso' });

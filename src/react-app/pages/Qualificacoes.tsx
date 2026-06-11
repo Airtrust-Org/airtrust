@@ -4393,8 +4393,26 @@ export default function Qualificacoes() {
                 return;
               }
 
+              // ⚠️ Safety timeout: evita que o botão fique em "Salvando..." para sempre.
+              // Timeout de 30s cobre até mesmo o pior caso de reconcileImportedEdappHistory.
+              const SAVE_TIMEOUT_MS = 30_000;
+              let saveTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
               try {
                 setSavingTipo(true);
+
+                // Forçar reset após timeout como último recurso (defesa em profundidade)
+                saveTimeoutId = setTimeout(() => {
+                  console.error(
+                    '[SalvarTipo] TIMEOUT: operação excedeu %ds — forçando reset de savingTipo',
+                    SAVE_TIMEOUT_MS / 1000,
+                  );
+                  setSavingTipo(false);
+                  showToast.error(
+                    'Operação excedeu o tempo limite. O modelo pode ter sido salvo — verifique a lista.',
+                  );
+                }, SAVE_TIMEOUT_MS);
+
                 const token = getAccessToken();
                 const apiUrl = API_BASE_URL;
 
@@ -4439,6 +4457,17 @@ export default function Qualificacoes() {
                     editingTipo.descricao?.trim() || editingTipo.observacoes?.trim() || null;
                 }
 
+                console.log(
+                  '[SalvarTipo] Enviando %s %s — categoria=%s',
+                  method,
+                  url,
+                  payload.categoria,
+                );
+
+                // ⚠️ AbortController com timeout para fetch — evita promise pendente eterna
+                const abortController = new AbortController();
+                const fetchTimeoutId = setTimeout(() => abortController.abort(), SAVE_TIMEOUT_MS);
+
                 const response = await fetch(url, {
                   method,
                   headers: {
@@ -4446,7 +4475,16 @@ export default function Qualificacoes() {
                     Authorization: `Bearer ${token}`,
                   },
                   body: JSON.stringify(payload),
+                  signal: abortController.signal,
                 });
+
+                clearTimeout(fetchTimeoutId);
+
+                console.log(
+                  '[SalvarTipo] Resposta recebida — status=%d, ok=%s',
+                  response.status,
+                  response.ok,
+                );
 
                 if (response.ok) {
                   clearApiCacheByPattern('/qualificacoes/tipos');
@@ -4470,10 +4508,22 @@ export default function Qualificacoes() {
                         : 'Erro ao salvar modelo'),
                   );
                 }
-              } catch (error) {
-                console.error('[SalvarTipo] erro', error);
-                showToast.error('Erro ao salvar modelo');
+              } catch (error: unknown) {
+                if (error instanceof DOMException && error.name === 'AbortError') {
+                  console.error('[SalvarTipo] Fetch abortado por timeout');
+                  showToast.error('Operação excedeu o tempo limite. Tente novamente.');
+                } else {
+                  console.error('[SalvarTipo] erro', error);
+                  showToast.error(
+                    error instanceof TypeError
+                      ? 'Erro de conexão. Verifique sua rede.'
+                      : 'Erro ao salvar modelo',
+                  );
+                }
               } finally {
+                if (saveTimeoutId !== null) {
+                  clearTimeout(saveTimeoutId);
+                }
                 setSavingTipo(false);
               }
             }}
