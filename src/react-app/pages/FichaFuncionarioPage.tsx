@@ -266,7 +266,14 @@ function badgeStatusRequisito(status: RequisitoStatus, diasRestantes: number | n
   );
 }
 
-function badgeStatusQualificacao(dataVencimento: string) {
+function badgeStatusQualificacao(dataVencimento: string | null | undefined) {
+  if (!dataVencimento) {
+    return (
+      <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+        Sem data
+      </span>
+    );
+  }
   const hoje = new Date();
   const dv = parseISO(dataVencimento);
   const dias = differenceInDays(dv, hoje);
@@ -292,7 +299,14 @@ function badgeStatusQualificacao(dataVencimento: string) {
   );
 }
 
-function badgeStatusLicenca(dataVencimento: string) {
+function badgeStatusLicenca(dataVencimento: string | null | undefined) {
+  if (!dataVencimento) {
+    return (
+      <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+        Sem data
+      </span>
+    );
+  }
   const hoje = new Date();
   const dv = parseISO(dataVencimento);
   const dias = differenceInDays(dv, hoje);
@@ -486,13 +500,14 @@ export default function FichaFuncionarioPage() {
   const qualificacoesVencidas = useMemo(
     () =>
       qualificacoesTecnicas.filter(
-        (q) => differenceInDays(parseISO(q.data_vencimento), new Date()) < 0,
+        (q) => q.data_vencimento && differenceInDays(parseISO(q.data_vencimento), new Date()) < 0,
       ).length,
     [qualificacoesTecnicas],
   );
   const qualificacoesEmRisco = useMemo(
     () =>
       qualificacoesTecnicas.filter((q) => {
+        if (!q.data_vencimento) return false;
         const dias = differenceInDays(parseISO(q.data_vencimento), new Date());
         return dias >= 0 && dias <= 30;
       }).length,
