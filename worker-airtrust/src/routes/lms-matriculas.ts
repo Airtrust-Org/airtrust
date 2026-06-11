@@ -22,6 +22,7 @@ import {
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import { logAudit } from '../utils/db';
+import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -128,6 +129,107 @@ async function createLmsInAppNotification(
       createdAt,
     )
     .run();
+}
+
+/**
+ * Envia e-mail de notificação de matrícula ao funcionário.
+ * Fire-and-forget: nunca lança exceção, loga warnings em caso de falha.
+ */
+async function sendMatriculaEmail(
+  env: Env,
+  db: D1Database,
+  params: {
+    funcionarioId: number;
+    empresaId: number;
+    cursoId: number;
+    cursoTitulo: string;
+    dataExpiracao?: string | null;
+    isNovoCiclo: boolean;
+  },
+): Promise<void> {
+  try {
+    const funcionario = await db
+      .prepare(
+        `SELECT nome, email FROM funcionarios
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(params.funcionarioId, params.empresaId)
+      .first<{ nome: string; email: string | null }>();
+
+    if (!funcionario?.email) {
+      console.info(
+        '[lms-matricula] Email não encontrado para funcionario',
+        params.funcionarioId,
+      );
+      return;
+    }
+
+    const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '');
+    const cursoUrl = `${frontendUrl}/lms/cursos/${params.cursoId}`;
+
+    const nomeAluno = funcionario.nome || `Funcionário ${params.funcionarioId}`;
+    const actionLabel = params.isNovoCiclo ? 'Novo ciclo de treinamento' : 'Novo treinamento';
+    const subject = `${actionLabel}: ${params.cursoTitulo}`;
+
+    const validadeLinha = params.dataExpiracao
+      ? `<p><strong>Prazo de conclusão:</strong> ${params.dataExpiracao.split('-').reverse().join('/')}</p>`
+      : '';
+
+    const htmlContent = `
+      <div style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#1e40af;margin-bottom:16px">${actionLabel}</h2>
+        <p>Olá <strong>${nomeAluno}</strong>,</p>
+        <p>Você foi matriculado no curso:</p>
+        <div style="background:#f0f9ff;border-left:4px solid #3b82f6;padding:12px 16px;margin:12px 0;border-radius:4px">
+          <p style="font-size:16px;font-weight:600;margin:0;color:#1e3a5f">${params.cursoTitulo}</p>
+        </div>
+        ${validadeLinha}
+        <p>Para acessar o curso, clique no botão abaixo:</p>
+        <p style="margin:24px 0">
+          <a href="${cursoUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">
+            Acessar curso
+          </a>
+        </p>
+        <p style="color:#6b7280;font-size:12px;margin-top:24px">
+          Este e-mail foi enviado automaticamente pela plataforma AirTrust.
+        </p>
+      </div>`;
+
+    const textContent = [
+      `${actionLabel}: ${params.cursoTitulo}`,
+      '',
+      `Olá ${nomeAluno},`,
+      '',
+      `Você foi matriculado no curso: ${params.cursoTitulo}`,
+      params.dataExpiracao
+        ? `Prazo de conclusão: ${params.dataExpiracao.split('-').reverse().join('/')}`
+        : '',
+      '',
+      `Acesse o curso em: ${cursoUrl}`,
+      '',
+      'Este e-mail foi enviado automaticamente pela plataforma AirTrust.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const sent = await sendEmail(env, {
+      to: [{ email: funcionario.email, name: nomeAluno }],
+      subject,
+      textContent,
+      htmlContent,
+    });
+
+    if (sent) {
+      console.log(
+        '[lms-matricula] Email enviado para',
+        funcionario.email,
+        'curso',
+        params.cursoId,
+      );
+    }
+  } catch (err) {
+    console.warn('[lms-matricula] Falha ao enviar email de matrícula:', err);
+  }
 }
 
 async function findLatestMatriculaForFuncionario(
@@ -655,6 +757,14 @@ app.post('/', async (c) => {
           novo_ciclo: true,
         },
       });
+      await sendMatriculaEmail(c.env, db, {
+        funcionarioId: funcionario_id,
+        empresaId,
+        cursoId: curso_id,
+        cursoTitulo: curso.titulo,
+        dataExpiracao,
+        isNovoCiclo: true,
+      });
       return c.json({ success: true, data: updated }, 200);
     }
   }
@@ -705,6 +815,14 @@ app.post('/', async (c) => {
         funcionario_nome: funcionario.nome,
         data_expiracao: data_expiracao ?? null,
       },
+    });
+    await sendMatriculaEmail(c.env, db, {
+      funcionarioId: funcionario_id,
+      empresaId,
+      cursoId: curso_id,
+      cursoTitulo: curso.titulo,
+      dataExpiracao,
+      isNovoCiclo: false,
     });
     return c.json({ success: true, data: matricula }, 201);
   } catch (error) {
@@ -763,6 +881,14 @@ app.post('/', async (c) => {
         novo_ciclo: true,
         reconciled_unique_conflict: true,
       },
+    });
+    await sendMatriculaEmail(c.env, db, {
+      funcionarioId: funcionario_id,
+      empresaId,
+      cursoId: curso_id,
+      cursoTitulo: curso.titulo,
+      dataExpiracao,
+      isNovoCiclo: true,
     });
     return c.json({ success: true, data: updated }, 200);
   }
@@ -871,6 +997,14 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
             novo_ciclo: true,
           },
         });
+        await sendMatriculaEmail(c.env, db, {
+          funcionarioId,
+          empresaId,
+          cursoId: curso_id,
+          cursoTitulo: curso.titulo,
+          dataExpiracao,
+          isNovoCiclo: true,
+        });
 
         const matriculaAtualizada = await readMatriculaForCourseList(db, {
           matriculaId: existente!.id,
@@ -918,6 +1052,14 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
             data_expiracao: data_expiracao ?? null,
             observacoes: observacoes ?? null,
           },
+        });
+        await sendMatriculaEmail(c.env, db, {
+          funcionarioId,
+          empresaId,
+          cursoId: curso_id,
+          cursoTitulo: curso.titulo,
+          dataExpiracao,
+          isNovoCiclo: false,
         });
 
         const matriculaCriada = await readMatriculaForCourseList(db, {
@@ -988,6 +1130,14 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
             novo_ciclo: true,
             reconciled_unique_conflict: true,
           },
+        });
+        await sendMatriculaEmail(c.env, db, {
+          funcionarioId,
+          empresaId,
+          cursoId: curso_id,
+          cursoTitulo: curso.titulo,
+          dataExpiracao,
+          isNovoCiclo: true,
         });
 
         const matriculaAtualizada = await readMatriculaForCourseList(db, {
