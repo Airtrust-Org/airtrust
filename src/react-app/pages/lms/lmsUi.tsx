@@ -194,7 +194,7 @@ export function LmsSummaryTag({
           {icon}
         </span>
       ) : null}
-      <span className="truncate text-[11px] font-medium leading-none">{label}</span>
+      <span className="truncate text-xs font-medium leading-none">{label}</span>
       <span className="whitespace-nowrap text-xs font-semibold leading-none text-slate-900 dark:text-slate-100">
         {value}
       </span>
@@ -322,7 +322,7 @@ export function LmsCourseArtwork({
 
   return (
     <div
-      className={`relative overflow-hidden border border-slate-200 ${compact ? 'h-14 w-14 rounded-xl' : 'aspect-[16/8] w-full rounded-xl'} bg-slate-950`}
+      className={`relative overflow-hidden border border-slate-200 ${compact ? 'h-14 w-14 rounded-xl' : 'aspect-[16/9] w-full rounded-xl'} bg-slate-950`}
     >
       {thumbnailUrl ? (
         <img
@@ -335,7 +335,7 @@ export function LmsCourseArtwork({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.42),_transparent_34%),linear-gradient(140deg,_#0f172a_0%,_#111827_46%,_#1e3a8a_100%)]" />
       )}
       <div
-        className={`absolute inset-0 ${thumbnailUrl ? 'bg-gradient-to-t from-slate-950/90 via-slate-950/34 to-slate-950/10' : 'bg-gradient-to-br from-white/0 via-white/0 to-sky-400/10'}`}
+        className={`absolute inset-0 ${thumbnailUrl ? 'bg-gradient-to-t from-slate-950/60 via-slate-950/15 to-transparent' : 'bg-gradient-to-br from-white/0 via-white/0 to-sky-400/10'}`}
       />
 
       <div
@@ -359,19 +359,6 @@ export function LmsCourseArtwork({
             >
               {meta.icon}
             </div>
-            {curso.categoria ? (
-              <div
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${thumbnailUrl ? 'border border-white/20 bg-slate-900/55 text-white backdrop-blur-sm' : 'border border-slate-200 bg-slate-50 text-slate-600'}`}
-              >
-                {curso.categoria}
-              </div>
-            ) : (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${thumbnailUrl ? 'border border-white/16 bg-white/14 text-white backdrop-blur-sm' : meta.chipClass}`}
-              >
-                {meta.label}
-              </span>
-            )}
           </>
         )}
       </div>
@@ -389,7 +376,7 @@ export function LmsCourseArtwork({
 
 export function LmsInfoChip({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
       {icon}
       {children}
     </span>
