@@ -32,6 +32,10 @@ import {
   removeManagedEscalaEvents,
 } from '../shared/syncEscalaEventosExternos';
 import funcionariosMutationsRoutes from './funcionarios-mutations';
+import {
+  employeeSectorSql,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -123,7 +127,8 @@ app.get('/', auth(), async (c) => {
   const status = c.req.query('status'); // "true" ou "false"
   const ativoParam = c.req.query('ativo'); // compat: ativo=true/false
   const cargo = c.req.query('cargo');
-  const setor = c.req.query('setor'); // ✅ ATENÇÃO: Requer migration 0006 aplicada
+  const setor = c.req.query('setor');
+  const setorId = c.req.query('setor_id');
   const funcao = c.req.query('funcao'); // ✅ Filtro de função
   const aeronave = c.req.query('aeronave'); // ✅ Filtro por aeronave (texto)
   const quinzena = c.req.query('quinzena'); // primeira|segunda|personalizada
@@ -143,14 +148,19 @@ app.get('/', auth(), async (c) => {
 
   // Construir WHERE clauses (main query uses alias `f`; countRecords does not)
   const whereClausesQuery: string[] = ['f.deleted_at IS NULL'];
-  const whereClausesCount: string[] = [];
+  const whereClausesCount: string[] = ['f.deleted_at IS NULL'];
   const bindings: unknown[] = [];
 
   // Filtro por empresa (multi-tenant) — fail-closed: sempre exige tenant
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const sectorScope = employeeSectorSql(access, 'f');
   whereClausesQuery.push('f.empresa_id = ?');
   whereClausesCount.push('empresa_id = ?');
   bindings.push(empresaId);
+  whereClausesQuery.push(sectorScope.clause);
+  whereClausesCount.push(sectorScope.clause);
+  bindings.push(...sectorScope.bindings);
 
   // Busca textual
   if (search) {
@@ -224,7 +234,15 @@ app.get('/', auth(), async (c) => {
   }
 
   // Filtro por setor (✅ ATENÇÃO: Requer migration 0006 aplicada)
-  if (setor) {
+  if (setorId) {
+    const parsedSetorId = Number(setorId);
+    if (!Number.isInteger(parsedSetorId) || parsedSetorId <= 0) {
+      badRequest('Setor inválido');
+    }
+    whereClausesQuery.push('f.setor_id = ?');
+    whereClausesCount.push('f.setor_id = ?');
+    bindings.push(parsedSetorId);
+  } else if (setor) {
     whereClausesQuery.push('f.setor = ?');
     whereClausesCount.push('setor = ?');
     bindings.push(setor);
@@ -312,7 +330,7 @@ app.get('/', auth(), async (c) => {
   const query = `
     SELECT 
       f.id, f.matricula, f.nome, f.guerra, f.cpf, f.email, f.telefone,
-      f.cargo, f.setor, f.funcao,
+      f.cargo, f.setor_id, COALESCE(s.nome, f.setor) AS setor, f.funcao,
       ${aeronaveSelectExpr} AS aeronave,
       f.quinzena,
       f.codigo_anac,
@@ -322,6 +340,10 @@ app.get('/', auth(), async (c) => {
       f.is_instrutor, f.is_checador,
       f.created_at, f.updated_at
     FROM funcionarios f
+    LEFT JOIN setores s
+      ON s.id = f.setor_id
+     AND s.empresa_id = f.empresa_id
+     AND s.deleted_at IS NULL
     WHERE ${whereClauseQuery}
     ORDER BY ${orderByQueryClause}
     LIMIT ? OFFSET ?
@@ -348,6 +370,8 @@ app.get('/', auth(), async (c) => {
 app.get('/stats', auth(), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const sectorScope = employeeSectorSql(access, 'f');
 
   // Descobrir schema real (status TEXT vs. ativo INTEGER)
   const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
@@ -378,9 +402,10 @@ app.get('/stats', auth(), async (c) => {
       LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id
       WHERE f.deleted_at IS NULL
         AND f.empresa_id = ?
+        AND ${sectorScope.clause}
     `,
     )
-    .bind(empresaId)
+    .bind(empresaId, ...sectorScope.bindings)
     .first<{ total: number; ativos: number; inativos: number }>();
 
   return c.json({
@@ -664,6 +689,8 @@ app.get('/:fid/ferias', auth(), async (c) => {
   const db = c.env.DB;
   const funcionarioId = c.req.param('fid');
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const sectorScope = employeeSectorSql(access, 'f');
 
   const rows = await db
     .prepare(
@@ -683,9 +710,10 @@ app.get('/:fid/ferias', auth(), async (c) => {
        WHERE ff.funcionario_id = ?
          AND ff.deleted_at IS NULL
          AND f.empresa_id = ?
+         AND ${sectorScope.clause}
        ORDER BY ff.data_inicio DESC`,
     )
-    .bind(funcionarioId, empresaId)
+    .bind(funcionarioId, empresaId, ...sectorScope.bindings)
     .all<{
       id: string;
       funcionario_id: string;
@@ -712,6 +740,8 @@ app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const funcionarioId = c.req.param('fid');
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const sectorScope = employeeSectorSql(access, 'funcionarios');
   const userId = String(extrairUsuarioAuditoria(c) || 'system');
   const body = (await c.req.json().catch(() => null)) as {
     data_inicio?: string;
@@ -738,9 +768,10 @@ app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
     .prepare(
       `SELECT id FROM funcionarios
         WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
+          AND ${sectorScope.clause}
         LIMIT 1`,
     )
-    .bind(funcionarioId, empresaId)
+    .bind(funcionarioId, empresaId, ...sectorScope.bindings)
     .first<{ id: string }>();
 
   if (!funcionario) {
@@ -823,6 +854,8 @@ app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), as
   const funcionarioId = c.req.param('fid');
   const feriasId = c.req.param('feriasId');
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const sectorScope = employeeSectorSql(access, 'f');
 
   const periodo = await db
     .prepare(
@@ -839,9 +872,10 @@ app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), as
          AND ff.funcionario_id = ?
          AND ff.deleted_at IS NULL
          AND f.empresa_id = ?
+         AND ${sectorScope.clause}
        LIMIT 1`,
     )
-    .bind(feriasId, funcionarioId, empresaId)
+    .bind(feriasId, funcionarioId, empresaId, ...sectorScope.bindings)
     .first<{
       id: string;
       funcionario_id: string;
@@ -904,6 +938,9 @@ app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), as
 app.get('/:id', auth(), async (c) => {
   const db = c.env.DB;
   const id = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const sectorScope = employeeSectorSql(access, 'funcionarios');
 
   if (isNaN(id)) {
     badRequest('ID inválido');
@@ -928,7 +965,7 @@ app.get('/:id', auth(), async (c) => {
     SELECT 
       id, matricula, nome, guerra, cpf, rg, 
       nascimento, email, telefone,
-      funcao, cargo, setor, base, aeronave, modelo_aeronave_id,
+      funcao, cargo, setor, setor_id, base, aeronave, modelo_aeronave_id,
       admissao, codigo_anac,
       nivel_icao, data_realizacao_icao, validade_icao, 
       cma, data_realizacao_cma, validade_cma, 
@@ -943,9 +980,10 @@ app.get('/:id', auth(), async (c) => {
     FROM funcionarios
     WHERE id = ? AND deleted_at IS NULL
       AND empresa_id = ?
+      AND ${sectorScope.clause}
   `,
     )
-    .bind(id, getEmpresaId(c))
+    .bind(id, empresaId, ...sectorScope.bindings)
     .first<Funcionario>();
 
   if (!funcionario) {
