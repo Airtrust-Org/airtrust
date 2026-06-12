@@ -128,7 +128,7 @@ app.get('/', auth(), async (c) => {
   const ativoParam = c.req.query('ativo'); // compat: ativo=true/false
   const cargo = c.req.query('cargo');
   const setor = c.req.query('setor');
-  const setorId = c.req.query('setor_id');
+  const setorIds = c.req.queries('setor_id'); // suporta multi-select: ?setor_id=1&setor_id=2
   const funcao = c.req.query('funcao'); // ✅ Filtro de função
   const aeronave = c.req.query('aeronave'); // ✅ Filtro por aeronave (texto)
   const quinzena = c.req.query('quinzena'); // primeira|segunda|personalizada
@@ -233,15 +233,18 @@ app.get('/', auth(), async (c) => {
     bindings.push(cargo);
   }
 
-  // Filtro por setor (✅ ATENÇÃO: Requer migration 0006 aplicada)
-  if (setorId) {
-    const parsedSetorId = Number(setorId);
-    if (!Number.isInteger(parsedSetorId) || parsedSetorId <= 0) {
+  // Filtro por setor(es) — suporta multi-select via ?setor_id=1&setor_id=2
+  if (setorIds && setorIds.length > 0) {
+    const parsedIds = setorIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    if (parsedIds.length === 0) {
       badRequest('Setor inválido');
     }
-    whereClausesQuery.push('f.setor_id = ?');
-    whereClausesCount.push('f.setor_id = ?');
-    bindings.push(parsedSetorId);
+    const placeholders = parsedIds.map(() => '?').join(', ');
+    whereClausesQuery.push(`f.setor_id IN (${placeholders})`);
+    whereClausesCount.push(`f.setor_id IN (${placeholders})`);
+    bindings.push(...parsedIds);
   } else if (setor) {
     whereClausesQuery.push('f.setor = ?');
     whereClausesCount.push('setor = ?');

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Columns2, Plus, Search } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 import { Button as UIButton } from '@/react-app/components/UI';
+import { MultiSelect } from '@/react-app/components/ui/MultiSelect';
+import type { MultiSelectOption } from '@/react-app/components/ui/MultiSelect';
 import { ListaFuncionarios } from './funcionarios/ListaFuncionarios';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
@@ -40,7 +42,7 @@ export default function Funcionarios() {
     funcaoFilter: string;
     aeronaveFilter: string;
     quinzenaFilter: string;
-    setorFilter: string;
+    setorFilter: string[];
   }
 
   const [filters, setFilters] = useLocalStorage<FuncionariosFilters>(FUNCIONARIOS_FILTERS_KEY, {
@@ -49,18 +51,25 @@ export default function Funcionarios() {
     funcaoFilter: searchParams.get('funcao') ?? '',
     aeronaveFilter: '',
     quinzenaFilter: '',
-    setorFilter: '',
+    setorFilter: [] as string[],
   });
 
   const { searchTerm, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter } =
     filters;
 
   const updateFilter = useCallback(
-    (key: keyof FuncionariosFilters, value: string) => {
+    <K extends keyof FuncionariosFilters>(key: K, value: FuncionariosFilters[K]) => {
       setFilters((prev) => ({ ...prev, [key]: value }));
     },
     [setFilters],
   );
+
+  // Derived: setor options for MultiSelect
+  const setorOptions = useMemo<MultiSelectOption[]>(() => {
+    return [...setores]
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+      .map((s) => ({ value: String(s.id), label: s.nome }));
+  }, [setores]);
   const [configColunasAberto, setConfigColunasAberto] = useState(false);
   const [showModalNovoFuncionario, setShowModalNovoFuncionario] = useState(false);
   const [modelosAeronave, setModelosAeronave] = useState<ModeloAeronave[]>([]);
@@ -123,10 +132,6 @@ export default function Funcionarios() {
     else nextParams.delete('funcao');
     setSearchParams(nextParams, { replace: true });
   }, [funcaoFilter, searchParams, setSearchParams]);
-
-  const setoresOrdenados = useMemo(() => {
-    return [...setores].sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [setores]);
 
   const modelosAeronaveOptions = useMemo(() => {
     const unique = new Map<string, { id: number; label: string }>();
@@ -218,18 +223,13 @@ export default function Funcionarios() {
               <option value="personalizada">Flex</option>
             </select>
 
-            <select
-              value={setorFilter}
-              onChange={(e) => updateFilter('setorFilter', e.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer w-max dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="">Todos os Setores</option>
-              {setoresOrdenados.map((setor) => (
-                <option key={setor.id} value={String(setor.id)}>
-                  {setor.nome}
-                </option>
-              ))}
-            </select>
+            <MultiSelect
+              options={setorOptions}
+              selected={setorFilter}
+              onChange={(selected) => updateFilter('setorFilter', selected)}
+              placeholder="Todos os Setores"
+              allLabel="Todos os Setores"
+            />
             <button
               onClick={() => setConfigColunasAberto((prev) => !prev)}
               className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
