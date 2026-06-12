@@ -54,8 +54,14 @@ export default function Funcionarios() {
     setorFilter: [] as string[],
   });
 
-  const { searchTerm, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter } =
-    filters;
+  // Migrar setorFilter legado (string → string[]) se ainda estiver no formato antigo
+  const setorFilter: string[] = Array.isArray(filters.setorFilter)
+    ? filters.setorFilter
+    : filters.setorFilter
+      ? [filters.setorFilter]
+      : [];
+
+  const { searchTerm, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter } = filters;
 
   const updateFilter = useCallback(
     <K extends keyof FuncionariosFilters>(key: K, value: FuncionariosFilters[K]) => {
