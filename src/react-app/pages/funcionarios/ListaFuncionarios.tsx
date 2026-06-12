@@ -108,6 +108,7 @@ interface ListaFuncionariosProps {
   statusFilter: string;
   funcaoFilter?: string;
   aeronaveFilter?: string;
+  quinzenaFilter?: string;
   setorFilter?: string;
   configColunasAberto: boolean;
   onToggleConfigColunas: () => void;
@@ -148,6 +149,7 @@ export function ListaFuncionarios({
   statusFilter,
   funcaoFilter,
   aeronaveFilter,
+  quinzenaFilter,
   setorFilter,
   configColunasAberto,
   onToggleConfigColunas,
@@ -230,6 +232,19 @@ export function ListaFuncionarios({
     setoresDiscoverCallbackRef.current = onSetoresDiscover;
   }, [onSetoresDiscover]);
 
+  // Resetar paginação para página 1 quando qualquer filtro mudar
+  const prevFiltersKeyRef = useRef('');
+  useEffect(() => {
+    const key = [debouncedTermoBusca, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter]
+      .map((v) => v ?? '')
+      .join('|');
+    if (prevFiltersKeyRef.current && key !== prevFiltersKeyRef.current) {
+      setPagination((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }));
+    }
+    prevFiltersKeyRef.current = key;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedTermoBusca, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter]);
+
   // Fetch principal - com ordenação server-side
   useEffect(() => {
     const abortController = new AbortController();
@@ -243,6 +258,7 @@ export function ListaFuncionarios({
       statusFilter,
       funcaoFilter: funcaoFilter || '',
       aeronaveFilter: aeronaveFilter || '',
+      quinzenaFilter: quinzenaFilter || '',
       setorFilter: setorFilter || '',
       token: token || '',
       sortColumn: sortConfig.column || '',
@@ -287,9 +303,14 @@ export function ListaFuncionarios({
           params.append('aeronave', aeronaveFilter);
         }
 
+        // Adicionar filtro de quinzena se existir
+        if (quinzenaFilter) {
+          params.append('quinzena', quinzenaFilter);
+        }
+
         // Adicionar filtro de setor se existir
         if (setorFilter) {
-          params.append('setor', setorFilter);
+          params.append('setor_id', setorFilter);
         }
 
         // Adicionar ordenação se existir
@@ -421,6 +442,7 @@ export function ListaFuncionarios({
     statusFilter,
     funcaoFilter,
     aeronaveFilter,
+    quinzenaFilter,
     setorFilter,
     token,
     sortConfig,
