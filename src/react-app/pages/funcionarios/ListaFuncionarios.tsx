@@ -109,7 +109,7 @@ interface ListaFuncionariosProps {
   funcaoFilter?: string;
   aeronaveFilter?: string;
   quinzenaFilter?: string;
-  setorFilter?: string;
+  setorFilter?: string[];
   configColunasAberto: boolean;
   onToggleConfigColunas: () => void;
   onStatsChange?: (stats: {
@@ -235,7 +235,14 @@ export function ListaFuncionarios({
   // Resetar paginação para página 1 quando qualquer filtro mudar
   const prevFiltersKeyRef = useRef('');
   useEffect(() => {
-    const key = [debouncedTermoBusca, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter]
+    const key = [
+      debouncedTermoBusca,
+      statusFilter,
+      funcaoFilter,
+      aeronaveFilter,
+      quinzenaFilter,
+      (setorFilter || []).join(','),
+    ]
       .map((v) => v ?? '')
       .join('|');
     if (prevFiltersKeyRef.current && key !== prevFiltersKeyRef.current) {
@@ -259,7 +266,7 @@ export function ListaFuncionarios({
       funcaoFilter: funcaoFilter || '',
       aeronaveFilter: aeronaveFilter || '',
       quinzenaFilter: quinzenaFilter || '',
-      setorFilter: setorFilter || '',
+      setorFilter: (setorFilter || []).join(','),
       token: token || '',
       sortColumn: sortConfig.column || '',
       sortDirection: sortConfig.direction || '',
@@ -308,9 +315,9 @@ export function ListaFuncionarios({
           params.append('quinzena', quinzenaFilter);
         }
 
-        // Adicionar filtro de setor se existir
-        if (setorFilter) {
-          params.append('setor_id', setorFilter);
+        // Adicionar filtro de setor(es) se existir
+        if (setorFilter && setorFilter.length > 0) {
+          setorFilter.forEach((id) => params.append('setor_id', id));
         }
 
         // Adicionar ordenação se existir
