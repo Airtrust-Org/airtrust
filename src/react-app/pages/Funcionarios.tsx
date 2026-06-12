@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Columns2, Plus, Search } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 import { Button as UIButton } from '@/react-app/components/UI';
@@ -7,6 +7,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { useLocalStorage } from '@/react-app/hooks/useLocalStorage';
 import { useSearchParams } from 'react-router-dom';
 
 interface ModeloAeronave {
@@ -21,11 +22,6 @@ interface Setor {
   nome: string;
 }
 
-type FuncionarioSetorDiscover = {
-  setor_id?: number;
-  setor?: string;
-};
-
 function normalizeAeronaveLabel(value?: string): string {
   if (!value) return '';
   return ['S76', 'SK76'].includes(value.trim().toUpperCase()) ? 'SK76' : value;
@@ -34,12 +30,37 @@ function normalizeAeronaveLabel(value?: string): string {
 export default function Funcionarios() {
   const { token } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ativos');
-  const [funcaoFilter, setFuncaoFilter] = useState(searchParams.get('funcao') ?? '');
-  const [aeronaveFilter, setAeronaveFilter] = useState('');
-  const [quinzenaFilter, setQuinzenaFilter] = useState('');
-  const [setorFilter, setSetorFilter] = useState('');
+
+  // ── Filtros persistentes (localStorage por usuário) ──
+  const FUNCIONARIOS_FILTERS_KEY = '@airtrust/filters-funcionarios';
+
+  interface FuncionariosFilters {
+    searchTerm: string;
+    statusFilter: string;
+    funcaoFilter: string;
+    aeronaveFilter: string;
+    quinzenaFilter: string;
+    setorFilter: string;
+  }
+
+  const [filters, setFilters] = useLocalStorage<FuncionariosFilters>(FUNCIONARIOS_FILTERS_KEY, {
+    searchTerm: '',
+    statusFilter: 'ativos',
+    funcaoFilter: searchParams.get('funcao') ?? '',
+    aeronaveFilter: '',
+    quinzenaFilter: '',
+    setorFilter: '',
+  });
+
+  const { searchTerm, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter } =
+    filters;
+
+  const updateFilter = useCallback(
+    (key: keyof FuncionariosFilters, value: string) => {
+      setFilters((prev) => ({ ...prev, [key]: value }));
+    },
+    [setFilters],
+  );
   const [configColunasAberto, setConfigColunasAberto] = useState(false);
   const [showModalNovoFuncionario, setShowModalNovoFuncionario] = useState(false);
   const [modelosAeronave, setModelosAeronave] = useState<ModeloAeronave[]>([]);
@@ -66,30 +87,6 @@ export default function Funcionarios() {
     }
   };
 
-  const handleSetoresDiscover = useCallback((funcionarios: FuncionarioSetorDiscover[]) => {
-    // Extrair setores únicos dos funcionários
-    const setoresUnicos = new Map<number, string>();
-    funcionarios.forEach((f) => {
-      if (f.setor_id && f.setor) {
-        setoresUnicos.set(f.setor_id, f.setor);
-      }
-    });
-    // Converter para array e ordenar
-    const setoresArray = Array.from(setoresUnicos.entries())
-      .map(([id, nome]) => ({ id, nome }))
-      .sort((a, b) => a.nome.localeCompare(b.nome));
-    setSetores((prev) => {
-      if (prev.length === setoresArray.length) {
-        const unchanged = prev.every(
-          (setor, index) =>
-            setor.id === setoresArray[index]?.id && setor.nome === setoresArray[index]?.nome,
-        );
-        if (unchanged) return prev;
-      }
-      return setoresArray;
-    });
-  }, []);
-
   useEffect(() => {
     if (modelosLoadedRef.current) return;
     modelosLoadedRef.current = true;
@@ -98,9 +95,25 @@ export default function Funcionarios() {
   }, [token]);
 
   useEffect(() => {
+    const loadSetores = async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const response = await fetch(`${API_BASE_URL}/setores`, { headers, cache: 'no-cache' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        setSetores(Array.isArray(payload?.data) ? payload.data : []);
+      } catch (error) {
+        console.error('Erro ao carregar setores:', error);
+      }
+    };
+    loadSetores();
+  }, [token]);
+
+  useEffect(() => {
     const nextFuncao = searchParams.get('funcao') ?? '';
     if (nextFuncao !== funcaoFilter) {
-      setFuncaoFilter(nextFuncao);
+      updateFilter('funcaoFilter', nextFuncao);
     }
   }, [funcaoFilter, searchParams]);
 
@@ -157,13 +170,13 @@ export default function Funcionarios() {
                 type="text"
                 placeholder="Buscar por nome, matrícula, CPF..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => updateFilter('searchTerm', e.target.value)}
                 className="w-56 rounded-md border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </div>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => updateFilter('statusFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="todos">Todos</option>
@@ -173,7 +186,7 @@ export default function Funcionarios() {
 
             <select
               value={funcaoFilter}
-              onChange={(e) => setFuncaoFilter(e.target.value)}
+              onChange={(e) => updateFilter('funcaoFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">Todas as Funções</option>
@@ -183,7 +196,7 @@ export default function Funcionarios() {
 
             <select
               value={aeronaveFilter}
-              onChange={(e) => setAeronaveFilter(e.target.value)}
+              onChange={(e) => updateFilter('aeronaveFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer w-max dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">Todos os Equipamentos</option>
@@ -196,7 +209,7 @@ export default function Funcionarios() {
 
             <select
               value={quinzenaFilter}
-              onChange={(e) => setQuinzenaFilter(e.target.value)}
+              onChange={(e) => updateFilter('quinzenaFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer w-max dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">Todas as Quinzenas</option>
@@ -207,12 +220,12 @@ export default function Funcionarios() {
 
             <select
               value={setorFilter}
-              onChange={(e) => setSetorFilter(e.target.value)}
+              onChange={(e) => updateFilter('setorFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer w-max dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">Todos os Setores</option>
               {setoresOrdenados.map((setor) => (
-                <option key={setor.id} value={setor.nome}>
+                <option key={setor.id} value={String(setor.id)}>
                   {setor.nome}
                 </option>
               ))}
@@ -267,7 +280,6 @@ export default function Funcionarios() {
             setorFilter={setorFilter}
             configColunasAberto={configColunasAberto}
             onToggleConfigColunas={() => setConfigColunasAberto((prev) => !prev)}
-            onSetoresDiscover={handleSetoresDiscover}
             onStatsChange={setStats}
             showModalNovoFuncionario={showModalNovoFuncionario}
             onCloseModalNovoFuncionario={() => setShowModalNovoFuncionario(false)}
