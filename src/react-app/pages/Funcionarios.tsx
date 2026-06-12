@@ -54,12 +54,20 @@ export default function Funcionarios() {
     setorFilter: [] as string[],
   });
 
-  // Migrar setorFilter legado (string → string[]) se ainda estiver no formato antigo
-  const setorFilter: string[] = Array.isArray(filters.setorFilter)
-    ? filters.setorFilter
-    : filters.setorFilter
-      ? [filters.setorFilter]
-      : [];
+  // Migrar setorFilter legado (string → string[]) uma vez na montagem
+  useEffect(() => {
+    if (!Array.isArray(filters.setorFilter)) {
+      const normalized: string[] = filters.setorFilter ? [filters.setorFilter] : [];
+      setFilters((prev) => ({ ...prev, setorFilter: normalized }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Estabilizar referência (useMemo evita novo [] a cada render)
+  const setorFilter: string[] = useMemo(
+    () => (Array.isArray(filters.setorFilter) ? filters.setorFilter : []),
+    [filters.setorFilter],
+  );
 
   const { searchTerm, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter } = filters;
 
