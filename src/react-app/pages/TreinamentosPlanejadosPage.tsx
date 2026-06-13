@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState, useCallback } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -27,7 +27,9 @@ import PageHeader from '@/react-app/components/PageHeader';
 import TimeInput from '@/react-app/components/TimeInput';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import ModalNovaSessao from '@/react-app/components/modals/ModalNovaSessao';
+import { MultiSelect, type MultiSelectOption } from '@/react-app/components/UI/MultiSelect';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { useApi } from '@/react-app/hooks/useApi';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
 import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQualificacao';
@@ -615,6 +617,7 @@ export default function TreinamentosPlanejadosPage({
   const [instrutorFiltro, setInstrutorFiltro] = useState('');
   const [busca, setBusca] = useState('');
   const [buscaConvocados, setBuscaConvocados] = useState('');
+  const [setorFilter, setSetorFilter] = useState<string[]>(() => initialSetorIds?.map(String) ?? []);
   const [modalFormularioAberto, setModalFormularioAberto] = useState(false);
   const [modalDetalheAberto, setModalDetalheAberto] = useState(false);
   const [modalSessaoSimuladorAberto, setModalSessaoSimuladorAberto] = useState(false);
@@ -639,6 +642,36 @@ export default function TreinamentosPlanejadosPage({
   const { data: funcionarios = [], isLoading: funcionariosLoading } = useFuncionariosAtivos();
   const { data: tiposQualificacao = [], isLoading: tiposLoading } = useTiposQualificacao();
 
+  const { data: setoresData } = useApi<{ data?: Array<{ id: number; nome: string }> }>('/setores', {
+    requireAuth: true,
+    bypassGetCache: true,
+  });
+  const setorOptions = useMemo<MultiSelectOption[]>(() => {
+    const raw = Array.isArray(setoresData)
+      ? (setoresData as Array<{ id: number; nome: string }>)
+      : (setoresData?.data ?? []);
+    return raw.map((s) => ({ value: String(s.id), label: s.nome }));
+  }, [setoresData]);
+
+  // Sync local filter when parent provides a new initial value (e.g. auto-select for managers).
+  const prevInitialRef = useRef<string>('');
+  useEffect(() => {
+    const next = (initialSetorIds ?? []).join(',');
+    if (next !== prevInitialRef.current) {
+      prevInitialRef.current = next;
+      if (initialSetorIds && initialSetorIds.length > 0) {
+        setSetorFilter(initialSetorIds.map(String));
+      }
+    }
+  }, [initialSetorIds]);
+
+  // Auto-select the single setor when the user has access to exactly one.
+  useEffect(() => {
+    if (setorOptions.length === 1 && setorFilter.length === 0) {
+      setSetorFilter([setorOptions[0].value]);
+    }
+  }, [setorOptions, setorFilter.length]);
+
   const monthRange = useMemo(() => getMonthRange(mesReferencia), [mesReferencia]);
   const filtrosComuns = useMemo(
     () => ({
@@ -648,9 +681,9 @@ export default function TreinamentosPlanejadosPage({
       inicio: monthRange.inicio,
       fim: monthRange.fim,
       source: sourceFilter,
-      setor_ids: initialSetorIds && initialSetorIds.length > 0 ? initialSetorIds : undefined,
+      setor_ids: setorFilter.length > 0 ? setorFilter.map(Number) : undefined,
     }),
-    [buscaAdiada, initialSetorIds, instrutorFiltro, monthRange.fim, monthRange.inicio, sourceFilter, statusFiltro],
+    [buscaAdiada, instrutorFiltro, monthRange.fim, monthRange.inicio, setorFilter, sourceFilter, statusFiltro],
   );
 
   const treinamentosQuery = useTreinamentosPlanejados(filtrosComuns);
@@ -659,7 +692,7 @@ export default function TreinamentosPlanejadosPage({
     status: statusFiltro || undefined,
     instrutor_id: instrutorFiltro ? Number(instrutorFiltro) : undefined,
     source: sourceFilter,
-    setor_ids: initialSetorIds && initialSetorIds.length > 0 ? initialSetorIds : undefined,
+    setor_ids: setorFilter.length > 0 ? setorFilter.map(Number) : undefined,
   });
   const auditoriaQuery = useTreinamentosPlanejadosAuditoria(filtrosComuns);
   const detalheQuery = useTreinamentoPlanejadoDetalhe(treinamentoSelecionadoId);
@@ -1458,6 +1491,20 @@ export default function TreinamentosPlanejadosPage({
             onChange={(event) => setMesReferencia(event.target.value)}
             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-900 focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
           />
+          {setorOptions.length === 1 ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
+              {setorOptions[0].label}
+            </div>
+          ) : setorOptions.length > 1 ? (
+            <MultiSelect
+              options={setorOptions}
+              selected={setorFilter}
+              onChange={setSetorFilter}
+              placeholder="Todos os setores"
+              allLabel="Todos os setores"
+              className="min-w-[180px]"
+            />
+          ) : null}
           <select
             value={statusFiltro}
             onChange={(event) => setStatusFiltro(event.target.value)}
