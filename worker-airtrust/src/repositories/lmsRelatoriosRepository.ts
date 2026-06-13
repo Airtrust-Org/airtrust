@@ -61,6 +61,25 @@ function assertDias(dias: number, max = 180): number {
   return clamped;
 }
 
+function buildCourseSetorFilter(
+  courseAlias: string,
+  setorIds: number[],
+): { clause: string; bindings: number[] } {
+  if (setorIds.length === 0) return { clause: '', bindings: [] };
+  const placeholders = setorIds.map(() => '?').join(',');
+  return {
+    clause: `AND ${courseAlias}.qualificacao_tipo_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM qualificacoes_tipos_setores qts_r
+        WHERE qts_r.tipo_id = ${courseAlias}.qualificacao_tipo_id
+          AND qts_r.empresa_id = ${courseAlias}.empresa_id
+          AND qts_r.setor_id IN (${placeholders})
+          AND qts_r.deleted_at IS NULL
+      )`,
+    bindings: setorIds,
+  };
+}
+
 // ── Queries ────────────────────────────────────────────────────────────────────
 
 /**
@@ -70,8 +89,11 @@ function assertDias(dias: number, max = 180): number {
 export async function getConformidadeRows(
   db: D1Database,
   empresaId: number,
+  setorIds: number[] = [],
 ): Promise<ConformidadeRow[]> {
   assertEmpresaId(empresaId);
+
+  const setorFilter = buildCourseSetorFilter('c_sf', setorIds);
 
   const results = await db
     .prepare(
@@ -90,6 +112,12 @@ export async function getConformidadeRows(
           ON m.funcionario_id = f.id
           AND m.empresa_id = f.empresa_id
           AND m.deleted_at IS NULL
+          ${setorFilter.clause ? `AND EXISTS (
+            SELECT 1 FROM lms_cursos c_sf
+            WHERE c_sf.id = m.curso_id AND c_sf.empresa_id = m.empresa_id
+              AND c_sf.deleted_at IS NULL
+              ${setorFilter.clause}
+          )` : ''}
         WHERE f.empresa_id = ?
           AND f.ativo = 1
           AND f.deleted_at IS NULL
@@ -127,7 +155,7 @@ export async function getConformidadeRows(
       ORDER BY taxa_conclusao_pct ASC, total_funcionarios DESC
       `,
     )
-    .bind(empresaId)
+    .bind(...setorFilter.bindings, empresaId)
     .all<ConformidadeRow>();
 
   return results.results || [];
@@ -140,8 +168,11 @@ export async function getConformidadeRows(
 export async function getCursosConformidadeRows(
   db: D1Database,
   empresaId: number,
+  setorIds: number[] = [],
 ): Promise<CursoConformidadeRow[]> {
   assertEmpresaId(empresaId);
+
+  const setorFilter = buildCourseSetorFilter('c', setorIds);
 
   const results = await db
     .prepare(
@@ -174,11 +205,12 @@ export async function getCursosConformidadeRows(
         AND c.deleted_at IS NULL
         AND c.ativo = 1
         AND c.publicado = 1
+        ${setorFilter.clause}
       GROUP BY c.id, COALESCE(f.funcao, 'Sem função')
       ORDER BY c.titulo ASC, taxa_pct ASC
       `,
     )
-    .bind(empresaId)
+    .bind(empresaId, ...setorFilter.bindings)
     .all<CursoConformidadeRow>();
 
   return results.results || [];
@@ -192,9 +224,12 @@ export async function getExpiracaoRows(
   db: D1Database,
   empresaId: number,
   dias: number,
+  setorIds: number[] = [],
 ): Promise<ExpiracaoRow[]> {
   assertEmpresaId(empresaId);
   const diasClamped = assertDias(dias);
+
+  const setorFilter = buildCourseSetorFilter('c', setorIds);
 
   const results = await db
     .prepare(
@@ -223,11 +258,12 @@ export async function getExpiracaoRows(
         AND m.data_expiracao IS NOT NULL
         AND m.status NOT IN ('CANCELADO', 'CONCLUIDO')
         AND m.data_expiracao <= date('now', '+' || ? || ' days')
+        ${setorFilter.clause}
       ORDER BY m.data_expiracao ASC
       LIMIT 500
       `,
     )
-    .bind(empresaId, diasClamped)
+    .bind(empresaId, diasClamped, ...setorFilter.bindings)
     .all<ExpiracaoRow>();
 
   return results.results || [];

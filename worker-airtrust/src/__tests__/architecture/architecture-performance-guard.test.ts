@@ -8,7 +8,8 @@ const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const LARGE_FILE_LINE_CAPS = {
   'routes/frms.ts': 3649,
   'services/sigvoos-frms.ts': 2817,
-  'routes/lms-cursos.ts': 2295,
+  // Acknowledged growth (2026-06-13): sector filter added to GET /cursos (EXISTS subquery + access control).
+  'routes/lms-cursos.ts': 2330,
   'routes/escalas-alocacoes.ts': 2268,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,

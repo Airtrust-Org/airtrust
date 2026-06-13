@@ -12,40 +12,62 @@ import {
   getCursosConformidadeRows,
   getExpiracaoRows,
 } from '../repositories/lmsRelatoriosRepository';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // ── GET /relatorios/conformidade ─────────────────────────────────────────────
 // Retorna % de conformidade por função (cargo), para todos os cursos vinculados a qualificação.
+function resolveRelatorioSetorIds(
+  access: { mode: string; setorIds: number[] },
+  rawParam: string | undefined,
+): number[] {
+  const requested = (rawParam || '')
+    .split(',')
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  if (access.mode === 'all') return requested; // admin: use explicit param or no filter
+  if (access.mode === 'sector') {
+    // sector manager: intersect requested with allowed; if none requested, use all allowed
+    if (requested.length === 0) return access.setorIds;
+    return requested.filter((id) => access.setorIds.includes(id));
+  }
+  return access.setorIds;
+}
+
 app.get('/relatorios/conformidade', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const setorIds = resolveRelatorioSetorIds(access, c.req.query('setor_ids'));
 
-  // Para cada função (cargo), calcula % de funcionários com todas as qualificações EAD em dia
-  const rows = await getConformidadeRows(db, empresaId);
+  const rows = await getConformidadeRows(db, empresaId, setorIds);
 
   return c.json({ success: true, data: rows });
 });
 
 // ── GET /relatorios/cursos-conformidade ──────────────────────────────────────
-// Por curso: conformidade por função (qual % de cada função concluiu aquele curso)
 app.get('/relatorios/cursos-conformidade', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const setorIds = resolveRelatorioSetorIds(access, c.req.query('setor_ids'));
 
-  const rows = await getCursosConformidadeRows(db, empresaId);
+  const rows = await getCursosConformidadeRows(db, empresaId, setorIds);
 
   return c.json({ success: true, data: rows });
 });
 
 // ── GET /relatorios/expiracoes ───────────────────────────────────────────────
-// Matrículas próximas do prazo ou expiradas
 app.get('/relatorios/expiracoes', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const setorIds = resolveRelatorioSetorIds(access, c.req.query('setor_ids'));
   const dias = Math.min(Number(c.req.query('dias') ?? '30'), 180);
 
-  const rows = await getExpiracaoRows(db, empresaId, dias);
+  const rows = await getExpiracaoRows(db, empresaId, dias, setorIds);
 
   return c.json({ success: true, data: rows });
 });
