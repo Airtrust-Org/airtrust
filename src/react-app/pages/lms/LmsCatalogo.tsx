@@ -31,6 +31,7 @@ import Button from '@/react-app/components/Button';
 import PageHeader from '@/react-app/components/PageHeader';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { useApi } from '@/react-app/hooks/useApi';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -1448,6 +1449,9 @@ export default function LmsCatalogo() {
   const [statusFilter, setStatusFilter] = useState<'all' | MatriculaStatus>('all');
   const [complianceFilter, setComplianceFilter] = useState<'all' | 'critical'>('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sectorFilter, setSectorFilter] = useState('all');
+  const { data: setoresData } = useApi<{ id: number; nome: string }[]>('/setores');
+  const setores = setoresData ?? [];
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<LmsCurso | undefined>();
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
@@ -1455,14 +1459,17 @@ export default function LmsCatalogo() {
   const [uploadStatus, setUploadStatus] = useState('');
   const [isSavingCourse, setIsSavingCourse] = useState(false);
 
+  const catalogSetor_ids = sectorFilter !== 'all' ? [Number(sectorFilter)] : undefined;
   const { data: publishedCoursesResponse, isLoading: loadingPublishedCourses } = useLmsCursos({
     publicados: true,
     limit: 300,
+    setor_ids: catalogSetor_ids,
   });
   const { data: draftCoursesResponse, isLoading: loadingDraftCourses } = useLmsCursos(
     {
       publicados: false,
       limit: 300,
+      setor_ids: catalogSetor_ids,
     },
     { enabled: canManage },
   );
@@ -1812,7 +1819,7 @@ export default function LmsCatalogo() {
 
           {/* Filters */}
           <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-950/60">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr]">
               <label className="relative block">
                 <span className="sr-only">Buscar cursos</span>
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1824,6 +1831,22 @@ export default function LmsCatalogo() {
                   aria-label="Buscar cursos por título, categoria ou descrição"
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
+              </label>
+              <label className="block">
+                <span className="sr-only">Filtrar por setor</span>
+                <select
+                  value={sectorFilter}
+                  onChange={(e) => setSectorFilter(e.target.value)}
+                  aria-label="Filtrar por setor"
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <option value="all">Todos os setores</option>
+                  {setores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nome}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="block">
                 <span className="sr-only">Filtrar por tipo de conteúdo</span>

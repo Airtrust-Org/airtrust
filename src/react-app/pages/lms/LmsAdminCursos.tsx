@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useApi } from '@/react-app/hooks/useApi';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -98,6 +99,9 @@ export default function LmsAdminCursos() {
     'all' | 'published' | 'draft' | 'critical' | 'missing-content'
   >('all');
   const [typeFilter, setTypeFilter] = useState<'all' | TipoConteudo>('all');
+  const [sectorFilter, setSectorFilter] = useState('all');
+  const { data: setoresData } = useApi<{ id: number; nome: string }[]>('/setores');
+  const setores = setoresData ?? [];
   const [lastSyncSummary, setLastSyncSummary] = useState<{
     at: string;
     created: number;
@@ -114,13 +118,16 @@ export default function LmsAdminCursos() {
     erros: number;
   } | null>(null);
 
+  const setor_ids = sectorFilter !== 'all' ? [Number(sectorFilter)] : undefined;
   const { data: publishedCoursesResponse, isLoading: loadingPublishedCourses } = useLmsCursos({
     publicados: true,
     limit: 300,
+    setor_ids,
   });
   const { data: draftCoursesResponse, isLoading: loadingDraftCourses } = useLmsCursos({
     publicados: false,
     limit: 300,
+    setor_ids,
   });
   const { data: legacySummary, refetch: refetchLegacySummary } = useLmsEdappLegacySummary();
 
@@ -444,7 +451,7 @@ export default function LmsAdminCursos() {
                   </Button>
                 </div>
 
-                <div className="mb-5 grid gap-3 lg:grid-cols-[2fr_1fr_1fr]">
+                <div className="mb-5 grid gap-3 lg:grid-cols-[2fr_1fr_1fr_1fr]">
                   <label className="relative block">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
@@ -455,6 +462,19 @@ export default function LmsAdminCursos() {
                       className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     />
                   </label>
+
+                  <select
+                    value={sectorFilter}
+                    onChange={(event) => setSectorFilter(event.target.value)}
+                    className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    <option value="all">Todos os setores</option>
+                    {setores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nome}
+                      </option>
+                    ))}
+                  </select>
 
                   <select
                     value={statusFilter}
