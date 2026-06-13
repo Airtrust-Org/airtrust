@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Suspense, useCallback } from 'react';
+import { useState, useEffect, useMemo, Suspense, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -52,6 +52,9 @@ import { Modal } from '@/components/ui/Modal';
 import { ModalAlertaEAD } from '@/react-app/components/modals/ModalAlertaEAD';
 import PageHeader from '@/react-app/components/PageHeader';
 import TimeInput from '@/react-app/components/TimeInput';
+import { MultiSelect, type MultiSelectOption } from '@/react-app/components/UI/MultiSelect';
+import { useTablePreferences } from '@/react-app/hooks/useTablePreferences';
+import { useAuth } from '@/react-app/hooks/useAuth';
 import { lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 // 🚀 LAZY LOADING: Modais carregados apenas quando necessário
 const ModalAtribuirQualificacao = lazyWithRetry(
@@ -124,9 +127,17 @@ interface QualificacoesPrefs {
   aeronaveFilter?: string;
   categoriaFilter?: string;
   statusFiltro?: string[];
+  setorFilter?: string[];
+}
+
+interface QualificacoesModelosPrefs {
+  searchTerm: string;
+  categoriaFilter: string;
+  setorFilter: string[];
 }
 
 export default function Qualificacoes() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const initialPrefs = useMemo(
     () => readUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {}),
@@ -189,6 +200,7 @@ export default function Qualificacoes() {
   const { aeronaves: aeronavesConfig } = useAeronavesConfig();
   const [aeronaveFilter, setAeronaveFilter] = useState(initialPrefs.aeronaveFilter ?? '');
   const [categoriaFilter, setCategoriaFilter] = useState(initialPrefs.categoriaFilter ?? '');
+  const [setorFilter, setSetorFilter] = useState<string[]>(initialPrefs.setorFilter ?? []);
 
   // Estado para filtrar por status - renovadas e apagadas ficam ocultas por padrao.
   const [statusFiltro, setStatusFiltro] = useState<Set<string>>(
@@ -241,6 +253,7 @@ export default function Qualificacoes() {
       aeronaveFilter,
       categoriaFilter,
       statusFiltro: [...statusFiltro],
+      setorFilter,
     });
   }, [
     activeTab,
@@ -252,6 +265,7 @@ export default function Qualificacoes() {
     aeronaveFilter,
     categoriaFilter,
     statusFiltro,
+    setorFilter,
   ]);
 
   const effectiveHistoricoStatusFiltro = useMemo(
@@ -277,6 +291,7 @@ export default function Qualificacoes() {
     aeronaveFilter,
     categoriaFilter,
     effectiveHistoricoStatusFiltro,
+    setorFilter.length > 0 ? setorFilter : undefined,
     highlightedHistoricoId || undefined,
   );
 
@@ -410,6 +425,16 @@ export default function Qualificacoes() {
   const stats = historicoStats;
 
   const [showModal, setShowModal] = useState(false);
+  const canManageTipos = ['ADMINISTRADOR', 'ADMIN'].includes(String(user?.role || '').toUpperCase());
+  const {
+    preferences: modelosPrefs,
+    setPreferences: setModelosPrefs,
+    ready: modelosPrefsReady,
+  } = useTablePreferences<QualificacoesModelosPrefs>('table.qualificacoes.modelos', {
+    searchTerm: '',
+    categoriaFilter: '',
+    setorFilter: [],
+  });
   // Tipos agora são fornecidos pelo hook dedicado useQualificacaoTipos
   type TipoQualificacao = {
     id: string | number;
@@ -429,6 +454,9 @@ export default function Qualificacoes() {
     is_check?: number | boolean | null;
     created_at?: string;
     updated_at?: string | null;
+    setores?: Array<{ id: number; nome: string }>;
+    is_transversal?: boolean;
+    setor_ids?: number[];
   };
 
   type Categoria = {
@@ -492,6 +520,7 @@ export default function Qualificacoes() {
     useState<number[]>([]);
   const [buscaParticipanteTurmaPlanejada, setBuscaParticipanteTurmaPlanejada] = useState('');
   const [salvandoTurmaPlanejada, setSalvandoTurmaPlanejada] = useState(false);
+  const [searchTipos, setSearchTipos] = useState(''); // Campo de busca para tipos
 
   // Estados para modais de qualificação (showModal já existe acima)
   const [modalEditarAberto, setModalEditarAberto] = useState(false); // Modal de editar simplificado
@@ -504,14 +533,36 @@ export default function Qualificacoes() {
     loading: loadingTipos,
     refetch: refetchTipos,
     error: tiposError,
-  } = useQualificacaoTipos(activeTab === 'tipos' || showTurmaPlanejadaModal, 200);
+  } = useQualificacaoTipos(activeTab === 'tipos' || showTurmaPlanejadaModal, 200, {
+    categoria: activeTab === 'tipos' ? categoriaFilter : undefined,
+    setorIds: activeTab === 'tipos' ? modelosPrefs.setorFilter : undefined,
+    search: activeTab === 'tipos' ? searchTipos : undefined,
+  });
 
   const { data: funcionariosAtivosData = [], isLoading: loadingFuncionariosAtivos } =
     useFuncionariosAtivos();
   // Remover estados locais desnecessários
   const [showTipoModal, setShowTipoModal] = useState(false);
   const [editingTipo, setEditingTipo] = useState<TipoQualificacao | null>(null);
-  const [searchTipos, setSearchTipos] = useState(''); // Campo de busca para tipos
+  const modelosPrefsHydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (!modelosPrefsReady || modelosPrefsHydratedRef.current) return;
+    modelosPrefsHydratedRef.current = true;
+    setSearchTipos(modelosPrefs.searchTerm || '');
+    if (modelosPrefs.categoriaFilter) {
+      setCategoriaFilter(modelosPrefs.categoriaFilter);
+    }
+  }, [modelosPrefs, modelosPrefsReady]);
+
+  useEffect(() => {
+    if (!modelosPrefsReady) return;
+    setModelosPrefs((prev) => ({
+      ...prev,
+      searchTerm: searchTipos,
+      categoriaFilter,
+    }));
+  }, [categoriaFilter, modelosPrefsReady, searchTipos, setModelosPrefs]);
 
   // Estado para categorias
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -564,6 +615,45 @@ export default function Qualificacoes() {
   // Estado para painel de configuração de colunas por aba
   const [columnConfigOpen, setColumnConfigOpen] = useState<'historico' | 'tipos' | null>(null);
   const [savingTipo, setSavingTipo] = useState(false);
+  const { data: setoresTiposData } = useApi<{ data?: Array<{ id: number; nome: string }> }>('/setores', {
+    enabled: activeTab === 'tipos' || activeTab === 'historico' || activeTab === 'planejados' || showTipoModal,
+    requireAuth: true,
+    bypassGetCache: true,
+  });
+
+  const setoresTipos = useMemo(() => {
+    const payload = Array.isArray(setoresTiposData)
+      ? setoresTiposData
+      : Array.isArray(setoresTiposData?.data)
+        ? setoresTiposData.data
+        : [];
+
+    return [...payload].sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
+  }, [setoresTiposData]);
+
+  const setorOptionsTipos = useMemo<MultiSelectOption[]>(
+    () => setoresTipos.map((setor) => ({ value: String(setor.id), label: setor.nome })),
+    [setoresTipos],
+  );
+
+  // Sector options for historico/planejados (same data source, separate const for clarity)
+  const setorOptionsHistorico = setorOptionsTipos;
+
+  useEffect(() => {
+    if (!modelosPrefsReady) return;
+    if (setoresTipos.length !== 1) return;
+    const onlySetorId = String(setoresTipos[0].id);
+    if (modelosPrefs.setorFilter.length === 1 && modelosPrefs.setorFilter[0] === onlySetorId) return;
+    setModelosPrefs((prev) => ({ ...prev, setorFilter: [onlySetorId] }));
+  }, [modelosPrefs.setorFilter, modelosPrefsReady, setModelosPrefs, setoresTipos]);
+
+  // Auto-select single sector for historico/planejados when user has only one available
+  useEffect(() => {
+    if (setoresTipos.length !== 1) return;
+    const onlySetorId = String(setoresTipos[0].id);
+    if (setorFilter.length === 1 && setorFilter[0] === onlySetorId) return;
+    setSetorFilter([onlySetorId]);
+  }, [setoresTipos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const funcionariosAtivos = useMemo(
     () =>
@@ -1067,7 +1157,7 @@ export default function Qualificacoes() {
   );
 
   const shouldUseLocalHistoricoHeaderStats = Boolean(
-    debouncedSearch.trim() || aeronaveFilter || categoriaFilter || !isDefaultStatusFilter,
+    debouncedSearch.trim() || aeronaveFilter || categoriaFilter || setorFilter.length > 0 || !isDefaultStatusFilter,
   );
 
   const localHistoricoStats = useMemo(
@@ -2423,9 +2513,30 @@ export default function Qualificacoes() {
               </button>
             </div>
             {/* Primary action button — right side of tab bar */}
-            {activeTab === 'tipos' && (
+            {activeTab === 'tipos' && canManageTipos && (
               <button
-                onClick={async () => { setEditingTipo({ id: '', nome: '', codigo: '', tipo: null, categoria: '', validade: null, observacoes: null, ativo: 1, descricao: null, conteudo_programatico: null, carga_horaria: null, carga_horaria_inicial: null, carga_horaria_recorrente: null, vencimento_fim_mes: 0, is_check: 0 }); setShowTipoModal(true); }}
+                onClick={async () => {
+                  setEditingTipo({
+                    id: '',
+                    nome: '',
+                    codigo: '',
+                    tipo: null,
+                    categoria: '',
+                    validade: null,
+                    observacoes: null,
+                    ativo: 1,
+                    descricao: null,
+                    conteudo_programatico: null,
+                    carga_horaria: null,
+                    carga_horaria_inicial: null,
+                    carga_horaria_recorrente: null,
+                    vencimento_fim_mes: 0,
+                    is_check: 0,
+                    setores: [],
+                    setor_ids: modelosPrefs.setorFilter.map((value) => Number(value)),
+                  });
+                  setShowTipoModal(true);
+                }}
                 className="flex items-center gap-1.5 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 cursor-pointer"
               >
                 <Plus className="w-4 h-4" /> Novo Modelo
@@ -2450,9 +2561,9 @@ export default function Qualificacoes() {
           </div>
 
           {/* Row 2: Search + filters bar */}
-          <div className="flex flex-wrap items-center gap-2 px-4 pb-2.5">
-            {(usesHistoricoDataset || activeTab === 'tipos') && (
-              <div className="relative flex-1 min-w-[200px] max-w-md">
+	          <div className="flex flex-wrap items-center gap-2 px-4 pb-2.5">
+	            {(usesHistoricoDataset || activeTab === 'tipos') && (
+	              <div className="relative flex-1 min-w-[200px] max-w-md">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                 <input
                   type="text"
@@ -2460,11 +2571,59 @@ export default function Qualificacoes() {
                   value={activeTab === 'tipos' ? searchTipos : searchTerm}
                   onChange={(e) => activeTab === 'tipos' ? setSearchTipos(e.target.value) : setSearchTerm(e.target.value)}
                   className="w-full rounded-md border border-slate-300 pl-8 pr-3 py-1.5 text-sm focus:border-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
-                />
-              </div>
-            )}
-            {usesHistoricoDataset && (
-              <>
+	                />
+	              </div>
+	            )}
+	            {activeTab === 'tipos' && (
+	              <>
+	                <select
+	                  value={categoriaFilter}
+	                  onChange={(e) => setCategoriaFilter(e.target.value)}
+	                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
+	                >
+	                  <option value="">Categoria</option>
+	                  {categorias
+	                    .slice()
+	                    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+	                    .map((cat) => (
+	                      <option key={cat.id ?? cat.nome} value={cat.nome}>
+	                        {cat.nome}
+	                      </option>
+	                    ))}
+	                </select>
+	                {setoresTipos.length === 1 ? (
+	                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
+	                    {setoresTipos[0].nome}
+	                  </div>
+	                ) : (
+	                  <MultiSelect
+	                    options={setorOptionsTipos}
+	                    selected={modelosPrefs.setorFilter}
+	                    onChange={(selected) =>
+	                      setModelosPrefs((prev) => ({ ...prev, setorFilter: selected }))
+	                    }
+	                    placeholder="Todos os setores"
+	                    allLabel="Todos os setores"
+	                    className="min-w-[220px]"
+	                  />
+	                )}
+	                {(searchTipos.trim() || modelosPrefs.setorFilter.length > 0 || categoriaFilter) && (
+	                  <button
+	                    type="button"
+	                    onClick={() => {
+	                      setSearchTipos('');
+	                      setCategoriaFilter('');
+	                      setModelosPrefs((prev) => ({ ...prev, setorFilter: [] }));
+	                    }}
+	                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+	                  >
+	                    Limpar filtros
+	                  </button>
+	                )}
+	              </>
+	            )}
+	            {usesHistoricoDataset && (
+	              <>
                 <select
                   value={aeronaveFilter}
                   onChange={(e) => { setAeronaveFilter(e.target.value); setPage(1); }}
@@ -2485,6 +2644,20 @@ export default function Qualificacoes() {
                     <option key={cat.id ?? cat.nome} value={cat.nome}>{cat.nome}</option>
                   ))}
                 </select>
+                {setorOptionsHistorico.length === 1 ? (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
+                    {setorOptionsHistorico[0].label}
+                  </div>
+                ) : setorOptionsHistorico.length > 1 ? (
+                  <MultiSelect
+                    options={setorOptionsHistorico}
+                    selected={setorFilter}
+                    onChange={(selected) => { setSetorFilter(selected); setPage(1); }}
+                    placeholder="Todos os setores"
+                    allLabel="Todos os setores"
+                    className="min-w-[180px]"
+                  />
+                ) : null}
                 <div className="relative">
                   <button type="button" onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
                     className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer">
@@ -2799,63 +2972,72 @@ export default function Qualificacoes() {
                       visible: true,
                       render: (value, row) => (
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={async () => {
-                              await safeDelete({
-                                url: `${API_BASE_URL}/qualificacoes/tipos`,
-                                id: row.id,
-                                itemName: row.nome || 'modelo',
-                                onSuccess: () => {
-                                  showToast.success('Modelo deletado com sucesso!');
-                                  refetchTipos();
-                                },
-                                onError: () => {
-                                  showToast.error('Erro ao deletar modelo');
-                                },
-                              });
-                            }}
-                            className={historicoActionDangerButtonClass}
-                            title="Excluir modelo"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </button>
-                          <button
-                            onClick={async () => {
-                              setEditingTipo({
-                                id: row.id ?? String(row.nome || 'tipo'),
-                                nome: row.nome || '',
-                                codigo: row.codigo ?? null,
-                                tipo: (row as { tipo?: string | null }).tipo ?? null,
-                                categoria: row.categoria ?? null,
-                                validade: row.validade ?? null,
-                                observacoes: row.observacoes ?? null,
-                                ativo: row.ativo ?? 1,
-                                descricao: row.descricao ?? null,
-                                conteudo_programatico:
-                                  (row as { conteudo_programatico?: string | null })
-                                    .conteudo_programatico ?? null,
-                                carga_horaria:
-                                  (row as { carga_horaria?: number | null }).carga_horaria ?? null,
-                                carga_horaria_inicial:
-                                  (row as { carga_horaria_inicial?: number | null })
-                                    .carga_horaria_inicial ?? null,
-                                carga_horaria_recorrente:
-                                  (row as { carga_horaria_recorrente?: number | null })
-                                    .carga_horaria_recorrente ?? null,
-                                vencimento_fim_mes: (row as any).vencimento_fim_mes ?? 0,
-                                is_check: (row as { is_check?: number | boolean | null }).is_check
-                                  ? 1
-                                  : 0,
-                                created_at: row.created_at,
-                                updated_at: row.updated_at ?? null,
-                              });
-                              setShowTipoModal(true);
-                            }}
-                            className={historicoActionButtonClass}
-                            title="Editar modelo"
-                          >
-                            <Pencil className="w-4 h-4 text-indigo-600" />
-                          </button>
+                          {canManageTipos && (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  await safeDelete({
+                                    url: `${API_BASE_URL}/qualificacoes/tipos`,
+                                    id: row.id,
+                                    itemName: row.nome || 'modelo',
+                                    onSuccess: () => {
+                                      showToast.success('Modelo deletado com sucesso!');
+                                      refetchTipos();
+                                    },
+                                    onError: () => {
+                                      showToast.error('Erro ao deletar modelo');
+                                    },
+                                  });
+                                }}
+                                className={historicoActionDangerButtonClass}
+                                title="Excluir modelo"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-600" />
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  setEditingTipo({
+                                    id: row.id ?? String(row.nome || 'tipo'),
+                                    nome: row.nome || '',
+                                    codigo: row.codigo ?? null,
+                                    tipo: (row as { tipo?: string | null }).tipo ?? null,
+                                    categoria: row.categoria ?? null,
+                                    validade: row.validade ?? null,
+                                    observacoes: row.observacoes ?? null,
+                                    ativo: row.ativo ?? 1,
+                                    descricao: row.descricao ?? null,
+                                    conteudo_programatico:
+                                      (row as { conteudo_programatico?: string | null })
+                                        .conteudo_programatico ?? null,
+                                    carga_horaria:
+                                      (row as { carga_horaria?: number | null }).carga_horaria ?? null,
+                                    carga_horaria_inicial:
+                                      (row as { carga_horaria_inicial?: number | null })
+                                        .carga_horaria_inicial ?? null,
+                                    carga_horaria_recorrente:
+                                      (row as { carga_horaria_recorrente?: number | null })
+                                        .carga_horaria_recorrente ?? null,
+                                    vencimento_fim_mes: (row as any).vencimento_fim_mes ?? 0,
+                                    is_check: (row as { is_check?: number | boolean | null }).is_check
+                                      ? 1
+                                      : 0,
+                                    setores: (row as { setores?: Array<{ id: number; nome: string }> }).setores ?? [],
+                                    setor_ids:
+                                      ((row as { setores?: Array<{ id: number; nome: string }> }).setores ?? []).map(
+                                        (setor) => Number(setor.id),
+                                      ),
+                                    created_at: row.created_at,
+                                    updated_at: row.updated_at ?? null,
+                                  });
+                                  setShowTipoModal(true);
+                                }}
+                                className={historicoActionButtonClass}
+                                title="Editar modelo"
+                              >
+                                <Pencil className="w-4 h-4 text-indigo-600" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       ),
                     },
@@ -2957,6 +3139,40 @@ export default function Qualificacoes() {
                       },
                     },
                     {
+                      id: 'setores',
+                      label: 'Setores',
+                      accessor: (row) => row.setores || [],
+                      sortable: false,
+                      visible: true,
+                      render: (value, row) => {
+                        const setores = Array.isArray(value)
+                          ? (value as Array<{ id: number; nome: string }>)
+                          : [];
+
+                        if (setores.length === 0 || (row as { is_transversal?: boolean }).is_transversal) {
+                          return (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                              Transversal
+                            </span>
+                          );
+                        }
+
+                        if (setores.length === 1) {
+                          return (
+                            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                              {setores[0].nome}
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                            {setores.length} setores
+                          </span>
+                        );
+                      },
+                    },
+                    {
                       id: 'validade',
                       label: 'Valid.',
                       accessor: (row) => row.validade || '-',
@@ -3004,13 +3220,15 @@ export default function Qualificacoes() {
                       <p className="text-sm text-slate-600 mb-6">
                         Configure os modelos de qualificações disponíveis no sistema
                       </p>
-                      <button
-                        onClick={() => setShowTipoModal(true)}
-                        className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Novo Modelo</span>
-                      </button>
+                      {canManageTipos && (
+                        <button
+                          onClick={() => setShowTipoModal(true)}
+                          className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Novo Modelo</span>
+                        </button>
+                      )}
                     </div>
                   }
                 />
@@ -3218,6 +3436,7 @@ export default function Qualificacoes() {
                     forcedTab="quadro"
                     hideActions={true}
                     hideTabNav={true}
+                    initialSetorIds={setorFilter.length > 0 ? setorFilter.map(Number) : undefined}
                   />
                 </Suspense>
               </div>
@@ -3236,6 +3455,7 @@ export default function Qualificacoes() {
                     forcedTab="calendario"
                     hideActions={true}
                     hideTabNav={true}
+                    initialSetorIds={setorFilter.length > 0 ? setorFilter.map(Number) : undefined}
                   />
                 </Suspense>
               </div>
@@ -3256,6 +3476,7 @@ export default function Qualificacoes() {
                     sourceFilter="TREINAMENTOS"
                     autoOpenForm={autoOpenTurmasModal}
                     onAutoOpenFormHandled={() => setAutoOpenTurmasModal(false)}
+                    initialSetorIds={setorFilter.length > 0 ? setorFilter.map(Number) : undefined}
                   />
                 </Suspense>
               </div>
@@ -4086,9 +4307,9 @@ export default function Qualificacoes() {
                 })()}
               </div>
             )}
-          </div>
-        }
-      >
+	          </div>
+	        }
+	      >
         {planejadaSelecionada && (
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -4487,6 +4708,39 @@ export default function Qualificacoes() {
                 );
 
                 if (response.ok) {
+                  const responseJson = (await response.json().catch(() => null)) as
+                    | { data?: { id?: string | number } }
+                    | null;
+                  const savedTipoId = String(responseJson?.data?.id || editingTipo.id || '').trim();
+
+                  if (!savedTipoId) {
+                    showToast.error('Tipo salvo sem ID de retorno.');
+                    return;
+                  }
+
+                  const setoresResponse = await fetch(
+                    `${apiUrl}/qualificacoes/tipos/${savedTipoId}/setores`,
+                    {
+                      method: 'PUT',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({
+                        setor_ids: (editingTipo.setor_ids || [])
+                          .map((value) => Number(value))
+                          .filter((value) => Number.isInteger(value) && value > 0),
+                      }),
+                      signal: abortController.signal,
+                    },
+                  );
+
+                  if (!setoresResponse.ok) {
+                    const setorErr = await setoresResponse.json().catch(() => null);
+                    showToast.error(setorErr?.error || 'Erro ao salvar setores do modelo');
+                    return;
+                  }
+
                   clearApiCacheByPattern('/qualificacoes/tipos');
                   showToast.success(isEdit ? 'Modelo atualizado!' : 'Modelo criado!');
                   setShowTipoModal(false);
@@ -4529,7 +4783,7 @@ export default function Qualificacoes() {
             }}
             submitLabel="Salvar"
             loading={savingTipo}
-            submitDisabled={savingTipo}
+            submitDisabled={savingTipo || !canManageTipos}
           />
         }
       >
@@ -4619,6 +4873,36 @@ export default function Qualificacoes() {
               ]}
             />
           </FormField>
+
+          <div className="md:col-span-2">
+            <FormField label="Setores">
+              {setorOptionsTipos.length <= 1 ? (
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  {setorOptionsTipos[0]?.label || 'Transversal'}
+                </div>
+              ) : (
+                <MultiSelect
+                  options={setorOptionsTipos}
+                  selected={(editingTipo?.setor_ids || []).map((id) => String(id))}
+                  onChange={(selected) =>
+                    setEditingTipo((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            setor_ids: selected.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0),
+                          }
+                        : prev,
+                    )
+                  }
+                  placeholder="Transversal"
+                  allLabel="Transversal"
+                />
+              )}
+              <p className="mt-1 text-xs text-slate-500">
+                Sem setor vinculado, o modelo fica transversal.
+              </p>
+            </FormField>
+          </div>
 
           <FormField label="Validade (meses)">
             <TextInput

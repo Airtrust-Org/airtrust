@@ -4,8 +4,14 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { forbidden } from '../middleware/error-handler';
 import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-planejados-integration';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
+import {
+  filterRequestedSetorIdsByAccess,
+  getEmployeeSectorAccess,
+  type EmployeeSectorAccess,
+} from '../services/employee-sector-access';
 import {
   buildConvocacaoPreview,
   getEmailConvocacaoConfig,
@@ -47,6 +53,51 @@ async function hasColumn(db: D1Database, table: string, column: string): Promise
   } catch {
     return false;
   }
+}
+
+function parseRequestedSetorIds(rawSetorId?: string | null, rawSetorIds?: string | null): number[] {
+  const values: string[] = [];
+  if (rawSetorId) values.push(rawSetorId);
+  if (rawSetorIds) {
+    values.push(
+      ...rawSetorIds
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+    );
+  }
+
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  );
+}
+
+function resolveScopedSetorIds(
+  access: EmployeeSectorAccess,
+  requestedSetorIds: number[],
+): number[] | null {
+  if (requestedSetorIds.length > 0) {
+    const allowedRequested =
+      access.mode === 'all'
+        ? requestedSetorIds
+        : filterRequestedSetorIdsByAccess(requestedSetorIds, access);
+
+    if (allowedRequested.length !== requestedSetorIds.length) {
+      forbidden('Filtro de setor fora do escopo permitido', 'SETOR_FORA_DO_ESCOPO');
+    }
+
+    return allowedRequested;
+  }
+
+  if (access.mode === 'all') {
+    return null;
+  }
+
+  return access.setorIds;
 }
 
 // Module-level cache for schema capabilities — avoids 10+ PRAGMA calls per request.
@@ -721,6 +772,7 @@ async function loadParticipantesByTreinamento(
   db: D1Database,
   empresaId: number,
   treinamentoIds: number[],
+  scopedSetorIds: number[] | null,
 ): Promise<Map<number, ParticipanteRow[]>> {
   const map = new Map<number, ParticipanteRow[]>();
   if (treinamentoIds.length === 0) return map;
@@ -751,11 +803,18 @@ async function loadParticipantesByTreinamento(
                    LEFT JOIN funcionarios f ON f.id = tp.funcionario_id AND f.deleted_at IS NULL
                   WHERE t.empresa_id = ?
                     AND tp.treinamento_id IN (${placeholders})
+                    ${
+                      scopedSetorIds === null
+                        ? ''
+                        : scopedSetorIds.length === 0
+                          ? 'AND 1 = 0'
+                          : `AND f.setor_id IN (${scopedSetorIds.map(() => '?').join(', ')})`
+                    }
                   ORDER BY COALESCE(f.nome, ''), tp.funcionario_id`;
 
   const rows = await db
     .prepare(query)
-    .bind(empresaId, ...treinamentoIds)
+    .bind(empresaId, ...treinamentoIds, ...(scopedSetorIds === null ? [] : scopedSetorIds))
     .all<ParticipanteRow>();
 
   for (const row of rows.results || []) {
@@ -1052,6 +1111,7 @@ async function listTreinamentosPlanejadosBase(
     funcionarioId?: string | null;
     busca?: string | null;
     treinamentoId?: number | null;
+    scopedSetorIds?: number[] | null;
   },
   capabilities: TreinamentoSchemaCapabilities,
 ) {
@@ -1149,6 +1209,15 @@ async function listTreinamentosPlanejadosBase(
     )`;
     params.push(busca, busca, busca, busca);
   }
+  if (filters.scopedSetorIds !== null && filters.scopedSetorIds !== undefined) {
+    if (filters.scopedSetorIds.length === 0) {
+      sql += ' AND 1 = 0';
+    } else {
+      const placeholders = filters.scopedSetorIds.map(() => '?').join(', ');
+      sql += ` AND EXISTS (SELECT 1 FROM treinamentos_participantes tp3 INNER JOIN funcionarios f3 ON f3.id = tp3.funcionario_id AND f3.deleted_at IS NULL WHERE tp3.treinamento_id = t.id AND f3.setor_id IN (${placeholders}))`;
+      params.push(...filters.scopedSetorIds);
+    }
+  }
 
   sql += ` GROUP BY t.id
            ORDER BY date(t.data_prevista) ASC, COALESCE(t.hora_inicio, '00:00') ASC, t.id DESC
@@ -1161,7 +1230,7 @@ async function listTreinamentosPlanejadosBase(
 
   const ids = (rows.results || []).map((row) => Number(row.id));
   const [participantes, dias, instrutores] = await Promise.all([
-    loadParticipantesByTreinamento(db, empresaId, ids),
+    loadParticipantesByTreinamento(db, empresaId, ids, filters.scopedSetorIds ?? null),
     capabilities.hasDiasTable
       ? loadDiasByTreinamento(db, empresaId, ids)
       : Promise.resolve(new Map<number, DiaRow[]>()),
@@ -1189,6 +1258,7 @@ async function loadStandalonePlannedQualificationItems(
     fim?: string | null;
     funcionarioId?: string | null;
     busca?: string | null;
+    scopedSetorIds?: number[] | null;
   },
 ): Promise<ConsolidatedTrainingItem[]> {
   if (filters.status && normalizeTrainingStatusForCompatibility(filters.status) !== 'PLANEJADO') {
@@ -1263,6 +1333,14 @@ async function loadStandalonePlannedQualificationItems(
       UPPER(COALESCE(qh.observacoes, '')) LIKE ?
     )`;
     params.push(busca, busca, busca, busca);
+  }
+  if (filters.scopedSetorIds !== null && filters.scopedSetorIds !== undefined) {
+    if (filters.scopedSetorIds.length === 0) {
+      sql += ' AND 1 = 0';
+    } else {
+      sql += ` AND f.setor_id IN (${filters.scopedSetorIds.map(() => '?').join(', ')})`;
+      params.push(...filters.scopedSetorIds);
+    }
   }
 
   sql += ' ORDER BY date(qh.data_conclusao) ASC, qh.id ASC LIMIT 400';
@@ -1635,6 +1713,7 @@ async function listEventos(
     busca?: string | null;
     treinamentoId?: number | null;
     source?: string | null;
+    scopedSetorIds?: number[] | null;
   },
   capabilities?: TreinamentoSchemaCapabilities,
 ): Promise<{ items: ConsolidatedTrainingItem[]; diagnostics: ListEventosDiagnostics }> {
@@ -1733,6 +1812,11 @@ async function loadAuditoriaByTreinamento(
 treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scopedSetorIds = resolveScopedSetorIds(
+    access,
+    parseRequestedSetorIds(c.req.query('setor_id'), c.req.query('setor_ids')),
+  );
   const capabilities = await detectTreinamentoSchemaCapabilities(db);
   const { items, diagnostics } = await listEventos(db, empresaId, {
     status: c.req.query('status'),
@@ -1742,6 +1826,7 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
     funcionarioId: c.req.query('funcionario_id'),
     busca: c.req.query('busca'),
     source: c.req.query('source'),
+    scopedSetorIds,
   }, capabilities);
 
   return c.json({
@@ -1757,6 +1842,11 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
 treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scopedSetorIds = resolveScopedSetorIds(
+    access,
+    parseRequestedSetorIds(c.req.query('setor_id'), c.req.query('setor_ids')),
+  );
   const monthRange = buildMonthRange(c.req.query('mes'));
   const inicio = c.req.query('inicio') || monthRange?.inicio || null;
   const fim = c.req.query('fim') || monthRange?.fim || null;
@@ -1770,6 +1860,7 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
     funcionarioId: c.req.query('funcionario_id'),
     busca: c.req.query('busca'),
     source: c.req.query('source'),
+    scopedSetorIds,
   }, capabilities);
 
   return c.json({
@@ -1787,6 +1878,11 @@ treinamentosPlanejadosRoutes.get('/planejados/calendario', async (c) => {
 treinamentosPlanejadosRoutes.get('/planejados/auditoria', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scopedSetorIds = resolveScopedSetorIds(
+    access,
+    parseRequestedSetorIds(c.req.query('setor_id'), c.req.query('setor_ids')),
+  );
   const { items } = await listEventos(db, empresaId, {
     status: c.req.query('status'),
     inicio: c.req.query('inicio'),
@@ -1795,6 +1891,7 @@ treinamentosPlanejadosRoutes.get('/planejados/auditoria', async (c) => {
     funcionarioId: c.req.query('funcionario_id'),
     busca: c.req.query('busca'),
     source: c.req.query('source'),
+    scopedSetorIds,
   });
 
   const auditMap = await loadAuditoriaByTreinamento(

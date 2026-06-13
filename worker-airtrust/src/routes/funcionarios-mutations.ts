@@ -10,7 +10,7 @@
 
 import { Hono } from 'hono';
 import type { Env, ApiResponse } from '../types';
-import { notFound, badRequest } from '../middleware/error-handler';
+import { notFound, badRequest, forbidden } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -18,6 +18,10 @@ import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { syncFuncionarioCertificacoes } from '../services/sync-certificacoes-funcionarios';
 import { publishDomainEvent } from '../shared/domainEvents';
+import {
+  assertFuncionarioInScope,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -52,6 +56,50 @@ function normalizeFuncionarioQuinzena(value: unknown): string | null {
   return normalized;
 }
 
+async function resolveSetorPayload(
+  db: D1Database,
+  empresaId: number,
+  body: Record<string, unknown>,
+): Promise<{ setorId: number | null; setorNome: string | null }> {
+  const explicitSetorId = Number(body.setor_id || 0);
+  if (Number.isInteger(explicitSetorId) && explicitSetorId > 0) {
+    const setor = await db
+      .prepare(
+        'SELECT id, nome FROM setores WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+      )
+      .bind(explicitSetorId, empresaId)
+      .first<{ id: number; nome: string | null }>();
+
+    if (!setor?.id) {
+      badRequest('Setor informado não existe na empresa');
+    }
+
+    return { setorId: Number(setor.id), setorNome: setor.nome || null };
+  }
+
+  const setorTexto = String(body.setor || '').trim();
+  if (!setorTexto) {
+    return { setorId: null, setorNome: null };
+  }
+
+  const setor = await db
+    .prepare(
+      `SELECT id, nome
+         FROM setores
+        WHERE empresa_id = ?
+          AND deleted_at IS NULL
+          AND (LOWER(TRIM(nome)) = LOWER(TRIM(?)) OR LOWER(TRIM(COALESCE(codigo, ''))) = LOWER(TRIM(?)))
+        LIMIT 1`,
+    )
+    .bind(empresaId, setorTexto, setorTexto)
+    .first<{ id: number; nome: string | null }>();
+
+  return {
+    setorId: setor?.id ? Number(setor.id) : null,
+    setorNome: setor?.nome || setorTexto,
+  };
+}
+
 /**
  * POST /api/funcionarios
  * Cria novo funcionário
@@ -61,6 +109,9 @@ function normalizeFuncionarioQuinzena(value: unknown): string | null {
 app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json();
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const setorPayload = await resolveSetorPayload(db, empresaId, body as Record<string, unknown>);
 
   // Validações obrigatórias (matrícula OPCIONAL agora)
   if (!body.nome || !body.cpf || !body.email) {
@@ -77,7 +128,9 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     badRequest('CPF inválido');
   }
 
-  const empresaId = getEmpresaId(c);
+  if (access.mode === 'restricted' && !access.setorIds.includes(Number(setorPayload.setorId || 0))) {
+    forbidden('Gestor só pode criar funcionários nos setores vinculados', 'SETOR_FORA_DO_ESCOPO');
+  }
 
   // Verificar se matricula já existe no tenant (APENAS se fornecida)
   if (body.matricula) {
@@ -106,7 +159,7 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     INSERT INTO funcionarios (
       matricula, nome, guerra, cpf, rg, nascimento, sexo, nacionalidade,
       email, telefone, telefone_emergencia, contato_emergencia_nome,
-      funcao, cargo, setor, base, modelo_aeronave_id, admissao, codigo_anac,
+      funcao, cargo, setor, setor_id, base, modelo_aeronave_id, admissao, codigo_anac,
       nivel_icao, data_realizacao_icao, validade_icao,
       cma, data_realizacao_cma, validade_cma,
       aso, data_realizacao_aso, validade_aso,
@@ -118,7 +171,7 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?,
@@ -145,7 +198,8 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
       // Dados Profissionais
       body.funcao || null,
       body.cargo || null,
-      body.setor || null,
+      setorPayload.setorNome,
+      setorPayload.setorId,
       body.base || null,
       body.modelo_aeronave_id || null,
       body.admissao || null,
@@ -250,6 +304,7 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   }
 
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
 
   // Verificar se existe
   const existing = await db
@@ -260,6 +315,8 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   if (!existing) {
     notFound('Funcionário não encontrado');
   }
+
+  await assertFuncionarioInScope(db, empresaId, id, access);
 
   // Guardar dados anteriores para auditoria
   const dadosAnteriores = { ...existing };
@@ -327,9 +384,18 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     bindings.push(body.cargo);
   }
 
-  if (body.setor !== undefined) {
+  if (body.setor !== undefined || body.setor_id !== undefined) {
+    const setorPayload = await resolveSetorPayload(db, empresaId, body as Record<string, unknown>);
+    if (access.mode === 'restricted' && !access.setorIds.includes(Number(setorPayload.setorId || 0))) {
+      forbidden(
+        'Gestor só pode mover funcionários para setores vinculados',
+        'SETOR_FORA_DO_ESCOPO',
+      );
+    }
     updates.push('setor = ?');
-    bindings.push(body.setor);
+    bindings.push(setorPayload.setorNome);
+    updates.push('setor_id = ?');
+    bindings.push(setorPayload.setorId);
   }
 
   if (body.funcao !== undefined) {
@@ -679,11 +745,14 @@ app.get('/:id/escalas', auth(), async (c) => {
   const { id } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
   const limit = Number(c.req.query('limit') || '20');
   const offset = Number(c.req.query('offset') || '0');
   const status = c.req.query('status'); // rascunho|publicada|encerrada
 
   try {
+    await assertFuncionarioInScope(db, empresaId, Number(id), access);
+
     // Verify employee exists
     const func = await db
       .prepare(

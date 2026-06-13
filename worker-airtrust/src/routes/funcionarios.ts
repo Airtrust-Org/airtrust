@@ -18,7 +18,7 @@ import {
   buildSearchWhere,
   buildOrderBy,
 } from '../utils/db';
-import { notFound, badRequest } from '../middleware/error-handler';
+import { notFound, badRequest, forbidden } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -33,7 +33,9 @@ import {
 } from '../shared/syncEscalaEventosExternos';
 import funcionariosMutationsRoutes from './funcionarios-mutations';
 import {
+  assertFuncionarioInScope,
   employeeSectorSql,
+  filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 
@@ -241,10 +243,14 @@ app.get('/', auth(), async (c) => {
     if (parsedIds.length === 0) {
       badRequest('Setor inválido');
     }
-    const placeholders = parsedIds.map(() => '?').join(', ');
+    const allowedSetorIds = filterRequestedSetorIdsByAccess(parsedIds, access);
+    if (allowedSetorIds.length !== parsedIds.length) {
+      forbidden('Filtro de setor fora do escopo permitido', 'SETOR_FORA_DO_ESCOPO');
+    }
+    const placeholders = allowedSetorIds.map(() => '?').join(', ');
     whereClausesQuery.push(`f.setor_id IN (${placeholders})`);
     whereClausesCount.push(`f.setor_id IN (${placeholders})`);
-    bindings.push(...parsedIds);
+    bindings.push(...allowedSetorIds);
   } else if (setor) {
     whereClausesQuery.push('f.setor = ?');
     whereClausesCount.push('setor = ?');
@@ -429,6 +435,8 @@ app.get('/stats/dashboard', auth(), async (c) => {
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const sectorScope = employeeSectorSql(access, 'f');
     const aeronaveSelectExpr = buildFuncionarioAeronaveDisplayExpr('f');
 
     // Descobrir schema real
@@ -457,9 +465,10 @@ app.get('/stats/dashboard', auth(), async (c) => {
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
         AND f.empresa_id = ?
+        AND ${sectorScope.clause}
     `,
       )
-      .bind(empresaId)
+      .bind(empresaId, ...sectorScope.bindings)
       .first<{ total: number; ativos: number; inativos: number }>();
 
     // Funcionários por aeronave
@@ -490,6 +499,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
         WHERE f.deleted_at IS NULL
           AND ${ativoExpr}
           AND f.empresa_id = ?
+          AND ${sectorScope.clause}
 
         UNION ALL
 
@@ -503,6 +513,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
         WHERE f.deleted_at IS NULL
           AND ${ativoExpr}
           AND f.empresa_id = ?
+          AND ${sectorScope.clause}
           AND NULLIF(TRIM(COALESCE(f.aeronave, '')), '') IS NOT NULL
           AND NOT EXISTS (
             SELECT 1
@@ -517,7 +528,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
       LIMIT 10
     `,
       )
-      .bind(empresaId, empresaId)
+      .bind(empresaId, ...sectorScope.bindings, empresaId, ...sectorScope.bindings)
       .all<{ aeronave: string; total: number; ativos: number }>();
 
     // Funcionários por função
@@ -532,12 +543,13 @@ app.get('/stats/dashboard', auth(), async (c) => {
       WHERE f.deleted_at IS NULL
         AND ${ativoExpr}
         AND f.empresa_id = ?
+        AND ${sectorScope.clause}
       GROUP BY UPPER(TRIM(COALESCE(f.funcao, '')))
       ORDER BY total DESC
       LIMIT 10
     `,
       )
-      .bind(empresaId)
+      .bind(empresaId, ...sectorScope.bindings)
       .all<{ funcao: string; total: number; ativos: number }>();
 
     // Funcionários por setor
@@ -552,12 +564,13 @@ app.get('/stats/dashboard', auth(), async (c) => {
       WHERE f.deleted_at IS NULL
         AND ${ativoExpr}
         AND f.empresa_id = ?
+        AND ${sectorScope.clause}
       GROUP BY UPPER(TRIM(COALESCE(f.setor, '')))
       ORDER BY total DESC
       LIMIT 10
     `,
       )
-      .bind(empresaId)
+      .bind(empresaId, ...sectorScope.bindings)
       .all<{ setor: string; total: number; ativos: number }>();
 
     // Distribuição por status (detalhada)
@@ -570,11 +583,12 @@ app.get('/stats/dashboard', auth(), async (c) => {
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
         AND f.empresa_id = ?
+        AND ${sectorScope.clause}
       GROUP BY ${buildNormalizedFuncionarioStatusExpr('f')}
       ORDER BY total DESC
     `,
       )
-      .bind(empresaId)
+      .bind(empresaId, ...sectorScope.bindings)
       .all<{ status: string; total: number }>();
 
     const qualificacoesStats = await db
@@ -605,6 +619,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
           AND COALESCE(qh.renovada, 0) = 0
           AND ${ativoExpr}
           AND f.empresa_id = ?
+          AND ${sectorScope.clause}
           AND qh.id IN (
             SELECT MAX(sub.id)
             FROM qualificacoes_historico sub
@@ -633,7 +648,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
       FROM qualificacoes_ativas
     `,
       )
-      .bind(empresaId)
+      .bind(empresaId, ...sectorScope.bindings)
       .first<{
         funcionarios_com_qualificacoes: number;
         total_qualificacoes: number;
@@ -948,6 +963,8 @@ app.get('/:id', auth(), async (c) => {
   if (isNaN(id)) {
     badRequest('ID inválido');
   }
+
+  await assertFuncionarioInScope(db, empresaId, id, access);
 
   // Descobrir schema real
   const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())

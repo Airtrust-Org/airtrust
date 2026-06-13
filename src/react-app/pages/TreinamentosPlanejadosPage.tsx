@@ -589,6 +589,7 @@ interface TreinamentosPlanejadosPageProps {
   sourceFilter?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA' | 'TREINAMENTOS';
   autoOpenForm?: boolean;
   onAutoOpenFormHandled?: () => void;
+  initialSetorIds?: number[];
 }
 
 export default function TreinamentosPlanejadosPage({
@@ -599,6 +600,7 @@ export default function TreinamentosPlanejadosPage({
   sourceFilter,
   autoOpenForm = false,
   onAutoOpenFormHandled,
+  initialSetorIds,
 }: TreinamentosPlanejadosPageProps) {
   const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
   const navigate = useNavigate();
@@ -646,8 +648,9 @@ export default function TreinamentosPlanejadosPage({
       inicio: monthRange.inicio,
       fim: monthRange.fim,
       source: sourceFilter,
+      setor_ids: initialSetorIds && initialSetorIds.length > 0 ? initialSetorIds : undefined,
     }),
-    [buscaAdiada, instrutorFiltro, monthRange.fim, monthRange.inicio, sourceFilter, statusFiltro],
+    [buscaAdiada, initialSetorIds, instrutorFiltro, monthRange.fim, monthRange.inicio, sourceFilter, statusFiltro],
   );
 
   const treinamentosQuery = useTreinamentosPlanejados(filtrosComuns);
@@ -656,6 +659,7 @@ export default function TreinamentosPlanejadosPage({
     status: statusFiltro || undefined,
     instrutor_id: instrutorFiltro ? Number(instrutorFiltro) : undefined,
     source: sourceFilter,
+    setor_ids: initialSetorIds && initialSetorIds.length > 0 ? initialSetorIds : undefined,
   });
   const auditoriaQuery = useTreinamentosPlanejadosAuditoria(filtrosComuns);
   const detalheQuery = useTreinamentoPlanejadoDetalhe(treinamentoSelecionadoId);

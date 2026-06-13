@@ -239,7 +239,8 @@ export interface TreinamentoPlanejadoFiltros {
   instrutor_id?: number | null;
   funcionario_id?: number | null;
   busca?: string;
-  source?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA';
+  source?: 'TURMA' | 'SIMULADOR' | 'QUALIFICACAO_PLANEJADA' | 'TREINAMENTOS';
+  setor_ids?: number[];
 }
 
 export interface TreinamentoPlanejadoInput {
@@ -321,7 +322,11 @@ function buildQueryString(filters: Record<string, unknown>): string {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return;
-    params.set(key, String(value));
+    if (Array.isArray(value)) {
+      if (value.length > 0) params.set(key, value.join(','));
+    } else {
+      params.set(key, String(value));
+    }
   });
   const query = params.toString();
   return query ? `?${query}` : '';

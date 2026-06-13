@@ -52,14 +52,14 @@ describe('tenant-scoped tables: empresa_id filter present in GET queries', () =>
     expect(source).toMatch(/WHERE id = \? AND deleted_at IS NULL AND empresa_id = \?/);
   });
 
-  it('qualificacoes/tipos.ts GET / includes empresa_id = ? filter', () => {
+  it('qualificacoes/tipos.ts GET / includes qt.empresa_id filter', () => {
     const source = src('routes/qualificacoes/tipos.ts');
-    expect(source).toMatch(/AND empresa_id = \? ORDER BY categoria, nome LIMIT \?/);
+    expect(source).toMatch(/qt\.empresa_id = \?/);
   });
 
-  it('qualificacoes/tipos.ts GET /:id includes empresa_id = ? filter', () => {
+  it('qualificacoes/tipos.ts GET /:id includes qt.empresa_id = ? filter', () => {
     const source = src('routes/qualificacoes/tipos.ts');
-    expect(source).toMatch(/WHERE id = \? AND deleted_at IS NULL AND empresa_id = \?/);
+    expect(source).toMatch(/qt\.id = \? AND qt\.deleted_at IS NULL AND qt\.empresa_id = \?/);
   });
 
   it('simuladores-relatorios.ts anchors uso queries on empresa_id', () => {

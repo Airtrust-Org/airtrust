@@ -14,6 +14,10 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
+import {
+  assertFuncionarioInScope,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -608,10 +612,13 @@ app.get('/funcionarios/:id/ficha-360', async (c: Context<{ Bindings: Env }>) => 
   try {
     const id = Number(c.req.param('id'));
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
 
     if (Number.isNaN(id)) {
       return c.json({ error: 'ID inválido' }, 400);
     }
+
+    await assertFuncionarioInScope(c.env.DB, empresaId, id, access);
 
     const data = await getFicha360(c.env.DB, id, empresaId);
 

@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Columns2, Plus, Search } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 import { Button as UIButton } from '@/react-app/components/UI';
+import { MultiSelect, type MultiSelectOption } from '@/react-app/components/UI/MultiSelect';
 import { ListaFuncionarios } from './funcionarios/ListaFuncionarios';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
-import { useLocalStorage } from '@/react-app/hooks/useLocalStorage';
+import { useTablePreferences } from '@/react-app/hooks/useTablePreferences';
 import { useSearchParams } from 'react-router-dom';
 
 interface ModeloAeronave {
@@ -43,14 +44,48 @@ export default function Funcionarios() {
     setorFilter: string[];
   }
 
-  const [filters, setFilters] = useLocalStorage<FuncionariosFilters>(FUNCIONARIOS_FILTERS_KEY, {
-    searchTerm: '',
-    statusFilter: 'ativos',
-    funcaoFilter: searchParams.get('funcao') ?? '',
-    aeronaveFilter: '',
-    quinzenaFilter: '',
-    setorFilter: [] as string[],
-  });
+  const defaultFilters = useMemo<FuncionariosFilters>(
+    () => ({
+      searchTerm: '',
+      statusFilter: 'ativos',
+      funcaoFilter: '',
+      aeronaveFilter: '',
+      quinzenaFilter: '',
+      setorFilter: [],
+    }),
+    [],
+  );
+
+  const {
+    preferences: filters,
+    setPreferences: setFilters,
+    ready: filtersReady,
+  } = useTablePreferences<FuncionariosFilters>('tabela.funcionarios.lista', defaultFilters);
+
+  const migratedLegacyFiltersRef = useRef(false);
+
+  useEffect(() => {
+    if (!filtersReady || migratedLegacyFiltersRef.current) return;
+    migratedLegacyFiltersRef.current = true;
+
+    try {
+      const legacyRaw = localStorage.getItem(FUNCIONARIOS_FILTERS_KEY);
+      if (!legacyRaw) return;
+      const legacy = JSON.parse(legacyRaw) as Partial<FuncionariosFilters>;
+      setFilters((prev) => ({
+        ...prev,
+        ...legacy,
+        setorFilter: Array.isArray(legacy.setorFilter)
+          ? legacy.setorFilter
+          : legacy.setorFilter
+            ? [String(legacy.setorFilter)]
+            : prev.setorFilter,
+      }));
+      localStorage.removeItem(FUNCIONARIOS_FILTERS_KEY);
+    } catch (error) {
+      console.error('Erro ao migrar filtros legados de funcionários:', error);
+    }
+  }, [filtersReady, setFilters]);
 
   // Migrar setorFilter legado (string → string[]) uma vez na montagem
   useEffect(() => {
@@ -76,10 +111,6 @@ export default function Funcionarios() {
     [setFilters],
   );
 
-  // Setores ordenados para o select múltiplo
-  const setoresOrdenados = useMemo(() => {
-    return [...setores].sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [setores]);
   const [configColunasAberto, setConfigColunasAberto] = useState(false);
   const [showModalNovoFuncionario, setShowModalNovoFuncionario] = useState(false);
   const [modelosAeronave, setModelosAeronave] = useState<ModeloAeronave[]>([]);
@@ -91,6 +122,23 @@ export default function Funcionarios() {
     byModelo: Record<string, { cmd: number; cop: number }>;
   } | null>(null);
   const modelosLoadedRef = useRef(false);
+
+  // Setores ordenados para o select múltiplo
+  const setoresOrdenados = useMemo(() => {
+    return [...setores].sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [setores]);
+
+  const setorOptions = useMemo<MultiSelectOption[]>(
+    () => setoresOrdenados.map((setor) => ({ value: String(setor.id), label: setor.nome })),
+    [setoresOrdenados],
+  );
+
+  useEffect(() => {
+    if (setoresOrdenados.length !== 1) return;
+    const onlySetorId = String(setoresOrdenados[0].id);
+    if (setorFilter.length === 1 && setorFilter[0] === onlySetorId) return;
+    updateFilter('setorFilter', [onlySetorId]);
+  }, [setoresOrdenados, setorFilter, updateFilter]);
 
   const loadModelosAeronave = async () => {
     try {
@@ -233,25 +281,19 @@ export default function Funcionarios() {
               <option value="personalizada">Flex</option>
             </select>
 
-            <select
-              multiple
-              value={setorFilter}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
-                updateFilter('setorFilter', selected);
-              }}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary bg-white text-slate-900 cursor-pointer dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              size={setoresOrdenados.length > 0 ? Math.min(setoresOrdenados.length, 6) : 1}
-            >
-              {setoresOrdenados.length === 0 && (
-                <option value="" disabled>Carregando setores...</option>
-              )}
-              {setoresOrdenados.map((setor) => (
-                <option key={setor.id} value={String(setor.id)}>
-                  {setor.nome}
-                </option>
-              ))}
-            </select>
+            {setoresOrdenados.length === 1 ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                {setoresOrdenados[0].nome}
+              </div>
+            ) : (
+              <MultiSelect
+                options={setorOptions}
+                selected={setorFilter}
+                onChange={(selected) => updateFilter('setorFilter', selected)}
+                placeholder="Todos os setores"
+                allLabel="Todos os setores"
+              />
+            )}
             <button
               onClick={() => setConfigColunasAberto((prev) => !prev)}
               className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"

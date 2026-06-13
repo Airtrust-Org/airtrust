@@ -89,4 +89,12 @@ describe('RBAC middleware role normalization', () => {
     const payload = (await response.json()) as { code?: string };
     expect(payload.code).toBe('NOT_AUTHENTICATED');
   });
+
+  it('blocks INSTRUTOR for requireRole(manager)', async () => {
+    const response = await hit(buildApp('manager'), 'INSTRUTOR');
+    expect(response.status).toBe(403);
+
+    const payload = (await response.json()) as { code?: string };
+    expect(payload.code).toBe('RBAC_FORBIDDEN');
+  });
 });

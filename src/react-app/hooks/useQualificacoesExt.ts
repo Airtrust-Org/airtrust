@@ -89,6 +89,8 @@ export interface QualificacaoTipoDTO {
   vencimento_fim_mes?: number | null;
   created_at?: string;
   updated_at?: string | null;
+  setores?: Array<{ id: number; nome: string }>;
+  is_transversal?: boolean;
 }
 
 interface ApiResponse {
@@ -133,6 +135,7 @@ export function useQualificacoesHistorico(
   aeronaveId?: string,
   categoria?: string,
   statusFilter?: string[], // Backend status filters
+  setorIds?: string[],
   historicoId?: number,
 ) {
   const [loadingExtra, setLoadingExtra] = useState(false);
@@ -147,6 +150,9 @@ export function useQualificacoesHistorico(
   if (categoria) endpoint += `&categoria=${encodeURIComponent(categoria)}`;
   if (statusFilter && statusFilter.length > 0) {
     endpoint += `&statuses=${encodeURIComponent(statusFilter.join(','))}`;
+  }
+  if (setorIds && setorIds.length > 0) {
+    endpoint += `&setor_ids=${encodeURIComponent(setorIds.join(','))}`;
   }
   if (historicoId) endpoint += `&id=${historicoId}`;
 
@@ -340,9 +346,28 @@ export function useHabilitacoes(limit = 50) {
  * Hook para listar tipos de qualificações
  * Normaliza campo obrigatoria para boolean e garante array segura
  */
-export function useQualificacaoTipos(enabled: boolean = true, limit = 200) {
+export function useQualificacaoTipos(
+  enabled: boolean = true,
+  limit = 200,
+  filters?: {
+    categoria?: string;
+    setorIds?: string[];
+    search?: string;
+  },
+) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (filters?.categoria?.trim()) {
+    query.set('categoria', filters.categoria.trim());
+  }
+  if (filters?.setorIds?.length) {
+    query.set('setor_ids', filters.setorIds.join(','));
+  }
+  if (filters?.search?.trim()) {
+    query.set('search', filters.search.trim());
+  }
+
   const { data, loading, error, refetch } = useApi<{ data?: QualificacaoTipoDTO[] }>(
-    `/api/qualificacoes/tipos?limit=${limit}`,
+    `/api/qualificacoes/tipos?${query.toString()}`,
     {
       enabled,
       requireAuth: true,
