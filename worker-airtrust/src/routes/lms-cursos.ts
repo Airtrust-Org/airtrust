@@ -10,6 +10,7 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { logAudit } from '../utils/db';
 import { getAuditContextSnapshot } from '../lib/audit/context';
 import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
@@ -1106,6 +1107,28 @@ app.get('/', async (c) => {
   const q = c.req.query('q');
   const somentePublicados = c.req.query('publicados') !== '0';
 
+  const rawSetorIds = c.req.query('setor_ids') || c.req.query('setor_id');
+  const requestedSetorIds: number[] = rawSetorIds
+    ? rawSetorIds.split(',').map(Number).filter((n) => Number.isFinite(n) && n > 0)
+    : [];
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+
+  let finalSetorIds: number[] | null = null;
+  if (requestedSetorIds.length > 0) {
+    if (access.mode === 'sector') {
+      const allowed = requestedSetorIds.filter((id) => access.setorIds.includes(id));
+      if (allowed.length !== requestedSetorIds.length) {
+        return c.json({ success: false, error: 'Filtro de setor fora do escopo permitido' }, 403);
+      }
+      finalSetorIds = allowed;
+    } else {
+      finalSetorIds = requestedSetorIds;
+    }
+  } else if (access.mode === 'sector' && access.setorIds.length > 0) {
+    finalSetorIds = access.setorIds;
+  }
+
   let where = 'WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1';
   const binds: (string | number)[] = [empresaId];
 
@@ -1119,6 +1142,16 @@ app.get('/', async (c) => {
   if (q) {
     where += ' AND c.titulo LIKE ?';
     binds.push(`%${q}%`);
+  }
+  if (finalSetorIds !== null) {
+    const placeholders = finalSetorIds.map(() => '?').join(', ');
+    where += ` AND EXISTS (
+      SELECT 1 FROM qualificacoes_tipos_setores qts_f
+      WHERE qts_f.tipo_id = c.qualificacao_tipo_id
+        AND qts_f.empresa_id = c.empresa_id
+        AND qts_f.setor_id IN (${placeholders})
+    )`;
+    binds.push(...finalSetorIds);
   }
 
   const total = await db

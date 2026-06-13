@@ -517,6 +517,7 @@ export interface CursosFilters {
   publicados?: boolean;
   page?: number;
   limit?: number;
+  setor_ids?: number[];
 }
 
 export function useLmsCursos(
@@ -535,6 +536,8 @@ export function useLmsCursos(
         params.set('publicados', filters.publicados ? '1' : '0');
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
+      if (filters.setor_ids && filters.setor_ids.length > 0)
+        params.set('setor_ids', filters.setor_ids.join(','));
       const qs = params.toString();
       return lmsRequestPaginated<LmsCurso>(`/cursos${qs ? '?' + qs : ''}`);
     },
