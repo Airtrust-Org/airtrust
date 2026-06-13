@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Settings,
@@ -18,6 +18,16 @@ import {
   BarChart2,
   FileText,
   RefreshCcw,
+  Wrench,
+  Plane,
+  Clock,
+  Package,
+  ChevronDown,
+  GraduationCap,
+  Cpu,
+  ClipboardList,
+  MessagesSquare,
+  LayoutGrid,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -31,6 +41,7 @@ import { useLanguage } from '../i18n/useLanguage';
 import { useTheme } from '../theme/ThemeProvider';
 import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
 import { canAccessModule } from '@/react-app/lib/module-access';
+import ModuleSecondaryNav from './ModuleSecondaryNav';
 interface AppLayoutProps {
   children: ReactNode;
 }
@@ -49,6 +60,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { isDark, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hardRefreshLoading, setHardRefreshLoading] = useState(false);
+  const [treinamentosOpen, setTreinamentosOpen] = useState(false);
+  const [treinamentosMobileOpen, setTreinamentosMobileOpen] = useState(false);
+  const treinamentosTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [empresaLogoError, setEmpresaLogoError] = useState<Record<number, boolean>>({});
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
   const modulosAtivos = empresaAtual?.modulos_ativos;
@@ -67,10 +81,36 @@ export default function AppLayout({ children }: AppLayoutProps) {
     canAccessModule('escalas', modulosAtivos) && (can('escalas.view') || can('self.escala'));
   const showFrms = canAccessModule('frms', modulosAtivos) && can('frms.view');
   const showSgso = canAccessModule('sgso', modulosAtivos) && can('sgso.view');
+  const showMro = canAccessModule('mro', modulosAtivos) && !isAluno && !isInstrutor;
+  const showTreinamentosPlanejados =
+    canAccessModule('treinamentos_planejados', modulosAtivos) && !isAluno && !isInstrutor;
+
+  // Grupo "Treinamentos" — visível se pelo menos um sub-módulo estiver acessível
+  const showTreinamentosGroup =
+    !isAluno &&
+    !isInstrutor &&
+    (showQualificacoes || showSimuladores || showLms || showTreinamentosPlanejados);
 
   const isActivePath = (path: string, exact = false) => {
     if (exact) return location.pathname === path;
     return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
+  const isInTreinamentosPath =
+    isActivePath('/treinamentos') ||
+    isActivePath('/qualificacoes') ||
+    isActivePath('/lms') ||
+    isActivePath('/simuladores') ||
+    isActivePath('/treinamentos/planejados') ||
+    isActivePath('/treinamentos/solicitacoes') ||
+    isActivePath('/treinamentos/voo');
+
+  const handleTreinamentosMouseEnter = () => {
+    if (treinamentosTimerRef.current) clearTimeout(treinamentosTimerRef.current);
+    setTreinamentosOpen(true);
+  };
+  const handleTreinamentosMouseLeave = () => {
+    treinamentosTimerRef.current = setTimeout(() => setTreinamentosOpen(false), 120);
   };
 
   const getUserInitials = () => {
@@ -188,30 +228,84 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   {t('layout.nav.employees')}
                 </Link>
               )}
-              {!isAluno && !isInstrutor && showQualificacoes && (
-                <Link
-                  to="/qualificacoes"
-                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/qualificacoes') ? NAV_ACTIVE : NAV_INACTIVE}`}
+
+              {/* ── Treinamentos dropdown ── */}
+              {showTreinamentosGroup && (
+                <div
+                  className="relative"
+                  onMouseEnter={handleTreinamentosMouseEnter}
+                  onMouseLeave={handleTreinamentosMouseLeave}
                 >
-                  {t('layout.nav.qualifications')}
-                </Link>
+                  <button
+                    type="button"
+                    className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium transition-colors ${isInTreinamentosPath ? NAV_ACTIVE : NAV_INACTIVE}`}
+                  >
+                    Treinamentos
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform duration-150 ${treinamentosOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  {treinamentosOpen && (
+                    <div
+                      className="absolute left-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                      onMouseEnter={handleTreinamentosMouseEnter}
+                      onMouseLeave={handleTreinamentosMouseLeave}
+                    >
+                      <Link
+                        to="/treinamentos"
+                        onClick={() => setTreinamentosOpen(false)}
+                        className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos', true) ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
+                      >
+                        <LayoutGrid className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                        Painel
+                      </Link>
+                      <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                      {showQualificacoes && (
+                        <Link
+                          to="/qualificacoes"
+                          onClick={() => setTreinamentosOpen(false)}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/qualificacoes') || isActivePath('/treinamentos/planejados') || isActivePath('/treinamentos/solicitacoes') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
+                        >
+                          <BadgeCheck className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          Qualificações
+                        </Link>
+                      )}
+                      {showLms && (
+                        <Link
+                          to="/lms"
+                          onClick={() => setTreinamentosOpen(false)}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/lms') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
+                        >
+                          <BookOpen className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          LMS / Cursos EAD
+                        </Link>
+                      )}
+                      {showSimuladores && (
+                        <Link
+                          to="/simuladores"
+                          onClick={() => setTreinamentosOpen(false)}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/simuladores') || isActivePath('/treinamentos/voo') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
+                        >
+                          <Plane className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          Treinamento de Voo
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
-              {!isAluno && !isInstrutor && showSimuladores && (
+
+              {/* LMS standalone — visível somente para alunos/instrutores (não entram no grupo Treinamentos) */}
+              {(isAluno || isInstrutor) && showLms && (
                 <Link
-                  to="/simuladores"
-                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/simuladores') ? NAV_ACTIVE : NAV_INACTIVE}`}
-                >
-                  {t('layout.nav.simulators')}
-                </Link>
-              )}
-              {showLms && (
-                <Link
-                  to="/lms"
+                  to="/lms/cursos"
                   className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/lms') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   LMS
                 </Link>
               )}
+
               {!isAluno && !isInstrutor && showEscalas && (
                 <Link
                   to="/escalas"
@@ -234,6 +328,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/sgso') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   SGSO
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showMro && (
+                <Link
+                  to="/mro"
+                  className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/mro') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  Manutenção
+                  <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
                 </Link>
               )}
             </nav>
@@ -424,51 +527,65 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   {t('layout.nav.employees')}
                 </Link>
               )}
-              {!isAluno && !isInstrutor && showQualificacoes && (
+              {/* ── Treinamentos (mobile) ── */}
+              {showTreinamentosGroup && (
                 <>
-                  <Link
-                    to="/qualificacoes"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/qualificacoes') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                  <button
+                    type="button"
+                    onClick={() => setTreinamentosMobileOpen((v) => !v)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-4 py-3 font-medium transition-all ${isInTreinamentosPath ? 'bg-primary/10 text-primary dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
                   >
-                    <BadgeCheck className="h-4 w-4 shrink-0" />
-                    {t('layout.nav.qualifications')}
-                  </Link>
-                  {isActivePath('/qualificacoes') && (
+                    <div className="flex items-center gap-3">
+                      <GraduationCap className="h-4 w-4 shrink-0" />
+                      Treinamentos
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 transition-transform duration-150 ${treinamentosMobileOpen || isInTreinamentosPath ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {(treinamentosMobileOpen || isInTreinamentosPath) && (
                     <div className="ml-7 flex flex-col gap-0.5">
-                      <Link to="/qualificacoes/alertas" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <Bell className="h-3.5 w-3.5 shrink-0" /> Alertas
+                      <Link
+                        to="/treinamentos"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos', true) ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5 shrink-0" /> Painel
                       </Link>
-                      <Link to="/qualificacoes/dashboard" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <LayoutDashboard className="h-3.5 w-3.5 shrink-0" /> Dashboard
-                      </Link>
+                      {showQualificacoes && (
+                        <Link
+                          to="/qualificacoes"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/qualificacoes') || isActivePath('/treinamentos/planejados') || isActivePath('/treinamentos/solicitacoes') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                        >
+                          <BadgeCheck className="h-3.5 w-3.5 shrink-0" /> Qualificações
+                        </Link>
+                      )}
+                      {showLms && (
+                        <Link
+                          to="/lms"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/lms') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                        >
+                          <BookOpen className="h-3.5 w-3.5 shrink-0" /> LMS / Cursos EAD
+                        </Link>
+                      )}
+                      {showSimuladores && (
+                        <Link
+                          to="/simuladores"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/simuladores') || isActivePath('/treinamentos/voo') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                        >
+                          <Plane className="h-3.5 w-3.5 shrink-0" /> Treinamento de Voo
+                        </Link>
+                      )}
                     </div>
                   )}
                 </>
               )}
-              {!isAluno && !isInstrutor && showSimuladores && (
-                <>
-                  <Link
-                    to="/simuladores"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/simuladores') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-                  >
-                    <Gauge className="h-4 w-4 shrink-0" />
-                    {t('layout.nav.simulators')}
-                  </Link>
-                  {isActivePath('/simuladores') && (
-                    <div className="ml-7 flex flex-col gap-0.5">
-                      <Link to="/simuladores" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <CalendarDays className="h-3.5 w-3.5 shrink-0" /> Agenda
-                      </Link>
-                      <Link to="/simuladores/fichas" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <FileText className="h-3.5 w-3.5 shrink-0" /> Fichas
-                      </Link>
-                    </div>
-                  )}
-                </>
-              )}
-              {showLms && (
+
+              {/* LMS standalone — alunos/instrutores não entram no grupo Treinamentos */}
+              {(isAluno || isInstrutor) && showLms && (
                 <>
                   <Link
                     to="/lms/cursos"
@@ -478,16 +595,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     <BookOpen className="h-4 w-4 shrink-0" />
                     LMS
                   </Link>
-                  {isActivePath('/lms') && (
-                    <div className="ml-7 flex flex-col gap-0.5">
-                      <Link to="/lms/dashboard" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <LayoutDashboard className="h-3.5 w-3.5 shrink-0" /> Dashboard
-                      </Link>
-                      <Link to="/lms/relatorios" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
-                        <BarChart2 className="h-3.5 w-3.5 shrink-0" /> Relatórios
-                      </Link>
-                    </div>
-                  )}
                 </>
               )}
               {!isAluno && !isInstrutor && showEscalas && (
@@ -533,6 +640,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 >
                   <ShieldCheck className="h-4 w-4 shrink-0" />
                   SGSO
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showMro && (
+                <Link
+                  to="/mro"
+                  className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/mro') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  Manutenção
+                  <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
                 </Link>
               )}
             </nav>
@@ -629,6 +745,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </div>
         </>
       )}
+
+      {/* Sub-navegação de módulo (Qualificações / LMS / Treinamento de Voo) */}
+      <ModuleSecondaryNav />
 
       {/* Main content */}
       <main className="mx-auto w-full flex-1 px-4 py-3 sm:px-6 sm:py-4 md:px-8 lg:px-10 lg:py-5 xl:px-12">

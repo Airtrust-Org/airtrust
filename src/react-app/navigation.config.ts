@@ -197,6 +197,22 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
       path: '/hospedagem',
       expandable: false,
     },
+    {
+      id: 'mro',
+      label: 'Manutenção',
+      icon: 'Wrench',
+      expandable: true,
+      badge: 'Prévia',
+      children: [
+        { id: 'mro-dashboard', label: 'Dashboard', path: '/mro' },
+        { id: 'mro-aeronaves', label: 'Aeronaves', path: '/mro/aeronaves' },
+        { id: 'mro-componentes', label: 'Componentes', path: '/mro/componentes' },
+        { id: 'mro-os', label: 'Ordens de Serviço', path: '/mro/os' },
+        { id: 'mro-vencimentos', label: 'Vencimentos', path: '/mro/vencimentos' },
+        { id: 'mro-estoque', label: 'Estoque', path: '/mro/estoque' },
+        { id: 'mro-registros', label: 'Registros Técnicos', path: '/mro/registros-tecnicos' },
+      ],
+    },
   ],
   settings_menu: [
     {
