@@ -14,6 +14,10 @@ import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger } from '../utils/logger';
 import {
+  appendEmployeeSectorFilter,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
+import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
 } from '../utils/qualificacoes-alerta-config';
@@ -32,6 +36,10 @@ app.get('/funcionarios', auth(), async (c) => {
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const conditions = ['f.deleted_at IS NULL', 'f.empresa_id = ?'];
+    const bindings: unknown[] = [empresaId];
+    appendEmployeeSectorFilter(conditions, bindings, access, 'f');
 
     const funcionarios = await db
       .prepare(
@@ -56,11 +64,10 @@ app.get('/funcionarios', auth(), async (c) => {
           f.updated_at
         FROM funcionarios f
         LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
-        WHERE f.deleted_at IS NULL
-          AND f.empresa_id = ?
+        WHERE ${conditions.join('\n          AND ')}
         ORDER BY f.nome`,
       )
-      .bind(empresaId)
+      .bind(...bindings)
       .all();
 
     if (!funcionarios.success) {
@@ -156,6 +163,7 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
   try {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
 
     // MODELO_AERONAVE_EXPR idêntico ao historico.ts — inclui funcionarios_aeronaves
     const MODELO_AERONAVE_EXPR = `COALESCE(
@@ -196,8 +204,9 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
       NULLIF(REPLACE(REPLACE(COALESCE(f.modelo_aeronave_id, ''), ',', ' / '), ' ', ''), '')
     )`;
 
-    const empresaFilter = 'AND f.empresa_id = ?';
-    const params: any[] = [empresaId];
+    const conditions = ['qh.deleted_at IS NULL', 'f.empresa_id = ?'];
+    const params: unknown[] = [empresaId];
+    appendEmployeeSectorFilter(conditions, params, access, 'f');
 
     const { results } = await db
       .prepare(
@@ -233,7 +242,7 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
       LEFT JOIN funcionarios f         ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
       LEFT JOIN modelos_aeronave ma    ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
-      WHERE qh.deleted_at IS NULL ${empresaFilter}
+      WHERE ${conditions.join('\n        AND ')}
       ORDER BY qh.data_conclusao DESC, f.nome ASC
     `,
       )
@@ -454,6 +463,7 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
 app.get('/qualificacoes-tipos', auth(), async (c) => {
   try {
     const db = c.env.DB;
+    const empresaId = getEmpresaId(c);
 
     const tipos = await db
       .prepare(
@@ -472,8 +482,10 @@ app.get('/qualificacoes-tipos', auth(), async (c) => {
           updated_at
         FROM qualificacoes_tipos
         WHERE deleted_at IS NULL
+          AND empresa_id = ?
         ORDER BY codigo`,
       )
+      .bind(empresaId)
       .all();
 
     if (!tipos.success) {

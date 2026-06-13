@@ -6,12 +6,13 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { forbidden } from './error-handler';
+import { normalizeTenantRole } from './tenant';
 
 function isDevAuthBypassEnabled(env: Env): boolean {
   return env.ENVIRONMENT === 'development' && env.ENABLE_DEV_AUTH_BYPASS === 'true';
 }
 
-export type UserRole = 'admin' | 'manager' | 'user';
+export type UserRole = 'admin' | 'manager' | 'instructor' | 'student' | 'viewer' | 'editor';
 
 /**
  * Normaliza role do banco (PT-BR) para o padrão RBAC:
@@ -21,12 +22,9 @@ export type UserRole = 'admin' | 'manager' | 'user';
  */
 function normalizeRole(raw: string | undefined): UserRole | undefined {
   if (!raw) return undefined;
-  const r = raw.toLowerCase().trim();
-  if (r === 'admin' || r === 'administrador') return 'admin';
-  if (r === 'gestor' || r === 'manager') return 'manager';
-  if (r === 'instrutor' || r === 'instructor') return 'manager'; // instrutor has manager-level access for routes
-  if (r === 'usuario' || r === 'user' || r === 'aluno' || r === 'student') return 'user';
-  return r as UserRole;
+  const normalized = normalizeTenantRole(raw);
+  if (normalized === 'student') return 'student';
+  return normalized;
 }
 
 /**

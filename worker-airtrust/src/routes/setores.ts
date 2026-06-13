@@ -6,6 +6,7 @@ import type { Env } from '../types';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 
 const setores = new Hono<{ Bindings: Env }>();
 
@@ -13,20 +14,29 @@ const setores = new Hono<{ Bindings: Env }>();
 setores.get('/', auth(), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
 
   try {
-    const { results } = await db
-      .prepare(
-        `
-        SELECT id, codigo, nome, descricao, responsavel, ativo, created_at, updated_at
-        FROM setores
-        WHERE deleted_at IS NULL
-          AND empresa_id = ?
-        ORDER BY nome ASC
-        `,
-      )
-      .bind(empresaId)
-      .all();
+    let sql = `
+      SELECT id, codigo, nome, descricao, responsavel, ativo, created_at, updated_at
+      FROM setores
+      WHERE deleted_at IS NULL
+        AND empresa_id = ?
+    `;
+    const bindings: unknown[] = [empresaId];
+
+    if (access.mode !== 'all') {
+      if (access.setorIds.length === 0) {
+        return c.json({ success: true, data: [] });
+      }
+
+      sql += ` AND id IN (${access.setorIds.map(() => '?').join(', ')})`;
+      bindings.push(...access.setorIds);
+    }
+
+    sql += ' ORDER BY nome ASC';
+
+    const { results } = await db.prepare(sql).bind(...bindings).all();
 
     return c.json({
       success: true,
@@ -43,18 +53,25 @@ setores.get('/:id', auth(), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
 
   try {
-    const { results } = await db
-      .prepare(
-        `
-        SELECT id, codigo, nome, descricao, responsavel, ativo, created_at, updated_at
-        FROM setores
-        WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
-        `,
-      )
-      .bind(id, empresaId)
-      .all();
+    let sql = `
+      SELECT id, codigo, nome, descricao, responsavel, ativo, created_at, updated_at
+      FROM setores
+      WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
+    `;
+    const bindings: unknown[] = [id, empresaId];
+
+    if (access.mode !== 'all') {
+      if (access.setorIds.length === 0) {
+        throw new ApiError('Setor não encontrado', 404);
+      }
+      sql += ` AND id IN (${access.setorIds.map(() => '?').join(', ')})`;
+      bindings.push(...access.setorIds);
+    }
+
+    const { results } = await db.prepare(sql).bind(...bindings).all();
 
     if (!results || results.length === 0) {
       throw new ApiError('Setor não encontrado', 404);

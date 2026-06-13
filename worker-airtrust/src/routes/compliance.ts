@@ -14,6 +14,11 @@ import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
 import {
+  appendEmployeeSectorFilter,
+  assertFuncionarioInScope,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
+import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
 } from '../utils/qualificacoes-alerta-config';
@@ -177,10 +182,13 @@ app.get('/funcionarios/:id/compliance', auth(), async (c: Context<{ Bindings: En
   try {
     const id = Number(c.req.param('id'));
     const empresaId = getEmpresaId(c as any);
+    const access = await getEmployeeSectorAccess(c, empresaId);
 
     if (Number.isNaN(id)) {
       return c.json({ error: 'ID inválido' }, 400);
     }
+
+    await assertFuncionarioInScope(c.env.DB, empresaId, id, access);
 
     const ficha = await getFicha360(c.env.DB, id, empresaId);
 
@@ -244,12 +252,18 @@ app.get('/compliance/funcionarios', auth(), async (c: Context<{ Bindings: Env }>
 
     // Filtro multi-tenant obrigatório
     const empresaId = getEmpresaId(c as any);
+    const access = await getEmployeeSectorAccess(c, empresaId);
 
     // 1. Buscar todos os funcionários ativos (1 query)
     let fQuery = `SELECT id, nome, matricula, funcao FROM funcionarios WHERE deleted_at IS NULL AND ativo = 1`;
     const fParams: unknown[] = [];
     fQuery += ` AND empresa_id = ?`;
     fParams.push(empresaId);
+    const scopeConditions: string[] = [];
+    appendEmployeeSectorFilter(scopeConditions, fParams, access, 'funcionarios');
+    if (scopeConditions.length > 0) {
+      fQuery += ` AND ${scopeConditions.join(' AND ')}`;
+    }
     if (funcaoFiltro) {
       fQuery += ` AND funcao = ?`;
       fParams.push(funcaoFiltro);

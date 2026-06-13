@@ -17,6 +17,7 @@ import {
   updateSetorGestor,
   deleteSetorGestor,
   getGestoresByFuncionarioSetor,
+  listEligibleGestorUsers,
 } from '../services/setores-gestores';
 
 const setoresGestores = new Hono<{ Bindings: Env }>();
@@ -33,7 +34,7 @@ setoresGestores.use('/*', async (c, next) => {
 });
 
 // ===== GET /api/setores-gestores =====
-setoresGestores.get('/', async (c) => {
+setoresGestores.get('/', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
 
@@ -50,7 +51,7 @@ setoresGestores.get('/', async (c) => {
 });
 
 // ===== GET /api/setores-gestores/por-setor/:setor_id =====
-setoresGestores.get('/por-setor/:setor_id', async (c) => {
+setoresGestores.get('/por-setor/:setor_id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const setorId = parseInt(c.req.param('setor_id'), 10);
@@ -72,7 +73,7 @@ setoresGestores.get('/por-setor/:setor_id', async (c) => {
 });
 
 // ===== GET /api/setores-gestores/por-gestor/:gestor_id =====
-setoresGestores.get('/por-gestor/:gestor_id', async (c) => {
+setoresGestores.get('/por-gestor/:gestor_id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const gestorId = parseInt(c.req.param('gestor_id'), 10);
@@ -94,7 +95,7 @@ setoresGestores.get('/por-gestor/:gestor_id', async (c) => {
 });
 
 // ===== GET /api/setores-gestores/do-funcionario/:funcionario_id =====
-setoresGestores.get('/do-funcionario/:funcionario_id', async (c) => {
+setoresGestores.get('/do-funcionario/:funcionario_id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const funcionarioId = parseInt(c.req.param('funcionario_id'), 10);
@@ -115,8 +116,25 @@ setoresGestores.get('/do-funcionario/:funcionario_id', async (c) => {
   }
 });
 
+// ===== GET /api/setores-gestores/usuarios-elegiveis =====
+setoresGestores.get('/usuarios-elegiveis/lista', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+
+  try {
+    const results = await listEligibleGestorUsers(db, empresaId);
+    return c.json({
+      success: true,
+      data: results,
+    });
+  } catch (error) {
+    logger(c).error('Erro ao listar usuários gestores elegíveis', toError(error));
+    throw new ApiError('Erro ao listar usuários gestores elegíveis', 500);
+  }
+});
+
 // ===== GET /api/setores-gestores/:id =====
-setoresGestores.get('/:id', async (c) => {
+setoresGestores.get('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = parseInt(c.req.param('id'), 10);
@@ -289,10 +307,15 @@ setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), 
   }
 
   try {
-    const body = (await c.req.json()) as { gestor_ids: number[] };
+    const body = (await c.req.json()) as { usuario_ids?: number[]; gestor_ids?: number[] };
+    const usuarioIds = Array.isArray(body.usuario_ids)
+      ? body.usuario_ids
+      : Array.isArray(body.gestor_ids)
+        ? body.gestor_ids
+        : [];
 
-    if (!Array.isArray(body.gestor_ids)) {
-      throw new ApiError('gestor_ids deve ser um array', 400);
+    if (!Array.isArray(usuarioIds)) {
+      throw new ApiError('usuario_ids deve ser um array', 400);
     }
 
     // Delete existing assignments
@@ -309,10 +332,10 @@ setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), 
 
     // Create new assignments
     const created = [];
-    for (const gestorId of body.gestor_ids) {
+    for (const usuarioId of usuarioIds) {
       const id = await createSetorGestor(db, empresaId, {
         setor_id: setorId,
-        gestor_id: gestorId,
+        usuario_id: usuarioId,
         role: 'manager',
         ativo: true,
       });
@@ -328,7 +351,7 @@ setoresGestores.post('/bulk-assign/:setor_id', requireRole('admin', 'manager'), 
       tabela: 'setores_gestores',
       acao: 'BULK_UPDATE',
       registro_id: setorId,
-      dados_novos: { gestor_ids: body.gestor_ids },
+      dados_novos: { usuario_ids: usuarioIds },
       ...ua,
     });
 

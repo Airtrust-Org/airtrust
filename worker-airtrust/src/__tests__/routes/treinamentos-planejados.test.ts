@@ -32,6 +32,11 @@ vi.mock('../../services/treinamentos-planejados-integration', () => ({
   syncTreinamentoPlanejadoIntegration: syncTreinamentoPlanejadoIntegrationMock,
 }));
 
+vi.mock('../../services/employee-sector-access', () => ({
+  getEmployeeSectorAccess: async () => ({ mode: 'all', setorIds: [], funcionarioId: null }),
+  filterRequestedSetorIdsByAccess: (requested: number[]) => requested,
+}));
+
 import treinamentosPlanejadosRoutes from '../../routes/treinamentos-planejados';
 
 type QueryHandler = {

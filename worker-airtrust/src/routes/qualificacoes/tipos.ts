@@ -14,6 +14,7 @@ import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
 import { requireRole } from '../../middleware/rbac';
 import { getTenantContext } from '../../middleware/tenant';
+import { ApiError, forbidden } from '../../middleware/error-handler';
 import { z } from 'zod';
 import {
   buildHistoricoTipoSnapshot,
@@ -26,6 +27,11 @@ import {
   softDeleteLmsCourseForQualificacaoTipo,
   syncLmsCourseFromQualificacaoTipo,
 } from '../../services/lms-ead-ssot';
+import {
+  filterRequestedSetorIdsByAccess,
+  getEmployeeSectorAccess,
+  type EmployeeSectorAccess,
+} from '../../services/employee-sector-access';
 
 type TipoAtualizadoRow = {
   id: number;
@@ -53,6 +59,34 @@ type HistoricoTipoSyncRow = {
 type TipoExistenteRow = {
   id: number;
   deleted_at: string | null;
+};
+
+type TipoSetor = {
+  id: number;
+  nome: string;
+};
+
+type TipoQualificacaoRow = {
+  id: number | string;
+  tipo?: string | null;
+  codigo?: string | null;
+  nome?: string | null;
+  descricao?: string | null;
+  categoria?: string | null;
+  carga_horaria?: number | null;
+  carga_horaria_inicial?: number | null;
+  carga_horaria_recorrente?: number | null;
+  conteudo_programatico?: string | null;
+  validade?: number | null;
+  vencimento_fim_mes?: number | null;
+  observacoes?: string | null;
+  ativo?: number | boolean | null;
+  is_check?: number | boolean | null;
+  created_at?: string;
+  updated_at?: string | null;
+  total_no_historico?: number | null;
+  setores_json?: string | null;
+  setores_count?: number | null;
 };
 
 const router = new Hono<{ Bindings: Env }>();
@@ -146,12 +180,22 @@ const updateTipoSchema = z.object({
   is_check: z.union([z.boolean(), z.number()]).optional(),
 });
 
+const updateTipoSetoresSchema = z.object({
+  setor_ids: z.array(z.number().int().positive()).default([]),
+});
+
 // ===== HELPERS =====
 function safe(fn: (c: any) => Promise<Response> | Response) {
   return async (c: any) => {
     try {
       return await fn(c);
     } catch (e) {
+      if (e instanceof ApiError) {
+        return c.json(
+          { success: false, error: e.message, code: e.code },
+          e.statusCode as 400 | 403 | 404 | 409 | 500,
+        );
+      }
       const errorMessage = (e as Error).message || String(e);
       console.error('[TIPOS_ERROR]', errorMessage, (e as Error).stack);
       return c.json({ success: false, error: errorMessage }, 500);
@@ -179,6 +223,291 @@ async function logAuditoria(db: D1Database, entidade: string, entidade_id: strin
   }
 }
 
+async function hasQualificacoesTiposSetoresTable(db: D1Database): Promise<boolean> {
+  const table = await db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores' LIMIT 1",
+    )
+    .first<{ name: string }>();
+
+  return Boolean(table?.name);
+}
+
+function normalizeSetorIds(values: Array<string | number>): number[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  );
+}
+
+function parseRequestedSetorIds(rawSetorId?: string, rawSetorIds?: string): number[] {
+  const ids: Array<string | number> = [];
+  if (rawSetorId) ids.push(rawSetorId);
+  if (rawSetorIds) {
+    ids.push(
+      ...rawSetorIds
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+    );
+  }
+  return normalizeSetorIds(ids);
+}
+
+function parseSetoresJson(raw: string | null | undefined): TipoSetor[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Array<{ id?: number; nome?: string } | null>;
+    return (parsed || [])
+      .filter((item): item is { id: number; nome: string } => Boolean(item?.id && item?.nome))
+      .map((item) => ({ id: Number(item.id), nome: String(item.nome) }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  } catch {
+    return [];
+  }
+}
+
+function enrichTipoRow<T extends TipoQualificacaoRow>(row: T) {
+  const setores = parseSetoresJson(row.setores_json);
+  return {
+    ...row,
+    setores,
+    is_transversal: setores.length === 0,
+  };
+}
+
+function buildTipoSetorVisibilityClause(
+  access: EmployeeSectorAccess,
+  hasQualificacoesTiposSetores: boolean,
+  requestedSetorIds: number[],
+): { clause: string; bindings: number[] } {
+  if (!hasQualificacoesTiposSetores) {
+    return requestedSetorIds.length > 0
+      ? { clause: '1 = 0', bindings: [] }
+      : { clause: '1 = 1', bindings: [] };
+  }
+
+  const activeLinksMissing = `NOT EXISTS (
+    SELECT 1
+      FROM qualificacoes_tipos_setores qts_scope
+     WHERE qts_scope.tipo_id = qt.id
+       AND qts_scope.empresa_id = qt.empresa_id
+       AND qts_scope.deleted_at IS NULL
+  )`;
+
+  const setorIdsForScope =
+    requestedSetorIds.length > 0 ? requestedSetorIds : access.mode === 'all' ? [] : access.setorIds;
+
+  if (setorIdsForScope.length === 0) {
+    return access.mode === 'all'
+      ? { clause: '1 = 1', bindings: [] }
+      : { clause: activeLinksMissing, bindings: [] };
+  }
+
+  const linkedToScopedSetor = `EXISTS (
+    SELECT 1
+      FROM qualificacoes_tipos_setores qts_scope
+     WHERE qts_scope.tipo_id = qt.id
+       AND qts_scope.empresa_id = qt.empresa_id
+       AND qts_scope.deleted_at IS NULL
+       AND qts_scope.setor_id IN (${setorIdsForScope.map(() => '?').join(', ')})
+  )`;
+
+  return {
+    clause: `(${activeLinksMissing} OR ${linkedToScopedSetor})`,
+    bindings: setorIdsForScope,
+  };
+}
+
+async function validateRequestedSetorScope(
+  access: EmployeeSectorAccess,
+  requestedSetorIds: number[],
+): Promise<number[]> {
+  if (requestedSetorIds.length === 0 || access.mode === 'all') {
+    return requestedSetorIds;
+  }
+
+  const allowedRequestedSetorIds = filterRequestedSetorIdsByAccess(requestedSetorIds, access);
+  if (allowedRequestedSetorIds.length !== requestedSetorIds.length) {
+    forbidden('Filtro de setor fora do escopo permitido', 'SETOR_FORA_DO_ESCOPO');
+  }
+
+  return allowedRequestedSetorIds;
+}
+
+function buildSetoresAggregationSelect(hasQualificacoesTiposSetores: boolean): string {
+  if (!hasQualificacoesTiposSetores) {
+    return `'[]' AS setores_json, 0 AS setores_count`;
+  }
+
+  return `
+    COALESCE(qtsa.setores_json, '[]') AS setores_json,
+    COALESCE(qtsa.setores_count, 0) AS setores_count
+  `;
+}
+
+function buildSetoresAggregationJoin(hasQualificacoesTiposSetores: boolean): string {
+  if (!hasQualificacoesTiposSetores) {
+    return '';
+  }
+
+  return `
+    LEFT JOIN (
+      SELECT
+        qts.tipo_id,
+        qts.empresa_id,
+        json_group_array(json_object('id', s.id, 'nome', s.nome)) AS setores_json,
+        COUNT(*) AS setores_count
+      FROM qualificacoes_tipos_setores qts
+      INNER JOIN setores s
+        ON s.id = qts.setor_id
+       AND s.empresa_id = qts.empresa_id
+       AND s.deleted_at IS NULL
+      WHERE qts.deleted_at IS NULL
+      GROUP BY qts.tipo_id, qts.empresa_id
+    ) qtsa
+      ON qtsa.tipo_id = qt.id
+     AND qtsa.empresa_id = qt.empresa_id
+  `;
+}
+
+async function listTipoSetores(
+  db: D1Database,
+  empresaId: number,
+  tipoId: string,
+): Promise<TipoSetor[]> {
+  if (!(await hasQualificacoesTiposSetoresTable(db))) {
+    return [];
+  }
+
+  const { results } = await db
+    .prepare(
+      `SELECT s.id, s.nome
+         FROM qualificacoes_tipos_setores qts
+         INNER JOIN setores s
+           ON s.id = qts.setor_id
+          AND s.empresa_id = qts.empresa_id
+          AND s.deleted_at IS NULL
+        WHERE qts.tipo_id = ?
+          AND qts.empresa_id = ?
+          AND qts.deleted_at IS NULL
+        ORDER BY s.nome ASC`,
+    )
+    .bind(tipoId, empresaId)
+    .all<TipoSetor>();
+
+  return (results || []).map((row) => ({ id: Number(row.id), nome: String(row.nome) }));
+}
+
+async function syncTipoSetores(
+  db: D1Database,
+  empresaId: number,
+  tipoId: string,
+  setorIds: number[],
+): Promise<void> {
+  if (!(await hasQualificacoesTiposSetoresTable(db))) {
+    throw new ApiError(
+      'Tabela qualificacoes_tipos_setores não disponível. Aplique a migration antes de editar vínculos.',
+      500,
+      'QUALIFICACOES_TIPOS_SETORES_MISSING',
+    );
+  }
+
+  const normalizedSetorIds = normalizeSetorIds(setorIds);
+
+  if (normalizedSetorIds.length > 0) {
+    const setorRows = await db
+      .prepare(
+        `SELECT id
+           FROM setores
+          WHERE empresa_id = ?
+            AND deleted_at IS NULL
+            AND id IN (${normalizedSetorIds.map(() => '?').join(', ')})`,
+      )
+      .bind(empresaId, ...normalizedSetorIds)
+      .all<{ id: number }>();
+
+    const foundIds = new Set((setorRows.results || []).map((row) => Number(row.id)));
+    if (foundIds.size !== normalizedSetorIds.length) {
+      throw new ApiError('Um ou mais setores não pertencem à empresa', 400, 'SETOR_INVALIDO');
+    }
+  }
+
+  const existing = await db
+    .prepare(
+      `SELECT id, setor_id, deleted_at
+         FROM qualificacoes_tipos_setores
+        WHERE tipo_id = ?
+          AND empresa_id = ?`,
+    )
+    .bind(tipoId, empresaId)
+    .all<{ id: number; setor_id: number; deleted_at: string | null }>();
+
+  const activeBySetorId = new Map<number, { id: number; deleted_at: string | null }>();
+  const deletedBySetorId = new Map<number, { id: number; deleted_at: string | null }>();
+
+  for (const row of existing.results || []) {
+    const normalizedSetorId = Number(row.setor_id);
+    if (row.deleted_at) deletedBySetorId.set(normalizedSetorId, row);
+    else activeBySetorId.set(normalizedSetorId, row);
+  }
+
+  const statements: D1PreparedStatement[] = [];
+
+  for (const [existingSetorId, row] of activeBySetorId.entries()) {
+    if (!normalizedSetorIds.includes(existingSetorId)) {
+      statements.push(
+        db
+          .prepare(
+            `UPDATE qualificacoes_tipos_setores
+                SET deleted_at = datetime('now'),
+                    updated_at = datetime('now')
+              WHERE id = ?`,
+          )
+          .bind(row.id),
+      );
+    }
+  }
+
+  for (const setorId of normalizedSetorIds) {
+    if (activeBySetorId.has(setorId)) {
+      continue;
+    }
+
+    const deletedRow = deletedBySetorId.get(setorId);
+    if (deletedRow) {
+      statements.push(
+        db
+          .prepare(
+            `UPDATE qualificacoes_tipos_setores
+                SET deleted_at = NULL,
+                    updated_at = datetime('now')
+              WHERE id = ?`,
+          )
+          .bind(deletedRow.id),
+      );
+      continue;
+    }
+
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO qualificacoes_tipos_setores
+             (tipo_id, setor_id, empresa_id, created_at, updated_at, deleted_at)
+           VALUES (?, ?, ?, datetime('now'), datetime('now'), NULL)`,
+        )
+        .bind(tipoId, setorId, empresaId),
+    );
+  }
+
+  if (statements.length > 0) {
+    await db.batch(statements);
+  }
+}
+
 // ===== ENDPOINTS =====
 
 /**
@@ -191,15 +520,41 @@ router.get(
   safe(async (c) => {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
+    const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
     const limitRaw = c.req.query('limit');
     const limitParsed = parseInt(limitRaw || '200', 10);
     const limitFinal = Math.min(Math.max(limitParsed, 1), 500);
+    const categoria = String(c.req.query('categoria') || '').trim();
+    const search = String(c.req.query('search') || '').trim();
+    const requestedSetorIds = await validateRequestedSetorScope(
+      access,
+      parseRequestedSetorIds(c.req.query('setor_id'), c.req.query('setor_ids')),
+    );
+    const setorScope = buildTipoSetorVisibilityClause(
+      access,
+      hasQualificacoesTiposSetores,
+      requestedSetorIds,
+    );
+    const conditions = ['qt.deleted_at IS NULL', 'qt.empresa_id = ?', setorScope.clause];
+    const bindings: unknown[] = [empresaId, ...setorScope.bindings];
+
+    if (categoria) {
+      conditions.push('qt.categoria = ?');
+      bindings.push(categoria);
+    }
+
+    if (search) {
+      conditions.push('(qt.nome LIKE ? OR qt.codigo LIKE ? OR qt.categoria LIKE ?)');
+      const like = `%${search}%`;
+      bindings.push(like, like, like);
+    }
 
     const { results } = await db
       .prepare(
-        `SELECT id, tipo, codigo, nome, descricao, categoria, carga_horaria, ${
+        `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria, qt.carga_horaria, ${
           columnsSupport.hasCargaInicial ? 'carga_horaria_inicial' : 'NULL as carga_horaria_inicial'
         }, ${
           columnsSupport.hasCargaRecorrente
@@ -209,18 +564,23 @@ router.get(
           columnsSupport.hasConteudoProgramatico
             ? 'conteudo_programatico'
             : 'NULL as conteudo_programatico'
-        }, validade, vencimento_fim_mes, observacoes, ativo, ${
+        }, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
-        }, created_at, updated_at,
-        (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.qualificacao_id = qualificacoes_tipos.id AND qh.deleted_at IS NULL) AS total_no_historico
-        FROM qualificacoes_tipos WHERE deleted_at IS NULL AND empresa_id = ? ORDER BY categoria, nome LIMIT ?`,
+        }, qt.created_at, qt.updated_at,
+        (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.qualificacao_id = qt.id AND qh.deleted_at IS NULL) AS total_no_historico,
+        ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
+        FROM qualificacoes_tipos qt
+        ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY qt.categoria, qt.nome
+        LIMIT ?`,
       )
-      .bind(empresaId, limitFinal)
-      .all();
+      .bind(...bindings, limitFinal)
+      .all<TipoQualificacaoRow>();
 
     return c.json({
       success: true,
-      data: results || [],
+      data: (results || []).map(enrichTipoRow),
       meta: { count: (results || []).length, limit: limitFinal },
     });
   }),
@@ -232,13 +592,16 @@ router.get(
   safe(async (c) => {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
+    const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
     const id = c.req.param('id');
+    const setorScope = buildTipoSetorVisibilityClause(access, hasQualificacoesTiposSetores, []);
 
     const tipo = await db
       .prepare(
-        `SELECT id, tipo, codigo, nome, descricao, categoria, carga_horaria, ${
+        `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria, qt.carga_horaria, ${
           columnsSupport.hasCargaInicial ? 'carga_horaria_inicial' : 'NULL as carga_horaria_inicial'
         }, ${
           columnsSupport.hasCargaRecorrente
@@ -248,21 +611,63 @@ router.get(
           columnsSupport.hasConteudoProgramatico
             ? 'conteudo_programatico'
             : 'NULL as conteudo_programatico'
-        }, validade, vencimento_fim_mes, observacoes, ativo, ${
+        }, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
-        }, created_at, updated_at
-        FROM qualificacoes_tipos
-        WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
+        }, qt.created_at, qt.updated_at,
+        ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
+        FROM qualificacoes_tipos qt
+        ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
+        WHERE qt.id = ? AND qt.deleted_at IS NULL AND qt.empresa_id = ? AND ${setorScope.clause}
         LIMIT 1`,
       )
-      .bind(id, empresaId)
-      .first();
+      .bind(id, empresaId, ...setorScope.bindings)
+      .first<TipoQualificacaoRow>();
 
     if (!tipo) {
       return c.json({ success: false, error: 'Tipo não encontrado' }, 404);
     }
 
-    return c.json({ success: true, data: tipo });
+    return c.json({ success: true, data: enrichTipoRow(tipo) });
+  }),
+);
+
+router.get(
+  '/:id/setores',
+  auth(),
+  safe(async (c) => {
+    const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
+    const id = c.req.param('id');
+    const setorScope = buildTipoSetorVisibilityClause(access, hasQualificacoesTiposSetores, []);
+
+    const tipo = await db
+      .prepare(
+        `SELECT qt.id
+           FROM qualificacoes_tipos qt
+          WHERE qt.id = ?
+            AND qt.empresa_id = ?
+            AND qt.deleted_at IS NULL
+            AND ${setorScope.clause}
+          LIMIT 1`,
+      )
+      .bind(id, empresaId, ...setorScope.bindings)
+      .first<{ id: number }>();
+
+    if (!tipo) {
+      return c.json({ success: false, error: 'Tipo não encontrado' }, 404);
+    }
+
+    const setores = await listTipoSetores(db, empresaId, id);
+    return c.json({
+      success: true,
+      data: {
+        tipo_id: Number(id),
+        setores,
+        is_transversal: setores.length === 0,
+      },
+    });
   }),
 );
 
@@ -273,7 +678,7 @@ router.get(
 router.post(
   '/',
   auth(),
-  requireRole('admin', 'manager'),
+  requireRole('admin'),
   safe(async (c) => {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
@@ -486,7 +891,7 @@ router.post(
 router.put(
   '/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requireRole('admin'),
   safe(async (c) => {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
@@ -790,6 +1195,56 @@ router.put(
   }),
 );
 
+router.put(
+  '/:id/setores',
+  auth(),
+  requireRole('admin'),
+  safe(async (c) => {
+    const db = c.env.DB;
+    const { empresaId } = getTenantContext(c);
+    const id = c.req.param('id');
+    const body = await c.req.json();
+
+    const parsed = updateTipoSetoresSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Validação falhou',
+          details: parsed.error.flatten().fieldErrors,
+        },
+        400,
+      );
+    }
+
+    const tipo = await db
+      .prepare(
+        'SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+      )
+      .bind(id, empresaId)
+      .first<{ id: number }>();
+
+    if (!tipo) {
+      return c.json({ success: false, error: 'Tipo não encontrado' }, 404);
+    }
+
+    const setorIds = normalizeSetorIds(parsed.data.setor_ids);
+    await syncTipoSetores(db, empresaId, id, setorIds);
+    await logAuditoria(db, 'qualificacoes_tipos_setores', String(id), 'SYNC');
+
+    const setores = await listTipoSetores(db, empresaId, id);
+    return c.json({
+      success: true,
+      data: {
+        tipo_id: Number(id),
+        setores,
+        is_transversal: setores.length === 0,
+      },
+      message: 'Vínculos de setores atualizados',
+    });
+  }),
+);
+
 /**
  * DELETE /tipos/:id
  * Deleta tipo (soft delete)
@@ -797,7 +1252,7 @@ router.put(
 router.delete(
   '/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requireRole('admin'),
   safe(async (c) => {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
