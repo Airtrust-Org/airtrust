@@ -18,6 +18,7 @@ import {
 import AppLayout from '@/react-app/components/AppLayout';
 import { toast } from 'sonner';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { buildPasta360Url } from '@/react-app/utils/pasta360';
 import AbaDadosPessoais from './AbaDadosPessoais';
 import AbaDocumentos from './AbaDocumentos';
 import AbaHistorico from './AbaHistorico';
@@ -687,11 +688,11 @@ export default function PerfilFuncionario() {
             Qualificações
           </Link>
           <Link
-            to={`/simuladores/desempenho/${id}`}
+            to={buildPasta360Url(id, { tab: 'simulador', origem: 'perfil-funcionario' }) || `/funcionarios/${id}/ficha?tab=simulador`}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
           >
             <BarChart3 className="h-4 w-4 text-violet-500" />
-            Desempenho Simulador
+            Treinamento de Voo
           </Link>
           <Link
             to={`/frms/tripulante/${id}`}

@@ -1,5 +1,5 @@
 export interface Pasta360Context {
-  tab?: 'resumo' | 'qualificacoes' | 'licencas' | 'documentos' | 'pasta';
+  tab?: 'resumo' | 'qualificacoes' | 'licencas' | 'documentos' | 'pasta' | 'simulador';
   origem?: string;
   historicoId?: number | string | null;
   certificadoId?: number | string | null;

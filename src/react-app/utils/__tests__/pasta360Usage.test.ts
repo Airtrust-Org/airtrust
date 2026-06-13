@@ -7,7 +7,9 @@ const flowFiles = [
   'src/react-app/components/funcionarios/TabelaFuncionarios.tsx',
   'src/react-app/components/qualificacoes/ModalCertificados.tsx',
   'src/react-app/pages/FichaFuncionarioPage.tsx',
+  'src/react-app/pages/FichaVoo.tsx',
   'src/react-app/pages/funcionarios/ListaFuncionarios.tsx',
+  'src/react-app/pages/funcionarios/PerfilFuncionario.tsx',
   'src/react-app/pages/funcionarios/tabs/ListaTab.tsx',
 ];
 

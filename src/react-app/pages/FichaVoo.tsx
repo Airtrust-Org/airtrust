@@ -28,6 +28,7 @@ import type { FichaPDFData } from '@/react-app/services/pdf-ficha-client';
 import { openPreviewWindow } from '@/react-app/utils/pdfPreview';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
 interface Manobra {
   id: number;
@@ -423,7 +424,18 @@ export default function FichaVoo() {
       toast.error('ID do funcionário não disponível');
       return;
     }
-    navigate(`/simuladores/desempenho/${ficha.colaborador_id_aluno}`);
+
+    const ficha360Url = buildPasta360Url(ficha.colaborador_id_aluno, {
+      tab: 'simulador',
+      origem: 'ficha-voo',
+    });
+
+    if (!ficha360Url) {
+      toast.error('Não foi possível abrir a Ficha 360');
+      return;
+    }
+
+    navigate(ficha360Url);
   }
 
   // ========== LOADING ==========
@@ -799,7 +811,7 @@ export default function FichaVoo() {
                 className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg transition font-semibold text-sm bg-primary hover:bg-primary/90 text-white shadow-md"
               >
                 <BarChart3 size={18} />
-                Ver Dashboard de Desempenho
+                Abrir Ficha 360
               </button>
             </div>
           </div>
