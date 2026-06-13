@@ -405,6 +405,15 @@ function sanitizeArchivePath(path: string): string | null {
   return normalized;
 }
 
+const setorIdsSchema = z.preprocess(
+  (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    return value;
+  },
+  z.array(z.number().int().positive()).optional(),
+);
+
 const CursoCreateSchema = z.object({
   titulo: z.string().min(2).max(255),
   descricao: trimNullableText,
@@ -427,6 +436,7 @@ const CursoCreateSchema = z.object({
   qualificacao_tipo_id: optionalNullablePositiveInt,
   gerar_qualificacao_ao_concluir: binaryFlagWithDefault(0),
   publicado: binaryFlagWithDefault(0),
+  setor_ids: setorIdsSchema,
 });
 
 const CursoUpdateSchema = z.object({
@@ -453,6 +463,7 @@ const CursoUpdateSchema = z.object({
   publicado: optionalBinaryFlag,
   ativo: optionalBinaryFlag,
   version_tag: trimNullableText,
+  setor_ids: setorIdsSchema,
 });
 
 const StructuredContentInitSchema = z.object({
@@ -654,6 +665,14 @@ async function parseCursoCreateRequest(
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await c.req.formData();
+    const rawSetorIds = formData.get('setor_ids');
+    const parsedSetorIds: number[] = [];
+    if (typeof rawSetorIds === 'string' && rawSetorIds.trim()) {
+      for (const s of rawSetorIds.split(',')) {
+        const n = parseInt(s.trim(), 10);
+        if (Number.isFinite(n) && n > 0) parsedSetorIds.push(n);
+      }
+    }
     const payload = {
       titulo: String(formData.get('titulo') ?? '').trim(),
       descricao: parseNullableText(formData.get('descricao')),
@@ -668,6 +687,7 @@ async function parseCursoCreateRequest(
         formData.get('gerar_qualificacao_ao_concluir'),
       ),
       publicado: parseOptionalBinary(formData.get('publicado')),
+      setor_ids: parsedSetorIds.length > 0 ? parsedSetorIds : undefined,
     };
 
     const parsed = CursoCreateSchema.safeParse(payload);
@@ -685,6 +705,80 @@ async function parseCursoCreateRequest(
   }
 
   return { data: parsed.data, uploadFile: null };
+}
+
+async function validateSetorIds(
+  db: D1Database,
+  empresaId: number,
+  setorIds: number[],
+): Promise<void> {
+  if (setorIds.length === 0) return;
+  const placeholders = setorIds.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `SELECT id FROM setores WHERE id IN (${placeholders}) AND empresa_id = ? AND ativo = 1`,
+    )
+    .bind(...setorIds, empresaId)
+    .all<{ id: number }>();
+  const found = new Set((rows.results ?? []).map((r) => r.id));
+  const invalid = setorIds.filter((id) => !found.has(id));
+  if (invalid.length > 0) {
+    throw new ApiError(`Setor(es) inválido(s) para esta empresa: ${invalid.join(', ')}`, 400);
+  }
+}
+
+async function upsertCursoSetores(
+  db: D1Database,
+  empresaId: number,
+  cursoId: number,
+  setorIds: number[],
+): Promise<void> {
+  if (setorIds.length === 0) return;
+  for (const setorId of setorIds) {
+    await db
+      .prepare(
+        `INSERT INTO lms_cursos_setores (curso_id, setor_id, empresa_id)
+         VALUES (?, ?, ?)
+         ON CONFLICT DO UPDATE SET deleted_at = NULL, updated_at = datetime('now')`,
+      )
+      .bind(cursoId, setorId, empresaId)
+      .run();
+  }
+}
+
+async function replaceCursoSetores(
+  db: D1Database,
+  empresaId: number,
+  cursoId: number,
+  setorIds: number[],
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE lms_cursos_setores
+       SET deleted_at = datetime('now'), updated_at = datetime('now')
+       WHERE curso_id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(cursoId, empresaId)
+    .run();
+  await upsertCursoSetores(db, empresaId, cursoId, setorIds);
+}
+
+async function getCursoSetores(
+  db: D1Database,
+  empresaId: number,
+  cursoId: number,
+): Promise<{ id: number; nome: string }[]> {
+  const rows = await db
+    .prepare(
+      `SELECT s.id, s.nome
+       FROM lms_cursos_setores cs
+       JOIN setores s ON s.id = cs.setor_id
+       WHERE cs.curso_id = ? AND cs.empresa_id = ? AND cs.deleted_at IS NULL
+       ORDER BY s.nome ASC`,
+    )
+    .bind(cursoId, empresaId)
+    .all<{ id: number; nome: string }>();
+  return rows.results ?? [];
 }
 
 /** Extrai launch file do imsmanifest.xml (SCORM 1.2 e 2004) */
@@ -1145,13 +1239,29 @@ app.get('/', async (c) => {
   }
   if (finalSetorIds !== null) {
     const placeholders = finalSetorIds.map(() => '?').join(', ');
-    where += ` AND EXISTS (
-      SELECT 1 FROM qualificacoes_tipos_setores qts_f
-      WHERE qts_f.tipo_id = c.qualificacao_tipo_id
-        AND qts_f.empresa_id = c.empresa_id
-        AND qts_f.setor_id IN (${placeholders})
+    // Filtra por lms_cursos_setores (vínculo direto) OU por qualificacoes_tipos_setores (fallback via qualificação)
+    where += ` AND (
+      EXISTS (
+        SELECT 1 FROM lms_cursos_setores lcs_f
+        WHERE lcs_f.curso_id = c.id
+          AND lcs_f.empresa_id = c.empresa_id
+          AND lcs_f.setor_id IN (${placeholders})
+          AND lcs_f.deleted_at IS NULL
+      )
+      OR (
+        NOT EXISTS (
+          SELECT 1 FROM lms_cursos_setores lcs_chk
+          WHERE lcs_chk.curso_id = c.id AND lcs_chk.empresa_id = c.empresa_id AND lcs_chk.deleted_at IS NULL
+        )
+        AND EXISTS (
+          SELECT 1 FROM qualificacoes_tipos_setores qts_f
+          WHERE qts_f.tipo_id = c.qualificacao_tipo_id
+            AND qts_f.empresa_id = c.empresa_id
+            AND qts_f.setor_id IN (${placeholders})
+        )
+      )
     )`;
-    binds.push(...finalSetorIds);
+    binds.push(...finalSetorIds, ...finalSetorIds);
   }
 
   const total = await db
@@ -1168,7 +1278,12 @@ app.get('/', async (c) => {
         (SELECT COUNT(*) FROM lms_matriculas m
          WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL) AS total_matriculas,
         (SELECT COUNT(*) FROM lms_matriculas m
-         WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.status = 'CONCLUIDO' AND m.deleted_at IS NULL) AS total_concluidos
+         WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.status = 'CONCLUIDO' AND m.deleted_at IS NULL) AS total_concluidos,
+        (SELECT json_group_array(json_object('id', s.id, 'nome', s.nome))
+         FROM lms_cursos_setores lcs
+         JOIN setores s ON s.id = lcs.setor_id
+         WHERE lcs.curso_id = c.id AND lcs.empresa_id = c.empresa_id AND lcs.deleted_at IS NULL
+         ORDER BY s.nome ASC) AS setores_json
       FROM lms_cursos c
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
       LEFT JOIN lms_h5p_conteudos h
@@ -1184,9 +1299,18 @@ app.get('/', async (c) => {
     .bind(...binds, limit, offset)
     .all<Record<string, unknown>>();
 
+  const data = (rows.results ?? []).map((row) => {
+    const setoresJson = row.setores_json as string | null;
+    const { setores_json: _, ...rest } = row;
+    return {
+      ...rest,
+      setores: setoresJson ? (JSON.parse(setoresJson) as { id: number; nome: string }[]) : [],
+    };
+  });
+
   return c.json({
     success: true,
-    data: rows.results,
+    data,
     pagination: { page, limit, total: total?.n ?? 0 },
   });
 });
@@ -1453,7 +1577,12 @@ app.get('/:id{[0-9]+}', async (c) => {
       SELECT c.*,
         qt.nome AS qualificacao_tipo_nome,
         qt.codigo AS qualificacao_tipo_codigo,
-        h.id AS h5p_conteudo_id
+        h.id AS h5p_conteudo_id,
+        (SELECT json_group_array(json_object('id', s.id, 'nome', s.nome))
+         FROM lms_cursos_setores lcs
+         JOIN setores s ON s.id = lcs.setor_id
+         WHERE lcs.curso_id = c.id AND lcs.empresa_id = c.empresa_id AND lcs.deleted_at IS NULL
+         ORDER BY s.nome ASC) AS setores_json
       FROM lms_cursos c
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
       LEFT JOIN lms_h5p_conteudos h
@@ -1469,7 +1598,14 @@ app.get('/:id{[0-9]+}', async (c) => {
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
 
-  return c.json({ success: true, data: curso });
+  const setoresJson = curso.setores_json as string | null;
+  const { setores_json: _, ...cursoRest } = curso;
+  const data = {
+    ...cursoRest,
+    setores: setoresJson ? (JSON.parse(setoresJson) as { id: number; nome: string }[]) : [],
+  };
+
+  return c.json({ success: true, data });
 });
 
 // ── Criar curso ──────────────────────────────────────────────────────────────
@@ -1490,6 +1626,11 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     d.qualificacao_tipo_id ?? null,
     { allowMissingForEad: isEadCategoria(d.categoria) },
   );
+
+  const setorIds = Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : [];
+  if (setorIds.length > 0) {
+    await validateSetorIds(db, empresaId, setorIds);
+  }
 
   const result = await db
     .prepare(
@@ -1523,6 +1664,10 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     .run();
 
   const id = result.meta.last_row_id;
+
+  if (setorIds.length > 0) {
+    await upsertCursoSetores(db, empresaId, id, setorIds);
+  }
 
   try {
     if (
@@ -1558,10 +1703,14 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     });
   }
 
-  const curso = await db
-    .prepare(`SELECT ${LMS_CURSOS_SELECT_COLUMNS} FROM lms_cursos WHERE id = ?`)
-    .bind(id)
-    .first();
+  const cursoSetores = await getCursoSetores(db, empresaId, id);
+  const curso = {
+    ...(await db
+      .prepare(`SELECT ${LMS_CURSOS_SELECT_COLUMNS} FROM lms_cursos WHERE id = ?`)
+      .bind(id)
+      .first()),
+    setores: cursoSetores,
+  };
   if (finalQualificacaoTipoId) {
     await syncQualificacaoTipoFromCurso(db, { empresaId, cursoId: Number(id) });
     await syncLmsCourseFromQualificacaoTipo(db, {
@@ -1599,6 +1748,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
       qualificacao_tipo_id: finalQualificacaoTipoId,
       gerar_qualificacao_ao_concluir:
         finalQualificacaoTipoId != null ? 1 : d.gerar_qualificacao_ao_concluir,
+      setor_ids: setorIds,
     },
   });
   return c.json({ success: true, data: curso }, 201);
@@ -1707,13 +1857,25 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     }
   }
 
-  if (sets.length === 0) throw new ApiError('Nenhum campo para atualizar', 400);
-  sets.push("updated_at = datetime('now')");
+  const updateSetorIds =
+    Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : null;
+  if (updateSetorIds !== null) {
+    await validateSetorIds(db, empresaId, updateSetorIds);
+  }
 
-  await db
-    .prepare(`UPDATE lms_cursos SET ${sets.join(', ')} WHERE id = ? AND empresa_id = ?`)
-    .bind(...vals, cursoId, empresaId)
-    .run();
+  if (sets.length === 0 && updateSetorIds === null) throw new ApiError('Nenhum campo para atualizar', 400);
+
+  if (sets.length > 0) {
+    sets.push("updated_at = datetime('now')");
+    await db
+      .prepare(`UPDATE lms_cursos SET ${sets.join(', ')} WHERE id = ? AND empresa_id = ?`)
+      .bind(...vals, cursoId, empresaId)
+      .run();
+  }
+
+  if (updateSetorIds !== null) {
+    await replaceCursoSetores(db, empresaId, cursoId, updateSetorIds);
+  }
 
   if (!resolvedQualificacaoTipoId && isEadCategoria(nextCategoria)) {
     resolvedQualificacaoTipoId = await ensureQualificacaoTipoForCurso(db, { empresaId, cursoId });
@@ -1746,10 +1908,14 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     }
   }
 
-  const curso = await db
-    .prepare(`SELECT ${LMS_CURSOS_SELECT_COLUMNS} FROM lms_cursos WHERE id = ?`)
-    .bind(cursoId)
-    .first();
+  const cursoSetores = await getCursoSetores(db, empresaId, cursoId);
+  const curso = {
+    ...(await db
+      .prepare(`SELECT ${LMS_CURSOS_SELECT_COLUMNS} FROM lms_cursos WHERE id = ?`)
+      .bind(cursoId)
+      .first()),
+    setores: cursoSetores,
+  };
   await logLmsCourseAudit(db, c, {
     action: 'LMS_CURSO_EDITADO',
     cursoId,
@@ -1766,6 +1932,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
       qualificacao_tipo_id: resolvedQualificacaoTipoId ?? null,
       gerar_qualificacao_ao_concluir:
         resolvedQualificacaoTipoId != null ? 1 : nextGerarQualificacao,
+      setor_ids: updateSetorIds ?? undefined,
     },
   });
   return c.json({ success: true, data: curso });

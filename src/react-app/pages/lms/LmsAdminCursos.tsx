@@ -572,6 +572,18 @@ export default function LmsAdminCursos() {
                                       {curso.categoria ?? 'Sem categoria'} ·{' '}
                                       {formatMinutes(curso.carga_horaria_minutos)}
                                     </p>
+                                    {curso.setores && curso.setores.length > 0 ? (
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {curso.setores.map((s) => (
+                                          <span
+                                            key={s.id}
+                                            className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
+                                          >
+                                            {s.nome}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : null}
                                     <p className="mt-2 line-clamp-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
                                       {curso.descricao ||
                                         'Curso sem descrição operacional resumida.'}
