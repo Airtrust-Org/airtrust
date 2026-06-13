@@ -24,6 +24,7 @@ import {
 import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -527,6 +528,27 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
   const limit = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
   const offset = (page - 1) * limit;
 
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  if (access.mode === 'sector' && access.setorIds.length > 0) {
+    const sectorOk = await db
+      .prepare(
+        `SELECT 1 FROM lms_cursos lc
+         WHERE lc.id = ? AND lc.empresa_id = ?
+           AND lc.qualificacao_tipo_id IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM qualificacoes_tipos_setores qts
+             WHERE qts.tipo_id = lc.qualificacao_tipo_id
+               AND qts.empresa_id = lc.empresa_id
+               AND qts.setor_id IN (${access.setorIds.map(() => '?').join(',')})
+               AND qts.deleted_at IS NULL
+           )
+         LIMIT 1`,
+      )
+      .bind(cursoId, empresaId, ...access.setorIds)
+      .first();
+    if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+  }
+
   let where = `WHERE m.curso_id = ?
                  AND m.empresa_id = ?
                  AND m.deleted_at IS NULL
@@ -912,11 +934,28 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
 
   const curso = await db
     .prepare(
-      'SELECT id, titulo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
+      'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
     )
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string }>();
+    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
+
+  const loteAccess = await getEmployeeSectorAccess(c, empresaId);
+  if (loteAccess.mode === 'sector' && loteAccess.setorIds.length > 0) {
+    const sectorOk =
+      curso.qualificacao_tipo_id != null &&
+      (await db
+        .prepare(
+          `SELECT 1 FROM qualificacoes_tipos_setores qts
+           WHERE qts.tipo_id = ? AND qts.empresa_id = ?
+             AND qts.setor_id IN (${loteAccess.setorIds.map(() => '?').join(',')})
+             AND qts.deleted_at IS NULL
+           LIMIT 1`,
+        )
+        .bind(curso.qualificacao_tipo_id, empresaId, ...loteAccess.setorIds)
+        .first());
+    if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+  }
 
   const funcionarioPlaceholders = funcionarioIdsUnicos.map(() => '?').join(', ');
   const funcionarios = await db

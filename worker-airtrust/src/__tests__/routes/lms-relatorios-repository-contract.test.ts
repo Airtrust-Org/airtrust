@@ -152,7 +152,7 @@ describe('lms relatorios repository contract', () => {
         },
       ],
     });
-    expect(getConformidadeRowsMock).toHaveBeenCalledWith(env.DB, 77);
+    expect(getConformidadeRowsMock).toHaveBeenCalledWith(env.DB, 77, []);
     expect((env.DB.prepare as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
   });
 
@@ -182,7 +182,7 @@ describe('lms relatorios repository contract', () => {
         },
       ],
     });
-    expect(getCursosConformidadeRowsMock).toHaveBeenCalledWith(env.DB, 88);
+    expect(getCursosConformidadeRowsMock).toHaveBeenCalledWith(env.DB, 88, []);
   });
 
   it('GET /relatorios/expiracoes repassa filtro dias para repository', async () => {
@@ -212,7 +212,7 @@ describe('lms relatorios repository contract', () => {
         dias_restantes: 28,
       },
     ]);
-    expect(getExpiracaoRowsMock).toHaveBeenCalledWith(env.DB, 77, 45);
+    expect(getExpiracaoRowsMock).toHaveBeenCalledWith(env.DB, 77, 45, []);
   });
 
   it('limita dias em 180 antes de chamar repository, preservando comportamento da rota', async () => {
@@ -225,7 +225,7 @@ describe('lms relatorios repository contract', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(getExpiracaoRowsMock).toHaveBeenCalledWith(env.DB, 77, 180);
+    expect(getExpiracaoRowsMock).toHaveBeenCalledWith(env.DB, 77, 180, []);
   });
 
   it('sem Authorization retorna 401 antes de chamar repository', async () => {
@@ -265,7 +265,7 @@ describe('lms relatorios repository contract', () => {
       code: 'INTERNAL_ERROR',
     });
     expect(body.data).toBeUndefined();
-    expect(getConformidadeRowsMock).toHaveBeenCalledWith(env.DB, 0);
+    expect(getConformidadeRowsMock).toHaveBeenCalledWith(env.DB, 0, []);
   });
 
   it('erro do repository vira resposta segura conforme errorHandler de producao', async () => {

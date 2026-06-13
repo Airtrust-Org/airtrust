@@ -1117,17 +1117,22 @@ export interface ExpiracaoMatricula {
   dias_restantes: number;
 }
 
-export function useLmsConformidade() {
+export function useLmsConformidade(setorIds?: number[]) {
+  const params = new URLSearchParams();
+  if (setorIds && setorIds.length > 0) params.set('setor_ids', setorIds.join(','));
+  const qs = params.toString() ? `?${params.toString()}` : '';
   return useQuery({
-    queryKey: ['lms', 'relatorios', 'conformidade'],
-    queryFn: () => lmsRequest<ConformidadePorFuncao[]>('/relatorios/conformidade'),
+    queryKey: ['lms', 'relatorios', 'conformidade', setorIds ?? []],
+    queryFn: () => lmsRequest<ConformidadePorFuncao[]>(`/relatorios/conformidade${qs}`),
   });
 }
 
-export function useLmsExpiracoes(dias = 30) {
+export function useLmsExpiracoes(dias = 30, setorIds?: number[]) {
+  const params = new URLSearchParams({ dias: String(dias) });
+  if (setorIds && setorIds.length > 0) params.set('setor_ids', setorIds.join(','));
   return useQuery({
-    queryKey: ['lms', 'relatorios', 'expiracoes', dias],
-    queryFn: () => lmsRequest<ExpiracaoMatricula[]>(`/relatorios/expiracoes?dias=${dias}`),
+    queryKey: ['lms', 'relatorios', 'expiracoes', dias, setorIds ?? []],
+    queryFn: () => lmsRequest<ExpiracaoMatricula[]>(`/relatorios/expiracoes?${params.toString()}`),
   });
 }
 

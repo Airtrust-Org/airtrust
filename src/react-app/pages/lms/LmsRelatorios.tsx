@@ -15,6 +15,7 @@ import PageHeader from '@/react-app/components/PageHeader';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useLmsConformidade, useLmsExpiracoes } from '@/react-app/hooks/useLms';
+import { useApi } from '@/react-app/hooks/useApi';
 import { LmsModuleTabs, LmsPageShell, LmsSummaryTag } from './lmsUi';
 
 function getConformidadeColor(pct: number): string {
@@ -47,9 +48,14 @@ export default function LmsRelatorios() {
   const canManage = isAdmin || isGestor;
   const [tab, setTab] = useState<'conformidade' | 'expiracoes'>('conformidade');
   const [dias, setDias] = useState(30);
+  const [sectorFilter, setSectorFilter] = useState('all');
 
-  const { data: conformidade, isLoading: loadingConformidade } = useLmsConformidade();
-  const { data: expiracoes, isLoading: loadingExpiracoes } = useLmsExpiracoes(dias);
+  const { data: setoresData } = useApi<{ id: number; nome: string }[]>('/setores');
+  const setores = setoresData ?? [];
+  const setorIds = sectorFilter !== 'all' ? [Number(sectorFilter)] : undefined;
+
+  const { data: conformidade, isLoading: loadingConformidade } = useLmsConformidade(setorIds);
+  const { data: expiracoes, isLoading: loadingExpiracoes } = useLmsExpiracoes(dias, setorIds);
 
   const totalFuncionarios = conformidade?.reduce((sum, r) => sum + r.total_funcionarios, 0) ?? 0;
   const totalMatriculados = conformidade?.reduce((sum, r) => sum + r.matriculados, 0) ?? 0;
@@ -140,6 +146,25 @@ export default function LmsRelatorios() {
                 tone={taxaGeral >= 80 ? 'emerald' : taxaGeral >= 50 ? 'amber' : 'rose'}
               />
             </div>
+
+            {/* Sector filter */}
+            {setores.length > 0 && (
+              <div className="flex items-center gap-2">
+                <select
+                  value={sectorFilter}
+                  onChange={(e) => setSectorFilter(e.target.value)}
+                  className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
+                  aria-label="Filtrar por setor"
+                >
+                  <option value="all">Todos os setores</option>
+                  {setores.map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {s.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Tabs */}
             <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm w-fit dark:border-slate-700 dark:bg-slate-800">
