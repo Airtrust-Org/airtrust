@@ -23,6 +23,12 @@ describe('pasta360 url helpers', () => {
     );
   });
 
+  it('suporta abrir a aba de treinamento de voo dentro da Ficha 360', () => {
+    expect(buildPasta360Url(321, { tab: 'simulador', origem: 'ficha-voo' })).toBe(
+      '/funcionarios/321/ficha?tab=simulador&origem=ficha-voo',
+    );
+  });
+
   it('falha de forma explicita quando funcionario e invalido', () => {
     expect(buildPasta360Url(null)).toBeNull();
     expect(() => requirePasta360Url(null)).toThrow('Funcionário inválido para abrir Pasta 360');

@@ -921,13 +921,6 @@ export default function App() {
                         </ProtectedRoute>
                       }
                     />
-                    {/* Aliases conceituais para Treinamento de Voo — redirecionam para rotas existentes */}
-                    <Route path="/treinamentos/voo" element={<Navigate to="/simuladores" replace />} />
-                    <Route path="/treinamentos/voo/sessoes" element={<Navigate to="/simuladores" replace />} />
-                    <Route path="/treinamentos/voo/fichas" element={<Navigate to="/simuladores/fichas" replace />} />
-                    <Route path="/treinamentos/voo/desempenho" element={<Navigate to="/simuladores/dashboard" replace />} />
-                    <Route path="/treinamentos/voo/relatorios" element={<Navigate to="/simuladores/relatorios" replace />} />
-                    <Route path="/treinamentos/voo/cadastros" element={<Navigate to="/simuladores/configuracoes" replace />} />
 
                     {/* LMS — Learning Management System */}
                     <Route

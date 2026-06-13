@@ -41,7 +41,6 @@ import { useLanguage } from '../i18n/useLanguage';
 import { useTheme } from '../theme/ThemeProvider';
 import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
 import { canAccessModule } from '@/react-app/lib/module-access';
-import ModuleSecondaryNav from './ModuleSecondaryNav';
 interface AppLayoutProps {
   children: ReactNode;
 }
@@ -100,10 +99,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     isActivePath('/treinamentos') ||
     isActivePath('/qualificacoes') ||
     isActivePath('/lms') ||
-    isActivePath('/simuladores') ||
-    isActivePath('/treinamentos/planejados') ||
-    isActivePath('/treinamentos/solicitacoes') ||
-    isActivePath('/treinamentos/voo');
+    isActivePath('/simuladores');
 
   const handleTreinamentosMouseEnter = () => {
     if (treinamentosTimerRef.current) clearTimeout(treinamentosTimerRef.current);
@@ -285,7 +281,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         <Link
                           to="/simuladores"
                           onClick={() => setTreinamentosOpen(false)}
-                          className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/simuladores') || isActivePath('/treinamentos/voo') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/simuladores') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
                         >
                           <Plane className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
                           Treinamento de Voo
@@ -574,7 +570,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         <Link
                           to="/simuladores"
                           onClick={() => setMobileMenuOpen(false)}
-                          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/simuladores') || isActivePath('/treinamentos/voo') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/simuladores') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
                         >
                           <Plane className="h-3.5 w-3.5 shrink-0" /> Treinamento de Voo
                         </Link>
@@ -745,9 +741,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </div>
         </>
       )}
-
-      {/* Sub-navegação de módulo (Qualificações / LMS / Treinamento de Voo) */}
-      <ModuleSecondaryNav />
 
       {/* Main content */}
       <main className="mx-auto w-full flex-1 px-4 py-3 sm:px-6 sm:py-4 md:px-8 lg:px-10 lg:py-5 xl:px-12">

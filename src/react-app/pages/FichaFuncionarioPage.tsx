@@ -14,6 +14,7 @@ import { ptBR } from 'date-fns/locale';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import AppLayout from '@/react-app/components/AppLayout';
 import PastaVirtualCompleta from '@/react-app/components/funcionarios/PastaVirtualCompleta';
+import Ficha360TreinamentoVooSection from '@/react-app/components/funcionarios/Ficha360TreinamentoVooSection';
 import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 import {
@@ -171,6 +172,7 @@ interface Ficha360Data {
     fichas: SimuladorFicha[];
   };
   auditoria: AuditoriaEvento[];
+  treinamento_voo_pontos_atencao?: import('@/react-app/components/funcionarios/Ficha360TreinamentoVooSection').TreinamentoVooPontosAtencaoData | null;
 }
 
 interface MatrizRequisito {
@@ -475,6 +477,7 @@ export default function FichaFuncionarioPage() {
     })();
   }, [id]);
 
+
   const qualificacoes = ficha?.qualificacoes ?? [];
   const qualificacoesHistorico = ficha?.qualificacoes_historico ?? [];
   const licencas = ficha?.licencas ?? [];
@@ -654,7 +657,7 @@ export default function FichaFuncionarioPage() {
               className={tabButtonClass('simulador')}
             >
               <Activity className="h-4 w-4" />
-              Simulador
+              Treinamento de Voo
             </button>
             <button
               type="button"
@@ -1102,7 +1105,7 @@ export default function FichaFuncionarioPage() {
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Simulador
+                  Treinamento de voo
                 </p>
                 <p className="mt-2 text-lg font-semibold text-slate-900">
                   {simuladorSessoes.length} sessões · {simuladorFichas.length} fichas
@@ -1374,7 +1377,7 @@ export default function FichaFuncionarioPage() {
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-slate-200 p-4">
                 <h3 className="mb-4 text-base font-semibold text-gray-800">
-                  Sessões recentes de simulador
+                  Sessões recentes de treinamento de voo
                 </h3>
                 <div className="space-y-3">
                   {simuladorSessoes.map((sessao) => (
@@ -1385,7 +1388,7 @@ export default function FichaFuncionarioPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-medium text-slate-900">
-                            {sessao.tipo_sessao ?? 'Sessão de simulador'}
+                            {sessao.tipo_sessao ?? 'Sessão de treinamento'}
                           </p>
                           <p className="text-xs text-slate-500">
                             {formatarDataHora(sessao.data_sessao)} · Papel {sessao.papel ?? '-'}
@@ -1405,7 +1408,7 @@ export default function FichaFuncionarioPage() {
 
               <div className="rounded-lg border border-slate-200 p-4">
                 <h3 className="mb-4 text-base font-semibold text-gray-800">
-                  Fichas recentes de simulador
+                  Fichas recentes de treinamento de voo
                 </h3>
                 <div className="space-y-3">
                   {simuladorFichas.map((fichaSimulador) => (
@@ -1416,7 +1419,7 @@ export default function FichaFuncionarioPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-medium text-slate-900">
-                            {fichaSimulador.tipo_sessao ?? 'Ficha de simulador'}
+                            {fichaSimulador.tipo_sessao ?? 'Ficha de treinamento'}
                           </p>
                           <p className="text-xs text-slate-500">
                             {formatarDataHora(fichaSimulador.data_sessao)} · Nota{' '}
@@ -1443,15 +1446,17 @@ export default function FichaFuncionarioPage() {
           <div className="space-y-4 rounded-lg bg-white p-6 shadow">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="text-base font-semibold text-gray-800">Desempenho no Simulador</h3>
+                <h3 className="text-base font-semibold text-gray-800">Treinamento de Voo</h3>
                 <p className="text-sm text-gray-600">
-                  Sessões e fichas de avaliação do simulador registradas para este funcionário.
+                  Sessões e fichas de avaliação registradas para este funcionário em simulador e
+                  aeronave.
                 </p>
               </div>
               <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                 {simuladorSessoes.length} sessão(ões) · {simuladorFichas.length} ficha(s)
               </span>
             </div>
+
 
             <div className="grid gap-4 lg:grid-cols-2">
               {/* Sessões */}
@@ -1465,7 +1470,7 @@ export default function FichaFuncionarioPage() {
                     >
                       <div>
                         <p className="text-sm font-medium text-slate-900">
-                          {sessao.tipo_sessao ?? 'Sessão de simulador'}
+                          {sessao.tipo_sessao ?? 'Sessão de treinamento'}
                         </p>
                         <p className="text-xs text-slate-500">
                           {formatarData(sessao.data_sessao)} ·{' '}
@@ -1555,6 +1560,9 @@ export default function FichaFuncionarioPage() {
                 </div>
               </div>
             </div>
+
+            {/* Pontos de Atenção em Treinamento de Voo — bloco centralizado do backend */}
+            <Ficha360TreinamentoVooSection data={ficha?.treinamento_voo_pontos_atencao} />
           </div>
         )}
 

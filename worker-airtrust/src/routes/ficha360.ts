@@ -25,6 +25,51 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('/funcionarios/:id/ficha-360', auth());
 
 const tableColumnsCache = new Map<string, Set<string>>();
+const NOTA_MINIMA_TREINAMENTO_VOO = 8;
+
+interface TreinamentoVooPontoAtencaoItem {
+  item_id: number | string;
+  nome: string;
+  tipo: 'MANOBRA' | 'ITEM' | 'SESSAO';
+  nota: number;
+  observacao: string | null;
+  resultado: string | null;
+  tentativa: number | null;
+}
+
+interface TreinamentoVooPontoAtencaoSessao {
+  sessao_id: number | null;
+  ficha_id: number | null;
+  data: string | null;
+  tipo_sessao: 'SIMULADOR' | 'AERONAVE' | null;
+  recurso_nome: string | null;
+  modelo_sessao: string | null;
+  instrutor_nome: string | null;
+  nota_geral: number | null;
+  status: string | null;
+  url_ficha: string | null;
+  itens_abaixo_padrao: TreinamentoVooPontoAtencaoItem[];
+}
+
+interface TreinamentoVooPontosAtencaoPayload {
+  threshold: number;
+  total_itens: number;
+  total_sessoes: number;
+  ultima_ocorrencia: string | null;
+  pendentes_acompanhamento: number | null;
+  sessoes: TreinamentoVooPontoAtencaoSessao[];
+}
+
+function createEmptyTreinamentoVooPontosAtencao(): TreinamentoVooPontosAtencaoPayload {
+  return {
+    threshold: NOTA_MINIMA_TREINAMENTO_VOO,
+    total_itens: 0,
+    total_sessoes: 0,
+    ultima_ocorrencia: null,
+    pendentes_acompanhamento: null,
+    sessoes: [],
+  };
+}
 
 export async function getTableColumns(db: D1Database, tableName: string): Promise<Set<string>> {
   const cached = tableColumnsCache.get(tableName);
@@ -44,6 +89,366 @@ function normalizeFuncionarioRecord(funcionario: Record<string, unknown>) {
     ...funcionario,
     nome: String(funcionario.nome || nomeCompleto),
     nome_completo: nomeCompleto,
+  };
+}
+
+function parseTrainingScore(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const normalized = raw.toUpperCase();
+  if (['NR', 'NAO_REALIZADA', 'NAO REALIZADA', 'N/A', 'NA'].includes(normalized)) {
+    return null;
+  }
+
+  const parsed = Number(raw.replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseNullableInteger(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeOptionalText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function inferTreinamentoVooTipoSessao(row: Record<string, unknown>): 'SIMULADOR' | 'AERONAVE' | null {
+  if (parseNullableInteger(row.aeronave_id) !== null) return 'AERONAVE';
+  if (parseNullableInteger(row.simulador_id) !== null) return 'SIMULADOR';
+
+  const tipoDispositivo = String(row.tipo_dispositivo || '')
+    .trim()
+    .toUpperCase();
+  if (tipoDispositivo.includes('AERONAVE') || tipoDispositivo.includes('VOO')) return 'AERONAVE';
+  if (tipoDispositivo.includes('SIM')) return 'SIMULADOR';
+
+  const recurso = String(row.recurso_nome || '')
+    .trim()
+    .toUpperCase();
+  if (recurso.includes('PS-') || recurso.includes('PR-') || recurso.includes('PT-')) {
+    return 'AERONAVE';
+  }
+
+  return null;
+}
+
+function getTrainingAttentionSessionStatus(row: Record<string, unknown>): string | null {
+  const explicitStatus = normalizeOptionalText(row.status);
+  if (explicitStatus) return explicitStatus;
+
+  const resultadoFinal = normalizeOptionalText(row.resultado_final);
+  if (resultadoFinal) return resultadoFinal;
+
+  const aprovado = row.aprovado;
+  if (aprovado === 1 || aprovado === true) return 'APROVADO';
+  if (aprovado === 0 || aprovado === false) return 'NAO_APROVADO';
+
+  return null;
+}
+
+async function getTreinamentoVooPontosAtencao(
+  db: D1Database,
+  funcionarioId: number,
+  empresaId: number | undefined,
+  funcionarioEmpresaId?: number | null,
+): Promise<TreinamentoVooPontosAtencaoPayload> {
+  const empty = createEmptyTreinamentoVooPontosAtencao();
+  const effectiveEmpresaId =
+    empresaId ?? (typeof funcionarioEmpresaId === 'number' ? funcionarioEmpresaId : null);
+
+  const fichasCols = await getTableColumns(db, 'fichas_sessao');
+  if (fichasCols.size === 0 || effectiveEmpresaId === null) {
+    return empty;
+  }
+
+  const manobrasCols = await getTableColumns(db, 'fichas_sessao_manobras');
+  const agendamentoCols = await getTableColumns(db, 'simulador_agendamentos');
+  const simuladoresCols = await getTableColumns(db, 'simuladores');
+  const aeronavesCols = await getTableColumns(db, 'aeronaves');
+  const modelosCols = await getTableColumns(db, 'modelos_sessao');
+  const catalogoManobrasCols = await getTableColumns(db, 'manobras');
+
+  const fichaFuncionarioCol = fichasCols.has('funcionario_id')
+    ? 'funcionario_id'
+    : fichasCols.has('colaborador_id_aluno')
+      ? 'colaborador_id_aluno'
+      : null;
+  if (!fichaFuncionarioCol) {
+    return empty;
+  }
+
+  const fichaEmpresaFilter = fichasCols.has('empresa_id') ? 'AND fs.empresa_id = ?' : '';
+  const fichaDeletedFilter = fichasCols.has('deleted_at') ? 'AND fs.deleted_at IS NULL' : '';
+  const agendamentoJoin =
+    agendamentoCols.size > 0
+      ? `LEFT JOIN simulador_agendamentos sa ON fs.${fichasCols.has('agendamento_slot_id') ? 'agendamento_slot_id' : fichasCols.has('sessao_id') ? 'sessao_id' : 'id'} = sa.id ${agendamentoCols.has('deleted_at') ? 'AND sa.deleted_at IS NULL' : ''}`
+      : '';
+  const simuladorJoin =
+    agendamentoCols.size > 0 && simuladoresCols.size > 0 && agendamentoCols.has('simulador_id')
+      ? `LEFT JOIN simuladores sim ON sa.simulador_id = sim.id ${simuladoresCols.has('deleted_at') ? 'AND sim.deleted_at IS NULL' : ''}`
+      : '';
+  const aeronaveJoin =
+    agendamentoCols.size > 0 && aeronavesCols.size > 0 && agendamentoCols.has('aeronave_id')
+      ? `LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id ${aeronavesCols.has('deleted_at') ? 'AND ae.deleted_at IS NULL' : ''}`
+      : '';
+  const instrutorJoin = fichasCols.has('instrutor_id')
+    ? 'LEFT JOIN funcionarios instrutor ON fs.instrutor_id = instrutor.id AND instrutor.deleted_at IS NULL'
+    : '';
+  const modeloJoin = modelosCols.size > 0 && fichasCols.has('tipo_sessao')
+    ? `LEFT JOIN modelos_sessao ms ON fs.tipo_sessao = ms.codigo ${modelosCols.has('deleted_at') ? 'AND ms.deleted_at IS NULL' : ''}`
+    : '';
+
+  const notaGeralExpr = fichasCols.has('nota_geral')
+    ? 'fs.nota_geral'
+    : fichasCols.has('nota_final')
+      ? 'fs.nota_final'
+      : fichasCols.has('nota')
+        ? 'fs.nota'
+        : 'NULL';
+  const sessaoIdExpr = fichasCols.has('agendamento_slot_id')
+    ? 'fs.agendamento_slot_id'
+    : fichasCols.has('sessao_id')
+      ? 'fs.sessao_id'
+      : 'NULL';
+  const dataSessaoExpr =
+    agendamentoCols.size > 0 && agendamentoCols.has('data')
+      ? 'COALESCE(sa.data, fs.data_sessao, fs.created_at)'
+      : fichasCols.has('data_sessao')
+        ? 'COALESCE(fs.data_sessao, fs.created_at)'
+        : 'fs.created_at';
+  const recursoNomeExpr =
+    agendamentoCols.size > 0
+      ? `COALESCE(${simuladoresCols.size > 0 ? 'sim.nome' : 'NULL'}, ${aeronavesCols.size > 0 ? 'ae.prefixo' : 'NULL'}, ${aeronavesCols.size > 0 ? 'ae.modelo' : 'NULL'}, ${fichasCols.has('tipo_aeronave') ? 'fs.tipo_aeronave' : 'NULL'})`
+      : fichasCols.has('tipo_aeronave')
+        ? 'fs.tipo_aeronave'
+        : 'NULL';
+  const modeloSessaoExpr =
+    agendamentoCols.size > 0 && modelosCols.size > 0
+      ? `COALESCE(${agendamentoCols.has('nome') ? 'sa.nome' : 'NULL'}, ms.nome, ${fichasCols.has('tipo_sessao') ? 'fs.tipo_sessao' : 'NULL'})`
+      : modelosCols.size > 0
+        ? `COALESCE(ms.nome, ${fichasCols.has('tipo_sessao') ? 'fs.tipo_sessao' : 'NULL'})`
+        : fichasCols.has('tipo_sessao')
+          ? 'fs.tipo_sessao'
+          : 'NULL';
+  const tipoDispositivoExpr =
+    agendamentoCols.size > 0 && agendamentoCols.has('tipo_dispositivo')
+      ? 'sa.tipo_dispositivo'
+      : 'NULL';
+  const tipoSessaoCodigoExpr =
+    agendamentoCols.size > 0 && agendamentoCols.has('tipo_sessao')
+      ? `COALESCE(sa.tipo_sessao, ${fichasCols.has('tipo_sessao') ? 'fs.tipo_sessao' : 'NULL'})`
+      : fichasCols.has('tipo_sessao')
+        ? 'fs.tipo_sessao'
+        : 'NULL';
+  const observacoesSessaoExpr = fichasCols.has('observacoes')
+    ? 'fs.observacoes'
+    : fichasCols.has('observacoes_gerais')
+      ? 'fs.observacoes_gerais'
+      : 'NULL';
+
+  const fichasQuery = `
+    SELECT
+      fs.id AS ficha_id,
+      ${sessaoIdExpr} AS sessao_id,
+      ${dataSessaoExpr} AS data_sessao,
+      ${tipoSessaoCodigoExpr} AS tipo_sessao_codigo,
+      ${tipoDispositivoExpr} AS tipo_dispositivo,
+      ${agendamentoCols.size > 0 && agendamentoCols.has('simulador_id') ? 'sa.simulador_id' : 'NULL'} AS simulador_id,
+      ${agendamentoCols.size > 0 && agendamentoCols.has('aeronave_id') ? 'sa.aeronave_id' : 'NULL'} AS aeronave_id,
+      ${recursoNomeExpr} AS recurso_nome,
+      ${modeloSessaoExpr} AS modelo_sessao,
+      ${instrutorJoin ? 'instrutor.nome' : 'NULL'} AS instrutor_nome,
+      ${notaGeralExpr} AS nota_geral,
+      ${fichasCols.has('status') ? 'fs.status' : 'NULL'} AS status,
+      ${fichasCols.has('resultado_final') ? 'fs.resultado_final' : 'NULL'} AS resultado_final,
+      ${fichasCols.has('aprovado') ? 'fs.aprovado' : 'NULL'} AS aprovado,
+      ${observacoesSessaoExpr} AS observacoes_sessao
+    FROM fichas_sessao fs
+    ${agendamentoJoin}
+    ${simuladorJoin}
+    ${aeronaveJoin}
+    ${instrutorJoin}
+    ${modeloJoin}
+    WHERE fs.${fichaFuncionarioCol} = ?
+      ${fichaEmpresaFilter}
+      ${fichaDeletedFilter}
+    ORDER BY datetime(${dataSessaoExpr}) DESC, fs.id DESC
+  `;
+
+  const fichaBinds: unknown[] = [funcionarioId];
+  if (fichaEmpresaFilter) {
+    fichaBinds.push(effectiveEmpresaId);
+  }
+
+  const fichasRaw = await db
+    .prepare(fichasQuery)
+    .bind(...fichaBinds)
+    .all<Record<string, unknown>>();
+
+  const fichas = (fichasRaw.results || []) as Array<Record<string, unknown>>;
+  if (fichas.length === 0) {
+    return empty;
+  }
+
+  const sessoesMap = new Map<number, TreinamentoVooPontoAtencaoSessao>();
+
+  const ensureSessao = (row: Record<string, unknown>) => {
+    const fichaId = parseNullableInteger(row.ficha_id);
+    if (fichaId === null) return null;
+
+    const existing = sessoesMap.get(fichaId);
+    if (existing) return existing;
+
+    const sessao: TreinamentoVooPontoAtencaoSessao = {
+      sessao_id: parseNullableInteger(row.sessao_id),
+      ficha_id: fichaId,
+      data: normalizeOptionalText(row.data_sessao),
+      tipo_sessao: inferTreinamentoVooTipoSessao(row),
+      recurso_nome: normalizeOptionalText(row.recurso_nome),
+      modelo_sessao: normalizeOptionalText(row.modelo_sessao) ?? normalizeOptionalText(row.tipo_sessao_codigo),
+      instrutor_nome: normalizeOptionalText(row.instrutor_nome),
+      nota_geral: parseTrainingScore(row.nota_geral),
+      status: getTrainingAttentionSessionStatus(row),
+      url_ficha: `/simuladores/fichas/${fichaId}`,
+      itens_abaixo_padrao: [],
+    };
+
+    sessoesMap.set(fichaId, sessao);
+    return sessao;
+  };
+
+  for (const fichaRow of fichas) {
+    const notaGeral = parseTrainingScore(fichaRow.nota_geral);
+    if (notaGeral === null || notaGeral >= NOTA_MINIMA_TREINAMENTO_VOO) continue;
+
+    const sessao = ensureSessao(fichaRow);
+    if (!sessao) continue;
+
+    sessao.itens_abaixo_padrao.push({
+      item_id: `sessao-${sessao.ficha_id}`,
+      nome: 'Nota geral da sessão',
+      tipo: 'SESSAO',
+      nota: notaGeral,
+      observacao: normalizeOptionalText(fichaRow.observacoes_sessao),
+      resultado: normalizeOptionalText(fichaRow.resultado_final),
+      tentativa: null,
+    });
+  }
+
+  if (manobrasCols.size > 0) {
+    const manobraDeletedFilter = manobrasCols.has('deleted_at') ? 'AND fsm.deleted_at IS NULL' : '';
+    const nomeCatalogoJoin =
+      catalogoManobrasCols.size > 0
+        ? `LEFT JOIN (
+             SELECT codigo, MIN(nome) AS nome, MIN(descricao) AS descricao
+             FROM manobras
+             WHERE deleted_at IS NULL AND empresa_id = ?
+             GROUP BY codigo
+           ) catalogo_manobras
+             ON catalogo_manobras.codigo = fsm.codigo`
+        : '';
+
+    const manobrasQuery = `
+      SELECT
+        fsm.id,
+        fsm.ficha_id,
+        ${manobrasCols.has('ordem') ? 'fsm.ordem' : 'NULL'} AS ordem,
+        fsm.codigo,
+        ${manobrasCols.has('nome') ? 'fsm.nome' : 'NULL'} AS nome_ficha,
+        ${manobrasCols.has('descricao') ? 'fsm.descricao' : 'NULL'} AS descricao_ficha,
+        ${catalogoManobrasCols.size > 0 ? 'catalogo_manobras.nome' : 'NULL'} AS nome_catalogo,
+        ${catalogoManobrasCols.size > 0 ? 'catalogo_manobras.descricao' : 'NULL'} AS descricao_catalogo,
+        ${manobrasCols.has('resultado') ? 'fsm.resultado' : 'NULL'} AS resultado,
+        ${manobrasCols.has('observacoes') ? 'fsm.observacoes' : 'NULL'} AS observacoes
+      FROM fichas_sessao_manobras fsm
+      INNER JOIN fichas_sessao fs ON fs.id = fsm.ficha_id
+      ${nomeCatalogoJoin}
+      WHERE fs.${fichaFuncionarioCol} = ?
+        ${fichaEmpresaFilter}
+        ${fichaDeletedFilter}
+        ${manobraDeletedFilter}
+      ORDER BY fsm.ficha_id DESC, ${manobrasCols.has('ordem') ? 'fsm.ordem ASC' : 'fsm.id ASC'}
+    `;
+
+    const manobraBinds: unknown[] = [];
+    if (catalogoManobrasCols.size > 0) {
+      manobraBinds.push(effectiveEmpresaId);
+    }
+    manobraBinds.push(funcionarioId);
+    if (fichaEmpresaFilter) {
+      manobraBinds.push(effectiveEmpresaId);
+    }
+
+    const manobrasRaw = await db
+      .prepare(manobrasQuery)
+      .bind(...manobraBinds)
+      .all<Record<string, unknown>>();
+
+    for (const manobraRow of manobrasRaw.results || []) {
+      const nota = parseTrainingScore(manobraRow.resultado);
+      if (nota === null || nota >= NOTA_MINIMA_TREINAMENTO_VOO) continue;
+
+      const fichaRow = fichas.find((row) => String(row.ficha_id) === String(manobraRow.ficha_id));
+      if (!fichaRow) continue;
+
+      const sessao = ensureSessao(fichaRow);
+      if (!sessao) continue;
+
+      const ordem = parseNullableInteger(manobraRow.ordem);
+      const nome =
+        normalizeOptionalText(manobraRow.nome_ficha) ||
+        normalizeOptionalText(manobraRow.nome_catalogo) ||
+        normalizeOptionalText(manobraRow.descricao_ficha) ||
+        normalizeOptionalText(manobraRow.descricao_catalogo) ||
+        normalizeOptionalText(manobraRow.codigo) ||
+        `Manobra ${ordem ?? ''}`.trim();
+
+      sessao.itens_abaixo_padrao.push({
+        item_id: parseNullableInteger(manobraRow.id) ?? `${sessao.ficha_id}-${ordem ?? 'item'}`,
+        nome,
+        tipo: 'MANOBRA',
+        nota,
+        observacao: normalizeOptionalText(manobraRow.observacoes),
+        resultado: normalizeOptionalText(manobraRow.resultado),
+        tentativa: null,
+      });
+    }
+  }
+
+  const sessoes = Array.from(sessoesMap.values())
+    .filter((sessao) => sessao.itens_abaixo_padrao.length > 0)
+    .sort((a, b) => {
+      const dateA = Date.parse(a.data || '');
+      const dateB = Date.parse(b.data || '');
+      if (Number.isFinite(dateA) && Number.isFinite(dateB)) return dateB - dateA;
+      if (Number.isFinite(dateA)) return -1;
+      if (Number.isFinite(dateB)) return 1;
+      return Number(b.ficha_id || 0) - Number(a.ficha_id || 0);
+    });
+
+  if (sessoes.length === 0) {
+    return empty;
+  }
+
+  const totalItens = sessoes.reduce((acc, sessao) => acc + sessao.itens_abaixo_padrao.length, 0);
+
+  return {
+    threshold: NOTA_MINIMA_TREINAMENTO_VOO,
+    total_itens: totalItens,
+    total_sessoes: sessoes.length,
+    ultima_ocorrencia: sessoes[0]?.data ?? null,
+    pendentes_acompanhamento: null,
+    sessoes,
   };
 }
 
@@ -168,6 +573,9 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
     if (!funcionario) return null;
     const funcionarioNormalizado = normalizeFuncionarioRecord(
       funcionario as Record<string, unknown>,
+    );
+    const funcionarioEmpresaId = parseNullableInteger(
+      (funcionarioNormalizado as Record<string, unknown>).empresa_id,
     );
 
     // Detectar esquema divergente de qualificações
@@ -584,6 +992,12 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
       : [];
 
     const auditoria = await getFuncionarioAuditoria(db, funcionarioId);
+    const treinamentoVooPontosAtencao = await getTreinamentoVooPontosAtencao(
+      db,
+      funcionarioId,
+      empresaId,
+      funcionarioEmpresaId,
+    );
 
     return {
       funcionario: funcionarioNormalizado,
@@ -597,6 +1011,7 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
         sessoes,
         fichas,
       },
+      treinamento_voo_pontos_atencao: treinamentoVooPontosAtencao,
       auditoria,
     };
   } catch (error) {
