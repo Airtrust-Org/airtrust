@@ -114,6 +114,13 @@ export const PRODUCT_MODULES: ProductModule[] = [
     defaultForPilot: false,
     description: 'Configuracoes fora do escopo do piloto inicial.',
   },
+  {
+    key: 'mro',
+    label: 'MRO / Manutenção',
+    status: 'beta',
+    defaultForPilot: false,
+    description: 'Gestão de manutenção de aeronaves, componentes, OS e estoque.',
+  },
 ];
 
 export const PRODUCT_MODULE_BY_KEY = Object.fromEntries(

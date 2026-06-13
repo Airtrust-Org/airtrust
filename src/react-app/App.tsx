@@ -209,6 +209,10 @@ const TreinamentosPlanejadosPage = lazyWithRetry(
   () => import('./pages/TreinamentosPlanejadosPage'),
   'TreinamentosPlanejadosPage',
 );
+const TreinamentosPainel = lazyWithRetry(
+  () => import('./pages/TreinamentosPainel'),
+  'TreinamentosPainel',
+);
 
 // LMS — Learning Management System
 const LmsCatalogo = lazyWithRetry(() => import('./pages/lms/LmsCatalogo'), 'LmsCatalogo');
@@ -242,6 +246,17 @@ const SgsoRelprevPage = lazyWithRetry(
 );
 const SgsoBowtiePage = lazyWithRetry(() => import('./pages/sgso/SgsoBowtiePage'), 'SgsoBowtiePage');
 const SgsoFratPage = lazyWithRetry(() => import('./pages/sgso/SgsoFratPage'), 'SgsoFratPage');
+
+// MRO — Manutenção de Aeronaves (Protótipo)
+const MroDashboard = lazyWithRetry(() => import('./pages/mro/MroDashboard'), 'MroDashboard');
+const MroAeronaves = lazyWithRetry(() => import('./pages/mro/MroAeronaves'), 'MroAeronaves');
+const MroAeronaveDetalhe = lazyWithRetry(() => import('./pages/mro/MroAeronaveDetalhe'), 'MroAeronaveDetalhe');
+const MroComponentes = lazyWithRetry(() => import('./pages/mro/MroComponentes'), 'MroComponentes');
+const MroOrdensServico = lazyWithRetry(() => import('./pages/mro/MroOrdensServico'), 'MroOrdensServico');
+const MroOrdemServicoDetalhe = lazyWithRetry(() => import('./pages/mro/MroOrdemServicoDetalhe'), 'MroOrdemServicoDetalhe');
+const MroVencimentos = lazyWithRetry(() => import('./pages/mro/MroVencimentos'), 'MroVencimentos');
+const MroEstoque = lazyWithRetry(() => import('./pages/mro/MroEstoque'), 'MroEstoque');
+const MroRegistrosTecnicos = lazyWithRetry(() => import('./pages/mro/MroRegistrosTecnicos'), 'MroRegistrosTecnicos');
 
 // Loading fallback component
 const PageLoader = () => {
@@ -868,6 +883,18 @@ export default function App() {
                       }
                     />
 
+                    {/* MRO — Manutenção de Aeronaves (Protótipo) */}
+                    <Route path="/mro" element={<ProtectedRoute><MroDashboard /></ProtectedRoute>} />
+                    <Route path="/mro/dashboard" element={<ProtectedRoute><MroDashboard /></ProtectedRoute>} />
+                    <Route path="/mro/aeronaves" element={<ProtectedRoute><MroAeronaves /></ProtectedRoute>} />
+                    <Route path="/mro/aeronaves/:id" element={<ProtectedRoute><MroAeronaveDetalhe /></ProtectedRoute>} />
+                    <Route path="/mro/componentes" element={<ProtectedRoute><MroComponentes /></ProtectedRoute>} />
+                    <Route path="/mro/os" element={<ProtectedRoute><MroOrdensServico /></ProtectedRoute>} />
+                    <Route path="/mro/os/:id" element={<ProtectedRoute><MroOrdemServicoDetalhe /></ProtectedRoute>} />
+                    <Route path="/mro/vencimentos" element={<ProtectedRoute><MroVencimentos /></ProtectedRoute>} />
+                    <Route path="/mro/estoque" element={<ProtectedRoute><MroEstoque /></ProtectedRoute>} />
+                    <Route path="/mro/registros-tecnicos" element={<ProtectedRoute><MroRegistrosTecnicos /></ProtectedRoute>} />
+
                     {/* Horas de Voo — caderneta standalone */}
                     <Route
                       path="/horas-voo"
@@ -894,6 +921,13 @@ export default function App() {
                         </ProtectedRoute>
                       }
                     />
+                    {/* Aliases conceituais para Treinamento de Voo — redirecionam para rotas existentes */}
+                    <Route path="/treinamentos/voo" element={<Navigate to="/simuladores" replace />} />
+                    <Route path="/treinamentos/voo/sessoes" element={<Navigate to="/simuladores" replace />} />
+                    <Route path="/treinamentos/voo/fichas" element={<Navigate to="/simuladores/fichas" replace />} />
+                    <Route path="/treinamentos/voo/desempenho" element={<Navigate to="/simuladores/dashboard" replace />} />
+                    <Route path="/treinamentos/voo/relatorios" element={<Navigate to="/simuladores/relatorios" replace />} />
+                    <Route path="/treinamentos/voo/cadastros" element={<Navigate to="/simuladores/configuracoes" replace />} />
 
                     {/* LMS — Learning Management System */}
                     <Route
@@ -920,7 +954,7 @@ export default function App() {
                       path="/treinamentos"
                       element={
                         <ProtectedRoute>
-                          <TreinamentosPlanejadosPage />
+                          <TreinamentosPainel />
                         </ProtectedRoute>
                       }
                     />

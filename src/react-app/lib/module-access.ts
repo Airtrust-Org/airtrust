@@ -29,6 +29,7 @@ const LEGACY_PRESET_MODULES = [
   'sgso',
   'lms',
   'hospedagem',
+  'mro',
   'configuracoes_avancadas',
 ];
 
@@ -77,6 +78,13 @@ const MODULE_ID_ALIASES: Record<string, string> = {
   certificado: 'configuracoes_avancadas',
   limpar_dados: 'admin',
   hard_refresh: 'admin',
+  mro_dashboard: 'mro',
+  mro_aeronaves: 'mro',
+  mro_componentes: 'mro',
+  mro_os: 'mro',
+  mro_vencimentos: 'mro',
+  mro_estoque: 'mro',
+  mro_registros: 'mro',
 };
 
 export const MODULE_ROUTE_MATCHES: ModuleRouteMatch[] = [
@@ -101,6 +109,7 @@ export const MODULE_ROUTE_MATCHES: ModuleRouteMatch[] = [
   { pathPrefix: '/importacao', moduleKey: 'configuracoes_avancadas' },
   { pathPrefix: '/sistema', moduleKey: 'configuracoes_avancadas' },
   { pathPrefix: '/admin', moduleKey: 'usuarios_empresas' },
+  { pathPrefix: '/mro', moduleKey: 'mro' },
 ];
 
 export function hasExplicitModuleConfig(modulosAtivos: EmpresaModuleState): boolean {
