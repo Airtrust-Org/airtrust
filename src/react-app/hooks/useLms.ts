@@ -50,6 +50,7 @@ export interface LmsCurso {
   updated_at: string;
   total_matriculas?: number;
   total_concluidos?: number;
+  setores?: { id: number; nome: string }[];
 }
 
 export interface LmsH5pConteudo {
@@ -159,6 +160,7 @@ export interface CreateCursoDTO {
   scorm_versao?: ScormVersao;
   tipo_conteudo?: TipoConteudo;
   publicado?: 0 | 1;
+  setor_ids?: number[];
 }
 
 export interface UpdateCursoDTO extends Partial<CreateCursoDTO> {}
@@ -240,6 +242,7 @@ function sanitizeCreateCursoPayload(dto: CreateCursoDTO): CreateCursoDTO {
     qualificacao_tipo_id: dto.qualificacao_tipo_id ?? null,
     scorm_mastery_score: dto.scorm_mastery_score ?? 70,
     scorm_versao: dto.scorm_versao ?? null,
+    setor_ids: dto.setor_ids && dto.setor_ids.length > 0 ? dto.setor_ids : undefined,
   };
 }
 
@@ -272,6 +275,8 @@ function sanitizeUpdateCursoPayload(dto: UpdateCursoDTO): UpdateCursoDTO {
   if ('scorm_versao' in dto) payload.scorm_versao = dto.scorm_versao ?? null;
   if ('tipo_conteudo' in dto) payload.tipo_conteudo = dto.tipo_conteudo;
   if ('publicado' in dto) payload.publicado = dto.publicado;
+  if ('setor_ids' in dto)
+    payload.setor_ids = dto.setor_ids && dto.setor_ids.length > 0 ? dto.setor_ids : undefined;
 
   return payload;
 }

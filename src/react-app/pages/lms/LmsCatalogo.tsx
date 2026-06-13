@@ -224,6 +224,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     scorm_versao: initial?.scorm_versao ?? '1.2',
     tipo_conteudo: initial?.tipo_conteudo ?? 'scorm',
     publicado: initial?.publicado ?? 0,
+    setor_ids: initial?.setores?.map((s) => s.id) ?? [],
   };
 }
 function validateForm(form: CreateCursoDTO) {
@@ -590,6 +591,7 @@ function CourseDrawer({
   isSaving,
   uploadProgress,
   uploadStatus,
+  availableSetores,
 }: {
   initial?: LmsCurso;
   onClose: () => void;
@@ -601,6 +603,7 @@ function CourseDrawer({
   isSaving: boolean;
   uploadProgress: number;
   uploadStatus: string;
+  availableSetores: { id: number; nome: string }[];
 }) {
   const { tipos: qualTipos } = useQualificacaoTipos();
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
@@ -619,6 +622,23 @@ function CourseDrawer({
     () => qualTipos.find((t) => sameTipoId(form.qualificacao_tipo_id, t.id)),
     [form.qualificacao_tipo_id, qualTipos],
   );
+
+  const prevQualTipoIdRef = React.useRef<number | null | undefined>(form.qualificacao_tipo_id);
+  useEffect(() => {
+    const prev = prevQualTipoIdRef.current;
+    prevQualTipoIdRef.current = form.qualificacao_tipo_id;
+    if (prev === form.qualificacao_tipo_id) return;
+    if (!curTipo?.setores || curTipo.setores.length === 0) return;
+    const currentSetorIds = form.setor_ids ?? [];
+    if (currentSetorIds.length === 0) {
+      const suggested = curTipo.setores
+        .map((s) => s.id)
+        .filter((id) => availableSetores.some((a) => a.id === id));
+      if (suggested.length > 0) {
+        setForm((c) => ({ ...c, setor_ids: suggested }));
+      }
+    }
+  }, [form.qualificacao_tipo_id, curTipo, availableSetores]);
   const hasLegacy =
     form.gerar_qualificacao_ao_concluir === 1 && Boolean(curTipo) && !isEadTipo(curTipo!);
   const storedContentLabel = getStoredContentLabel(courseSnapshot);
@@ -843,6 +863,46 @@ function CourseDrawer({
                         <FieldError message={errors.scorm_mastery_score} />
                       </div>
                     </div>
+                    {availableSetores.length > 0 && (
+                      <div className="space-y-2">
+                        <FieldLabel label="Setor" />
+                        <div className="flex flex-wrap gap-2">
+                          {availableSetores.map((s) => {
+                            const selected = (form.setor_ids ?? []).includes(s.id);
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() =>
+                                  setForm((c) => {
+                                    const ids = c.setor_ids ?? [];
+                                    return {
+                                      ...c,
+                                      setor_ids: selected
+                                        ? ids.filter((id) => id !== s.id)
+                                        : [...ids, s.id],
+                                    };
+                                  })
+                                }
+                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition border ${
+                                  selected
+                                    ? 'border-blue-600 bg-blue-600 text-white'
+                                    : 'border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-600'
+                                }`}
+                              >
+                                {s.nome}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {curTipo?.setores && curTipo.setores.length > 0 && (
+                          <p className="text-xs text-slate-500">
+                            Sugestão da qualificação:{' '}
+                            {curTipo.setores.map((s) => s.nome).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </DrawerSection>
 
                   <DrawerSection
@@ -1291,6 +1351,16 @@ function CourseCard({
                   {curso.categoria}
                 </span>
               ) : null}
+              {curso.setores && curso.setores.length > 0
+                ? curso.setores.map((s) => (
+                    <span
+                      key={s.id}
+                      className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
+                    >
+                      {s.nome}
+                    </span>
+                  ))
+                : null}
               <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {formatMinutes(curso.carga_horaria_minutos)}
               </span>
@@ -2004,6 +2074,7 @@ export default function LmsCatalogo() {
           }
           uploadProgress={uploadProgress}
           uploadStatus={uploadStatus}
+          availableSetores={setores}
         />
       ) : null}
     </AppLayout>
