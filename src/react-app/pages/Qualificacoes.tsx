@@ -538,7 +538,7 @@ export default function Qualificacoes() {
     refetch: refetchTipos,
     error: tiposError,
   } = useQualificacaoTipos(activeTab === 'tipos' || showTurmaPlanejadaModal, 200, {
-    categoria: activeTab === 'tipos' ? categoriaFilter : undefined,
+    categoriaId: activeTab === 'tipos' && categoriaFilter ? parseInt(categoriaFilter, 10) || undefined : undefined,
     setorIds: activeTab === 'tipos' ? modelosPrefs.setorFilter : undefined,
     search: activeTab === 'tipos' ? searchTipos : undefined,
   });
@@ -2603,7 +2603,7 @@ export default function Qualificacoes() {
 	                    .slice()
 	                    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 	                    .map((cat) => (
-	                      <option key={cat.id ?? cat.nome} value={cat.nome}>
+	                      <option key={cat.id ?? cat.nome} value={cat.id != null ? String(cat.id) : cat.nome}>
 	                        {cat.nome}
 	                      </option>
 	                    ))}

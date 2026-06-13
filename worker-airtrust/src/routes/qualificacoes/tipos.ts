@@ -73,6 +73,8 @@ type TipoQualificacaoRow = {
   nome?: string | null;
   descricao?: string | null;
   categoria?: string | null;
+  categoria_id?: number | null;
+  categoria_cor?: string | null;
   carga_horaria?: number | null;
   carga_horaria_inicial?: number | null;
   carga_horaria_recorrente?: number | null;
@@ -276,6 +278,8 @@ function enrichTipoRow<T extends TipoQualificacaoRow>(row: T) {
     ...row,
     setores,
     is_transversal: setores.length === 0,
+    categoria_id: row.categoria_id ?? null,
+    categoria_cor: row.categoria_cor ?? null,
   };
 }
 
@@ -315,6 +319,12 @@ function buildTipoSetorVisibilityClause(
        AND qts_scope.deleted_at IS NULL
        AND qts_scope.setor_id IN (${setorIdsForScope.map(() => '?').join(', ')})
   )`;
+
+  // When user explicitly requests specific sectors, only include tipos linked to those sectors.
+  // activeLinksMissing is only a fallback for implicit sector-scoped access (no explicit filter).
+  if (requestedSetorIds.length > 0) {
+    return { clause: linkedToScopedSetor, bindings: setorIdsForScope };
+  }
 
   return {
     clause: `(${activeLinksMissing} OR ${linkedToScopedSetor})`,
@@ -372,6 +382,13 @@ function buildSetoresAggregationJoin(hasQualificacoesTiposSetores: boolean): str
       ON qtsa.tipo_id = qt.id
      AND qtsa.empresa_id = qt.empresa_id
   `;
+}
+
+function buildCategoriaJoin(): string {
+  return `LEFT JOIN qualificacoes_categorias qc
+    ON qc.nome = qt.categoria
+   AND qc.empresa_id = qt.empresa_id
+   AND qc.deleted_at IS NULL`;
 }
 
 async function listTipoSetores(
@@ -528,6 +545,8 @@ router.get(
     const limitParsed = parseInt(limitRaw || '200', 10);
     const limitFinal = Math.min(Math.max(limitParsed, 1), 500);
     const categoria = String(c.req.query('categoria') || '').trim();
+    const categoriaIdRaw = parseInt(c.req.query('categoria_id') || '', 10);
+    const categoriaId = Number.isFinite(categoriaIdRaw) && categoriaIdRaw > 0 ? categoriaIdRaw : 0;
     const search = String(c.req.query('search') || '').trim();
     const requestedSetorIds = await validateRequestedSetorScope(
       access,
@@ -541,7 +560,10 @@ router.get(
     const conditions = ['qt.deleted_at IS NULL', 'qt.empresa_id = ?', setorScope.clause];
     const bindings: unknown[] = [empresaId, ...setorScope.bindings];
 
-    if (categoria) {
+    if (categoriaId > 0) {
+      conditions.push('qc.id = ?');
+      bindings.push(categoriaId);
+    } else if (categoria) {
       conditions.push('qt.categoria = ?');
       bindings.push(categoria);
     }
@@ -554,7 +576,9 @@ router.get(
 
     const { results } = await db
       .prepare(
-        `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria, qt.carga_horaria, ${
+        `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria,
+        qc.id as categoria_id, qc.cor as categoria_cor,
+        qt.carga_horaria, ${
           columnsSupport.hasCargaInicial ? 'carga_horaria_inicial' : 'NULL as carga_horaria_inicial'
         }, ${
           columnsSupport.hasCargaRecorrente
@@ -570,6 +594,7 @@ router.get(
         (SELECT COUNT(*) FROM qualificacoes_historico qh WHERE qh.qualificacao_id = qt.id AND qh.deleted_at IS NULL) AS total_no_historico,
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
+        ${buildCategoriaJoin()}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE ${conditions.join(' AND ')}
         ORDER BY qt.categoria, qt.nome
@@ -601,7 +626,9 @@ router.get(
 
     const tipo = await db
       .prepare(
-        `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria, qt.carga_horaria, ${
+        `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria,
+        qc.id as categoria_id, qc.cor as categoria_cor,
+        qt.carga_horaria, ${
           columnsSupport.hasCargaInicial ? 'carga_horaria_inicial' : 'NULL as carga_horaria_inicial'
         }, ${
           columnsSupport.hasCargaRecorrente
@@ -616,6 +643,7 @@ router.get(
         }, qt.created_at, qt.updated_at,
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
+        ${buildCategoriaJoin()}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE qt.id = ? AND qt.deleted_at IS NULL AND qt.empresa_id = ? AND ${setorScope.clause}
         LIMIT 1`,

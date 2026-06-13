@@ -351,12 +351,15 @@ export function useQualificacaoTipos(
   limit = 200,
   filters?: {
     categoria?: string;
+    categoriaId?: number;
     setorIds?: string[];
     search?: string;
   },
 ) {
   const query = new URLSearchParams({ limit: String(limit) });
-  if (filters?.categoria?.trim()) {
+  if (filters?.categoriaId && filters.categoriaId > 0) {
+    query.set('categoria_id', String(filters.categoriaId));
+  } else if (filters?.categoria?.trim()) {
     query.set('categoria', filters.categoria.trim());
   }
   if (filters?.setorIds?.length) {
