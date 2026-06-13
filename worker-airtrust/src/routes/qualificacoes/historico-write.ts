@@ -751,34 +751,42 @@ Alternativamente, edite ou exclua o registro existente antes de criar um novo.`,
     let registroAnteriorRenovadoId: number | null = null;
 
     if (statusFinal !== QUALIFICACAO_STATUS.PLANEJADA) {
-      const anterior = await db
+      // Mark ALL older completed/valid records for the same person+qualification as RENOVADA.
+      // Using a direct UPDATE (no LIMIT) ensures that bulk-imported multi-cycle records are
+      // fully cleaned up when a new record arrives, not just the immediate predecessor.
+      const renovaResult = await db
         .prepare(
-          `SELECT id
-             FROM qualificacoes_historico
+          `UPDATE qualificacoes_historico
+              SET renovada = 1,
+                  status = 'RENOVADA',
+                  updated_at = datetime('now')
             WHERE funcionario_id = ?
               AND qualificacao_codigo = ?
               AND id <> ?
               AND deleted_at IS NULL
               AND COALESCE(renovada, 0) = 0
               AND ${sqlStatusNotEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.CONCLUIDA)}
-            ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
-            LIMIT 1`,
+              AND date(COALESCE(data_conclusao, '1900-01-01')) <= date(COALESCE(?, '2099-12-31'))`,
         )
-        .bind(funcionario_id, qualificacao_codigo, createdHistoricoId)
-        .first<{ id: number }>();
+        .bind(funcionario_id, qualificacao_codigo, createdHistoricoId, data_conclusao)
+        .run();
 
-      if (anterior?.id) {
-        await db
+      if (renovaResult.meta.changes > 0) {
+        // Return the most recent of the newly-renovated records for audit logging
+        const anteriorAudit = await db
           .prepare(
-            `UPDATE qualificacoes_historico
-                SET renovada = 1,
-                    status = 'RENOVADA',
-                    updated_at = datetime('now')
-              WHERE id = ? AND deleted_at IS NULL`,
+            `SELECT id FROM qualificacoes_historico
+              WHERE funcionario_id = ?
+                AND qualificacao_codigo = ?
+                AND id <> ?
+                AND deleted_at IS NULL
+                AND COALESCE(renovada, 0) = 1
+              ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) DESC, id DESC
+              LIMIT 1`,
           )
-          .bind(anterior.id)
-          .run();
-        registroAnteriorRenovadoId = anterior.id;
+          .bind(funcionario_id, qualificacao_codigo, createdHistoricoId)
+          .first<{ id: number }>();
+        registroAnteriorRenovadoId = anteriorAudit?.id ?? null;
       }
     }
 
