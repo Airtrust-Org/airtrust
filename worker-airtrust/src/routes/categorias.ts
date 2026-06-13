@@ -22,25 +22,55 @@ app.use('*', auth());
 
 /**
  * GET /api/categorias
- * Lista todas as categorias de qualificações
+ * Lista categorias de qualificações.
+ * Query params opcionais:
+ *   setor_ids=1,2,3 — filtra categorias que têm pelo menos um tipo vinculado aos setores indicados
+ *   setor_id=11     — alias para setor_ids (um único valor)
  */
 app.get('/', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
 
-  const { results } = await db
-    .prepare(
-      `
-    SELECT id, nome, cor, descricao, ativo, created_at, updated_at
-    FROM qualificacoes_categorias
-    WHERE empresa_id = ? AND deleted_at IS NULL
-    ORDER BY id ASC
-  `,
-    )
-    .bind(empresaId)
-    .all<any>();
+  const rawSetorIds = c.req.query('setor_ids') || c.req.query('setor_id');
+  const setorIds: number[] = rawSetorIds
+    ? rawSetorIds
+        .split(',')
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0)
+    : [];
 
-  // Mapear para tipo esperado
+  let sql: string;
+  let bindings: unknown[];
+
+  if (setorIds.length > 0) {
+    const placeholders = setorIds.map(() => '?').join(', ');
+    sql = `
+      SELECT DISTINCT qc.id, qc.nome, qc.cor, qc.descricao, qc.ativo, qc.created_at, qc.updated_at
+      FROM qualificacoes_categorias qc
+      INNER JOIN qualificacoes_tipos qt
+        ON qt.categoria = qc.nome
+        AND qt.empresa_id = qc.empresa_id
+        AND qt.deleted_at IS NULL
+      INNER JOIN qualificacoes_tipos_setores qts
+        ON qts.tipo_id = qt.id
+        AND qts.empresa_id = qc.empresa_id
+        AND qts.setor_id IN (${placeholders})
+      WHERE qc.empresa_id = ? AND qc.deleted_at IS NULL
+      ORDER BY qc.id ASC
+    `;
+    bindings = [...setorIds, empresaId];
+  } else {
+    sql = `
+      SELECT id, nome, cor, descricao, ativo, created_at, updated_at
+      FROM qualificacoes_categorias
+      WHERE empresa_id = ? AND deleted_at IS NULL
+      ORDER BY id ASC
+    `;
+    bindings = [empresaId];
+  }
+
+  const { results } = await db.prepare(sql).bind(...bindings).all<any>();
+
   const categorias: QualificacaoCategoria[] = (results || []).map((r) => ({
     id: r.id,
     nome: r.nome,

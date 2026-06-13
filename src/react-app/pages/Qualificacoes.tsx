@@ -128,6 +128,7 @@ interface QualificacoesPrefs {
   categoriaFilter?: string;
   statusFiltro?: string[];
   setorFilter?: string[];
+  categoriasSetorFilter?: string[];
 }
 
 interface QualificacoesModelosPrefs {
@@ -201,6 +202,7 @@ export default function Qualificacoes() {
   const [aeronaveFilter, setAeronaveFilter] = useState(initialPrefs.aeronaveFilter ?? '');
   const [categoriaFilter, setCategoriaFilter] = useState(initialPrefs.categoriaFilter ?? '');
   const [setorFilter, setSetorFilter] = useState<string[]>(initialPrefs.setorFilter ?? []);
+  const [categoriasSetorFilter, setCategoriasSetorFilter] = useState<string[]>(initialPrefs.categoriasSetorFilter ?? []);
 
   // Estado para filtrar por status - renovadas e apagadas ficam ocultas por padrao.
   const [statusFiltro, setStatusFiltro] = useState<Set<string>>(
@@ -254,6 +256,7 @@ export default function Qualificacoes() {
       categoriaFilter,
       statusFiltro: [...statusFiltro],
       setorFilter,
+      categoriasSetorFilter,
     });
   }, [
     activeTab,
@@ -266,6 +269,7 @@ export default function Qualificacoes() {
     categoriaFilter,
     statusFiltro,
     setorFilter,
+    categoriasSetorFilter,
   ]);
 
   const effectiveHistoricoStatusFiltro = useMemo(
@@ -616,7 +620,7 @@ export default function Qualificacoes() {
   const [columnConfigOpen, setColumnConfigOpen] = useState<'historico' | 'tipos' | null>(null);
   const [savingTipo, setSavingTipo] = useState(false);
   const { data: setoresTiposData } = useApi<{ data?: Array<{ id: number; nome: string }> }>('/setores', {
-    enabled: activeTab === 'tipos' || activeTab === 'historico' || activeTab === 'planejados' || showTipoModal,
+    enabled: activeTab === 'tipos' || activeTab === 'historico' || activeTab === 'planejados' || activeTab === 'categorias' || showTipoModal,
     requireAuth: true,
     bypassGetCache: true,
   });
@@ -653,6 +657,14 @@ export default function Qualificacoes() {
     const onlySetorId = String(setoresTipos[0].id);
     if (setorFilter.length === 1 && setorFilter[0] === onlySetorId) return;
     setSetorFilter([onlySetorId]);
+  }, [setoresTipos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select single sector for categorias tab
+  useEffect(() => {
+    if (setoresTipos.length !== 1) return;
+    const onlySetorId = String(setoresTipos[0].id);
+    if (categoriasSetorFilter.length === 1 && categoriasSetorFilter[0] === onlySetorId) return;
+    setCategoriasSetorFilter([onlySetorId]);
   }, [setoresTipos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const funcionariosAtivos = useMemo(
@@ -858,12 +870,17 @@ export default function Qualificacoes() {
   // Usar useApi para carregar tipos com autenticação automática
   // Removido uso direto de useApi para tipos (substituído por hook dedicado)
 
-  // Usar useApi para carregar categorias
+  // Usar useApi para carregar categorias — URL dinâmica por setor
+  const categoriasApiUrl = useMemo(() => {
+    if (categoriasSetorFilter.length === 0) return '/categorias';
+    return `/categorias?setor_ids=${categoriasSetorFilter.join(',')}`;
+  }, [categoriasSetorFilter]);
+
   const {
     data: categoriasData,
     error: categoriasError,
     refetch: refetchCategorias,
-  } = useApi('/categorias');
+  } = useApi(categoriasApiUrl);
 
   // Atualizar tipos quando dados forem carregados
   // Removido efeito de sincronização antigo (tiposData)
@@ -2618,6 +2635,33 @@ export default function Qualificacoes() {
 	                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
 	                  >
 	                    Limpar filtros
+	                  </button>
+	                )}
+	              </>
+	            )}
+	            {activeTab === 'categorias' && (
+	              <>
+	                {setoresTipos.length === 1 ? (
+	                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
+	                    {setoresTipos[0].nome}
+	                  </div>
+	                ) : setoresTipos.length > 1 ? (
+	                  <MultiSelect
+	                    options={setorOptionsTipos}
+	                    selected={categoriasSetorFilter}
+	                    onChange={setCategoriasSetorFilter}
+	                    placeholder="Todos os setores"
+	                    allLabel="Todos os setores"
+	                    className="min-w-[180px]"
+	                  />
+	                ) : null}
+	                {categoriasSetorFilter.length > 0 && setoresTipos.length > 1 && (
+	                  <button
+	                    type="button"
+	                    onClick={() => setCategoriasSetorFilter([])}
+	                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+	                  >
+	                    Limpar filtro
 	                  </button>
 	                )}
 	              </>
