@@ -20,7 +20,7 @@ export default function ControleVoosJornadas() {
     <AppLayout>
       <div className="w-full">
         <ControleVoosPageShell>
-          <ControleVoosPageHeader title="Jornadas — Integração FRMS" description="Visão consolidada de jornada, horas de voo e score FRMS por tripulante. Os dados são originados do módulo FRMS e complementados pelo registro de voo. — 13 de junho de 2026" />
+          <ControleVoosPageHeader title="Jornadas — Visão informativa FRMS" description="Visão demonstrativa de jornada, horas de voo e score FRMS por tripulante — dados demonstrativos, não regulados. O módulo N1 lerá esses dados diretamente do FRMS real (somente leitura, sem cálculo de fadiga)." />
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
             <div className="overflow-x-auto">
@@ -88,7 +88,7 @@ export default function ControleVoosJornadas() {
               </div>
               <div className="flex items-center gap-2">
                 <ControleVoosStatusBadge status="bloqueado" />
-                <span className="text-slate-600 dark:text-slate-400">Bloqueado — Tripulante NÃO pode ser alocado a voo.</span>
+                <span className="text-slate-600 dark:text-slate-400">Bloqueado — score FRMS crítico (demonstrativo). Alertas informativos no N1, não bloqueio regulatório.</span>
               </div>
             </div>
           </div>

@@ -141,9 +141,9 @@ export default function ControleVoosVooDetalhe() {
 
             {/* Coluna lateral */}
             <div className="space-y-6">
-              {/* Validações simuladas */}
+              {/* Verificações informativas — demonstrativas, hardcoded no protótipo N0 */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Shield className="h-4 w-4 text-blue-500" /> Validações</h2>
+                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Shield className="h-4 w-4 text-blue-500" /> Verificações (demonstrativo)</h2>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between"><span className="text-slate-600 dark:text-slate-400">Qualificações</span><span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">✅ Tripulantes aptos</span></div>
                   <div className="flex items-center justify-between"><span className="text-slate-600 dark:text-slate-400">CMA / ASO</span><span className="text-amber-600 dark:text-amber-400 text-xs font-medium">⚠️ 1 vence em 7 dias</span></div>

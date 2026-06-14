@@ -31,7 +31,7 @@ export default function ControleVoosRdv() {
                     <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Voo</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Data</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Comandante</th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Resp. preenchimento</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Origem → Destino</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Decolagem</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Pouso</th>
@@ -53,7 +53,7 @@ export default function ControleVoosRdv() {
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{voo?.prefixo || '—'}</td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatDate(rdv.dataVoo)}</td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{aeronave?.matricula || '—'}</td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">{rdv.assinaturaCmdteNome || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">{rdv.responsavelPreenchimentoNome || '—'}</td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">{origem?.codigoIcao || '—'} → {destino?.codigoIcao || '—'}</td>
                         <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(rdv.horarioDecolagemReal)}</td>
                         <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(rdv.horarioPousoReal)}</td>
