@@ -49,6 +49,10 @@ interface R2BackupObject {
   etag: string;
 }
 
+interface BackupArtifactDigest extends R2BackupObject {
+  sha256: string;
+}
+
 export class BackupOrchestrator {
   constructor(private env: Env) {}
 
@@ -235,22 +239,24 @@ export class BackupOrchestrator {
   }
 
   private async listarObjetosR2(skipBackupObjects = false): Promise<R2BackupObject[]> {
+    return this.listarObjetosR2PorPrefixo(undefined, skipBackupObjects);
+  }
+
+  private async listarObjetosR2PorPrefixo(
+    prefix?: string,
+    skipBackupObjects = false,
+  ): Promise<R2BackupObject[]> {
     const objetos: R2BackupObject[] = [];
     let cursor: string | undefined;
 
     do {
-      const lista = await this.env.BUCKET.list({ cursor, limit: 1000 });
+      const lista = await this.env.BUCKET.list({ cursor, limit: 1000, prefix });
       for (const obj of lista.objects) {
         if (skipBackupObjects && obj.key.startsWith('backups/')) {
           continue;
         }
 
-        objetos.push({
-          key: obj.key,
-          size: obj.size,
-          uploaded: obj.uploaded.toISOString(),
-          etag: obj.etag,
-        });
+        objetos.push(this.normalizarObjetoR2(obj));
       }
       cursor = lista.truncated ? lista.cursor : undefined;
     } while (cursor);
@@ -292,6 +298,7 @@ export class BackupOrchestrator {
       await this.logBackup(controlId, 'WARN', 'Erro ao catalogar metadados R2', {
         detalhes: JSON.stringify(error),
       });
+      throw new Error(`Falha ao catalogar metadados R2: ${this.formatarErro(error)}`);
     }
   }
 
@@ -311,7 +318,7 @@ export class BackupOrchestrator {
         const arquivo = await bucket.get(objeto.key);
 
         if (arquivo) {
-          const body = arquivo.body ?? (await arquivo.arrayBuffer());
+          const body = await this.lerObjetoR2ArrayBuffer(arquivo, objeto.key);
           await bucket.put(backupKey, body, {
             customMetadata: {
               original_key: objeto.key,
@@ -350,6 +357,7 @@ export class BackupOrchestrator {
       await this.logBackup(controlId, 'WARN', 'Erro no backup R2', {
         detalhes: JSON.stringify(error),
       });
+      throw new Error(`Falha ao copiar arquivos R2 para backup: ${this.formatarErro(error)}`);
     }
   }
 
@@ -503,8 +511,132 @@ export class BackupOrchestrator {
    * Gera checksum do backup
    */
   private async gerarChecksumBackup(uuid: string): Promise<string> {
-    // Simplificado - em produção usar crypto.subtle.digest
-    return `sha256-${uuid}-${Date.now()}`;
+    if (!uuid || typeof uuid !== 'string') {
+      throw new Error('UUID do backup ausente; nao e possivel gerar checksum real');
+    }
+
+    const datePrefix = this.gerarR2Path(uuid);
+    const legacyPrefix = `backups/${uuid}/`;
+    const artifactKeys = new Set<string>();
+
+    for (const prefix of [datePrefix, legacyPrefix]) {
+      const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+      const objetos = await this.listarObjetosR2PorPrefixo(normalizedPrefix);
+      for (const objeto of objetos) {
+        if (objeto.key.endsWith('/checksum-manifest.json')) {
+          continue;
+        }
+        artifactKeys.add(objeto.key);
+      }
+    }
+
+    const artifacts: BackupArtifactDigest[] = [];
+    for (const key of [...artifactKeys].sort()) {
+      const objeto = await this.env.BUCKET.get(key);
+      if (!objeto) {
+        throw new Error(`Artefato de backup ausente no R2 durante checksum: ${key}`);
+      }
+
+      const metadata = this.normalizarObjetoR2(objeto);
+      const bytes = await this.lerObjetoR2ArrayBuffer(objeto, key);
+      if (bytes.byteLength !== metadata.size) {
+        throw new Error(
+          `Tamanho inconsistente para artefato de backup ${key}: metadata=${metadata.size}, bytes=${bytes.byteLength}`,
+        );
+      }
+
+      artifacts.push({
+        ...metadata,
+        sha256: `sha256:${await this.sha256Hex(bytes)}`,
+      });
+    }
+
+    if (artifacts.length === 0) {
+      throw new Error(`Nenhum artefato encontrado no R2 para gerar checksum do backup ${uuid}`);
+    }
+
+    // O checksum final cobre um manifesto deterministico com todos os artefatos e hashes.
+    // O arquivo checksum-manifest.json e excluido da propria entrada para evitar hash recursivo.
+    const manifest = {
+      version: 1,
+      backup_uuid: uuid,
+      algorithm: 'SHA-256',
+      generated_at: new Date().toISOString(),
+      scope_prefixes: [datePrefix, legacyPrefix],
+      artifact_count: artifacts.length,
+      total_bytes: artifacts.reduce((sum, artifact) => sum + artifact.size, 0),
+      artifacts,
+    };
+
+    const manifestJson = JSON.stringify(manifest);
+    const manifestSha256 = await this.sha256Hex(manifestJson);
+    await this.env.BUCKET.put(`backups/${uuid}/checksum-manifest.json`, manifestJson, {
+      httpMetadata: { contentType: 'application/json' },
+      customMetadata: {
+        sha256: `sha256:${manifestSha256}`,
+        backup_uuid: uuid,
+      },
+    });
+
+    return `sha256:${manifestSha256}`;
+  }
+
+  private normalizarObjetoR2(obj: R2Object): R2BackupObject {
+    if (!obj.key || typeof obj.key !== 'string') {
+      throw new Error('Objeto R2 sem key valida durante backup');
+    }
+
+    const size = Number(obj.size);
+    if (!Number.isFinite(size) || size < 0) {
+      throw new Error(`Objeto R2 com tamanho invalido durante backup: ${obj.key}`);
+    }
+
+    return {
+      key: obj.key,
+      size,
+      uploaded: this.formatarUploadedAt(obj.uploaded),
+      etag: typeof obj.etag === 'string' ? obj.etag : '',
+    };
+  }
+
+  private formatarUploadedAt(value: unknown): string {
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+    }
+
+    return 'unknown';
+  }
+
+  private async lerObjetoR2ArrayBuffer(objeto: R2ObjectBody, key: string): Promise<ArrayBuffer> {
+    if (typeof objeto.arrayBuffer === 'function') {
+      return objeto.arrayBuffer();
+    }
+
+    if (objeto.body) {
+      return new Response(objeto.body).arrayBuffer();
+    }
+
+    throw new Error(`Artefato de backup sem corpo legivel no R2: ${key}`);
+  }
+
+  private async sha256Hex(content: string | ArrayBuffer | Uint8Array): Promise<string> {
+    const bytes =
+      typeof content === 'string'
+        ? new TextEncoder().encode(content)
+        : content instanceof Uint8Array
+          ? content
+          : new Uint8Array(content);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  private formatarErro(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   /**
