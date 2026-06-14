@@ -81,6 +81,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const showFrms = canAccessModule('frms', modulosAtivos) && can('frms.view');
   const showSgso = canAccessModule('sgso', modulosAtivos) && can('sgso.view');
   const showMro = canAccessModule('mro', modulosAtivos) && !isAluno && !isInstrutor;
+  const showControleVoos = canAccessModule('controle_voos', modulosAtivos) && !isAluno && !isInstrutor;
   const showTreinamentosPlanejados =
     canAccessModule('treinamentos_planejados', modulosAtivos) && !isAluno && !isInstrutor;
 
@@ -332,6 +333,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/mro') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   Manutenção
+                  <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showControleVoos && (
+                <Link
+                  to="/controle-voos"
+                  className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/controle-voos') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  Controle de Voos
                   <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
                 </Link>
               )}
@@ -644,6 +654,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/mro') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   Manutenção
+                  <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
+                </Link>
+              )}
+              {!isAluno && !isInstrutor && showControleVoos && (
+                <Link
+                  to="/controle-voos"
+                  className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/controle-voos') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                >
+                  Controle de Voos
                   <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
                 </Link>
               )}

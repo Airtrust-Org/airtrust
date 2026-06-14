@@ -258,6 +258,18 @@ const MroVencimentos = lazyWithRetry(() => import('./pages/mro/MroVencimentos'),
 const MroEstoque = lazyWithRetry(() => import('./pages/mro/MroEstoque'), 'MroEstoque');
 const MroRegistrosTecnicos = lazyWithRetry(() => import('./pages/mro/MroRegistrosTecnicos'), 'MroRegistrosTecnicos');
 
+// Controle de Voos — Protótipo
+const ControleVoosDashboard = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosDashboard'), 'ControleVoosDashboard');
+const ControleVoosVoos = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosVoos'), 'ControleVoosVoos');
+const ControleVoosVooDetalhe = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosVooDetalhe'), 'ControleVoosVooDetalhe');
+const ControleVoosRdv = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosRdv'), 'ControleVoosRdv');
+const ControleVoosRdvDetalhe = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosRdvDetalhe'), 'ControleVoosRdvDetalhe');
+const ControleVoosJornadas = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosJornadas'), 'ControleVoosJornadas');
+const ControleVoosIndisponibilidades = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosIndisponibilidades'), 'ControleVoosIndisponibilidades');
+const ControleVoosHangaragem = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosHangaragem'), 'ControleVoosHangaragem');
+const ControleVoosRelatorios = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosRelatorios'), 'ControleVoosRelatorios');
+const ControleVoosTabelas = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosTabelas'), 'ControleVoosTabelas');
+
 // Loading fallback component
 const PageLoader = () => {
   const { t } = useLanguage();
@@ -894,6 +906,19 @@ export default function App() {
                     <Route path="/mro/vencimentos" element={<ProtectedRoute><MroVencimentos /></ProtectedRoute>} />
                     <Route path="/mro/estoque" element={<ProtectedRoute><MroEstoque /></ProtectedRoute>} />
                     <Route path="/mro/registros-tecnicos" element={<ProtectedRoute><MroRegistrosTecnicos /></ProtectedRoute>} />
+
+                    {/* Controle de Voos — Protótipo */}
+                    <Route path="/controle-voos" element={<ProtectedRoute><ControleVoosDashboard /></ProtectedRoute>} />
+                    <Route path="/controle-voos/dashboard" element={<ProtectedRoute><ControleVoosDashboard /></ProtectedRoute>} />
+                    <Route path="/controle-voos/voos" element={<ProtectedRoute><ControleVoosVoos /></ProtectedRoute>} />
+                    <Route path="/controle-voos/voos/:id" element={<ProtectedRoute><ControleVoosVooDetalhe /></ProtectedRoute>} />
+                    <Route path="/controle-voos/rdv" element={<ProtectedRoute><ControleVoosRdv /></ProtectedRoute>} />
+                    <Route path="/controle-voos/rdv/:id" element={<ProtectedRoute><ControleVoosRdvDetalhe /></ProtectedRoute>} />
+                    <Route path="/controle-voos/jornadas" element={<ProtectedRoute><ControleVoosJornadas /></ProtectedRoute>} />
+                    <Route path="/controle-voos/indisponibilidades" element={<ProtectedRoute><ControleVoosIndisponibilidades /></ProtectedRoute>} />
+                    <Route path="/controle-voos/hangaragem" element={<ProtectedRoute><ControleVoosHangaragem /></ProtectedRoute>} />
+                    <Route path="/controle-voos/relatorios" element={<ProtectedRoute><ControleVoosRelatorios /></ProtectedRoute>} />
+                    <Route path="/controle-voos/tabelas" element={<ProtectedRoute><ControleVoosTabelas /></ProtectedRoute>} />
 
                     {/* Horas de Voo — caderneta standalone */}
                     <Route

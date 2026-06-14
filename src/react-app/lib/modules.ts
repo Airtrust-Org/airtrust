@@ -121,6 +121,13 @@ export const PRODUCT_MODULES: ProductModule[] = [
     defaultForPilot: false,
     description: 'Gestão de manutenção de aeronaves, componentes, OS e estoque.',
   },
+  {
+    key: 'controle_voos',
+    label: 'Controle de Voos',
+    status: 'beta',
+    defaultForPilot: false,
+    description: 'Programação de voos, tripulação, RDV, jornada, indisponibilidade e relatórios operacionais.',
+  },
 ];
 
 export const PRODUCT_MODULE_BY_KEY = Object.fromEntries(

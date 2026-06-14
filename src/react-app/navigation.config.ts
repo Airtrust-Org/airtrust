@@ -213,6 +213,23 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
         { id: 'mro-registros', label: 'Registros Técnicos', path: '/mro/registros-tecnicos' },
       ],
     },
+    {
+      id: 'controle_voos',
+      label: 'Controle de Voos',
+      icon: 'Plane',
+      expandable: true,
+      badge: 'Prévia',
+      children: [
+        { id: 'controle_voos-dashboard', label: 'Dashboard OCC', path: '/controle-voos' },
+        { id: 'controle_voos-voos', label: 'Voos', path: '/controle-voos/voos' },
+        { id: 'controle_voos-rdv', label: 'RDV', path: '/controle-voos/rdv' },
+        { id: 'controle_voos-jornadas', label: 'Jornadas', path: '/controle-voos/jornadas' },
+        { id: 'controle_voos-indisponibilidades', label: 'Indisponibilidades', path: '/controle-voos/indisponibilidades' },
+        { id: 'controle_voos-hangaragem', label: 'Hangaragem', path: '/controle-voos/hangaragem' },
+        { id: 'controle_voos-relatorios', label: 'Relatórios', path: '/controle-voos/relatorios' },
+        { id: 'controle_voos-tabelas', label: 'Tabelas', path: '/controle-voos/tabelas' },
+      ],
+    },
   ],
   settings_menu: [
     {
