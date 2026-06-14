@@ -1911,7 +1911,14 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   const cursoSetores = await getCursoSetores(db, empresaId, cursoId);
   const curso = {
     ...(await db
-      .prepare(`SELECT ${LMS_CURSOS_SELECT_COLUMNS} FROM lms_cursos WHERE id = ?`)
+      .prepare(
+        `SELECT c.*,
+           qt.nome AS qualificacao_tipo_nome,
+           qt.codigo AS qualificacao_tipo_codigo
+         FROM lms_cursos c
+         LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
+         WHERE c.id = ?`,
+      )
       .bind(cursoId)
       .first()),
     setores: cursoSetores,

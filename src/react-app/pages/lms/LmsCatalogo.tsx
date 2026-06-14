@@ -1721,11 +1721,16 @@ export default function LmsCatalogo() {
       if (assets.thumbnailFile) {
         setUploadStatus('Enviando capa');
         toast.info('Upload da capa em andamento...');
-        await uploadThumb.mutateAsync({
+        const thumbResult = await uploadThumb.mutateAsync({
           cursoId,
           file: assets.thumbnailFile,
           onProgress: setUploadProgress,
         });
+        nextCourseSnapshot = {
+          ...nextCourseSnapshot,
+          thumbnail_r2_key: thumbResult.thumbnail_r2_key,
+          version_tag: thumbResult.version_tag,
+        };
       }
       if (assets.contentFile && form.tipo_conteudo !== 'video') {
         setUploadProgress(5);
