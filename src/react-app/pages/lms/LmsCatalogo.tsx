@@ -1795,7 +1795,8 @@ export default function LmsCatalogo() {
       setEditingCourse(undefined);
       setUploadProgress(0);
       setUploadStatus('');
-      void qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
+      // Mutation hooks (useUpdateCurso, useUploadCursoThumbnail, etc.) already
+      // update caches and invalidate collections — no extra invalidation needed.
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao salvar curso');
       setUploadProgress(0);
