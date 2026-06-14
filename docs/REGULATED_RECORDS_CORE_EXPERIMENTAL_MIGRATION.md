@@ -86,6 +86,10 @@ Esta etapa nao prova conformidade regulatoria e nao serve como evidencia ANAC:
 
 Veredito atual: pronta para ser tratada como **promotion candidate de desenvolvimento local**, ainda fora de staging, producao, deploy e qualquer uso regulado.
 
+A definicao operacional completa desse status esta em:
+
+- `docs/REGULATED_RECORDS_CORE_DEVELOPMENT_LOCAL_CANDIDATE.md`
+
 Motivos:
 
 - a migration esta isolada em `worker-airtrust/migrations_experimental/`;
