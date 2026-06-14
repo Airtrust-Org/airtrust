@@ -189,3 +189,9 @@ scripts/**/*dump*.sql
 scripts/**/*backup*.sql
 scripts/**/*prod*.sql
 scripts/legacy/*.sql
+
+# AirTrust pilot CV N1 temporary containment artifacts
+worker-airtrust/wrangler.pilot-cv-n1.toml
+docs/snapshots/
+pilot-cv-n1-*.sql
+pilot-cv-n1-*.dump.sql
