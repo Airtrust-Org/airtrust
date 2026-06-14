@@ -1,9 +1,16 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), '../../../migrations');
+const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..');
+const migrationsDir = join(workerRoot, 'migrations');
+const experimentalMigrationPath = join(
+  workerRoot,
+  'migrations_experimental',
+  '0410_experimental_regulated_records_core.sql',
+);
+const wranglerConfigPaths = [join(workerRoot, 'wrangler.toml'), join(workerRoot, 'wrangler.dev.toml')] as const;
 
 const EXPECTED_DUPLICATE_PREFIXES = {
   '0049': ['0049_create_integrated_view.sql', '0049_qualificacoes_view_integrada.sql'],
@@ -127,8 +134,27 @@ describe('migration governance', () => {
     const regularPrefixes = numericPrefixes.filter((prefix) => prefix !== '9999');
     const highPrefixes = files.filter((file) => /^([0-9]{4})_/.test(file) && !/^0[0-9]{3}_/.test(file));
 
-    expect(Math.max(...regularPrefixes.map(Number))).toBe(407);
+    expect(Math.max(...regularPrefixes.map(Number))).toBe(409);
     expect(highPrefixes).toEqual(['9999_add_modelo_sessao_id_to_agendamentos.sql']);
+  });
+
+  it('keeps experimental migrations outside the canonical production migration chain', () => {
+    const experimentalFilesInCanonicalChain = files.filter((file) => /experimental/i.test(file));
+
+    expect(experimentalFilesInCanonicalChain).toEqual([]);
+    expect(existsSync(experimentalMigrationPath)).toBe(true);
+  });
+
+  it('keeps Wrangler D1 migrations configured to the canonical migrations folder', () => {
+    for (const configPath of wranglerConfigPaths) {
+      const configuredMigrationDirs = [...readFileSync(configPath, 'utf8').matchAll(/^\s*migrations_dir\s*=\s*"([^"]+)"/gm)].map(
+        ([, migrationsDir]) => migrationsDir,
+      );
+
+      expect(configuredMigrationDirs.length).toBeGreaterThan(0);
+      expect(configuredMigrationDirs.every((migrationsDir) => migrationsDir === './migrations')).toBe(true);
+      expect(configuredMigrationDirs).not.toContain('./migrations_experimental');
+    }
   });
 
   it('keeps CREATE TEMP TABLE confined to the documented historical allowlist', () => {
