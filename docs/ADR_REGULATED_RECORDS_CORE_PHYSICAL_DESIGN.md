@@ -2,13 +2,13 @@
 
 ## 1. Status and Scope
 
-**Status:** Proposed
+**Status:** Proposto
 
-**Scope:** physical design only. This ADR defines the minimum D1/R2 data layer, integrity model, service boundaries, and future implementation gates for the AirTrust Regulated Records Core.
+**Escopo:** desenho físico em Cloudflare D1/R2. This ADR defines the minimum D1/R2 data layer, integrity model, service boundaries, and future implementation gates for the AirTrust Regulated Records Core.
 
-**Regulatory status:** not regulated yet. This ADR does not state that AirTrust, DB Digital/eDB, SDRMe, Controle de Voos/RDV, MRO, FRMS, or any future module is homologated, certified, approved, accepted, or authorized by ANAC.
+**Sem implementação:** no code, no migration, no endpoint, no frontend/backend change, no database write, no deploy, no commit.
 
-**Implementation status:** no code, no migration, no endpoint, no frontend/backend change, no database write, no deploy, no commit.
+**Não regulado ainda:** this ADR does not state that AirTrust, DB Digital/eDB, SDRMe, Controle de Voos/RDV, MRO, FRMS, or any future module is homologated, certified, approved, accepted, or authorized by ANAC.
 
 The design is preparatory. ANAC does not generically homologate software; any future official use depends on acceptance/authorization by the regulated operator or OMA, by scope, fleet/aircraft, and record type.
 
@@ -852,9 +852,9 @@ When Records Core exists, restore must validate:
 - `payload_hash` for each restored version;
 - `attachments_manifest_hash` and each R2 attachment hash;
 - `record_hash`;
+- `chain_hash`/`tenant_chain_hash`;
 - audit `event_hash`;
 - `previous_event_hash`;
-- `tenant_chain_hash`;
 - export `manifest_hash` when exports exist;
 - backup `checksum-manifest.json` hash.
 
@@ -989,4 +989,3 @@ Approval checklist:
 This ADR recommends proceeding to **Phase B: local experimental migration** only after the ADR is reviewed and approved.
 
 The recommendation is limited to local, non-regulated experimentation. It does not recommend staging or production migration, does not recommend eDB/SDRMe/RDV implementation, and does not authorize any regulated claim. The next safe technical step is to validate the five-table physical design locally with immutability triggers, canonicalization vectors, hash-chain conflict behavior, and migration-guard specifications.
-
