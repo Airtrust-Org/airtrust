@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { Clock, Plane, Droplets, AlertTriangle, CheckCircle, Send, UserCheck, Download, Ban } from 'lucide-react';
+import { Clock, Plane, Droplets, AlertTriangle, CheckCircle, Download, Ban } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
@@ -120,40 +120,15 @@ export default function ControleVoosRdvDetalhe() {
 
             {/* Coluna lateral */}
             <div className="space-y-6">
-              {/* Assinatura e Validação */}
+              {/* Preenchimento operacional — sem valor jurídico */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2"><UserCheck className="h-4 w-4 text-purple-500" /> Assinatura e validação</h2>
+                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Preenchimento operacional</h2>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Comandante</span>
-                    <span className="text-slate-800 dark:text-slate-200 font-medium">{rdv.assinaturaCmdteNome || 'Pendente'}</span>
+                    <span className="text-slate-500 dark:text-slate-400">Responsável</span>
+                    <span className="text-slate-800 dark:text-slate-200 font-medium">{rdv.responsavelPreenchimentoNome || 'Pendente'}</span>
                   </div>
-                  {rdv.assinaturaData && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500 dark:text-slate-400">Assinatura em</span>
-                      <span className="text-slate-800 dark:text-slate-200 font-mono text-xs">{formatDateTime(rdv.assinaturaData)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Validação</span>
-                    <span className="text-slate-800 dark:text-slate-200">{rdv.validadoPorNome || 'Pendente'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status de envio MRO/FRMS */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Send className="h-4 w-4 text-teal-500" /> Integração</h2>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Envio ao MRO</span>
-                    {rdv.enviadoMro ? <CheckCircle className="h-4 w-4 text-emerald-500" /> : <Clock className="h-4 w-4 text-slate-300" />}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">Envio ao FRMS</span>
-                    {rdv.enviadoFrms ? <CheckCircle className="h-4 w-4 text-emerald-500" /> : <Clock className="h-4 w-4 text-slate-300" />}
-                  </div>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">Horas, ciclos e pousos são enviados automaticamente após validação do RDV.</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-2 mt-2">Uso operacional interno — sem valor jurídico. Não é RDV oficial, DB, eDB ou registro ANAC.</p>
                 </div>
               </div>
 
@@ -161,10 +136,9 @@ export default function ControleVoosRdvDetalhe() {
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Ações</h2>
                 <div className="space-y-2">
-                  <button disabled className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500" title="Protótipo — assinatura de RDV indisponível nesta prévia"><UserCheck className="h-4 w-4" />Assinar RDV</button>
-                  <button disabled className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500" title="Protótipo — validação de RDV indisponível nesta prévia"><CheckCircle className="h-4 w-4" />Validar RDV</button>
+                  <button disabled className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500" title="Protótipo — finalização de RDV indisponível nesta prévia"><CheckCircle className="h-4 w-4" />Finalizar preenchimento</button>
                   <button disabled className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500" title="Protótipo — cancelamento de RDV indisponível nesta prévia"><Ban className="h-4 w-4" />Cancelar RDV</button>
-                  <button disabled className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500" title="Protótipo — exportação de PDF indisponível nesta prévia"><Download className="h-4 w-4" />Exportar PDF</button>
+                  <button disabled className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500" title="Protótipo — exportação indisponível nesta prévia"><Download className="h-4 w-4" />Exportar (não fiscal)</button>
                 </div>
               </div>
             </div>

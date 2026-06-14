@@ -11,7 +11,7 @@ export default function ControleVoosHangaragem() {
     <AppLayout>
       <div className="w-full">
         <ControleVoosPageShell>
-          <ControleVoosPageHeader title="Hangaragem" description="Registros de entrada e saída de aeronaves em hangar, vinculados a ordens de serviço do MRO — Fase 2">
+          <ControleVoosPageHeader title="Hangaragem" description="Registros de hangaragem operacional — dados demonstrativos. A referência a OS MRO é textual (sem integração real com o módulo MRO).">
             <button
               disabled
               className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"
@@ -59,7 +59,7 @@ export default function ControleVoosHangaragem() {
             </div>
           )}
 
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">{MOCK_HANGARAGENS.length} registros — dados demonstrativos — Fase 2</p>
+          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">{MOCK_HANGARAGENS.length} registros — dados demonstrativos</p>
         </ControleVoosPageShell>
       </div>
     </AppLayout>

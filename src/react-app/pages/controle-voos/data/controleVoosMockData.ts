@@ -203,6 +203,7 @@ export const MOCK_TRIPULACAO_VOO: TripulacaoVoo[] = [
 export type StatusRdv = 'rascunho' | 'finalizado' | 'cancelado';
 
 // ---- RDV ----
+// Operacional interno — sem valor jurídico. Não é RDV/DB oficial, eDB, registro ANAC, SDRMe ou assinatura regulatória.
 export interface Rdv {
   id: string;
   numero: string;
@@ -218,11 +219,7 @@ export interface Rdv {
   ocorrencias: string;
   divergencias: string;
   status: StatusRdv;
-  assinaturaCmdteNome: string | null;
-  assinaturaData: string | null;
-  validadoPorNome: string | null;
-  enviadoMro: boolean;
-  enviadoFrms: boolean;
+  responsavelPreenchimentoNome: string | null; // preenchimento operacional interno, sem valor jurídico
 }
 
 export const MOCK_RDVS: Rdv[] = [
@@ -232,8 +229,7 @@ export const MOCK_RDVS: Rdv[] = [
     horasVoadas: 1.2, numeroPousos: 1,
     combustivelDecolagem: 1250, combustivelPouso: 680, combustivelConsumo: 570,
     ocorrencias: 'Nenhuma ocorrência relevante.', divergencias: '',
-    status: 'finalizado', assinaturaCmdteNome: 'Cmt. Ricardo Albuquerque', assinaturaData: '2026-06-13T08:10:00',
-    validadoPorNome: 'Desp. Operacional', enviadoMro: true, enviadoFrms: true,
+    status: 'finalizado', responsavelPreenchimentoNome: 'Cmt. Ricardo Albuquerque',
   },
   {
     id: 'rdv-002', numero: 'RDV-20260613-002', vooId: 'voo-002', dataVoo: '2026-06-13',
@@ -241,8 +237,7 @@ export const MOCK_RDVS: Rdv[] = [
     horasVoadas: 1.27, numeroPousos: 1,
     combustivelDecolagem: 1180, combustivelPouso: 620, combustivelConsumo: 560,
     ocorrencias: 'Turbulência moderada na subida.', divergencias: 'Horário real difere do previsto em +3 min.',
-    status: 'finalizado', assinaturaCmdteNome: 'Cmt. Ricardo Albuquerque', assinaturaData: '2026-06-13T10:00:00',
-    validadoPorNome: 'Desp. Operacional', enviadoMro: true, enviadoFrms: true,
+    status: 'finalizado', responsavelPreenchimentoNome: 'Cmt. Ricardo Albuquerque',
   },
   {
     id: 'rdv-003', numero: 'RDV-20260613-003', vooId: 'voo-003', dataVoo: '2026-06-13',
@@ -250,8 +245,7 @@ export const MOCK_RDVS: Rdv[] = [
     horasVoadas: 0.95, numeroPousos: 1,
     combustivelDecolagem: 1450, combustivelPouso: 820, combustivelConsumo: 630,
     ocorrencias: '', divergencias: '',
-    status: 'finalizado', assinaturaCmdteNome: 'Cmt. Ana Carolina Souza', assinaturaData: '2026-06-13T10:15:00',
-    validadoPorNome: null, enviadoMro: true, enviadoFrms: false,
+    status: 'finalizado', responsavelPreenchimentoNome: 'Cmt. Ana Carolina Souza',
   },
   {
     id: 'rdv-004', numero: 'RDV-20260613-004', vooId: 'voo-004', dataVoo: '2026-06-13',
@@ -259,8 +253,7 @@ export const MOCK_RDVS: Rdv[] = [
     horasVoadas: null, numeroPousos: null,
     combustivelDecolagem: null, combustivelPouso: null, combustivelConsumo: null,
     ocorrencias: '', divergencias: '',
-    status: 'rascunho', assinaturaCmdteNome: null, assinaturaData: null,
-    validadoPorNome: null, enviadoMro: false, enviadoFrms: false,
+    status: 'rascunho', responsavelPreenchimentoNome: null,
   },
   {
     id: 'rdv-005', numero: 'RDV-20260613-005', vooId: 'voo-005', dataVoo: '2026-06-13',
@@ -268,8 +261,7 @@ export const MOCK_RDVS: Rdv[] = [
     horasVoadas: null, numeroPousos: null,
     combustivelDecolagem: null, combustivelPouso: null, combustivelConsumo: null,
     ocorrencias: '', divergencias: '',
-    status: 'rascunho', assinaturaCmdteNome: null, assinaturaData: null,
-    validadoPorNome: null, enviadoMro: false, enviadoFrms: false,
+    status: 'rascunho', responsavelPreenchimentoNome: null,
   },
   {
     id: 'rdv-006', numero: 'RDV-20260613-006', vooId: 'voo-006', dataVoo: '2026-06-13',
@@ -277,8 +269,7 @@ export const MOCK_RDVS: Rdv[] = [
     horasVoadas: null, numeroPousos: null,
     combustivelDecolagem: null, combustivelPouso: null, combustivelConsumo: null,
     ocorrencias: 'Voo cancelado por indisponibilidade da aeronave PP-MRO.', divergencias: '',
-    status: 'cancelado', assinaturaCmdteNome: null, assinaturaData: null,
-    validadoPorNome: 'Desp. Operacional', enviadoMro: false, enviadoFrms: false,
+    status: 'cancelado', responsavelPreenchimentoNome: null,
   },
 ];
 
@@ -410,7 +401,7 @@ export const MOCK_RELATORIOS: RelatorioCard[] = [
   { id: 'rel-005', titulo: 'Cancelamentos e atrasos', descricao: 'Voos cancelados ou com atraso por motivo.', icone: 'AlertTriangle', fase: 'MVP' },
   { id: 'rel-006', titulo: 'Indisponibilidade', descricao: 'Tempo de indisponibilidade por aeronave, causa e grupo.', icone: 'BarChart3', fase: 'Fase 2' },
   { id: 'rel-007', titulo: 'Export APUS / Sigvoos', descricao: 'Exportação de dados no formato compatível com APUS RMCV e Sigvoos.', icone: 'Download', fase: 'Fase 2' },
-  { id: 'rel-008', titulo: 'Jornadas / RBAC 117', descricao: 'Relatório de jornadas, limites e alertas por tripulante.', icone: 'TrendingUp', fase: 'Fase 2' },
+  { id: 'rel-008', titulo: 'Jornadas por tripulante', descricao: 'Relatório de jornadas e horas por tripulante — disponível na Fase 2.', icone: 'TrendingUp', fase: 'Fase 2' },
 ];
 
 // ---- Tabelas auxiliares agrupadas ----

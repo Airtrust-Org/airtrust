@@ -18,9 +18,12 @@ import {
 } from './data/controleVoosMockData';
 import { formatTime } from './data/controleVoosUtils';
 
+// Data de referência demonstrativa — em produção o dashboard usará a data real do sistema.
+const DATA_MOCK_DEMONSTRATIVO = '2026-06-13';
+
 export default function ControleVoosDashboard() {
   const stats = useMemo(() => {
-    const hoje = '2026-06-13';
+    const hoje = DATA_MOCK_DEMONSTRATIVO;
     const voosHoje = MOCK_VOOS.filter((v) => v.dataProgramacao === hoje);
     const programados = voosHoje.filter((v) => v.status === 'planejado' || v.status === 'liberado').length;
     const emExecucao = voosHoje.filter((v) => v.status === 'em_voo').length;
@@ -51,7 +54,7 @@ export default function ControleVoosDashboard() {
     <AppLayout>
       <div className="w-full">
         <ControleVoosPageShell>
-          <ControleVoosPageHeader title="Painel Operacional — Controle de Voos" description="Visão do dia operacional — 13 de junho de 2026" />
+          <ControleVoosPageHeader title="Painel Operacional — Controle de Voos" description="Dados demonstrativos — referência: 13/06/2026" />
           <ControleVoosStatCards cards={cardData} className="mb-8" />
 
           {/* Links rápidos */}
@@ -95,7 +98,7 @@ export default function ControleVoosDashboard() {
             <h2 className="mb-3 text-lg font-semibold text-slate-800 dark:text-slate-100">Timeline do dia — por aeronave</h2>
             <div className="space-y-3">
               {MOCK_AERONAVES.map((aero) => {
-                const voosAeronave = MOCK_VOOS.filter((v) => v.aeronaveId === aero.id && v.dataProgramacao === '2026-06-13');
+                const voosAeronave = MOCK_VOOS.filter((v) => v.aeronaveId === aero.id && v.dataProgramacao === DATA_MOCK_DEMONSTRATIVO);
                 if (voosAeronave.length === 0 && aero.status === 'disponivel') return null;
                 return (
                   <div key={aero.id} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
