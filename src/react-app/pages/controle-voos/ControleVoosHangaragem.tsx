@@ -15,7 +15,7 @@ export default function ControleVoosHangaragem() {
             <button
               disabled
               className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"
-              title="Funcionalidade em desenvolvimento — Fase 2"
+              title="Protótipo — hangaragem indisponível nesta prévia"
             >
               <Warehouse className="h-4 w-4" />+ Nova Hangaragem
             </button>

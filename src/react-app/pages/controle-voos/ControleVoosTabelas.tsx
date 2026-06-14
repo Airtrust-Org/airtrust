@@ -50,7 +50,7 @@ export default function ControleVoosTabelas() {
                       <button
                         disabled
                         className="inline-flex items-center gap-1 rounded text-xs font-medium text-slate-400 cursor-not-allowed dark:text-slate-500"
-                        title="Visualização em desenvolvimento"
+                        title="Protótipo — visualização ampliada indisponível nesta prévia"
                       >
                         <Eye className="h-3 w-3" /> Ver
                       </button>
