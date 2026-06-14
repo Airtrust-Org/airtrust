@@ -755,11 +755,15 @@ export function useUpdateCurso() {
         method: 'PUT',
         body: JSON.stringify(sanitizeUpdateCursoPayload(dto)),
       }),
-    onMutate: async ({ id }) => {
+    onMutate: ({ id }) => {
       // Cancel in-flight list fetches so a stale GET response can't overwrite the
       // optimistic merge that follows in onSuccess.
-      await qc.cancelQueries({ queryKey: ['lms', 'cursos'], exact: false });
-      await qc.cancelQueries({ queryKey: lmsKeys.curso(id) });
+      // NOTE: cancelQueries is fire-and-forget here — awaiting it is unnecessary
+      // and causes a TDZ ("Cannot access 'i' before initialization") in the
+      // minified bundle because esbuild transforms async functions into state
+      // machines where const declarations can be reordered.
+      qc.cancelQueries({ queryKey: ['lms', 'cursos'], exact: false });
+      qc.cancelQueries({ queryKey: lmsKeys.curso(id) });
       // Snapshot the individual course so we can roll back on error.
       const previousCurso = qc.getQueryData<LmsCurso>(lmsKeys.curso(id));
       return { previousCurso };
@@ -927,10 +931,11 @@ export function useUploadCursoThumbnail() {
         await uploadLmsContent(`/api/lms/cursos/${cursoId}/thumbnail-upload`, formData, onProgress),
       );
     },
-    onMutate: async ({ cursoId }) => {
-      // Cancel in-flight list fetches so a stale GET can't overwrite the thumbnail patch
-      await qc.cancelQueries({ queryKey: ['lms', 'cursos'], exact: false });
-      await qc.cancelQueries({ queryKey: lmsKeys.curso(cursoId) });
+    onMutate: ({ cursoId }) => {
+      // Cancel in-flight list fetches so a stale GET can't overwrite the thumbnail patch.
+      // NOTE: fire-and-forget — see useUpdateCurso.onMutate for rationale.
+      qc.cancelQueries({ queryKey: ['lms', 'cursos'], exact: false });
+      qc.cancelQueries({ queryKey: lmsKeys.curso(cursoId) });
       const previousCurso = qc.getQueryData<LmsCurso>(lmsKeys.curso(cursoId));
       return { previousCurso };
     },
