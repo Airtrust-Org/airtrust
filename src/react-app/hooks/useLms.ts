@@ -514,6 +514,25 @@ function getCachedCursoIdFromMatricula(
   return cached?.curso_id ?? null;
 }
 
+export function patchCursoThumbnailListCache(
+  current: { data: LmsCurso[]; total: number } | undefined,
+  cursoId: number,
+  patch: { thumbnail_r2_key: string | null; version_tag: string | null },
+) {
+  if (!current?.data?.length) return current;
+
+  const nextCourses = current.data.map((course) => {
+    if (course.id !== cursoId) return course;
+    return {
+      ...course,
+      thumbnail_r2_key: patch.thumbnail_r2_key,
+      version_tag: patch.version_tag,
+    };
+  });
+
+  return { ...current, data: nextCourses };
+}
+
 // ── Catálogo (público autenticado) ────────────────────────────────────────────
 
 export interface CursosFilters {
@@ -944,26 +963,23 @@ export function useUploadCursoThumbnail() {
         qc.setQueryData(lmsKeys.curso(vars.cursoId), context.previousCurso);
       }
     },
-    onSuccess: (data, vars) => {
+    onSuccess: (uploadResult, vars) => {
       // Update individual course cache so the new capa shows immediately
       qc.setQueryData<LmsCurso | undefined>(
         lmsKeys.curso(vars.cursoId),
         (current) =>
           current
-            ? { ...current, thumbnail_r2_key: data.thumbnail_r2_key, version_tag: data.version_tag }
+            ? {
+                ...current,
+                thumbnail_r2_key: uploadResult.thumbnail_r2_key,
+                version_tag: uploadResult.version_tag,
+              }
             : current,
       );
       // Update all list caches so the card thumbnail refreshes instantly
       qc.setQueriesData<{ data: LmsCurso[]; total: number }>(
         { queryKey: ['lms', 'cursos'], exact: false },
-        (current) => {
-          if (!current?.data?.length) return current;
-          const data = current.data.map((course) => {
-            if (course.id !== vars.cursoId) return course;
-            return { ...course, thumbnail_r2_key: data.thumbnail_r2_key, version_tag: data.version_tag };
-          });
-          return { ...current, data };
-        },
+        (current) => patchCursoThumbnailListCache(current, vars.cursoId, uploadResult),
       );
       // Background reconciliation
       invalidateCursoCollections(qc);
