@@ -72,6 +72,7 @@ const migrationPath = join(
   '../../../migrations/0410_controle_voos_n1_schema.sql',
 );
 const routePath = join(dirname(fileURLToPath(import.meta.url)), '../../routes/controle-voos.ts');
+const testPath = fileURLToPath(import.meta.url);
 
 function sqlString(value: unknown): string {
   if (value === null || value === undefined) return 'NULL';
@@ -132,14 +133,16 @@ function createSqliteD1(): SqliteD1 {
         run: async () => {
           runSql(databasePath, interpolate(sql, binds));
           const lastId = sql.includes('INSERT INTO cv_voos')
-            ? queryJson<{ id: number }>(
-                databasePath,
-                'SELECT id FROM cv_voos ORDER BY id DESC LIMIT 1',
-              )[0]?.id
-            : queryJson<{ id: number }>(
-                databasePath,
-                'SELECT id FROM cv_voo_eventos ORDER BY id DESC LIMIT 1',
-              )[0]?.id;
+            ? queryJson<{ id: number }>(databasePath, 'SELECT id FROM cv_voos ORDER BY id DESC LIMIT 1')[0]?.id
+            : sql.includes('INSERT INTO cv_rdv_operacional')
+              ? queryJson<{ id: number }>(
+                  databasePath,
+                  'SELECT id FROM cv_rdv_operacional ORDER BY id DESC LIMIT 1',
+                )[0]?.id
+              : queryJson<{ id: number }>(
+                  databasePath,
+                  'SELECT id FROM cv_voo_eventos ORDER BY id DESC LIMIT 1',
+                )[0]?.id;
           return { meta: { changes: 1, last_row_id: lastId || 0 } };
         },
       };
@@ -253,6 +256,26 @@ function validFlightPayload(overrides: Record<string, unknown> = {}) {
     horario_previsto_partida: '2026-06-16T10:00:00Z',
     horario_previsto_chegada: '2026-06-16T11:00:00Z',
     observacoes: 'Uso interno',
+    ...overrides,
+  };
+}
+
+function validRdvPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    numero: 'RDV-20260614-001',
+    data_voo: '2026-06-14',
+    horario_decolagem_real: '2026-06-14T10:05:00Z',
+    horario_pouso_real: '2026-06-14T11:10:00Z',
+    horas_voadas: 1.08,
+    numero_pousos: 1,
+    ciclos: 1,
+    combustivel_decolagem: 1200,
+    combustivel_pouso: 700,
+    combustivel_consumo: 500,
+    pob: 4,
+    carga_kg: 120.5,
+    ocorrencias: 'Sem intercorrencias',
+    divergencias: 'Nenhuma',
     ...overrides,
   };
 }
@@ -449,6 +472,294 @@ describe('controle voos routes', () => {
     expect(patchResponse.status).toBe(200);
   });
 
+  it('cria RDV para voo existente', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        voo_id: 601,
+        numero: 'RDV-20260614-001',
+        status: 'rascunho',
+        responsavel_preenchimento_id: 10,
+      },
+    });
+  });
+
+  it('consulta RDV existente', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { voo_id: 601, numero: 'RDV-20260614-001', status: 'rascunho' },
+    });
+  });
+
+  it('atualiza RDV em rascunho', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({
+        horas_voadas: 1.25,
+        numero_pousos: 2,
+        combustivel_decolagem: 1400,
+        combustivel_pouso: 800,
+        combustivel_consumo: 600,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { horas_voadas: 1.25, numero_pousos: 2, combustivel_consumo: 600, status: 'rascunho' },
+    });
+  });
+
+  it('finaliza preenchimento', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data: { status: string; finalizado_operacionalmente_por: number; finalizado_operacionalmente_em: string | null };
+    };
+    expect(body.data.status).toBe('preenchimento_finalizado');
+    expect(body.data.finalizado_operacionalmente_por).toBe(10);
+    expect(body.data.finalizado_operacionalmente_em).toBeTruthy();
+  });
+
+  it('nao altera RDV ja finalizado', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
+      method: 'POST',
+    });
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ horas_voadas: 2 }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_RDV_LOCKED',
+    });
+  });
+
+  it('nao cria RDV para voo de outra empresa', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(
+      db,
+      '/api/controle-voos/voos/701/rdv',
+      { method: 'PUT', body: JSON.stringify(validRdvPayload()) },
+      1,
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it('nao cria RDV para voo inexistente', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/9999/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('nao cria RDV para voo com soft delete', async () => {
+    const db = createSqliteD1();
+    runSql(db.databasePath, "UPDATE cv_voos SET deleted_at = datetime('now') WHERE id = 601");
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('rejeita horarios incoerentes no RDV', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(
+        validRdvPayload({
+          horario_decolagem_real: '2026-06-14T11:10:00Z',
+          horario_pouso_real: '2026-06-14T10:05:00Z',
+        }),
+      ),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_INVALID_RDV_TIME',
+    });
+  });
+
+  it('rejeita valores negativos e combustivel incoerente no RDV', async () => {
+    const db = createSqliteD1();
+
+    const negativeResponse = await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload({ horas_voadas: -1 })),
+    });
+
+    expect(negativeResponse.status).toBe(400);
+    await expect(negativeResponse.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_INVALID_PAYLOAD',
+    });
+
+    const fuelResponse = await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(
+        validRdvPayload({
+          combustivel_decolagem: 1200,
+          combustivel_pouso: 700,
+          combustivel_consumo: 300,
+        }),
+      ),
+    });
+
+    expect(fuelResponse.status).toBe(400);
+    await expect(fuelResponse.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_INVALID_RDV_FUEL',
+    });
+  });
+
+  it('viewer nao cria, edita nem finaliza RDV', async () => {
+    const db = createSqliteD1();
+
+    const createResponse = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv',
+      { method: 'PUT', body: JSON.stringify(validRdvPayload()) },
+      1,
+      'viewer',
+    );
+    expect(createResponse.status).toBe(403);
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+
+    const updateResponse = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv',
+      { method: 'PUT', body: JSON.stringify({ horas_voadas: 1.5 }) },
+      1,
+      'viewer',
+    );
+    expect(updateResponse.status).toBe(403);
+
+    const finalizeResponse = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
+      { method: 'POST' },
+      1,
+      'viewer',
+    );
+    expect(finalizeResponse.status).toBe(403);
+  });
+
+  it('editor cria, edita e finaliza RDV', async () => {
+    const db = createSqliteD1();
+
+    const createResponse = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv',
+      { method: 'PUT', body: JSON.stringify(validRdvPayload({ numero: 'RDV-20260614-EDT' })) },
+      1,
+      'editor',
+    );
+    expect(createResponse.status).toBe(201);
+
+    const updateResponse = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv',
+      { method: 'PUT', body: JSON.stringify({ horas_voadas: 1.4, combustivel_consumo: 500 }) },
+      1,
+      'editor',
+    );
+    expect(updateResponse.status).toBe(200);
+
+    const finalizeResponse = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
+      { method: 'POST' },
+      1,
+      'editor',
+    );
+    expect(finalizeResponse.status).toBe(200);
+  });
+
+  it('registra evento rdv em criacao, atualizacao e finalizacao', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ horas_voadas: 1.25, combustivel_consumo: 500 }),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
+      method: 'POST',
+    });
+
+    const events = db.queryJson<{ tipo_evento: string; descricao: string; metadata_json: string }>(
+      "SELECT tipo_evento, descricao, metadata_json FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' ORDER BY id",
+    );
+
+    expect(events).toHaveLength(3);
+    expect(events.map((event) => event.tipo_evento)).toEqual(['rdv', 'rdv', 'rdv']);
+    expect(events.map((event) => event.descricao)).toEqual([
+      'RDV operacional criado',
+      'RDV operacional atualizado',
+      'RDV operacional com preenchimento finalizado',
+    ]);
+    expect(events[0].metadata_json).toContain('"action":"create"');
+    expect(events[1].metadata_json).toContain('"action":"update"');
+    expect(events[2].metadata_json).toContain('"action":"finalize"');
+  });
+
   it('rejeita campos e termos fora do escopo', async () => {
     const db = createSqliteD1();
 
@@ -472,11 +783,13 @@ describe('controle voos routes', () => {
   });
 
   it('nao referencia dominios externos fora do escopo da fase', () => {
-    const source = readFileSync(routePath, 'utf8');
+    const routeSource = readFileSync(routePath, 'utf8');
+    const testSource = readFileSync(testPath, 'utf8');
     const blocked = ['M' + 'RO', 'FR' + 'MS', 'Records' + ' Core', 'e' + 'DB', 'SDR' + 'Me'];
 
     for (const term of blocked) {
-      expect(source).not.toContain(term);
+      expect(routeSource).not.toContain(term);
+      expect(testSource).not.toContain(term);
     }
   });
 });
