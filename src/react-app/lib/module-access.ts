@@ -30,6 +30,7 @@ const LEGACY_PRESET_MODULES = [
   'lms',
   'hospedagem',
   'mro',
+  'controle_voos',
   'configuracoes_avancadas',
 ];
 
@@ -85,6 +86,15 @@ const MODULE_ID_ALIASES: Record<string, string> = {
   mro_vencimentos: 'mro',
   mro_estoque: 'mro',
   mro_registros: 'mro',
+  controle_voos: 'controle_voos',
+  controle_voos_dashboard: 'controle_voos',
+  controle_voos_voos: 'controle_voos',
+  controle_voos_rdv: 'controle_voos',
+  controle_voos_jornadas: 'controle_voos',
+  controle_voos_indisponibilidades: 'controle_voos',
+  controle_voos_hangaragem: 'controle_voos',
+  controle_voos_relatorios: 'controle_voos',
+  controle_voos_tabelas: 'controle_voos',
 };
 
 export const MODULE_ROUTE_MATCHES: ModuleRouteMatch[] = [
@@ -110,6 +120,7 @@ export const MODULE_ROUTE_MATCHES: ModuleRouteMatch[] = [
   { pathPrefix: '/sistema', moduleKey: 'configuracoes_avancadas' },
   { pathPrefix: '/admin', moduleKey: 'usuarios_empresas' },
   { pathPrefix: '/mro', moduleKey: 'mro' },
+  { pathPrefix: '/controle-voos', moduleKey: 'controle_voos' },
 ];
 
 export function hasExplicitModuleConfig(modulosAtivos: EmpresaModuleState): boolean {
