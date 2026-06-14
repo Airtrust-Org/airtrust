@@ -31,7 +31,7 @@ import {
   LmsStatPill,
   LmsSurface,
 } from './lmsUi';
-import { getAdminCoursePreviewPath } from './lmsAdminPreview';
+import { getAdminCoursePreviewPath, supportsAdminCoursePreview } from './lmsAdminPreview';
 
 export default function LmsCursoDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -48,15 +48,7 @@ export default function LmsCursoDetalhe() {
   const canManage = isAdmin || isGestor;
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const canPreview = Boolean(previewPath);
-  const hasContent = curso
-    ? curso.tipo_conteudo === 'h5p'
-      ? Boolean(curso.scorm_package_r2_prefix)
-      : curso.tipo_conteudo === 'pdf'
-        ? Boolean(curso.pdf_r2_key)
-        : curso.tipo_conteudo === 'pptx'
-          ? Boolean(curso.pptx_r2_key)
-          : Boolean(curso.scorm_launch_file)
-    : false;
+  const hasContent = supportsAdminCoursePreview(curso);
 
   const learningGoals = useMemo(() => {
     if (!curso) return [];
