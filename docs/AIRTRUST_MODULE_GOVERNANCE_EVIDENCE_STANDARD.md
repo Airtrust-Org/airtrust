@@ -581,7 +581,7 @@ Para módulos N0, dados mockados devem ser identificáveis visualmente:
 O Records Core **não existe ainda** no AirTrust. Não há tabela `regulated_records`, não há canonicalização formal, não há ledger A3, não há assinatura regulatória. Este é o principal pré-requisito para qualquer módulo atingir N3.
 
 Lacunas verificadas (conforme Red Team Review):
-- ~~Backup atual usa digest placeholder (`sha256-${uuid}-${Date.now()}`) — não é evidência criptográfica.~~ **RESOLVIDO** em commit `da5177af`: `gerarChecksumBackup` agora computa SHA-256 real via `crypto.subtle.digest` por artefato e por manifesto; teste unitário adicionado em `worker-airtrust/src/__tests__/services/backup-orchestrator.test.ts`.
+- ~~Backup atual usa digest placeholder (`sha256-${uuid}-${Date.now()}`) — não é evidência criptográfica.~~ **RESOLVIDO** em commit `da5177af`: `gerarChecksumBackup` agora computa SHA-256 real via `crypto.subtle.digest` por artefato e por manifesto; teste unitário adicionado em `worker-airtrust/src/__tests__/services/backup-orchestrator.test.ts`. **MITIGADO LOCALMENTE em 2026-06-14**: restore drill local verifica `checksum-manifest.json`, presença, tamanho e SHA-256 dos artefatos com fixtures fake; ver `docs/BACKUP_RESTORE_DRILL.md`.
 - `audit_events_v2` não é ledger imutável — sem `previous_event_hash`, sem trigger de bloqueio. (aberto)
 - Migrations sem governança que impeça remoção acidental de triggers de imutabilidade. (aberto)
 
@@ -899,7 +899,7 @@ Uma página administrativa (`/admin/governance`) deveria exibir:
 | **Divergência entre sistemas** | RDV no AirTrust diverge de jornada no SIGVOOS/FIRA; dois sistemas divergem em fiscalização. | Alta | Alto (divergência indefensável em fiscalização) | Declarar fonte oficial; regra de precedência; sincronização rastreável |
 | **Retrabalho com ANAC** | Operador solicita autorização de uso do eDB ao POI, mas o sistema não tem os requisitos técnicos da Resolução 458. | Alta (se tentar antes de N3) | Muito alto (tempo, custo, credibilidade) | Só buscar autorização do POI após N3 completo e validado por consultor |
 | **Exposição LGPD** | Export fiscal com dados pessoais de tripulantes fora do escopo da fiscalização. | Média | Alto (multa LGPD; dano à reputação) | Escopo mínimo obrigatório; mascaramento fora do escopo; DPO envolvido |
-| **Backup com hash falso declarado como evidência** | ~~Backup atual (digest placeholder)~~ **RESOLVIDO** em `da5177af` — SHA-256 real implementado. Risco remanescente: restore drill ainda não verifica integridade pós-restore dos record_hash. | Baixa (digest corrigido) | Alto (se drill não existir) | Implementar restore drill com verificação de hash (Fase 7) |
+| **Backup com hash falso declarado como evidência** | ~~Backup atual (digest placeholder)~~ **RESOLVIDO** em `da5177af` — SHA-256 real implementado. Restore drill local com manifesto/artefatos fake implementado em 2026-06-14. Risco remanescente: ainda não há restore em staging nem verificação pós-restore de `record_hash`/chain. | Baixa (digest corrigido) | Alto (se drill regulatório não existir) | Evoluir para restore drill de staging com verificação de domínio e Records Core quando existir |
 | **Upgrade de nível sem critérios** | Time classifica FRMS como N3 por pressão comercial, sem Records Core implementado. Gestor apresenta export FRMS como registro regulado. | Média | Muito alto | Este padrão + aprovação de CTO + consultor como portão de N3 |
 
 ---
@@ -924,27 +924,15 @@ Uma página administrativa (`/admin/governance`) deveria exibir:
 - Banners N0 aplicados via PageShell em 9+10 páginas (cobertura 100%).
 - Ações N0 desabilitadas ou marcadas como protótipo em todos os módulos.
 
-### 16.3 Próxima etapa — restore drill (Sonnet 4.6)
+### 16.3 Concluído parcialmente — restore drill local ✅
 
-**O que fazer:** implementar restore drill que verifica integridade dos hashes após restauração. O backup já gera SHA-256 real; agora é preciso provar que o hash é verificável pós-restore.
+**Mitigado em:** 2026-06-14.
 
-**Modelo:** Sonnet 4.6.
+- Verificador local `verifyBackupChecksumManifest` adicionado para validar SHA-256 do manifesto, presença, tamanho e SHA-256 de cada artefato.
+- Teste unitário cobre sucesso, manifesto divergente, byte corrompido, artefato ausente e tamanho divergente.
+- Runbook criado em `docs/BACKUP_RESTORE_DRILL.md`.
 
-**Prompt sugerido:**
-```
-Você está no monorepo AirTrust. Use produção segura (airtrust-production-safe).
-Leia worker-airtrust/src/services/backup/orchestrator.ts e
-worker-airtrust/src/__tests__/services/backup-orchestrator.test.ts.
-
-Objetivo: criar um runbook (docs/) de restore drill que:
-1. Liste os passos para restaurar um backup D1 em ambiente temporário.
-2. Especifique como verificar o checksum-manifest.json pós-restore (recomputar SHA-256
-   de cada artefato e comparar com o manifesto).
-3. Documente o critério de PASS/FAIL (hash idêntico = PASS; divergência = FAIL + ação).
-4. Proponha um script bash de verificação de manifesto (sem executar em produção).
-
-Não alterar código de produção. Não fazer deploy. Apenas documentação e script de verificação.
-```
+**Limite remanescente:** este drill não restaura em D1 temporário, não mede RPO/RTO e não verifica `record_hash`, `manifest_hash` ou chain. Para N3/N4, ainda falta restore drill real em staging descartável com verificação pós-restore de domínio e Records Core.
 
 ### 16.4 Médio prazo — A2 em módulos prioritários (Sonnet 4.6)
 
