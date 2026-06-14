@@ -64,7 +64,7 @@ const BANNER_CONFIG: Record<ModuleMaturityLevel, BannerConfig> = {
     iconTone: 'text-emerald-600 dark:text-emerald-300',
     label: 'Registro regulado',
     description:
-      'Autorização de uso por operador/escopo ainda pode ser necessária.',
+      'A substituição do papel exige autorização formal do POI por operador e escopo.',
   },
   N4: {
     icon: CheckCircle2,
