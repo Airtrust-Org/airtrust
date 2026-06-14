@@ -340,7 +340,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 function mergeCourseIntoCache(qc: ReturnType<typeof useQueryClient>, nextCourse: LmsCurso) {
   qc.setQueryData(lmsKeys.curso(nextCourse.id), nextCourse);
   qc.setQueriesData<{ data: LmsCurso[]; total: number }>(
-    { queryKey: ['lms', 'cursos'] },
+    { queryKey: ['lms', 'cursos'], exact: false },
     (current) => {
       if (!current?.data?.length) {
         return current;
