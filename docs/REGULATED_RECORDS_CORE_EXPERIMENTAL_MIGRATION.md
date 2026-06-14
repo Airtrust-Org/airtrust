@@ -59,8 +59,10 @@ A suite experimental valida:
 - encadeamento `previous_event_hash` -> `event_hash`;
 - deteccao de remocao/reordenacao por recomputacao da chain;
 - bloqueio de link cross-tenant;
+- bloqueio de referencias cross-tenant em versoes, hashes, eventos e `current_version_id`;
 - addendum experimental por nova versao com `base_version_id`;
 - canonicalizacao JSON deterministica;
+- normalizacao Unicode NFC, preservacao de arrays e `null`, e rejeicao explicita de `undefined`, `Date` e numeros nao finitos;
 - SHA-256 estavel sobre payload canonicalizado.
 
 ## O que ela nao valida
@@ -76,12 +78,33 @@ Esta etapa nao prova conformidade regulatoria e nao serve como evidencia ANAC:
 - nao integra com MRO, Controle de Voos, eDB, SDRMe, FRMS ou SGSO;
 - nao mede RPO/RTO;
 - nao cria endpoints ou servicos de aplicacao.
+- nao prova concorrencia real em D1; apenas cobre conflito local por `UNIQUE (empresa_id, chain_scope, chain_sequence)`;
+- nao cria uma tabela de chain head nem Durable Object/queue para serializar selagem;
+- nao executa restore drill nem recomputacao pos-restore em D1;
+
+## Readiness local
+
+Veredito atual: pronta para ser tratada como **promotion candidate de desenvolvimento local**, ainda fora de staging, producao, deploy e qualquer uso regulado.
+
+Motivos:
+
+- a migration esta isolada em `worker-airtrust/migrations_experimental/`;
+- o teste de governanca protege contra retorno acidental para `worker-airtrust/migrations/`;
+- as cinco tabelas do ADR estao presentes e mantem `empresa_id`;
+- os indices principais sao tenant-first quando dependem de consulta por tenant;
+- triggers bloqueiam mutacao destrutiva em registros/versoes selados, ledger, hashes e links ativos;
+- triggers tenant-aware bloqueiam referencias cross-tenant em versoes, hashes, eventos, links e `current_version_id`;
+- a hash chain local cobre sequencia por `(empresa_id, chain_scope)`, repeticao permitida entre empresas e conflito dentro da mesma empresa/scope;
+- canonicalizacao e hash tem testes deterministas locais.
+
+Isso nao autoriza mover para `worker-airtrust/migrations/`. Uma promotion formal para a cadeia local normal deve ser uma fase separada, com nome novo, revisao de rollback, plano de seed/restore local e decisao explicita sobre serializacao da chain.
 
 ## Por que ainda nao serve para ANAC
 
 O Records Core continua inexistente como produto regulado. Esta migration apenas prova, localmente, que o desenho fisico minimo pode ser representado em SQLite/D1 com triggers, chain e canonicalizacao. Antes de qualquer pretensao regulatoria ainda faltam:
 
 - restore drill em staging descartavel com verificacao de `record_hash`, `tenant_chain_hash` e `manifest_hash`;
+- mecanismo formal para evitar bifurcacao de chain em concorrencia real, como retry transacional comprovado, tabela de chain head, Durable Object ou fila por `(empresa_id, chain_scope)`;
 - decisao formal sobre assinatura por tipo de registro;
 - decisao sobre offline, timestamp e PWA vs app nativo;
 - threat model;

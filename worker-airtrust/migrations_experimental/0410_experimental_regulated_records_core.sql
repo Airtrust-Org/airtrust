@@ -232,6 +232,34 @@ BEGIN
   SELECT RAISE(ABORT, 'regulated_records: sealed records cannot be soft-deleted');
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_regulated_records_current_version_same_empresa_insert
+BEFORE INSERT ON regulated_records
+WHEN
+  NEW.current_version_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM regulated_record_versions
+    WHERE id = NEW.current_version_id
+      AND record_id = NEW.id
+      AND empresa_id = NEW.empresa_id
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_records: current_version_id must belong to the same record and empresa_id');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_records_current_version_same_empresa_update
+BEFORE UPDATE OF empresa_id, current_version_id ON regulated_records
+WHEN
+  NEW.current_version_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM regulated_record_versions
+    WHERE id = NEW.current_version_id
+      AND record_id = NEW.id
+      AND empresa_id = NEW.empresa_id
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_records: current_version_id must belong to the same record and empresa_id');
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_regulated_versions_no_update_after_seal
 BEFORE UPDATE ON regulated_record_versions
 WHEN OLD.status = 'SEALED'
@@ -251,6 +279,80 @@ BEFORE UPDATE OF deleted_at, status ON regulated_record_versions
 WHEN NEW.status = 'SEALED' AND NEW.deleted_at IS NOT NULL
 BEGIN
   SELECT RAISE(ABORT, 'regulated_record_versions: sealed versions cannot be soft-deleted');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_versions_same_empresa_insert
+BEFORE INSERT ON regulated_record_versions
+WHEN
+  NOT EXISTS (
+    SELECT 1 FROM regulated_records
+    WHERE id = NEW.record_id AND empresa_id = NEW.empresa_id
+  )
+  OR (
+    NEW.base_version_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM regulated_record_versions
+      WHERE id = NEW.base_version_id
+        AND record_id = NEW.record_id
+        AND empresa_id = NEW.empresa_id
+    )
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_record_versions: record_id and base_version_id must belong to version empresa_id');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_versions_same_empresa_update
+BEFORE UPDATE OF empresa_id, record_id, base_version_id ON regulated_record_versions
+WHEN
+  NOT EXISTS (
+    SELECT 1 FROM regulated_records
+    WHERE id = NEW.record_id AND empresa_id = NEW.empresa_id
+  )
+  OR (
+    NEW.base_version_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM regulated_record_versions
+      WHERE id = NEW.base_version_id
+        AND record_id = NEW.record_id
+        AND empresa_id = NEW.empresa_id
+    )
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_record_versions: record_id and base_version_id must belong to version empresa_id');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_hashes_same_empresa_insert
+BEFORE INSERT ON regulated_record_hashes
+WHEN
+  NOT EXISTS (
+    SELECT 1 FROM regulated_records
+    WHERE id = NEW.record_id AND empresa_id = NEW.empresa_id
+  )
+  OR NOT EXISTS (
+    SELECT 1 FROM regulated_record_versions
+    WHERE id = NEW.version_id
+      AND record_id = NEW.record_id
+      AND empresa_id = NEW.empresa_id
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_record_hashes: record_id and version_id must belong to hash empresa_id');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_hashes_same_empresa_update
+BEFORE UPDATE OF empresa_id, record_id, version_id ON regulated_record_hashes
+WHEN
+  NOT EXISTS (
+    SELECT 1 FROM regulated_records
+    WHERE id = NEW.record_id AND empresa_id = NEW.empresa_id
+  )
+  OR NOT EXISTS (
+    SELECT 1 FROM regulated_record_versions
+    WHERE id = NEW.version_id
+      AND record_id = NEW.record_id
+      AND empresa_id = NEW.empresa_id
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_record_hashes: record_id and version_id must belong to hash empresa_id');
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_regulated_hashes_no_update
@@ -275,6 +377,68 @@ CREATE TRIGGER IF NOT EXISTS trg_regulated_audit_no_delete
 BEFORE DELETE ON regulated_audit_events
 BEGIN
   SELECT RAISE(ABORT, 'regulated_audit_events: ledger rows cannot be deleted');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_audit_refs_same_empresa_insert
+BEFORE INSERT ON regulated_audit_events
+WHEN
+  (
+    NEW.record_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM regulated_records
+      WHERE id = NEW.record_id AND empresa_id = NEW.empresa_id
+    )
+  )
+  OR (
+    NEW.version_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM regulated_record_versions
+      WHERE id = NEW.version_id AND empresa_id = NEW.empresa_id
+    )
+  )
+  OR (
+    NEW.record_id IS NOT NULL
+    AND NEW.version_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM regulated_record_versions
+      WHERE id = NEW.version_id
+        AND record_id = NEW.record_id
+        AND empresa_id = NEW.empresa_id
+    )
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_audit_events: record_id and version_id must belong to event empresa_id');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_audit_refs_same_empresa_update
+BEFORE UPDATE OF empresa_id, record_id, version_id ON regulated_audit_events
+WHEN
+  (
+    NEW.record_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM regulated_records
+      WHERE id = NEW.record_id AND empresa_id = NEW.empresa_id
+    )
+  )
+  OR (
+    NEW.version_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM regulated_record_versions
+      WHERE id = NEW.version_id AND empresa_id = NEW.empresa_id
+    )
+  )
+  OR (
+    NEW.record_id IS NOT NULL
+    AND NEW.version_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM regulated_record_versions
+      WHERE id = NEW.version_id
+        AND record_id = NEW.record_id
+        AND empresa_id = NEW.empresa_id
+    )
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_audit_events: record_id and version_id must belong to event empresa_id');
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_regulated_links_same_empresa_insert

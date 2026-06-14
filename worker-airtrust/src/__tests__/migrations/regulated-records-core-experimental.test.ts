@@ -59,13 +59,21 @@ const requiredTriggers = [
   'trg_regulated_records_no_update_after_seal',
   'trg_regulated_records_no_delete_after_seal',
   'trg_regulated_records_no_soft_delete_when_sealed',
+  'trg_regulated_records_current_version_same_empresa_insert',
+  'trg_regulated_records_current_version_same_empresa_update',
   'trg_regulated_versions_no_update_after_seal',
   'trg_regulated_versions_no_delete_after_seal',
   'trg_regulated_versions_no_soft_delete_when_sealed',
+  'trg_regulated_versions_same_empresa_insert',
+  'trg_regulated_versions_same_empresa_update',
+  'trg_regulated_hashes_same_empresa_insert',
+  'trg_regulated_hashes_same_empresa_update',
   'trg_regulated_hashes_no_update',
   'trg_regulated_hashes_no_delete',
   'trg_regulated_audit_no_update',
   'trg_regulated_audit_no_delete',
+  'trg_regulated_audit_refs_same_empresa_insert',
+  'trg_regulated_audit_refs_same_empresa_update',
   'trg_regulated_links_same_empresa_insert',
   'trg_regulated_links_same_empresa_update',
   'trg_regulated_links_no_update_active',
@@ -345,6 +353,89 @@ describe('migration 0410 experimental regulated records core', () => {
     );
   });
 
+  it('blocks cross-tenant record, version, hash and audit references', () => {
+    const { sqlite, sqliteResult } = createDb();
+    insertRecord(sqlite, 'record-tenant-a', 10);
+    insertRecord(sqlite, 'record-tenant-b', 11);
+    insertVersion(sqlite, {
+      id: 'version-tenant-b',
+      empresaId: 11,
+      recordId: 'record-tenant-b',
+      versionNumber: 1,
+      payload: '{"value":"tenant-b"}',
+    });
+
+    expectSqlFailure(
+      sqliteResult("UPDATE regulated_records SET current_version_id = 'version-tenant-b' WHERE id = 'record-tenant-a';"),
+      'regulated_records: current_version_id must belong to the same record and empresa_id',
+    );
+
+    expectSqlFailure(
+      sqliteResult(`
+        INSERT INTO regulated_record_versions (
+          id, empresa_id, record_id, version_number, version_reason,
+          canonical_payload_json, canonical_payload_size, canonical_schema_version,
+          canonicalization_version, status, created_by
+        ) VALUES (
+          'version-cross-tenant', 11, 'record-tenant-a', 1, 'INITIAL_SEAL',
+          '{"value":"wrong-tenant"}', 24, 'exp.schema.v1', 'canonicalizer.v1', 'SEALED', 101
+        );
+      `),
+      'regulated_record_versions: record_id and base_version_id must belong to version empresa_id',
+    );
+
+    insertVersion(sqlite, {
+      id: 'version-tenant-a',
+      empresaId: 10,
+      recordId: 'record-tenant-a',
+      versionNumber: 1,
+      payload: '{"value":"tenant-a"}',
+    });
+
+    expectSqlFailure(
+      sqliteResult(`
+        INSERT INTO regulated_record_versions (
+          id, empresa_id, record_id, version_number, version_reason, base_version_id,
+          canonical_payload_json, canonical_payload_size, canonical_schema_version,
+          canonicalization_version, status, created_by
+        ) VALUES (
+          'version-base-cross-tenant', 11, 'record-tenant-b', 2, 'ADDENDUM_CORRECTION', 'version-tenant-a',
+          '{"value":"wrong-base"}', 22, 'exp.schema.v1', 'canonicalizer.v1', 'SEALED', 101
+        );
+      `),
+      'regulated_record_versions: record_id and base_version_id must belong to version empresa_id',
+    );
+
+    expectSqlFailure(
+      sqliteResult(`
+        INSERT INTO regulated_record_hashes (
+          id, empresa_id, record_id, version_id, record_type, canonicalization_version,
+          canonical_schema_version, payload_hash, record_hash, tenant_chain_hash,
+          chain_scope, chain_sequence, computed_by
+        ) VALUES (
+          'hash-cross-tenant', 11, 'record-tenant-a', 'version-tenant-a', 'EXPERIMENTAL_RECORD',
+          'canonicalizer.v1', 'exp.schema.v1', '${hexA}', '${hexB}', '${hexC}',
+          'EXPERIMENTAL_RECORD', 1, 101
+        );
+      `),
+      'regulated_record_hashes: record_id and version_id must belong to hash empresa_id',
+    );
+
+    expectSqlFailure(
+      sqliteResult(`
+        INSERT INTO regulated_audit_events (
+          id, empresa_id, record_id, version_id, event_type, event_category, actor_type,
+          event_payload_json, event_hash, tenant_chain_hash, chain_scope, chain_sequence
+        ) VALUES (
+          'event-cross-tenant', 11, 'record-tenant-a', 'version-tenant-a',
+          'TEST_EVENT', 'REGULATED_RECORDS_CORE', 'system',
+          '{"event":"wrong-tenant"}', '${hexA}', '${hexB}', 'EXPERIMENTAL_RECORD', 1
+        );
+      `),
+      'regulated_audit_events: record_id and version_id must belong to event empresa_id',
+    );
+  });
+
   it('enforces monotonic sequence uniqueness per empresa_id and chain_scope', async () => {
     const { sqlite, sqliteResult } = createDb();
     const first = await insertAuditEvent(sqlite, {
@@ -561,6 +652,14 @@ describe('regulated records canonicalization helper', () => {
     expect(canonicalizeJson({ values: [1, 2] })).toBe('{"values":[1,2]}');
   });
 
+  it('normalizes Unicode strings to NFC and preserves null values', () => {
+    const composed = canonicalizeJson({ label: 'Caf\u00e9', optional: null });
+    const decomposed = canonicalizeJson({ optional: null, label: 'Cafe\u0301' });
+
+    expect(composed).toBe(decomposed);
+    expect(composed).toBe('{"label":"Café","optional":null}');
+  });
+
   it('excludes volatile fields from canonical material', () => {
     const first = canonicalizeJson({
       aircraft_prefix: 'PR-AAA',
@@ -579,6 +678,12 @@ describe('regulated records canonicalization helper', () => {
 
   it('rejects undefined explicitly', () => {
     expect(() => canonicalizeJson({ value: undefined })).toThrow('Undefined is not allowed');
+  });
+
+  it('rejects Date objects and non-finite numbers explicitly', () => {
+    expect(() => canonicalizeJson({ created_at: new Date('2026-06-14T00:00:00.000Z') })).toThrow('Date objects are not allowed');
+    expect(() => canonicalizeJson({ value: Number.NaN })).toThrow('Non-finite numbers are not allowed');
+    expect(() => canonicalizeJson({ value: Number.POSITIVE_INFINITY })).toThrow('Non-finite numbers are not allowed');
   });
 
   it('changes hash when relevant data changes and includes schema/canonicalizer versions', async () => {
@@ -602,10 +707,16 @@ describe('regulated records canonicalization helper', () => {
       canonicalizationVersion: 'canonicalizer.v1',
       payload: { value: 'A' },
     });
+    const changedCanonicalizer = await hashCanonicalPayload({
+      canonicalSchemaVersion: 'exp.schema.v1',
+      canonicalizationVersion: 'canonicalizer.v2',
+      payload: { value: 'A' },
+    });
 
     expect(first.payloadHash).toBe(reordered.payloadHash);
     expect(first.payloadHash).not.toBe(changedPayload.payloadHash);
     expect(first.payloadHash).not.toBe(changedSchema.payloadHash);
+    expect(first.payloadHash).not.toBe(changedCanonicalizer.payloadHash);
     expect(first.canonicalJson).toContain('"canonical_schema_version":"exp.schema.v1"');
     expect(first.canonicalJson).toContain('"canonicalization_version":"canonicalizer.v1"');
   });
