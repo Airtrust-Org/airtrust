@@ -20,20 +20,13 @@ import {
   RefreshCcw,
   Wrench,
   Plane,
-  Clock,
-  Package,
   ChevronDown,
   GraduationCap,
-  Cpu,
-  ClipboardList,
-  MessagesSquare,
   LayoutGrid,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
 import { VersionBadge } from './VersionBadge';
-import { NotificacoesSistema } from './NotificacoesSistema';
-import { NotificacoesEscala } from './NotificacoesEscala';
 import { useSystemSettings } from '../hooks/useSystemSettings';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../config/api';
@@ -48,6 +41,8 @@ interface AppLayoutProps {
 const NAV_ACTIVE = 'whitespace-nowrap bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200';
 const NAV_INACTIVE =
   'whitespace-nowrap text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100';
+const PREVIEW_BADGE_CLASS =
+  'ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
@@ -168,8 +163,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     : ({ '--header-height': '48px' } as React.CSSProperties);
 
   const themeActionLabel = isDark ? 'Ativar modo claro' : 'Ativar modo escuro';
-  const themeStateLabel = isDark ? 'Escuro' : 'Claro';
-
   const handleHardRefresh = async () => {
     if (hardRefreshLoading) return;
     setHardRefreshLoading(true);
@@ -203,7 +196,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <img
                 src={logoSrc}
                 alt="AirTrust"
-                className="h-6 sm:h-7 md:h-8 w-[150px] object-contain object-left"
+                className="h-7 w-[160px] object-contain object-left sm:h-8 sm:w-[172px] md:h-9 md:w-[188px]"
               />
             </Link>
 
@@ -322,9 +315,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
               {!isAluno && !isInstrutor && showSgso && (
                 <Link
                   to="/sgso"
-                  className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/sgso') ? NAV_ACTIVE : NAV_INACTIVE}`}
+                  className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/sgso') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   SGSO
+                  <span className={PREVIEW_BADGE_CLASS}>PRÉVIA</span>
                 </Link>
               )}
               {!isAluno && !isInstrutor && showMro && (
@@ -333,7 +327,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/mro') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   Manutenção
-                  <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
+                  <span className={PREVIEW_BADGE_CLASS}>PRÉVIA</span>
                 </Link>
               )}
               {!isAluno && !isInstrutor && showControleVoos && (
@@ -394,11 +388,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 type="button"
                 onClick={() => void handleHardRefresh()}
                 disabled={hardRefreshLoading}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
-                title="Use se a tela parecer desatualizada."
+                aria-label={hardRefreshLoading ? 'Atualizando app' : 'Atualizar app'}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                title={hardRefreshLoading ? 'Atualizando app' : 'Atualizar app'}
               >
                 <RefreshCcw className={`h-3.5 w-3.5 ${hardRefreshLoading ? 'animate-spin' : ''}`} />
-                {hardRefreshLoading ? 'Atualizando...' : 'Atualizar app'}
               </button>
               <button
                 type="button"
@@ -406,15 +400,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 aria-label={themeActionLabel}
                 aria-pressed={isDark}
                 title={themeActionLabel}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-2.5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
               >
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm dark:bg-blue-500/15 dark:text-blue-200">
                   {isDark ? <MoonStar className="h-3.5 w-3.5" /> : <SunMedium className="h-3.5 w-3.5" />}
                 </span>
-                <span className="pr-1 text-xs font-semibold">{themeStateLabel}</span>
               </button>
-              <NotificacoesEscala />
-              <NotificacoesSistema />
               {(isAdmin || isGestor) && (
                 <button
                   className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -646,6 +637,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 >
                   <ShieldCheck className="h-4 w-4 shrink-0" />
                   SGSO
+                  <span className={PREVIEW_BADGE_CLASS}>PRÉVIA</span>
                 </Link>
               )}
               {!isAluno && !isInstrutor && showMro && (
@@ -654,7 +646,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/mro') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   Manutenção
-                  <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
+                  <span className={PREVIEW_BADGE_CLASS}>PRÉVIA</span>
                 </Link>
               )}
               {!isAluno && !isInstrutor && showControleVoos && (
@@ -741,10 +733,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
               >
                 <Settings className="w-5 h-5" />
                 {t('layout.actions.settings')}
-              </button>
-              <button className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
-                <Bell className="w-5 h-5" />
-                {t('layout.mobile.notifications')}
               </button>
               <button
                 onClick={() => {
