@@ -1,0 +1,482 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Hono } from 'hono';
+import type { Env } from '../../types';
+import { errorHandler } from '../../middleware/error-handler';
+
+vi.mock('../../middleware/auth', () => ({
+  auth:
+    () =>
+    async (c: any, next: () => Promise<void>) => {
+      if (!c.req.header('Authorization')) {
+        return c.json({ success: false, error: 'Token de autenticacao nao fornecido' }, 401);
+      }
+
+      const empresaId = Number(c.req.header('x-test-empresa-id') || 1);
+      const role = String(c.req.header('x-test-role') || 'admin').toLowerCase();
+      c.set('userId', 10);
+      c.set('empresaId', empresaId);
+      c.set('userRole', role);
+      c.set('tenantContext', {
+        empresaId,
+        empresaCodigo: `empresa-${empresaId}`,
+        empresaNome: `Empresa ${empresaId}`,
+        role,
+        plano: 'pro',
+        permissions: role === 'viewer' ? ['read'] : ['read', 'write'],
+      });
+      await next();
+    },
+}));
+
+vi.mock('../../middleware/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/tenant')>();
+  const hierarchy: Record<string, number> = {
+    admin: 100,
+    manager: 80,
+    instructor: 60,
+    editor: 50,
+    student: 20,
+    viewer: 10,
+  };
+  return {
+    ...actual,
+    getEmpresaId: (c: any) => Number(c.get('tenantContext')?.empresaId || c.get('empresaId') || 0),
+    checkPermission: (c: any, minimumRole: string) => {
+      const role = String(c.get('tenantContext')?.role || c.get('userRole') || 'viewer');
+      return (hierarchy[role] || 0) >= (hierarchy[minimumRole] || 0);
+    },
+  };
+});
+
+vi.mock('../../utils/auditoria', () => ({
+  registrarAuditoria: vi.fn(async () => undefined),
+  extrairUsuarioAuditoria: () => ({ usuario_id: '10', usuario_nome: 'Teste' }),
+}));
+
+import controleVoosRoutes from '../../routes/controle-voos';
+
+type SqliteD1 = D1Database & {
+  databasePath: string;
+  tempDir: string;
+  queryJson: <T>(sql: string) => T[];
+};
+
+const tempDirs: string[] = [];
+const migrationPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../migrations/0410_controle_voos_n1_schema.sql',
+);
+const routePath = join(dirname(fileURLToPath(import.meta.url)), '../../routes/controle-voos.ts');
+
+function sqlString(value: unknown): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'NULL';
+  if (typeof value === 'boolean') return value ? '1' : '0';
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function interpolate(sql: string, args: unknown[]): string {
+  let index = 0;
+  return sql.replace(/\?/g, () => sqlString(args[index++]));
+}
+
+function runSql(databasePath: string, sql: string) {
+  const result = spawnSync('sqlite3', [databasePath], {
+    input: sql,
+    encoding: 'utf8',
+  });
+  expect(result.status, result.stderr).toBe(0);
+  return result.stdout.trim();
+}
+
+function queryJson<T>(databasePath: string, sql: string): T[] {
+  const result = spawnSync('sqlite3', ['-json', databasePath, sql], {
+    encoding: 'utf8',
+  });
+  expect(result.status, result.stderr).toBe(0);
+  return result.stdout.trim() ? (JSON.parse(result.stdout) as T[]) : [];
+}
+
+function createSqliteD1(): SqliteD1 {
+  const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-cv-routes-'));
+  const databasePath = join(tempDir, 'routes.sqlite');
+  tempDirs.push(tempDir);
+
+  runSql(databasePath, 'PRAGMA foreign_keys = ON;');
+  runSql(databasePath, readFileSync(migrationPath, 'utf8'));
+  seed(databasePath);
+
+  const db = {
+    databasePath,
+    tempDir,
+    queryJson: <T>(sql: string) => queryJson<T>(databasePath, sql),
+    prepare(sql: string) {
+      let binds: unknown[] = [];
+      const statement = {
+        bind: (...args: unknown[]) => {
+          binds = args;
+          return statement;
+        },
+        first: async <T = unknown>() => {
+          const rows = queryJson<T>(databasePath, interpolate(sql, binds));
+          return rows[0] || null;
+        },
+        all: async <T = unknown>() => ({
+          results: queryJson<T>(databasePath, interpolate(sql, binds)),
+        }),
+        run: async () => {
+          runSql(databasePath, interpolate(sql, binds));
+          const lastId = sql.includes('INSERT INTO cv_voos')
+            ? queryJson<{ id: number }>(
+                databasePath,
+                'SELECT id FROM cv_voos ORDER BY id DESC LIMIT 1',
+              )[0]?.id
+            : queryJson<{ id: number }>(
+                databasePath,
+                'SELECT id FROM cv_voo_eventos ORDER BY id DESC LIMIT 1',
+              )[0]?.id;
+          return { meta: { changes: 1, last_row_id: lastId || 0 } };
+        },
+      };
+      return statement;
+    },
+  } as unknown as SqliteD1;
+
+  return db;
+}
+
+function seed(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      INSERT INTO cv_aeroportos (id, empresa_id, codigo, codigo_icao, nome, tipo, ativo, ordem)
+      VALUES
+        (101, 1, 'SBRJ', 'SBRJ', 'Santos Dumont', 'aeroporto', 1, 1),
+        (102, 1, 'SBSP', 'SBSP', 'Congonhas', 'aeroporto', 1, 2),
+        (103, 1, 'SBPL01', 'SBPL01', 'Plataforma P-01', 'plataforma', 1, 3),
+        (201, 2, 'SBBR', 'SBBR', 'Brasilia', 'aeroporto', 1, 1),
+        (202, 2, 'SBCF', 'SBCF', 'Confins', 'aeroporto', 1, 2);
+
+      INSERT INTO cv_tipos_voo (id, empresa_id, codigo, nome, ativo, ordem)
+      VALUES
+        (301, 1, 'REG', 'Regular', 1, 1),
+        (302, 2, 'REG', 'Regular B', 1, 1);
+
+      INSERT INTO cv_naturezas_voo (id, empresa_id, codigo, nome, ativo, ordem)
+      VALUES
+        (401, 1, 'PAX', 'Passageiro', 1, 1),
+        (402, 2, 'PAX', 'Passageiro B', 1, 1);
+
+      INSERT INTO cv_motivos_operacionais (id, empresa_id, codigo, nome, tipo, ativo, ordem)
+      VALUES
+        (501, 1, 'WX', 'Meteorologia', 'cancelamento', 1, 1),
+        (502, 1, 'OPS', 'Ajuste operacional', 'geral', 1, 2),
+        (503, 2, 'WX', 'Meteorologia B', 'cancelamento', 1, 1);
+
+      INSERT INTO cv_voos (
+        id, empresa_id, prefixo, data_programacao, origem_id, destino_id,
+        tipo_voo_id, natureza_voo_id, horario_previsto_partida,
+        horario_previsto_chegada, status, observacoes, created_by, updated_by
+      ) VALUES
+        (
+          601, 1, 'ATX-1001', '2026-06-14', 101, 102,
+          301, 401, '2026-06-14T10:00:00Z',
+          '2026-06-14T11:00:00Z', 'planejado', 'Tenant A', 10, 10
+        ),
+        (
+          602, 1, 'ATX-1002', '2026-06-15', 102, 103,
+          301, 401, '2026-06-15T10:00:00Z',
+          '2026-06-15T11:00:00Z', 'liberado_operacionalmente', 'Tenant A 2', 10, 10
+        ),
+        (
+          701, 2, 'BTX-2001', '2026-06-14', 201, 202,
+          302, 402, '2026-06-14T12:00:00Z',
+          '2026-06-14T13:00:00Z', 'planejado', 'Tenant B', 20, 20
+        );
+    `,
+  );
+}
+
+function createApp() {
+  const app = new Hono<{ Bindings: Env }>();
+  app.onError(errorHandler);
+  app.route('/api/controle-voos', controleVoosRoutes);
+  return app;
+}
+
+function createEnv(db: D1Database): Env {
+  return {
+    DB: db,
+    BUCKET: {} as R2Bucket,
+    JWT_SECRET: 'test-secret',
+    ENVIRONMENT: 'test' as Env['ENVIRONMENT'],
+    API_URL: 'http://localhost',
+    FRONTEND_URL: 'http://localhost:3000',
+    DEBUG: 'false',
+    LOG_LEVEL: 'error',
+  };
+}
+
+async function request(
+  db: D1Database,
+  path: string,
+  init: RequestInit = {},
+  empresaId = 1,
+  role = 'admin',
+) {
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', 'Bearer test');
+  headers.set('x-test-empresa-id', String(empresaId));
+  headers.set('x-test-role', role);
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+
+  return createApp().fetch(
+    new Request(`http://localhost${path}`, { ...init, headers }),
+    createEnv(db),
+    {} as ExecutionContext,
+  );
+}
+
+function validFlightPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    prefixo: 'ATX-2099',
+    data_programacao: '2026-06-16',
+    origem_id: 101,
+    destino_id: 102,
+    tipo_voo_id: 301,
+    natureza_voo_id: 401,
+    horario_previsto_partida: '2026-06-16T10:00:00Z',
+    horario_previsto_chegada: '2026-06-16T11:00:00Z',
+    observacoes: 'Uso interno',
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  while (tempDirs.length > 0) {
+    rmSync(tempDirs.pop() || '', { recursive: true, force: true });
+  }
+});
+
+describe('controle voos routes', () => {
+  it('cria voo valido e registra evento operacional', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload()),
+    });
+
+    expect(response.status).toBe(201);
+    const body = await response.json() as { data: { id: number; empresa_id: number; prefixo: string } };
+    expect(body.data).toMatchObject({ empresa_id: 1, prefixo: 'ATX-2099' });
+
+    const events = db.queryJson<{ tipo_evento: string; status_novo: string }>(
+      `SELECT tipo_evento, status_novo FROM cv_voo_eventos WHERE voo_id = ${body.data.id}`,
+    );
+    expect(events).toEqual([{ tipo_evento: 'sistema', status_novo: 'planejado' }]);
+  });
+
+  it('lista somente voos do tenant atual com limite maximo', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos?limit=500');
+    const body = await response.json() as {
+      data: Array<{ empresa_id: number; prefixo: string }>;
+      pagination: { limit: number; total: number };
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.pagination).toMatchObject({ limit: 100, total: 2 });
+    expect(body.data.map((flight) => flight.empresa_id)).toEqual([1, 1]);
+    expect(body.data.map((flight) => flight.prefixo)).not.toContain('BTX-2001');
+  });
+
+  it('retorna detalhe por id respeitando soft delete', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { id: 601, empresa_id: 1, prefixo: 'ATX-1001' },
+    });
+
+    runSql(db.databasePath, "UPDATE cv_voos SET deleted_at = datetime('now') WHERE id = 601");
+    const deletedResponse = await request(db, '/api/controle-voos/voos/601');
+    expect(deletedResponse.status).toBe(404);
+  });
+
+  it('aplica patch basico e grava evento', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ observacoes: 'Revisao operacional' }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: { id: 601, observacoes: 'Revisao operacional' },
+    });
+    expect(
+      db.queryJson<{ total: number }>(
+        "SELECT COUNT(*) AS total FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'observacao'",
+      ),
+    ).toEqual([{ total: 1 }]);
+  });
+
+  it('aceita transicao de status basica', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601/status', {
+      method: 'POST',
+      body: JSON.stringify({ status: 'liberado_operacionalmente' }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: { id: 601, status: 'liberado_operacionalmente' },
+    });
+  });
+
+  it('rejeita transicao de status nao permitida', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601/status', {
+      method: 'POST',
+      body: JSON.stringify({ status: 'pousado' }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_INVALID_TRANSITION',
+    });
+  });
+
+  it('rejeita cancelamento sem motivo operacional', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601/status', {
+      method: 'POST',
+      body: JSON.stringify({ status: 'cancelado' }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_CANCEL_REASON_REQUIRED',
+    });
+  });
+
+  it('lista catalogos permitidos por tenant', async () => {
+    const db = createSqliteD1();
+
+    for (const nome of ['aeroportos', 'tipos-voo', 'naturezas-voo', 'motivos-operacionais']) {
+      const response = await request(db, `/api/controle-voos/catalogos/${nome}`);
+      const body = await response.json() as { data: Array<{ id: number }>; meta: { count: number } };
+
+      expect(response.status).toBe(200);
+      expect(body.meta.count).toBeGreaterThan(0);
+      expect(body.data.some((item) => item.id >= 200 && item.id < 300)).toBe(false);
+    }
+  });
+
+  it('empresa A nao acessa voo da empresa B', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/701', {}, 1);
+    expect(response.status).toBe(404);
+
+    const updateResponse = await request(
+      db,
+      '/api/controle-voos/voos/701',
+      { method: 'PATCH', body: JSON.stringify({ observacoes: 'Tentativa' }) },
+      1,
+    );
+    expect(updateResponse.status).toBe(404);
+  });
+
+  it('viewer nao cria nem edita', async () => {
+    const db = createSqliteD1();
+
+    const createResponse = await request(
+      db,
+      '/api/controle-voos/voos',
+      { method: 'POST', body: JSON.stringify(validFlightPayload()) },
+      1,
+      'viewer',
+    );
+    expect(createResponse.status).toBe(403);
+
+    const patchResponse = await request(
+      db,
+      '/api/controle-voos/voos/601',
+      { method: 'PATCH', body: JSON.stringify({ observacoes: 'x' }) },
+      1,
+      'viewer',
+    );
+    expect(patchResponse.status).toBe(403);
+  });
+
+  it('editor cria e edita', async () => {
+    const db = createSqliteD1();
+
+    const createResponse = await request(
+      db,
+      '/api/controle-voos/voos',
+      { method: 'POST', body: JSON.stringify(validFlightPayload({ prefixo: 'ATX-3000' })) },
+      1,
+      'editor',
+    );
+    expect(createResponse.status).toBe(201);
+
+    const patchResponse = await request(
+      db,
+      '/api/controle-voos/voos/601',
+      { method: 'PATCH', body: JSON.stringify({ observacoes: 'Editor ok' }) },
+      1,
+      'editor',
+    );
+    expect(patchResponse.status).toBe(200);
+  });
+
+  it('rejeita campos e termos fora do escopo', async () => {
+    const db = createSqliteD1();
+
+    const fieldResponse = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ empresa_id: 99 })),
+    });
+    expect(fieldResponse.status).toBe(400);
+    await expect(fieldResponse.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_FORBIDDEN_FIELD',
+    });
+
+    const termResponse = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ observacoes: 'sem ' + 'assi' + 'natura' })),
+    });
+    expect(termResponse.status).toBe(400);
+    await expect(termResponse.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SCOPE_TERM',
+    });
+  });
+
+  it('nao referencia dominios externos fora do escopo da fase', () => {
+    const source = readFileSync(routePath, 'utf8');
+    const blocked = ['M' + 'RO', 'FR' + 'MS', 'Records' + ' Core', 'e' + 'DB', 'SDR' + 'Me'];
+
+    for (const term of blocked) {
+      expect(source).not.toContain(term);
+    }
+  });
+});
