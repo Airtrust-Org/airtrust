@@ -24,7 +24,7 @@ export default function ControleVoosVoos() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="Voos — Programação"
-            description="Voos programados, em execução e realizados — dados reais N1"
+            description="Voos programados, em execução e realizados com dados reais N1 para uso operacional interno"
           >
             <button
               disabled

@@ -23,6 +23,10 @@ nao substitui Diario de Bordo, nao e eDB, nao e SDRMe, nao executa RAS e nao est
 homologado, certificado ou autorizado pela ANAC. Relatorios e exports futuros devem carregar
 disclaimer de uso operacional interno e nao fiscal.
 
+Setup local seguro do worker: usar `npm run setup:local`, que deve aplicar a migration
+`0410_controle_voos_n1_schema.sql` no D1 local (`wrangler.dev.toml`, `--local`) e popular
+catalogos/voos minimos de demonstracao N1 sem tocar em staging ou producao.
+
 O backend substitui os seguintes mocks atuais:
 
 - `MOCK_VOOS` por `cv_voos`.

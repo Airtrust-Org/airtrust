@@ -239,9 +239,9 @@ export const PRODUCT_MODULES: ProductModule[] = [
     status: 'beta',
     defaultForPilot: false,
     description: 'Programação de voos, tripulação, RDV, jornada, indisponibilidade e relatórios operacionais.',
-    ...prototypeModuleGovernance(
-      'Papel / OCC (estado atual).',
-      'Frontend navegavel com dados demonstrativos; nao utilizar como registro oficial.',
+    ...operationalModuleGovernance(
+      'AirTrust (programacao, voos, dashboard OCC e RDV operacional internos).',
+      'Uso operacional interno; nao regulado, nao fiscal e sem substituicao de registros oficiais da operacao.',
     ),
   },
 ];

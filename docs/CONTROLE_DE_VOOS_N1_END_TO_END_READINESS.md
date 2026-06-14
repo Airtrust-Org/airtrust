@@ -1,5 +1,14 @@
 # Controle de Voos N1 — End-to-End Readiness
 
+> Addendum de fechamento dos bloqueios obrigatórios — 2026-06-14
+>
+> Após a correção desta rodada, os três bloqueios obrigatórios do readiness foram fechados:
+> 1. o setup local seguro passou a aplicar `0410_controle_voos_n1_schema.sql` e um seed mínimo local de `cv_*`, eliminando o erro `D1_ERROR: no such table: cv_voos` no fluxo local;
+> 2. as telas conectadas ao backend passaram a se apresentar como **N1/A1 operacional interno**, enquanto as telas ainda mockadas seguem marcadas explicitamente como demonstrativas;
+> 3. a tela de detalhe do RDV passou a permitir criar, editar e finalizar o preenchimento operacional ponta a ponta, respeitando `data: null`, `rascunho` e `preenchimento_finalizado`.
+>
+> **Veredito atualizado desta fase:** **pronto com ressalvas** para piloto interno controlado, sujeito aos riscos remanescentes listados neste documento e às validações locais completas.
+
 > Tipo: validacao macro frontend + backend + governanca
 > Data: 2026-06-14
 > Escopo: readiness para piloto interno controlado
@@ -7,7 +16,7 @@
 
 ## Veredito
 
-**Nao pronto** para piloto interno controlado no estado atual.
+**Pronto com ressalvas** para piloto interno controlado no estado corrigido desta fase.
 
 ### Motivo executivo
 
