@@ -352,15 +352,7 @@ export function LmsCourseArtwork({
               <GraduationCap className="h-5 w-5" />
             </div>
           </>
-        ) : (
-          <>
-            <div
-              className={`flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 ${thumbnailUrl ? 'bg-white/14 text-white backdrop-blur-sm' : meta.artworkClass}`}
-            >
-              {meta.icon}
-            </div>
-          </>
-        )}
+        ) : null}
       </div>
       {typeof progress === 'number' ? (
         <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-100">
