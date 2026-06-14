@@ -218,7 +218,6 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
       label: 'Controle de Voos',
       icon: 'Plane',
       expandable: true,
-      badge: 'Prévia',
       children: [
         { id: 'controle_voos-dashboard', label: 'Dashboard OCC', path: '/controle-voos' },
         { id: 'controle_voos-voos', label: 'Voos', path: '/controle-voos/voos' },

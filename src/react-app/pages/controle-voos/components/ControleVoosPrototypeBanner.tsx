@@ -6,12 +6,12 @@ export default function ControleVoosPrototypeBanner() {
 
   return (
     <ModuleGovernanceBanner
-      title="Módulo Controle de Voos em prévia"
+      title="Módulo Controle de Voos"
       maturityLevel={module.maturityLevel}
       evidenceLevel={module.evidenceLevel}
       isPrototype={module.isPrototype}
       isRegulated={module.isRegulated}
-      description="Dados demonstrativos. Não utilizar como registro oficial de voo, RDV, jornada, despacho ou fiscalização."
+      description="Uso operacional interno com dados reais N1. Não regulado. Não substitui registros oficiais da operação."
     />
   );
 }

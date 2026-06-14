@@ -90,7 +90,7 @@ export default function ControleVoosDashboard() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="Painel Operacional — Controle de Voos"
-            description="Uso operacional interno — dados reais. Não regulado. Não fiscal."
+            description="Uso operacional interno com dados reais N1. Não regulado. Não fiscal. Não substitui Diário de Bordo, eDB ou SDRMe."
           />
 
           {isLoading && (

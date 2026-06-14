@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Clock, Plane, Droplets, AlertTriangle, CheckCircle, Download, Ban } from 'lucide-react';
+import { Clock, Plane, Droplets, AlertTriangle, CheckCircle } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
@@ -10,7 +10,9 @@ import {
   useControleVoosVoo,
   useControleVoosRdv,
   useControleVoosAeroportos,
+  useSalvarRdv,
   useFinalizarPreenchimentoRdv,
+  type CvRdv,
   type CvAeroporto,
 } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime, formatTime, formatHours, formatCombustivel } from './data/controleVoosUtils';
@@ -19,17 +21,87 @@ function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
 }
 
+type RdvFormState = {
+  numero: string;
+  data_voo: string;
+  horario_decolagem_real: string;
+  horario_pouso_real: string;
+  horas_voadas: string;
+  numero_pousos: string;
+  ciclos: string;
+  combustivel_decolagem: string;
+  combustivel_pouso: string;
+  combustivel_consumo: string;
+  pob: string;
+  carga_kg: string;
+  ocorrencias: string;
+  divergencias: string;
+};
+
+function formatRdvNumero(dataVoo: string, prefixo: string) {
+  const compactDate = dataVoo.replaceAll('-', '');
+  const compactPrefix = prefixo.replaceAll(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return `RDV-${compactDate}-${compactPrefix}`;
+}
+
+function toInputDateTime(value: string | null | undefined) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+function fromInputDateTime(value: string) {
+  if (!value.trim()) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString();
+}
+
+function toInputNumber(value: number | null | undefined) {
+  return value == null ? '' : String(value);
+}
+
+function buildFormState(voo: { prefixo: string; data_programacao: string }, rdv: CvRdv | null): RdvFormState {
+  return {
+    numero: rdv?.numero || formatRdvNumero(voo.data_programacao, voo.prefixo),
+    data_voo: rdv?.data_voo || voo.data_programacao,
+    horario_decolagem_real: toInputDateTime(rdv?.horario_decolagem_real),
+    horario_pouso_real: toInputDateTime(rdv?.horario_pouso_real),
+    horas_voadas: toInputNumber(rdv?.horas_voadas),
+    numero_pousos: toInputNumber(rdv?.numero_pousos),
+    ciclos: toInputNumber(rdv?.ciclos),
+    combustivel_decolagem: toInputNumber(rdv?.combustivel_decolagem),
+    combustivel_pouso: toInputNumber(rdv?.combustivel_pouso),
+    combustivel_consumo: toInputNumber(rdv?.combustivel_consumo),
+    pob: toInputNumber(rdv?.pob),
+    carga_kg: toInputNumber(rdv?.carga_kg),
+    ocorrencias: rdv?.ocorrencias || '',
+    divergencias: rdv?.divergencias || '',
+  };
+}
+
 export default function ControleVoosRdvDetalhe() {
   const { id } = useParams<{ id: string }>();
   const [finalizarConfirm, setFinalizarConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [formState, setFormState] = useState<RdvFormState | null>(null);
 
   const { data: voo, isLoading: vooLoading, error: vooError } = useControleVoosVoo(id);
   const { data: rdv, isLoading: rdvLoading } = useControleVoosRdv(id);
   const { data: aeroportos = [] } = useControleVoosAeroportos();
+  const salvarMutation = useSalvarRdv();
   const finalizarMutation = useFinalizarPreenchimentoRdv();
 
   const aeroMap = buildAeroMap(aeroportos);
   const isLoading = vooLoading || rdvLoading;
+
+  useEffect(() => {
+    if (!voo) return;
+    setFormState(buildFormState(voo, rdv ?? null));
+    setIsEditing(rdv?.status === 'rascunho');
+    setFinalizarConfirm(false);
+  }, [voo, rdv]);
 
   if (isLoading) {
     return (
@@ -65,8 +137,63 @@ export default function ControleVoosRdvDetalhe() {
 
   const origem = aeroMap.get(voo.origem_id);
   const destino = aeroMap.get(voo.destino_id);
+  const form = formState ?? buildFormState(voo, rdv ?? null);
+  const isLocked = rdv?.status === 'preenchimento_finalizado';
+  const hasDraft = rdv?.status === 'rascunho';
+  const canSave = Boolean(id) && !isLocked && isEditing && !salvarMutation.isPending;
+  const canStart = !rdv && !isEditing;
 
-  const canFinalizar = rdv && rdv.status === 'rascunho' && !finalizarMutation.isPending;
+  const canFinalizar = hasDraft && !finalizarMutation.isPending;
+
+  function updateField<K extends keyof RdvFormState>(field: K, value: RdvFormState[K]) {
+    setFormState((current) => ({
+      ...(current ?? buildFormState(voo, rdv ?? null)),
+      [field]: value,
+    }));
+  }
+
+  function parseNumber(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return Number(trimmed);
+  }
+
+  function parseInteger(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return Number.parseInt(trimmed, 10);
+  }
+
+  function handleSave() {
+    if (!id) return;
+    salvarMutation.mutate(
+      {
+        vooId: id,
+        dados: {
+          numero: form.numero.trim(),
+          data_voo: form.data_voo,
+          horario_decolagem_real: fromInputDateTime(form.horario_decolagem_real),
+          horario_pouso_real: fromInputDateTime(form.horario_pouso_real),
+          horas_voadas: parseNumber(form.horas_voadas),
+          numero_pousos: parseInteger(form.numero_pousos),
+          ciclos: parseInteger(form.ciclos),
+          combustivel_decolagem: parseNumber(form.combustivel_decolagem),
+          combustivel_pouso: parseNumber(form.combustivel_pouso),
+          combustivel_consumo: parseNumber(form.combustivel_consumo),
+          pob: parseInteger(form.pob),
+          carga_kg: parseNumber(form.carga_kg),
+          ocorrencias: form.ocorrencias.trim() || null,
+          divergencias: form.divergencias.trim() || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          setIsEditing(true);
+          setFinalizarConfirm(false);
+        },
+      },
+    );
+  }
 
   function handleFinalizar() {
     if (!finalizarConfirm) {
@@ -96,10 +223,16 @@ export default function ControleVoosRdvDetalhe() {
             {rdv && <ControleVoosStatusBadge status={rdv.status} className="text-sm px-3 py-1" />}
           </ControleVoosPageHeader>
 
-          {!rdv && (
+          {!rdv && !isEditing && (
             <div className="mb-6 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-6 text-center dark:border-amber-700 dark:bg-amber-950/20">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Nenhum RDV criado para este voo.</p>
-              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">O RDV será criado automaticamente ao salvar os dados. Criação manual em desenvolvimento.</p>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">RDV ainda não preenchido.</p>
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Inicie o preenchimento operacional para criar o rascunho deste voo.</p>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="mt-4 inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 dark:bg-amber-700 dark:hover:bg-amber-600"
+              >
+                Iniciar preenchimento
+              </button>
             </div>
           )}
 
@@ -148,7 +281,100 @@ export default function ControleVoosRdvDetalhe() {
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                   <Clock className="h-4 w-4 text-emerald-500" /> Dados realizados
                 </h2>
-                {rdv ? (
+                {isEditing && !isLocked ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Número do RDV</span>
+                      <input
+                        value={form.numero}
+                        onChange={(event) => updateField('numero', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Data do voo</span>
+                      <input
+                        type="date"
+                        value={form.data_voo}
+                        onChange={(event) => updateField('data_voo', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Horário de decolagem real</span>
+                      <input
+                        type="datetime-local"
+                        value={form.horario_decolagem_real}
+                        onChange={(event) => updateField('horario_decolagem_real', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Horário de pouso real</span>
+                      <input
+                        type="datetime-local"
+                        value={form.horario_pouso_real}
+                        onChange={(event) => updateField('horario_pouso_real', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Horas voadas</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.horas_voadas}
+                        onChange={(event) => updateField('horas_voadas', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Número de pousos</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.numero_pousos}
+                        onChange={(event) => updateField('numero_pousos', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Ciclos</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.ciclos}
+                        onChange={(event) => updateField('ciclos', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">POB</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.pob}
+                        onChange={(event) => updateField('pob', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm sm:col-span-2">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Carga</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={form.carga_kg}
+                        onChange={(event) => updateField('carga_kg', event.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                    </label>
+                  </div>
+                ) : rdv ? (
                   <dl className="grid gap-3 sm:grid-cols-2 text-sm">
                     <div>
                       <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Decolagem real</dt>
@@ -185,48 +411,109 @@ export default function ControleVoosRdvDetalhe() {
               </div>
 
               {/* Combustível */}
-              {rdv && (
+              {(rdv || (isEditing && !isLocked)) && (
                 <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                   <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                     <Droplets className="h-4 w-4 text-amber-500" /> Combustível
                   </h2>
-                  <dl className="grid gap-3 sm:grid-cols-3 text-sm">
-                    <div>
-                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Decolagem</dt>
-                      <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatCombustivel(rdv.combustivel_decolagem)}</dd>
+                  {isEditing && !isLocked ? (
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível decolagem</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={form.combustivel_decolagem}
+                          onChange={(event) => updateField('combustivel_decolagem', event.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível pouso</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={form.combustivel_pouso}
+                          onChange={(event) => updateField('combustivel_pouso', event.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível consumo</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={form.combustivel_consumo}
+                          onChange={(event) => updateField('combustivel_consumo', event.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        />
+                      </label>
                     </div>
-                    <div>
-                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Pouso</dt>
-                      <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatCombustivel(rdv.combustivel_pouso)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Consumo total</dt>
-                      <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatCombustivel(rdv.combustivel_consumo)}</dd>
-                    </div>
-                  </dl>
+                  ) : rdv ? (
+                    <dl className="grid gap-3 sm:grid-cols-3 text-sm">
+                      <div>
+                        <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Decolagem</dt>
+                        <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatCombustivel(rdv.combustivel_decolagem)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Pouso</dt>
+                        <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatCombustivel(rdv.combustivel_pouso)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Consumo total</dt>
+                        <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatCombustivel(rdv.combustivel_consumo)}</dd>
+                      </div>
+                    </dl>
+                  ) : null}
                 </div>
               )}
 
               {/* Ocorrências e Divergências */}
-              {rdv && (
+              {(rdv || (isEditing && !isLocked)) && (
                 <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                   <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-500" /> Ocorrências e divergências
                   </h2>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-1">Ocorrências</p>
-                      <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 rounded-lg p-3 dark:bg-slate-800">
-                        {rdv.ocorrencias || 'Nenhuma ocorrência registrada.'}
-                      </p>
+                  {isEditing && !isLocked ? (
+                    <div className="space-y-4">
+                      <label className="block space-y-1 text-sm">
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Ocorrências</span>
+                        <textarea
+                          value={form.ocorrencias}
+                          onChange={(event) => updateField('ocorrencias', event.target.value)}
+                          rows={4}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        />
+                      </label>
+                      <label className="block space-y-1 text-sm">
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Divergências</span>
+                        <textarea
+                          value={form.divergencias}
+                          onChange={(event) => updateField('divergencias', event.target.value)}
+                          rows={4}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        />
+                      </label>
                     </div>
-                    <div>
-                      <p className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-1">Divergências do planejado</p>
-                      <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 rounded-lg p-3 dark:bg-slate-800">
-                        {rdv.divergencias || 'Nenhuma divergência registrada.'}
-                      </p>
+                  ) : rdv ? (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-1">Ocorrências</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 rounded-lg p-3 dark:bg-slate-800">
+                          {rdv.ocorrencias || 'Nenhuma ocorrência registrada.'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-1">Divergências do planejado</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 rounded-lg p-3 dark:bg-slate-800">
+                          {rdv.divergencias || 'Nenhuma divergência registrada.'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -256,7 +543,7 @@ export default function ControleVoosRdvDetalhe() {
                     </div>
                   )}
                   <p className="text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-2 mt-2">
-                    Uso operacional interno — sem valor jurídico. Não é RDV oficial, DB, eDB ou registro ANAC.
+                    Uso operacional interno. Não regulado. Não substitui registros oficiais da operação.
                   </p>
                 </div>
               </div>
@@ -265,7 +552,21 @@ export default function ControleVoosRdvDetalhe() {
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Ações</h2>
                 <div className="space-y-2">
-                  {/* Finalizar preenchimento — habilitado se rascunho */}
+                  {isEditing && !isLocked && (
+                    <button
+                      onClick={handleSave}
+                      disabled={!canSave}
+                      className={`w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        canSave
+                          ? 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600'
+                          : 'bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500'
+                      }`}
+                    >
+                      <Clock className="h-4 w-4" />
+                      {salvarMutation.isPending ? 'Salvando…' : hasDraft ? 'Salvar rascunho' : 'Criar rascunho'}
+                    </button>
+                  )}
+
                   {canFinalizar ? (
                     <button
                       onClick={handleFinalizar}
@@ -302,20 +603,21 @@ export default function ControleVoosRdvDetalhe() {
                     <p className="text-xs text-red-600 dark:text-red-400">{finalizarMutation.error?.message}</p>
                   )}
 
-                  <button
-                    disabled
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500"
-                    title="N1 — cancelamento em desenvolvimento"
-                  >
-                    <Ban className="h-4 w-4" />Cancelar RDV
-                  </button>
-                  <button
-                    disabled
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500"
-                    title="Exportação não fiscal em desenvolvimento"
-                  >
-                    <Download className="h-4 w-4" />Exportar (não fiscal)
-                  </button>
+                  {salvarMutation.isError && (
+                    <p className="text-xs text-red-600 dark:text-red-400">{salvarMutation.error?.message}</p>
+                  )}
+
+                  {isLocked && (
+                    <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">
+                      Preenchimento finalizado. Edição bloqueada para este RDV.
+                    </p>
+                  )}
+
+                  {!rdv && canStart && (
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                      Inicie o preenchimento para habilitar o salvamento do rascunho.
+                    </p>
+                  )}
                 </div>
               </div>
 

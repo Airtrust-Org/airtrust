@@ -24,7 +24,7 @@ export default function ControleVoosRdv() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="RDVs — Relatórios Diários de Voo"
-            description="Selecione um voo para abrir ou preencher o RDV operacional correspondente"
+            description="Selecione um voo para iniciar, revisar ou finalizar o preenchimento operacional correspondente"
           />
 
           {isLoading && (
@@ -96,7 +96,7 @@ export default function ControleVoosRdv() {
           )}
 
           <p className="mt-4 text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 rounded-lg px-3 py-2">
-            RDV operacional interno N1 — sem valor jurídico. Não é RDV oficial, DB, eDB ou registro ANAC.
+            RDV operacional interno N1. Uso operacional interno e não regulado.
           </p>
         </ControleVoosPageShell>
       </div>
