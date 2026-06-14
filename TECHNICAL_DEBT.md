@@ -107,6 +107,16 @@ Digest placeholder `sha256-${uuid}-${Date.now()}` também substituído por SHA-2
 via `crypto.subtle.digest`. Teste unitário adicionado em
 `worker-airtrust/src/__tests__/services/backup-orchestrator.test.ts`.
 
+**Mitigação complementar em 2026-06-14**: restore drill local adicionado para
+verificar `checksum-manifest.json`, SHA-256/tamanho/presença de artefatos e falhas
+por corrupção/ausência/tamanho divergente, sem tocar produção ou D1 real. Ver
+`docs/BACKUP_RESTORE_DRILL.md` e
+`worker-airtrust/src/__tests__/services/backup-restore-drill.test.ts`.
+
+**Limite remanescente**: ainda não é evidência regulatória completa; falta restore
+em staging descartável com verificação de domínio, `record_hash`, `manifest_hash` e
+chain quando Records Core existir.
+
 ---
 
 ### 2.6 Outros erros TypeScript (7 adicionais)
