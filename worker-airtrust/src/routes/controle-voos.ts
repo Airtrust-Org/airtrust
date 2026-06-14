@@ -101,6 +101,15 @@ type RdvInput = Partial<{
   divergencias: string | null;
 }>;
 
+type OperationalReadFilters = {
+  dataInicio: string;
+  dataFim: string;
+  status: FlightStatus | null;
+  aeronaveId: number | null;
+  origemId: number | null;
+  destinoId: number | null;
+};
+
 type CatalogConfig = {
   table: string;
   fields: string;
@@ -317,6 +326,10 @@ function normalizeStatus(value: unknown): FlightStatus {
   return status;
 }
 
+function isIsoDateOnly(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`));
+}
+
 function isIsoLikeDateTime(value: string): boolean {
   return Number.isFinite(Date.parse(value));
 }
@@ -374,6 +387,93 @@ async function parseJsonPayload(c: Context<{ Bindings: Env }>): Promise<Record<s
     if (error instanceof ApiError) throw error;
     throw new ApiError('Payload JSON invalido', 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
   }
+}
+
+function parseDateOnlyParam(value: string | null | undefined, field: string, required = false): string | null {
+  const normalized = normalizeString(value, field, required);
+  if (normalized === null) return null;
+  if (!isIsoDateOnly(normalized)) {
+    throw new ApiError(`${field} invalido`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
+  }
+  return normalized;
+}
+
+function parseOperationalReadFilters(
+  c: Context<{ Bindings: Env }>,
+  options?: { requireRange?: boolean },
+): OperationalReadFilters {
+  const exactDate = parseDateOnlyParam(c.req.query('data'), 'data');
+  const dataInicioQuery = parseDateOnlyParam(c.req.query('data_inicio'), 'data_inicio');
+  const dataFimQuery = parseDateOnlyParam(c.req.query('data_fim'), 'data_fim');
+
+  let dataInicio = dataInicioQuery;
+  let dataFim = dataFimQuery;
+
+  if (exactDate) {
+    dataInicio = exactDate;
+    dataFim = exactDate;
+  } else if (options?.requireRange) {
+    if (!dataInicio || !dataFim) {
+      throw new ApiError(
+        'Periodo obrigatorio',
+        400,
+        'CONTROLE_VOOS_INVALID_PERIOD',
+      );
+    }
+  } else if (!dataInicio && !dataFim) {
+    const today = new Date().toISOString().slice(0, 10);
+    dataInicio = today;
+    dataFim = today;
+  } else if (dataInicio && !dataFim) {
+    dataFim = dataInicio;
+  } else if (!dataInicio && dataFim) {
+    dataInicio = dataFim;
+  }
+
+  if (!dataInicio || !dataFim) {
+    throw new ApiError('Periodo obrigatorio', 400, 'CONTROLE_VOOS_INVALID_PERIOD');
+  }
+  if (dataFim < dataInicio) {
+    throw new ApiError('Periodo invalido', 400, 'CONTROLE_VOOS_INVALID_PERIOD');
+  }
+
+  return {
+    dataInicio,
+    dataFim,
+    status: c.req.query('status') ? normalizeStatus(c.req.query('status')) : null,
+    aeronaveId: parseOptionalPositiveInteger(c.req.query('aeronave_id'), 'aeronave_id'),
+    origemId: parseOptionalPositiveInteger(c.req.query('origem_id'), 'origem_id'),
+    destinoId: parseOptionalPositiveInteger(c.req.query('destino_id'), 'destino_id'),
+  };
+}
+
+function buildFlightScope(alias: string, empresaId: number, filters: OperationalReadFilters) {
+  const clauses = [
+    `${alias}.empresa_id = ?`,
+    `${alias}.deleted_at IS NULL`,
+    `${alias}.data_programacao >= ?`,
+    `${alias}.data_programacao <= ?`,
+  ];
+  const values: unknown[] = [empresaId, filters.dataInicio, filters.dataFim];
+
+  if (filters.status) {
+    clauses.push(`${alias}.status = ?`);
+    values.push(filters.status);
+  }
+  if (filters.aeronaveId) {
+    clauses.push(`${alias}.aeronave_id = ?`);
+    values.push(filters.aeronaveId);
+  }
+  if (filters.origemId) {
+    clauses.push(`${alias}.origem_id = ?`);
+    values.push(filters.origemId);
+  }
+  if (filters.destinoId) {
+    clauses.push(`${alias}.destino_id = ?`);
+    values.push(filters.destinoId);
+  }
+
+  return { where: clauses.join(' AND '), values };
 }
 
 function normalizeFlightInput(payload: Record<string, unknown>, requireBaseFields: boolean): FlightInput {
@@ -1305,6 +1405,331 @@ controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), requireContro
 
   const updated = await getRdvOrThrow(c.env.DB, existing.id, empresaId);
   return c.json({ success: true, data: updated });
+});
+
+controleVoos.get('/dashboard', auth(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const filters = parseOperationalReadFilters(c);
+  const scope = buildFlightScope('v', empresaId, filters);
+
+  const totalsRow = await c.env.DB
+    .prepare(
+      `
+      SELECT
+        COUNT(*) AS total_voos,
+        SUM(CASE WHEN v.status = 'planejado' THEN 1 ELSE 0 END) AS voos_planejados,
+        SUM(CASE WHEN v.status = 'liberado_operacionalmente' THEN 1 ELSE 0 END) AS voos_liberados_operacionalmente,
+        SUM(CASE WHEN v.status = 'em_andamento' THEN 1 ELSE 0 END) AS voos_em_andamento,
+        SUM(CASE WHEN v.status = 'pousado' THEN 1 ELSE 0 END) AS voos_pousados,
+        SUM(CASE WHEN v.status = 'concluido_operacionalmente' THEN 1 ELSE 0 END) AS voos_concluidos_operacionalmente,
+        SUM(CASE WHEN v.status = 'cancelado' THEN 1 ELSE 0 END) AS voos_cancelados,
+        SUM(CASE WHEN v.status = 'alternado_divergido' THEN 1 ELSE 0 END) AS voos_alternados_divergidos,
+        SUM(CASE WHEN r.status = 'rascunho' THEN 1 ELSE 0 END) AS rdvs_rascunho,
+        SUM(CASE WHEN r.status = 'preenchimento_finalizado' THEN 1 ELSE 0 END) AS rdvs_preenchimento_finalizado,
+        SUM(CASE WHEN r.id IS NULL THEN 1 ELSE 0 END) AS voos_sem_rdv,
+        SUM(
+          CASE
+            WHEN NOT EXISTS (
+              SELECT 1
+              FROM cv_voo_tripulantes t
+              WHERE t.voo_id = v.id
+                AND t.empresa_id = v.empresa_id
+                AND t.deleted_at IS NULL
+            ) THEN 1
+            ELSE 0
+          END
+        ) AS voos_sem_tripulacao,
+        SUM(CASE WHEN v.aeronave_id IS NULL THEN 1 ELSE 0 END) AS voos_sem_aeronave,
+        SUM(
+          CASE
+            WHEN v.status = 'concluido_operacionalmente' AND r.id IS NULL THEN 1
+            ELSE 0
+          END
+        ) AS voos_concluidos_sem_rdv
+      FROM cv_voos v
+      LEFT JOIN cv_rdv_operacional r
+        ON r.voo_id = v.id
+       AND r.empresa_id = v.empresa_id
+       AND r.deleted_at IS NULL
+       AND r.status <> 'cancelado'
+      WHERE ${scope.where}
+    `,
+    )
+    .bind(...scope.values)
+    .first<Record<string, number | null>>();
+
+  const { results: nextFlights } = await c.env.DB
+    .prepare(
+      `
+      SELECT ${FLIGHT_SELECT}
+      FROM cv_voos v
+      WHERE ${scope.where}
+      ORDER BY v.data_programacao ASC, v.horario_previsto_partida ASC, v.id ASC
+      LIMIT 10
+    `,
+    )
+    .bind(...scope.values)
+    .all<FlightRow>();
+
+  const totals = {
+    voos: Number(totalsRow?.total_voos || 0),
+    voos_planejados: Number(totalsRow?.voos_planejados || 0),
+    voos_liberados_operacionalmente: Number(totalsRow?.voos_liberados_operacionalmente || 0),
+    voos_em_andamento: Number(totalsRow?.voos_em_andamento || 0),
+    voos_pousados: Number(totalsRow?.voos_pousados || 0),
+    voos_concluidos_operacionalmente: Number(totalsRow?.voos_concluidos_operacionalmente || 0),
+    voos_cancelados: Number(totalsRow?.voos_cancelados || 0),
+    voos_alternados_divergidos: Number(totalsRow?.voos_alternados_divergidos || 0),
+    rdvs_rascunho: Number(totalsRow?.rdvs_rascunho || 0),
+    rdvs_preenchimento_finalizado: Number(totalsRow?.rdvs_preenchimento_finalizado || 0),
+    voos_sem_rdv: Number(totalsRow?.voos_sem_rdv || 0),
+  };
+
+  return c.json({
+    success: true,
+    data: {
+      uso_operacional_interno: true,
+      nao_regulado: true,
+      periodo: {
+        data_inicio: filters.dataInicio,
+        data_fim: filters.dataFim,
+      },
+      filtros: {
+        status: filters.status,
+        aeronave_id: filters.aeronaveId,
+        origem_id: filters.origemId,
+        destino_id: filters.destinoId,
+      },
+      totais: totals,
+      voos_por_status: {
+        planejado: totals.voos_planejados,
+        liberado_operacionalmente: totals.voos_liberados_operacionalmente,
+        em_andamento: totals.voos_em_andamento,
+        pousado: totals.voos_pousados,
+        concluido_operacionalmente: totals.voos_concluidos_operacionalmente,
+        cancelado: totals.voos_cancelados,
+        alternado_divergido: totals.voos_alternados_divergidos,
+      },
+      proximos_voos: nextFlights || [],
+      alertas_operacionais: {
+        voos_sem_tripulacao: Number(totalsRow?.voos_sem_tripulacao || 0),
+        voos_sem_aeronave: Number(totalsRow?.voos_sem_aeronave || 0),
+        voos_concluidos_sem_rdv: Number(totalsRow?.voos_concluidos_sem_rdv || 0),
+      },
+    },
+  });
+});
+
+controleVoos.get('/relatorios/resumo-operacional', auth(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const filters = parseOperationalReadFilters(c, { requireRange: true });
+  const scope = buildFlightScope('v', empresaId, filters);
+
+  const overallRow = await c.env.DB
+    .prepare(
+      `
+      SELECT
+        COUNT(*) AS total_voos,
+        SUM(CASE WHEN v.status = 'planejado' THEN 1 ELSE 0 END) AS planejado,
+        SUM(CASE WHEN v.status = 'liberado_operacionalmente' THEN 1 ELSE 0 END) AS liberado_operacionalmente,
+        SUM(CASE WHEN v.status = 'em_andamento' THEN 1 ELSE 0 END) AS em_andamento,
+        SUM(CASE WHEN v.status = 'pousado' THEN 1 ELSE 0 END) AS pousado,
+        SUM(CASE WHEN v.status = 'concluido_operacionalmente' THEN 1 ELSE 0 END) AS concluido_operacionalmente,
+        SUM(CASE WHEN v.status = 'cancelado' THEN 1 ELSE 0 END) AS cancelado,
+        SUM(CASE WHEN v.status = 'alternado_divergido' THEN 1 ELSE 0 END) AS alternado_divergido,
+        SUM(CASE WHEN r.status = 'rascunho' THEN 1 ELSE 0 END) AS rdvs_rascunho,
+        SUM(CASE WHEN r.status = 'preenchimento_finalizado' THEN 1 ELSE 0 END) AS rdvs_preenchimento_finalizado,
+        SUM(CASE WHEN r.id IS NULL THEN 1 ELSE 0 END) AS voos_sem_rdv,
+        COALESCE(SUM(r.horas_voadas), 0) AS horas_voadas,
+        COALESCE(SUM(r.numero_pousos), 0) AS numero_pousos,
+        COALESCE(SUM(r.ciclos), 0) AS ciclos,
+        COALESCE(SUM(r.combustivel_consumo), 0) AS combustivel_consumo,
+        SUM(
+          CASE
+            WHEN v.horario_real_partida IS NOT NULL
+             AND v.horario_previsto_partida IS NOT NULL
+             AND v.horario_real_partida > v.horario_previsto_partida THEN 1
+            ELSE 0
+          END
+        ) AS voos_com_atraso_partida,
+        SUM(
+          CASE
+            WHEN v.horario_real_chegada IS NOT NULL
+             AND v.horario_previsto_chegada IS NOT NULL
+             AND v.horario_real_chegada > v.horario_previsto_chegada THEN 1
+            ELSE 0
+          END
+        ) AS voos_com_atraso_chegada,
+        SUM(
+          CASE
+            WHEN TRIM(COALESCE(r.divergencias, '')) <> '' THEN 1
+            ELSE 0
+          END
+        ) AS rdvs_com_divergencias
+      FROM cv_voos v
+      LEFT JOIN cv_rdv_operacional r
+        ON r.voo_id = v.id
+       AND r.empresa_id = v.empresa_id
+       AND r.deleted_at IS NULL
+       AND r.status <> 'cancelado'
+      WHERE ${scope.where}
+    `,
+    )
+    .bind(...scope.values)
+    .first<Record<string, number | null>>();
+
+  const { results: perDay } = await c.env.DB
+    .prepare(
+      `
+      SELECT
+        v.data_programacao AS data,
+        COUNT(*) AS total_voos,
+        SUM(CASE WHEN v.status = 'planejado' THEN 1 ELSE 0 END) AS planejado,
+        SUM(CASE WHEN v.status = 'liberado_operacionalmente' THEN 1 ELSE 0 END) AS liberado_operacionalmente,
+        SUM(CASE WHEN v.status = 'em_andamento' THEN 1 ELSE 0 END) AS em_andamento,
+        SUM(CASE WHEN v.status = 'pousado' THEN 1 ELSE 0 END) AS pousado,
+        SUM(CASE WHEN v.status = 'concluido_operacionalmente' THEN 1 ELSE 0 END) AS concluido_operacionalmente,
+        SUM(CASE WHEN v.status = 'cancelado' THEN 1 ELSE 0 END) AS cancelado,
+        SUM(CASE WHEN v.status = 'alternado_divergido' THEN 1 ELSE 0 END) AS alternado_divergido,
+        SUM(CASE WHEN r.status = 'rascunho' THEN 1 ELSE 0 END) AS rdvs_rascunho,
+        SUM(CASE WHEN r.status = 'preenchimento_finalizado' THEN 1 ELSE 0 END) AS rdvs_preenchimento_finalizado,
+        SUM(CASE WHEN r.id IS NULL THEN 1 ELSE 0 END) AS voos_sem_rdv,
+        COALESCE(SUM(r.horas_voadas), 0) AS horas_voadas,
+        COALESCE(SUM(r.numero_pousos), 0) AS numero_pousos,
+        COALESCE(SUM(r.ciclos), 0) AS ciclos,
+        COALESCE(SUM(r.combustivel_consumo), 0) AS combustivel_consumo,
+        SUM(
+          CASE
+            WHEN v.horario_real_partida IS NOT NULL
+             AND v.horario_previsto_partida IS NOT NULL
+             AND v.horario_real_partida > v.horario_previsto_partida THEN 1
+            ELSE 0
+          END
+        ) AS voos_com_atraso_partida,
+        SUM(
+          CASE
+            WHEN v.horario_real_chegada IS NOT NULL
+             AND v.horario_previsto_chegada IS NOT NULL
+             AND v.horario_real_chegada > v.horario_previsto_chegada THEN 1
+            ELSE 0
+          END
+        ) AS voos_com_atraso_chegada,
+        SUM(
+          CASE
+            WHEN TRIM(COALESCE(r.divergencias, '')) <> '' THEN 1
+            ELSE 0
+          END
+        ) AS rdvs_com_divergencias
+      FROM cv_voos v
+      LEFT JOIN cv_rdv_operacional r
+        ON r.voo_id = v.id
+       AND r.empresa_id = v.empresa_id
+       AND r.deleted_at IS NULL
+       AND r.status <> 'cancelado'
+      WHERE ${scope.where}
+      GROUP BY v.data_programacao
+      ORDER BY v.data_programacao ASC
+    `,
+    )
+    .bind(...scope.values)
+    .all<Record<string, number | string | null>>();
+
+  const { results: cancelamentos } = await c.env.DB
+    .prepare(
+      `
+      SELECT
+        m.id AS motivo_id,
+        m.nome AS motivo_nome,
+        COUNT(*) AS total
+      FROM cv_voos v
+      LEFT JOIN cv_motivos_operacionais m
+        ON m.id = v.cancelado_motivo_id
+       AND m.empresa_id = v.empresa_id
+       AND m.deleted_at IS NULL
+      WHERE ${scope.where}
+        AND v.status = 'cancelado'
+      GROUP BY m.id, m.nome
+      ORDER BY total DESC, motivo_nome ASC
+    `,
+    )
+    .bind(...scope.values)
+    .all<{ motivo_id: number | null; motivo_nome: string | null; total: number }>();
+
+  return c.json({
+    success: true,
+    data: {
+      uso_operacional_interno: true,
+      nao_regulado: true,
+      relatorio_interno: true,
+      periodo: {
+        data_inicio: filters.dataInicio,
+        data_fim: filters.dataFim,
+      },
+      filtros: {
+        status: filters.status,
+        aeronave_id: filters.aeronaveId,
+        origem_id: filters.origemId,
+        destino_id: filters.destinoId,
+      },
+      totais: {
+        voos: Number(overallRow?.total_voos || 0),
+        horas_voadas: Number(overallRow?.horas_voadas || 0),
+        numero_pousos: Number(overallRow?.numero_pousos || 0),
+        ciclos: Number(overallRow?.ciclos || 0),
+        combustivel_consumo: Number(overallRow?.combustivel_consumo || 0),
+        voos_sem_rdv: Number(overallRow?.voos_sem_rdv || 0),
+        rdvs_rascunho: Number(overallRow?.rdvs_rascunho || 0),
+        rdvs_preenchimento_finalizado: Number(overallRow?.rdvs_preenchimento_finalizado || 0),
+      },
+      totais_por_status: {
+        planejado: Number(overallRow?.planejado || 0),
+        liberado_operacionalmente: Number(overallRow?.liberado_operacionalmente || 0),
+        em_andamento: Number(overallRow?.em_andamento || 0),
+        pousado: Number(overallRow?.pousado || 0),
+        concluido_operacionalmente: Number(overallRow?.concluido_operacionalmente || 0),
+        cancelado: Number(overallRow?.cancelado || 0),
+        alternado_divergido: Number(overallRow?.alternado_divergido || 0),
+      },
+      cancelamentos_por_motivo: (cancelamentos || []).map((row) => ({
+        motivo_id: row.motivo_id,
+        motivo_nome: row.motivo_nome,
+        total: Number(row.total || 0),
+      })),
+      atrasos_ou_divergencias: {
+        voos_com_atraso_partida: Number(overallRow?.voos_com_atraso_partida || 0),
+        voos_com_atraso_chegada: Number(overallRow?.voos_com_atraso_chegada || 0),
+        voos_alternados_divergidos: Number(overallRow?.alternado_divergido || 0),
+        rdvs_com_divergencias: Number(overallRow?.rdvs_com_divergencias || 0),
+      },
+      agregados_por_dia: (perDay || []).map((row) => ({
+        data: row.data,
+        totais: {
+          voos: Number(row.total_voos || 0),
+          horas_voadas: Number(row.horas_voadas || 0),
+          numero_pousos: Number(row.numero_pousos || 0),
+          ciclos: Number(row.ciclos || 0),
+          combustivel_consumo: Number(row.combustivel_consumo || 0),
+          voos_sem_rdv: Number(row.voos_sem_rdv || 0),
+          rdvs_rascunho: Number(row.rdvs_rascunho || 0),
+          rdvs_preenchimento_finalizado: Number(row.rdvs_preenchimento_finalizado || 0),
+        },
+        totais_por_status: {
+          planejado: Number(row.planejado || 0),
+          liberado_operacionalmente: Number(row.liberado_operacionalmente || 0),
+          em_andamento: Number(row.em_andamento || 0),
+          pousado: Number(row.pousado || 0),
+          concluido_operacionalmente: Number(row.concluido_operacionalmente || 0),
+          cancelado: Number(row.cancelado || 0),
+          alternado_divergido: Number(row.alternado_divergido || 0),
+        },
+        atrasos_ou_divergencias: {
+          voos_com_atraso_partida: Number(row.voos_com_atraso_partida || 0),
+          voos_com_atraso_chegada: Number(row.voos_com_atraso_chegada || 0),
+          rdvs_com_divergencias: Number(row.rdvs_com_divergencias || 0),
+        },
+      })),
+    },
+  });
 });
 
 controleVoos.get('/catalogos/:nome', auth(), async (c) => {
