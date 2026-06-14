@@ -736,6 +736,9 @@ export function useCreateCurso() {
         method: 'POST',
         body: JSON.stringify(sanitizeCreateCursoPayload(dto)),
       }),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ['lms', 'cursos'], exact: false });
+    },
     onSuccess: (newCourse) => {
       // Immediately cache the new course for detail views before the list refetch completes
       qc.setQueryData(lmsKeys.curso(newCourse.id), newCourse);
@@ -752,6 +755,20 @@ export function useUpdateCurso() {
         method: 'PUT',
         body: JSON.stringify(sanitizeUpdateCursoPayload(dto)),
       }),
+    onMutate: async ({ id }) => {
+      // Cancel in-flight list fetches so a stale GET response can't overwrite the
+      // optimistic merge that follows in onSuccess.
+      await qc.cancelQueries({ queryKey: ['lms', 'cursos'], exact: false });
+      await qc.cancelQueries({ queryKey: lmsKeys.curso(id) });
+      // Snapshot the individual course so we can roll back on error.
+      const previousCurso = qc.getQueryData<LmsCurso>(lmsKeys.curso(id));
+      return { previousCurso };
+    },
+    onError: (_err, vars, context) => {
+      if (context?.previousCurso) {
+        qc.setQueryData(lmsKeys.curso(vars.id), context.previousCurso);
+      }
+    },
     onSuccess: (updatedCourse, vars) => {
       // Immediately update the individual course cache with server response
       qc.setQueryData(lmsKeys.curso(vars.id), updatedCourse);
@@ -782,6 +799,9 @@ export function useDeleteCurso() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => lmsRequest<void>(`/cursos/${id}`, { method: 'DELETE' }),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ['lms', 'cursos'], exact: false });
+    },
     onSuccess: (_data, id) => {
       // Remove from individual course cache so stale data is never shown
       qc.removeQueries({ queryKey: lmsKeys.curso(id) });
@@ -906,6 +926,18 @@ export function useUploadCursoThumbnail() {
       return unwrapUploadResult<{ thumbnail_r2_key: string | null; version_tag: string | null }>(
         await uploadLmsContent(`/api/lms/cursos/${cursoId}/thumbnail-upload`, formData, onProgress),
       );
+    },
+    onMutate: async ({ cursoId }) => {
+      // Cancel in-flight list fetches so a stale GET can't overwrite the thumbnail patch
+      await qc.cancelQueries({ queryKey: ['lms', 'cursos'], exact: false });
+      await qc.cancelQueries({ queryKey: lmsKeys.curso(cursoId) });
+      const previousCurso = qc.getQueryData<LmsCurso>(lmsKeys.curso(cursoId));
+      return { previousCurso };
+    },
+    onError: (_err, vars, context) => {
+      if (context?.previousCurso) {
+        qc.setQueryData(lmsKeys.curso(vars.cursoId), context.previousCurso);
+      }
     },
     onSuccess: (data, vars) => {
       // Update individual course cache so the new capa shows immediately
