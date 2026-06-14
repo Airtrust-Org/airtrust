@@ -18,6 +18,7 @@ export interface SubMenuItem {
   label: string;
   path: string;
   badge?: string;
+  title?: string;
 }
 
 export interface SettingsMenuItem {
@@ -222,11 +223,41 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
         { id: 'controle_voos-dashboard', label: 'Dashboard OCC', path: '/controle-voos' },
         { id: 'controle_voos-voos', label: 'Voos', path: '/controle-voos/voos' },
         { id: 'controle_voos-rdv', label: 'RDV', path: '/controle-voos/rdv' },
-        { id: 'controle_voos-jornadas', label: 'Jornadas', path: '/controle-voos/jornadas' },
-        { id: 'controle_voos-indisponibilidades', label: 'Indisponibilidades', path: '/controle-voos/indisponibilidades' },
-        { id: 'controle_voos-hangaragem', label: 'Hangaragem', path: '/controle-voos/hangaragem' },
-        { id: 'controle_voos-relatorios', label: 'Relatórios', path: '/controle-voos/relatorios' },
-        { id: 'controle_voos-tabelas', label: 'Tabelas', path: '/controle-voos/tabelas' },
+        {
+          id: 'controle_voos-jornadas',
+          label: 'Jornadas',
+          path: '/controle-voos/jornadas',
+          badge: 'Demo',
+          title: 'Tela demonstrativa - nao usar como fonte operacional',
+        },
+        {
+          id: 'controle_voos-indisponibilidades',
+          label: 'Indisponibilidades',
+          path: '/controle-voos/indisponibilidades',
+          badge: 'Demo',
+          title: 'Tela demonstrativa - nao usar como fonte operacional',
+        },
+        {
+          id: 'controle_voos-hangaragem',
+          label: 'Hangaragem',
+          path: '/controle-voos/hangaragem',
+          badge: 'Demo',
+          title: 'Tela demonstrativa - nao usar como fonte operacional',
+        },
+        {
+          id: 'controle_voos-relatorios',
+          label: 'Relatórios',
+          path: '/controle-voos/relatorios',
+          badge: 'Demo',
+          title: 'Tela demonstrativa - nao usar como fonte operacional',
+        },
+        {
+          id: 'controle_voos-tabelas',
+          label: 'Tabelas',
+          path: '/controle-voos/tabelas',
+          badge: 'Demo',
+          title: 'Tela demonstrativa - nao usar como fonte operacional',
+        },
       ],
     },
   ],

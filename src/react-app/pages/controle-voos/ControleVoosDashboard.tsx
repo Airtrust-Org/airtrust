@@ -8,6 +8,9 @@ import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import { useControleVoosDashboard } from '@/react-app/hooks/useControleVoos';
 import { formatTime, formatDate } from './data/controleVoosUtils';
 
+const DEMO_LINK_BADGE_CLASS =
+  'rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300';
+
 function AlertIcon({ gravidade }: { gravidade: 'critico' | 'alerta' | 'info' }) {
   if (gravidade === 'critico') return <span className="flex h-2 w-2 shrink-0 rounded-full bg-red-500 mt-1.5" />;
   if (gravidade === 'alerta') return <span className="flex h-2 w-2 shrink-0 rounded-full bg-amber-500 mt-1.5" />;
@@ -121,16 +124,20 @@ export default function ControleVoosDashboard() {
                 {[
                   { to: '/controle-voos/voos', icon: <Plane className="h-5 w-5 text-blue-500" />, label: 'Voos / Programação' },
                   { to: '/controle-voos/rdv', icon: <FileText className="h-5 w-5 text-purple-500" />, label: 'RDVs' },
-                  { to: '/controle-voos/jornadas', icon: <Users className="h-5 w-5 text-teal-500" />, label: 'Jornadas' },
-                  { to: '/controle-voos/indisponibilidades', icon: <Wrench className="h-5 w-5 text-amber-500" />, label: 'Indisponibilidades' },
+                  { to: '/controle-voos/jornadas', icon: <Users className="h-5 w-5 text-teal-500" />, label: 'Jornadas', demo: true },
+                  { to: '/controle-voos/indisponibilidades', icon: <Wrench className="h-5 w-5 text-amber-500" />, label: 'Indisponibilidades', demo: true },
                 ].map((link) => (
                   <Link
                     key={link.to}
                     to={link.to}
+                    title={link.demo ? 'Tela demonstrativa - nao usar como fonte operacional' : undefined}
                     className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-600"
                   >
                     {link.icon}
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{link.label}</span>
+                    <span className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                      <span>{link.label}</span>
+                      {link.demo && <span className={DEMO_LINK_BADGE_CLASS}>Demo</span>}
+                    </span>
                   </Link>
                 ))}
               </div>
