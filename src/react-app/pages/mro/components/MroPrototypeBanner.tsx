@@ -1,14 +1,17 @@
-import { AlertTriangle } from 'lucide-react';
+import ModuleGovernanceBanner from '@/react-app/components/ModuleGovernanceBanner';
+import { PRODUCT_MODULE_BY_KEY } from '@/react-app/lib/modules';
 
 export default function MroPrototypeBanner() {
+  const module = PRODUCT_MODULE_BY_KEY.mro;
+
   return (
-    <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-      <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500 dark:text-amber-400" />
-      <span>
-        <strong>Módulo MRO em prévia: Protótipo — não regulado.</strong> Dados
-        demonstrativos para validação de fluxo. Não utilizar como registro oficial de
-        manutenção, OS, RAS ou aeronavegabilidade.
-      </span>
-    </div>
+    <ModuleGovernanceBanner
+      title="Módulo MRO em prévia"
+      maturityLevel={module.maturityLevel}
+      evidenceLevel={module.evidenceLevel}
+      isPrototype={module.isPrototype}
+      isRegulated={module.isRegulated}
+      description="Dados demonstrativos. Não utilizar como registro oficial de manutenção, OS, RAS ou aeronavegabilidade."
+    />
   );
 }
