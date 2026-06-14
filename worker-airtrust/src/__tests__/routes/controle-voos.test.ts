@@ -280,6 +280,86 @@ function validRdvPayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function seedDashboardFixtures(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      INSERT INTO cv_voos (
+        id, empresa_id, prefixo, data_programacao, origem_id, destino_id,
+        tipo_voo_id, natureza_voo_id, aeronave_id,
+        horario_previsto_partida, horario_previsto_chegada,
+        horario_real_partida, horario_real_chegada,
+        status, observacoes, cancelado_motivo_id, created_by, updated_by
+      ) VALUES
+        (
+          603, 1, 'ATX-1003', '2026-06-14', 101, 102, 301, 401, 9101,
+          '2026-06-14T14:00:00Z', '2026-06-14T15:10:00Z',
+          '2026-06-14T14:12:00Z', '2026-06-14T15:18:00Z',
+          'concluido_operacionalmente', 'Concluido sem RDV', NULL, 10, 10
+        ),
+        (
+          604, 1, 'ATX-1004', '2026-06-15', 101, 103, 301, 401, 9102,
+          '2026-06-15T08:00:00Z', '2026-06-15T09:30:00Z',
+          NULL, NULL,
+          'cancelado', 'Cancelado', 501, 10, 10
+        ),
+        (
+          605, 1, 'ATX-1005', '2026-06-15', 103, 102, 301, 401, 9103,
+          '2026-06-15T13:00:00Z', '2026-06-15T15:00:00Z',
+          '2026-06-15T13:05:00Z', '2026-06-15T15:20:00Z',
+          'alternado_divergido', 'Divergencia operacional', NULL, 10, 10
+        ),
+        (
+          606, 1, 'ATX-1006', '2026-06-14', 102, 103, 301, 401, 9104,
+          '2026-06-14T16:00:00Z', '2026-06-14T17:20:00Z',
+          '2026-06-14T16:05:00Z', NULL,
+          'em_andamento', 'Em andamento', NULL, 10, 10
+        );
+
+      INSERT INTO cv_voo_tripulantes (
+        empresa_id, voo_id, funcionario_id, funcao, horario_apresentacao, created_by, updated_by
+      ) VALUES
+        (1, 603, 801, 'PIC', '2026-06-14T13:00:00Z', 10, 10),
+        (1, 605, 802, 'PIC', '2026-06-15T12:00:00Z', 10, 10),
+        (1, 606, 803, 'PIC', '2026-06-14T15:00:00Z', 10, 10);
+
+      INSERT INTO cv_rdv_operacional (
+        id, empresa_id, voo_id, numero, data_voo,
+        horario_decolagem_real, horario_pouso_real,
+        horas_voadas, numero_pousos, ciclos,
+        combustivel_decolagem, combustivel_pouso, combustivel_consumo,
+        pob, carga_kg, ocorrencias, divergencias,
+        status, responsavel_preenchimento_id, preenchido_em,
+        created_by, updated_by, finalizado_operacionalmente_por, finalizado_operacionalmente_em
+      ) VALUES
+        (
+          901, 1, 602, 'RDV-20260615-602', '2026-06-15',
+          '2026-06-15T10:10:00Z', '2026-06-15T11:22:00Z',
+          1.2, 1, 1,
+          1200, 700, 500,
+          4, 100, 'Rascunho', '', 'rascunho', 10, '2026-06-15T11:30:00Z',
+          10, 10, NULL, NULL
+        ),
+        (
+          902, 1, 605, 'RDV-20260615-605', '2026-06-15',
+          '2026-06-15T13:05:00Z', '2026-06-15T15:20:00Z',
+          2.1, 2, 2,
+          1800, 1100, 700,
+          5, 180, 'Finalizado', 'Alternado por meteorologia', 'preenchimento_finalizado', 10, '2026-06-15T15:30:00Z',
+          10, 10, 10, '2026-06-15T15:40:00Z'
+        ),
+        (
+          903, 2, 701, 'RDV-20260614-701', '2026-06-14',
+          '2026-06-14T12:10:00Z', '2026-06-14T13:00:00Z',
+          0.8, 1, 1,
+          900, 600, 300,
+          3, 80, 'Tenant B', '', 'preenchimento_finalizado', 20, '2026-06-14T13:10:00Z',
+          20, 20, 20, '2026-06-14T13:15:00Z'
+        );
+    `,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -758,6 +838,286 @@ describe('controle voos routes', () => {
     expect(events[0].metadata_json).toContain('"action":"create"');
     expect(events[1].metadata_json).toContain('"action":"update"');
     expect(events[2].metadata_json).toContain('"action":"finalize"');
+  });
+
+  it('dashboard retorna totais corretos por tenant', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/dashboard?data_inicio=2026-06-14&data_fim=2026-06-15',
+      {},
+      1,
+      'viewer',
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        uso_operacional_interno: true,
+        nao_regulado: true,
+        totais: {
+          voos: 6,
+          voos_planejados: 1,
+          voos_liberados_operacionalmente: 1,
+          voos_em_andamento: 1,
+          voos_concluidos_operacionalmente: 1,
+          voos_cancelados: 1,
+          voos_alternados_divergidos: 1,
+        },
+        voos_por_status: {
+          planejado: 1,
+          liberado_operacionalmente: 1,
+          em_andamento: 1,
+          concluido_operacionalmente: 1,
+          cancelado: 1,
+          alternado_divergido: 1,
+        },
+      },
+    });
+  });
+
+  it('dashboard respeita filtro de data e periodo', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const singleDayResponse = await request(db, '/api/controle-voos/dashboard?data=2026-06-14');
+    expect(singleDayResponse.status).toBe(200);
+    await expect(singleDayResponse.json()).resolves.toMatchObject({
+      data: {
+        totais: {
+          voos: 3,
+          voos_planejados: 1,
+          voos_em_andamento: 1,
+          voos_concluidos_operacionalmente: 1,
+        },
+      },
+    });
+
+    const rangeResponse = await request(
+      db,
+      '/api/controle-voos/dashboard?data_inicio=2026-06-15&data_fim=2026-06-15',
+    );
+    expect(rangeResponse.status).toBe(200);
+    await expect(rangeResponse.json()).resolves.toMatchObject({
+      data: {
+        totais: {
+          voos: 3,
+          voos_liberados_operacionalmente: 1,
+          voos_cancelados: 1,
+          voos_alternados_divergidos: 1,
+        },
+      },
+    });
+  });
+
+  it('dashboard respeita filtro de status', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/dashboard?data_inicio=2026-06-14&data_fim=2026-06-15&status=cancelado',
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        totais: {
+          voos: 1,
+          voos_cancelados: 1,
+        },
+        voos_por_status: {
+          cancelado: 1,
+        },
+      },
+    });
+  });
+
+  it('dashboard calcula voos sem RDV e RDVs por status', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/dashboard?data_inicio=2026-06-14&data_fim=2026-06-15',
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        totais: {
+          voos_sem_rdv: 4,
+          rdvs_rascunho: 1,
+          rdvs_preenchimento_finalizado: 1,
+        },
+      },
+    });
+  });
+
+  it('dashboard cria alertas operacionais simples', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/dashboard?data_inicio=2026-06-14&data_fim=2026-06-15',
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        alertas_operacionais: {
+          voos_sem_tripulacao: 3,
+          voos_sem_aeronave: 2,
+          voos_concluidos_sem_rdv: 1,
+        },
+      },
+    });
+  });
+
+  it('relatorio resumo retorna agregados por dia', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/relatorios/resumo-operacional?data_inicio=2026-06-14&data_fim=2026-06-15',
+      {},
+      1,
+      'viewer',
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data: {
+        uso_operacional_interno: boolean;
+        relatorio_interno: boolean;
+        agregados_por_dia: Array<{ data: string; totais: { voos: number } }>;
+      };
+    };
+
+    expect(body.data.uso_operacional_interno).toBe(true);
+    expect(body.data.relatorio_interno).toBe(true);
+    expect(body.data.agregados_por_dia).toHaveLength(2);
+    expect(body.data.agregados_por_dia).toEqual([
+      expect.objectContaining({ data: '2026-06-14', totais: expect.objectContaining({ voos: 3 }) }),
+      expect.objectContaining({ data: '2026-06-15', totais: expect.objectContaining({ voos: 3 }) }),
+    ]);
+  });
+
+  it('relatorio soma horas, pousos, ciclos e combustivel', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/relatorios/resumo-operacional?data_inicio=2026-06-14&data_fim=2026-06-15',
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        totais: {
+          horas_voadas: 3.3,
+          numero_pousos: 3,
+          ciclos: 3,
+          combustivel_consumo: 1200,
+        },
+      },
+    });
+  });
+
+  it('relatorio agrega cancelamentos por motivo', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/relatorios/resumo-operacional?data_inicio=2026-06-14&data_fim=2026-06-15',
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        cancelamentos_por_motivo: [
+          { motivo_id: 501, motivo_nome: 'Meteorologia', total: 1 },
+        ],
+      },
+    });
+  });
+
+  it('empresa A nao ve dashboard e relatorio da empresa B', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const tenantAResponse = await request(
+      db,
+      '/api/controle-voos/dashboard?data_inicio=2026-06-14&data_fim=2026-06-15',
+      {},
+      1,
+    );
+    await expect(tenantAResponse.json()).resolves.toMatchObject({
+      data: {
+        totais: { voos: 6 },
+      },
+    });
+
+    const tenantBResponse = await request(
+      db,
+      '/api/controle-voos/dashboard?data_inicio=2026-06-14&data_fim=2026-06-15',
+      {},
+      2,
+    );
+    await expect(tenantBResponse.json()).resolves.toMatchObject({
+      data: {
+        totais: {
+          voos: 1,
+          rdvs_preenchimento_finalizado: 1,
+          voos_sem_rdv: 0,
+        },
+      },
+    });
+
+    const reportResponse = await request(
+      db,
+      '/api/controle-voos/relatorios/resumo-operacional?data_inicio=2026-06-14&data_fim=2026-06-15',
+      {},
+      2,
+    );
+    await expect(reportResponse.json()).resolves.toMatchObject({
+      data: {
+        totais: {
+          voos: 1,
+          horas_voadas: 0.8,
+        },
+      },
+    });
+  });
+
+  it('viewer consegue ler dashboard e relatorio', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+
+    const dashboardResponse = await request(
+      db,
+      '/api/controle-voos/dashboard?data_inicio=2026-06-14&data_fim=2026-06-15',
+      {},
+      1,
+      'viewer',
+    );
+    expect(dashboardResponse.status).toBe(200);
+
+    const reportResponse = await request(
+      db,
+      '/api/controle-voos/relatorios/resumo-operacional?data_inicio=2026-06-14&data_fim=2026-06-15',
+      {},
+      1,
+      'viewer',
+    );
+    expect(reportResponse.status).toBe(200);
   });
 
   it('rejeita campos e termos fora do escopo', async () => {
