@@ -984,8 +984,128 @@ Approval checklist:
 - [ ] Requires deterministic canonicalization tests.
 - [ ] Keeps PDF as export/view only.
 
-## 22. Conclusion
+## 22. Revisao critica pos-ADR
 
-This ADR recommends proceeding to **Phase B: local experimental migration** only after the ADR is reviewed and approved.
+**Veredito:** aprovado com ressalvas para **migration experimental local**. Nao aprovado para staging, producao, uso regulado, assinatura juridica, offline regulado, exportacao fiscal oficial ou integracao selada entre eDB/RDV/SDRMe.
 
-The recommendation is limited to local, non-regulated experimentation. It does not recommend staging or production migration, does not recommend eDB/SDRMe/RDV implementation, and does not authorize any regulated claim. The next safe technical step is to validate the five-table physical design locally with immutability triggers, canonicalization vectors, hash-chain conflict behavior, and migration-guard specifications.
+### 22.1 Escopo minimo
+
+O ADR esta suficientemente minimo para um vertical slice inicial de criacao, versao, canonicalizacao, hash, selagem, ledger e consulta. As cinco tabelas propostas sao aceitaveis para uma prova local nao regulada:
+
+- `regulated_records`
+- `regulated_record_versions`
+- `regulated_record_hashes`
+- `regulated_audit_events`
+- `regulated_record_links`
+
+Ressalva: `regulated_record_links` nao e estritamente necessario para um vertical slice de um unico tipo de registro. Ele pode permanecer no desenho porque prepara rastreabilidade entre RDV, eDB, OS e RAS, mas a migration experimental local deve permitir que links sejam zero ou opcionais no primeiro fluxo.
+
+Ressalva maior: o padrao de governanca N3 anterior citava `regulated_addenda` como parte do nucleo minimo. Este ADR adia a tabela dedicada e modela addendum por nova versao, `base_version_id`, `version_reason`, hash e evento de auditoria. Isso e aceitavel para experimento local, mas antes de qualquer classificacao N3/N4 ou pacote regulatorio o time deve decidir se `regulated_addenda` entra no nucleo efetivo.
+
+### 22.2 Imutabilidade
+
+A estrategia com triggers SQLite/D1 e viavel como defesa de banco, desde que nao seja tratada como controle isolado. As tabelas que devem ser append-only desde a insercao sao:
+
+- `regulated_audit_events`
+- `regulated_record_hashes`
+
+As tabelas que precisam permitir update controlado antes da selagem sao:
+
+- `regulated_records`, para transicao `DRAFT` -> `SEALED`, definicao de `current_version_id`, `sealed_at` e metadados finais;
+- `regulated_record_versions`, apenas enquanto `DRAFT`, se o fluxo experimental permitir rascunho de versao;
+- `regulated_record_links`, apenas enquanto link nao estiver ativo/selado em fluxo futuro.
+
+Depois da selagem, updates e deletes devem abortar no banco. Soft delete nao deve existir para registro regulado selado; `deleted_at` so pode ser usado para rascunhos abandonados ou deve permanecer sempre `NULL` nas tabelas append-only.
+
+Ressalva: a migration experimental precisa especificar triggers para todas as tabelas reguladas, nao apenas os exemplos do ADR. O migration guard deve consultar `sqlite_master`, verificar nomes e definicoes esperadas dos triggers e executar tentativas reais de `UPDATE`/`DELETE` em banco descartavel.
+
+### 22.3 Hash chain e concorrencia
+
+A estrategia de hash por payload/version, `record_hash`, `event_hash`, `previous_event_hash` e `tenant_chain_hash` e coerente. A cadeia por `empresa_id`/tenant preserva isolamento e reduz blast radius de falha.
+
+Ressalva: a sequencia monotonicamente crescente por `(empresa_id, chain_scope)` precisa ser invariavel explicita da implementacao, nao apenas indice unico. A migration experimental deve provar pelo menos um destes mecanismos:
+
+- transacao D1 que le o ultimo `chain_sequence`, insere `chain_sequence + 1` e falha/retry em conflito;
+- insercao otimista com unique constraint e retry deterministico;
+- serializacao externa por tenant/scope, por exemplo Durable Object ou fila, se o teste local mostrar bifurcacao ou alto conflito.
+
+Sem esse teste, o desenho nao deve passar para staging.
+
+### 22.4 Canonicalizacao JSON
+
+O ADR define regras implementaveis: ordenacao recursiva de chaves, UTF-8, Unicode NFC, datas UTC ISO-8601, normalizacao de numeros, exclusao de campos volateis, `canonical_schema_version` e `canonicalization_version`.
+
+Ressalvas para a fase experimental:
+
+- `canonical_schema_version` e `canonicalization_version` devem permanecer separados;
+- arrays so podem representar ordem semantica real;
+- campos excluidos devem ser catalogados por schema, nao decididos ad hoc;
+- valores monetarios, tempo de voo, ciclos, horas e quantidades devem evitar `float`;
+- vetores congelados de teste devem ser criados antes de qualquer uso em dado real.
+
+### 22.5 Multi-tenant, RBAC e platform admin
+
+O desenho respeita o padrao atual de AirTrust ao repetir `empresa_id` em todas as tabelas e exigir indices compostos por `empresa_id`. Isso conversa com a regra existente de que toda query de tenant deve incluir `WHERE empresa_id = ?`.
+
+Ressalvas:
+
+- a implementacao deve usar um repository/service obrigatorio que injeta `empresa_id`;
+- leitura cross-tenant por platform admin, suporte ou fiscalizacao futura deve gerar evento no ledger com escopo claro;
+- `tenant_id` nao pode substituir `empresa_id`; ele e apenas identificador auxiliar futuro;
+- testes precisam tentar leitura e link cross-tenant e esperar bloqueio.
+
+### 22.6 D1/R2 e evidencia fora do banco
+
+O ADR reconhece corretamente que D1 e R2 nao sao transacionais entre si. Para o nucleo minimo, R2 pode ficar restrito a anexos opcionais e export futuro. Isso e seguro para um vertical slice sem anexos ou com anexos tratados como fora do escopo.
+
+Ressalva: se o vertical slice incluir anexos, o fluxo deve ser write-then-verify em R2 antes da selagem em D1. Objeto R2 regulado nao pode depender de overwrite, lifecycle destrutivo ou manifest nao verificado.
+
+### 22.7 Addendum
+
+O ADR explica a regra correta: corrigir sem alterar o original. O modelo por nova versao + hash + evento suporta addendum basico no experimento local.
+
+Ressalva: para evitar confundir nova versao com edicao destrutiva, a proxima fase deve definir valores controlados para `version_reason`, exigir `base_version_id`, registrar campos alterados no evento e exibir sempre original + correcao. Se isso ficar dificil na pratica, `regulated_addenda` deve voltar para o nucleo antes de qualquer N3.
+
+### 22.8 Assinatura e offline
+
+E seguro deixar assinatura fora do nucleo minimo. O ADR prepara `record_hash` e metadados suficientes para assinatura futura sem escolher ICP-Brasil, Gov.br ou CANAC antes da decisao regulatoria.
+
+Tambem e correto deixar offline/tablet fora do nucleo minimo. O texto nao promete assinatura offline e trata clock de dispositivo como nao confiavel. A preparacao por versionamento, idempotencia e timestamp de servidor e suficiente para nao bloquear sync futuro.
+
+### 22.9 Testabilidade
+
+A lista de testes futuros e adequada, mas a migration experimental local so deve ser considerada concluida quando houver pelo menos:
+
+- teste de canonicalizacao deterministica com vetores congelados;
+- teste de hash estavel;
+- teste de trigger bloqueando `UPDATE` e `DELETE`;
+- teste de append-only para ledger e hashes;
+- teste de concorrencia da chain ou conflito/retry;
+- teste de isolamento por `empresa_id`;
+- teste de link cross-tenant bloqueado;
+- teste de restore local ou simulado recomputando `record_hash` e `tenant_chain_hash`.
+
+O restore staging descartavel continua bloqueio para qualquer pretensao regulatoria.
+
+### 22.10 Governanca regulatoria
+
+O ADR evita declarar homologacao, certificacao, aprovacao ou aceite ANAC. Tambem mantem MRO e Controle de Voos como prototipos nao regulados e deixa claro que Records Core nao torna nenhum modulo automaticamente oficial.
+
+Ressalva: qualquer material comercial, UI ou export futuro deve preservar a mesma linguagem. O risco de prototipo confundido com regulado continua alto enquanto MRO/Controle de Voos forem navegaveis com mock data.
+
+### 22.11 Recomendacao
+
+O ADR esta pronto para orientar uma migration experimental local **com ressalvas**:
+
+1. a fase local deve provar triggers para todas as tabelas reguladas;
+2. a chain deve ter sequencia monotonica testada por tenant/scope;
+3. addendum por versao deve ser demonstrado sem sobrescrita;
+4. isolamento por `empresa_id` deve ser testado;
+5. nenhum passo deve tocar staging/producao;
+6. nenhum texto ou UI deve tratar o resultado como regulado.
+
+## 23. Conclusion
+
+This ADR is **approved with caveats** for proceeding to **Phase B: local experimental migration** only.
+
+The recommendation is limited to local, non-regulated experimentation. It does not recommend staging or production migration, does not recommend eDB/SDRMe/RDV implementation, and does not authorize any regulated claim. The next safe technical step is to validate the five-table physical design locally with immutability triggers, canonicalization vectors, hash-chain conflict behavior, tenant-isolation tests, addendum-by-version semantics, and migration-guard specifications.
