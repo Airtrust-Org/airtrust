@@ -162,7 +162,14 @@ self.addEventListener('fetch', (event) => {
   const { url, method } = request;
 
   if (shouldBypassAirTrustCaching(request)) {
-    event.respondWith(fetch(request));
+    event.respondWith(
+      fetch(request).catch(() => {
+        return new Response('Service Unavailable', {
+          status: 503,
+          statusText: 'Service Unavailable',
+        });
+      }),
+    );
     return;
   }
 
@@ -266,6 +273,11 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return response;
+        }).catch(() => {
+          return new Response('', {
+            status: 503,
+            statusText: 'Network unavailable for asset',
+          });
         });
       }),
     );
@@ -275,19 +287,26 @@ self.addEventListener('fetch', (event) => {
   // ===== ESTRATÉGIA 3: Outros (fallback) → cache-first =====
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      return (
-        cachedResponse ||
-        fetch(request).then((response) => {
-          // ✅ IMPORTANTE: clonar ANTES de retornar ou armazenar
-          if (response.ok) {
-            const responseToCache = response.clone();
-            caches.open(RUNTIME_CACHE).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
-          return response;
-        })
-      );
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(request).then((response) => {
+        // ✅ IMPORTANTE: clonar ANTES de retornar ou armazenar
+        if (response.ok) {
+          const responseToCache = response.clone();
+          caches.open(RUNTIME_CACHE).then((cache) => {
+            cache.put(request, responseToCache);
+          });
+        }
+        return response;
+      }).catch(() => {
+        // Network failed and no cache available — return a clean 503
+        // so the FetchEvent promise never rejects without a Response.
+        return new Response('Service Unavailable', {
+          status: 503,
+          statusText: 'Service Unavailable',
+        });
+      });
     }),
   );
 });
