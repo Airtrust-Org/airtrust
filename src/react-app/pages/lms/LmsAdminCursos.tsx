@@ -39,20 +39,8 @@ import {
   LmsSummaryTag,
   LmsSurface,
 } from './lmsUi';
-import { getAdminCoursePreviewPath } from './lmsAdminPreview';
+import { getAdminCoursePreviewPath, supportsAdminCoursePreview as supportsContentPreview } from './lmsAdminPreview';
 
-function supportsContentPreview(
-  curso: Pick<LmsCurso, 'tipo_conteudo' | 'scorm_launch_file' | 'scorm_package_r2_prefix'> & {
-    pdf_r2_key?: string | null;
-    pptx_r2_key?: string | null;
-  },
-) {
-  if (curso.tipo_conteudo === 'h5p') return Boolean(curso.scorm_package_r2_prefix);
-  if (curso.tipo_conteudo === 'scorm') return Boolean(curso.scorm_launch_file);
-  if (curso.tipo_conteudo === 'pdf') return Boolean(curso.pdf_r2_key);
-  if (curso.tipo_conteudo === 'pptx') return Boolean(curso.pptx_r2_key);
-  return false;
-}
 
 function impactsCompliance(
   curso: Pick<LmsCurso, 'gerar_qualificacao_ao_concluir' | 'qualificacao_tipo_nome'>,

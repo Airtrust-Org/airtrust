@@ -69,7 +69,7 @@ import {
   LmsPageShell,
   LmsStatPill,
 } from './lmsUi';
-import { getAdminCoursePreviewPath } from './lmsAdminPreview';
+import { getAdminCoursePreviewPath, supportsAdminCoursePreview as supportsContentPreview } from './lmsAdminPreview';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
@@ -235,16 +235,6 @@ function validateForm(form: CreateCursoDTO) {
   if ((form.scorm_mastery_score ?? 70) < 0 || (form.scorm_mastery_score ?? 70) > 100)
     e.scorm_mastery_score = 'Nota mínima entre 0 e 100.';
   return e;
-}
-function supportsContentPreview(
-  curso: Pick<LmsCurso, 'tipo_conteudo' | 'scorm_launch_file' | 'scorm_package_r2_prefix'>,
-) {
-  if (curso.tipo_conteudo === 'h5p') return Boolean(curso.scorm_package_r2_prefix);
-  if (curso.tipo_conteudo === 'scorm') return Boolean(curso.scorm_launch_file);
-  if (curso.tipo_conteudo === 'pdf') return Boolean((curso as Record<string, unknown>).pdf_r2_key);
-  if (curso.tipo_conteudo === 'pptx')
-    return Boolean((curso as Record<string, unknown>).pptx_r2_key);
-  return false;
 }
 
 function getStoredContentLabel(curso?: Partial<LmsCurso>) {
@@ -1328,14 +1318,18 @@ function CourseCard({
       }`}
     >
       <div className="p-4 pb-0">
-        <LmsCourseArtwork
-          curso={curso}
-          progress={!canManage ? matricula?.progresso_pct : undefined}
-        />
+        <div className="relative">
+          <LmsCourseArtwork
+            curso={curso}
+            progress={!canManage ? matricula?.progresso_pct : undefined}
+          />
+          <div className="pointer-events-none absolute top-2 right-2 z-10">
+            <LmsStatPill status={statusMeta} />
+          </div>
+        </div>
       </div>
       <div className="flex flex-1 flex-col p-4 pt-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 min-h-[2.5rem]">
+        <div className="min-w-0">
             <h3 className="line-clamp-2 text-sm font-semibold tracking-tight text-slate-950 dark:text-slate-100">
               {curso.titulo}
             </h3>
@@ -1365,8 +1359,6 @@ function CourseCard({
                 {formatMinutes(curso.carga_horaria_minutos)}
               </span>
             </div>
-          </div>
-          <LmsStatPill status={statusMeta} />
         </div>
         <div className="flex-1">
           {complianceCourse && curso.qualificacao_tipo_nome ? (
