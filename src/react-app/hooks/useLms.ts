@@ -736,7 +736,9 @@ export function useCreateCurso() {
         method: 'POST',
         body: JSON.stringify(sanitizeCreateCursoPayload(dto)),
       }),
-    onSuccess: () => {
+    onSuccess: (newCourse) => {
+      // Immediately cache the new course for detail views before the list refetch completes
+      qc.setQueryData(lmsKeys.curso(newCourse.id), newCourse);
       invalidateCursoCollections(qc);
     },
   });
@@ -750,8 +752,27 @@ export function useUpdateCurso() {
         method: 'PUT',
         body: JSON.stringify(sanitizeUpdateCursoPayload(dto)),
       }),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: lmsKeys.curso(vars.id) });
+    onSuccess: (updatedCourse, vars) => {
+      // Immediately update the individual course cache with server response
+      qc.setQueryData(lmsKeys.curso(vars.id), updatedCourse);
+
+      // Merge into all curso list caches (any filters) so the UI reflects the edit instantly
+      qc.setQueriesData<{ data: LmsCurso[]; total: number }>(
+        { queryKey: ['lms', 'cursos'], exact: false },
+        (current) => {
+          if (!current?.data?.length) return current;
+          let found = false;
+          const data = current.data.map((course) => {
+            if (course.id !== updatedCourse.id) return course;
+            found = true;
+            return { ...course, ...updatedCourse };
+          });
+          if (!found) return current;
+          return { ...current, data };
+        },
+      );
+
+      // Background reconciliation — mark stale to confirm with server
       invalidateCursoCollections(qc);
     },
   });
@@ -761,8 +782,21 @@ export function useDeleteCurso() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => lmsRequest<void>(`/cursos/${id}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
+    onSuccess: (_data, id) => {
+      // Remove from individual course cache so stale data is never shown
+      qc.removeQueries({ queryKey: lmsKeys.curso(id) });
+      // Remove from all list caches immediately so the card disappears
+      qc.setQueriesData<{ data: LmsCurso[]; total: number }>(
+        { queryKey: ['lms', 'cursos'], exact: false },
+        (current) => {
+          if (!current?.data?.length) return current;
+          const data = current.data.filter((course) => course.id !== id);
+          if (data.length === current.data.length) return current;
+          return { ...current, data, total: current.total - 1 };
+        },
+      );
+      // Background reconciliation — also refreshes admin stats
+      invalidateCursoCollections(qc);
     },
   });
 }
@@ -869,12 +903,32 @@ export function useUploadCursoThumbnail() {
       const formData = new FormData();
       formData.append('thumbnail', file);
 
-      return unwrapUploadResult<{ thumbnail_r2_key: string | null }>(
+      return unwrapUploadResult<{ thumbnail_r2_key: string | null; version_tag: string | null }>(
         await uploadLmsContent(`/api/lms/cursos/${cursoId}/thumbnail-upload`, formData, onProgress),
       );
     },
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: lmsKeys.curso(vars.cursoId) });
+    onSuccess: (data, vars) => {
+      // Update individual course cache so the new capa shows immediately
+      qc.setQueryData<LmsCurso | undefined>(
+        lmsKeys.curso(vars.cursoId),
+        (current) =>
+          current
+            ? { ...current, thumbnail_r2_key: data.thumbnail_r2_key, version_tag: data.version_tag }
+            : current,
+      );
+      // Update all list caches so the card thumbnail refreshes instantly
+      qc.setQueriesData<{ data: LmsCurso[]; total: number }>(
+        { queryKey: ['lms', 'cursos'], exact: false },
+        (current) => {
+          if (!current?.data?.length) return current;
+          const data = current.data.map((course) => {
+            if (course.id !== vars.cursoId) return course;
+            return { ...course, thumbnail_r2_key: data.thumbnail_r2_key, version_tag: data.version_tag };
+          });
+          return { ...current, data };
+        },
+      );
+      // Background reconciliation
       invalidateCursoCollections(qc);
     },
   });
