@@ -1,0 +1,26 @@
+{
+  "flight_report": {
+    "id": 700106,
+    "report_number": "FR-700106",
+    "flight_number": "ATX7006"
+  },
+  "flight_report_leg": {
+    "number": 3,
+    "departure_location": {
+      "icao_code": "SBMI"
+    },
+    "arrival_location": {
+      "icao_code": "SBRJ"
+    },
+    "engine_start_time_str": "19:05",
+    "takeoff_time_str": "19:18",
+    "landing_time_str": "20:03",
+    "engine_shutoff_time_str": "20:10"
+  },
+  "staff": {
+    "name": "TRIPULANTE_SIG_05",
+    "inscription": "09999"
+  },
+  "date": "2026-06-14",
+  "aircraft_registration": "PS-TS6"
+}
