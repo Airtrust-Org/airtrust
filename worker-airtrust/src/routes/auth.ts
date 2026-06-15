@@ -219,6 +219,119 @@ function normalizeAuthRole(value: unknown): string {
   return normalized;
 }
 
+type DevBypassIdentity = {
+  nome: string;
+  resolvedRole: string;
+  persistedProfile: string;
+  empresaRole: string;
+  isPreset: boolean;
+};
+
+function resolveDevBypassIdentity(email: string): DevBypassIdentity {
+  const normalizedEmail = email.trim().toLowerCase();
+  const localPart = normalizedEmail.split('@')[0] || 'dev';
+
+  if (localPart.includes('admin')) {
+    return {
+      nome: 'Administrador Dev',
+      resolvedRole: 'ADMINISTRADOR',
+      persistedProfile: 'ADMIN',
+      empresaRole: 'admin',
+      isPreset: true,
+    };
+  }
+
+  if (localPart.includes('gestor') || localPart.includes('manager')) {
+    return {
+      nome: 'Gestor Dev',
+      resolvedRole: 'GESTOR',
+      persistedProfile: 'GESTOR',
+      empresaRole: 'manager',
+      isPreset: true,
+    };
+  }
+
+  if (localPart.includes('instrutor') || localPart.includes('instructor')) {
+    return {
+      nome: 'Instrutor Dev',
+      resolvedRole: 'INSTRUTOR',
+      persistedProfile: 'USUARIO',
+      empresaRole: 'instructor',
+      isPreset: true,
+    };
+  }
+
+  if (
+    localPart.includes('aluno') ||
+    localPart.includes('aluna') ||
+    localPart.includes('student') ||
+    localPart.includes('member')
+  ) {
+    return {
+      nome: 'Aluno Dev',
+      resolvedRole: 'ALUNO',
+      persistedProfile: 'USUARIO',
+      empresaRole: 'student',
+      isPreset: true,
+    };
+  }
+
+  return {
+    nome: localPart,
+    resolvedRole: 'USUARIO',
+    persistedProfile: 'USUARIO',
+    empresaRole: 'member',
+    isPreset: false,
+  };
+}
+
+async function syncDevBypassUser(
+  db: D1Database,
+  devIdentity: DevBypassIdentity,
+  userId: number,
+  statusColumns: { hasActive: boolean; hasAtivo: boolean },
+): Promise<void> {
+  const statusSetClause = statusColumns.hasActive
+    ? ', active = 1'
+    : statusColumns.hasAtivo
+      ? ', ativo = 1'
+      : '';
+
+  await db
+    .prepare(
+      `UPDATE usuarios
+       SET password_hash = ?, nome = ?, perfil = ?, deleted_at = NULL, updated_at = datetime('now')${statusSetClause}
+       WHERE id = ?`,
+    )
+    .bind('dev-local-bypass', devIdentity.nome, devIdentity.persistedProfile, userId)
+    .run();
+
+  const primeiraEmpresa = await db
+    .prepare(`SELECT id FROM empresas WHERE deleted_at IS NULL AND ativo = 1 ORDER BY id ASC LIMIT 1`)
+    .first<{ id: number }>();
+
+  if (!primeiraEmpresa?.id) {
+    return;
+  }
+
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role) VALUES (?, ?, 1, ?)`,
+    )
+    .bind(userId, primeiraEmpresa.id, devIdentity.empresaRole)
+    .run();
+
+  await db
+    .prepare(
+      `UPDATE usuarios_empresas
+       SET role = ?, is_primary = CASE WHEN empresa_id = ? THEN 1 ELSE is_primary END
+       WHERE usuario_id = ?
+         AND empresa_id = ?`,
+    )
+    .bind(devIdentity.empresaRole, primeiraEmpresa.id, userId, primeiraEmpresa.id)
+    .run();
+}
+
 function normalizeModulosAtivos(value: unknown): string[] | null {
   if (Array.isArray(value)) {
     const normalized = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
@@ -700,6 +813,7 @@ authRoutes.post(
 
       const devEnv = c.env.ENVIRONMENT ?? 'production';
       const devBypassEnabled = devEnv === 'development' && c.env.ENABLE_DEV_AUTH_BYPASS === 'true';
+      const devIdentity = devBypassEnabled ? resolveDevBypassIdentity(email) : null;
 
       // Buscar usuário no D1
       const db = c.env.DB;
@@ -726,18 +840,49 @@ authRoutes.post(
         .bind(email.toLowerCase())
         .first<DbUser>();
 
+      if (devBypassEnabled && devIdentity?.isPreset && user) {
+        await syncDevBypassUser(db, devIdentity, user.id, { hasActive, hasAtivo });
+        user = await db
+          .prepare(
+            `SELECT id, email, nome, perfil, password_hash FROM usuarios WHERE email = ? AND deleted_at IS NULL ${activeWhere}`,
+          )
+          .bind(email.toLowerCase())
+          .first<DbUser>();
+      }
+
+      if (!user && devBypassEnabled && devIdentity?.isPreset) {
+        const legacyUser = await db
+          .prepare(`SELECT id, email, nome, perfil, password_hash FROM usuarios WHERE email = ? LIMIT 1`)
+          .bind(email.toLowerCase())
+          .first<DbUser>();
+
+        if (legacyUser) {
+          await syncDevBypassUser(db, devIdentity, legacyUser.id, { hasActive, hasAtivo });
+          user = await db
+            .prepare(
+              `SELECT id, email, nome, perfil, password_hash FROM usuarios WHERE email = ? AND deleted_at IS NULL ${activeWhere}`,
+            )
+            .bind(email.toLowerCase())
+            .first<DbUser>();
+        }
+      }
+
       if (!user) {
-        if (devBypassEnabled) {
-          // Dev bypass: auto-provisionar qualquer email que não exista no banco local
-          const nomeDev = email.toLowerCase().split('@')[0];
+        if (devBypassEnabled && devIdentity) {
+          // Dev bypass: auto-provisionar perfis locais sem tocar ambientes remotos.
           await db
             .prepare(
-              `INSERT OR IGNORE INTO usuarios (email, password_hash, nome, perfil, ${
+              `INSERT OR IGNORE INTO usuarios (email, password_hash, nome, perfil, deleted_at, ${
                 hasActive ? 'active' : hasAtivo ? 'ativo' : 'created_at'
               })
-             VALUES (?, ?, ?, ?, ${hasActive || hasAtivo ? '1' : "datetime('now')"})`,
+             VALUES (?, ?, ?, ?, NULL, ${hasActive || hasAtivo ? '1' : "datetime('now')"})`,
             )
-            .bind(email.toLowerCase(), 'dev-local-bypass', nomeDev, 'ADMIN')
+            .bind(
+              email.toLowerCase(),
+              'dev-local-bypass',
+              devIdentity.nome,
+              devIdentity.persistedProfile,
+            )
             .run();
 
           const created = await db
@@ -747,21 +892,13 @@ authRoutes.post(
             .bind(email.toLowerCase())
             .first<DbUser>();
           if (created) {
-            user = created;
-            // Vincular à primeira empresa ativa se ainda não tiver vínculo
-            const primeiraEmpresa = await db
+            await syncDevBypassUser(db, devIdentity, created.id, { hasActive, hasAtivo });
+            user = await db
               .prepare(
-                `SELECT id FROM empresas WHERE deleted_at IS NULL AND ativo = 1 ORDER BY id ASC LIMIT 1`,
+                `SELECT id, email, nome, perfil, password_hash FROM usuarios WHERE email = ? AND deleted_at IS NULL ${activeWhere}`,
               )
-              .first<{ id: number }>();
-            if (primeiraEmpresa?.id) {
-              await db
-                .prepare(
-                  `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role) VALUES (?, ?, 1, 'admin')`,
-                )
-                .bind((created as NonNullable<DbUser>).id, primeiraEmpresa.id)
-                .run();
-            }
+              .bind(email.toLowerCase())
+              .first<DbUser>();
           } else {
             throw unauthorized('Credenciais inválidas', 'INVALID_CREDENTIALS');
           }
@@ -773,7 +910,7 @@ authRoutes.post(
       // Verificar senha — em dev com bypass, aceitar qualquer senha para utilizadores auto-provisionados
       let isValidPassword = false;
       try {
-        if (devBypassEnabled) {
+        if (devBypassEnabled && (user as NonNullable<DbUser>).password_hash === 'dev-local-bypass') {
           isValidPassword = true;
         } else {
           isValidPassword = await verifyPassword(
@@ -789,15 +926,17 @@ authRoutes.post(
         throw unauthorized('Credenciais inválidas', 'INVALID_CREDENTIALS');
       }
 
+      const authenticatedUser = user as NonNullable<DbUser>;
+
       // Gerar JWT access token (1 hora)
       const jwtSecret = c.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET não configurado no ambiente');
-      const empresaId = await resolveUserEmpresaId(db, (user as NonNullable<DbUser>).id);
+      const empresaId = await resolveUserEmpresaId(db, authenticatedUser.id);
       const resolvedRole = await resolveAuthRoleForUser(
         db,
-        (user as NonNullable<DbUser>).id,
+        authenticatedUser.id,
         empresaId,
-        (user as NonNullable<DbUser>).perfil,
+        authenticatedUser.perfil,
       );
 
       // Carregar permissões individuais do usuário
@@ -805,7 +944,7 @@ authRoutes.post(
         .prepare(
           `SELECT permissao, tipo FROM usuario_permissoes WHERE usuario_id = ? ORDER BY permissao`,
         )
-        .bind((user as NonNullable<DbUser>).id)
+        .bind(authenticatedUser.id)
         .all<{ permissao: string; tipo: string }>()
         .catch(() => ({ results: [] as Array<{ permissao: string; tipo: string }> }));
 
@@ -814,17 +953,17 @@ authRoutes.post(
       // Carregar funcionario_id se existir
       const userFull = await db
         .prepare(`SELECT funcionario_id FROM usuarios WHERE id = ? LIMIT 1`)
-        .bind((user as NonNullable<DbUser>).id)
+        .bind(authenticatedUser.id)
         .first<{ funcionario_id: number | null }>()
         .catch(() => null);
 
       const { token: accessToken, jti } = await generateJWT(
         {
-          sub: (user as NonNullable<DbUser>).id,
+          sub: authenticatedUser.id,
           empresa_id: empresaId,
-          email: (user as NonNullable<DbUser>).email,
+          email: authenticatedUser.email,
           role: resolvedRole,
-          nome: (user as NonNullable<DbUser>).nome,
+          nome: authenticatedUser.nome,
           permissions: permissions.length > 0 ? permissions : undefined,
           funcionario_id: userFull?.funcionario_id ?? null,
         },
@@ -841,13 +980,13 @@ authRoutes.post(
         .prepare(
           'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
         )
-        .bind((user as NonNullable<DbUser>).id, refreshToken, expiresAt, jti)
+        .bind(authenticatedUser.id, refreshToken, expiresAt, jti)
         .run()
         .catch(() =>
           // fallback: tabela pode não ter a coluna jti ainda (migration pendente)
           db
             .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-            .bind((user as NonNullable<DbUser>).id, refreshToken, expiresAt)
+            .bind(authenticatedUser.id, refreshToken, expiresAt)
             .run(),
         );
 
@@ -858,10 +997,10 @@ authRoutes.post(
           accessToken,
           refreshToken,
           user: {
-            id: user.id,
-            email: user.email,
+            id: authenticatedUser.id,
+            email: authenticatedUser.email,
             role: resolvedRole,
-            nome: user.nome,
+            nome: authenticatedUser.nome,
             permissions,
             funcionario_id: userFull?.funcionario_id ?? null,
           },
