@@ -1,0 +1,26 @@
+{
+  "flight_report": {
+    "report_number": "FR-MISSING-ID",
+    "flight_number": "ATX7002"
+  },
+  "flight_report_leg": {
+    "number": null,
+    "departure_location": {
+      "icao_code": "SBSP"
+    },
+    "arrival_location": {
+      "icao_code": "SBJR"
+    },
+    "engine_start_time_str": "10:20",
+    "takeoff_time_str": "10:34",
+    "landing_time_str": "11:15",
+    "engine_shutoff_time_str": "11:22"
+  },
+  "staff": {
+    "id": 8802,
+    "name": "TRIPULANTE_SIG_02",
+    "inscription": "04567"
+  },
+  "date": "2026-06-14",
+  "aircraft_registration": "PS-TS2"
+}
