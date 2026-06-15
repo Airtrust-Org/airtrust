@@ -5,7 +5,7 @@
 > **Versão:** v1.0 — documento interno; **NÃO submetido à ANAC**; **não é parecer regulatório**
 > **Autor:** AirTrust Engineering
 > **Nível alvo:** **N1 — Operacional interno** (conforme `docs/AIRTRUST_MODULE_GOVERNANCE_EVIDENCE_STANDARD.md`)
-> **Estado atual do módulo:** **N0 — Protótipo navegável com mock data** (`controle_voos`, `isPrototype: true`, ver [modules.ts:236](src/react-app/lib/modules.ts))
+> **Estado atual do módulo:** **N1/A1 — operacional interno nas telas conectadas ao backend**, com telas auxiliares ainda marcadas como demonstrativas (`controle_voos`, ver [modules.ts](src/react-app/lib/modules.ts))
 >
 > **AVISO LEGAL E DE ESCOPO**
 > O AirTrust **não está homologado, certificado, aprovado ou autorizado** pela ANAC. Este MVP N1 é um **sistema operacional interno não regulado**: não substitui Diário de Bordo, eDB, SDRMe, RDV oficial, despacho legal, papel ou qualquer sistema oficial. **Não criar código, não alterar frontend/backend, não criar/aplicar migrations, não fazer deploy, não mexer em secrets, não fazer commit.** Este documento é apenas especificação. Nenhum dado, relatório ou exportação produzido por este MVP é evidência fiscal ou registro regulado.

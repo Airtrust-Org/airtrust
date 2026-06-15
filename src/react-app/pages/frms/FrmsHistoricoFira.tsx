@@ -19,7 +19,7 @@ import {
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
-import { EmptyState } from '@/react-app/components/ui/EmptyState';
+import { EmptyState } from '@/react-app/components/UI/EmptyState';
 import { useApi } from '@/react-app/hooks/useApi';
 import { useFrmsMutation } from '@/react-app/hooks/useFrms';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';

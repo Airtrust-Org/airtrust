@@ -17,6 +17,8 @@ type NamedSchemaObject = {
   name: string;
 };
 
+type SqliteHandle = ReturnType<typeof createDb>;
+
 const migrationPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../../migrations_experimental/0410_experimental_regulated_records_core.sql',
@@ -28,6 +30,7 @@ const requiredTables = [
   'regulated_record_versions',
   'regulated_record_hashes',
   'regulated_audit_events',
+  'regulated_chain_heads',
   'regulated_record_links',
 ];
 
@@ -50,6 +53,7 @@ const requiredIndexes = [
   'idx_regulated_audit_empresa_actor_created',
   'idx_regulated_audit_empresa_chain_sequence',
   'idx_regulated_audit_request',
+  'idx_regulated_chain_heads_empresa_scope',
   'idx_regulated_links_empresa_source_type',
   'idx_regulated_links_empresa_target_type',
   'idx_regulated_links_empresa_type_created',
@@ -74,16 +78,84 @@ const requiredTriggers = [
   'trg_regulated_audit_no_delete',
   'trg_regulated_audit_refs_same_empresa_insert',
   'trg_regulated_audit_refs_same_empresa_update',
+  'trg_regulated_chain_heads_matches_audit_insert',
+  'trg_regulated_chain_heads_no_rewind',
+  'trg_regulated_chain_heads_matches_audit_update',
+  'trg_regulated_chain_heads_no_delete',
   'trg_regulated_links_same_empresa_insert',
   'trg_regulated_links_same_empresa_update',
   'trg_regulated_links_no_update_active',
   'trg_regulated_links_no_delete_active',
 ];
 
+const triggerPolicyByTable: Record<string, readonly string[]> = {
+  regulated_audit_events: [
+    'trg_regulated_audit_no_update',
+    'trg_regulated_audit_no_delete',
+    'trg_regulated_audit_refs_same_empresa_insert',
+    'trg_regulated_audit_refs_same_empresa_update',
+  ],
+  regulated_chain_heads: [
+    'trg_regulated_chain_heads_matches_audit_insert',
+    'trg_regulated_chain_heads_no_rewind',
+    'trg_regulated_chain_heads_matches_audit_update',
+    'trg_regulated_chain_heads_no_delete',
+  ],
+  regulated_record_hashes: [
+    'trg_regulated_hashes_same_empresa_insert',
+    'trg_regulated_hashes_same_empresa_update',
+    'trg_regulated_hashes_no_update',
+    'trg_regulated_hashes_no_delete',
+  ],
+  regulated_record_links: [
+    'trg_regulated_links_same_empresa_insert',
+    'trg_regulated_links_same_empresa_update',
+    'trg_regulated_links_no_update_active',
+    'trg_regulated_links_no_delete_active',
+  ],
+  regulated_record_versions: [
+    'trg_regulated_versions_no_update_after_seal',
+    'trg_regulated_versions_no_delete_after_seal',
+    'trg_regulated_versions_no_soft_delete_when_sealed',
+    'trg_regulated_versions_same_empresa_insert',
+    'trg_regulated_versions_same_empresa_update',
+  ],
+  regulated_records: [
+    'trg_regulated_records_no_update_after_seal',
+    'trg_regulated_records_no_delete_after_seal',
+    'trg_regulated_records_no_soft_delete_when_sealed',
+    'trg_regulated_records_current_version_same_empresa_insert',
+    'trg_regulated_records_current_version_same_empresa_update',
+  ],
+};
+
 const hexA = 'a'.repeat(64);
 const hexB = 'b'.repeat(64);
 const hexC = 'c'.repeat(64);
 const hexD = 'd'.repeat(64);
+
+const frozenCanonicalizationVectors = [
+  {
+    name: 'nested object with ISO date string, nulls, arrays, Unicode NFC, volatile fields and sorted keys',
+    input: {
+      z: null,
+      request_id: 'req-local-1',
+      a: {
+        values: [3, null, { b: 'Cafe\u0301', a: true }],
+        updated_at: '2026-06-14T11:00:00.000Z',
+        date_utc: '2026-06-14T00:00:00.000Z',
+        nested: {
+          second: ['A', 'B'],
+          first: null,
+        },
+      },
+      updated_at: '2026-06-14T10:00:00.000Z',
+    },
+    expectedCanonicalJson:
+      '{"a":{"date_utc":"2026-06-14T00:00:00.000Z","nested":{"first":null,"second":["A","B"]},"values":[3,null,{"a":true,"b":"Café"}]},"z":null}',
+    expectedSha256: 'ef09c5b4351aa5213e85ecb4847677181adaa0c4bdbd0290445ce0f1d11c7bc8',
+  },
+] as const;
 
 const tempDirs: string[] = [];
 
@@ -124,7 +196,7 @@ function createDb() {
 
   sqlite(migrationSql);
 
-  return { sqlite, sqliteResult, queryJson };
+  return { databasePath, sqlite, sqliteResult, queryJson };
 }
 
 function expectSqlFailure(result: ReturnType<typeof spawnSync>, message: string) {
@@ -172,6 +244,64 @@ function insertVersion(
       ${(input.status ?? 'SEALED') === 'SEALED' ? "'2026-06-14T00:00:00.000Z'" : 'NULL'}
     );
   `);
+}
+
+async function buildRecordHash(input: {
+  recordId: string;
+  versionId: string;
+  recordType: string;
+  payloadHash: string;
+  attachmentsManifestHash?: string | null;
+  canonicalSchemaVersion?: string;
+  canonicalizationVersion?: string;
+}) {
+  return sha256Hex(
+    canonicalizeJson({
+      attachments_manifest_hash: input.attachmentsManifestHash ?? null,
+      canonical_schema_version: input.canonicalSchemaVersion ?? 'exp.schema.v1',
+      canonicalization_version: input.canonicalizationVersion ?? 'canonicalizer.v1',
+      payload_hash: input.payloadHash,
+      record_id: input.recordId,
+      record_type: input.recordType,
+      version_id: input.versionId,
+    }),
+  );
+}
+
+async function insertRecordHash(
+  sqlite: (sql: string) => string,
+  input: {
+    id: string;
+    empresaId: number;
+    recordId: string;
+    versionId: string;
+    recordType: string;
+    payloadHash: string;
+    chainScope: string;
+    chainSequence: number;
+    previousRecordHash?: string | null;
+    previousTenantChainHash?: string | null;
+  },
+) {
+  const recordHash = await buildRecordHash(input);
+  const tenantChainHash = await sha256Hex(`${input.previousTenantChainHash ?? 'GENESIS'}:${recordHash}`);
+
+  sqlite(`
+    INSERT INTO regulated_record_hashes (
+      id, empresa_id, record_id, version_id, record_type, canonicalization_version,
+      canonical_schema_version, payload_hash, record_hash, previous_record_hash,
+      previous_tenant_chain_hash, tenant_chain_hash, chain_scope, chain_sequence, computed_by
+    ) VALUES (
+      ${sqlString(input.id)}, ${input.empresaId}, ${sqlString(input.recordId)}, ${sqlString(input.versionId)},
+      ${sqlString(input.recordType)}, 'canonicalizer.v1', 'exp.schema.v1',
+      ${sqlString(input.payloadHash)}, ${sqlString(recordHash)},
+      ${input.previousRecordHash ? sqlString(input.previousRecordHash) : 'NULL'},
+      ${input.previousTenantChainHash ? sqlString(input.previousTenantChainHash) : 'NULL'},
+      ${sqlString(tenantChainHash)}, ${sqlString(input.chainScope)}, ${input.chainSequence}, 101
+    );
+  `);
+
+  return { recordHash, tenantChainHash };
 }
 
 async function buildEventHash(previousEventHash: string | null, payload: string) {
@@ -235,6 +365,164 @@ async function verifyEventChain(rows: { chain_sequence: number; event_payload_js
   return true;
 }
 
+function advanceChainHead(
+  sqlite: (sql: string) => string,
+  input: {
+    empresaId: number;
+    chainScope: string;
+    expectedSequence: number;
+    expectedEventHash: string;
+    nextSequence: number;
+    nextEventHash: string;
+    nextTenantChainHash: string;
+  },
+) {
+  return Number(
+    sqlite(`
+      UPDATE regulated_chain_heads
+      SET
+        last_chain_sequence = ${input.nextSequence},
+        last_event_hash = ${sqlString(input.nextEventHash)},
+        last_tenant_chain_hash = ${sqlString(input.nextTenantChainHash)},
+        updated_by = 101,
+        updated_at = '2026-06-14T00:00:00.000Z'
+      WHERE empresa_id = ${input.empresaId}
+        AND chain_scope = ${sqlString(input.chainScope)}
+        AND last_chain_sequence = ${input.expectedSequence}
+        AND last_event_hash = ${sqlString(input.expectedEventHash)};
+
+      SELECT changes();
+    `),
+  );
+}
+
+function dumpDatabase(databasePath: string) {
+  const result = spawnSync('sqlite3', [databasePath], {
+    input: '.dump\n',
+    encoding: 'utf8',
+  });
+
+  expect(result.status, result.stderr).toBe(0);
+  return result.stdout;
+}
+
+function restoreDumpToTempDb(dumpSql: string) {
+  const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-regulated-core-restore-'));
+  const databasePath = join(tempDir, 'restore.sqlite');
+  tempDirs.push(tempDir);
+
+  const result = spawnSync('sqlite3', [databasePath], {
+    input: dumpSql,
+    encoding: 'utf8',
+  });
+
+  expect(result.status, result.stderr).toBe(0);
+
+  function queryJson<T extends SqliteRow>(sql: string): T[] {
+    const queryResult = spawnSync('sqlite3', ['-json', databasePath, sql], {
+      encoding: 'utf8',
+    });
+
+    expect(queryResult.status, queryResult.stderr).toBe(0);
+    return queryResult.stdout.trim() ? (JSON.parse(queryResult.stdout) as T[]) : [];
+  }
+
+  return { databasePath, queryJson };
+}
+
+async function verifyRestoredCoreHashes(queryJson: SqliteHandle['queryJson']) {
+  const hashRows = queryJson<{
+    record_id: string;
+    version_id: string;
+    record_type: string;
+    canonical_payload_json: string;
+    payload_hash: string;
+    record_hash: string;
+    previous_tenant_chain_hash: string | null;
+    tenant_chain_hash: string;
+    chain_sequence: number;
+  }>(
+    `SELECT
+       h.record_id,
+       h.version_id,
+       h.record_type,
+       v.canonical_payload_json,
+       h.payload_hash,
+       h.record_hash,
+       h.previous_tenant_chain_hash,
+       h.tenant_chain_hash,
+       h.chain_sequence
+     FROM regulated_record_hashes h
+     JOIN regulated_record_versions v ON v.id = h.version_id
+     ORDER BY h.chain_sequence;`,
+  );
+
+  let previousRecordTenantChainHash: string | null = null;
+  for (const row of hashRows) {
+    const expectedPayloadHash = await sha256Hex(row.canonical_payload_json);
+    const expectedRecordHash = await buildRecordHash({
+      recordId: row.record_id,
+      versionId: row.version_id,
+      recordType: row.record_type,
+      payloadHash: row.payload_hash,
+    });
+    const expectedTenantChainHash = await sha256Hex(`${previousRecordTenantChainHash ?? 'GENESIS'}:${row.record_hash}`);
+
+    if (row.payload_hash !== expectedPayloadHash) return false;
+    if (row.record_hash !== expectedRecordHash) return false;
+    if (row.previous_tenant_chain_hash !== previousRecordTenantChainHash) return false;
+    if (row.tenant_chain_hash !== expectedTenantChainHash) return false;
+
+    previousRecordTenantChainHash = row.tenant_chain_hash;
+  }
+
+  const auditRows = queryJson<{
+    chain_sequence: number;
+    event_payload_json: string;
+    previous_event_hash: string | null;
+    event_hash: string;
+    tenant_chain_hash: string;
+  }>(
+    `SELECT chain_sequence, event_payload_json, previous_event_hash, event_hash, tenant_chain_hash
+     FROM regulated_audit_events
+     WHERE empresa_id = 10 AND chain_scope = 'EXPERIMENTAL_RECORD'
+     ORDER BY chain_sequence;`,
+  );
+
+  let previousEventHash: string | null = null;
+  let previousTenantChainHash: string | null = null;
+  for (const row of auditRows) {
+    const expectedEventHash = await buildEventHash(previousEventHash, row.event_payload_json);
+    const expectedTenantChainHash = await buildTenantChainHash(previousTenantChainHash, expectedEventHash);
+
+    if (row.previous_event_hash !== previousEventHash) return false;
+    if (row.event_hash !== expectedEventHash) return false;
+    if (row.tenant_chain_hash !== expectedTenantChainHash) return false;
+
+    previousEventHash = row.event_hash;
+    previousTenantChainHash = row.tenant_chain_hash;
+  }
+
+  const chainHeads = queryJson<{
+    last_chain_sequence: number;
+    last_event_hash: string | null;
+    last_tenant_chain_hash: string | null;
+  }>(
+    `SELECT last_chain_sequence, last_event_hash, last_tenant_chain_hash
+     FROM regulated_chain_heads
+     WHERE empresa_id = 10 AND chain_scope = 'EXPERIMENTAL_RECORD';`,
+  );
+  const lastAuditRow = auditRows.at(-1);
+
+  return (
+    chainHeads.length === 1 &&
+    lastAuditRow !== undefined &&
+    chainHeads[0].last_chain_sequence === lastAuditRow.chain_sequence &&
+    chainHeads[0].last_event_hash === lastAuditRow.event_hash &&
+    chainHeads[0].last_tenant_chain_hash === lastAuditRow.tenant_chain_hash
+  );
+}
+
 afterEach(() => {
   while (tempDirs.length > 0) {
     const tempDir = tempDirs.pop();
@@ -248,7 +536,7 @@ describe('migration 0410 experimental regulated records core', () => {
     expect(migrationPath).not.toContain('/migrations/');
   });
 
-  it('creates the five minimum tables with empresa_id on every table', () => {
+  it('creates the regulated local candidate tables with empresa_id on every table', () => {
     const { queryJson } = createDb();
 
     const tables = queryJson<NamedSchemaObject>(
@@ -275,6 +563,24 @@ describe('migration 0410 experimental regulated records core', () => {
 
     expect(indexes).toEqual(expect.arrayContaining(requiredIndexes));
     expect(triggers).toEqual(expect.arrayContaining(requiredTriggers));
+  });
+
+  it('requires an explicit trigger policy for every experimental regulated table', () => {
+    const { queryJson } = createDb();
+
+    const tables = queryJson<NamedSchemaObject>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'regulated_%' ORDER BY name;",
+    ).map(({ name }) => name);
+    const triggers = queryJson<{ name: string; tbl_name: string }>(
+      "SELECT name, tbl_name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_regulated_%' ORDER BY name;",
+    );
+
+    expect(Object.keys(triggerPolicyByTable).sort()).toEqual(tables);
+
+    for (const table of tables) {
+      const tableTriggers = triggers.filter(({ tbl_name }) => tbl_name === table).map(({ name }) => name);
+      expect(tableTriggers).toEqual(expect.arrayContaining([...triggerPolicyByTable[table]]));
+    }
   });
 
   it('blocks UPDATE and DELETE on sealed versions', () => {
@@ -478,6 +784,157 @@ describe('migration 0410 experimental regulated records core', () => {
     `);
   });
 
+  it('serializes a local chain head by empresa_id and chain_scope and forces stale attempts to retry', async () => {
+    const { sqlite, sqliteResult, queryJson } = createDb();
+    const scope = 'EXPERIMENTAL_RECORD';
+    const first = await insertAuditEvent(sqlite, {
+      id: 'event-head-1',
+      empresaId: 10,
+      chainScope: scope,
+      chainSequence: 1,
+      payload: '{"event":"created"}',
+      previousEventHash: null,
+      previousTenantChainHash: null,
+    });
+
+    sqlite(`
+      INSERT INTO regulated_chain_heads (
+        id, empresa_id, chain_scope, last_chain_sequence, last_event_hash,
+        last_tenant_chain_hash, updated_by
+      ) VALUES (
+        'head-10-experimental-record', 10, ${sqlString(scope)}, 1,
+        ${sqlString(first.eventHash)}, ${sqlString(first.tenantChainHash)}, 101
+      );
+    `);
+
+    const winner = await insertAuditEvent(sqlite, {
+      id: 'event-head-2-winner',
+      empresaId: 10,
+      chainScope: scope,
+      chainSequence: 2,
+      payload: '{"event":"sealed","attempt":"winner"}',
+      previousEventHash: first.eventHash,
+      previousTenantChainHash: first.tenantChainHash,
+    });
+
+    expect(
+      advanceChainHead(sqlite, {
+        empresaId: 10,
+        chainScope: scope,
+        expectedSequence: 1,
+        expectedEventHash: first.eventHash,
+        nextSequence: 2,
+        nextEventHash: winner.eventHash,
+        nextTenantChainHash: winner.tenantChainHash,
+      }),
+    ).toBe(1);
+
+    const staleEventHash = await buildEventHash(first.eventHash, '{"event":"sealed","attempt":"stale"}');
+    const staleTenantChainHash = await buildTenantChainHash(first.tenantChainHash, staleEventHash);
+    expectSqlFailure(
+      sqliteResult(`
+        INSERT INTO regulated_audit_events (
+          id, empresa_id, event_type, event_category, actor_type, event_payload_json,
+          previous_event_hash, event_hash, tenant_chain_hash, chain_scope, chain_sequence
+        ) VALUES (
+          'event-head-2-stale', 10, 'TEST_EVENT', 'REGULATED_RECORDS_CORE', 'system',
+          '{"event":"sealed","attempt":"stale"}', ${sqlString(first.eventHash)},
+          ${sqlString(staleEventHash)}, ${sqlString(staleTenantChainHash)}, ${sqlString(scope)}, 2
+        );
+      `),
+      'UNIQUE constraint failed: regulated_audit_events.empresa_id, regulated_audit_events.chain_scope, regulated_audit_events.chain_sequence',
+    );
+
+    const third = await insertAuditEvent(sqlite, {
+      id: 'event-head-3',
+      empresaId: 10,
+      chainScope: scope,
+      chainSequence: 3,
+      payload: '{"event":"retry-after-refresh"}',
+      previousEventHash: winner.eventHash,
+      previousTenantChainHash: winner.tenantChainHash,
+    });
+
+    expect(
+      advanceChainHead(sqlite, {
+        empresaId: 10,
+        chainScope: scope,
+        expectedSequence: 1,
+        expectedEventHash: first.eventHash,
+        nextSequence: 3,
+        nextEventHash: third.eventHash,
+        nextTenantChainHash: third.tenantChainHash,
+      }),
+    ).toBe(0);
+    expect(
+      advanceChainHead(sqlite, {
+        empresaId: 10,
+        chainScope: scope,
+        expectedSequence: 2,
+        expectedEventHash: winner.eventHash,
+        nextSequence: 3,
+        nextEventHash: third.eventHash,
+        nextTenantChainHash: third.tenantChainHash,
+      }),
+    ).toBe(1);
+
+    const heads = queryJson<{ last_chain_sequence: number; last_event_hash: string; last_tenant_chain_hash: string }>(
+      "SELECT last_chain_sequence, last_event_hash, last_tenant_chain_hash FROM regulated_chain_heads WHERE id = 'head-10-experimental-record';",
+    );
+    expect(heads).toEqual([
+      {
+        last_chain_sequence: 3,
+        last_event_hash: third.eventHash,
+        last_tenant_chain_hash: third.tenantChainHash,
+      },
+    ]);
+  });
+
+  it('blocks chain head deletion, rewind and references to missing audit events', async () => {
+    const { sqlite, sqliteResult } = createDb();
+    const first = await insertAuditEvent(sqlite, {
+      id: 'event-head-guard-1',
+      empresaId: 10,
+      chainScope: 'EXPERIMENTAL_RECORD',
+      chainSequence: 1,
+      payload: '{"event":"created"}',
+      previousEventHash: null,
+      previousTenantChainHash: null,
+    });
+
+    expectSqlFailure(
+      sqliteResult(`
+        INSERT INTO regulated_chain_heads (
+          id, empresa_id, chain_scope, last_chain_sequence, last_event_hash,
+          last_tenant_chain_hash, updated_by
+        ) VALUES (
+          'head-missing-event', 10, 'EXPERIMENTAL_RECORD', 2,
+          ${sqlString(hexA)}, ${sqlString(hexB)}, 101
+        );
+      `),
+      'regulated_chain_heads: head must match an existing audit event',
+    );
+
+    sqlite(`
+      INSERT INTO regulated_chain_heads (
+        id, empresa_id, chain_scope, last_chain_sequence, last_event_hash,
+        last_tenant_chain_hash, updated_by
+      ) VALUES (
+        'head-guard', 10, 'EXPERIMENTAL_RECORD', 1,
+        ${sqlString(first.eventHash)}, ${sqlString(first.tenantChainHash)}, 101
+      );
+    `);
+
+    expectSqlFailure(
+      sqliteResult("UPDATE regulated_chain_heads SET last_chain_sequence = 0, last_event_hash = NULL, last_tenant_chain_hash = NULL WHERE id = 'head-guard';"),
+      'regulated_chain_heads: chain head can only advance within the same empresa_id and chain_scope',
+    );
+    expectSqlFailure(
+      sqliteResult("DELETE FROM regulated_chain_heads WHERE id = 'head-guard';"),
+      'regulated_chain_heads: chain heads cannot be deleted',
+    );
+  });
+
   it('stores previous_event_hash and makes removal or reordering detectable by recomputation', async () => {
     const { sqlite, queryJson } = createDb();
     const first = await insertAuditEvent(sqlite, {
@@ -516,6 +973,106 @@ describe('migration 0410 experimental regulated records core', () => {
     await expect(verifyEventChain(rows)).resolves.toBe(true);
     await expect(verifyEventChain([...rows].reverse())).resolves.toBe(false);
     await expect(verifyEventChain(rows.slice(1))).resolves.toBe(false);
+  });
+
+  it('restores a local SQLite logical dump and detects payload tampering by recomputation', async () => {
+    const { databasePath, sqlite } = createDb();
+    const payload = {
+      aircraft_prefix: 'PR-ABC',
+      observed_at: '2026-06-14T00:00:00.000Z',
+      readings: [3, null, { label: 'Cafe\u0301' }],
+      updated_at: 'volatile-local-field',
+    };
+    const sealedPayload = await hashCanonicalPayload({
+      canonicalSchemaVersion: 'exp.schema.v1',
+      canonicalizationVersion: 'canonicalizer.v1',
+      payload,
+    });
+
+    insertRecord(sqlite, 'record-restore', 10, 'SEALED');
+    insertVersion(sqlite, {
+      id: 'version-restore',
+      empresaId: 10,
+      recordId: 'record-restore',
+      versionNumber: 1,
+      payload: sealedPayload.canonicalJson,
+    });
+    const recordHash = await insertRecordHash(sqlite, {
+      id: 'hash-restore',
+      empresaId: 10,
+      recordId: 'record-restore',
+      versionId: 'version-restore',
+      recordType: 'EXPERIMENTAL_RECORD',
+      payloadHash: sealedPayload.payloadHash,
+      chainScope: 'EXPERIMENTAL_RECORD',
+      chainSequence: 1,
+    });
+    const first = await insertAuditEvent(sqlite, {
+      id: 'event-restore-1',
+      empresaId: 10,
+      recordId: 'record-restore',
+      versionId: 'version-restore',
+      chainScope: 'EXPERIMENTAL_RECORD',
+      chainSequence: 1,
+      payload: canonicalizeJson({
+        event: 'RECORD_HASHED',
+        payload_hash: sealedPayload.payloadHash,
+        record_hash: recordHash.recordHash,
+      }),
+      previousEventHash: null,
+      previousTenantChainHash: null,
+    });
+
+    sqlite(`
+      INSERT INTO regulated_chain_heads (
+        id, empresa_id, chain_scope, last_chain_sequence, last_event_hash,
+        last_tenant_chain_hash, updated_by
+      ) VALUES (
+        'head-restore', 10, 'EXPERIMENTAL_RECORD', 1,
+        ${sqlString(first.eventHash)}, ${sqlString(first.tenantChainHash)}, 101
+      );
+    `);
+
+    const second = await insertAuditEvent(sqlite, {
+      id: 'event-restore-2',
+      empresaId: 10,
+      recordId: 'record-restore',
+      versionId: 'version-restore',
+      chainScope: 'EXPERIMENTAL_RECORD',
+      chainSequence: 2,
+      payload: canonicalizeJson({
+        event: 'HEAD_ADVANCED',
+        tenant_chain_hash: recordHash.tenantChainHash,
+      }),
+      previousEventHash: first.eventHash,
+      previousTenantChainHash: first.tenantChainHash,
+    });
+
+    expect(
+      advanceChainHead(sqlite, {
+        empresaId: 10,
+        chainScope: 'EXPERIMENTAL_RECORD',
+        expectedSequence: 1,
+        expectedEventHash: first.eventHash,
+        nextSequence: 2,
+        nextEventHash: second.eventHash,
+        nextTenantChainHash: second.tenantChainHash,
+      }),
+    ).toBe(1);
+
+    const dump = dumpDatabase(databasePath);
+    const restored = restoreDumpToTempDb(dump);
+    await expect(verifyRestoredCoreHashes(restored.queryJson)).resolves.toBe(true);
+
+    const tamperedPayload = await hashCanonicalPayload({
+      canonicalSchemaVersion: 'exp.schema.v1',
+      canonicalizationVersion: 'canonicalizer.v1',
+      payload: { ...payload, aircraft_prefix: 'PR-TMP' },
+    });
+    expect(dump).toContain(sealedPayload.canonicalJson);
+
+    const tamperedRestore = restoreDumpToTempDb(dump.replace(sealedPayload.canonicalJson, tamperedPayload.canonicalJson));
+    await expect(verifyRestoredCoreHashes(tamperedRestore.queryJson)).resolves.toBe(false);
   });
 
   it('blocks cross-tenant links', () => {
@@ -639,6 +1196,13 @@ describe('migration 0410 experimental regulated records core', () => {
 });
 
 describe('regulated records canonicalization helper', () => {
+  it.each(frozenCanonicalizationVectors)('matches frozen canonicalization vector: $name', async (vector) => {
+    const canonicalJson = canonicalizeJson(vector.input);
+
+    expect(canonicalJson).toBe(vector.expectedCanonicalJson);
+    await expect(sha256Hex(canonicalJson)).resolves.toBe(vector.expectedSha256);
+  });
+
   it('generates the same canonical string for objects with different key order', () => {
     const first = canonicalizeJson({ b: 2, a: { y: true, x: null } });
     const second = canonicalizeJson({ a: { x: null, y: true }, b: 2 });

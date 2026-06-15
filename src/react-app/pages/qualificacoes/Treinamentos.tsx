@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
 import { Plus, Search, FileText, SearchX } from 'lucide-react';
-import { EmptyState } from '@/react-app/components/ui/EmptyState';
+import { EmptyState } from '@/react-app/components/UI/EmptyState';
 // 🚀 LAZY LOADING: XLSX carregado dinamicamente apenas quando necessário (exportarParaExcel)
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { BaseModal as Modal } from '../../components/modals/BaseModal';

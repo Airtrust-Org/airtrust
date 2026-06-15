@@ -36,7 +36,9 @@ describe('service worker cache guard', () => {
       'const LMS_PLAYER_NAV_PATTERNS = [/^\\/lms\\/player\\//];',
     );
     expect(serviceWorkerSource).toContain('const API_BYPASS_PATHS = [/^\\/api\\//];');
-    expect(serviceWorkerSource).toContain('if (shouldBypassAirTrustCaching(request)) {');
-    expect(serviceWorkerSource).toContain('event.respondWith(fetch(request));');
+    expect(serviceWorkerSource).toMatch(
+      /if \(shouldBypassAirTrustCaching\(request\)\) \{\s*event\.respondWith\(\s*fetch\(request\)\.catch/,
+    );
+    expect(serviceWorkerSource).toContain("statusText: 'Service Unavailable'");
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppLayout from '../AppLayout';
@@ -100,7 +100,9 @@ describe('AppLayout module gating', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: 'LMS' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'SGSO' })).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Treinamentos' }));
+
+    expect(screen.getByRole('link', { name: 'LMS / Cursos EAD' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'SGSO PRÉVIA' })).toBeInTheDocument();
   });
 });

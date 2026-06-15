@@ -17,7 +17,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
-import { EmptyState } from '@/react-app/components/ui/EmptyState';
+import { EmptyState } from '@/react-app/components/UI/EmptyState';
 import { useFrmsAlertas, useFrmsMutation } from '@/react-app/hooks/useFrms';
 import type { FrmsAlertaRow } from '@/react-app/hooks/useFrms';
 import { toast } from 'sonner';

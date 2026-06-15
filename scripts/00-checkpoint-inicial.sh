@@ -1,6 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # 00-checkpoint-inicial.sh
 # Checkpoint inicial antes da Fase 2
+#
+# Operational hardening:
+# - does not stage files automatically
+# - does not commit automatically
+# - aborts on a dirty working tree so the operator can review selectively
 
 set -euo pipefail
 
@@ -10,12 +15,9 @@ echo ""
 # 1. Verificar que estamos em branch limpo
 if [ -n "$(git status --porcelain)" ]; then
   echo "⚠️  ATENÇÃO: Há mudanças não commitadas"
-  echo "Fazer commit antes de continuar? (s/n)"
-  read -r response
-  if [ "$response" = "s" ]; then
-    git add -A
-    git commit -m "chore: checkpoint antes da Fase 2"
-  fi
+  echo "Revise e faça stage seletivo manualmente antes de continuar."
+  echo "Este script não usa git add automático."
+  exit 1
 fi
 
 # 2. Criar backup completo

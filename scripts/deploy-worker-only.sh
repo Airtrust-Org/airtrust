@@ -4,11 +4,27 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKER_DIR="$ROOT_DIR/worker-airtrust"
+CONFIRM_DEPLOY_TEXT="I understand this deploys the AirTrust production worker"
 # DPLY-1: Abort if APP_VERSION is set externally without an explicit override flag.
 if [[ -n "${APP_VERSION:-}" && "${AIRTRUST_ALLOW_APP_VERSION_OVERRIDE:-0}" != "1" ]]; then
   echo "❌ APP_VERSION externo detectado: '$APP_VERSION'" >&2
   echo "   Isso pode causar version stamp obsoleto no deploy." >&2
   echo "   Remova a variável ou use AIRTRUST_ALLOW_APP_VERSION_OVERRIDE=1 conscientemente." >&2
+  exit 1
+fi
+
+echo "⚠️  PRODUCTION WORKER DEPLOY PATH"
+echo "   This script is blocked by default and must not be used for routine local validation."
+if [[ "${AIRTRUST_ALLOW_PROD_WORKER_DEPLOY:-}" != "YES" ]]; then
+  echo "❌ Production worker deploy is blocked by default." >&2
+  echo "   Use AIRTRUST_ALLOW_PROD_WORKER_DEPLOY=YES only in an approved deploy window." >&2
+  exit 1
+fi
+
+if [[ "${AIRTRUST_CONFIRM_PROD_WORKER_DEPLOY:-}" != "$CONFIRM_DEPLOY_TEXT" ]]; then
+  echo "❌ Missing explicit confirmation for production worker deploy." >&2
+  echo "   Set AIRTRUST_CONFIRM_PROD_WORKER_DEPLOY exactly to:" >&2
+  echo "   $CONFIRM_DEPLOY_TEXT" >&2
   exit 1
 fi
 

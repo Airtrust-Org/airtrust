@@ -258,7 +258,7 @@ const MroVencimentos = lazyWithRetry(() => import('./pages/mro/MroVencimentos'),
 const MroEstoque = lazyWithRetry(() => import('./pages/mro/MroEstoque'), 'MroEstoque');
 const MroRegistrosTecnicos = lazyWithRetry(() => import('./pages/mro/MroRegistrosTecnicos'), 'MroRegistrosTecnicos');
 
-// Controle de Voos — Protótipo
+// Controle de Voos — N1 operacional interno
 const ControleVoosDashboard = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosDashboard'), 'ControleVoosDashboard');
 const ControleVoosVoos = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosVoos'), 'ControleVoosVoos');
 const ControleVoosVooDetalhe = lazyWithRetry(() => import('./pages/controle-voos/ControleVoosVooDetalhe'), 'ControleVoosVooDetalhe');
@@ -907,7 +907,7 @@ export default function App() {
                     <Route path="/mro/estoque" element={<ProtectedRoute><MroEstoque /></ProtectedRoute>} />
                     <Route path="/mro/registros-tecnicos" element={<ProtectedRoute><MroRegistrosTecnicos /></ProtectedRoute>} />
 
-                    {/* Controle de Voos — Protótipo */}
+                    {/* Controle de Voos — N1 operacional interno */}
                     <Route path="/controle-voos" element={<ProtectedRoute><ControleVoosDashboard /></ProtectedRoute>} />
                     <Route path="/controle-voos/dashboard" element={<ProtectedRoute><ControleVoosDashboard /></ProtectedRoute>} />
                     <Route path="/controle-voos/voos" element={<ProtectedRoute><ControleVoosVoos /></ProtectedRoute>} />

@@ -30,6 +30,7 @@ DEV_CONFIG="$WORKER_DIR/wrangler.dev.toml"
 SCHEMA_FILE="$SCRIPT_DIR/schema-local.sql"
 SEED_FILE="$SCRIPT_DIR/seed-local.sql"
 OVERRIDES_FILE="$SCRIPT_DIR/setup-local-overrides.sql"
+CONTROLE_VOOS_SEED_FILE="$SCRIPT_DIR/seed-local-controle-voos.sql"
 DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 LMS_MIGRATIONS=(
@@ -51,6 +52,9 @@ LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0389_platform_roles_support_access_foundation.sql"
   "$WORKER_DIR/migrations/0390_training_class_management.sql"
 )
+CONTROLE_VOOS_MIGRATIONS=(
+  "$WORKER_DIR/migrations/0410_controle_voos_n1_schema.sql"
+)
 
 # ── Cores ──────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -68,6 +72,7 @@ command -v sqlite3 >/dev/null 2>&1 || error "sqlite3 não encontrado (brew insta
 [[ -f "$DEV_CONFIG"   ]] || error "wrangler.dev.toml não encontrado em $WORKER_DIR"
 [[ -f "$SCHEMA_FILE"  ]] || error "schema-local.sql não encontrado em $SCRIPT_DIR — restaure scripts/schema-local.sql e tente novamente"
 [[ -f "$SEED_FILE"    ]] || error "seed-local.sql não encontrado em $SCRIPT_DIR"
+[[ -f "$CONTROLE_VOOS_SEED_FILE" ]] || error "seed-local-controle-voos.sql não encontrado em $SCRIPT_DIR"
 
 # ── Reset ────────────────────────────────────────────────────
 if [[ "${1:-}" == "--reset" ]] || [[ ! -d "$LOCAL_STATE_DIR" ]]; then
@@ -128,6 +133,29 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
   fi
 done
 
+# ── Aplicar migrations incrementais do Controle de Voos N1 ────────────────────
+info "Aplicando migrations incrementais do Controle de Voos..."
+for migration_file in "${CONTROLE_VOOS_MIGRATIONS[@]}"; do
+  [[ -f "$migration_file" ]] || error "Migration não encontrada: $migration_file"
+  if npx wrangler d1 execute "$DB_NAME" \
+      --config "$DEV_CONFIG" \
+      --local \
+      --file "$migration_file" \
+      >/dev/null 2>&1; then
+    success "Migration aplicada: $(basename "$migration_file")"
+  else
+    warn "Migration aplicada com avisos: $(basename "$migration_file")"
+  fi
+done
+
+# ── Seed mínimo e demonstrativo de Controle de Voos N1 ───────────────────────
+info "Aplicando seed mínimo de Controle de Voos..."
+if sqlite3 "$SQLITE_FILE" < "$CONTROLE_VOOS_SEED_FILE" 2>/dev/null; then
+  success "Seed de Controle de Voos aplicado"
+else
+  warn "Seed de Controle de Voos aplicado com avisos"
+fi
+
 # ── Aplicar overrides idempotentes locais ─────────────────────────────────────
 if [[ -f "$OVERRIDES_FILE" ]]; then
   info "Aplicando overrides locais..."
@@ -151,6 +179,12 @@ EMPRESA_COUNT=$(sqlite3 "$SQLITE_FILE" \
 FUNCIONARIO_COUNT=$(sqlite3 "$SQLITE_FILE" \
   "SELECT COUNT(*) FROM funcionarios WHERE deleted_at IS NULL;" 2>/dev/null || echo "?")
 
+CV_TABLE_COUNT=$(sqlite3 "$SQLITE_FILE" \
+  "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'cv_%';" 2>/dev/null || echo "?")
+
+CV_FLIGHT_COUNT=$(sqlite3 "$SQLITE_FILE" \
+  "SELECT COUNT(*) FROM cv_voos WHERE deleted_at IS NULL;" 2>/dev/null || echo "?")
+
 echo ""
 echo "============================================================"
 success "Banco local pronto!"
@@ -158,6 +192,8 @@ echo ""
 echo "  Tabelas     : $TABLE_COUNT"
 echo "  Empresas    : $EMPRESA_COUNT"
 echo "  Funcionários: $FUNCIONARIO_COUNT"
+echo "  Tabelas cv_*: $CV_TABLE_COUNT"
+echo "  Voos N1     : $CV_FLIGHT_COUNT"
 echo ""
 echo "  Login master: filipe.daumas@icloud.com  /  senha: Davi@1979air"
 echo "  Login legado : admin@dev.local  /  senha: Admin@123"

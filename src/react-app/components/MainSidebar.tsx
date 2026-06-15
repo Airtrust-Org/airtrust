@@ -142,6 +142,7 @@ function MainSidebar() {
                         <Link
                           key={child.id}
                           to={child.path}
+                          title={child.title}
                           className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
                             isActiveRoute(child.path)
                               ? 'bg-primary/10 text-blue-700 border border-blue-200 font-medium'
@@ -150,7 +151,10 @@ function MainSidebar() {
                         >
                           <span>{child.label}</span>
                           {child.badge && (
-                            <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">
+                            <span
+                              title={child.title}
+                              className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full"
+                            >
                               {child.badge}
                             </span>
                           )}
