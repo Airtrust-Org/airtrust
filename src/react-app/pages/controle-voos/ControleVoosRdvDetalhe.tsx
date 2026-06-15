@@ -44,6 +44,24 @@ function formatRdvNumero(dataVoo: string, prefixo: string) {
   return `RDV-${compactDate}-${compactPrefix}`;
 }
 
+function normalizeRdvNumero(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function getSalvarRdvErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+
+  if (message.includes('Payload contem termo fora do escopo')) {
+    return 'Texto contem termo fora do escopo operacional interno. Remova termos regulatorios ou fiscais e salve novamente.';
+  }
+
+  if (message.includes('Combustivel incoerente')) {
+    return 'Combustivel incoerente: decolagem menos pouso deve ser igual ao consumo informado.';
+  }
+
+  return message || 'Nao foi possivel salvar o RDV.';
+}
+
 function toInputDateTime(value: string | null | undefined) {
   if (!value) return '';
   const parsed = new Date(value);
@@ -86,6 +104,8 @@ export default function ControleVoosRdvDetalhe() {
   const [finalizarConfirm, setFinalizarConfirm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [formState, setFormState] = useState<RdvFormState | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const { data: voo, isLoading: vooLoading, error: vooError } = useControleVoosVoo(id);
   const { data: rdv, isLoading: rdvLoading } = useControleVoosRdv(id);
@@ -140,12 +160,13 @@ export default function ControleVoosRdvDetalhe() {
   const form = formState ?? buildFormState(voo, rdv ?? null);
   const isLocked = rdv?.status === 'preenchimento_finalizado';
   const hasDraft = rdv?.status === 'rascunho';
-  const canSave = Boolean(id) && !isLocked && isEditing && !salvarMutation.isPending;
+  const canSave = Boolean(id) && !isLocked && isEditing && !isSaving && !salvarMutation.isPending;
   const canStart = !rdv && !isEditing;
 
   const canFinalizar = hasDraft && !finalizarMutation.isPending;
 
   function updateField<K extends keyof RdvFormState>(field: K, value: RdvFormState[K]) {
+    setSaveError(null);
     setFormState((current) => ({
       ...(current ?? buildFormState(voo, rdv ?? null)),
       [field]: value,
@@ -164,10 +185,48 @@ export default function ControleVoosRdvDetalhe() {
     return Number.parseInt(trimmed, 10);
   }
 
-  function handleSave() {
+  function validateBeforeSave() {
+    const expectedNumero = formatRdvNumero(form.data_voo || voo.data_programacao, voo.prefixo);
+    const normalizedNumero = normalizeRdvNumero(form.numero);
+
+    if (!normalizedNumero.startsWith(expectedNumero)) {
+      return `Numero do RDV deve comecar com ${expectedNumero} para este voo.`;
+    }
+
+    const combustivelDecolagem = parseNumber(form.combustivel_decolagem);
+    const combustivelPouso = parseNumber(form.combustivel_pouso);
+    const combustivelConsumo = parseNumber(form.combustivel_consumo);
+
+    if (combustivelDecolagem != null && combustivelPouso != null) {
+      if (combustivelPouso > combustivelDecolagem) {
+        return 'Combustivel incoerente: pouso nao pode ser maior que decolagem.';
+      }
+
+      if (combustivelConsumo != null) {
+        const expectedConsumo = Number((combustivelDecolagem - combustivelPouso).toFixed(3));
+        const actualConsumo = Number(combustivelConsumo.toFixed(3));
+        if (actualConsumo !== expectedConsumo) {
+          return `Combustivel incoerente: consumo deve ser ${expectedConsumo}.`;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  async function handleSave() {
     if (!id) return;
-    salvarMutation.mutate(
-      {
+    const validationError = validateBeforeSave();
+    if (validationError) {
+      setSaveError(validationError);
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await salvarMutation.mutateAsync({
         vooId: id,
         dados: {
           numero: form.numero.trim(),
@@ -185,14 +244,14 @@ export default function ControleVoosRdvDetalhe() {
           ocorrencias: form.ocorrencias.trim() || null,
           divergencias: form.divergencias.trim() || null,
         },
-      },
-      {
-        onSuccess: () => {
-          setIsEditing(true);
-          setFinalizarConfirm(false);
-        },
-      },
-    );
+      });
+      setIsEditing(true);
+      setFinalizarConfirm(false);
+    } catch (error) {
+      setSaveError(getSalvarRdvErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   function handleFinalizar() {
@@ -290,6 +349,9 @@ export default function ControleVoosRdvDetalhe() {
                         onChange={(event) => updateField('numero', event.target.value)}
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       />
+                      <span className="block text-[11px] text-slate-400 dark:text-slate-500">
+                        Deve comecar com {formatRdvNumero(form.data_voo || voo.data_programacao, voo.prefixo)}.
+                      </span>
                     </label>
                     <label className="space-y-1 text-sm">
                       <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Data do voo</span>
@@ -417,41 +479,46 @@ export default function ControleVoosRdvDetalhe() {
                     <Droplets className="h-4 w-4 text-amber-500" /> Combustível
                   </h2>
                   {isEditing && !isLocked ? (
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <label className="space-y-1 text-sm">
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível decolagem</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.1"
-                          value={form.combustivel_decolagem}
-                          onChange={(event) => updateField('combustivel_decolagem', event.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                        />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível pouso</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.1"
-                          value={form.combustivel_pouso}
-                          onChange={(event) => updateField('combustivel_pouso', event.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                        />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível consumo</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.1"
-                          value={form.combustivel_consumo}
-                          onChange={(event) => updateField('combustivel_consumo', event.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                        />
-                      </label>
-                    </div>
+                    <>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <label className="space-y-1 text-sm">
+                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível decolagem</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={form.combustivel_decolagem}
+                            onChange={(event) => updateField('combustivel_decolagem', event.target.value)}
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível pouso</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={form.combustivel_pouso}
+                            onChange={(event) => updateField('combustivel_pouso', event.target.value)}
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Combustível consumo</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={form.combustivel_consumo}
+                            onChange={(event) => updateField('combustivel_consumo', event.target.value)}
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                          />
+                        </label>
+                      </div>
+                      <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                        Regra operacional: decolagem menos pouso deve ser igual ao consumo.
+                      </p>
+                    </>
                   ) : rdv ? (
                     <dl className="grid gap-3 sm:grid-cols-3 text-sm">
                       <div>
@@ -563,7 +630,7 @@ export default function ControleVoosRdvDetalhe() {
                       }`}
                     >
                       <Clock className="h-4 w-4" />
-                      {salvarMutation.isPending ? 'Salvando…' : hasDraft ? 'Salvar rascunho' : 'Criar rascunho'}
+                      {isSaving || salvarMutation.isPending ? 'Salvando…' : hasDraft ? 'Salvar rascunho' : 'Criar rascunho'}
                     </button>
                   )}
 
@@ -603,8 +670,10 @@ export default function ControleVoosRdvDetalhe() {
                     <p className="text-xs text-red-600 dark:text-red-400">{finalizarMutation.error?.message}</p>
                   )}
 
-                  {salvarMutation.isError && (
-                    <p className="text-xs text-red-600 dark:text-red-400">{salvarMutation.error?.message}</p>
+                  {(saveError || salvarMutation.isError) && (
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
+                      {saveError || getSalvarRdvErrorMessage(salvarMutation.error)}
+                    </p>
                   )}
 
                   {isLocked && (
