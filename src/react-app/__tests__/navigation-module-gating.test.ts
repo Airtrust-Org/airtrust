@@ -63,4 +63,58 @@ describe('navigation module gating', () => {
     expect(visible.map((item) => item.id)).not.toContain('sgso');
     expect(visible.map((item) => item.id)).not.toContain('treinamentos_planejados');
   });
+
+  it('oculta modulos de desenvolvimento para admin nao allowlisted', () => {
+    const visible = getVisibleNavigationItems(
+      NAVIGATION_CONFIG.main_menu,
+      ['dashboard', 'mro', 'controle_voos'],
+      {
+        user: {
+          email: 'admin@empresa.com',
+          role: 'ADMINISTRADOR',
+        },
+      },
+    );
+
+    expect(visible.map((item) => item.id)).not.toContain('mro');
+    expect(visible.map((item) => item.id)).not.toContain('controle_voos');
+  });
+
+  it('oculta dashboard administrativo para gestor comum', () => {
+    const visible = getVisibleNavigationItems(NAVIGATION_CONFIG.main_menu, ['dashboard'], {
+      user: {
+        email: 'gestor@empresa.com',
+        role: 'GESTOR',
+      },
+    });
+
+    expect(visible.map((item) => item.id)).not.toContain('dashboard');
+  });
+
+  it('exibe modulos de desenvolvimento para admin principal allowlisted', () => {
+    const visible = getVisibleNavigationItems(
+      NAVIGATION_CONFIG.main_menu,
+      ['dashboard', 'mro', 'controle_voos'],
+      {
+        user: {
+          email: 'filipe.daumas@icloud.com',
+          role: 'ADMINISTRADOR',
+        },
+      },
+    );
+
+    expect(visible.map((item) => item.id)).toContain('mro');
+    expect(visible.map((item) => item.id)).toContain('controle_voos');
+  });
+
+  it('exibe dashboard administrativo para admin principal allowlisted', () => {
+    const visible = getVisibleNavigationItems(NAVIGATION_CONFIG.main_menu, ['dashboard'], {
+      user: {
+        email: 'filipe.daumas@icloud.com',
+        role: 'ADMINISTRADOR',
+      },
+    });
+
+    expect(visible.map((item) => item.id)).toContain('dashboard');
+  });
 });

@@ -81,6 +81,7 @@ describe('AppLayout module gating', () => {
 
     expect(screen.queryByRole('link', { name: 'LMS' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'SGSO' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'layout.nav.dashboard' })).toBeNull();
   });
 
   it('exibe LMS e SGSO quando os modulos beta estao ativos', () => {
@@ -104,5 +105,71 @@ describe('AppLayout module gating', () => {
 
     expect(screen.getByRole('link', { name: 'LMS / Cursos EAD' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'SGSO PRÉVIA' })).toBeInTheDocument();
+  });
+
+  it('oculta Manutencao e Controle de Voos para admin comum', () => {
+    authMock.mockReturnValue({
+      user: {
+        nome: 'Admin Comum',
+        email: 'admin@empresa.com',
+        role: 'ADMINISTRADOR',
+      },
+      logout: vi.fn(),
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'mro', 'controle_voos'] }],
+      empresaAtualId: 1,
+      selectEmpresa: vi.fn(async () => undefined),
+    });
+    permissionsMock.mockReturnValue({
+      can: () => true,
+      isAdmin: true,
+      isGestor: false,
+      isInstrutor: false,
+      isAluno: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppLayout>
+          <div>conteudo</div>
+        </AppLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('link', { name: 'layout.nav.dashboard' })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Manutenção/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Controle de Voos/i })).toBeNull();
+  });
+
+  it('exibe Manutencao e Controle de Voos para admin principal allowlisted', () => {
+    authMock.mockReturnValue({
+      user: {
+        nome: 'Filipe Daumas',
+        email: 'filipe.daumas@icloud.com',
+        role: 'ADMINISTRADOR',
+      },
+      logout: vi.fn(),
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'mro', 'controle_voos'] }],
+      empresaAtualId: 1,
+      selectEmpresa: vi.fn(async () => undefined),
+    });
+    permissionsMock.mockReturnValue({
+      can: () => true,
+      isAdmin: true,
+      isGestor: false,
+      isInstrutor: false,
+      isAluno: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppLayout>
+          <div>conteudo</div>
+        </AppLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByRole('link', { name: 'layout.nav.dashboard' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /Manutenção/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /Controle de Voos/i }).length).toBeGreaterThan(0);
   });
 });
