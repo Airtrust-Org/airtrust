@@ -19,7 +19,7 @@ import {
   CalendarX,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
-import { EmptyState } from '@/react-app/components/ui/EmptyState';
+import { EmptyState } from '@/react-app/components/UI/EmptyState';
 import { useApi } from '@/react-app/hooks/useApi';
 import { useFrmsEscalas, useFrmsMutation } from '@/react-app/hooks/useFrms';
 import type { FrmsEscalaRow } from '@/react-app/hooks/useFrms';

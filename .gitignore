@@ -146,6 +146,7 @@ node_modules
 .claude/worktrees/
 
 # AirTrust local/generated heavy artifacts
+lms/
 *.zip
 *.bundle
 *.tar
@@ -178,6 +179,17 @@ scripts/seed-local.sql
 scripts/seed-sgso-demo-full.sql
 scripts/validation/audit-endpoint-matrix.mjs
 
+# AirTrust employee exports generated from local/production data
+scripts/export_funcionarios_airtrust*.csv
+scripts/export_funcionarios_airtrust*.json
+scripts/export_funcionarios_airtrust*_report.md
+scripts/relatorio_export_funcionarios_airtrust*.md
+scripts/export_funcionarios*.csv
+scripts/export_funcionarios*.json
+scripts/export-funcionarios.sh
+scripts/export_funcionarios.py
+scripts/export_producao.py
+
 # ========== SENSITIVE SQL DUMPS / BACKUPS ==========
 # Scoped to avoid hiding official migrations in worker-airtrust/migrations/
 .local-dumps/
@@ -189,3 +201,9 @@ scripts/**/*dump*.sql
 scripts/**/*backup*.sql
 scripts/**/*prod*.sql
 scripts/legacy/*.sql
+
+# AirTrust pilot CV N1 temporary containment artifacts
+worker-airtrust/wrangler.pilot-cv-n1.toml
+docs/snapshots/
+pilot-cv-n1-*.sql
+pilot-cv-n1-*.dump.sql

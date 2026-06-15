@@ -336,7 +336,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/controle-voos') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   Controle de Voos
-                  <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
                 </Link>
               )}
             </nav>
@@ -655,7 +654,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/controle-voos') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   Controle de Voos
-                  <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">PRÉVIA</span>
                 </Link>
               )}
             </nav>

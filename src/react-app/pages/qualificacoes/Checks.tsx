@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
 import { Plus, Search, SearchX } from 'lucide-react';
-import { EmptyState } from '@/react-app/components/ui/EmptyState';
+import { EmptyState } from '@/react-app/components/UI/EmptyState';
 import { BaseModal as Modal } from '../../components/modals/BaseModal';
 import FormularioQualificacao from './FormularioQualificacao';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';

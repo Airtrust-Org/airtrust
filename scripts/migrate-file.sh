@@ -106,7 +106,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
   echo "    rm $SRC"
   echo ""
   echo "5️⃣  COMMIT"
-  echo "    git add -A"
+  echo "    git add -- $SRC $NEW_PATH"
   echo "    git commit -m \"refactor(simuladores): move $(basename $SRC) to $NEW_PATH\""
 else
   echo "❌ Operação cancelada"

@@ -3,6 +3,10 @@ set -euo pipefail
 
 CONFIRM_TEXT="I understand this may modify production data"
 
+echo "⚠️  PRODUCTION DATABASE WRITE PATH"
+echo "   This script can execute allowlisted SQL against production D1."
+echo "   It is blocked unless all explicit production DB write gates are set."
+
 if [[ $# -ne 1 ]]; then
   echo "ERROR: usage: bash scripts/run-production-db-script.sh <sql-file>"
   exit 1

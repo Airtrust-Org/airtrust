@@ -9,6 +9,7 @@ BACKUPS_DIR="$ROOT_DIR/backups"
 WRANGLER=(npx -y node@20 node_modules/wrangler/bin/wrangler.js)
 TARGET="local"
 ASSUME_YES=0
+CONFIRM_SYNC_TEXT="I understand this exports production D1 and writes only to the selected non-production target"
 
 usage() {
   cat <<'EOF'
@@ -17,6 +18,7 @@ Uso:
 
 Proteções:
   - Exige AIRTRUST_ALLOW_PROD_SYNC=1
+  - --yes exige AIRTRUST_CONFIRM_PROD_SYNC com o texto exato informado pelo script
   - Nunca aponta localhost para produção
   - Sempre anonimiza dados pessoais e limpa tokens/logs operacionais
 EOF
@@ -64,11 +66,15 @@ done
 command -v sqlite3 >/dev/null 2>&1 || fail "sqlite3 não encontrado"
 [[ -d "$WORKER_DIR" ]] || fail "worker-airtrust não encontrado"
 
+warn "PRODUCTION D1 EXPORT PATH: este script exporta produção e escreve apenas em target não-produtivo."
+
 if [[ "$ASSUME_YES" -ne 1 ]]; then
   warn "Você vai exportar produção e importar uma cópia anonimizada em $TARGET."
   printf 'Digite SYNC para continuar: '
   read -r confirmation
   [[ "$confirmation" == "SYNC" ]] || fail "Operação cancelada"
+else
+  [[ "${AIRTRUST_CONFIRM_PROD_SYNC:-}" == "$CONFIRM_SYNC_TEXT" ]] || fail "Com --yes, defina AIRTRUST_CONFIRM_PROD_SYNC exatamente como: $CONFIRM_SYNC_TEXT"
 fi
 
 mkdir -p "$BACKUPS_DIR"

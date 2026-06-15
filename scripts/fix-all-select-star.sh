@@ -1,12 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
 echo "🔧 OTIMIZANDO TODOS OS SELECT * AUTOMATICAMENTE"
 echo "================================================"
 echo ""
 
-# Backup antes de começar
-echo "📦 Criando backup..."
-git stash push -m "backup antes de otimizar SELECT *"
+if [ -n "$(git status --porcelain)" ]; then
+  echo "❌ Working tree suja. Este script altera arquivos em massa."
+  echo "   Faça backup/stage seletivo manualmente e rode novamente em uma árvore limpa."
+  exit 1
+fi
 
 # Definir substituições para cada tabela
 declare -A REPLACEMENTS=(
@@ -48,11 +51,8 @@ npm run build
 if [ $? -eq 0 ]; then
   echo "✅ Build OK!"
   echo ""
-  echo "💾 Commitando mudanças..."
-  git add -A
-  git commit -m "perf: Otimizar TODOS os SELECT * para colunas específicas (automatizado)"
+  echo "💾 Revise com git diff e faça stage seletivo manualmente."
 else
-  echo "❌ Build falhou! Revertendo..."
-  git stash pop
+  echo "❌ Build falhou! Revise o diff e reverta seletivamente."
   exit 1
 fi

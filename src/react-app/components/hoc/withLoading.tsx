@@ -6,7 +6,7 @@
  */
 
 import { ComponentType } from 'react';
-import { Spinner } from '@/react-app/components/ui/Spinner';
+import { Spinner } from '@/react-app/components/UI/Spinner';
 
 export interface WithLoadingProps {
   isLoading: boolean;

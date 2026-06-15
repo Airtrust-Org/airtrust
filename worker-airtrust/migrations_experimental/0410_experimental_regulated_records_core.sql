@@ -1,7 +1,10 @@
 -- AirTrust Regulated Records Core - experimental local physical schema.
 -- Scope: local-only experiment for the ADR-approved minimum core.
 -- No eDB, SDRMe, Controle de Voos, signatures, exports, devices, sync, or retention policies.
--- Do not apply to staging or production without a separate approved implementation phase.
+-- Experimental local artifact only; do not apply to staging or production.
+-- Do not move this file to worker-airtrust/migrations/.
+-- This file is not 0411 and must not be treated as a regular migration.
+-- This file does not authorize regulated use.
 
 CREATE TABLE IF NOT EXISTS regulated_records (
   id TEXT PRIMARY KEY,
@@ -181,6 +184,37 @@ CREATE INDEX IF NOT EXISTS idx_regulated_audit_empresa_chain_sequence
 
 CREATE INDEX IF NOT EXISTS idx_regulated_audit_request
   ON regulated_audit_events (request_id);
+
+CREATE TABLE IF NOT EXISTS regulated_chain_heads (
+  id TEXT PRIMARY KEY,
+  empresa_id INTEGER NOT NULL,
+  tenant_id TEXT,
+  chain_scope TEXT NOT NULL,
+  last_chain_sequence INTEGER NOT NULL DEFAULT 0,
+  last_event_hash TEXT,
+  last_tenant_chain_hash TEXT,
+  updated_by INTEGER NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (last_chain_sequence >= 0),
+  CHECK (last_event_hash IS NULL OR length(last_event_hash) = 64),
+  CHECK (last_tenant_chain_hash IS NULL OR length(last_tenant_chain_hash) = 64),
+  CHECK (
+    (
+      last_chain_sequence = 0
+      AND last_event_hash IS NULL
+      AND last_tenant_chain_hash IS NULL
+    )
+    OR (
+      last_chain_sequence > 0
+      AND last_event_hash IS NOT NULL
+      AND last_tenant_chain_hash IS NOT NULL
+    )
+  ),
+  UNIQUE (empresa_id, chain_scope)
+);
+
+CREATE INDEX IF NOT EXISTS idx_regulated_chain_heads_empresa_scope
+  ON regulated_chain_heads (empresa_id, chain_scope);
 
 CREATE TABLE IF NOT EXISTS regulated_record_links (
   id TEXT PRIMARY KEY,
@@ -439,6 +473,54 @@ WHEN
   )
 BEGIN
   SELECT RAISE(ABORT, 'regulated_audit_events: record_id and version_id must belong to event empresa_id');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_chain_heads_matches_audit_insert
+BEFORE INSERT ON regulated_chain_heads
+WHEN
+  NEW.last_chain_sequence > 0
+  AND NOT EXISTS (
+    SELECT 1 FROM regulated_audit_events
+    WHERE empresa_id = NEW.empresa_id
+      AND chain_scope = NEW.chain_scope
+      AND chain_sequence = NEW.last_chain_sequence
+      AND event_hash = NEW.last_event_hash
+      AND tenant_chain_hash = NEW.last_tenant_chain_hash
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_chain_heads: head must match an existing audit event');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_chain_heads_no_rewind
+BEFORE UPDATE OF empresa_id, chain_scope, last_chain_sequence, last_event_hash, last_tenant_chain_hash ON regulated_chain_heads
+WHEN
+  NEW.empresa_id != OLD.empresa_id
+  OR NEW.chain_scope != OLD.chain_scope
+  OR NEW.last_chain_sequence <= OLD.last_chain_sequence
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_chain_heads: chain head can only advance within the same empresa_id and chain_scope');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_chain_heads_matches_audit_update
+BEFORE UPDATE OF last_chain_sequence, last_event_hash, last_tenant_chain_hash ON regulated_chain_heads
+WHEN
+  NEW.last_chain_sequence > 0
+  AND NOT EXISTS (
+    SELECT 1 FROM regulated_audit_events
+    WHERE empresa_id = NEW.empresa_id
+      AND chain_scope = NEW.chain_scope
+      AND chain_sequence = NEW.last_chain_sequence
+      AND event_hash = NEW.last_event_hash
+      AND tenant_chain_hash = NEW.last_tenant_chain_hash
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_chain_heads: head must match an existing audit event');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_regulated_chain_heads_no_delete
+BEFORE DELETE ON regulated_chain_heads
+BEGIN
+  SELECT RAISE(ABORT, 'regulated_chain_heads: chain heads cannot be deleted');
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_regulated_links_same_empresa_insert
