@@ -1210,7 +1210,7 @@ app.get('/', async (c) => {
 
   let finalSetorIds: number[] | null = null;
   if (requestedSetorIds.length > 0) {
-    if (access.mode === 'sector') {
+    if (access.mode === 'restricted') {
       const allowed = requestedSetorIds.filter((id) => access.setorIds.includes(id));
       if (allowed.length !== requestedSetorIds.length) {
         return c.json({ success: false, error: 'Filtro de setor fora do escopo permitido' }, 403);
@@ -1219,7 +1219,7 @@ app.get('/', async (c) => {
     } else {
       finalSetorIds = requestedSetorIds;
     }
-  } else if (access.mode === 'sector' && access.setorIds.length > 0) {
+  } else if (access.mode === 'restricted' && access.setorIds.length > 0) {
     finalSetorIds = access.setorIds;
   }
 

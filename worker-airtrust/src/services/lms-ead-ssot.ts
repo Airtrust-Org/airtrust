@@ -59,6 +59,11 @@ function normalizeNullableNumber(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function normalizePositiveInteger(value: string | number | null | undefined) {
+  const numeric = typeof value === 'string' ? Number(value) : value;
+  return typeof numeric === 'number' && Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
 export function isEadCategoria(categoria: string | null | undefined) {
   const normalized = String(categoria || '')
     .trim()
@@ -293,7 +298,10 @@ export async function syncLmsCourseFromQualificacaoTipo(
   db: D1Database,
   params: { empresaId: number; qualificacaoTipoId: string | number },
 ) {
-  const tipo = await fetchQualificacaoTipo(db, params.empresaId, params.qualificacaoTipoId);
+  const qualificacaoTipoId = normalizePositiveInteger(params.qualificacaoTipoId);
+  if (!qualificacaoTipoId) return null;
+
+  const tipo = await fetchQualificacaoTipo(db, params.empresaId, qualificacaoTipoId);
 
   if (!tipo || tipo.deleted_at || !isEadCategoria(tipo.categoria)) {
     return null;
@@ -302,7 +310,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
   const existingCurso = await fetchCursoByQualificacaoTipo(
     db,
     params.empresaId,
-    params.qualificacaoTipoId,
+    qualificacaoTipoId,
   );
 
   const titulo = tipo.nome.trim();
@@ -609,6 +617,9 @@ export async function softDeleteLmsCourseForQualificacaoTipo(
   db: D1Database,
   params: { empresaId: number; qualificacaoTipoId: string | number },
 ) {
+  const qualificacaoTipoId = normalizePositiveInteger(params.qualificacaoTipoId);
+  if (!qualificacaoTipoId) return;
+
   await db
     .prepare(
       `UPDATE lms_cursos
@@ -619,7 +630,7 @@ export async function softDeleteLmsCourseForQualificacaoTipo(
           AND qualificacao_tipo_id = ?
           AND deleted_at IS NULL`,
     )
-    .bind(params.empresaId, params.qualificacaoTipoId)
+    .bind(params.empresaId, qualificacaoTipoId)
     .run();
 }
 
@@ -755,6 +766,7 @@ export async function reconcileImportedEdappHistory(
     integracaoEventoId?: number;
   },
 ) {
+  const qualificacaoTipoId = normalizePositiveInteger(params.qualificacaoTipoId);
   const conditions = ['lhi.empresa_id = ?', "lhi.fonte = 'EDAPP'", 'lhi.deleted_at IS NULL'];
   const bindings: Array<string | number> = [params.empresaId];
 
@@ -771,11 +783,9 @@ export async function reconcileImportedEdappHistory(
   // ⚠️ Filtrar por qualificacaoTipoId quando disponível para evitar processar
   // TODOS os registros EDAPP do tenant (causa hang com muitos registros).
   // Faz JOIN com lms_cursos + qualificacoes_tipos para limitar ao tipo específico.
-  if (params.qualificacaoTipoId) {
-    conditions.push(
-      '(qt.id = ? OR lhi.curso_id IS NULL)',
-    );
-    bindings.push(String(params.qualificacaoTipoId));
+  if (qualificacaoTipoId) {
+    conditions.push('(qt.id = ? OR lhi.curso_id IS NULL)');
+    bindings.push(qualificacaoTipoId);
   }
 
   const rows = await db
@@ -811,7 +821,7 @@ export async function reconcileImportedEdappHistory(
       db,
       row,
       params.cursoId,
-      params.qualificacaoTipoId,
+      qualificacaoTipoId ?? undefined,
     );
     const resolvedQualificacaoId = await resolveImportedHistoryQualificacaoId(
       db,

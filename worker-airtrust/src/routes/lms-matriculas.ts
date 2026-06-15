@@ -529,7 +529,7 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
   const offset = (page - 1) * limit;
 
   const access = await getEmployeeSectorAccess(c, empresaId);
-  if (access.mode === 'sector' && access.setorIds.length > 0) {
+  if (access.mode === 'restricted' && access.setorIds.length > 0) {
     const sectorOk = await db
       .prepare(
         `SELECT 1 FROM lms_cursos lc
@@ -941,7 +941,7 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
 
   const loteAccess = await getEmployeeSectorAccess(c, empresaId);
-  if (loteAccess.mode === 'sector' && loteAccess.setorIds.length > 0) {
+  if (loteAccess.mode === 'restricted' && loteAccess.setorIds.length > 0) {
     const sectorOk =
       curso.qualificacao_tipo_id != null &&
       (await db
