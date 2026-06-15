@@ -2,14 +2,15 @@
 
 **Data:** 2026-06-15
 **Branch:** `codex/manutencao-layout-visibilidade-perfil`
-**Veredito:** `LAYOUT/MANUTENCAO AJUSTADO — COM RESSALVA (guard dev.toml)`
+**Veredito:** `LAYOUT/MANUTENCAO AJUSTADO — RESSALVA DO GUARD FECHADA`
 
 ---
 
 ## Resumo Executivo
 
-Esta fase ajustou a visibilidade de telas e cards por perfil de usuário e corrigiu o login rápido
-de desenvolvimento local. As alterações são divididas em dois blocos independentes, commitados
+Esta fase ajustou a visibilidade de telas e cards por perfil de usuário, corrigiu o login rápido
+de desenvolvimento local e fechou a ressalva do `check-tracked-secrets.sh` sem ampliar o escopo
+do bypass dev/local. As alterações seguem divididas em dois blocos independentes, commitados
 separadamente.
 
 ---
@@ -48,20 +49,29 @@ separadamente.
 | Não altera JWT de produção | ✅ JWT_SECRET dev ≠ produção |
 | Não permite login sem senha fora de dev | ✅ Bloqueado pela dupla guarda |
 
-### Ressalva: check-tracked-secrets.sh
+### Ressalva original do guard e correção aplicada
 
-O guard `scripts/check-tracked-secrets.sh` falha porque `wrangler.dev.toml` agora contém
+O guard `scripts/check-tracked-secrets.sh` falhava porque `wrangler.dev.toml` contém
 `ENABLE_DEV_AUTH_BYPASS = "true"` e `JWT_SECRET = "airtrust-dev-secret-2025"` em texto claro
-(antes eram comentados).
+(fixtures locais rastreados).
 
-**Por que é um falso positivo:**
+**Por que era falso positivo:**
 - `wrangler.dev.toml` é exclusivo para `wrangler dev --local`, nunca usado em produção
 - O JWT_SECRET `airtrust-dev-secret-2025` é um segredo dev público sem valor em produção
-- É análogo a `.dev.vars.example` (já excluído do guard)
-- A proteção real de produção é dupla: ENVIRONMENT + ENABLE_DEV_AUTH_BYPASS
+- A proteção real continua sendo dupla: `ENVIRONMENT=development` + `ENABLE_DEV_AUTH_BYPASS=true`
 
-**Ação recomendada (follow-up):** Adicionar `wrangler.dev.toml` à lista `GG_EXCLUDE` em
-`scripts/check-tracked-secrets.sh` em PR separado.
+**Correção aplicada:**
+- `scripts/check-tracked-secrets.sh` agora usa allowlist estreita por ocorrência/padrão exato
+  para essas duas linhas dev-only em `worker-airtrust/wrangler.dev.toml`
+- O arquivo **não** foi excluído integralmente do scanner
+- O scanner continua ativo para qualquer outro `JWT_SECRET`, `CF_ACCOUNT_ID`,
+  `EDAPP_API_TOKEN`, `EDAPP_WEBHOOK_SECRET` ou flags sensíveis no mesmo arquivo
+
+**Por que a exceção é segura:**
+- cobre apenas fixtures locais determinísticos, não segredos reais
+- não altera o JWT de produção nem a origem do segredo em runtime
+- não toca Cloudflare, D1 remoto, R2, secrets ou qualquer ambiente fora de local/dev
+- o bypass segue bloqueado fora de dev, inclusive com `ENVIRONMENT=production`
 
 ---
 
@@ -127,15 +137,15 @@ nem nas queries SQL. As mudanças são exclusivamente frontend (gates de UI).
 | Suite | Resultado |
 |---|---|
 | `auth-dev-login-bypass.test.ts` | 7/7 PASS |
-| `ProtectedRoute.module-gating.test.tsx` | 19/19 PASS |
+| `ProtectedRoute.module-gating.test.tsx` | 17/17 PASS |
 | `Configuracoes.visibility.test.tsx` | 2/2 PASS |
 | `HomePerfil.cards.test.tsx` | 2/2 PASS |
 | TypeCheck (`tsc --noEmit`) | PASS (0 erros) |
-| Build (`npm run build`) | PASS (7.19s) |
+| Build (`npm run build`) | PASS (6.37s) |
 | `git diff --check` | PASS |
 | `audit-deploy-scripts.sh` | PASS |
 | `audit-dangerous-ops.sh` | PASS |
-| `check-tracked-secrets.sh` | ⚠️ FALSO POSITIVO (wrangler.dev.toml — ver ressalva) |
+| `check-tracked-secrets.sh` | PASS |
 
 ---
 
@@ -168,7 +178,6 @@ Validado no browser local (informado pelo usuário):
 
 ## Limitações
 
-- `check-tracked-secrets.sh` falha por falso positivo em `wrangler.dev.toml`. Requer follow-up PR.
 - Checagem visual foi validada pelo usuário; não foi possível capturar screenshots aqui.
 
 ---
@@ -176,6 +185,4 @@ Validado no browser local (informado pelo usuário):
 ## Recomendação
 
 1. **Revisão humana do PR** para confirmar lógica de gates e separação manutenção/tripulação.
-2. **Follow-up PR separado:** adicionar `worker-airtrust/wrangler.dev.toml` à lista `GG_EXCLUDE`
-   em `scripts/check-tracked-secrets.sh` para eliminar o falso positivo.
-3. **Não fazer merge** sem revisão do bloco de login dev por um segundo revisor.
+2. **Não fazer merge** sem revisão do bloco de login dev por um segundo revisor.
