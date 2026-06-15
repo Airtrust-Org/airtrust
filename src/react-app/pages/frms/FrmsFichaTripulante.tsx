@@ -10,7 +10,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Calendar, ChevronLeft, ChevronRight, CalendarX, X } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
-import { EmptyState } from '@/react-app/components/ui/EmptyState';
+import { EmptyState } from '@/react-app/components/UI/EmptyState';
 import {
   useFrmsJornadas,
   useFrmsUltimaJornada,

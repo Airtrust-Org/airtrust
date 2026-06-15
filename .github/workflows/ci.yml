@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: http://127.0.0.1:8787
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,7 +28,7 @@ jobs:
         run: npm run lint:api-base
         env:
           CI: true
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_URL: http://127.0.0.1:8787
 
       - name: Build
         run: npm run build

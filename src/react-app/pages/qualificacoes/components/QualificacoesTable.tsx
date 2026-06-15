@@ -12,7 +12,7 @@ import {
   ArrowUpDown,
   Award,
 } from 'lucide-react';
-import { EmptyState } from '@/react-app/components/ui/EmptyState';
+import { EmptyState } from '@/react-app/components/UI/EmptyState';
 
 interface Qualificacao {
   id: number;
