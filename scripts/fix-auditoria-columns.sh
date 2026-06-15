@@ -1,15 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
 echo "🔧 CORRIGINDO COLUNAS DE AUDITORIA"
 echo "======================================"
 echo ""
 
-# Backup
-echo "📦 Criando backup..."
-git add -A
-git stash push -m "backup antes de fix auditoria $(date +%Y%m%d-%H%M%S)"
-echo "   ✅ Backup criado"
-echo ""
+if [ -n "$(git status --porcelain)" ]; then
+    echo "❌ Working tree suja. Este script altera arquivos em massa."
+    echo "   Faça backup/stage seletivo manualmente e rode novamente em uma árvore limpa."
+    exit 1
+fi
 
 # Encontrar arquivos com INSERT INTO auditoriaavancadav2
 echo "🔍 Procurando arquivos com auditoria..."
@@ -46,4 +46,4 @@ echo "   Substitua: VALUES ('ACTION', 'module', id, data)"
 echo "   Por: VALUES ('ACTION_MODULE', json_object('id', id, 'data', data))"
 echo ""
 echo "🔍 Execute 'git diff' para ver as mudanças"
-echo "♻️  Execute 'git stash pop' para desfazer se necessário"
+echo "♻️  Use git diff e reverta seletivamente se necessário"

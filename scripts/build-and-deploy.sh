@@ -8,6 +8,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+CONFIRM_TEXT="I understand this deploys AirTrust production Pages and Worker"
+
+echo "⚠️  LEGACY FULL PRODUCTION DEPLOY PATH"
+echo "   This script deploys Pages and Worker and is blocked by default."
+if [[ "${AIRTRUST_ALLOW_LEGACY_FULL_DEPLOY:-}" != "YES" ]]; then
+  echo "❌ Legacy full deploy is blocked by default." >&2
+  echo "   Prefer the reviewed workflow/runbook. To continue in an approved window, set:" >&2
+  echo "   AIRTRUST_ALLOW_LEGACY_FULL_DEPLOY=YES" >&2
+  exit 1
+fi
+
+if [[ "${AIRTRUST_CONFIRM_LEGACY_FULL_DEPLOY:-}" != "$CONFIRM_TEXT" ]]; then
+  echo "❌ Missing explicit confirmation for legacy full deploy." >&2
+  echo "   Set AIRTRUST_CONFIRM_LEGACY_FULL_DEPLOY exactly to:" >&2
+  echo "   $CONFIRM_TEXT" >&2
+  exit 1
+fi
+
 bash scripts/preflight-clean-deploy.sh
 
 # Usar Node 22 explicitamente (Node 24 tem bug de deadlock com esbuild)

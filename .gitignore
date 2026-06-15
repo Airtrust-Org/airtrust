@@ -178,6 +178,14 @@ scripts/seed-local.sql
 scripts/seed-sgso-demo-full.sql
 scripts/validation/audit-endpoint-matrix.mjs
 
+# AirTrust employee exports generated from local/production data
+scripts/export_funcionarios_airtrust*.csv
+scripts/export_funcionarios_airtrust*.json
+scripts/export_funcionarios_airtrust*_report.md
+scripts/relatorio_export_funcionarios_airtrust*.md
+scripts/export_funcionarios*.csv
+scripts/export_funcionarios*.json
+
 # ========== SENSITIVE SQL DUMPS / BACKUPS ==========
 # Scoped to avoid hiding official migrations in worker-airtrust/migrations/
 .local-dumps/
