@@ -185,6 +185,9 @@ scripts/export_funcionarios_airtrust*_report.md
 scripts/relatorio_export_funcionarios_airtrust*.md
 scripts/export_funcionarios*.csv
 scripts/export_funcionarios*.json
+scripts/export-funcionarios.sh
+scripts/export_funcionarios.py
+scripts/export_producao.py
 
 # ========== SENSITIVE SQL DUMPS / BACKUPS ==========
 # Scoped to avoid hiding official migrations in worker-airtrust/migrations/
