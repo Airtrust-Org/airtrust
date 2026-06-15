@@ -70,6 +70,11 @@ interface ResolvedTripulante {
   fonteResolucao: TripulanteResolutionSource;
 }
 
+interface TripulanteConflict {
+  justificativa: string;
+  valorSigvoos: SigvoosRecord;
+}
+
 interface FuncionarioLookup {
   id: number;
   nome: string | null;
@@ -113,6 +118,10 @@ export interface ImportSigvoosPayloadSummary {
   createdConflicts: number;
   results: ImportSigvoosPayloadItemResult[];
 }
+
+type ResolveTripulanteResult =
+  | { status: 'RESOLVED'; resolution: ResolvedTripulante }
+  | { status: 'CONFLICT'; conflict: TripulanteConflict };
 
 function asRecord(value: unknown): SigvoosRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as SigvoosRecord) : null;
@@ -284,6 +293,12 @@ async function normalizeSigvoosImporterRecord(raw: SigvoosRecord): Promise<Sigvo
   const payloadSanitizedJson = JSON.stringify(payloadSanitized);
   const payloadHash = await sha256Hex(payloadSanitizedJson);
 
+  const aircraftRegistration = normalizeUpper(
+    asRecord(flightReport?.aircraft)?.registration || raw.aircraft_registration || raw.matricula_aeronave,
+  );
+  const clientName = normalizeText(flightReport?.client_name) || pickFirstString(raw, ['client_name', 'cliente']);
+  const contractName =
+    normalizeText(flightReport?.contract_name) || pickFirstString(raw, ['contract_name', 'contrato']);
   const reportNumber = normalizeText(flightReport?.report_number) || pickFirstString(raw, ['report_number']);
   const flightNumber =
     normalizeUpper(flightReport?.flight_number) ||
@@ -313,18 +328,11 @@ async function normalizeSigvoosImporterRecord(raw: SigvoosRecord): Promise<Sigvo
     pickFirstString(raw, ['inscription', 'staff_inscription', 'matricula', 'employee_code', 'crew_code']);
 
   const flightIdentityHash = await hashJson({
-    aircraftRegistration: normalizeUpper(
-      asRecord(flightReport?.aircraft)?.registration || raw.aircraft_registration || raw.matricula_aeronave,
-    ),
+    aircraftRegistration,
+    clientName,
+    contractName,
     date,
-    destinoIcao,
     flightNumber,
-    horaDecolagem,
-    horaMotorDesligado,
-    horaMotorLigado,
-    horaPouso,
-    legNumber,
-    origemIcao,
     reportNumber,
   });
 
@@ -350,12 +358,9 @@ async function normalizeSigvoosImporterRecord(raw: SigvoosRecord): Promise<Sigvo
     flightReportId: parseInteger(flightReport?.id),
     reportNumber,
     flightNumber,
-    clientName: normalizeText(flightReport?.client_name) || pickFirstString(raw, ['client_name', 'cliente']),
-    contractName:
-      normalizeText(flightReport?.contract_name) || pickFirstString(raw, ['contract_name', 'contrato']),
-    aircraftRegistration: normalizeUpper(
-      asRecord(flightReport?.aircraft)?.registration || raw.aircraft_registration || raw.matricula_aeronave,
-    ),
+    clientName,
+    contractName,
+    aircraftRegistration,
     legNumber,
     origemIcao,
     destinoIcao,
@@ -996,7 +1001,8 @@ async function resolveTripulante(
   empresaId: number,
   record: SigvoosImporterRecord,
   funcionarios: FuncionarioLookup[],
-): Promise<ResolvedTripulante | null> {
+): Promise<ResolveTripulanteResult | null> {
+  let previousStaffMapping: number | null = null;
   if (record.staffId != null) {
     const previous = await db
       .prepare(
@@ -1012,28 +1018,52 @@ async function resolveTripulante(
       .first<{ funcionario_id: number }>();
 
     if (previous?.funcionario_id) {
-      return {
-        funcionarioId: Number(previous.funcionario_id),
-        fonteResolucao: 'STAFF_ID',
-      };
+      previousStaffMapping = Number(previous.funcionario_id);
     }
   }
 
-  if (!record.staffInscriptionNormalized) {
-    return null;
+  const byInscription = record.staffInscriptionNormalized
+    ? funcionarios.find(
+        (funcionario) => normalizeSigvoosStaffInscription(funcionario.matricula) === record.staffInscriptionNormalized,
+      ) || null
+    : null;
+
+  if (previousStaffMapping != null && byInscription && Number(byInscription.id) !== previousStaffMapping) {
+    return {
+      status: 'CONFLICT',
+      conflict: {
+        justificativa: 'staff.id e staff.inscription resolvidos para funcionarios diferentes',
+        valorSigvoos: {
+          funcionario_id_staff_id: previousStaffMapping,
+          funcionario_id_staff_inscription: Number(byInscription.id),
+          staff_id: record.staffId,
+          staff_inscription: record.staffInscriptionRaw,
+          staff_name: record.staffName,
+        },
+      },
+    };
   }
 
-  const byInscription = funcionarios.find(
-    (funcionario) => normalizeSigvoosStaffInscription(funcionario.matricula) === record.staffInscriptionNormalized,
-  );
+  if (previousStaffMapping != null) {
+    return {
+      status: 'RESOLVED',
+      resolution: {
+        funcionarioId: previousStaffMapping,
+        fonteResolucao: 'STAFF_ID',
+      },
+    };
+  }
 
   if (!byInscription) {
     return null;
   }
 
   return {
-    funcionarioId: Number(byInscription.id),
-    fonteResolucao: 'STAFF_INSCRIPTION',
+    status: 'RESOLVED',
+    resolution: {
+      funcionarioId: Number(byInscription.id),
+      fonteResolucao: 'STAFF_INSCRIPTION',
+    },
   };
 }
 
@@ -1190,6 +1220,7 @@ async function createTripulanteConflict(
   stageId: string,
   record: SigvoosImporterRecord,
   options: ImportSigvoosPayloadOptions,
+  conflict?: TripulanteConflict,
 ): Promise<number> {
   const insertResult = await db
     .prepare(
@@ -1211,13 +1242,15 @@ async function createTripulanteConflict(
     .bind(
       empresaId,
       vooId,
-      JSON.stringify({
-        staff_id: record.staffId,
-        staff_name: record.staffName,
-        staff_inscription: record.staffInscriptionRaw,
-      }),
+      JSON.stringify(
+        conflict?.valorSigvoos || {
+          staff_id: record.staffId,
+          staff_name: record.staffName,
+          staff_inscription: record.staffInscriptionRaw,
+        },
+      ),
       stageId,
-      'funcionario nao resolvido por staff.id ou staff.inscription',
+      conflict?.justificativa || 'funcionario nao resolvido por staff.id ou staff.inscription',
       options.actorUserId ?? null,
       options.actorUserId ?? null,
     )
@@ -1323,7 +1356,48 @@ export async function importSigvoosPayloadToControleVoos(
         continue;
       }
 
-      const tripulante = await upsertTripulante(db, empresaId, flight.id, etapa.id, record, resolution, options);
+      if (resolution.status === 'CONFLICT') {
+        const conflictId = await createTripulanteConflict(
+          db,
+          empresaId,
+          flight.id,
+          stageId,
+          record,
+          options,
+          resolution.conflict,
+        );
+        await updateStageStatus(db, {
+          stageId,
+          status: 'CONFLICT',
+          flightId: flight.id,
+          etapaId: etapa.id,
+          tripulanteId: null,
+        });
+
+        summary.conflictRecords += 1;
+        summary.createdConflicts += 1;
+        summary.results.push({
+          stageId,
+          payloadHash: record.payloadHash,
+          status: 'CONFLICT',
+          reused: false,
+          flightId: flight.id,
+          etapaId: etapa.id,
+          tripulanteId: null,
+          conflictId,
+        });
+        continue;
+      }
+
+      const tripulante = await upsertTripulante(
+        db,
+        empresaId,
+        flight.id,
+        etapa.id,
+        record,
+        resolution.resolution,
+        options,
+      );
       if (tripulante.created) summary.createdTripulantes += 1;
       if (tripulante.updated) summary.updatedTripulantes += 1;
 

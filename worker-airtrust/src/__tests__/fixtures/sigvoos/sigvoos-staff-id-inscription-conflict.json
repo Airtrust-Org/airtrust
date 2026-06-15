@@ -1,0 +1,28 @@
+{
+  "flight_report": {
+    "id": 710209,
+    "report_number": "FR-710209",
+    "flight_number": "ATX7218"
+  },
+  "flight_report_leg": {
+    "number": 1,
+    "departure_location": {
+      "icao_code": "SBRJ"
+    },
+    "arrival_location": {
+      "icao_code": "SBSP"
+    },
+    "engine_start_time_str": "07:10",
+    "takeoff_time_str": "07:23",
+    "landing_time_str": "08:04",
+    "engine_shutoff_time_str": "08:11"
+  },
+  "staff": {
+    "id": 8899,
+    "name": "TRIPULANTE_SIG_CONFLICT",
+    "inscription": "01234",
+    "role": "PIC"
+  },
+  "date": "2026-06-14",
+  "aircraft_registration": "PS-CF1"
+}
