@@ -70,6 +70,9 @@ export default function Configuracoes() {
   const canAccessCompanyManagement = isAdmin;
   const [searchParams] = useSearchParams();
   const canManageMatriz = isAdmin || isGestor;
+  const canManageUsers = isAdmin;
+  const canManageBackup = isAdmin;
+  const canManageOperationalSettings = isAdmin || isGestor;
   const [activeTab, setActiveTab] = useState<
     | 'backup'
     | 'empresas'
@@ -89,6 +92,42 @@ export default function Configuracoes() {
       setActiveTab('matriz-treinamento');
     }
   }, [searchParams, canManageMatriz]);
+
+  useEffect(() => {
+    if (activeTab === 'empresas' && !canAccessCompanyManagement) {
+      setActiveTab('cadastros');
+      return;
+    }
+
+    if (activeTab === 'usuarios' && !canManageUsers) {
+      setActiveTab('cadastros');
+      return;
+    }
+
+    if (activeTab === 'backup' && !canManageBackup) {
+      setActiveTab('cadastros');
+      return;
+    }
+
+    if (
+      ['importacao', 'integracoes', 'sistema', 'setores-gestores'].includes(activeTab) &&
+      !canManageOperationalSettings
+    ) {
+      setActiveTab('cadastros');
+      return;
+    }
+
+    if (activeTab === 'danger-zone' && !isAdmin) {
+      setActiveTab('cadastros');
+    }
+  }, [
+    activeTab,
+    canAccessCompanyManagement,
+    canManageBackup,
+    canManageOperationalSettings,
+    canManageUsers,
+    isAdmin,
+  ]);
 
   return (
     <AppLayout>
@@ -118,17 +157,19 @@ export default function Configuracoes() {
             </button>
           )}
 
-          <button
-            onClick={() => setActiveTab('usuarios')}
-            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-              activeTab === 'usuarios'
-                ? 'border-primary text-blue-600 dark:text-blue-300'
-                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            {t('settings.tab.users')}
-          </button>
+          {canManageUsers && (
+            <button
+              onClick={() => setActiveTab('usuarios')}
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                activeTab === 'usuarios'
+                  ? 'border-primary text-blue-600 dark:text-blue-300'
+                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              {t('settings.tab.users')}
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('cadastros')}
@@ -142,17 +183,19 @@ export default function Configuracoes() {
             {t('settings.tab.registry')}
           </button>
 
-          <button
-            onClick={() => setActiveTab('setores-gestores')}
-            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-              activeTab === 'setores-gestores'
-                ? 'border-primary text-blue-600 dark:text-blue-300'
-                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Network className="w-4 h-4" />
-            Gestores por Setor
-          </button>
+          {canManageOperationalSettings && (
+            <button
+              onClick={() => setActiveTab('setores-gestores')}
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                activeTab === 'setores-gestores'
+                  ? 'border-primary text-blue-600 dark:text-blue-300'
+                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Network className="w-4 h-4" />
+              Gestores por Setor
+            </button>
+          )}
 
           {canManageMatriz && (
             <button
@@ -168,43 +211,49 @@ export default function Configuracoes() {
             </button>
           )}
 
-          <button
-            onClick={() => setActiveTab('backup')}
-            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-              activeTab === 'backup'
-                ? 'border-primary bg-slate-50 text-primary font-semibold'
-                : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-            }`}
-          >
-            <Database className="w-4 h-4" />
-            {t('settings.tab.backup')}
-          </button>
+          {canManageBackup && (
+            <button
+              onClick={() => setActiveTab('backup')}
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                activeTab === 'backup'
+                  ? 'border-primary bg-slate-50 text-primary font-semibold'
+                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Database className="w-4 h-4" />
+              {t('settings.tab.backup')}
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab('importacao')}
-            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-              activeTab === 'importacao'
-                ? 'border-primary bg-slate-50 text-primary font-semibold'
-                : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            {t('settings.tab.imports')}
-          </button>
+          {canManageOperationalSettings && (
+            <button
+              onClick={() => setActiveTab('importacao')}
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                activeTab === 'importacao'
+                  ? 'border-primary bg-slate-50 text-primary font-semibold'
+                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              {t('settings.tab.imports')}
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab('integracoes')}
-            className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
-              activeTab === 'integracoes'
-                ? 'border-primary bg-slate-50 text-primary font-semibold'
-                : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-            }`}
-          >
-            <Plug className="w-4 h-4" />
-            {t('settings.tab.integrations')}
-          </button>
+          {canManageOperationalSettings && (
+            <button
+              onClick={() => setActiveTab('integracoes')}
+              className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                activeTab === 'integracoes'
+                  ? 'border-primary bg-slate-50 text-primary font-semibold'
+                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Plug className="w-4 h-4" />
+              {t('settings.tab.integrations')}
+            </button>
+          )}
 
-          {(isAdmin || isGestor) && (
+          {canManageOperationalSettings && (
             <button
               onClick={() => setActiveTab('sistema')}
               className={`flex items-center gap-2 px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
@@ -235,7 +284,7 @@ export default function Configuracoes() {
         </div>
       </div>
 
-      {activeTab === 'backup' && (
+      {canManageBackup && activeTab === 'backup' && (
         <Suspense fallback={tabFallback}>
           <BackupPage />
         </Suspense>
@@ -253,7 +302,7 @@ export default function Configuracoes() {
         </Suspense>
       )}
 
-      {activeTab === 'setores-gestores' && (
+      {canManageOperationalSettings && activeTab === 'setores-gestores' && (
         <Suspense fallback={tabFallback}>
           <SetoresGestores />
         </Suspense>
@@ -265,28 +314,28 @@ export default function Configuracoes() {
         </Suspense>
       )}
 
-      {(isAdmin || isGestor) && activeTab === 'importacao' && (
+      {canManageOperationalSettings && activeTab === 'importacao' && (
         <Suspense fallback={tabFallback}>
           <ImportacaoPage />
         </Suspense>
       )}
 
       {/* Tab: Integrações */}
-      {(isAdmin || isGestor) && activeTab === 'integracoes' && (
+      {canManageOperationalSettings && activeTab === 'integracoes' && (
         <Suspense fallback={tabFallback}>
           <EdAppIntegration />
         </Suspense>
       )}
 
       {/* Tab: Sistema */}
-      {(isAdmin || isGestor) && activeTab === 'sistema' && (
+      {canManageOperationalSettings && activeTab === 'sistema' && (
         <Suspense fallback={tabFallback}>
           <SistemaConfiguracoes />
         </Suspense>
       )}
 
       {/* Tab: Usuários */}
-      {(isAdmin || isGestor) && activeTab === 'usuarios' && (
+      {canManageUsers && activeTab === 'usuarios' && (
         <Suspense fallback={tabFallback}>
           <UsuariosContent
             empresaId={empresaAtualId}
@@ -300,7 +349,7 @@ export default function Configuracoes() {
       )}
 
       {/* Tab: Danger Zone */}
-      {activeTab === 'danger-zone' && <DangerZone />}
+      {isAdmin && activeTab === 'danger-zone' && <DangerZone />}
     </AppLayout>
   );
 }
