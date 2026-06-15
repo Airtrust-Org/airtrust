@@ -34,6 +34,12 @@ GG_EXCLUDE=(
   ":(exclude)scripts/check-tracked-secrets.sh"
 )
 
+# Allowlist estreita para fixtures dev-only/local rastreados no wrangler.dev.toml.
+# Mantém o scanner ativo para quaisquer outras flags ou segredos no mesmo arquivo.
+DEV_ONLY_WRANGLER_DEV_BYPASS_FIXTURE='^worker-airtrust/wrangler\.dev\.toml:[0-9]+:ENABLE_DEV_AUTH_BYPASS[[:space:]]*=[[:space:]]*"true"$'
+DEV_ONLY_WRANGLER_DEV_JWT_FIXTURE='^worker-airtrust/wrangler\.dev\.toml:[0-9]+:JWT_SECRET[[:space:]]*=[[:space:]]*"airtrust-dev-secret-2025"$'
+JWT_SECRET_DYNAMIC_IGNORE_PATTERN='\$\{|=[[:space:]]*\$[A-Z_][A-Z0-9_]*$|=[[:space:]]*"?\$\(|=[[:space:]]*$|=[[:space:]]*"?your-|=[[:space:]]*"?dev-secret-key-change-in-production'
+
 check_pattern() {
   local label="$1"
   local pattern="$2"
@@ -58,8 +64,8 @@ check_pattern() {
 failed=0
 
 check_pattern "senha default rastreada" '^(VITE_DEFAULT_LOGIN_PASSWORD|TEST_PASSWORD)=[^[:space:]]+' '=[[:space:]]*$' || failed=1
-check_pattern "bypass de auth ativo" '^[[:space:]]*ENABLE_DEV_AUTH_BYPASS[[:space:]]*=[[:space:]]*"?true"?' || failed=1
-check_pattern "jwt secret rastreado" '^[[:space:]]*JWT_SECRET[[:space:]]*=' '\$\{|=[[:space:]]*\$[A-Z_][A-Z0-9_]*$|=[[:space:]]*"?\$\(|=[[:space:]]*$|=[[:space:]]*"?your-|=[[:space:]]*"?dev-secret-key-change-in-production' || failed=1
+check_pattern "bypass de auth ativo" '^[[:space:]]*ENABLE_DEV_AUTH_BYPASS[[:space:]]*=[[:space:]]*"?true"?' "$DEV_ONLY_WRANGLER_DEV_BYPASS_FIXTURE" || failed=1
+check_pattern "jwt secret rastreado" '^[[:space:]]*JWT_SECRET[[:space:]]*=' "$DEV_ONLY_WRANGLER_DEV_JWT_FIXTURE|$JWT_SECRET_DYNAMIC_IGNORE_PATTERN" || failed=1
 check_pattern "token cloudflare rastreado" '^[[:space:]]*(CLOUDFLARE_API_TOKEN|CLOUDFLARE_TOKEN)=' '\$\{|=[[:space:]]*$|=[[:space:]]*npx\b|=your-' || failed=1
 check_pattern "secret EdApp rastreado" '^[[:space:]]*(EDAPP_API_TOKEN|EDAPP_WEBHOOK_SECRET)=' '\$\{|=[[:space:]]*$|=your-' || failed=1
 check_pattern "account id rastreado" '^[[:space:]]*CF_ACCOUNT_ID=' '\$\{|=[[:space:]]*$|=your-' || failed=1
