@@ -2181,7 +2181,7 @@ treinamentosPlanejadosRoutes.post(
       return c.json({ success: false, error: 'A turma já foi encerrada/concluída' }, 400);
     }
     if (item.participantes.length === 0) {
-      return c.json({ success: false, error: 'A turma não possui tripulantes matriculados' }, 400);
+      return c.json({ success: false, error: 'A turma não possui participantes matriculados' }, 400);
     }
 
     const body = (await c.req.json().catch(() => ({}))) as { gestores_cc_ids?: number[] };
@@ -2257,7 +2257,7 @@ treinamentosPlanejadosRoutes.post(
       return c.json({ success: false, error: 'A turma já foi encerrada/concluída' }, 400);
     }
     if (item.participantes.length === 0) {
-      return c.json({ success: false, error: 'A turma não possui tripulantes matriculados' }, 400);
+      return c.json({ success: false, error: 'A turma não possui participantes matriculados' }, 400);
     }
 
     const gestoresCcIdsInput = Array.isArray(body.gestores_cc_ids)
@@ -2306,7 +2306,7 @@ treinamentosPlanejadosRoutes.post(
         {
           success: false,
           error:
-            'Existem tripulantes sem e-mail cadastrado. Revise antes de enviar ou confirme o envio ignorando esses registros.',
+            'Existem participantes sem e-mail cadastrado. Revise antes de enviar ou confirme o envio ignorando esses registros.',
           code: 'CONVOCACAO_MISSING_EMAIL_CONFIRMATION_REQUIRED',
           data: preview,
         },
