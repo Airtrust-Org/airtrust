@@ -103,4 +103,56 @@ describe('ProtectedRoute module gating', () => {
     expect(screen.queryByText('Modulo indisponivel')).toBeNull();
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
   });
+
+  it('bloqueia configuracoes para usuario comum', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Aluno', role: 'ALUNO' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'funcionarios'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/configuracoes');
+
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
+  });
+
+  it('permite configuracoes para gestor', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Gestor', role: 'GESTOR' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'funcionarios'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/configuracoes');
+
+    expect(screen.queryByText('protected.denied.title')).toBeNull();
+    expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
+
+  it('bloqueia paginas admin para gestor', () => {
+    renderAt('/admin/permissoes');
+
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
+  });
+
+  it('permite paginas admin para administrador', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Admin', role: 'ADMINISTRADOR' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'funcionarios'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/admin/permissoes');
+
+    expect(screen.queryByText('protected.denied.title')).toBeNull();
+    expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
 });
