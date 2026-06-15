@@ -349,7 +349,7 @@ describe('controle-voos sigvoos importer', () => {
   it('resolves tripulantes by previous staff.id mappings when available', async () => {
     const db = createSqliteD1();
     const fixture = readFixture<Record<string, unknown>>('sigvoos-com-flight-report-id.json');
-    seedPreviousStaffIdMapping(db.databasePath, 8801, 6002);
+    seedPreviousStaffIdMapping(db.databasePath, 8801, 6001);
 
     const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
 
@@ -363,7 +363,7 @@ describe('controle-voos sigvoos importer', () => {
         ORDER BY id DESC
         LIMIT 1`,
     );
-    expect(tripulante).toEqual([{ funcionario_id: 6002, resolucao_funcionario_fonte: 'STAFF_ID' }]);
+    expect(tripulante).toEqual([{ funcionario_id: 6001, resolucao_funcionario_fonte: 'STAFF_ID' }]);
   });
 
   it('resolves tripulantes by normalized staff.inscription for local-only fixtures', async () => {
@@ -489,5 +489,270 @@ describe('controle-voos sigvoos importer', () => {
     );
     expect(frmsCounts).toEqual([{ jornadas: 0, alertas: 0 }]);
     expect(source).not.toMatch(/frms-source-policy/);
+  });
+
+  it('imports multiple legs under the same flight_report.id without duplicating the flight', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<{ variants: Record<string, unknown>[] }>('sigvoos-multileg-flight-report-id.json');
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+    expect(summary.processedRecords).toBe(2);
+    expect(summary.createdFlights).toBe(1);
+    expect(summary.updatedFlights).toBe(1);
+    expect(summary.createdEtapas).toBe(2);
+    expect(summary.createdTripulantes).toBe(2);
+
+    const flights = db.queryJson<{ id: number }>(
+      `SELECT id
+         FROM cv_voos
+        WHERE empresa_id = 6
+          AND sigvoos_flight_report_id = 710201`,
+    );
+    expect(flights).toHaveLength(1);
+
+    const etapas = db.queryJson<{ numero_etapa: number; sigvoos_leg_number: number | null }>(
+      `SELECT numero_etapa, sigvoos_leg_number
+         FROM cv_voo_etapas
+        WHERE empresa_id = 6
+          AND voo_id = ${flights[0].id}
+        ORDER BY numero_etapa`,
+    );
+    expect(etapas).toEqual([
+      { numero_etapa: 1, sigvoos_leg_number: 1 },
+      { numero_etapa: 2, sigvoos_leg_number: 2 },
+    ]);
+  });
+
+  it(
+    'keeps a multileg payload without flight_report.id in a single flight and remains idempotent',
+    async () => {
+      const db = createSqliteD1();
+      const fixture = readFixture<{ variants: Record<string, unknown>[] }>('sigvoos-multileg-sem-flight-report-id.json');
+
+      const first = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+      const second = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+      expect(first.processedRecords).toBe(2);
+      expect(first.createdFlights).toBe(1);
+      expect(first.updatedFlights).toBe(1);
+      expect(first.createdEtapas).toBe(2);
+      expect(second.reusedRecords).toBe(2);
+
+      const flights = db.queryJson<{ id: number; sigvoos_flight_report_id: number | null }>(
+        `SELECT id, sigvoos_flight_report_id
+           FROM cv_voos
+          WHERE empresa_id = 6
+            AND sigvoos_flight_number = 'ATX7211'`,
+      );
+      expect(flights).toEqual([{ id: flights[0].id, sigvoos_flight_report_id: null }]);
+
+      const etapas = db.queryJson<{ numero_etapa: number; sigvoos_leg_number: number | null }>(
+        `SELECT numero_etapa, sigvoos_leg_number
+           FROM cv_voo_etapas
+          WHERE empresa_id = 6
+            AND voo_id = ${flights[0].id}
+          ORDER BY numero_etapa`,
+      );
+      expect(etapas).toEqual([
+        { numero_etapa: 1, sigvoos_leg_number: 1 },
+        { numero_etapa: 2, sigvoos_leg_number: 2 },
+      ]);
+
+      const stages = db.queryJson<{ cv_voo_id: number; import_status: string }>(
+        `SELECT cv_voo_id, import_status
+           FROM cv_sigvoos_staging
+          WHERE empresa_id = 6
+          ORDER BY id`,
+      );
+      expect(stages).toHaveLength(2);
+      expect(new Set(stages.map((row) => row.cv_voo_id))).toEqual(new Set([flights[0].id]));
+      expect(stages.every((row) => row.import_status === 'PROCESSED')).toBe(true);
+    },
+    15000,
+  );
+
+  it('reuses the same etapa when leg.number is duplicated in the same flight', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<{ variants: Record<string, unknown>[] }>('sigvoos-leg-number-duplicado.json');
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+    expect(summary.processedRecords).toBe(2);
+    expect(summary.createdFlights).toBe(1);
+    expect(summary.updatedFlights).toBe(1);
+    expect(summary.createdEtapas).toBe(1);
+    expect(summary.updatedEtapas).toBe(1);
+    expect(summary.createdTripulantes).toBe(1);
+    expect(summary.updatedTripulantes).toBe(1);
+
+    const etapas = db.queryJson<{ id: number; sigvoos_leg_number: number | null }>(
+      `SELECT id, sigvoos_leg_number
+         FROM cv_voo_etapas
+        WHERE empresa_id = 6
+          AND voo_id = (SELECT id FROM cv_voos WHERE empresa_id = 6 AND sigvoos_flight_report_id = 710203 LIMIT 1)`,
+    );
+    expect(etapas).toHaveLength(1);
+    expect(etapas[0].sigvoos_leg_number).toBe(1);
+  });
+
+  it('creates distinct etapas for multiple null or missing leg numbers in the same flight', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<{ variants: Record<string, unknown>[] }>('sigvoos-multiple-null-legs.json');
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+    expect(summary.processedRecords).toBe(2);
+    expect(summary.createdFlights).toBe(1);
+    expect(summary.updatedFlights).toBe(1);
+    expect(summary.createdEtapas).toBe(2);
+
+    const etapas = db.queryJson<{ numero_etapa: number; sigvoos_leg_number: number | null }>(
+      `SELECT numero_etapa, sigvoos_leg_number
+         FROM cv_voo_etapas
+        WHERE empresa_id = 6
+          AND voo_id = (SELECT id FROM cv_voos WHERE empresa_id = 6 AND sigvoos_flight_report_id = 710204 LIMIT 1)
+        ORDER BY numero_etapa`,
+    );
+    expect(etapas).toEqual([
+      { numero_etapa: 1, sigvoos_leg_number: null },
+      { numero_etapa: 2, sigvoos_leg_number: null },
+    ]);
+  });
+
+  it('normalizes varied staff inscriptions and leaves invalid values in explicit conflict', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<{ variants: Record<string, unknown>[] }>('sigvoos-staff-normalization-variants.json');
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+    expect(summary.processedRecords).toBe(3);
+    expect(summary.conflictRecords).toBe(1);
+    expect(normalizeSigvoosStaffInscription(1234)).toBe('01234');
+    expect(normalizeSigvoosStaffInscription('00252')).toBe('00252');
+    expect(normalizeSigvoosStaffInscription(' 4567 ')).toBe('04567');
+    expect(normalizeSigvoosStaffInscription('MATRICULA-INVALIDA')).toBe(null);
+
+    const tripulantes = db.queryJson<{ funcionario_id: number; sigvoos_staff_inscription: string | null }>(
+      `SELECT funcionario_id, sigvoos_staff_inscription
+         FROM cv_voo_tripulantes
+        WHERE empresa_id = 6
+        ORDER BY id`,
+    );
+    expect(tripulantes).toEqual([
+      { funcionario_id: 6001, sigvoos_staff_inscription: '1234' },
+      { funcionario_id: 6003, sigvoos_staff_inscription: '00252' },
+      { funcionario_id: 6002, sigvoos_staff_inscription: '4567' },
+    ]);
+
+    const conflicts = db.queryJson<{ justificativa: string }>(
+      `SELECT justificativa
+         FROM cv_conflitos_integracao
+        WHERE empresa_id = 6
+        ORDER BY id`,
+    );
+    expect(conflicts).toEqual([
+      { justificativa: 'funcionario nao resolvido por staff.id ou staff.inscription' },
+    ]);
+  });
+
+  it('creates an explicit conflict when staff.id and staff.inscription resolve to different employees', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<Record<string, unknown>>('sigvoos-staff-id-inscription-conflict.json');
+    seedPreviousStaffIdMapping(db.databasePath, 8899, 6002);
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+    expect(summary.processedRecords).toBe(0);
+    expect(summary.conflictRecords).toBe(1);
+    expect(summary.createdTripulantes).toBe(0);
+
+    const conflicts = db.queryJson<{ justificativa: string; valor_sigvoos: string }>(
+      `SELECT justificativa, valor_sigvoos
+         FROM cv_conflitos_integracao
+        WHERE empresa_id = 6`,
+    );
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].justificativa).toBe('staff.id e staff.inscription resolvidos para funcionarios diferentes');
+    expect(conflicts[0].valor_sigvoos).toContain('"funcionario_id_staff_id":6002');
+    expect(conflicts[0].valor_sigvoos).toContain('"funcionario_id_staff_inscription":6001');
+
+    const stage = db.queryJson<{ import_status: string; cv_tripulante_id: number | null }>(
+      `SELECT import_status, cv_tripulante_id
+         FROM cv_sigvoos_staging
+        WHERE empresa_id = 6`,
+    );
+    expect(stage).toEqual([{ import_status: 'CONFLICT', cv_tripulante_id: null }]);
+  });
+
+  it('does not duplicate a repeated tripulante in the same etapa', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<{ variants: Record<string, unknown>[] }>('sigvoos-tripulante-repetido-mesma-etapa.json');
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+    expect(summary.processedRecords).toBe(2);
+    expect(summary.createdTripulantes).toBe(1);
+    expect(summary.updatedTripulantes).toBe(1);
+
+    const tripulantes = db.queryJson<{ id: number }>(
+      `SELECT id
+         FROM cv_voo_tripulantes
+        WHERE empresa_id = 6
+          AND voo_id = (SELECT id FROM cv_voos WHERE empresa_id = 6 AND sigvoos_flight_report_id = 710210 LIMIT 1)`,
+    );
+    expect(tripulantes).toHaveLength(1);
+
+    const stages = db.queryJson<{ cv_tripulante_id: number | null }>(
+      `SELECT cv_tripulante_id
+         FROM cv_sigvoos_staging
+        WHERE empresa_id = 6
+        ORDER BY id`,
+    );
+    expect(stages).toEqual([
+      { cv_tripulante_id: tripulantes[0].id },
+      { cv_tripulante_id: tripulantes[0].id },
+    ]);
+  });
+
+  it('accepts optional missing fields and strips sensitive keys while retaining benign extras in sanitized staging', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<Record<string, unknown>>('sigvoos-optional-missing-extra-sensitive.json');
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+
+    expect(summary.processedRecords).toBe(1);
+
+    const flights = db.queryJson<{ sigvoos_report_number: string | null; sigvoos_client_name: string | null }>(
+      `SELECT sigvoos_report_number, sigvoos_client_name
+         FROM cv_voos
+        WHERE empresa_id = 6
+          AND sigvoos_flight_report_id = 710211`,
+    );
+    expect(flights).toEqual([{ sigvoos_report_number: null, sigvoos_client_name: null }]);
+
+    const tripulantes = db.queryJson<{ funcao: string; sigvoos_staff_inscription: string | null }>(
+      `SELECT funcao, sigvoos_staff_inscription
+         FROM cv_voo_tripulantes
+        WHERE empresa_id = 6
+          AND voo_id = (SELECT id FROM cv_voos WHERE empresa_id = 6 AND sigvoos_flight_report_id = 710211 LIMIT 1)`,
+    );
+    expect(tripulantes).toEqual([{ funcao: 'OUTRO', sigvoos_staff_inscription: '01234' }]);
+
+    const stage = db.queryJson<{ payload_sanitizado_json: string }>(
+      `SELECT payload_sanitizado_json
+         FROM cv_sigvoos_staging
+        WHERE empresa_id = 6
+          AND sigvoos_flight_report_id = 710211`,
+    );
+    expect(stage).toHaveLength(1);
+
+    const sanitized = JSON.parse(stage[0].payload_sanitizado_json) as Record<string, unknown>;
+    expect(sanitized).toHaveProperty('unexpected_context');
+    expect(sanitized).toHaveProperty('manifest');
+    expect(stage[0].payload_sanitizado_json).not.toContain('REMOVE-TOKEN');
+    expect(stage[0].payload_sanitizado_json).not.toContain('REMOVE-CREDENTIAL');
+    expect(stage[0].payload_sanitizado_json).not.toContain('REMOVE-PASSWORD');
+    expect(stage[0].payload_sanitizado_json).not.toContain('REMOVE-SECRET');
   });
 });

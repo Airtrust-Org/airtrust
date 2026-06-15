@@ -1,0 +1,62 @@
+{
+  "variants": [
+    {
+      "flight_report": {
+        "id": 710210,
+        "report_number": "FR-710210",
+        "flight_number": "ATX7219"
+      },
+      "flight_report_leg": {
+        "number": 1,
+        "departure_location": {
+          "icao_code": "SBJR"
+        },
+        "arrival_location": {
+          "icao_code": "SBRJ"
+        },
+        "engine_start_time_str": "09:05",
+        "takeoff_time_str": "09:19",
+        "landing_time_str": "09:58",
+        "engine_shutoff_time_str": "10:04"
+      },
+      "staff": {
+        "id": 9851,
+        "name": "TRIPULANTE_SIG_REPEAT",
+        "inscription": "07890",
+        "role": "PIC"
+      },
+      "sync_marker": "REPEAT-A",
+      "date": "2026-06-14",
+      "aircraft_registration": "PS-RP1"
+    },
+    {
+      "flight_report": {
+        "id": 710210,
+        "report_number": "FR-710210",
+        "flight_number": "ATX7219"
+      },
+      "flight_report_leg": {
+        "number": 1,
+        "departure_location": {
+          "icao_code": "SBJR"
+        },
+        "arrival_location": {
+          "icao_code": "SBRJ"
+        },
+        "engine_start_time_str": "09:05",
+        "takeoff_time_str": "09:19",
+        "landing_time_str": "09:58",
+        "engine_shutoff_time_str": "10:04"
+      },
+      "staff": {
+        "id": 9851,
+        "name": "TRIPULANTE_SIG_REPEAT",
+        "inscription": "07890",
+        "role": "PIC"
+      },
+      "sync_marker": "REPEAT-B",
+      "date": "2026-06-14",
+      "aircraft_registration": "PS-RP1"
+    }
+  ]
+}
