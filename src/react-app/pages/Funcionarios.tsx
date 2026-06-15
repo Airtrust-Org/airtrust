@@ -28,6 +28,10 @@ interface Setor {
   nome: string;
 }
 
+function normalizeRoleLabel(value?: string | null): string {
+  return String(value || '').trim();
+}
+
 function normalizeAeronaveLabel(value?: string): string {
   if (!value) return '';
   return ['S76', 'SK76'].includes(value.trim().toUpperCase()) ? 'SK76' : value;
@@ -121,6 +125,7 @@ export default function Funcionarios() {
   const [modelosAeronave, setModelosAeronave] = useState<ModeloAeronave[]>([]);
   const [funcoes, setFuncoes] = useState<Funcao[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
+  const [roleOptionsDiscovered, setRoleOptionsDiscovered] = useState<string[]>([]);
   const [stats, setStats] = useState<{
     total: number;
     ativos: number;
@@ -140,10 +145,22 @@ export default function Funcionarios() {
   );
 
   const funcoesOrdenadas = useMemo(() => {
-    return [...funcoes]
-      .filter((funcao) => String(funcao.nome || '').trim().length > 0)
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  }, [funcoes]);
+    const byNome = new Map<string, Funcao>();
+
+    funcoes.forEach((funcao, index) => {
+      const nome = normalizeRoleLabel(funcao.nome);
+      if (!nome) return;
+      byNome.set(nome, { id: funcao.id || index + 1, nome });
+    });
+
+    roleOptionsDiscovered.forEach((nome, index) => {
+      const normalized = normalizeRoleLabel(nome);
+      if (!normalized || byNome.has(normalized)) return;
+      byNome.set(normalized, { id: 100000 + index, nome: normalized });
+    });
+
+    return Array.from(byNome.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [funcoes, roleOptionsDiscovered]);
 
   useEffect(() => {
     if (setoresOrdenados.length !== 1) return;
@@ -282,7 +299,7 @@ export default function Funcionarios() {
               onChange={(e) => updateFilter('funcaoFilter', e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
-              <option value="">Todas as Funções</option>
+              <option value="">Todas as Funções/Cargos</option>
               {funcoesOrdenadas.map((funcao) => (
                 <option key={funcao.id} value={funcao.nome}>
                   {funcao.nome}
@@ -378,6 +395,7 @@ export default function Funcionarios() {
             configColunasAberto={configColunasAberto}
             onToggleConfigColunas={() => setConfigColunasAberto((prev) => !prev)}
             onStatsChange={setStats}
+            onRoleOptionsDiscover={setRoleOptionsDiscovered}
             showModalNovoFuncionario={showModalNovoFuncionario}
             onCloseModalNovoFuncionario={() => setShowModalNovoFuncionario(false)}
           />
