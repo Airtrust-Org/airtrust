@@ -1,0 +1,56 @@
+{
+  "variants": [
+    {
+      "flight_report": {
+        "id": 700104,
+        "report_number": "FR-700104",
+        "flight_number": "ATX7004"
+      },
+      "flight_report_leg": {
+        "number": 1,
+        "departure_location": {
+          "icao_code": "SBJR"
+        },
+        "arrival_location": {
+          "icao_code": "SBRJ"
+        },
+        "engine_start_time_str": "15:10",
+        "takeoff_time_str": "15:25",
+        "landing_time_str": "16:01",
+        "engine_shutoff_time_str": "16:07"
+      },
+      "staff": {
+        "name": "TRIPULANTE_SIG_04A",
+        "inscription": 252
+      },
+      "date": "2026-06-14",
+      "aircraft_registration": "PS-TS4"
+    },
+    {
+      "flight_report": {
+        "id": 700105,
+        "report_number": "FR-700105",
+        "flight_number": "ATX7005"
+      },
+      "flight_report_leg": {
+        "number": 1,
+        "departure_location": {
+          "icao_code": "SBRJ"
+        },
+        "arrival_location": {
+          "icao_code": "SBMI"
+        },
+        "engine_start_time_str": "17:00",
+        "takeoff_time_str": "17:12",
+        "landing_time_str": "18:02",
+        "engine_shutoff_time_str": "18:09"
+      },
+      "staff": {
+        "name": "TRIPULANTE_SIG_04B",
+        "inscription": "00252"
+      },
+      "date": "2026-06-14",
+      "aircraft_registration": "PS-TS5"
+    }
+  ]
+}
