@@ -153,7 +153,7 @@ echo "    npm run build"
 echo "    ./scripts/check-imports-pos-limpeza.sh"
 echo ""
 echo "6️⃣  COMMIT"
-echo "    git add -A"
+echo "    git add -- <arquivos revisados>"
 echo "    git commit -m \"refactor(simuladores): consolidate PDF generators into single version\""
 echo ""
 
