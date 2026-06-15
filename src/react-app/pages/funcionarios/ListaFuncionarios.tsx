@@ -39,8 +39,9 @@ interface Coluna {
 const COLUNAS_PADRAO: Coluna[] = [
   { id: 'nome', label: 'Nome', visivel: true, ordem: 0 },
   { id: 'guerra', label: 'Guerra', visivel: true, ordem: 1 },
-  { id: 'funcao', label: 'Função', visivel: true, ordem: 2 },
-  { id: 'aeronave', label: 'Equipamento', visivel: true, ordem: 3 },
+  { id: 'funcao', label: 'Função / Cargo', visivel: true, ordem: 2 },
+  { id: 'setor', label: 'Setor', visivel: true, ordem: 3 },
+  { id: 'aeronave', label: 'Equipamento', visivel: true, ordem: 4 },
   { id: 'cpf', label: 'CPF', visivel: true, ordem: 5 },
   { id: 'nascimento', label: 'Data Nasc.', visivel: true, ordem: 6 },
   { id: 'licenca', label: 'Licença', visivel: true, ordem: 7 },
@@ -79,6 +80,7 @@ type SortableColumn =
   | 'nome'
   | 'guerra'
   | 'funcao'
+  | 'setor'
   | 'aeronave'
   | 'cpf'
   | 'nascimento'
@@ -119,6 +121,7 @@ interface ListaFuncionariosProps {
     byModelo: Record<string, { cmd: number; cop: number }>;
   }) => void;
   onSetoresDiscover?: (funcionarios: SetorDiscoverRow[]) => void;
+  onRoleOptionsDiscover?: (roleOptions: string[]) => void;
   showModalNovoFuncionario?: boolean;
   onCloseModalNovoFuncionario?: () => void;
 }
@@ -129,6 +132,8 @@ interface FuncionarioRow {
   status?: string;
   guerra?: string;
   funcao?: string;
+  cargo?: string;
+  setor?: string;
   aeronave?: string;
   cpf?: string;
   nascimento?: string;
@@ -141,6 +146,25 @@ interface FuncionarioRow {
   telefone?: string;
   admissao?: string;
   [key: string]: unknown; // permite acesso dinâmico em colunas configuráveis
+}
+
+export function resolveFuncionarioRoleLabel(
+  funcionario: Pick<FuncionarioRow, 'funcao' | 'cargo'> | null | undefined,
+): string {
+  return String(funcionario?.funcao || funcionario?.cargo || '')
+    .trim();
+}
+
+export function extractFuncionarioRoleOptions(
+  funcionarios: Array<Pick<FuncionarioRow, 'funcao' | 'cargo'>>,
+): string[] {
+  return Array.from(
+    new Set(
+      funcionarios
+        .map((funcionario) => resolveFuncionarioRoleLabel(funcionario))
+        .filter((value) => value.length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 // (import duplicado removido)
 
@@ -155,6 +179,7 @@ export function ListaFuncionarios({
   onToggleConfigColunas,
   onStatsChange,
   onSetoresDiscover,
+  onRoleOptionsDiscover,
   showModalNovoFuncionario = false,
   onCloseModalNovoFuncionario,
 }: ListaFuncionariosProps) {
@@ -231,6 +256,11 @@ export function ListaFuncionarios({
   useEffect(() => {
     setoresDiscoverCallbackRef.current = onSetoresDiscover;
   }, [onSetoresDiscover]);
+
+  const roleOptionsDiscoverCallbackRef = useRef(onRoleOptionsDiscover);
+  useEffect(() => {
+    roleOptionsDiscoverCallbackRef.current = onRoleOptionsDiscover;
+  }, [onRoleOptionsDiscover]);
 
   // Resetar paginação para página 1 quando qualquer filtro mudar
   const prevFiltersKeyRef = useRef('');
@@ -364,6 +394,11 @@ export function ListaFuncionarios({
         const setoresDiscoverCallback = setoresDiscoverCallbackRef.current;
         if (setoresDiscoverCallback && Array.isArray(lista)) {
           setoresDiscoverCallback(lista);
+        }
+
+        const roleOptionsDiscoverCallback = roleOptionsDiscoverCallbackRef.current;
+        if (roleOptionsDiscoverCallback && Array.isArray(lista)) {
+          roleOptionsDiscoverCallback(extractFuncionarioRoleOptions(lista));
         }
 
         if (data.pagination) {
@@ -623,9 +658,9 @@ export function ListaFuncionarios({
             ? 'SK76'
             : modelo || 'Outros';
         if (!byModelo[modeloKey]) byModelo[modeloKey] = { cmd: 0, cop: 0 };
-        const funcao = (f.funcao || '').toLowerCase();
-        if (funcao.includes('comandante')) byModelo[modeloKey].cmd++;
-        else if (funcao.includes('copiloto') || funcao.includes('copiloto'))
+        const cargoOuFuncao = resolveFuncionarioRoleLabel(f).toLowerCase();
+        if (cargoOuFuncao.includes('comandante')) byModelo[modeloKey].cmd++;
+        else if (cargoOuFuncao.includes('copiloto'))
           byModelo[modeloKey].cop++;
       }
       cb({ total, ativos, inativos, byModelo });
@@ -658,6 +693,7 @@ export function ListaFuncionarios({
                       'nome',
                       'guerra',
                       'funcao',
+                      'setor',
                       'aeronave',
                       'cpf',
                       'nascimento',
@@ -849,6 +885,10 @@ export function ListaFuncionarios({
                               </span>
                             </td>
                           );
+                        }
+
+                        if (col.id === 'funcao') {
+                          valor = resolveFuncionarioRoleLabel(func) || '-';
                         }
 
                         return (
