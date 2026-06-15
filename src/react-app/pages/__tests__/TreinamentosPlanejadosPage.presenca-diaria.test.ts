@@ -26,4 +26,13 @@ describe('TreinamentosPlanejadosPage daily attendance UI contract', () => {
     expect(hookSource).toContain('/planejados/${id}/dias/${diaId}/presencas');
     expect(hookSource).toContain('TreinamentoPlanejadoPresencaDiaInput');
   });
+
+  it('usa linguagem de participantes nas convocações operacionais da turma', () => {
+    expect(pageSource).toContain(
+      'Registro operacional dos envios de e-mail e das falhas por participante.',
+    );
+    expect(pageSource).toContain('Alguns participantes não entrarão na fila');
+    expect(pageSource).not.toContain('falhas por tripulante');
+    expect(pageSource).not.toContain('Alguns tripulantes não entrarão na fila');
+  });
 });

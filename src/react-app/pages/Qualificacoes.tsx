@@ -1897,7 +1897,7 @@ export default function Qualificacoes() {
     }
 
     if (turmaFuncionarioIds.length === 0) {
-      showToast.error('Não foi possível identificar os tripulantes da turma planejada.');
+      showToast.error('Não foi possível identificar os participantes da turma planejada.');
       return;
     }
 
@@ -3860,7 +3860,7 @@ export default function Qualificacoes() {
                           checked={escopoEnvioConvocacaoPlanejada === 'turma'}
                           onChange={() => setEscopoEnvioConvocacaoPlanejada('turma')}
                         />
-                        Enviar para todos os tripulantes da turma
+                        Enviar para todos os participantes da turma
                       </label>
                       <label className="flex items-center gap-2">
                         <input
@@ -3871,7 +3871,7 @@ export default function Qualificacoes() {
                         />
                         Enviar apenas para{' '}
                         {planejadaConvocacaoSelecionada?.funcionario_nome ||
-                          'o tripulante da linha'}
+                          'o participante da linha'}
                       </label>
                     </div>
                   </div>
