@@ -146,6 +146,7 @@ node_modules
 .claude/worktrees/
 
 # AirTrust local/generated heavy artifacts
+lms/
 *.zip
 *.bundle
 *.tar
