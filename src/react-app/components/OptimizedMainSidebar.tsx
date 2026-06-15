@@ -203,7 +203,7 @@ NavItem.displayName = 'NavItem';
 
 function OptimizedMainSidebar() {
   const location = useLocation();
-  const { empresas = [], empresaAtualId = null } = useAuth();
+  const { user, empresas = [], empresaAtualId = null } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>([
     'treinamentos',
     'pessoas',
@@ -213,6 +213,7 @@ function OptimizedMainSidebar() {
   const visibleNavigationItems = getVisibleNavigationItems(
     NAVIGATION_ITEMS,
     empresaAtual?.modulos_ativos,
+    { user },
   );
 
   const toggleExpanded = useMemo(

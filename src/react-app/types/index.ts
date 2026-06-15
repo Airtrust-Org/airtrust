@@ -10,6 +10,8 @@ export interface Funcionario {
   email?: string;
   telefone?: string;
   funcao: string;
+  setor?: string;
+  setor_id?: number;
   aeronave?: string;
   status: 'ativo' | 'inativo' | 'afastado';
   admissao?: string;

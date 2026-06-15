@@ -34,6 +34,10 @@ import { useLanguage } from '../i18n/useLanguage';
 import { useTheme } from '../theme/ThemeProvider';
 import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
 import { canAccessModule } from '@/react-app/lib/module-access';
+import {
+  canSeeAdministrativeDashboard,
+  canSeeDevelopmentModules,
+} from '@/react-app/lib/development-module-nav';
 interface AppLayoutProps {
   children: ReactNode;
 }
@@ -60,10 +64,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [empresaLogoError, setEmpresaLogoError] = useState<Record<number, boolean>>({});
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
   const modulosAtivos = empresaAtual?.modulos_ativos;
+  const canSeeAdminDashboard = canSeeAdministrativeDashboard(user);
+  const canSeeRestrictedDevelopmentNav = canSeeDevelopmentModules(user);
 
   // Flags de acesso a módulos
-  const showDashboard =
-    canAccessModule('dashboard', modulosAtivos) && (can('dashboard.view') || isAdmin || isGestor);
+  const showDashboard = canAccessModule('dashboard', modulosAtivos) && canSeeAdminDashboard;
   const showFuncionarios =
     canAccessModule('funcionarios', modulosAtivos) && can('funcionarios.view');
   const showQualificacoes =
@@ -75,8 +80,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
     canAccessModule('escalas', modulosAtivos) && (can('escalas.view') || can('self.escala'));
   const showFrms = canAccessModule('frms', modulosAtivos) && can('frms.view');
   const showSgso = canAccessModule('sgso', modulosAtivos) && can('sgso.view');
-  const showMro = canAccessModule('mro', modulosAtivos) && !isAluno && !isInstrutor;
-  const showControleVoos = canAccessModule('controle_voos', modulosAtivos) && !isAluno && !isInstrutor;
+  const showMro =
+    canAccessModule('mro', modulosAtivos) &&
+    !isAluno &&
+    !isInstrutor &&
+    canSeeRestrictedDevelopmentNav;
+  const showControleVoos =
+    canAccessModule('controle_voos', modulosAtivos) &&
+    !isAluno &&
+    !isInstrutor &&
+    canSeeRestrictedDevelopmentNav;
   const showTreinamentosPlanejados =
     canAccessModule('treinamentos_planejados', modulosAtivos) && !isAluno && !isInstrutor;
 

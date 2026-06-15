@@ -21,6 +21,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import AppLayout from '../components/AppLayout';
 import api from '../services/api';
 import { CardMeusEAD } from '../components/dashboard/CardMeusEAD';
+import type { HomeProfile, HomeProfileFuncionarioContext } from '../lib/home-profile';
 
 interface NotificacaoRecente {
   id: number;
@@ -40,6 +41,24 @@ interface AccessCard {
   route: string;
   color: string; // tailwind bg class for icon bg
   iconColor: string;
+}
+
+interface HomePerfilProps {
+  homeProfile?: HomeProfile;
+  funcionarioContext?: HomeProfileFuncionarioContext | null;
+}
+
+function getHomeProfileSubtitle(homeProfile: HomeProfile | undefined): string {
+  switch (homeProfile) {
+    case 'STUDENT_MANUTENCAO':
+      return 'Acesse rapidamente sua rotina operacional de manutencao.';
+    case 'STUDENT_TRIPULACAO':
+      return 'Acompanhe sua jornada operacional e os itens do dia.';
+    case 'STUDENT_ADMINISTRATIVO':
+      return 'Centralize suas tarefas administrativas e treinamentos.';
+    default:
+      return 'O que você quer fazer hoje?';
+  }
 }
 
 function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
@@ -122,7 +141,7 @@ function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
   return cards;
 }
 
-export default function HomePerfil() {
+export default function HomePerfil({ homeProfile, funcionarioContext = null }: HomePerfilProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can, role } = usePermissions();
@@ -132,6 +151,7 @@ export default function HomePerfil() {
   const nome = user?.nome?.split(' ')[0] ?? 'Usuário';
   const perfilLabel =
     role === 'INSTRUTOR' ? 'Instrutor' : role === 'ALUNO' ? 'Aluno' : (role ?? 'Usuário');
+  const subtitle = getHomeProfileSubtitle(homeProfile);
 
   const cards = buildCards(role ?? '', can);
 
@@ -205,10 +225,44 @@ export default function HomePerfil() {
             {perfilLabel}
           </p>
           <h1 className="text-lg sm:text-xl font-bold text-slate-900">Olá, {nome} 👋</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">O que você quer fazer hoje?</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{subtitle}</p>
         </div>
 
         <div className="p-3 sm:p-4 max-w-4xl mx-auto space-y-4 sm:space-y-6">
+          {funcionarioContext && (
+            <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Contexto derivado do funcionario
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Setor
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {funcionarioContext.setor || '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Funcao
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {funcionarioContext.funcao || '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Cargo
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {funcionarioContext.cargo || '-'}
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Cards de acesso */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {cards.map((card, i) => (

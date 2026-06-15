@@ -50,6 +50,8 @@ describe('ProtectedRoute module gating', () => {
     ['/sgso', ['dashboard', 'funcionarios']],
     ['/lms/cursos', ['dashboard', 'funcionarios']],
     ['/treinamentos/planejados', ['dashboard', 'funcionarios']],
+    ['/mro', ['dashboard', 'funcionarios']],
+    ['/controle-voos', ['dashboard', 'funcionarios']],
   ])('bloqueia %s quando o modulo nao esta ativo', (pathname, modulosAtivos) => {
     authMock.mockReturnValue({
       isAuthenticated: true,
@@ -70,6 +72,8 @@ describe('ProtectedRoute module gating', () => {
     ['/sgso', ['dashboard', 'funcionarios', 'sgso']],
     ['/lms/cursos', ['dashboard', 'funcionarios', 'lms']],
     ['/treinamentos/planejados', ['dashboard', 'funcionarios', 'treinamentos_planejados']],
+    ['/mro', ['dashboard', 'funcionarios', 'mro']],
+    ['/controle-voos', ['dashboard', 'funcionarios', 'controle_voos']],
   ])('permite %s quando o modulo esta ativo', (pathname, modulosAtivos) => {
     authMock.mockReturnValue({
       isAuthenticated: true,

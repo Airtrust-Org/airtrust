@@ -1,4 +1,8 @@
 import { PRODUCT_MODULE_BY_KEY } from './modules';
+import {
+  canSeeAdministrativeDashboard,
+  shouldShowRestrictedDevelopmentNavItems,
+} from './development-module-nav';
 
 export type EmpresaModuleState = string[] | null | undefined;
 
@@ -11,6 +15,13 @@ interface ModuleAccessOptions {
 export interface ModuleRouteMatch {
   moduleKey: string;
   pathPrefix: string;
+}
+
+interface VisibleNavigationOptions {
+  user?: {
+    email?: string | null;
+    role?: string | null;
+  } | null;
 }
 
 const LEGACY_PRESET_KEYS = new Set(['treinamento', 'compliance']);
@@ -96,6 +107,9 @@ const MODULE_ID_ALIASES: Record<string, string> = {
   controle_voos_relatorios: 'controle_voos',
   controle_voos_tabelas: 'controle_voos',
 };
+
+const RESTRICTED_DEVELOPMENT_NAV_MODULES = new Set(['mro', 'controle_voos']);
+const RESTRICTED_ADMIN_DASHBOARD_NAV_MODULES = new Set(['dashboard']);
 
 export const MODULE_ROUTE_MATCHES: ModuleRouteMatch[] = [
   { pathPrefix: '/configuracoes/integracoes/sigvoos', moduleKey: 'sigvoos' },
@@ -202,15 +216,43 @@ export function getModuleKeyForPath(pathname: string): string | null {
 
 export function getVisibleNavigationItems<
   T extends { id: string; children?: Array<{ id: string }> },
->(items: T[], modulosAtivos: EmpresaModuleState): T[] {
+>(items: T[], modulosAtivos: EmpresaModuleState, options: VisibleNavigationOptions = {}): T[] {
+  const canSeeRestrictedDevelopmentNavItems = shouldShowRestrictedDevelopmentNavItems(
+    options.user,
+  );
+
+  const shouldKeepNavigationItem = (itemId: string): boolean => {
+    if (!canAccessModule(itemId, modulosAtivos)) {
+      return false;
+    }
+
+    const resolvedModuleKey = resolveModuleKey(itemId);
+    if (
+      RESTRICTED_ADMIN_DASHBOARD_NAV_MODULES.has(resolvedModuleKey) &&
+      options.user &&
+      !canSeeAdministrativeDashboard(options.user)
+    ) {
+      return false;
+    }
+
+    if (
+      RESTRICTED_DEVELOPMENT_NAV_MODULES.has(resolvedModuleKey) &&
+      !canSeeRestrictedDevelopmentNavItems
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+
   return items
-    .filter((item) => canAccessModule(item.id, modulosAtivos))
+    .filter((item) => shouldKeepNavigationItem(item.id))
     .map((item) => {
       if (!item.children) return item;
 
       return {
         ...item,
-        children: item.children.filter((child) => canAccessModule(child.id, modulosAtivos)),
+        children: item.children.filter((child) => shouldKeepNavigationItem(child.id)),
       };
     })
     .filter((item) => !item.children || item.children.length > 0);

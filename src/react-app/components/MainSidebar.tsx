@@ -35,12 +35,13 @@ const iconMap = {
 function MainSidebar() {
   const location = useLocation();
   const { logoSrc } = useSystemSettings();
-  const { empresas = [], empresaAtualId = null } = useAuth();
+  const { user, empresas = [], empresaAtualId = null } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>(['lms', 'pessoas']);
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
   const visibleMainMenu = getVisibleNavigationItems(
     NAVIGATION_CONFIG.main_menu,
     empresaAtual?.modulos_ativos,
+    { user },
   );
   useEffect(() => {}, []);
 

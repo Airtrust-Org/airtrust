@@ -16,11 +16,10 @@ import { applySystemSettingsToDocument, getSystemSettings } from './config/syste
 import { LanguageProvider } from './i18n/LanguageContext';
 import { useLanguage } from './i18n/useLanguage';
 import { syncRuntimeTranslation } from './i18n/runtimeTranslator';
-import DashboardPrincipal from './pages/DashboardPrincipal';
 import { ThemeProvider } from './theme/ThemeProvider';
+import HomeRouter from './components/HomeRouter';
 
 // 🚀 LAZY LOADING: Páginas principais (code splitting)
-const HomePerfil = lazyWithRetry(() => import('./pages/HomePerfil'), 'HomePerfil');
 const TrocarSenhaPage = lazyWithRetry(() => import('./pages/TrocarSenhaPage'), 'TrocarSenhaPage');
 const Funcionarios = lazyWithRetry(() => import('./pages/Funcionarios'), 'Funcionarios');
 const Qualificacoes = lazyWithRetry(() => import('./pages/Qualificacoes'), 'Qualificacoes');
@@ -301,15 +300,6 @@ const RuntimeTranslationBridge = () => {
   return null;
 };
 
-/** Redireciona para a home correta de acordo com o perfil do usuário */
-function HomeRouter() {
-  const { user, isLoading } = useAuth();
-  if (isLoading) return null;
-  const role = user?.role?.toUpperCase() ?? '';
-  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR' || role === 'USUARIO') return <HomePerfil />;
-  return <DashboardPrincipal />;
-}
-
 function LmsEntryRouter() {
   const { user, isLoading } = useAuth();
   if (isLoading) return null;
@@ -377,7 +367,7 @@ export default function App() {
                         path="/home"
                         element={
                           <ProtectedRoute>
-                            <HomePerfil />
+                            <HomeRouter />
                           </ProtectedRoute>
                         }
                       />
