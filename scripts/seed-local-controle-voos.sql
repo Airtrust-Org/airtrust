@@ -218,7 +218,8 @@ INSERT OR IGNORE INTO cv_aeroportos (
   (62001, 6, 'SBRJ6', 'SBRJ', 'SDU', 'Santos Dumont', 'Rio de Janeiro', 'RJ', 'aeroporto', 'Seed local N1 tenant 6', 1, 1, 1, 1),
   (62002, 6, 'SBSP6', 'SBSP', 'CGH', 'Congonhas', 'Sao Paulo', 'SP', 'aeroporto', 'Seed local N1 tenant 6', 1, 2, 1, 1),
   (62003, 6, 'SBJR6', 'SBJR', NULL, 'Jacarepagua', 'Rio de Janeiro', 'RJ', 'aeroporto', 'Seed local N1 tenant 6', 1, 3, 1, 1),
-  (62004, 6, 'SBPL06', 'SBPL06', NULL, 'Plataforma P-06', 'Bacia de Campos', 'RJ', 'plataforma', 'Seed local N1 tenant 6', 1, 4, 1, 1);
+  (62004, 6, 'SBPL06', 'SBPL06', NULL, 'Plataforma P-06', 'Bacia de Campos', 'RJ', 'plataforma', 'Seed local N1 tenant 6', 1, 4, 1, 1),
+  (62005, 6, 'SBMI6', 'SBMI', NULL, 'Macae', 'Macae', 'RJ', 'aeroporto', 'Seed local N1 tenant 6 complemento SIGVOOS', 1, 5, 1, 1);
 
 INSERT OR IGNORE INTO cv_tipos_voo (
   id,
@@ -262,6 +263,71 @@ INSERT OR IGNORE INTO cv_motivos_operacionais (
 ) VALUES
   (62301, 6, 'WX', 'Meteorologia', 'cancelamento', 'Catalogo local demonstrativo tenant 6', 1, 1, 1, 1),
   (62302, 6, 'OPS', 'Ajuste operacional', 'geral', 'Catalogo local demonstrativo tenant 6', 1, 2, 1, 1);
+
+INSERT OR IGNORE INTO cv_aeroportos (
+  id,
+  empresa_id,
+  codigo,
+  codigo_icao,
+  codigo_iata,
+  nome,
+  cidade,
+  uf,
+  tipo,
+  descricao,
+  ativo,
+  ordem,
+  created_by,
+  updated_by
+) VALUES
+  (63001, 7, 'SBRJ7', 'SBRJ', 'SDU', 'Santos Dumont', 'Rio de Janeiro', 'RJ', 'aeroporto', 'Seed local N1 tenant 7', 1, 1, 1, 1),
+  (63002, 7, 'SBSP7', 'SBSP', 'CGH', 'Congonhas', 'Sao Paulo', 'SP', 'aeroporto', 'Seed local N1 tenant 7', 1, 2, 1, 1),
+  (63003, 7, 'SBJR7', 'SBJR', NULL, 'Jacarepagua', 'Rio de Janeiro', 'RJ', 'aeroporto', 'Seed local N1 tenant 7', 1, 3, 1, 1),
+  (63004, 7, 'SBPL07', 'SBPL07', NULL, 'Plataforma P-07', 'Bacia de Campos', 'RJ', 'plataforma', 'Seed local N1 tenant 7', 1, 4, 1, 1),
+  (63005, 7, 'SBMI7', 'SBMI', NULL, 'Macae', 'Macae', 'RJ', 'aeroporto', 'Seed local N1 tenant 7 complemento SIGVOOS', 1, 5, 1, 1);
+
+INSERT OR IGNORE INTO cv_tipos_voo (
+  id,
+  empresa_id,
+  codigo,
+  nome,
+  descricao,
+  ativo,
+  ordem,
+  created_by,
+  updated_by
+) VALUES
+  (63101, 7, 'REG', 'Regular', 'Operacao interna demonstrativa tenant 7', 1, 1, 1, 1),
+  (63102, 7, 'OFF', 'Offshore', 'Operacao interna demonstrativa tenant 7', 1, 2, 1, 1);
+
+INSERT OR IGNORE INTO cv_naturezas_voo (
+  id,
+  empresa_id,
+  codigo,
+  nome,
+  descricao,
+  ativo,
+  ordem,
+  created_by,
+  updated_by
+) VALUES
+  (63201, 7, 'PAX', 'Passageiro', 'Operacao interna demonstrativa tenant 7', 1, 1, 1, 1),
+  (63202, 7, 'SERV', 'Servico', 'Operacao interna demonstrativa tenant 7', 1, 2, 1, 1);
+
+INSERT OR IGNORE INTO cv_motivos_operacionais (
+  id,
+  empresa_id,
+  codigo,
+  nome,
+  tipo,
+  descricao,
+  ativo,
+  ordem,
+  created_by,
+  updated_by
+) VALUES
+  (63301, 7, 'WX', 'Meteorologia', 'cancelamento', 'Catalogo local demonstrativo tenant 7', 1, 1, 1, 1),
+  (63302, 7, 'OPS', 'Ajuste operacional', 'geral', 'Catalogo local demonstrativo tenant 7', 1, 2, 1, 1);
 
 INSERT OR IGNORE INTO cv_voos (
   id,
