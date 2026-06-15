@@ -18,6 +18,11 @@ interface ModeloAeronave {
   nome?: string;
 }
 
+interface Funcao {
+  id: number;
+  nome: string;
+}
+
 interface Setor {
   id: number;
   nome: string;
@@ -114,6 +119,7 @@ export default function Funcionarios() {
   const [configColunasAberto, setConfigColunasAberto] = useState(false);
   const [showModalNovoFuncionario, setShowModalNovoFuncionario] = useState(false);
   const [modelosAeronave, setModelosAeronave] = useState<ModeloAeronave[]>([]);
+  const [funcoes, setFuncoes] = useState<Funcao[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
   const [stats, setStats] = useState<{
     total: number;
@@ -132,6 +138,12 @@ export default function Funcionarios() {
     () => setoresOrdenados.map((setor) => ({ value: String(setor.id), label: setor.nome })),
     [setoresOrdenados],
   );
+
+  const funcoesOrdenadas = useMemo(() => {
+    return [...funcoes]
+      .filter((funcao) => String(funcao.nome || '').trim().length > 0)
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [funcoes]);
 
   useEffect(() => {
     if (setoresOrdenados.length !== 1) return;
@@ -159,6 +171,24 @@ export default function Funcionarios() {
     modelosLoadedRef.current = true;
     loadModelosAeronave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    const loadFuncoes = async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const response = await fetch(`${API_BASE_URL}/funcoes`, { headers, cache: 'no-cache' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const lista = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+        setFuncoes(lista);
+      } catch (error) {
+        console.error('Erro ao carregar funções:', error);
+      }
+    };
+
+    loadFuncoes();
   }, [token]);
 
   useEffect(() => {
@@ -253,8 +283,11 @@ export default function Funcionarios() {
               className="rounded-md border border-slate-300 px-3 py-2 pr-8 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-white text-slate-900 cursor-pointer dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">Todas as Funções</option>
-              <option value="Comandante">Comandante</option>
-              <option value="Copiloto">Copiloto</option>
+              {funcoesOrdenadas.map((funcao) => (
+                <option key={funcao.id} value={funcao.nome}>
+                  {funcao.nome}
+                </option>
+              ))}
             </select>
 
             <select

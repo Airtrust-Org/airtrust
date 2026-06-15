@@ -9,6 +9,9 @@ interface ProtectedRouteProps {
   requiredRole?: string[]; // Opcional: ['ADMIN', 'GESTOR']
 }
 
+const ADMIN_ONLY_PATH_PREFIXES = ['/admin'];
+const MANAGEMENT_PATH_PREFIXES = ['/configuracoes', '/sistema', '/importacao'];
+
 function normalizeRole(role?: string | null): string {
   const normalized = String(role ?? '')
     .trim()
@@ -26,6 +29,30 @@ function normalizeRole(role?: string | null): string {
     default:
       return normalized;
   }
+}
+
+function normalizePathname(pathname: string): string {
+  if (!pathname) return '/';
+  if (pathname === '/') return pathname;
+  return pathname.replace(/\/+$/, '') || '/';
+}
+
+function matchesPathPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+export function resolveImplicitRequiredRole(pathname: string): string[] | undefined {
+  const normalizedPathname = normalizePathname(pathname);
+
+  if (ADMIN_ONLY_PATH_PREFIXES.some((prefix) => matchesPathPrefix(normalizedPathname, prefix))) {
+    return ['ADMINISTRADOR'];
+  }
+
+  if (MANAGEMENT_PATH_PREFIXES.some((prefix) => matchesPathPrefix(normalizedPathname, prefix))) {
+    return ['ADMINISTRADOR', 'GESTOR'];
+  }
+
+  return undefined;
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
@@ -75,6 +102,10 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
 
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
   const moduleKey = getModuleKeyForPath(location.pathname);
+  const effectiveRequiredRole =
+    requiredRole && requiredRole.length > 0
+      ? requiredRole
+      : resolveImplicitRequiredRole(location.pathname);
 
   if (moduleKey && !canAccessModule(moduleKey, empresaAtual?.modulos_ativos)) {
     return (
@@ -97,9 +128,9 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   }
 
   // Verificar role se especificado
-  if (requiredRole && requiredRole.length > 0 && user) {
+  if (effectiveRequiredRole && effectiveRequiredRole.length > 0 && user) {
     const currentRole = normalizeRole(user.role);
-    const acceptedRoles = requiredRole.map((role) => normalizeRole(role));
+    const acceptedRoles = effectiveRequiredRole.map((role) => normalizeRole(role));
 
     if (!acceptedRoles.includes(currentRole)) {
       return (

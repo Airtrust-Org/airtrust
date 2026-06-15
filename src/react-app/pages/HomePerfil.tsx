@@ -22,6 +22,7 @@ import AppLayout from '../components/AppLayout';
 import api from '../services/api';
 import { CardMeusEAD } from '../components/dashboard/CardMeusEAD';
 import type { HomeProfile, HomeProfileFuncionarioContext } from '../lib/home-profile';
+import { buildPasta360Url } from '../utils/pasta360';
 
 interface NotificacaoRecente {
   id: number;
@@ -61,11 +62,20 @@ function getHomeProfileSubtitle(homeProfile: HomeProfile | undefined): string {
   }
 }
 
-function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
+export function buildHomeAccessCards(params: {
+  role: string;
+  can: (permission: string) => boolean;
+  homeProfile?: HomeProfile;
+  funcionarioId?: number | null;
+}): AccessCard[] {
+  const { role, can, homeProfile, funcionarioId } = params;
   const cards: AccessCard[] = [];
+  const isMaintenanceHome = homeProfile === 'STUDENT_MANUTENCAO';
+  const isFlightCrewHome = homeProfile === 'STUDENT_TRIPULACAO';
+  const isRestrictedOperationalRole = ['ALUNO', 'INSTRUTOR', 'USUARIO'].includes(role);
 
-  // Fadiga Diária — primeiro card para tripulantes/instrutores
-  if (['ALUNO', 'INSTRUTOR', 'USUARIO'].includes(role)) {
+  // Fadiga Diária — somente para perfis com jornada operacional aérea
+  if (isRestrictedOperationalRole && !isMaintenanceHome) {
     cards.push({
       icon: <HeartPulse className="w-7 h-7" />,
       title: 'Fadiga Diária',
@@ -77,7 +87,7 @@ function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
   }
 
   // Minha Escala
-  if (can('self.escala')) {
+  if (can('self.escala') && !isMaintenanceHome) {
     cards.push({
       icon: <CalendarDays className="w-7 h-7" />,
       title: 'Minha Escala',
@@ -85,6 +95,21 @@ function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
       route: '/escalas/minha-escala',
       color: 'bg-sky-50',
       iconColor: 'text-sky-600',
+    });
+  }
+
+  if (isMaintenanceHome && funcionarioId) {
+    cards.push({
+      icon: <ClipboardList className="w-7 h-7" />,
+      title: 'Minha Pasta 360',
+      description: 'Consulte documentos, registros e histórico do seu cadastro.',
+      route:
+        buildPasta360Url(funcionarioId, {
+          tab: 'pasta',
+          origem: 'home-perfil-manutencao',
+        }) || '/funcionarios',
+      color: 'bg-slate-100',
+      iconColor: 'text-slate-700',
     });
   }
 
@@ -96,6 +121,8 @@ function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
       description:
         role === 'INSTRUTOR'
           ? 'Visualize as sessões de simulador onde você é o instrutor.'
+          : isFlightCrewHome
+            ? 'Visualize as sessões de simulador vinculadas à sua rotina operacional.'
           : 'Visualize as sessões de simulador das quais você participa.',
       route: '/simuladores',
       color: 'bg-violet-50',
@@ -127,7 +154,7 @@ function buildCards(role: string, can: (p: string) => boolean): AccessCard[] {
     });
   }
 
-  if (['ALUNO', 'INSTRUTOR', 'USUARIO'].includes(role)) {
+  if (isRestrictedOperationalRole) {
     cards.push({
       icon: <LockKeyhole className="w-7 h-7" />,
       title: 'Trocar Senha',
@@ -153,7 +180,12 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
     role === 'INSTRUTOR' ? 'Instrutor' : role === 'ALUNO' ? 'Aluno' : (role ?? 'Usuário');
   const subtitle = getHomeProfileSubtitle(homeProfile);
 
-  const cards = buildCards(role ?? '', can);
+  const cards = buildHomeAccessCards({
+    role: role ?? '',
+    can,
+    homeProfile,
+    funcionarioId: user?.funcionario_id ?? null,
+  });
 
   React.useEffect(() => {
     let ativo = true;
