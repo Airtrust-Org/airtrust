@@ -535,7 +535,7 @@ router.get(
   '/',
   auth(),
   safe(async (c) => {
-    const db = c.env.DB;
+    const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
@@ -615,7 +615,7 @@ router.get(
   '/:id',
   auth(),
   safe(async (c) => {
-    const db = c.env.DB;
+    const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
@@ -663,7 +663,7 @@ router.get(
   '/:id/setores',
   auth(),
   safe(async (c) => {
-    const db = c.env.DB;
+    const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
     const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
@@ -708,7 +708,7 @@ router.post(
   auth(),
   requireRole('admin'),
   safe(async (c) => {
-    const db = c.env.DB;
+    const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
@@ -743,7 +743,7 @@ router.post(
           LIMIT 1`,
       )
       .bind(codigo, empresaId)
-      .first();
+      .first<TipoExistenteRow & { empresa_id: number }>();
 
     const existingRow = existing as TipoExistenteRow | null;
 
@@ -921,7 +921,7 @@ router.put(
   auth(),
   requireRole('admin'),
   safe(async (c) => {
-    const db = c.env.DB;
+    const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
     const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
     const hasIsCheck = columnsSupport.hasIsCheck;
@@ -1228,7 +1228,7 @@ router.put(
   auth(),
   requireRole('admin'),
   safe(async (c) => {
-    const db = c.env.DB;
+    const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
     const body = await c.req.json();

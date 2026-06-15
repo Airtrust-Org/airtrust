@@ -85,6 +85,20 @@ type TipoRecord = {
   setores: Array<{ id: number; nome: string }>;
 };
 
+type QualificacoesTiposPayload = {
+  data: Array<{
+    codigo: string;
+    is_transversal?: boolean;
+    setores?: Array<{ nome: string }>;
+  }>;
+};
+
+type QualificacoesTipoSetoresPayload = {
+  data: {
+    setores: Array<{ nome: string }>;
+  };
+};
+
 function createMockEnv() {
   const tipos: TipoRecord[] = [
     { id: 1, codigo: 'CONDUTA', nome: 'Código de Conduta', categoria: 'Treinamento', setores: [] },
@@ -292,7 +306,7 @@ describe('qualificacoes tipos setor scope', () => {
     const res = await req('/api/qualificacoes/tipos?limit=200', env, 'admin');
     expect(res.status).toBe(200);
 
-    const payload = await res.json();
+    const payload = (await res.json()) as QualificacoesTiposPayload;
     expect(payload.data).toHaveLength(3);
     expect(payload.data.map((item: any) => item.codigo)).toEqual(['CONDUTA', 'MNT-01', 'TRIP-01']);
     expect(payload.data[0].is_transversal).toBe(true);
@@ -303,7 +317,7 @@ describe('qualificacoes tipos setor scope', () => {
     const res = await req('/api/qualificacoes/tipos?limit=200', env, 'manager');
     expect(res.status).toBe(200);
 
-    const payload = await res.json();
+    const payload = (await res.json()) as QualificacoesTiposPayload;
     expect(payload.data.map((item: any) => item.codigo)).toEqual(['CONDUTA', 'MNT-01']);
     expect(payload.data.some((item: any) => item.codigo === 'TRIP-01')).toBe(false);
   });
@@ -323,7 +337,7 @@ describe('qualificacoes tipos setor scope', () => {
     });
 
     expect(res.status).toBe(200);
-    const payload = await res.json();
+    const payload = (await res.json()) as QualificacoesTipoSetoresPayload;
     expect(payload.data.setores.map((item: any) => item.nome).sort()).toEqual([
       'Engenharia',
       'Manutenção',
