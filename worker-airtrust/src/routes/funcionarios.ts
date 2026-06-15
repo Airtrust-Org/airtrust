@@ -537,12 +537,12 @@ app.get('/stats/dashboard', auth(), async (c) => {
       .bind(empresaId, ...sectorScope.bindings, empresaId, ...sectorScope.bindings)
       .all<{ aeronave: string; total: number; ativos: number }>();
 
-    // Funcionários por função
+    // Funcionários por função/cargo
     const porFuncao = await db
       .prepare(
         `
       SELECT 
-        COALESCE(NULLIF(TRIM(f.funcao), ''), 'Não Definida') as funcao,
+        ${buildFuncionarioRoleExpr('f')} as funcao,
         COUNT(*) as total,
         COUNT(*) as ativos
       FROM funcionarios f
@@ -550,7 +550,7 @@ app.get('/stats/dashboard', auth(), async (c) => {
         AND ${ativoExpr}
         AND f.empresa_id = ?
         AND ${sectorScope.clause}
-      GROUP BY UPPER(TRIM(COALESCE(f.funcao, '')))
+      GROUP BY UPPER(TRIM(COALESCE(${buildFuncionarioRoleExpr('f')}, 'Não Definida')))
       ORDER BY total DESC
       LIMIT 10
     `,

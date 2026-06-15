@@ -394,7 +394,7 @@ function getPessoaLabel(
 function getConvocacaoDisabledReason(treinamento?: TreinamentoPlanejado | null): string | null {
   if (!treinamento) return 'Carregando detalhes da turma';
   if ((treinamento.participantes || []).length === 0) {
-    return 'A turma não possui tripulantes matriculados';
+    return 'A turma não possui participantes matriculados';
   }
   if (!treinamento.data_prevista) {
     return 'A turma não possui data definida';
@@ -3039,7 +3039,7 @@ export default function TreinamentosPlanejadosPage({
                       Histórico de convocações
                     </h3>
                     <p className="text-sm text-slate-500">
-                      Registro operacional dos envios de e-mail e das falhas por tripulante.
+                      Registro operacional dos envios de e-mail e das falhas por participante.
                     </p>
                   </div>
                 </div>
@@ -3231,7 +3231,7 @@ export default function TreinamentosPlanejadosPage({
                     <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-amber-700" />
                     <div>
                       <p className="font-semibold text-amber-900">
-                        Alguns tripulantes não entrarão na fila
+                        Alguns participantes não entrarão na fila
                       </p>
                       <ul className="mt-2 space-y-1 text-sm text-amber-800">
                         {convocacaoPreview.ausentes_email.map((item) => (
@@ -3251,7 +3251,7 @@ export default function TreinamentosPlanejadosPage({
                           checked={ignorarSemEmail}
                           onChange={(event) => setIgnorarSemEmail(event.target.checked)}
                         />
-                        Confirmo o envio ignorando tripulantes sem e-mail ou com e-mail inválido.
+                        Confirmo o envio ignorando participantes sem e-mail ou com e-mail inválido.
                       </label>
                     </div>
                   </div>
