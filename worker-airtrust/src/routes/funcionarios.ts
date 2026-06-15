@@ -101,6 +101,12 @@ function buildFuncionarioAeronaveTokensExpr(funcAlias = 'f'): string {
   return `',' || REPLACE(UPPER(${buildFuncionarioAeronaveDisplayExpr(funcAlias)}), ' / ', ',') || ','`;
 }
 
+export function buildFuncionarioRoleExpr(funcAlias?: string): string {
+  const funcaoColumn = funcAlias ? `${funcAlias}.funcao` : 'funcao';
+  const cargoColumn = funcAlias ? `${funcAlias}.cargo` : 'cargo';
+  return `COALESCE(NULLIF(TRIM(${funcaoColumn}), ''), NULLIF(TRIM(${cargoColumn}), ''))`;
+}
+
 /**
  * GET /api/funcionarios
  * Lista funcionários com paginação e busca
@@ -259,8 +265,8 @@ app.get('/', auth(), async (c) => {
 
   // Filtro por função
   if (funcao) {
-    whereClausesQuery.push('f.funcao = ?');
-    whereClausesCount.push('funcao = ?');
+    whereClausesQuery.push(`${buildFuncionarioRoleExpr('f')} = ?`);
+    whereClausesCount.push(`${buildFuncionarioRoleExpr()} = ?`);
     bindings.push(funcao);
   }
 
