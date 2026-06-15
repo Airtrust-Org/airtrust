@@ -121,7 +121,7 @@ describe('employee sector access', () => {
 
   it('builds parameterized SQL and a deny-all predicate for empty manager scope', () => {
     expect(
-      employeeSectorSql({ mode: 'restricted', setorIds: [10, 12] }, 'f'),
+      employeeSectorSql({ mode: 'restricted', setorIds: [10, 12], funcionarioId: null }, 'f'),
     ).toEqual({
       clause: 'f.setor_id IN (?, ?)',
       bindings: [10, 12],
