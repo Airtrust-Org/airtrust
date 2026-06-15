@@ -120,6 +120,7 @@
     "setup:dev": "bash worker-airtrust/setup-dev-db.sh",
     "setup:local": "bash scripts/setup-local-db.sh",
     "setup:local:reset": "bash scripts/setup-local-db.sh --reset",
+    "setup:lms:local:reset": "bash scripts/setup-local-lms-smoke-db.sh --reset",
     "seed:lms:pdf:local": "bash scripts/seed-lms-pdf-demo.sh",
     "seed:lms:pptx:local": "bash scripts/seed-lms-pptx-demo.sh",
     "smoke:lms:local": "bash scripts/smoke-lms-content-local.sh",

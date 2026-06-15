@@ -784,7 +784,7 @@ app.post('/', async (c) => {
         empresaId,
         cursoId: curso_id,
         cursoTitulo: curso.titulo,
-        dataExpiracao,
+        dataExpiracao: data_expiracao ?? null,
         isNovoCiclo: true,
       });
       return c.json({ success: true, data: updated }, 200);
@@ -843,7 +843,7 @@ app.post('/', async (c) => {
       empresaId,
       cursoId: curso_id,
       cursoTitulo: curso.titulo,
-      dataExpiracao,
+      dataExpiracao: data_expiracao ?? null,
       isNovoCiclo: false,
     });
     return c.json({ success: true, data: matricula }, 201);
@@ -909,7 +909,7 @@ app.post('/', async (c) => {
       empresaId,
       cursoId: curso_id,
       cursoTitulo: curso.titulo,
-      dataExpiracao,
+      dataExpiracao: data_expiracao ?? null,
       isNovoCiclo: true,
     });
     return c.json({ success: true, data: updated }, 200);
@@ -1041,7 +1041,7 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
           empresaId,
           cursoId: curso_id,
           cursoTitulo: curso.titulo,
-          dataExpiracao,
+          dataExpiracao: data_expiracao ?? null,
           isNovoCiclo: true,
         });
 
@@ -1097,7 +1097,7 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
           empresaId,
           cursoId: curso_id,
           cursoTitulo: curso.titulo,
-          dataExpiracao,
+          dataExpiracao: data_expiracao ?? null,
           isNovoCiclo: false,
         });
 
@@ -1175,7 +1175,7 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
           empresaId,
           cursoId: curso_id,
           cursoTitulo: curso.titulo,
-          dataExpiracao,
+          dataExpiracao: data_expiracao ?? null,
           isNovoCiclo: true,
         });
 
