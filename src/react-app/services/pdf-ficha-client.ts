@@ -45,6 +45,27 @@ export interface FichaPDFData {
   }>;
 }
 
+export interface FichaPdfTableLayout {
+  codigoWidth: number;
+  itensWidth: number;
+  notaBadgeHeight: number;
+  notaBadgeWidth: number;
+  obsWidth: number;
+  positions: {
+    codigo: number;
+    itens: number;
+    nota: number;
+    num: number;
+    obs: number;
+    tripulante: number;
+  };
+  tripulanteWidth: number;
+}
+
+export function getFichaPdfTableHeaders() {
+  return ['#', 'CÓDIGO', 'TRIP.', 'ITENS', 'OBSERVAÇÕES', 'NOTA'] as const;
+}
+
 import { getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
@@ -84,6 +105,37 @@ const COLORS = {
   bgLight: '#F5F7FA',
   white: '#FFFFFF',
 };
+
+export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
+  return {
+    positions: {
+      num: margin + 3,
+      codigo: margin + 10,
+      tripulante: margin + 28,
+      itens: margin + 35,
+      obs: margin + 80,
+      nota: margin + 172,
+    },
+    codigoWidth: 16,
+    tripulanteWidth: 10,
+    itensWidth: 43,
+    obsWidth: 80,
+    notaBadgeWidth: 10,
+    notaBadgeHeight: 4,
+  };
+}
+
+function getTripulanteBadgeColors(tripulante?: 'A' | 'B' | 'AB') {
+  if (tripulante === 'A') {
+    return { fill: '#DBEAFE', text: '#1D4ED8' };
+  }
+
+  if (tripulante === 'B') {
+    return { fill: '#FEF3C7', text: '#B45309' };
+  }
+
+  return { fill: '#E2E8F0', text: '#334155' };
+}
 
 /**
  * Formata data para dd/mm/yyyy
@@ -555,27 +607,25 @@ export async function gerarPDFFichaCliente(
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
 
-  // Posições das colunas — sem coluna T (tripulante)
-  // Layout (A4 = 210mm, content = 180mm):
-  //  # (7mm) | CÓDIGO (18mm) | ITENS (52mm) | OBSERVAÇÕES (78mm) | NOTA (10mm badge)
-  const col = {
-    num: margin + 3, // # — texto centralizado
-    codigo: margin + 9, // CÓDIGO
-    itens: margin + 26, // ITENS (ITENS_WIDTH mm)
-    obs: margin + 80, // OBSERVAÇÕES (OBS_WIDTH mm) — coluna larga
-    nota: margin + 172, // NOTA — badge centralizado (badge ±5mm = 10mm); badge vai até 177 < 195
-  };
-  const ITENS_WIDTH = 52;
-  const OBS_WIDTH = 85; // de 80 até col.nota-5-2 = 172-5-2 = 165 → 165-80 = 85mm
-  const NOTA_BADGE_W = 10;
-  const NOTA_BADGE_H = 4;
+  const tableLayout = getFichaPdfTableLayout(margin);
+  const col = tableLayout.positions;
+  const ITENS_WIDTH = tableLayout.itensWidth;
+  const OBS_WIDTH = tableLayout.obsWidth;
+  const TRIP_WIDTH = tableLayout.tripulanteWidth;
+  const NOTA_BADGE_W = tableLayout.notaBadgeWidth;
+  const NOTA_BADGE_H = tableLayout.notaBadgeHeight;
 
-  // Headers
-  doc.text('#', col.num, currentY + 4, { align: 'center', maxWidth: 7 });
-  doc.text('CÓDIGO', col.codigo, currentY + 4, { align: 'left', maxWidth: 17 });
-  doc.text('ITENS', col.itens, currentY + 4, { align: 'left', maxWidth: ITENS_WIDTH });
-  doc.text('OBSERVAÇÕES', col.obs, currentY + 4, { align: 'left', maxWidth: OBS_WIDTH });
-  doc.text('NOTA', col.nota, currentY + 4, { align: 'center', maxWidth: NOTA_BADGE_W });
+  const [numHeader, codigoHeader, tripHeader, itensHeader, obsHeader, notaHeader] =
+    getFichaPdfTableHeaders();
+  doc.text(numHeader, col.num, currentY + 4, { align: 'center', maxWidth: 7 });
+  doc.text(codigoHeader, col.codigo, currentY + 4, {
+    align: 'left',
+    maxWidth: tableLayout.codigoWidth,
+  });
+  doc.text(tripHeader, col.tripulante, currentY + 4, { align: 'center', maxWidth: TRIP_WIDTH });
+  doc.text(itensHeader, col.itens, currentY + 4, { align: 'left', maxWidth: ITENS_WIDTH });
+  doc.text(obsHeader, col.obs, currentY + 4, { align: 'left', maxWidth: OBS_WIDTH });
+  doc.text(notaHeader, col.nota, currentY + 4, { align: 'center', maxWidth: NOTA_BADGE_W });
   currentY += 6;
 
   // ── Calcular alturas uniformes ────────────────────────────────────────────
@@ -648,7 +698,25 @@ export async function gerarPDFFichaCliente(
     doc.text(String(m.ordem).padStart(2, '0'), col.num, textTopY, { align: 'center' });
 
     // Código
-    doc.text((m.codigo || '').substring(0, 14), col.codigo, textTopY);
+    doc.text((m.codigo || '').substring(0, 13), col.codigo, textTopY);
+
+    // Tripulante (A/B/AB)
+    const tripulante = m.tripulante || 'AB';
+    const tripBadge = getTripulanteBadgeColors(tripulante);
+    const tripBadgeW = 8;
+    const tripBadgeH = 4;
+    const tripBadgeX = col.tripulante - tripBadgeW / 2;
+    const tripBadgeY = currentY + (rowH - tripBadgeH) / 2;
+    const tripBadgeTextY = tripBadgeY + tripBadgeH - 1.2;
+    doc.setFillColor(tripBadge.fill);
+    doc.roundedRect(tripBadgeX, tripBadgeY, tripBadgeW, tripBadgeH, 1, 1, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(Math.max(4.5, finalFontSize - 0.5));
+    doc.setTextColor(tripBadge.text);
+    doc.text(tripulante, col.tripulante, tripBadgeTextY, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(finalFontSize);
+    doc.setTextColor(COLORS.text);
 
     // Nome (1 linha máx)
     for (let li = 0; li < nomeLines.length; li++) {

@@ -1,196 +1,328 @@
-# AirTrust - Incidente Critico: Modelos de Sessao sem Manobras
+# INCIDENTE_MODELOS_SESSAO_MANOBRAS_RECOVERY_REPORT
 
-Data da apuracao: 2026-06-16  
-Escopo: Modelos de sessao, fichas de simulador, login e PR #59  
-Status: `BLOQUEADO — RESTAURACAO MANOBRAS TENANT INSEGURA`
+Status atual:
 
-## Veredito
+`FULL RESTORE OPERACIONAL CONCLUIDO PARA EMPRESA 6`
 
-A perda e real em producao: a tabela `modelos_sessao_manobras` esta vazia em nivel total, nao apenas em nivel de filtro por tenant. Nao houve escrita em producao nesta fase.
+Status do full restore:
 
-A hipotese de tenant nao foi confirmada. As manobras ativas existem e estao associadas a `empresa_id = 6`, mas nao existem linhas em `modelos_sessao_manobras` para nenhum tenant. O problema observado em producao e perda de relacao modelo -> manobra, nao filtro escondendo dados validos.
+`CONCLUIDO — A139-P-C1/IFR RESOLVIDO POR INFERENCIA OPERACIONAL CONFIRMADA`
 
-A recuperacao operacional dos dados nao deve ser aplicada ainda. As fontes versionadas cobrem parte relevante dos modelos, mas a fonte completa e verificavel para todos os 52 modelos ativos ainda nao foi provada em nivel de linha. Qualquer restauracao parcial criaria risco regulatorio e risco de avaliacao com conteudo incorreto.
+## Escopo executado
 
-## Regras de seguranca cumpridas
+Restore controlado somente para a empresa `6`, com insercao exclusiva em `modelos_sessao_manobras`.
 
-- SIGVOOS nao foi retomado.
-- FRMS e `frms-source-policy.ts` nao foram alterados.
-- Nenhuma migracao, DDL, DML, `DELETE`, `TRUNCATE`, `UPDATE` ou carga de dados foi aplicada em producao.
-- A apuracao remota usou apenas consultas `SELECT`/`PRAGMA`; os resultados reportaram `rows_written: 0`.
-- Nenhum dado pessoal foi incluido neste relatorio.
+Foi executado:
 
-## Estado de producao observado
+- ajuste do source-map para full restore;
+- inclusao de `51` modelos restauraveis;
+- resolucao do modelo `A139-P-C1/IFR`;
+- builder;
+- dry-run;
+- restore `--dry-run`;
+- snapshot novo imediatamente antes do apply;
+- apply incremental em producao;
+- correcao de fichas pendentes sem manobras;
+- bloqueio de avaliacao futura no frontend e backend;
+- validacao read-only pos-apply.
 
-Resumo de producao:
+Nao houve:
 
-| Metrica | Valor |
-| --- | ---: |
-| Modelos ativos | 52 |
-| Modelos ativos sem links em `modelos_sessao_manobras` | 52 |
-| Linhas totais em `modelos_sessao_manobras` | 0 |
-| Links ativos em `modelos_sessao_manobras` | 0 |
-| Links soft-deleted em `modelos_sessao_manobras` | 0 |
-| Manobras ativas no catalogo | 393 |
-| Manobras ativas da empresa 6 | 393 |
-| Manobras ativas sem `empresa_id` | 0 |
-| Fichas ativas | 75 |
-| Fichas ativas sem manobras | 20 |
-| Fichas assinadas/concluidas sem manobras | 0 |
+- `DELETE`;
+- `TRUNCATE`;
+- migration;
+- alteracao em `modelos_sessao`;
+- alteracao em `manobras`;
+- alteracao em fichas assinadas/concluidas;
+- alteracao em SIGVOOS;
+- alteracao em FRMS;
+- alteracao em `frms-source-policy.ts`;
+- qualquer escrita para empresa `8`.
 
-Distribuicao por tenant:
+## Source-map final
 
-| Empresa | Modelos ativos | Modelos sem links |
-| ---: | ---: | ---: |
-| 6 | 51 | 51 |
-| 8 | 1 | 1 |
+Estado publicado pelo builder:
 
-Fichas sem manobras por tenant:
+- `ready_for_partial_restore = true`
+- `ready_for_full_restore = true`
+- `blocked_models = []`
+- `allowlist_models = 51`
+- `relation_rows = 1122`
+- `candidate_relation_rows = 1122`
+- `coverage_status = READY_FOR_FULL_RESTORE`
 
-| Empresa | Fichas sem manobras |
-| ---: | ---: |
-| 6 | 19 |
-| 8 | 1 |
+Inferencia operacional registrada:
 
-Catalogo de manobras ativo:
+- `operational_inference_confirmed_2026-06-16:A139-P-C1/IFR:ordem_10:derived_from_similar_A139_IFR_cycle`
 
-| Empresa | Aeronave | Tipo de sessao | Manobras |
-| ---: | --- | --- | ---: |
-| 6 | n/a | CHECK | 44 |
-| 6 | AW139 | TREINAMENTO | 147 |
-| 6 | SK76 | PER | 22 |
-| 6 | SK76 | TREINAMENTO | 180 |
+## Historico do apply parcial anterior
 
-Schema confirmado em producao:
+## Snapshot pre-apply
 
-| Tabela | Campo tenant | Observacao |
-| --- | --- | --- |
-| `modelos_sessao` | `empresa_id` NOT NULL | tenantizado |
-| `manobras` | `empresa_id` nullable | em producao, todas as ativas estao na empresa 6 |
-| `modelos_sessao_manobras` | nao possui | relacao N:N sem tenant proprio |
-| `fichas_sessao` | `empresa_id` NOT NULL | possui `template_id`, `status` e campos de assinatura |
-| `fichas_sessao_manobras` | nao possui | depende da ficha |
+Snapshot novo criado imediatamente antes do apply parcial:
 
-## Hipotese de tenant
+- snapshot SQL preservado fora do commit
+- tamanho: `113388949` bytes
+- timestamp: `2026-06-16T17:41:08-0300`
 
-Respostas objetivas:
+Snapshot anterior do abort inseguro foi preservado e nao reutilizado.
 
-1. As manobras existem: sim, 393 ativas, todas em `empresa_id = 6`.
-2. As relacoes existem: nao. `modelos_sessao_manobras` tem `0` linhas totais em producao.
-3. As relacoes apontam para modelos da empresa 6: nao aplicavel, porque nao ha linhas.
-4. As manobras estao em empresa diferente de 6: nao. As ativas estao na empresa 6.
-5. A relacao tem `empresa_id` proprio: nao.
-6. A query atual exige tenant coerente entre modelo e manobra: sim, nos endpoints auditados o backend filtra `ms.empresa_id = ?` e `m.empresa_id = ?`.
-7. A populacao de ficha falha por filtro de tenant na empresa 6: nao. Ela falha porque a relacao modelo -> manobra esta ausente antes mesmo do filtro de tenant.
-8. O problema e dado, query ou ambos: dado. O filtro de tenant existe e e restritivo, mas o bloqueio operacional atual vem da ausencia total das linhas de relacao em producao.
+## Apply parcial
 
-## Impacto
+Comando aplicado:
 
-- A tela de avaliacao falhava com ficha sem manobras apos tentativa de populacao automatica.
-- Criacao e edicao de fichas podiam mascarar a ausencia do modelo, inclusive por fallback generico.
-- O fluxo de assinatura podia avancar sobre ficha sem itens avaliativos.
-- Sessoes compartilhadas com `gera_ficha=true` podiam criar fichas sem manobras quando o modelo estava zerado.
+- `node scripts/operations/restore-modelos-sessao-manobras-empresa6.mjs --apply --snapshot-path <snapshot> --i-understand-production-write`
 
-## Mitigacao de codigo preparada
+Resultado remoto:
 
-Foram preparadas guardas para impedir que o sistema continue criando, avaliando ou assinando fichas vazias:
+- `success: true`
+- `changes: 1100`
+- `changed_db: true`
+- `rows_written: 6601`
+- alvo unico: `modelos_sessao_manobras`
 
-- `GET /simuladores/fichas/:id` nao cria mais manobras genericas `ORD-*`; retorna erro 409 quando nao ha modelo ou quando o modelo nao tem manobras.
-- `PUT /simuladores/fichas/:id` bloqueia atualizacao de manobra inexistente e bloqueia recalc de status quando a ficha nao tem manobras.
-- `POST /simuladores/fichas/:id/assinar` bloqueia assinatura de ficha sem manobras.
-- Criacao/edicao de sessao compartilhada bloqueia `gera_ficha=true` quando o modelo de sessao nao tem manobras ativas.
-- O modal de avaliacao exibe a mensagem do backend e nao tenta reprocessar ficha vazia.
-- Login recebeu timeout controlado para evitar travamento quando `/auth/empresas` fica indisponivel.
+## Validacao pos-apply
 
-Essas mudancas nao restauram dados historicos; elas reduzem dano futuro ate a restauracao controlada.
+Resultados confirmados por consultas read-only em producao:
 
-## Fontes de recuperacao avaliadas
+- total de relacoes ativas em `modelos_sessao_manobras`: `1100`
+- modelos da allowlist com contagem diferente de `22`: `0`
+- modelos fora de allowlist e fora do bloqueado com relacoes restauradas: `0`
+- `A139-I-11/12` total de relacoes: `22`
+- `A139-I-11/12` distribuicao de `tripulante`: `AB = 22`
+- `A139-P-C1/IFR` total de relacoes restauradas: `0`
+- empresa `8` total de relacoes restauradas: `0`
+- fichas `ASSINADO`/`CONCLUIDO` sem manobras: `0`
 
-Fontes versionadas com vinculos de modelo/manobra foram localizadas em migracoes como:
+Conclusao da validacao:
 
-- `0180_implement_periodico_aw139.sql`
-- `0220_seed_sk76_modelos_iniciais.sql`
-- `0222_seed_sk76_manobras_e_modelos_periodicos.sql`
-- `0296_fap07_fap13_manobras.sql`
-- `0299_loft_chk_manobras.sql`
-- `0300_loft_off_not_e_fap_refs.sql`
-- `0373_fix_sk76_inicial_modelos_sem_manobras.sql`
-- `0382_create_sk76_semestral_sessions.sql`
-- `0383_split_night_training_onshore_offshore.sql`
+- partial restore: valido
+- full restore: segue bloqueado
 
-O problema: ha modelos atuais com codigos renomeados ou criados depois das fontes originais, alem do modelo piloto da empresa 8. Por isso, ainda nao existe mapa completo e aprovado de `modelo_codigo -> manobra_codigo -> ordem -> tripulante` para todos os 52 modelos ativos.
+## A139-I-11/12
 
-Staging nao e fonte confiavel: tambem esta sem links e sem manobras ativas suficientes para restauracao.
+O modelo `A139-I-11/12` foi restaurado com `22` relacoes e `22` classificacoes `AB`.
 
-Como a relacao esta zerada em nivel total, qualquer restauracao segura precisara reconstruir `modelos_sessao_manobras` a partir de fonte historica/versionada. Nao existe evidencia em producao de linhas deslocadas para outro tenant que permita restauracao por simples ajuste de `empresa_id`.
+Fonte operacional registrada:
 
-## Dry-run preparado
+- `responsavel_operacional_confirmado_2026-06-16:A139-I-11/12:AB`
 
-Foi adicionado o gerador read-only:
+## Resolucao operacional: A139-P-C1/IFR
 
-`scripts/validation/dry-run-modelos-sessao-manobras-recovery.mjs`
+O modelo `A139-P-C1/IFR` foi completado com `22` relacoes.
 
-Ele emite SQL somente-leitura para:
+Manobra escolhida para a ordem `10`:
 
-- recontar modelos/fichas afetados;
-- classificar modelos por fonte candidata;
-- marcar modelos cuja fonte de restauracao ainda nao esta provada.
+- codigo: `CAU-DCB-56`
+- descricao: `DC bus failure`
+- classificacao: `AB`
+- fonte registrada: `operational_inference_confirmed_2026-06-16:A139-P-C1/IFR:ordem_10:derived_from_similar_A139_IFR_cycle`
 
-Esse dry-run nao gera comandos de escrita e nao deve ser tratado como script de aplicacao. A restauracao real so deve nascer depois de snapshot, reconciliacao linha a linha e aprovacao explicita.
+Fonte analoga usada:
 
-Nesta etapa, o dry-run foi reforcado para responder explicitamente se o problema e tenant ou ausencia total da relacao.
+- `A139-P-C2/IFR`
+- alias visual PTO: `A139-P-IFR/C2`
+- PTO Rev.10 pagina `111`
+- mesma familia operacional: AW139 periodico IFR
+- mesma posicao de ciclo: ordem `10`
 
-## PR #59 e login
+- PTO Rev.10 pagina `109`: somente `21` linhas visiveis
+- ordens visiveis: `01..09` e `11..22`
+- referencia visual: `tmp/pdfs/pto_rev10_p109-109.png`
+- dump historico `modelo_id=29`: `21` relacoes nas mesmas ordens
 
-O PR #59 foi mergeado em `main` antes desta fase:
+Fonte primaria rejeitada para a ordem `10`:
 
-- PR: `https://github.com/airtrustsystem-alt/airtrust/pull/59`
-- Merge commit: `4fb1416d855241a07432fabbd83695fb09406d9e`
-- Merge em: 2026-06-16T17:35:34Z
+- `worker-airtrust/migrations/0180_implement_periodico_aw139.sql`
+- repete `CAU-AHR-47` nas ordens `6` e `10`
+- gera conflito real de unicidade `modelo_id + manobra_id`
 
-A correcao local de login preparada nesta fase adiciona timeout para `/api/auth/login` e tolerancia controlada para falha em `/api/auth/empresas`, sem alterar politica de autenticacao.
+Decisao aplicada:
 
-## PR #60
+- `CAU-AHR-47` duplicado foi rejeitado;
+- `CAU-DCB-56` foi aceito por existir no catalogo da empresa `6`, aparecer em ficha similar IFR AW139, nao duplicar manobra, nao duplicar ordem e possuir classificacao `AB`;
+- `A139-P-C1/IFR` entrou no source-map resolvido;
+- `ready_for_full_restore=true`.
 
-Estado atual do PR:
+## Apply full restore incremental
 
-- PR: `https://github.com/airtrustsystem-alt/airtrust/pull/60`
-- Branch: `codex/incidente-modelos-sessao-manobras`
-- Checks: verdes na ultima auditoria desta etapa
-- Decisao nesta etapa: nao mergear como se a restauracao estivesse resolvida
+Snapshot novo criado antes do apply do modelo e preservado fora do commit.
 
-O PR #60 continua valido como mitigacao de codigo. Ele nao resolve a perda das relacoes em producao e por isso nao encerra o incidente de dados.
+Comando aplicado:
 
-## Validacoes executadas
+- `node scripts/operations/restore-modelos-sessao-manobras-empresa6.mjs --apply --snapshot-path <snapshot> --i-understand-production-write`
 
-Passaram:
+Resultado:
 
-- `npx vitest run src/react-app/components/modals/ModalAvaliarFicha.test.tsx`
-- `npx vitest run src/__tests__/qualificacoes-historico-status-utils.test.ts src/react-app/components/modals/ModalRenovarQualificacao.test.tsx`
-- `cd worker-airtrust && npx vitest run src/__tests__/routes/simuladores-fichas-tenant-write.test.ts src/__tests__/routes/simuladores-shared-session-routes.test.ts src/__tests__/routes/qualificacoes-historico-renovadas.test.ts`
+- tabela alterada: `modelos_sessao_manobras`
+- relacoes inseridas: `22`
+- `A139-P-C1/IFR`: `22` relacoes
+- ordem `10`: `CAU-DCB-56`
+- duplicidade de ordem em `A139-P-C1/IFR`: `0`
+- duplicidade de manobra em `A139-P-C1/IFR`: `0`
+- `CAU-AHR-47` em `A139-P-C1/IFR`: `1`
+- total final `modelos_sessao_manobras`: `1122`
+- modelos empresa `6` com `22` relacoes: `51`
+- empresa `8`: `0` relacoes
+
+## Fichas pendentes sem manobras
+
+Relatorio read-only antes do apply:
+
+- fichas pendentes encontradas: `18`
+- status: todas `AVALIACAO_PENDENTE`
+- escopo: empresa `6`
+- fichas com assinatura de aluno/instrutor: `0`
+- fichas finais/assinadas/concluidas no alvo: `0`
+- modelos de origem: todos com `22` relacoes
+
+Fichas corrigidas:
+
+- `217`, `193`, `194`, `213`, `214`, `215`, `216`, `195`, `196`, `197`, `198`, `199`, `200`, `201`, `202`, `203`, `204`, `205`
+
+Snapshot novo criado antes do apply das fichas e preservado fora do commit.
+
+Apply:
+
+- tabela alterada: `fichas_sessao_manobras`
+- inserts aplicados: `396`
+- regra: `18` fichas x `22` manobras, copiadas do modelo respectivo
+- `resultado`: `NULL`
+- `observacoes`: vazia
+- `tripulante`: copiado de `modelos_sessao_manobras`
+
+Validacao pos-apply:
+
+- fichas corrigidas com `22` manobras: `18`
+- fichas corrigidas com `22` classificacoes `A/B/AB`: `18`
+- fichas pendentes restauraveis ainda sem manobras: `0`
+- empresa `8` com manobras de ficha: `0`
+- fichas `ASSINADO`/`CONCLUIDO` sem manobras: `0`
+- fichas finais/assinadas tocadas na janela do apply: `0`
+
+## Bloqueio de avaliacao futura
+
+Regra implementada:
+
+- timezone operacional: `America/Sao_Paulo`
+- fonte de data/hora: `simulador_agendamentos.data` + `simulador_agendamentos.hora_inicio`, com fallback para `fichas_sessao.data_sessao`
+- quando nao houver hora confiavel, a ficha fica disponivel a partir de `00:00` no timezone operacional
+- se `now < data/hora da sessao`, endpoints de escrita retornam `FICHA_NOT_AVAILABLE_YET`
+
+Backend protegido:
+
+- `PUT /simuladores/fichas/:id`
+- `POST /simuladores/fichas/:id/assinar`
+- `PUT /simuladores/fichas-simulador/:fichaId/manobras/:ordem`
+- `POST /simuladores/fichas-simulador/:id/popular-manobras`
+
+Frontend protegido:
+
+- botao `Avaliar Tripulante` fica desabilitado para sessao futura;
+- mensagem exibida: `Ficha disponível no dia da sessão`;
+- tentativa pelo handler tambem e bloqueada antes de abrir o modal.
+
+## Dry-run final desta fase
+
+`node scripts/operations/build-modelos-sessao-manobras-empresa6-source-map.mjs`
+
+- `ready_for_restore=true`
+- `ready_for_partial_restore=true`
+- `ready_for_full_restore=true`
+- `models_covered=51`
+- `relation_rows=1122`
+- `classification_present_rows=1122`
+
+`node scripts/validation/dry-run-modelos-sessao-manobras-recovery.mjs`
+
+- status: `READY_FOR_FULL_RESTORE`
+
+`node scripts/operations/restore-modelos-sessao-manobras-empresa6.mjs --dry-run`
+
+- status: `READY_FOR_FULL_RESTORE`
+
+## Arquivos atualizados
+
+- `scripts/operations/build-modelos-sessao-manobras-empresa6-source-map.mjs`
+- `scripts/operations/modelos-sessao-manobras-empresa6-source-map.json`
+- `scripts/validation/dry-run-modelos-sessao-manobras-recovery.mjs`
+- `scripts/operations/restore-modelos-sessao-manobras-empresa6.mjs`
+- `worker-airtrust/src/utils/ficha-availability.ts`
+- `worker-airtrust/src/routes/simuladores-fichas.ts`
+- `worker-airtrust/src/routes/simuladores-fichas-acoes.ts`
+- `worker-airtrust/src/routes/simuladores-fichas-simulador.ts`
+- `worker-airtrust/src/__tests__/routes/simuladores-fichas-tenant-write.test.ts`
+- `src/react-app/pages/simuladores/fichas/fichaAvailability.ts`
+- `docs/INCIDENTE_MODELOS_SESSAO_MANOBRAS_RECOVERY_REPORT.md`
+
+## Conclusao objetiva
+
+- restore full incremental da empresa `6`: aplicado
+- relacoes inseridas no modelo nesta etapa: `22`
+- total final de relacoes: `1122`
+- `A139-I-11/12`: restaurado com `22` relacoes `AB`
+- `A139-P-C1/IFR`: restaurado com `22` relacoes
+- fichas pendentes corrigidas: `18`
+- bloqueio de avaliacao futura: frontend e backend
+- empresa `8`: intocada
+- fichas assinadas/concluidas: intocadas
+- SIGVOOS: intocado
+- FRMS: intocado
+- migrations: nao
+
+Encerramento desta fase:
+
+`FULL RESTORE OPERACIONAL CONCLUIDO PARA EMPRESA 6`
+
+## Parte 3A - Modal de selecao para impressao das fichas modelo
+
+Data desta analise/correcao:
+
+- `2026-06-16`
+
+Causa raiz identificada no fluxo:
+
+- o modal de impressao estava implementado inline na propria pagina de fichas, com abertura, carregamento da lista e tratamento de erro misturados no mesmo fluxo;
+- nao havia estado visual persistente de erro/retry dentro do modal;
+- o bloqueio por ausencia de manobras so aparecia tarde, durante a geracao em lote, o que acoplava a experiencia de impressao a modelos incompletos e fazia o fluxo parecer quebrado quando havia inconsistencias na carga.
+
+Correcao aplicada:
+
+- abertura do modal desacoplada da carga dos modelos;
+- migracao do modal para `BaseModal`, com fechamento por `ESC`, backdrop e botao cancelar;
+- carga dos modelos em `useEffect` ao abrir o modal, com estado explicito de loading, erro e retry;
+- modelos sem manobras permanecem visiveis na lista, mas ficam bloqueados individualmente para impressao com mensagem clara;
+- coluna `TRIP.` adicionada no PDF para exibir `A`, `B` ou `AB` sem quebrar o layout.
+
+Arquivos alterados nesta parte:
+
+- `src/react-app/pages/simuladores/fichas/index.tsx`
+- `src/react-app/services/pdf-ficha-client.ts`
+- `src/react-app/pages/simuladores/fichas/__tests__/index.test.tsx`
+- `src/react-app/pages/simuladores/fichas/__tests__/fichaModeloPdf.test.ts`
+
+Validacao funcional:
+
+- modal abre ao clicar em `Ficha Modelo`: `sim`
+- modal fecha em `Cancelar`: `sim`
+- modal fecha com `ESC`: `sim`
+- lista de modelos da empresa ativa carrega com contagem de manobras: `sim`
+- modelo sem manobras permanece visivel e bloqueado com mensagem clara: `sim`
+- selecao de modelo imprimivel funciona: `sim`
+- disparo de download nao pode ser capturado no navegador in-app usado no smoke, porque essa superficie nao suporta downloads; o fluxo de habilitacao do botao e a chamada de geracao permanecem cobertos pelos testes e pelo caminho de codigo.
+
+Validacao automatizada executada:
+
+- `npm run test:run -- src/react-app/pages/simuladores/fichas/__tests__/index.test.tsx`
+- `npm run test:run -- src/react-app/pages/simuladores/fichas/__tests__/fichaModeloPdf.test.ts`
 - `npm run build`
 - `npm run lint`
-- `cd worker-airtrust && npx tsc --noEmit --pretty false`
 - `git diff --check`
-- `bash scripts/audit-dangerous-ops.sh` passou com aviso preexistente em scripts de sincronizacao local.
-- `bash scripts/check-tracked-secrets.sh`
-- `node scripts/validation/dry-run-modelos-sessao-manobras-recovery.mjs`
-- consultas read-only em producao com `PRAGMA table_info`, `sqlite_master` e `SELECT` para tabelas/contagens de tenant
 
-Nao passou por condicao preexistente:
+Restricoes confirmadas nesta parte:
 
-- `cd worker-airtrust && npm run types` falhou porque `worker-configuration.d.ts` ja existe e o Wrangler se recusou a sobrescrever arquivo nao gerado por ele.
-- `bash scripts/validation/audit-sensitive-files.sh` falhou por inventario ja rastreado de SQLs/backups/arquivos legados no repositorio; nao foi causado pelos novos arquivos desta fase.
-
-## Proxima fase segura
-
-1. Criar snapshot/backup verificavel do D1 de producao.
-2. Gerar mapa completo de restauracao a partir de fontes versionadas e/ou snapshot historico, sem dados pessoais.
-3. Executar dry-run linha a linha em copia local/staging.
-4. Revisar divergencias por modelo e por ordem.
-5. Solicitar autorizacao explicita e separada para qualquer escrita em producao.
-6. Aplicar apenas script idempotente, com `INSERT` condicionado a ausencia do link e sem `DELETE`/`TRUNCATE`.
-
-Enquanto a fonte completa nao for provada, o status correto desta etapa permanece:
-
-`BLOQUEADO — RESTAURACAO MANOBRAS TENANT INSEGURA`
+- banco alterado por esta parte: `nao`
+- DML/migration: `nao`
+- SIGVOOS: `nao`
+- FRMS: `nao`
+- `frms-source-policy.ts`: `intocado`
