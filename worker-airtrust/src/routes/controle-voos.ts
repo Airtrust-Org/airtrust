@@ -5,6 +5,11 @@ import { ApiError } from '../middleware/error-handler';
 import { checkPermission, getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
+import {
+  parseSigvoosRealPreviewRequest,
+  runSigvoosRealApiPreview,
+  SigvoosRealPreviewError,
+} from '../services/controle-voos/sigvoos-real-preview';
 
 type FlightStatus =
   | 'planejado'
@@ -1143,6 +1148,68 @@ controleVoos.post('/sigvoos/sync-preview', auth(), requireControleVoosSigvoosPre
       ...preview,
     },
   });
+});
+
+controleVoos.post('/sigvoos/real-preview', auth(), requireControleVoosSigvoosPreview(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  if (!empresaId) {
+    throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
+  }
+
+  const payload = await parseOptionalJsonPayload(c);
+  assertNoTenantOverride(payload);
+
+  const enabled = c.env.CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED === 'true';
+  if (!enabled) {
+    return c.json({
+      success: true,
+      data: {
+        mode: 'real-preview',
+        enabled: false,
+        tenantScoped: true,
+        writesEnabled: false,
+        realApiCalled: false,
+        provider: 'SIGVOOS',
+        empresaId,
+        status: 'FEATURE_DISABLED',
+        message: 'Preview real SIGVOOS desativado por feature flag.',
+        summary: {
+          recordsReceived: 0,
+          candidateFlights: 0,
+          withFlightReportId: 0,
+          withoutFlightReportId: 0,
+          crewWithStaffId: 0,
+          crewWithOnlyInscription: 0,
+          potentialConflictsEstimated: 0,
+          missingFields: {},
+          sensitiveFieldsDetected: [],
+          observedTopLevelFields: [],
+          sampleShape: [],
+          contractErrors: [],
+        },
+      },
+    });
+  }
+
+  try {
+    const request = parseSigvoosRealPreviewRequest(payload);
+    const preview = await runSigvoosRealApiPreview(c.env.DB, empresaId, c.env, request);
+    return c.json({ success: true, data: preview });
+  } catch (error) {
+    const safePreviewError = error as { name?: string; code?: unknown; status?: unknown };
+    if (
+      error instanceof SigvoosRealPreviewError ||
+      (safePreviewError.name === 'SigvoosRealPreviewError' && typeof safePreviewError.code === 'string')
+    ) {
+      const status = typeof safePreviewError.status === 'number' ? safePreviewError.status : 502;
+      throw new ApiError('Preview real SIGVOOS indisponivel', status, String(safePreviewError.code));
+    }
+    throw new ApiError(
+      'Preview real SIGVOOS indisponivel',
+      502,
+      'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_FAILED',
+    );
+  }
 });
 
 controleVoos.get('/voos', auth(), async (c) => {

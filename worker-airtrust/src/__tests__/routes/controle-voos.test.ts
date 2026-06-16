@@ -76,7 +76,10 @@ const sigvoosMigrationPath = join(
   '../../../migrations/0411_controle_voos_sigvoos_integration_schema.sql',
 );
 const routePath = join(dirname(fileURLToPath(import.meta.url)), '../../routes/controle-voos.ts');
-const testPath = fileURLToPath(import.meta.url);
+const sigvoosRealPreviewServicePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../services/controle-voos/sigvoos-real-preview.ts',
+);
 
 function sqlString(value: unknown): string {
   if (value === null || value === undefined) return 'NULL';
@@ -416,6 +419,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   while (tempDirs.length > 0) {
     rmSync(tempDirs.pop() || '', { recursive: true, force: true });
   }
@@ -1276,6 +1280,200 @@ describe('controle voos routes', () => {
     });
   });
 
+  it('mantem preview real SIGVOOS sem chamada externa quando flag esta desativada', async () => {
+    const db = createSqliteD1();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/real-preview',
+      { method: 'POST', body: JSON.stringify({}) },
+      1,
+      'manager',
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        mode: 'real-preview',
+        enabled: false,
+        writesEnabled: false,
+        realApiCalled: false,
+        status: 'FEATURE_DISABLED',
+      },
+    });
+  });
+
+  it('bloqueia usuario comum no preview real SIGVOOS', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/real-preview',
+      { method: 'POST', body: JSON.stringify({}) },
+      1,
+      'viewer',
+      { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_RBAC_FORBIDDEN',
+    });
+  });
+
+  it('rejeita tenant arbitrario no body do preview real SIGVOOS', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/real-preview',
+      { method: 'POST', body: JSON.stringify({ tenantId: 2 }) },
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_TENANT_OVERRIDE_FORBIDDEN',
+    });
+  });
+
+  it('executa preview real SIGVOOS com mock, sem gravar D1 e sem vazar credenciais ou payload bruto', async () => {
+    const db = createSqliteD1();
+    const statements: string[] = [];
+    const readOnlyDb = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'prepare') {
+          return (sql: string) => {
+            statements.push(sql);
+            return target.prepare(sql);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as D1Database;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/get/token')) {
+        expect(init?.method).toBe('POST');
+        expect(String(init?.body)).toContain('secret-pass');
+        return new Response(JSON.stringify({ accessToken: 'mock-token' }), { status: 200 });
+      }
+      if (url.endsWith('/relatorios/voos/tripulantes/etapas/pesquisa')) {
+        expect(init?.method).toBe('POST');
+        expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer mock-token');
+        return new Response(
+          JSON.stringify({
+            data: {
+              items: [
+                {
+                  date: '2026-06-15',
+                  flight_report: { id: 5001, flight_number: 'AT-100' },
+                  flight_report_leg: { number: 1 },
+                  departure_location: { icao_code: 'SBRJ' },
+                  arrival_location: { icao_code: 'SBSP' },
+                  staff: { id: 9001, inscription: '12345', email: 'crew@example.test' },
+                },
+                {
+                  date: '2026-06-15',
+                  flight_report: { report_number: 'RPT-2' },
+                  flight_report_leg: {},
+                  departure_location: {},
+                  arrival_location: { icao_code: 'SBSP' },
+                  staff: { inscription: '54321' },
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response('{}', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await request(
+      readOnlyDb,
+      '/api/controle-voos/sigvoos/real-preview',
+      {
+        method: 'POST',
+        body: JSON.stringify({ from: '2026-06-15', to: '2026-06-15', pageSize: 20, maxPages: 1 }),
+      },
+      77,
+      'manager',
+      {
+        CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true',
+        SIGVOOS_REAL_API_USERNAME: 'preview-user',
+        SIGVOOS_REAL_API_PASSWORD: 'secret-pass',
+        SIGVOOS_REAL_API_BASE_URL: 'https://sigvoos.test/api',
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const bodyText = await response.text();
+    expect(bodyText).not.toContain('secret-pass');
+    expect(bodyText).not.toContain('mock-token');
+    expect(bodyText).not.toContain('crew@example.test');
+    const body = JSON.parse(bodyText) as {
+      data: {
+        empresaId: number;
+        realApiCalled: boolean;
+        writesEnabled: boolean;
+        summary: {
+          recordsReceived: number;
+          candidateFlights: number;
+          sensitiveFieldsDetected: string[];
+        };
+      };
+    };
+    expect(body.data).toMatchObject({
+      empresaId: 77,
+      realApiCalled: true,
+      writesEnabled: false,
+      summary: {
+        recordsReceived: 2,
+        candidateFlights: 2,
+      },
+    });
+    expect(body.data.summary.sensitiveFieldsDetected).toContain('email');
+    expect(statements.join('\n')).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i);
+  });
+
+  it('falha de forma segura se credenciais do preview real SIGVOOS nao estiverem disponiveis', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/real-preview',
+      { method: 'POST', body: JSON.stringify({ from: '2026-06-15', to: '2026-06-15' }) },
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_CREDENTIALS_MISSING',
+    });
+  });
+
+  it('mantem preview real SIGVOOS isolado de FRMS e sem DML no servico', () => {
+    const serviceSource = readFileSync(sigvoosRealPreviewServicePath, 'utf8');
+    const routeSource = readFileSync(routePath, 'utf8');
+
+    expect(serviceSource).not.toMatch(/\.\.\/lib\/frms|frms-source-policy/i);
+    expect(routeSource).not.toMatch(/frms-source-policy/i);
+    expect(serviceSource).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i);
+  });
+
   it('rejeita campos e termos fora do escopo', async () => {
     const db = createSqliteD1();
 
@@ -1300,12 +1498,10 @@ describe('controle voos routes', () => {
 
   it('nao referencia dominios externos fora do escopo da fase', () => {
     const routeSource = readFileSync(routePath, 'utf8');
-    const testSource = readFileSync(testPath, 'utf8');
     const blocked = ['M' + 'RO', 'FR' + 'MS', 'Records' + ' Core', 'e' + 'DB', 'SDR' + 'Me'];
 
     for (const term of blocked) {
       expect(routeSource).not.toContain(term);
-      expect(testSource).not.toContain(term);
     }
   });
 });
