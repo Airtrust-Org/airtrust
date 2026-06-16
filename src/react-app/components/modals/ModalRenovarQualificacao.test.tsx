@@ -3,13 +3,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModalRenovarQualificacao } from './ModalRenovarQualificacao';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
 
+const getDataHojeHTMLMock = vi.hoisted(() => vi.fn(() => '2026-03-28'));
+
 vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:3000/api',
   getAccessToken: () => 'token-teste',
 }));
 
 vi.mock('@/react-app/utils/dateUtils', () => ({
-  getDataHojeHTML: () => '2026-03-28',
+  converterParaFormatoHTML: (data: string | null | undefined) => {
+    if (!data) return '';
+    const iso = String(data).match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const br = String(data).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!br) return '';
+    return `${br[3]}-${br[2]}-${br[1]}`;
+  },
+  getDataHojeHTML: getDataHojeHTMLMock,
+  validarData: (data: string) => /^\d{4}-\d{2}-\d{2}$/.test(data),
 }));
 
 vi.mock('@/react-app/lib/moduloBus', () => ({
@@ -19,6 +30,7 @@ vi.mock('@/react-app/lib/moduloBus', () => ({
 describe('ModalRenovarQualificacao', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    getDataHojeHTMLMock.mockReturnValue('2026-03-28');
   });
 
   it('dispara apenas uma requisicao ao confirmar repetidamente', async () => {
@@ -121,5 +133,55 @@ describe('ModalRenovarQualificacao', () => {
     );
     expect(onSuccess).toHaveBeenCalledWith();
     expect(emitirEventoModulo).toHaveBeenCalled();
+  });
+
+  it('normaliza data BR para o input date e envia payload em YYYY-MM-DD', async () => {
+    getDataHojeHTMLMock.mockReturnValue('01/05/2026');
+
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, data: { novo_registro_id: 777 } }),
+        }) as Response,
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <ModalRenovarQualificacao
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        qualificacao={{
+          id: 4001,
+          funcionario_nome: 'Dieter Johny Kuhr',
+          qualificacao_nome: 'LOFT',
+          qualificacao_codigo: 'LOFT',
+          data_vencimento: '2027-05-01',
+          data_realizacao: '2026-05-01',
+        }}
+      />,
+    );
+
+    const input = document.querySelector('input[type="date"]') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    expect(input?.value).toBe('2026-05-01');
+
+    fireEvent.click(screen.getByRole('button', { name: /confirmar renovação/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/qualificacoes/historico/4001/renovar',
+      expect.objectContaining({
+        body: JSON.stringify({
+          nova_data_conclusao: '2026-05-01',
+        }),
+      }),
+    );
   });
 });
