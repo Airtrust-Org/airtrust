@@ -52,7 +52,15 @@ const cancelledQualificationPredicate = sqlStatusEqualsAny(
 );
 
 function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
-  const renewalLinkPredicate = hasRenovacaoDe ? ' OR qh.renovacao_de IS NOT NULL' : '';
+  const renewalLinkPredicate = hasRenovacaoDe
+    ? ` OR EXISTS (
+      SELECT 1
+      FROM qualificacoes_historico qh_renovadora
+      WHERE qh_renovadora.deleted_at IS NULL
+        AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
+        AND qh_renovadora.renovacao_de = qh.id
+    )`
+    : '';
   const renewedQualificationPredicate = `(COALESCE(qh.renovada, 0) = 1 OR ${sqlStatusEqualsAny(
     QUALIFICATION_STATUS_EXPR,
     RENEWED_STATUS_VALUES,
@@ -374,6 +382,16 @@ router.get(
       qh.data_vencimento AS data_vencimento,
       qh.instrutor AS instrutor,
       qh.renovada,
+      ${hasRenovacaoDe ? `CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM qualificacoes_historico qh_renovadora
+          WHERE qh_renovadora.deleted_at IS NULL
+            AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
+            AND qh_renovadora.renovacao_de = qh.id
+        ) THEN 1
+        ELSE 0
+      END` : '0'} AS tem_renovacao_posterior,
       ${hasRenovacaoDe ? 'qh.renovacao_de' : 'NULL'} AS renovacao_de,
       qh.numero_certificado,
       qh.observacoes AS observacao,
@@ -446,11 +464,13 @@ router.get(
 
       let derivedStatus: string;
       const dbStatus = normalizeQualificationStatusForCompatibility(r.qualificacao_status);
+      const hasRenewalSuccessor =
+        r.tem_renovacao_posterior === true || Number(r.tem_renovacao_posterior || 0) === 1;
       const isRenewedQualification =
         r.renovada === true ||
         Number(r.renovada || 0) === 1 ||
         RENEWED_STATUS_VALUES.includes(dbStatus as (typeof RENEWED_STATUS_VALUES)[number]) ||
-        r.renovacao_de != null;
+        hasRenewalSuccessor;
       // Se o status salvo é PLANEJADA (data futura ou sem data), respeitar
       if (isRenewedQualification) {
         derivedStatus = 'RENOVADA';
@@ -478,6 +498,7 @@ router.get(
         qualificacao_nome: r.tipo_nome,
         qualificacao_codigo: r.tipo_codigo,
         qualificacao_categoria: r.tipo_categoria,
+        tem_renovacao_posterior: hasRenewalSuccessor ? 1 : 0,
         categoria_cor: r.categoria_cor || null,
         categoria_id: r.categoria_id || null,
         qualificacao_id: r.tipo_id, // manter ambos para compatibilidade

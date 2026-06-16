@@ -99,6 +99,22 @@ function createMockDb(options: { hasRenovacaoDe?: boolean } = {}) {
                   data_realizacao: '2026-01-15',
                   data_vencimento: '2027-01-15',
                   renovada: 0,
+                  tem_renovacao_posterior: 1,
+                  renovacao_de: null,
+                  qualificacao_status: 'CONCLUIDA',
+                },
+                {
+                  id: 502,
+                  funcionario_id: 10,
+                  funcionario_nome: 'Tripulante Teste',
+                  tipo_id: 20,
+                  tipo_nome: 'G1-SEM',
+                  tipo_codigo: 'G1-SEM',
+                  validade_meses: 12,
+                  data_realizacao: '2026-05-01',
+                  data_vencimento: '2027-05-01',
+                  renovada: 0,
+                  tem_renovacao_posterior: 0,
                   renovacao_de: 321,
                   qualificacao_status: 'CONCLUIDA',
                 },
@@ -149,7 +165,7 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(statsQuery).toContain('COALESCE(qh.renovada, 0) = 1');
     expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
     expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADO'");
-    expect(statsQuery).toContain('qh.renovacao_de IS NOT NULL');
+    expect(statsQuery).toContain('qh_renovadora.renovacao_de = qh.id');
   });
 
   it('mantem SQL valido quando a coluna renovacao_de ainda nao existe no D1 local', async () => {
@@ -169,27 +185,42 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
   });
 
-  it('filtra e serializa renovadas por flag, status ou vinculo renovacao_de', async () => {
+  it('filtra e serializa renovadas pelo registro anterior que recebeu renovacao posterior', async () => {
     const { db, calls } = createMockDb();
     const app = createApp(db);
 
     const response = await app.request('/historico?statuses=RENOVADA');
     const body = (await response.json()) as {
       success: boolean;
-      data: Array<{ status: string; renovacao_de: number }>;
+      data: Array<{ id: number; status: string; renovacao_de: number | null }>;
       stats: { renovadas: number };
     };
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.stats.renovadas).toBe(160);
-    expect(body.data[0]).toMatchObject({ status: 'RENOVADA', renovacao_de: 321 });
+    expect(body.data[0]).toMatchObject({ id: 501, status: 'RENOVADA', renovacao_de: null });
 
     const dataQuery = calls.find((call) => call.method === 'all' && call.query.includes('LIMIT ? OFFSET ?'))?.query || '';
     expect(dataQuery).toContain('qh.renovacao_de');
 
     const statsQuery = calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
-    expect(statsQuery).toContain('qh.renovacao_de IS NOT NULL');
+    expect(statsQuery).toContain('qh_renovadora.renovacao_de = qh.id');
     expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
+  });
+
+  it('mantem a sessao vigente com renovacao_de como valida quando nao houve substituicao posterior', async () => {
+    const { db } = createMockDb();
+    const app = createApp(db);
+
+    const response = await app.request('/historico');
+    const body = (await response.json()) as {
+      success: boolean;
+      data: Array<{ id: number; status: string; renovacao_de: number | null }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data[1]).toMatchObject({ id: 502, status: 'VALIDA', renovacao_de: 321 });
   });
 });

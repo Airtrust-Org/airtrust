@@ -2169,11 +2169,8 @@ export default function Qualificacoes() {
 
         // Para CONCLUIDA, usar a lógica de status derivado (VALIDA, VENCIDA, etc.)
         const statusHistorico = getHistoricoStatus(item);
-        const ehRenovadaFlag =
-          (row as unknown as { renovada?: number | boolean }).renovada === 1 ||
-          (row as unknown as { renovada?: number | boolean }).renovada === true;
-        const ehRenovada = ehRenovadaFlag || statusHistorico === 'RENOVADA';
-        const status = ehRenovada ? 'RENOVADA' : statusHistorico;
+        const ehRenovada = statusHistorico === 'RENOVADA';
+        const status = statusHistorico;
         return (
           <div className="flex flex-col items-start gap-1">
             <span
@@ -2429,10 +2426,7 @@ export default function Qualificacoes() {
               </span>
             ) : (
               // Mostrar "vencida há xxx dias" APENAS se NÃO for renovada
-              !(
-                (row as unknown as { renovada?: number | boolean }).renovada === 1 ||
-                (row as unknown as { renovada?: number | boolean }).renovada === true
-              ) && (
+              getHistoricoStatus(row as HistoricoItem) !== 'RENOVADA' && (
                 <>
                   <span className="text-xs font-medium text-danger-600">
                     Vencida há {Math.abs(diasRestantes)} dias
