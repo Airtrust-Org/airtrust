@@ -82,6 +82,13 @@ export interface Env {
   SIMULATOR_SHARED_SESSIONS_ENABLED?: string;
   // Feature flag for guarded Controle de Voos SIGVOOS runtime preview.
   CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED?: string;
+  // Feature flag for guarded Controle de Voos SIGVOOS real API read-only preview.
+  CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED?: string;
+  SIGVOOS_CONFIG_ENCRYPTION_KEY?: string;
+  SIGVOOS_REAL_API_BASE_URL?: string;
+  SIGVOOS_REAL_API_USERNAME?: string;
+  SIGVOOS_REAL_API_PASSWORD?: string;
+  SIGVOOS_REAL_API_SYSTEM?: string;
 }
 
 // ===== API RESPONSE TYPES =====

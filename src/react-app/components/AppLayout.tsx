@@ -68,6 +68,22 @@ type SigvoosRefreshPreviewResponse = {
   };
 };
 
+type SigvoosRealPreviewResponse = {
+  mode: 'real-preview';
+  enabled: boolean;
+  tenantScoped: boolean;
+  writesEnabled: boolean;
+  realApiCalled: boolean;
+  status: 'READY' | 'FEATURE_DISABLED';
+  summary?: {
+    recordsReceived: number;
+    candidateFlights: number;
+    potentialConflictsEstimated: number;
+  };
+};
+
+type SigvoosPreviewResponse = SigvoosRefreshPreviewResponse | SigvoosRealPreviewResponse;
+
 type ApiEnvelope<T> = {
   success: boolean;
   data?: T;
@@ -85,8 +101,27 @@ function isSigvoosRefreshPreviewEnabled(): boolean {
   return importMetaValue === 'true' || processValue === 'true';
 }
 
-function sigvoosPreviewMessage(data: SigvoosRefreshPreviewResponse): string {
+function isSigvoosRealPreviewEnabled(): boolean {
+  const importMetaValue = (import.meta as unknown as {
+    env?: { VITE_SIGVOOS_REAL_API_PREVIEW_ENABLED?: string };
+  }).env?.VITE_SIGVOOS_REAL_API_PREVIEW_ENABLED;
+  const processValue =
+    typeof process !== 'undefined'
+      ? (process.env?.VITE_SIGVOOS_REAL_API_PREVIEW_ENABLED as string | undefined)
+      : undefined;
+  return importMetaValue === 'true' || processValue === 'true';
+}
+
+function sigvoosPreviewMessage(data: SigvoosPreviewResponse): string {
   if (!data.enabled) return 'Prévia SIGVOOS desativada por flag.';
+  if (data.mode === 'real-preview') {
+    const summary = data.summary;
+    if (!summary) return 'Prévia SIGVOOS real concluída sem gravação.';
+    if (summary.potentialConflictsEstimated > 0) {
+      return `Prévia SIGVOOS real: ${summary.potentialConflictsEstimated} possível(is) conflito(s), sem gravação.`;
+    }
+    return `Prévia SIGVOOS real: ${summary.recordsReceived} registro(s), ${summary.candidateFlights} voo(s) candidato(s), sem gravação.`;
+  }
   if (data.counts.openConflicts > 0 || data.counts.stagingConflict > 0) {
     return `Prévia SIGVOOS: ${data.counts.openConflicts || data.counts.stagingConflict} conflito(s) encontrado(s).`;
   }
@@ -236,8 +271,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       if (shouldRunSigvoosPreview) {
         try {
-          const response = await apiClient.post<ApiEnvelope<SigvoosRefreshPreviewResponse>>(
-            '/controle-voos/sigvoos/sync-preview',
+          const endpoint = isSigvoosRealPreviewEnabled()
+            ? '/controle-voos/sigvoos/real-preview'
+            : '/controle-voos/sigvoos/sync-preview';
+          const response = await apiClient.post<ApiEnvelope<SigvoosPreviewResponse>>(
+            endpoint,
             {},
             { retry: 0, skipRequestControl: true },
           );
