@@ -31,17 +31,18 @@ import {
   Trash2,
   TrendingUp,
   User,
-  X,
 } from 'lucide-react';
 import { SimuladoresCard } from '../components/SimuladoresLayout';
 import ModalAvaliarFicha from '@/react-app/components/modals/ModalAvaliarFicha';
 import AssinaturaModal from '@/react-app/components/AssinaturaModal';
 import { ConfirmDeleteModal } from '@/react-app/components/modals/ConfirmDeleteModal';
+import { BaseModal } from '@/react-app/components/modals/BaseModal';
 import {
   buildFichaModeloPdfData,
   type ModeloSessaoManobra,
   type ModeloSessaoResumo,
 } from './fichaModeloPdf';
+import { isFichaFutureEvaluation } from './fichaAvailability';
 
 interface Instrutor {
   id: number;
@@ -150,6 +151,12 @@ const formatarHora = (dataHora?: string) => {
   return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 };
 
+const formatarResumoModelos = (modelos: string[]) => {
+  if (modelos.length === 0) return '';
+  if (modelos.length <= 3) return modelos.join(', ');
+  return `${modelos.slice(0, 3).join(', ')} e mais ${modelos.length - 3}`;
+};
+
 export function FichasAvaliacaoContent() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -180,8 +187,9 @@ export function FichasAvaliacaoContent() {
   const [deletandoId, setDeletandoId] = useState<number | null>(null);
   const [modalFichaModeloAberto, setModalFichaModeloAberto] = useState(false);
   const [modelosSessao, setModelosSessao] = useState<ModeloSessaoResumo[]>([]);
-  const [modeloSessaoId, setModeloSessaoId] = useState('');
   const [loadingModelosSessao, setLoadingModelosSessao] = useState(false);
+  const [erroModelosSessao, setErroModelosSessao] = useState<string | null>(null);
+  const [feedbackFichaModelo, setFeedbackFichaModelo] = useState<string | null>(null);
   const [gerandoFichaModelo, setGerandoFichaModelo] = useState(false);
   const [gerandoFichaModeloFichaId, setGerandoFichaModeloFichaId] = useState<number | null>(null);
   const [modelosSelecionados, setModelosSelecionados] = useState<Set<number>>(new Set());
@@ -199,9 +207,9 @@ export function FichasAvaliacaoContent() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  const modeloSessaoSelecionado = useMemo(
-    () => modelosSessao.find((modelo) => String(modelo.id) === modeloSessaoId) || null,
-    [modeloSessaoId, modelosSessao],
+  const modelosImprimiveis = useMemo(
+    () => modelosSessao.filter((modelo) => Number(modelo.total_manobras || 0) > 0),
+    [modelosSessao],
   );
 
   useEffect(() => {
@@ -219,6 +227,12 @@ export function FichasAvaliacaoContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessaoIdParam]);
+
+  useEffect(() => {
+    if (!modalFichaModeloAberto) return;
+    void carregarModelosSessao();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalFichaModeloAberto]);
 
   const carregarSessaoInfo = async (sessaoId: string) => {
     try {
@@ -260,6 +274,8 @@ export function FichasAvaliacaoContent() {
   const carregarModelosSessao = async () => {
     try {
       setLoadingModelosSessao(true);
+      setErroModelosSessao(null);
+      setFeedbackFichaModelo(null);
       const response = await fetch(`${API_BASE_URL}/simuladores/modelos-sessao?t=${Date.now()}`, {
         headers: authHeaders(),
       });
@@ -269,15 +285,24 @@ export function FichasAvaliacaoContent() {
       }
 
       const data = await response.json();
-      if (data.success) {
-        const modelosOrdenados = (data.data || []).sort(
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao carregar modelos de sessão');
+      }
+
+      const modelosOrdenados = ((data.data || []) as ModeloSessaoResumo[])
+        .map((modelo) => ({
+          ...modelo,
+          total_manobras: Number(modelo.total_manobras || 0),
+        }))
+        .sort(
           (a: ModeloSessaoResumo, b: ModeloSessaoResumo) =>
             `${a.codigo} ${a.nome}`.localeCompare(`${b.codigo} ${b.nome}`, 'pt-BR'),
         );
-        setModelosSessao(modelosOrdenados);
-      }
+      setModelosSessao(modelosOrdenados);
     } catch (error) {
       console.error('Erro ao carregar modelos de sessão:', error);
+      setModelosSessao([]);
+      setErroModelosSessao('Não foi possível carregar os modelos de sessão da empresa ativa.');
       toast.error('Erro ao carregar modelos de sessão');
     } finally {
       setLoadingModelosSessao(false);
@@ -301,11 +326,19 @@ export function FichasAvaliacaoContent() {
     }
   };
 
-  const abrirModalFichaModelo = async () => {
+  const fecharModalFichaModelo = () => {
+    setModalFichaModeloAberto(false);
+    setModelosSelecionados(new Set());
+    setGerandoProgresso(0);
+    setErroModelosSessao(null);
+    setFeedbackFichaModelo(null);
+  };
+
+  const abrirModalFichaModelo = () => {
+    setModelosSelecionados(new Set());
+    setErroModelosSessao(null);
+    setFeedbackFichaModelo(null);
     setModalFichaModeloAberto(true);
-    if (modelosSessao.length === 0) {
-      await carregarModelosSessao();
-    }
   };
 
   const handleGerarFichaModelo = async () => {
@@ -317,49 +350,88 @@ export function FichasAvaliacaoContent() {
     try {
       setGerandoFichaModelo(true);
       setGerandoProgresso(0);
+      setFeedbackFichaModelo(null);
 
       const logoUrl = await carregarLogoEmpresa();
       const { gerarPDFFichaCliente } = await import('@/react-app/services/pdf-ficha-client');
       const selecionados = modelosSessao.filter((m) => modelosSelecionados.has(m.id));
-      let gerados = 0;
-      let erros = 0;
+      const selecionadosBloqueados = selecionados.filter(
+        (modelo) => Number(modelo.total_manobras || 0) === 0,
+      );
+      const selecionadosImprimiveis = selecionados.filter(
+        (modelo) => Number(modelo.total_manobras || 0) > 0,
+      );
 
-      for (const modelo of selecionados) {
+      if (selecionadosImprimiveis.length === 0) {
+        const modelosBloqueados = formatarResumoModelos(
+          selecionadosBloqueados.map((modelo) => modelo.codigo || modelo.nome),
+        );
+        const message = modelosBloqueados
+          ? `Nenhum modelo selecionado pode ser impresso. Sem manobras: ${modelosBloqueados}.`
+          : 'Nenhum modelo selecionado pode ser impresso no momento.';
+        setFeedbackFichaModelo(message);
+        toast.warning(message);
+        return;
+      }
+
+      let gerados = 0;
+      const falhas: string[] = [];
+
+      for (const modelo of selecionadosImprimiveis) {
         try {
           const manobrasResponse = await fetch(
             `${API_BASE_URL}/simuladores/modelos-sessao/${modelo.id}/manobras`,
             { headers: authHeaders() },
           );
           if (!manobrasResponse.ok) {
-            erros++;
+            falhas.push(`${modelo.codigo || modelo.nome}: erro ao carregar manobras`);
             continue;
           }
           const manobrasPayload = await manobrasResponse.json();
           const manobras = (manobrasPayload.data || []) as ModeloSessaoManobra[];
           if (manobras.length === 0) {
-            erros++;
+            falhas.push(`${modelo.codigo || modelo.nome}: sem manobras cadastradas`);
             continue;
           }
           const dadosPDF = buildFichaModeloPdfData(modelo, manobras, logoUrl);
           await gerarPDFFichaCliente(dadosPDF, { mode: 'download' });
           gerados++;
-          setGerandoProgresso(Math.round((gerados / selecionados.length) * 100));
-        } catch {
-          erros++;
+          setGerandoProgresso(Math.round((gerados / selecionadosImprimiveis.length) * 100));
+        } catch (error) {
+          console.error('Erro ao gerar ficha modelo para o modelo', modelo.id, error);
+          falhas.push(`${modelo.codigo || modelo.nome}: falha ao gerar PDF`);
         }
       }
 
+      const bloqueados = selecionadosBloqueados.map((modelo) => modelo.codigo || modelo.nome);
+      const mensagens: string[] = [];
+
       if (gerados > 0) {
-        toast.success(
-          erros > 0
-            ? `${gerados} ficha(s) gerada(s), ${erros} com erro`
-            : `${gerados} ficha(s) modelo gerada(s) com sucesso`,
+        mensagens.push(
+          gerados === 1 ? '1 ficha modelo gerada com sucesso.' : `${gerados} fichas modelo geradas com sucesso.`,
         );
-      } else {
-        toast.error('Nenhuma ficha pôde ser gerada');
       }
-      setModalFichaModeloAberto(false);
-      setModelosSelecionados(new Set());
+
+      if (bloqueados.length > 0) {
+        mensagens.push(`Bloqueadas por falta de manobras: ${formatarResumoModelos(bloqueados)}.`);
+      }
+
+      if (falhas.length > 0) {
+        mensagens.push(`Falhas: ${formatarResumoModelos(falhas)}.`);
+      }
+
+      if (gerados > 0 && falhas.length === 0 && bloqueados.length === 0) {
+        toast.success(mensagens[0]);
+        fecharModalFichaModelo();
+      } else {
+        const message = mensagens.join(' ');
+        setFeedbackFichaModelo(message || 'Nenhuma ficha pôde ser gerada.');
+        if (gerados > 0) {
+          toast.warning(message || 'A geração foi concluída com pendências.');
+        } else {
+          toast.error(message || 'Nenhuma ficha pôde ser gerada');
+        }
+      }
     } catch (error) {
       console.error('Erro ao gerar ficha modelo:', error);
       toast.error(error instanceof Error ? error.message : 'Erro ao gerar ficha modelo');
@@ -622,6 +694,10 @@ export function FichasAvaliacaoContent() {
   // Handlers dos modais
   const handleAvaliar = (fichaId: number) => {
     const ficha = fichas.find((f) => f.id === fichaId);
+    if (isFichaFutureEvaluation(ficha?.data_hora)) {
+      toast.warning('Ficha disponível no dia da sessão');
+      return;
+    }
     if (
       ficha?.status === 'APROVADO' ||
       ficha?.status === 'NAO_APROVADO' ||
@@ -798,6 +874,7 @@ export function FichasAvaliacaoContent() {
 
   const renderFichaActions = (ficha: Ficha, compact = false) => {
     const isPendente = ficha.status === 'AVALIACAO_PENDENTE';
+    const isFichaFutura = isFichaFutureEvaluation(ficha.data_hora);
 
     const baseActionClass = compact
       ? 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-all'
@@ -805,8 +882,20 @@ export function FichasAvaliacaoContent() {
 
     return (
       <>
-        {isPendente && !isAluno && (
+        {isPendente && !isAluno && isFichaFutura && (
           <button
+            type="button"
+            disabled
+            className={`${baseActionClass} cursor-not-allowed bg-slate-100 text-slate-500 shadow-none ${compact ? 'flex-1' : ''}`}
+          >
+            <ClipboardList size={14} />
+            Ficha disponível no dia da sessão
+          </button>
+        )}
+
+        {isPendente && !isAluno && !isFichaFutura && (
+          <button
+            type="button"
             onClick={() => handleAvaliar(ficha.id)}
             className={`${baseActionClass} bg-amber-600 text-white hover:bg-amber-700 ${compact ? 'flex-1' : ''}`}
           >
@@ -894,6 +983,7 @@ export function FichasAvaliacaoContent() {
                   </span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     searchParams.delete('sessao');
                     setSearchParams(searchParams);
@@ -910,6 +1000,7 @@ export function FichasAvaliacaoContent() {
               {!showAlunoSimplificado && (
                 <>
                   <button
+                    type="button"
                     onClick={() =>
                       setFiltroStatus(
                         filtroStatus === 'AVALIACAO_PENDENTE' ? '' : 'AVALIACAO_PENDENTE',
@@ -925,6 +1016,7 @@ export function FichasAvaliacaoContent() {
                     <span className="whitespace-nowrap">Pendente: {stats.pendentes}</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() =>
                       setFiltroStatus(
                         filtroStatus === 'AGUARDANDO_ASSINATURAS' ? '' : 'AGUARDANDO_ASSINATURAS',
@@ -940,6 +1032,7 @@ export function FichasAvaliacaoContent() {
                     <span className="whitespace-nowrap">Aguardando: {stats.aguardando}</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() =>
                       setFiltroStatus(filtroStatus === 'CONCLUIDAS' ? '' : 'CONCLUIDAS')
                     }
@@ -997,6 +1090,7 @@ export function FichasAvaliacaoContent() {
 
               {(filtroStatus || filtroInstrutor || filtroSimulador || busca) && (
                 <button
+                  type="button"
                   onClick={() => {
                     setFiltroStatus('');
                     setFiltroInstrutor('');
@@ -1011,6 +1105,7 @@ export function FichasAvaliacaoContent() {
 
               <div className="ml-auto shrink-0 flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={abrirModalFichaModelo}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-medium hover:bg-slate-800 transition-colors"
                 >
@@ -1327,153 +1422,185 @@ export function FichasAvaliacaoContent() {
           isDeleting={deletandoId !== null}
         />
 
-        {modalFichaModeloAberto && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-950/50 p-4 animate-fade-in-up">
-            <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] animate-slide-up">
-              {/* Header */}
-              <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5 shrink-0">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Fichas Modelo para Impressão
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Selecione um ou mais modelos para gerar os PDFs de uma vez.
-                  </p>
-                </div>
+        <BaseModal
+          isOpen={modalFichaModeloAberto}
+          onClose={fecharModalFichaModelo}
+          title="Fichas Modelo para Impressão"
+          subtitle="Selecione um ou mais modelos para gerar os PDFs de uma vez."
+          size="xl"
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={fecharModalFichaModelo}
+                disabled={gerandoFichaModelo}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleGerarFichaModelo}
+                disabled={
+                  modelosSelecionados.size === 0 || loadingModelosSessao || gerandoFichaModelo
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                <FileDown className="h-4 w-4" />
+                {gerandoFichaModelo
+                  ? `Gerando${gerandoProgresso > 0 ? ` ${gerandoProgresso}%` : '...'}`
+                  : modelosSelecionados.size > 1
+                    ? `Gerar ${modelosSelecionados.size} PDFs`
+                    : 'Gerar PDF'}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            {feedbackFichaModelo && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {feedbackFichaModelo}
+              </div>
+            )}
+
+            {loadingModelosSessao ? (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                Carregando modelos de sessão...
+              </div>
+            ) : erroModelosSessao ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
+                <p>{erroModelosSessao}</p>
                 <button
-                  onClick={() => {
-                    setModalFichaModeloAberto(false);
-                    setModelosSelecionados(new Set());
-                  }}
-                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                  aria-label="Fechar"
+                  type="button"
+                  onClick={() => void carregarModelosSessao()}
+                  className="mt-3 inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
                 >
-                  <X className="h-4 w-4" />
+                  Tentar novamente
                 </button>
               </div>
-
-              {/* Body */}
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
-                {loadingModelosSessao ? (
-                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                    Carregando modelos de sessão...
+            ) : modelosSessao.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-500">
+                Nenhum modelo de sessão cadastrado.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      {modelosSelecionados.size === 0
+                        ? 'Nenhum selecionado'
+                        : `${modelosSelecionados.size} selecionado(s)`}
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      Modelos sem manobras continuam visíveis, mas ficam bloqueados para impressão.
+                    </p>
                   </div>
-                ) : modelosSessao.length === 0 ? (
-                  <p className="text-sm text-slate-500 text-center py-6">
-                    Nenhum modelo de sessão cadastrado.
-                  </p>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                        {modelosSelecionados.size === 0
-                          ? 'Nenhum selecionado'
-                          : `${modelosSelecionados.size} selecionado(s)`}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (modelosSelecionados.size === modelosSessao.length) {
-                            setModelosSelecionados(new Set());
-                          } else {
-                            setModelosSelecionados(new Set(modelosSessao.map((m) => m.id)));
-                          }
-                        }}
-                        className="text-xs text-blue-600 hover:underline"
+                  {modelosImprimiveis.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (modelosSelecionados.size === modelosImprimiveis.length) {
+                          setModelosSelecionados(new Set());
+                        } else {
+                          setModelosSelecionados(new Set(modelosImprimiveis.map((m) => m.id)));
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      {modelosSelecionados.size === modelosImprimiveis.length
+                        ? 'Desmarcar todos'
+                        : 'Selecionar todos'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {modelosSessao.map((modelo) => {
+                    const checked = modelosSelecionados.has(modelo.id);
+                    const totalManobras = Number(modelo.total_manobras || 0);
+                    const bloqueado = totalManobras === 0;
+
+                    return (
+                      <label
+                        key={modelo.id}
+                        className={`flex items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                          bloqueado
+                            ? 'cursor-not-allowed border-amber-200 bg-amber-50/70'
+                            : checked
+                              ? 'cursor-pointer border-blue-500 bg-blue-50'
+                              : 'cursor-pointer border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
                       >
-                        {modelosSelecionados.size === modelosSessao.length
-                          ? 'Desmarcar todos'
-                          : 'Selecionar todos'}
-                      </button>
-                    </div>
-                    {modelosSessao.map((modelo) => {
-                      const checked = modelosSelecionados.has(modelo.id);
-                      return (
-                        <label
-                          key={modelo.id}
-                          className={`flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer transition-colors ${
-                            checked
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-slate-200 bg-white hover:bg-slate-50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={gerandoFichaModelo}
-                            onChange={() => {
-                              setModelosSelecionados((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(modelo.id)) next.delete(modelo.id);
-                                else next.add(modelo.id);
-                                return next;
-                              });
-                            }}
-                            className="h-4 w-4 rounded border-slate-300 text-blue-600"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-slate-900 truncate">
-                              {modelo.codigo} — {modelo.nome}
-                            </p>
-                            <p className="text-xs text-slate-500 truncate">
-                              {[modelo.tipo_sessao_nome, modelo.modelo_aeronave]
-                                .filter(Boolean)
-                                .join(' · ') || 'Sem detalhes'}
-                            </p>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={gerandoFichaModelo || bloqueado}
+                          onChange={() => {
+                            setModelosSelecionados((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(modelo.id)) next.delete(modelo.id);
+                              else next.add(modelo.id);
+                              return next;
+                            });
+                          }}
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-900">
+                                {modelo.codigo} — {modelo.nome}
+                              </p>
+                              <p className="truncate text-xs text-slate-500">
+                                {[modelo.tipo_sessao_nome, modelo.modelo_aeronave]
+                                  .filter(Boolean)
+                                  .join(' · ') || 'Sem detalhes'}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${
+                                bloqueado
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-emerald-100 text-emerald-700'
+                              }`}
+                            >
+                              {bloqueado
+                                ? 'Sem manobras'
+                                : `${totalManobras} manobra${totalManobras === 1 ? '' : 's'}`}
+                            </span>
                           </div>
-                        </label>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
-
-              {/* Progress */}
-              {gerandoFichaModelo && gerandoProgresso > 0 && (
-                <div className="px-6 pb-2 shrink-0 animate-fade-in-up">
-                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
-                    <span>Gerando PDFs...</span>
-                    <span className="tabular-nums font-medium text-slate-700">{gerandoProgresso}%</span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
-                    <div
-                      className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 transition-[width] duration-500 ease-out"
-                      style={{ width: `${gerandoProgresso}%` }}
-                    />
-                  </div>
+                          {bloqueado && (
+                            <p className="mt-2 text-xs text-amber-800">
+                              Este modelo pode ser visualizado, mas a impressão fica bloqueada até
+                              que as manobras sejam restauradas.
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
-              )}
+              </>
+            )}
 
-              {/* Footer */}
-              <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4 shrink-0">
-                <button
-                  onClick={() => {
-                    setModalFichaModeloAberto(false);
-                    setModelosSelecionados(new Set());
-                  }}
-                  disabled={gerandoFichaModelo}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleGerarFichaModelo}
-                  disabled={
-                    modelosSelecionados.size === 0 || loadingModelosSessao || gerandoFichaModelo
-                  }
-                  className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-                >
-                  <FileDown className="h-4 w-4" />
-                  {gerandoFichaModelo
-                    ? `Gerando${gerandoProgresso > 0 ? ` ${gerandoProgresso}%` : '...'}`
-                    : modelosSelecionados.size > 1
-                      ? `Gerar ${modelosSelecionados.size} PDFs`
-                      : 'Gerar PDF'}
-                </button>
+            {gerandoFichaModelo && gerandoProgresso > 0 && (
+              <div className="animate-fade-in-up">
+                <div className="mb-1.5 flex items-center justify-between text-xs text-slate-500">
+                  <span>Gerando PDFs...</span>
+                  <span className="tabular-nums font-medium text-slate-700">
+                    {gerandoProgresso}%
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 transition-[width] duration-500 ease-out"
+                    style={{ width: `${gerandoProgresso}%` }}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
-        )}
+        </BaseModal>
       </div>
     </>
   );

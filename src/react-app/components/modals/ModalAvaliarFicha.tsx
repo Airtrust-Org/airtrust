@@ -140,7 +140,16 @@ export default function ModalAvaliarFicha({
             headers: { Authorization: `Bearer ${getAccessToken()}` },
           });
 
-          const result = await response.json();
+          const result = await response.json().catch(() => null);
+
+          if (!response.ok || !result?.success || !result?.data) {
+            toast.error(
+              result?.error ||
+                'Não foi possível carregar a ficha. Tente novamente ou acione o administrador.',
+            );
+            onClose();
+            return;
+          }
 
           if (result.success && result.data) {
             const mapManobras = (raw: unknown[]): Manobra[] =>
@@ -169,35 +178,15 @@ export default function ModalAvaliarFicha({
             const manobrasCarregadas = result.data.manobras || [];
 
             if (manobrasCarregadas.length === 0) {
-              console.warn('⚠️ [CARREGAMENTO] Nenhuma manobra retornada. Recarregando...');
-              await new Promise((resolve) => setTimeout(resolve, 500));
-              const retryResponse = await fetch(`${API_BASE_URL}/simuladores/fichas/${fichaId}`, {
-                headers: { Authorization: `Bearer ${getAccessToken()}` },
-              });
-              const retryResult = await retryResponse.json();
-              if (retryResult.success && retryResult.data?.manobras?.length > 0) {
-                setManobras(mapManobras(retryResult.data.manobras));
-                setObservacoesGerais(retryResult.data.observacoes_gerais || '');
-                setFichaContexto({
-                  ...ctx,
-                  participante_nome:
-                    retryResult.data.tripulante_nome || retryResult.data.participante_nome,
-                  participante_funcao:
-                    retryResult.data.tripulante_funcao || retryResult.data.participante_funcao,
-                  instrutor_nome: retryResult.data.instrutor_nome,
-                });
-              } else {
-                toast.error('Erro: ficha sem manobras após população automática');
-                onClose();
-              }
+              toast.error(
+                'Ficha sem manobras. Corrija o cadastro do modelo antes de avaliar o tripulante.',
+              );
+              onClose();
             } else {
               console.log('✅ [CARREGAMENTO] Manobras recebidas:', manobrasCarregadas.length);
               setManobras(mapManobras(manobrasCarregadas));
               setObservacoesGerais(result.data.observacoes_gerais || '');
             }
-          } else {
-            toast.error('Erro ao carregar ficha');
-            onClose();
           }
         } catch (error) {
           console.error('Erro ao carregar ficha:', error);
