@@ -98,7 +98,10 @@ vi.mock('../../theme/ThemeProvider', () => ({
 describe('AppLayout hard refresh action', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_SIGVOOS_REFRESH_PREVIEW_ENABLED', 'false');
+    vi.stubEnv('VITE_SIGVOOS_REAL_API_PREVIEW_ENABLED', 'false');
     (import.meta as unknown as { env: Record<string, string> }).env.VITE_SIGVOOS_REFRESH_PREVIEW_ENABLED =
+      'false';
+    (import.meta as unknown as { env: Record<string, string> }).env.VITE_SIGVOOS_REAL_API_PREVIEW_ENABLED =
       'false';
     hardRefreshMock.mockClear();
     apiPostMock.mockClear();
@@ -143,6 +146,54 @@ describe('AppLayout hard refresh action', () => {
     await waitFor(() =>
       expect(apiPostMock).toHaveBeenCalledWith(
         '/controle-voos/sigvoos/sync-preview',
+        {},
+        { retry: 0, skipRequestControl: true },
+      ),
+    );
+    await waitFor(() => expect(hardRefreshMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('chama preview real SIGVOOS antes do hard refresh quando flag real esta ativa', async () => {
+    vi.stubEnv('VITE_SIGVOOS_REFRESH_PREVIEW_ENABLED', 'true');
+    vi.stubEnv('VITE_SIGVOOS_REAL_API_PREVIEW_ENABLED', 'true');
+    (import.meta as unknown as { env: Record<string, string> }).env.VITE_SIGVOOS_REFRESH_PREVIEW_ENABLED =
+      'true';
+    (import.meta as unknown as { env: Record<string, string> }).env.VITE_SIGVOOS_REAL_API_PREVIEW_ENABLED =
+      'true';
+    apiPostMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        success: true,
+        data: {
+          mode: 'real-preview',
+          enabled: true,
+          tenantScoped: true,
+          writesEnabled: false,
+          realApiCalled: true,
+          status: 'READY',
+          summary: {
+            recordsReceived: 2,
+            candidateFlights: 2,
+            potentialConflictsEstimated: 0,
+          },
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/controle-voos']}>
+        <AppLayout>
+          <div>conteudo</div>
+        </AppLayout>
+      </MemoryRouter>,
+    );
+
+    const updateButtons = screen.getAllByRole('button', { name: /Atualizar app/i });
+    fireEvent.click(updateButtons[0]);
+
+    await waitFor(() =>
+      expect(apiPostMock).toHaveBeenCalledWith(
+        '/controle-voos/sigvoos/real-preview',
         {},
         { retry: 0, skipRequestControl: true },
       ),
