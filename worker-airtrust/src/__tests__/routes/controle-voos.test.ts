@@ -1325,7 +1325,25 @@ describe('controle voos routes', () => {
     });
   });
 
-  it('rejeita tenant arbitrario no body do preview real SIGVOOS', async () => {
+  it('rejeita empresaId arbitrario no body do preview real SIGVOOS', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/real-preview',
+      { method: 'POST', body: JSON.stringify({ empresaId: 2 }) },
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_TENANT_OVERRIDE_FORBIDDEN',
+    });
+  });
+
+  it('rejeita tenantId arbitrario no body do preview real SIGVOOS', async () => {
     const db = createSqliteD1();
 
     const response = await request(
@@ -1343,7 +1361,7 @@ describe('controle voos routes', () => {
     });
   });
 
-  it('executa preview real SIGVOOS com mock, sem gravar D1 e sem vazar credenciais ou payload bruto', async () => {
+  it('aceita body seguro no preview real SIGVOOS', async () => {
     const db = createSqliteD1();
     const statements: string[] = [];
     const readOnlyDb = new Proxy(db, {
@@ -1359,13 +1377,21 @@ describe('controle voos routes', () => {
     }) as D1Database;
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/get/token')) {
-        expect(init?.method).toBe('POST');
-        expect(String(init?.body)).toContain('secret-pass');
         return new Response(JSON.stringify({ accessToken: 'mock-token' }), { status: 200 });
       }
       if (url.endsWith('/relatorios/voos/tripulantes/etapas/pesquisa')) {
-        expect(init?.method).toBe('POST');
-        expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer mock-token');
+        const upstreamBody = JSON.parse(String(init?.body)) as {
+          date_start: string;
+          date_finish: string;
+          page: number;
+          page_size: number;
+          limit: number;
+        };
+        expect(upstreamBody.page).toBe(1);
+        expect(upstreamBody.page_size).toBe(10);
+        expect(upstreamBody.limit).toBe(10);
+        expect(upstreamBody.date_start).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+        expect(upstreamBody.date_finish).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
         return new Response(
           JSON.stringify({
             data: {
@@ -1399,10 +1425,7 @@ describe('controle voos routes', () => {
     const response = await request(
       readOnlyDb,
       '/api/controle-voos/sigvoos/real-preview',
-      {
-        method: 'POST',
-        body: JSON.stringify({ from: '2026-06-15', to: '2026-06-15', pageSize: 20, maxPages: 1 }),
-      },
+      { method: 'POST', body: JSON.stringify({ window: { days: 1 }, limit: 10 }) },
       77,
       'manager',
       {
@@ -1443,6 +1466,60 @@ describe('controle voos routes', () => {
     expect(statements.join('\n')).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i);
   });
 
+  it('rejeita janela grande no preview real SIGVOOS', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/real-preview',
+      { method: 'POST', body: JSON.stringify({ window: { days: 4 }, limit: 10 }) },
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_WINDOW_TOO_WIDE',
+    });
+  });
+
+  it('rejeita limit alto no preview real SIGVOOS', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/real-preview',
+      { method: 'POST', body: JSON.stringify({ window: { days: 1 }, limit: 11 }) },
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_LIMIT_INVALID',
+    });
+  });
+
+  it('rejeita campos legacy fora do contrato seguro no preview real SIGVOOS', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/real-preview',
+      { method: 'POST', body: JSON.stringify({ from: '2026-06-15', pageSize: 10 }) },
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_FIELD_FORBIDDEN',
+    });
+  });
+
   it('falha de forma segura se credenciais do preview real SIGVOOS nao estiverem disponiveis', async () => {
     const db = createSqliteD1();
     applySigvoosSchema(db.databasePath);
@@ -1452,7 +1529,7 @@ describe('controle voos routes', () => {
     const response = await request(
       db,
       '/api/controle-voos/sigvoos/real-preview',
-      { method: 'POST', body: JSON.stringify({ from: '2026-06-15', to: '2026-06-15' }) },
+      { method: 'POST', body: JSON.stringify({ window: { days: 1 }, limit: 10 }) },
       1,
       'manager',
       { CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED: 'true' },
