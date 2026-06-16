@@ -40,7 +40,7 @@ import sharedSessionRoutes from '../../routes/simuladores-shared-session';
 
 type QueryRun = { query: string; args: unknown[] };
 
-function createDbForSharedRoutes() {
+function createDbForSharedRoutes(options?: { modeloSemManobras?: boolean }) {
   const batches: Array<Array<QueryRun>> = [];
 
   const db = {
@@ -131,7 +131,20 @@ function createDbForSharedRoutes() {
           }
 
           if (query.includes('FROM modelos_sessao_manobras')) {
-            return { results: [] };
+            return {
+              results: options?.modeloSemManobras
+                ? []
+                : [
+                    {
+                      codigo: 'MNV-001',
+                      nome: 'Manobra 1',
+                      descricao: 'Manobra 1',
+                      categoria: 'GERAL',
+                      ordem: 1,
+                      tripulante: 'AB',
+                    },
+                  ],
+            };
           }
 
           return { results: [] };
@@ -305,5 +318,66 @@ describe('simuladores shared session routes', () => {
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_agendamento_segmentos'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO simulador_segmento_participantes'))).toBe(true);
     expect(batches[0].some((item) => item.query.startsWith('INSERT INTO fichas_sessao'))).toBe(true);
+  });
+
+  it('blocks shared session creation when generated ficha model has no manobras', async () => {
+    const { db, batches } = createDbForSharedRoutes({ modeloSemManobras: true });
+
+    const response = await sharedSessionRoutes.fetch(
+      new Request('http://localhost/sessoes/compartilhada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: '2026-06-20',
+          hora_inicio: '07:00',
+          hora_fim: '09:00',
+          simulador_id: 10,
+          instrutor_id: 201,
+          participantes: [
+            {
+              funcionario_id: 101,
+              cumpre_treinamento: true,
+              modelo_sessao_id: 2001,
+              gera_ficha: true,
+            },
+            {
+              funcionario_id: 102,
+              cumpre_treinamento: true,
+              modelo_sessao_id: 2002,
+              gera_ficha: true,
+            },
+          ],
+          segmentos: [
+            {
+              inicio: '07:00',
+              fim: '08:00',
+              atribuicao_funcionario_id: 101,
+              funcoes: [
+                { funcionario_id: 101, funcao: 'PF' },
+                { funcionario_id: 102, funcao: 'PM' },
+              ],
+            },
+            {
+              inicio: '08:00',
+              fim: '09:00',
+              atribuicao_funcionario_id: 102,
+              funcoes: [
+                { funcionario_id: 102, funcao: 'PF' },
+                { funcionario_id: 101, funcao: 'PM' },
+              ],
+            },
+          ],
+        }),
+      }),
+      { DB: db, SIMULATOR_SHARED_SESSIONS_ENABLED: 'true' } as unknown as Env,
+      executionContext,
+    );
+
+    expect(response.status).toBe(400);
+    expect(batches).toHaveLength(0);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Ficha sem manobras: modelo de sessão 2001 não possui manobras ativas.',
+    });
   });
 });

@@ -16,6 +16,7 @@ import {
   marcarNotificacoesFichaComoResolvidas,
   type ResultadoGeracaoQualificacao,
 } from './simuladores-fichas-helpers';
+import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -244,6 +245,41 @@ app.post('/fichas/:id/assinar', async (c) => {
       .bind(id)
       .first();
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
+
+    const availability = await getFichaAvailabilityFromDb(c.env.DB, id);
+    if (!availability.available) {
+      return c.json(
+        {
+          success: false,
+          code: availability.code,
+          error: availability.message,
+          details: {
+            ficha_id: Number(id),
+            session_starts_at: availability.sessionStartsAt,
+            timezone: availability.timezone,
+          },
+        },
+        409,
+      );
+    }
+
+    const manobrasAtivas = await c.env.DB.prepare(
+      'SELECT COUNT(1) as total FROM fichas_sessao_manobras WHERE ficha_id=? AND deleted_at IS NULL',
+    )
+      .bind(id)
+      .first<{ total: number }>();
+
+    if (Number(manobrasAtivas?.total || 0) === 0) {
+      return c.json(
+        {
+          success: false,
+          code: 'FICHA_SEM_MANOBRAS',
+          error:
+            'Ficha sem manobras. Corrija o cadastro do modelo antes de assinar esta ficha.',
+        },
+        409,
+      );
+    }
 
     // ── Verificar se o usuário é quem diz ser ────────────────────────────────
     if (!isFullAccess(role)) {
