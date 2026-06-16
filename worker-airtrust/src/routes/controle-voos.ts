@@ -116,6 +116,17 @@ type CatalogConfig = {
   orderBy: string;
 };
 
+type SigvoosRefreshPreviewCounts = {
+  stagingTotal: number;
+  stagingPending: number;
+  stagingProcessed: number;
+  stagingConflict: number;
+  openConflicts: number;
+  importedFlights: number;
+  importedStages: number;
+  importedCrew: number;
+};
+
 const controleVoos = new Hono<{ Bindings: Env }>();
 
 const FLIGHT_SELECT = `
@@ -270,6 +281,16 @@ function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }> {
   };
 }
 
+function requireControleVoosSigvoosPreview(): MiddlewareHandler<{ Bindings: Env }> {
+  return async (c, next) => {
+    if (!checkPermission(c, 'manager')) {
+      throw new ApiError('Permissao insuficiente', 403, 'CONTROLE_VOOS_SIGVOOS_RBAC_FORBIDDEN');
+    }
+
+    await next();
+  };
+}
+
 function parsePositiveInteger(value: unknown, field: string): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -386,6 +407,32 @@ async function parseJsonPayload(c: Context<{ Bindings: Env }>): Promise<Record<s
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError('Payload JSON invalido', 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
+  }
+}
+
+async function parseOptionalJsonPayload(c: Context<{ Bindings: Env }>): Promise<Record<string, unknown>> {
+  const contentType = c.req.header('content-type') || '';
+  const length = c.req.header('content-length');
+  if (!contentType.includes('application/json') && (!length || Number(length) === 0)) {
+    return {};
+  }
+
+  try {
+    const body = await c.req.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return {};
+    return body as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function assertNoTenantOverride(payload: Record<string, unknown>): void {
+  if ('empresaId' in payload || 'empresa_id' in payload || 'tenantId' in payload || 'tenant_id' in payload) {
+    throw new ApiError(
+      'Tenant arbitrario nao permitido neste gatilho',
+      400,
+      'CONTROLE_VOOS_SIGVOOS_TENANT_OVERRIDE_FORBIDDEN',
+    );
   }
 }
 
@@ -953,6 +1000,150 @@ function catalogKey(rawName: string): keyof typeof catalogos | null {
   if (name === 'motivos' || name === 'motivos-operacionais') return 'motivos';
   return null;
 }
+
+async function queryCount(db: D1Database, sql: string, ...values: unknown[]): Promise<number> {
+  const row = await db.prepare(sql).bind(...values).first<{ total: number }>();
+  return Number(row?.total || 0);
+}
+
+async function buildSigvoosRefreshPreview(
+  db: D1Database,
+  empresaId: number,
+): Promise<{
+  counts: SigvoosRefreshPreviewCounts;
+  lastImportedAt: string | null;
+}> {
+  const [
+    stagingTotal,
+    stagingPending,
+    stagingProcessed,
+    stagingConflict,
+    openConflicts,
+    importedFlights,
+    importedStages,
+    importedCrew,
+    lastImported,
+  ] = await Promise.all([
+    queryCount(db, 'SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = ? AND deleted_at IS NULL', empresaId),
+    queryCount(
+      db,
+      "SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = ? AND import_status = 'PENDING' AND deleted_at IS NULL",
+      empresaId,
+    ),
+    queryCount(
+      db,
+      "SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = ? AND import_status = 'PROCESSED' AND deleted_at IS NULL",
+      empresaId,
+    ),
+    queryCount(
+      db,
+      "SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = ? AND import_status = 'CONFLICT' AND deleted_at IS NULL",
+      empresaId,
+    ),
+    queryCount(
+      db,
+      "SELECT COUNT(*) AS total FROM cv_conflitos_integracao WHERE empresa_id = ? AND status = 'ABERTO' AND deleted_at IS NULL",
+      empresaId,
+    ),
+    queryCount(
+      db,
+      "SELECT COUNT(*) AS total FROM cv_voos WHERE empresa_id = ? AND origem_importacao = 'SIGVOOS' AND deleted_at IS NULL",
+      empresaId,
+    ),
+    queryCount(
+      db,
+      "SELECT COUNT(*) AS total FROM cv_voo_etapas WHERE empresa_id = ? AND origem_dados = 'SIGVOOS' AND deleted_at IS NULL",
+      empresaId,
+    ),
+    queryCount(
+      db,
+      'SELECT COUNT(*) AS total FROM cv_voo_tripulantes WHERE empresa_id = ? AND sigvoos_staff_id IS NOT NULL AND deleted_at IS NULL',
+      empresaId,
+    ),
+    db
+      .prepare(
+        `
+        SELECT MAX(sigvoos_importado_em) AS lastImportedAt
+        FROM cv_voos
+        WHERE empresa_id = ?
+          AND deleted_at IS NULL
+      `,
+      )
+      .bind(empresaId)
+      .first<{ lastImportedAt: string | null }>(),
+  ]);
+
+  return {
+    counts: {
+      stagingTotal,
+      stagingPending,
+      stagingProcessed,
+      stagingConflict,
+      openConflicts,
+      importedFlights,
+      importedStages,
+      importedCrew,
+    },
+    lastImportedAt: lastImported?.lastImportedAt || null,
+  };
+}
+
+controleVoos.post('/sigvoos/sync-preview', auth(), requireControleVoosSigvoosPreview(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  if (!empresaId) {
+    throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
+  }
+
+  const payload = await parseOptionalJsonPayload(c);
+  assertNoTenantOverride(payload);
+
+  const enabled = c.env.CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED === 'true';
+  if (!enabled) {
+    return c.json({
+      success: true,
+      data: {
+        mode: 'preview',
+        enabled: false,
+        tenantScoped: true,
+        writesEnabled: false,
+        realApiCalled: false,
+        provider: 'SIGVOOS',
+        empresaId,
+        status: 'FEATURE_DISABLED',
+        message: 'Preview runtime SIGVOOS desativado por feature flag.',
+        counts: {
+          stagingTotal: 0,
+          stagingPending: 0,
+          stagingProcessed: 0,
+          stagingConflict: 0,
+          openConflicts: 0,
+          importedFlights: 0,
+          importedStages: 0,
+          importedCrew: 0,
+        },
+        lastImportedAt: null,
+      },
+    });
+  }
+
+  const preview = await buildSigvoosRefreshPreview(c.env.DB, empresaId);
+
+  return c.json({
+    success: true,
+    data: {
+      mode: 'preview',
+      enabled,
+      tenantScoped: true,
+      writesEnabled: false,
+      realApiCalled: false,
+      provider: 'SIGVOOS',
+      empresaId,
+      status: 'READY',
+      message: 'Previa SIGVOOS disponivel sem chamada externa e sem gravacao.',
+      ...preview,
+    },
+  });
+});
 
 controleVoos.get('/voos', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
