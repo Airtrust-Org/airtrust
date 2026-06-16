@@ -71,6 +71,10 @@ const migrationPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../../migrations/0410_controle_voos_n1_schema.sql',
 );
+const sigvoosMigrationPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../migrations/0411_controle_voos_sigvoos_integration_schema.sql',
+);
 const routePath = join(dirname(fileURLToPath(import.meta.url)), '../../routes/controle-voos.ts');
 const testPath = fileURLToPath(import.meta.url);
 
@@ -212,7 +216,7 @@ function createApp() {
   return app;
 }
 
-function createEnv(db: D1Database): Env {
+function createEnv(db: D1Database, overrides: Partial<Env> = {}): Env {
   return {
     DB: db,
     BUCKET: {} as R2Bucket,
@@ -222,6 +226,7 @@ function createEnv(db: D1Database): Env {
     FRONTEND_URL: 'http://localhost:3000',
     DEBUG: 'false',
     LOG_LEVEL: 'error',
+    ...overrides,
   };
 }
 
@@ -231,6 +236,7 @@ async function request(
   init: RequestInit = {},
   empresaId = 1,
   role = 'admin',
+  envOverrides: Partial<Env> = {},
 ) {
   const headers = new Headers(init.headers);
   headers.set('Authorization', 'Bearer test');
@@ -240,8 +246,53 @@ async function request(
 
   return createApp().fetch(
     new Request(`http://localhost${path}`, { ...init, headers }),
-    createEnv(db),
+    createEnv(db, envOverrides),
     {} as ExecutionContext,
+  );
+}
+
+function applySigvoosSchema(databasePath: string) {
+  runSql(databasePath, readFileSync(sigvoosMigrationPath, 'utf8'));
+}
+
+function seedSigvoosPreviewState(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      UPDATE cv_voos
+      SET origem_importacao = 'SIGVOOS',
+          sigvoos_importado_em = '2026-06-15T12:00:00Z',
+          sigvoos_content_hash = 'hash-flight-601'
+      WHERE id = 601;
+
+      INSERT INTO cv_voo_etapas (
+        id, empresa_id, voo_id, numero_etapa, sigvoos_leg_number,
+        origem_icao, destino_icao, origem_dados, sigvoos_importado_em
+      ) VALUES
+        (9001, 1, 601, 1, 1, 'SBRJ', 'SBSP', 'SIGVOOS', '2026-06-15T12:00:00Z'),
+        (9002, 2, 701, 1, 1, 'SBBR', 'SBCF', 'SIGVOOS', '2026-06-15T12:00:00Z');
+
+      INSERT INTO cv_voo_tripulantes (
+        id, empresa_id, voo_id, funcionario_id, funcao, etapa_id, sigvoos_staff_id
+      ) VALUES
+        (9101, 1, 601, 1001, 'PIC', 9001, 7001),
+        (9102, 2, 701, 2001, 'PIC', 9002, 8001);
+
+      INSERT INTO cv_sigvoos_staging (
+        id, empresa_id, sigvoos_flight_report_id, sigvoos_leg_number,
+        data_operacional, source_window_start, source_window_end,
+        payload_hash, import_status, cv_voo_id, cv_etapa_id, cv_tripulante_id
+      ) VALUES
+        ('tenant-a-processed', 1, 700101, 1, '2026-06-15', '2026-06-15', '2026-06-15', 'hash-a-1', 'PROCESSED', 601, 9001, 9101),
+        ('tenant-a-pending', 1, 700102, 1, '2026-06-15', '2026-06-15', '2026-06-15', 'hash-a-2', 'PENDING', NULL, NULL, NULL),
+        ('tenant-b-processed', 2, 800101, 1, '2026-06-15', '2026-06-15', '2026-06-15', 'hash-b-1', 'PROCESSED', 701, 9002, 9102);
+
+      INSERT INTO cv_conflitos_integracao (
+        id, empresa_id, entidade_tipo, entidade_id, campo,
+        valor_airtrust, valor_sigvoos, staging_id, severidade, status
+      ) VALUES
+        (9201, 1, 'voo', 601, 'prefixo', 'ATX-1001', 'ATX-EXT', 'tenant-a-processed', 'MEDIA', 'ABERTO');
+    `,
   );
 }
 
@@ -1118,6 +1169,111 @@ describe('controle voos routes', () => {
       'viewer',
     );
     expect(reportResponse.status).toBe(200);
+  });
+
+  it('retorna preview SIGVOOS sem chamada externa e sem gravacao quando flag esta ativa', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    seedSigvoosPreviewState(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/sync-preview',
+      { method: 'POST', body: JSON.stringify({}) },
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        mode: 'preview',
+        enabled: true,
+        tenantScoped: true,
+        writesEnabled: false,
+        realApiCalled: false,
+        empresaId: 1,
+        counts: {
+          stagingTotal: 2,
+          stagingPending: 1,
+          stagingProcessed: 1,
+          openConflicts: 1,
+          importedFlights: 1,
+          importedStages: 1,
+          importedCrew: 1,
+        },
+      },
+    });
+
+    const tenantBRows = db.queryJson<{ total: number }>(
+      "SELECT COUNT(*) AS total FROM cv_sigvoos_staging WHERE empresa_id = 2 AND deleted_at IS NULL",
+    );
+    expect(tenantBRows[0]?.total).toBe(1);
+  });
+
+  it('mantem preview SIGVOOS sem gravacao quando flag esta desativada', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/sync-preview',
+      { method: 'POST', body: JSON.stringify({}) },
+      1,
+      'manager',
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        mode: 'preview',
+        enabled: false,
+        writesEnabled: false,
+        realApiCalled: false,
+        status: 'FEATURE_DISABLED',
+      },
+    });
+  });
+
+  it('bloqueia usuario comum no preview SIGVOOS', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/sync-preview',
+      { method: 'POST', body: JSON.stringify({}) },
+      1,
+      'viewer',
+      { CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_RBAC_FORBIDDEN',
+    });
+  });
+
+  it('rejeita tenant arbitrario no body do preview SIGVOOS', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/sync-preview',
+      { method: 'POST', body: JSON.stringify({ empresaId: 2 }) },
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_TENANT_OVERRIDE_FORBIDDEN',
+    });
   });
 
   it('rejeita campos e termos fora do escopo', async () => {

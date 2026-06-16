@@ -34,6 +34,7 @@ import { useLanguage } from '../i18n/useLanguage';
 import { useTheme } from '../theme/ThemeProvider';
 import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
 import { canAccessModule } from '@/react-app/lib/module-access';
+import { apiClient } from '@/react-app/services/apiClient';
 import {
   canSeeAdministrativeDashboard,
   canSeeDevelopmentModules,
@@ -47,6 +48,53 @@ const NAV_INACTIVE =
   'whitespace-nowrap text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100';
 const PREVIEW_BADGE_CLASS =
   'ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+
+type SigvoosRefreshPreviewResponse = {
+  mode: 'preview';
+  enabled: boolean;
+  tenantScoped: boolean;
+  writesEnabled: boolean;
+  realApiCalled: boolean;
+  status: 'READY' | 'FEATURE_DISABLED';
+  counts: {
+    stagingTotal: number;
+    stagingPending: number;
+    stagingProcessed: number;
+    stagingConflict: number;
+    openConflicts: number;
+    importedFlights: number;
+    importedStages: number;
+    importedCrew: number;
+  };
+};
+
+type ApiEnvelope<T> = {
+  success: boolean;
+  data?: T;
+  error?: string;
+};
+
+function isSigvoosRefreshPreviewEnabled(): boolean {
+  const importMetaValue = (import.meta as unknown as {
+    env?: { VITE_SIGVOOS_REFRESH_PREVIEW_ENABLED?: string };
+  }).env?.VITE_SIGVOOS_REFRESH_PREVIEW_ENABLED;
+  const processValue =
+    typeof process !== 'undefined'
+      ? (process.env?.VITE_SIGVOOS_REFRESH_PREVIEW_ENABLED as string | undefined)
+      : undefined;
+  return importMetaValue === 'true' || processValue === 'true';
+}
+
+function sigvoosPreviewMessage(data: SigvoosRefreshPreviewResponse): string {
+  if (!data.enabled) return 'Prévia SIGVOOS desativada por flag.';
+  if (data.counts.openConflicts > 0 || data.counts.stagingConflict > 0) {
+    return `Prévia SIGVOOS: ${data.counts.openConflicts || data.counts.stagingConflict} conflito(s) encontrado(s).`;
+  }
+  if (data.counts.stagingPending > 0) {
+    return `Prévia SIGVOOS: ${data.counts.stagingPending} payload(s) pendente(s) no tenant atual.`;
+  }
+  return 'Prévia SIGVOOS: sem novos dados materializados no tenant atual.';
+}
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
@@ -180,6 +228,28 @@ export default function AppLayout({ children }: AppLayoutProps) {
     if (hardRefreshLoading) return;
     setHardRefreshLoading(true);
     try {
+      const shouldRunSigvoosPreview =
+        isSigvoosRefreshPreviewEnabled() &&
+        Boolean(empresaAtualId) &&
+        (isAdmin || isGestor) &&
+        canAccessModule('controle_voos', modulosAtivos);
+
+      if (shouldRunSigvoosPreview) {
+        try {
+          const response = await apiClient.post<ApiEnvelope<SigvoosRefreshPreviewResponse>>(
+            '/controle-voos/sigvoos/sync-preview',
+            {},
+            { retry: 0, skipRequestControl: true },
+          );
+          const preview = response.data?.data;
+          if (preview) {
+            toast.info(sigvoosPreviewMessage(preview));
+          }
+        } catch {
+          toast.warning('Falha na prévia SIGVOOS; o app será atualizado sem sincronização.');
+        }
+      }
+
       await hardRefreshApp();
     } finally {
       setHardRefreshLoading(false);

@@ -80,6 +80,8 @@ export interface Env {
   ENABLE_ADMIN_DEBUG_ROUTES?: string;
   // Feature flag for additive shared simulator session backend
   SIMULATOR_SHARED_SESSIONS_ENABLED?: string;
+  // Feature flag for guarded Controle de Voos SIGVOOS runtime preview.
+  CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED?: string;
 }
 
 // ===== API RESPONSE TYPES =====
