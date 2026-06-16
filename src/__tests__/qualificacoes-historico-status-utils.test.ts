@@ -13,7 +13,25 @@ describe('qualificacoes historico status utils', () => {
       'PLANEJADA',
     );
     expect(getHistoricoDisplayStatus({ status: 'PROXIMA_VENCIMENTO' })).toBe('VENCENDO_30');
-    expect(getHistoricoDisplayStatus({ status: 'VALIDA', renovada: 1 })).toBe('RENOVADA');
+    expect(getHistoricoDisplayStatus({ renovada: 1 })).toBe('RENOVADA');
+  });
+
+  it('prioriza o status derivado do backend para nao marcar a renovacao vigente como renovada', () => {
+    expect(
+      getHistoricoDisplayStatus({
+        status: 'VALIDA',
+        renovada: 1,
+        renovacao_de: 321,
+        tem_renovacao_posterior: 0,
+      }),
+    ).toBe('VALIDA');
+    expect(
+      getHistoricoDisplayStatus({
+        status: 'RENOVADA',
+        renovada: 0,
+        tem_renovacao_posterior: 1,
+      }),
+    ).toBe('RENOVADA');
   });
 
   it('detecta quando uma qualificação vencida já possui ação planejada relacionada', () => {
