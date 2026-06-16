@@ -15,6 +15,7 @@ import {
   gerarQualificacaoDaFicha,
   getQualificacaoGeracaoErrorStatus,
 } from './simuladores-fichas-helpers';
+import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -39,6 +40,23 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
     const empresaId = getEmpresaId(c);
     const { fichaId, ordem } = c.req.param();
     const b = await c.req.json();
+
+    const availability = await getFichaAvailabilityFromDb(c.env.DB, fichaId);
+    if (!availability.available) {
+      return c.json(
+        {
+          success: false,
+          code: availability.code,
+          error: availability.message,
+          details: {
+            ficha_id: Number(fichaId),
+            session_starts_at: availability.sessionStartsAt,
+            timezone: availability.timezone,
+          },
+        },
+        409,
+      );
+    }
 
     // 1) Try to find existing manobra by ficha_id + ordem
     let manobra = await c.env.DB.prepare(
@@ -178,6 +196,23 @@ app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const fid = c.req.param('id');
+    const availability = await getFichaAvailabilityFromDb(c.env.DB, fid);
+    if (!availability.available) {
+      return c.json(
+        {
+          success: false,
+          code: availability.code,
+          error: availability.message,
+          details: {
+            ficha_id: Number(fid),
+            session_starts_at: availability.sessionStartsAt,
+            timezone: availability.timezone,
+          },
+        },
+        409,
+      );
+    }
+
     const f = await c.env.DB.prepare(
       'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
     )

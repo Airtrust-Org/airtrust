@@ -37,6 +37,7 @@ import {
 } from './simuladores-fichas-helpers';
 import fichasSimuladorRoutes from './simuladores-fichas-simulador';
 import fichasAcoesRoutes from './simuladores-fichas-acoes';
+import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 
 const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de fichas requerem autenticação
@@ -1061,6 +1062,23 @@ app.put('/fichas/:id', async (c) => {
       .bind(id, tenantEmpresaId)
       .first();
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
+
+    const availability = await getFichaAvailabilityFromDb(c.env.DB, id);
+    if (!availability.available) {
+      return c.json(
+        {
+          success: false,
+          code: availability.code,
+          error: availability.message,
+          details: {
+            ficha_id: Number(id),
+            session_starts_at: availability.sessionStartsAt,
+            timezone: availability.timezone,
+          },
+        },
+        409,
+      );
+    }
 
     if (['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'].includes(String((a as any).status || '').toUpperCase())) {
       return c.json(
