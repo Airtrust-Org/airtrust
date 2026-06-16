@@ -55,6 +55,13 @@ active_fichas AS (
    AND fsm.deleted_at IS NULL
   WHERE fs.deleted_at IS NULL
   GROUP BY fs.id
+),
+relation_inventory AS (
+  SELECT
+    COUNT(*) AS total_rows,
+    SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) AS active_rows,
+    SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END) AS soft_deleted_rows
+  FROM modelos_sessao_manobras
 )
 SELECT
   'SUMMARY' AS section,
@@ -76,6 +83,49 @@ SELECT
   COUNT(*),
   SUM(CASE WHEN active_manobras = 0 AND status LIKE 'ASSIN%' THEN 1 ELSE 0 END)
 FROM active_fichas;
+
+SELECT
+  'SUMMARY' AS section,
+  'relation_rows_total' AS metric,
+  total_rows AS total,
+  active_rows AS affected
+FROM relation_inventory
+UNION ALL
+SELECT
+  'SUMMARY',
+  'relation_rows_soft_deleted',
+  total_rows,
+  COALESCE(soft_deleted_rows, 0)
+FROM relation_inventory
+UNION ALL
+SELECT
+  'SUMMARY',
+  'tenant6_models_zero_all_rows',
+  COUNT(*),
+  COUNT(*)
+FROM classified_models
+WHERE empresa_id = 6
+  AND active_links = 0
+UNION ALL
+SELECT
+  'SUMMARY',
+  'tenant6_pending_fichas_zero_manobras',
+  COUNT(*),
+  COUNT(*)
+FROM active_fichas
+WHERE empresa_id = 6
+  AND active_manobras = 0
+  AND UPPER(COALESCE(status, '')) NOT IN ('ASSINADO', 'CONCLUIDO')
+UNION ALL
+SELECT
+  'SUMMARY',
+  'tenant6_signed_or_concluded_zero_manobras',
+  COUNT(*),
+  COUNT(*)
+FROM active_fichas
+WHERE empresa_id = 6
+  AND active_manobras = 0
+  AND UPPER(COALESCE(status, '')) IN ('ASSINADO', 'CONCLUIDO');
 
 SELECT
   'MODEL_SOURCE_COVERAGE' AS section,
@@ -101,6 +151,22 @@ SELECT
 FROM classified_models
 WHERE active_links = 0
 ORDER BY empresa_id, codigo;
+
+SELECT
+  'TENANT_AUDIT' AS section,
+  ms.empresa_id AS modelo_empresa_id,
+  m.empresa_id AS manobra_empresa_id,
+  COUNT(*) AS relation_rows
+FROM modelos_sessao_manobras msm
+INNER JOIN modelos_sessao ms
+  ON ms.id = msm.modelo_id
+ AND ms.deleted_at IS NULL
+INNER JOIN manobras m
+  ON m.id = msm.manobra_id
+ AND m.deleted_at IS NULL
+WHERE msm.deleted_at IS NULL
+GROUP BY ms.empresa_id, m.empresa_id
+ORDER BY ms.empresa_id, m.empresa_id;
 `;
 
 process.stdout.write(sql.trimStart());

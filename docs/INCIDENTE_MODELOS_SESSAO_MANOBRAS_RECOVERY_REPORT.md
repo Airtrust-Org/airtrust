@@ -2,11 +2,13 @@
 
 Data da apuracao: 2026-06-16  
 Escopo: Modelos de sessao, fichas de simulador, login e PR #59  
-Status: restauracao de dados bloqueada; mitigacao de codigo preparada
+Status: `BLOQUEADO — RESTAURACAO MANOBRAS TENANT INSEGURA`
 
 ## Veredito
 
-A perda e real em producao: a tabela `modelos_sessao_manobras` esta vazia para todos os modelos ativos auditados. Nao houve escrita em producao nesta fase.
+A perda e real em producao: a tabela `modelos_sessao_manobras` esta vazia em nivel total, nao apenas em nivel de filtro por tenant. Nao houve escrita em producao nesta fase.
+
+A hipotese de tenant nao foi confirmada. As manobras ativas existem e estao associadas a `empresa_id = 6`, mas nao existem linhas em `modelos_sessao_manobras` para nenhum tenant. O problema observado em producao e perda de relacao modelo -> manobra, nao filtro escondendo dados validos.
 
 A recuperacao operacional dos dados nao deve ser aplicada ainda. As fontes versionadas cobrem parte relevante dos modelos, mas a fonte completa e verificavel para todos os 52 modelos ativos ainda nao foi provada em nivel de linha. Qualquer restauracao parcial criaria risco regulatorio e risco de avaliacao com conteudo incorreto.
 
@@ -26,13 +28,15 @@ Resumo de producao:
 | --- | ---: |
 | Modelos ativos | 52 |
 | Modelos ativos sem links em `modelos_sessao_manobras` | 52 |
+| Linhas totais em `modelos_sessao_manobras` | 0 |
 | Links ativos em `modelos_sessao_manobras` | 0 |
 | Links soft-deleted em `modelos_sessao_manobras` | 0 |
 | Manobras ativas no catalogo | 393 |
-| Manobras soft-deleted no catalogo | 81 |
+| Manobras ativas da empresa 6 | 393 |
+| Manobras ativas sem `empresa_id` | 0 |
 | Fichas ativas | 75 |
 | Fichas ativas sem manobras | 20 |
-| Fichas assinadas sem manobras | 1 |
+| Fichas assinadas/concluidas sem manobras | 0 |
 
 Distribuicao por tenant:
 
@@ -40,6 +44,13 @@ Distribuicao por tenant:
 | ---: | ---: | ---: |
 | 6 | 51 | 51 |
 | 8 | 1 | 1 |
+
+Fichas sem manobras por tenant:
+
+| Empresa | Fichas sem manobras |
+| ---: | ---: |
+| 6 | 19 |
+| 8 | 1 |
 
 Catalogo de manobras ativo:
 
@@ -49,6 +60,29 @@ Catalogo de manobras ativo:
 | 6 | AW139 | TREINAMENTO | 147 |
 | 6 | SK76 | PER | 22 |
 | 6 | SK76 | TREINAMENTO | 180 |
+
+Schema confirmado em producao:
+
+| Tabela | Campo tenant | Observacao |
+| --- | --- | --- |
+| `modelos_sessao` | `empresa_id` NOT NULL | tenantizado |
+| `manobras` | `empresa_id` nullable | em producao, todas as ativas estao na empresa 6 |
+| `modelos_sessao_manobras` | nao possui | relacao N:N sem tenant proprio |
+| `fichas_sessao` | `empresa_id` NOT NULL | possui `template_id`, `status` e campos de assinatura |
+| `fichas_sessao_manobras` | nao possui | depende da ficha |
+
+## Hipotese de tenant
+
+Respostas objetivas:
+
+1. As manobras existem: sim, 393 ativas, todas em `empresa_id = 6`.
+2. As relacoes existem: nao. `modelos_sessao_manobras` tem `0` linhas totais em producao.
+3. As relacoes apontam para modelos da empresa 6: nao aplicavel, porque nao ha linhas.
+4. As manobras estao em empresa diferente de 6: nao. As ativas estao na empresa 6.
+5. A relacao tem `empresa_id` proprio: nao.
+6. A query atual exige tenant coerente entre modelo e manobra: sim, nos endpoints auditados o backend filtra `ms.empresa_id = ?` e `m.empresa_id = ?`.
+7. A populacao de ficha falha por filtro de tenant na empresa 6: nao. Ela falha porque a relacao modelo -> manobra esta ausente antes mesmo do filtro de tenant.
+8. O problema e dado, query ou ambos: dado. O filtro de tenant existe e e restritivo, mas o bloqueio operacional atual vem da ausencia total das linhas de relacao em producao.
 
 ## Impacto
 
@@ -88,6 +122,8 @@ O problema: ha modelos atuais com codigos renomeados ou criados depois das fonte
 
 Staging nao e fonte confiavel: tambem esta sem links e sem manobras ativas suficientes para restauracao.
 
+Como a relacao esta zerada em nivel total, qualquer restauracao segura precisara reconstruir `modelos_sessao_manobras` a partir de fonte historica/versionada. Nao existe evidencia em producao de linhas deslocadas para outro tenant que permita restauracao por simples ajuste de `empresa_id`.
+
 ## Dry-run preparado
 
 Foi adicionado o gerador read-only:
@@ -102,6 +138,8 @@ Ele emite SQL somente-leitura para:
 
 Esse dry-run nao gera comandos de escrita e nao deve ser tratado como script de aplicacao. A restauracao real so deve nascer depois de snapshot, reconciliacao linha a linha e aprovacao explicita.
 
+Nesta etapa, o dry-run foi reforcado para responder explicitamente se o problema e tenant ou ausencia total da relacao.
+
 ## PR #59 e login
 
 O PR #59 foi mergeado em `main` antes desta fase:
@@ -111,6 +149,17 @@ O PR #59 foi mergeado em `main` antes desta fase:
 - Merge em: 2026-06-16T17:35:34Z
 
 A correcao local de login preparada nesta fase adiciona timeout para `/api/auth/login` e tolerancia controlada para falha em `/api/auth/empresas`, sem alterar politica de autenticacao.
+
+## PR #60
+
+Estado atual do PR:
+
+- PR: `https://github.com/airtrustsystem-alt/airtrust/pull/60`
+- Branch: `codex/incidente-modelos-sessao-manobras`
+- Checks: verdes na ultima auditoria desta etapa
+- Decisao nesta etapa: nao mergear como se a restauracao estivesse resolvida
+
+O PR #60 continua valido como mitigacao de codigo. Ele nao resolve a perda das relacoes em producao e por isso nao encerra o incidente de dados.
 
 ## Validacoes executadas
 
@@ -126,6 +175,7 @@ Passaram:
 - `bash scripts/audit-dangerous-ops.sh` passou com aviso preexistente em scripts de sincronizacao local.
 - `bash scripts/check-tracked-secrets.sh`
 - `node scripts/validation/dry-run-modelos-sessao-manobras-recovery.mjs`
+- consultas read-only em producao com `PRAGMA table_info`, `sqlite_master` e `SELECT` para tabelas/contagens de tenant
 
 Nao passou por condicao preexistente:
 
@@ -141,4 +191,6 @@ Nao passou por condicao preexistente:
 5. Solicitar autorizacao explicita e separada para qualquer escrita em producao.
 6. Aplicar apenas script idempotente, com `INSERT` condicionado a ausencia do link e sem `DELETE`/`TRUNCATE`.
 
-Enquanto a fonte completa nao for provada, o status correto da restauracao e: bloqueada.
+Enquanto a fonte completa nao for provada, o status correto desta etapa permanece:
+
+`BLOQUEADO — RESTAURACAO MANOBRAS TENANT INSEGURA`
