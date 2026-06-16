@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, RotateCcw, Calendar, AlertCircle } from 'lucide-react';
 import { parseISO, format, isValid } from 'date-fns';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
-import { getDataHojeHTML } from '@/react-app/utils/dateUtils';
+import { converterParaFormatoHTML, getDataHojeHTML, validarData } from '@/react-app/utils/dateUtils';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
 
 interface ModalRenovarQualificacaoProps {
@@ -35,7 +35,7 @@ export function ModalRenovarQualificacao({
   useEffect(() => {
     if (isOpen && qualificacao && !initializedRef.current) {
       // Inicializar apenas uma vez quando o modal abre
-      setNovaDataConclusao(getDataHojeHTML());
+      setNovaDataConclusao(converterParaFormatoHTML(getDataHojeHTML()));
       initializedRef.current = true;
       setErro('');
     } else if (!isOpen) {
@@ -57,6 +57,11 @@ export function ModalRenovarQualificacao({
       setErro('Data de conclusão é obrigatória');
       return;
     }
+    const normalizedNovaDataConclusao = converterParaFormatoHTML(novaDataConclusao);
+    if (!normalizedNovaDataConclusao || !validarData(normalizedNovaDataConclusao)) {
+      setErro('Data de conclusão inválida');
+      return;
+    }
     if (!qualificacao) {
       setErro('Qualificação não encontrada');
       return;
@@ -69,7 +74,7 @@ export function ModalRenovarQualificacao({
 
       console.log('[Renovar] Enviando requisição:', {
         id: qualificacao.id,
-        nova_data_conclusao: novaDataConclusao,
+        nova_data_conclusao: normalizedNovaDataConclusao,
         observacao: observacao.trim() || undefined,
         url: `${API_BASE_URL}/qualificacoes/historico/${qualificacao.id}/renovar`,
       });
@@ -83,7 +88,7 @@ export function ModalRenovarQualificacao({
             Authorization: `Bearer ${getAccessToken()}`,
           },
           body: JSON.stringify({
-            nova_data_conclusao: novaDataConclusao,
+            nova_data_conclusao: normalizedNovaDataConclusao,
             observacao: observacao.trim() || undefined,
           }),
         },
@@ -116,7 +121,8 @@ export function ModalRenovarQualificacao({
   if (!isOpen || !qualificacao) return null;
 
   // Calcular data máxima (hoje) - formato local sem conversão UTC
-  const dataMaxima = getDataHojeHTML();
+  const dataMaxima = converterParaFormatoHTML(getDataHojeHTML());
+  const inputNovaDataConclusao = converterParaFormatoHTML(novaDataConclusao);
 
   // Função auxiliar para formatar datas com segurança
   const formatDate = (dateString: string | undefined | null): string => {
@@ -189,8 +195,8 @@ export function ModalRenovarQualificacao({
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="date"
-                value={novaDataConclusao}
-                onChange={(e) => setNovaDataConclusao(e.target.value)}
+                value={inputNovaDataConclusao}
+                onChange={(e) => setNovaDataConclusao(converterParaFormatoHTML(e.target.value))}
                 max={dataMaxima}
                 disabled={salvando}
                 className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/30 disabled:opacity-50 ${
@@ -232,7 +238,7 @@ export function ModalRenovarQualificacao({
             </button>
             <button
               onClick={handleConfirmar}
-              disabled={salvando || !novaDataConclusao}
+              disabled={salvando || !inputNovaDataConclusao}
               className="w-full sm:w-auto px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {salvando ? (

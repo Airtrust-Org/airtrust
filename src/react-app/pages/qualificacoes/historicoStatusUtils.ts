@@ -8,6 +8,8 @@ export type HistoricoStatusLike = {
   qualificacao_desc?: string | null;
   qualificacao_status?: string | null;
   renovada?: number | boolean | null;
+  tem_renovacao_posterior?: number | boolean | null;
+  renovacao_de?: number | string | null;
   status?: string | null;
   data_vencimento?: string | null;
   data_validade?: string | null;
@@ -40,23 +42,29 @@ export type HistoricoHeaderStats = {
 };
 
 export function getHistoricoDisplayStatus(item: HistoricoStatusLike): string {
-  const ehRenovada = item.renovada === 1 || item.renovada === true;
   const qualificacaoStatus = String(item.qualificacao_status || '').toUpperCase();
+  const rawStatus = String(item.status || '')
+    .trim()
+    .toUpperCase();
+  const normalized = rawStatus === 'PROXIMA_VENCIMENTO' ? 'VENCENDO_30' : rawStatus;
+  const temRenovacaoPosterior =
+    item.tem_renovacao_posterior === 1 || item.tem_renovacao_posterior === true;
+  const ehRenovada =
+    temRenovacaoPosterior ||
+    item.renovada === 1 ||
+    item.renovada === true ||
+    qualificacaoStatus === 'RENOVADA';
 
   if (qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'CANCELADA') {
     return qualificacaoStatus;
   }
 
-  if (ehRenovada) {
-    return 'RENOVADA';
-  }
-
-  const rawStatus = String(item.status || '')
-    .trim()
-    .toUpperCase();
-  const normalized = rawStatus === 'PROXIMA_VENCIMENTO' ? 'VENCENDO_30' : rawStatus;
   if (STATUS_RECONHECIDOS.has(normalized)) {
     return normalized;
+  }
+
+  if (ehRenovada) {
+    return 'RENOVADA';
   }
 
   const hoje = new Date().toISOString().split('T')[0];
