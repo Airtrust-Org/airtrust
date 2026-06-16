@@ -3,11 +3,10 @@ import type { Env } from '../../types';
 const SIGVOOS_DEFAULT_BASE_URL = 'https://api.sigvoos.com.br/api';
 const SIGVOOS_DEFAULT_SYSTEM = 'sigtrip';
 const SIGVOOS_PASSWORD_ENCRYPTED_PREFIX = 'enc:v1';
-const MAX_WINDOW_DAYS = 7;
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 100;
+const MAX_WINDOW_DAYS = 3;
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 10;
 const DEFAULT_MAX_PAGES = 1;
-const MAX_PAGES = 2;
 const REQUEST_TIMEOUT_MS = 8_000;
 
 type SigvoosRecord = Record<string, unknown>;
@@ -102,16 +101,39 @@ export function parseSigvoosRealPreviewRequest(
   payload: Record<string, unknown>,
   now = new Date(),
 ): SigvoosRealPreviewRequest {
-  const allowed = new Set(['from', 'to', 'pageSize', 'maxPages']);
+  const allowed = new Set(['window', 'limit']);
   for (const key of Object.keys(payload)) {
     if (!allowed.has(key)) {
       throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_FIELD_FORBIDDEN', 400);
     }
   }
 
-  const defaultFrom = todayIso(now);
-  const from = normalizeText(payload.from) || defaultFrom;
-  const to = normalizeText(payload.to) || addDaysIso(from, Math.min(MAX_WINDOW_DAYS, 1) - 1);
+  const window = payload.window;
+  if (window !== undefined && !isRecord(window)) {
+    throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_INVALID_WINDOW', 400);
+  }
+  if (isRecord(window)) {
+    const allowedWindowKeys = new Set(['days']);
+    for (const key of Object.keys(window)) {
+      if (!allowedWindowKeys.has(key)) {
+        throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_FIELD_FORBIDDEN', 400);
+      }
+    }
+  }
+
+  let requestedDays = 1;
+  if (window && window.days !== undefined && window.days !== null && window.days !== '') {
+    const parsedDays = typeof window.days === 'number' ? window.days : Number(window.days);
+    if (!Number.isInteger(parsedDays) || parsedDays < 1) {
+      throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_INVALID_WINDOW', 400);
+    }
+    if (parsedDays > MAX_WINDOW_DAYS) {
+      throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_WINDOW_TOO_WIDE', 400);
+    }
+    requestedDays = parsedDays;
+  }
+  const from = todayIso(now);
+  const to = addDaysIso(from, requestedDays - 1);
   if (!isIsoDateOnly(from) || !isIsoDateOnly(to) || to < from) {
     throw new SigvoosRealPreviewError('CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_INVALID_WINDOW', 400);
   }
@@ -123,19 +145,13 @@ export function parseSigvoosRealPreviewRequest(
     from,
     to,
     pageSize: parseBoundedInteger(
-      payload.pageSize,
+      payload.limit,
       DEFAULT_PAGE_SIZE,
       1,
       MAX_PAGE_SIZE,
-      'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_PAGE_SIZE_INVALID',
+      'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_LIMIT_INVALID',
     ),
-    maxPages: parseBoundedInteger(
-      payload.maxPages,
-      DEFAULT_MAX_PAGES,
-      1,
-      MAX_PAGES,
-      'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_MAX_PAGES_INVALID',
-    ),
+    maxPages: DEFAULT_MAX_PAGES,
   };
 }
 
