@@ -675,19 +675,53 @@ app.get('/fichas/:id', async (c) => {
           console.log(
             `[AUTO-POPULATE] ✅ Inseridas ${inserted} manobras do modelo ${modeloCorreto.id}`,
           );
+          if (inserted === 0) {
+            return c.json(
+              {
+                success: false,
+                code: 'FICHA_MODELO_SEM_MANOBRAS',
+                error:
+                  'Ficha modelo sem manobras cadastradas. Cadastre as manobras do modelo antes de avaliar o tripulante.',
+                details: {
+                  ficha_id: Number(id),
+                  modelo_sessao_id: modeloCorreto.id,
+                },
+              },
+              409,
+            );
+          }
         } else {
-          // Fallback de último recurso: manobras genéricas numeradas
-          const genericStmts = Array.from({ length: 22 }, (_, i) =>
-            c.env.DB.prepare(
-              `INSERT INTO fichas_sessao_manobras
-                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
-               VALUES (?, ?, ?, ?, 'GERAL', ?, 'AB', NULL, '')`,
-            ).bind(id, `ORD-${i + 1}`, `Manobra ${i + 1}`, `Manobra ${i + 1}`, i + 1),
+          return c.json(
+            {
+              success: false,
+              code: 'FICHA_MODELO_NAO_ENCONTRADO',
+              error:
+                'Ficha sem modelo de sessão resolvido. Vincule um modelo com manobras antes de avaliar o tripulante.',
+              details: {
+                ficha_id: Number(id),
+              },
+            },
+            409,
           );
-          await c.env.DB.batch(genericStmts);
         }
         m = await reloadManobras();
         console.log(`[AUTO-POPULATE] Recarregou: ${m.results?.length ?? 0} manobras`);
+      }
+
+      if (!m.results || m.results.length === 0) {
+        return c.json(
+          {
+            success: false,
+            code: 'FICHA_SEM_MANOBRAS',
+            error:
+              'Ficha sem manobras. Corrija o cadastro do modelo antes de avaliar ou assinar esta ficha.',
+            details: {
+              ficha_id: Number(id),
+              modelo_sessao_id: modeloSessaoResolvidoId,
+            },
+          },
+          409,
+        );
       }
     }
 
@@ -1053,19 +1087,16 @@ app.put('/fichas/:id', async (c) => {
           .run();
 
         if (update.meta.changes === 0) {
-          await c.env.DB.prepare(
-            'INSERT INTO fichas_sessao_manobras(ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          )
-            .bind(
-              id,
-              `ORD-${ordem}`,
-              `Manobra ordem ${ordem}`,
-              'GERAL',
-              ordem,
-              m?.resultado ?? null,
-              m?.observacoes ?? '',
-            )
-            .run();
+          return c.json(
+            {
+              success: false,
+              code: 'FICHA_MANOBRA_INEXISTENTE',
+              error:
+                'Não foi possível salvar a avaliação porque a ficha não possui a manobra informada.',
+              details: { ordem },
+            },
+            409,
+          );
         }
       }
 
@@ -1093,6 +1124,24 @@ app.put('/fichas/:id', async (c) => {
     if (b.recalculate_status === true) {
       console.log(`🔍 [FICHA ${id}] Iniciando recálculo de status...`);
       console.log(`📊 [FICHA ${id}] Status atual: "${a.status}"`);
+
+      const manobrasAtivas = await c.env.DB.prepare(
+        'SELECT COUNT(1) as total FROM fichas_sessao_manobras WHERE ficha_id=? AND deleted_at IS NULL',
+      )
+        .bind(id)
+        .first<{ total: number }>();
+
+      if (Number(manobrasAtivas?.total || 0) === 0) {
+        return c.json(
+          {
+            success: false,
+            code: 'FICHA_SEM_MANOBRAS',
+            error:
+              'Ficha sem manobras. A avaliação não pode ser salva ou enviada para assinatura até o modelo ser corrigido.',
+          },
+          409,
+        );
+      }
 
       const alunoAssinou = Boolean((a as any)?.assinatura_aluno_timestamp);
       const instrutorAssinou = Boolean((a as any)?.assinatura_instrutor_timestamp);

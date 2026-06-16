@@ -43,7 +43,7 @@ vi.mock('../../routes/simuladores-fichas-helpers', () => ({
 
 import simuladoresFichasRoutes from '../../routes/simuladores-fichas';
 
-function createDbMock(options?: { invalidTenantLink?: boolean }) {
+function createDbMock(options?: { invalidTenantLink?: boolean; manobrasCount?: number }) {
   const runs: Array<{ query: string; args: unknown[] }> = [];
 
   const db = {
@@ -63,6 +63,21 @@ function createDbMock(options?: { invalidTenantLink?: boolean }) {
               empresa_id: Number(args[1] || 6),
               deleted_at: null,
             };
+          }
+          if (query.includes('SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL')) {
+            return {
+              id: 901,
+              uuid: 'fs-901',
+              colaborador_id_aluno: 10,
+              instrutor_id: 11,
+              tipo_sessao: 'PER',
+              empresa_id: 6,
+              status: 'AGUARDANDO_ASSINATURA_ALUNO',
+              deleted_at: null,
+            };
+          }
+          if (query.includes('SELECT COUNT(1) as total FROM fichas_sessao_manobras')) {
+            return { total: options?.manobrasCount ?? 0 };
           }
           return null;
         },
@@ -134,5 +149,56 @@ describe('simuladores fichas tenant-aware writes', () => {
       error: 'Aluno ou instrutor fora do tenant',
     });
     expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao'))).toBe(false);
+  });
+
+  it('PUT /fichas/:id bloqueia recálculo quando ficha não tem manobras', async () => {
+    const { db, runs } = createDbMock({ manobrasCount: 0 });
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recalculate_status: true,
+          observacoes: 'Avaliação sem itens não deve avançar',
+        }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      code: 'FICHA_SEM_MANOBRAS',
+    });
+    expect(runs.some((item) => item.query.includes('UPDATE fichas_sessao SET status='))).toBe(
+      false,
+    );
+  });
+
+  it('POST /fichas/:id/assinar bloqueia assinatura quando ficha não tem manobras', async () => {
+    const { db, runs } = createDbMock({ manobrasCount: 0 });
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901/assinar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'ALUNO' }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      code: 'FICHA_SEM_MANOBRAS',
+    });
+    expect(
+      runs.some((item) =>
+        item.query.includes('assinatura_aluno_ip=?,assinatura_aluno_timestamp=?'),
+      ),
+    ).toBe(false);
   });
 });
