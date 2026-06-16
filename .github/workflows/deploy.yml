@@ -63,7 +63,7 @@ jobs:
           EOF
 
       - name: 🧱 Setup local database
-        run: npm run setup:local:reset
+        run: npm run setup:lms:local:reset
 
       - name: 🏃 Start local worker
         run: |
