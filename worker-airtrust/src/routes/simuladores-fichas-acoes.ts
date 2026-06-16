@@ -245,6 +245,24 @@ app.post('/fichas/:id/assinar', async (c) => {
       .first();
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
+    const manobrasAtivas = await c.env.DB.prepare(
+      'SELECT COUNT(1) as total FROM fichas_sessao_manobras WHERE ficha_id=? AND deleted_at IS NULL',
+    )
+      .bind(id)
+      .first<{ total: number }>();
+
+    if (Number(manobrasAtivas?.total || 0) === 0) {
+      return c.json(
+        {
+          success: false,
+          code: 'FICHA_SEM_MANOBRAS',
+          error:
+            'Ficha sem manobras. Corrija o cadastro do modelo antes de assinar esta ficha.',
+        },
+        409,
+      );
+    }
+
     // ── Verificar se o usuário é quem diz ser ────────────────────────────────
     if (!isFullAccess(role)) {
       const funcId = await getFuncionarioId(c.env.DB, userId, empresaId);
