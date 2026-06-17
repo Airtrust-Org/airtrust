@@ -19,6 +19,10 @@ import { jsonError } from '../middleware/response';
 import { AppError } from '../utils/errors';
 import { getEmpresaId } from '../middleware/tenant';
 import {
+  appendEmployeeSectorFilter,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
+import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
   getQualificacoesVencimentoExpr,
@@ -61,6 +65,11 @@ app.get(
       apenasRequisitosMatriz,
     } = c.req.query();
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const scopeConditions: string[] = [];
+    const scopeBindings: unknown[] = [];
+    appendEmployeeSectorFilter(scopeConditions, scopeBindings, access, 'f');
+
     const filtrarPorMatriz =
       String(apenasRequisitosMatriz || '')
         .trim()
@@ -89,6 +98,7 @@ app.get(
       WHERE qh.deleted_at IS NULL
         AND f.deleted_at IS NULL
         AND f.empresa_id = ?
+        AND ${scopeConditions.join(' AND ')}
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND qt.deleted_at IS NULL
         AND ${vencimentoExpr} IS NOT NULL
@@ -113,7 +123,7 @@ app.get(
         )
     `;
 
-    const params: (string | number)[] = [empresaId, hojeSp, diasJanela, filtrarPorMatriz ? 1 : 0];
+    const params: unknown[] = [empresaId, ...scopeBindings, hojeSp, diasJanela, filtrarPorMatriz ? 1 : 0];
 
     if (funcionario_cpf) {
       query += ` AND qh.funcionario_cpf = ?`;
@@ -193,6 +203,11 @@ app.get(
   safe(async (c) => {
     const { apenasRequisitosMatriz } = c.req.query();
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const scopeConditions: string[] = [];
+    const scopeBindings: unknown[] = [];
+    appendEmployeeSectorFilter(scopeConditions, scopeBindings, access, 'f');
+
     const filtrarPorMatriz =
       String(apenasRequisitosMatriz || '')
         .trim()
@@ -212,6 +227,7 @@ app.get(
       WHERE qh.deleted_at IS NULL
         AND f.deleted_at IS NULL
         AND f.empresa_id = ?
+        AND ${scopeConditions.join(' AND ')}
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND qt.deleted_at IS NULL
         AND (
@@ -235,7 +251,7 @@ app.get(
         )
     `,
     )
-      .bind(empresaId, filtrarPorMatriz ? 1 : 0)
+      .bind(empresaId, ...scopeBindings, filtrarPorMatriz ? 1 : 0)
       .all();
 
     // Calcular estatísticas

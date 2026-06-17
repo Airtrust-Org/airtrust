@@ -68,15 +68,32 @@ function buildCourseSetorFilter(
   if (setorIds.length === 0) return { clause: '', bindings: [] };
   const placeholders = setorIds.map(() => '?').join(',');
   return {
-    clause: `AND ${courseAlias}.qualificacao_tipo_id IS NOT NULL
-      AND EXISTS (
-        SELECT 1 FROM qualificacoes_tipos_setores qts_r
-        WHERE qts_r.tipo_id = ${courseAlias}.qualificacao_tipo_id
-          AND qts_r.empresa_id = ${courseAlias}.empresa_id
-          AND qts_r.setor_id IN (${placeholders})
-          AND qts_r.deleted_at IS NULL
-      )`,
-    bindings: setorIds,
+    clause: `AND (
+      EXISTS (
+        SELECT 1 FROM lms_cursos_setores lcs_f
+        WHERE lcs_f.curso_id = ${courseAlias}.id
+          AND lcs_f.empresa_id = ${courseAlias}.empresa_id
+          AND lcs_f.setor_id IN (${placeholders})
+          AND lcs_f.deleted_at IS NULL
+      )
+      OR (
+        NOT EXISTS (
+          SELECT 1 FROM lms_cursos_setores lcs_chk
+          WHERE lcs_chk.curso_id = ${courseAlias}.id
+            AND lcs_chk.empresa_id = ${courseAlias}.empresa_id
+            AND lcs_chk.deleted_at IS NULL
+        )
+        AND ${courseAlias}.qualificacao_tipo_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM qualificacoes_tipos_setores qts_r
+          WHERE qts_r.tipo_id = ${courseAlias}.qualificacao_tipo_id
+            AND qts_r.empresa_id = ${courseAlias}.empresa_id
+            AND qts_r.setor_id IN (${placeholders})
+            AND qts_r.deleted_at IS NULL
+        )
+      )
+    )`,
+    bindings: [...setorIds, ...setorIds],
   };
 }
 

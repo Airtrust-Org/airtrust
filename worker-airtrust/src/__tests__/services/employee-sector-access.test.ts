@@ -8,7 +8,13 @@ import {
 } from '../../services/employee-sector-access';
 
 function createDb(
-  options: { hasUsuarioId?: boolean; setorIds?: number[]; ownFuncionario?: { id: number; setor_id: number | null } | null } = {},
+  options: {
+    hasUsuarioId?: boolean;
+    hasGestorId?: boolean;
+    setorIds?: number[];
+    gestorFallbackSetorIds?: number[];
+    ownFuncionario?: { id: number; setor_id: number | null } | null;
+  } = {},
 ) {
   const calls: Array<{ sql: string; bindings: unknown[] }> = [];
   const db = {
@@ -19,10 +25,18 @@ function createDb(
           return {
             all: async () => {
               if (sql.includes("pragma_table_info('setores_gestores')")) {
+                const cols: Array<{ name: string }> = [];
+                if (options.hasUsuarioId !== false) cols.push({ name: 'usuario_id' });
+                if (options.hasGestorId === true) cols.push({ name: 'gestor_id' });
+                return { results: cols };
+              }
+              // Fallback gestor_id path returns different setor IDs
+              if (sql.includes('FROM setores_gestores sg') && sql.includes('INNER JOIN notificacoes_convocacao_cc_gestores')) {
                 return {
-                  results: options.hasUsuarioId === false ? [] : [{ name: 'usuario_id' }],
+                  results: (options.gestorFallbackSetorIds || []).map((setor_id) => ({ setor_id })),
                 };
               }
+              // Regular usuario_id path
               return {
                 results: (options.setorIds || []).map((setor_id) => ({ setor_id })),
               };
@@ -40,9 +54,10 @@ function createDb(
         },
         all: async () => {
           calls.push({ sql, bindings: [] });
-          return {
-            results: options.hasUsuarioId === false ? [] : [{ name: 'usuario_id' }],
-          };
+          const cols: Array<{ name: string }> = [];
+          if (options.hasUsuarioId !== false) cols.push({ name: 'usuario_id' });
+          if (options.hasGestorId === true) cols.push({ name: 'gestor_id' });
+          return { results: cols };
         },
         first: async () => {
           calls.push({ sql, bindings: [] });
@@ -154,5 +169,103 @@ describe('employee sector access', () => {
         funcionarioId: null,
       }),
     ).toEqual([2, 3]);
+  });
+
+  // ── Gestor_id fallback tests ──────────────────────────────────────────
+
+  it('uses gestor_id fallback when usuario_id column does not exist', async () => {
+    const { db, calls } = createDb({
+      hasUsuarioId: false,
+      hasGestorId: true,
+      gestorFallbackSetorIds: [5, 8],
+    });
+
+    await expect(resolveEmployeeSectorAccess(db, 6, 42, 'GESTOR')).resolves.toEqual({
+      mode: 'restricted',
+      setorIds: [5, 8],
+      funcionarioId: null,
+    });
+
+    const fallbackQuery = calls.find(
+      (call) =>
+        call.sql.includes('FROM setores_gestores sg') &&
+        call.sql.includes('INNER JOIN notificacoes_convocacao_cc_gestores'),
+    );
+    expect(fallbackQuery).toBeDefined();
+    expect(fallbackQuery?.bindings).toContain(42); // userId for email match
+    expect(fallbackQuery?.bindings).toContain(6); // empresaId
+  });
+
+  it('uses gestor_id fallback when usuario_id exists but returns empty results', async () => {
+    const { db, calls } = createDb({
+      hasUsuarioId: true,
+      hasGestorId: true,
+      setorIds: [], // empty from usuario_id path
+      gestorFallbackSetorIds: [3, 7],
+    });
+
+    await expect(resolveEmployeeSectorAccess(db, 6, 42, 'manager')).resolves.toEqual({
+      mode: 'restricted',
+      setorIds: [3, 7],
+      funcionarioId: null,
+    });
+
+    const fallbackQuery = calls.find(
+      (call) =>
+        call.sql.includes('FROM setores_gestores sg') &&
+        call.sql.includes('INNER JOIN notificacoes_convocacao_cc_gestores'),
+    );
+    expect(fallbackQuery).toBeDefined();
+  });
+
+  it('does not use gestor_id fallback when usuario_id already returns results', async () => {
+    const { db, calls } = createDb({
+      hasUsuarioId: true,
+      hasGestorId: true,
+      setorIds: [10, 20],
+      gestorFallbackSetorIds: [99], // should be ignored
+    });
+
+    await expect(resolveEmployeeSectorAccess(db, 6, 42, 'GESTOR')).resolves.toEqual({
+      mode: 'restricted',
+      setorIds: [10, 20],
+      funcionarioId: null,
+    });
+
+    // gestor_id fallback query should NOT have been executed
+    const fallbackQuery = calls.find(
+      (call) =>
+        call.sql.includes('FROM setores_gestores sg') &&
+        call.sql.includes('INNER JOIN notificacoes_convocacao_cc_gestores'),
+    );
+    expect(fallbackQuery).toBeUndefined();
+  });
+
+  it('fails closed when neither usuario_id nor gestor_id column exists', async () => {
+    const { db } = createDb({
+      hasUsuarioId: false,
+      hasGestorId: false,
+    });
+
+    await expect(resolveEmployeeSectorAccess(db, 6, 42, 'GESTOR')).resolves.toEqual({
+      mode: 'restricted',
+      setorIds: [],
+      funcionarioId: null,
+    });
+  });
+
+  it('returns empty scope when both paths return no results', async () => {
+    const { db } = createDb({
+      hasUsuarioId: true,
+      hasGestorId: true,
+      setorIds: [],
+      gestorFallbackSetorIds: [],
+    });
+
+    await expect(resolveEmployeeSectorAccess(db, 6, 42, 'COORDENADOR')).resolves.toEqual({
+      mode: 'restricted',
+      setorIds: [],
+      funcionarioId: null,
+    });
   });
 });

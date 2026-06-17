@@ -10,7 +10,11 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import {
+  employeeSectorSql,
+  getEmployeeSectorAccess,
+  type EmployeeSectorAccess,
+} from '../services/employee-sector-access';
 import { logAudit } from '../utils/db';
 import { getAuditContextSnapshot } from '../lib/audit/context';
 import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
@@ -62,6 +66,67 @@ const LMS_CURSOS_SELECT_COLUMNS = `
 `;
 
 app.use('*', auth());
+
+function buildCourseSetorScope(
+  access: EmployeeSectorAccess,
+  courseAlias = 'c',
+): { clause: string; bindings: number[] } {
+  if (access.mode === 'all') return { clause: '', bindings: [] };
+  if (access.setorIds.length === 0) return { clause: ' AND 1 = 0', bindings: [] };
+
+  const placeholders = access.setorIds.map(() => '?').join(', ');
+  return {
+    clause: ` AND (
+      EXISTS (
+        SELECT 1 FROM lms_cursos_setores lcs_f
+        WHERE lcs_f.curso_id = ${courseAlias}.id
+          AND lcs_f.empresa_id = ${courseAlias}.empresa_id
+          AND lcs_f.setor_id IN (${placeholders})
+          AND lcs_f.deleted_at IS NULL
+      )
+      OR (
+        NOT EXISTS (
+          SELECT 1 FROM lms_cursos_setores lcs_chk
+          WHERE lcs_chk.curso_id = ${courseAlias}.id
+            AND lcs_chk.empresa_id = ${courseAlias}.empresa_id
+            AND lcs_chk.deleted_at IS NULL
+        )
+        AND ${courseAlias}.qualificacao_tipo_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM qualificacoes_tipos_setores qts_f
+          WHERE qts_f.tipo_id = ${courseAlias}.qualificacao_tipo_id
+            AND qts_f.empresa_id = ${courseAlias}.empresa_id
+            AND qts_f.setor_id IN (${placeholders})
+            AND qts_f.deleted_at IS NULL
+        )
+      )
+    )`,
+    bindings: [...access.setorIds, ...access.setorIds],
+  };
+}
+
+function buildMatriculaEmployeeScope(
+  access: EmployeeSectorAccess,
+  matriculaAlias = 'm',
+): { clause: string; bindings: number[] } {
+  if (access.mode === 'all') return { clause: '', bindings: [] };
+  if (access.mode === 'self') {
+    return { clause: ` AND ${matriculaAlias}.funcionario_id = ?`, bindings: [access.funcionarioId] };
+  }
+  if (access.setorIds.length === 0) return { clause: ' AND 1 = 0', bindings: [] };
+
+  const placeholders = access.setorIds.map(() => '?').join(', ');
+  return {
+    clause: ` AND EXISTS (
+      SELECT 1 FROM funcionarios f_scope
+      WHERE f_scope.id = ${matriculaAlias}.funcionario_id
+        AND f_scope.empresa_id = ${matriculaAlias}.empresa_id
+        AND f_scope.deleted_at IS NULL
+        AND f_scope.setor_id IN (${placeholders})
+    )`,
+    bindings: access.setorIds,
+  };
+}
 
 function getCallerUserId(
   c: Context,
@@ -1210,7 +1275,7 @@ app.get('/', async (c) => {
 
   let finalSetorIds: number[] | null = null;
   if (requestedSetorIds.length > 0) {
-    if (access.mode === 'restricted') {
+    if (access.mode !== 'all') {
       const allowed = requestedSetorIds.filter((id) => access.setorIds.includes(id));
       if (allowed.length !== requestedSetorIds.length) {
         return c.json({ success: false, error: 'Filtro de setor fora do escopo permitido' }, 403);
@@ -1219,7 +1284,7 @@ app.get('/', async (c) => {
     } else {
       finalSetorIds = requestedSetorIds;
     }
-  } else if (access.mode === 'restricted' && access.setorIds.length > 0) {
+  } else if (access.mode !== 'all') {
     finalSetorIds = access.setorIds;
   }
 
@@ -1237,7 +1302,9 @@ app.get('/', async (c) => {
     where += ' AND c.titulo LIKE ?';
     binds.push(`%${q}%`);
   }
-  if (finalSetorIds !== null) {
+  if (finalSetorIds !== null && finalSetorIds.length === 0) {
+    where += ' AND 1 = 0';
+  } else if (finalSetorIds !== null) {
     const placeholders = finalSetorIds.map(() => '?').join(', ');
     // Filtra por lms_cursos_setores (vínculo direto) OU por qualificacoes_tipos_setores (fallback via qualificação)
     where += ` AND (
@@ -1258,11 +1325,14 @@ app.get('/', async (c) => {
           WHERE qts_f.tipo_id = c.qualificacao_tipo_id
             AND qts_f.empresa_id = c.empresa_id
             AND qts_f.setor_id IN (${placeholders})
+            AND qts_f.deleted_at IS NULL
         )
       )
     )`;
     binds.push(...finalSetorIds, ...finalSetorIds);
   }
+
+  const matriculaScope = buildMatriculaEmployeeScope(access, 'm');
 
   const total = await db
     .prepare(`SELECT COUNT(*) as n FROM lms_cursos c ${where}`)
@@ -1276,9 +1346,9 @@ app.get('/', async (c) => {
         qt.nome AS qualificacao_tipo_nome,
         h.id AS h5p_conteudo_id,
         (SELECT COUNT(*) FROM lms_matriculas m
-         WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL) AS total_matriculas,
+         WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL${matriculaScope.clause}) AS total_matriculas,
         (SELECT COUNT(*) FROM lms_matriculas m
-         WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.status = 'CONCLUIDO' AND m.deleted_at IS NULL) AS total_concluidos,
+         WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.status = 'CONCLUIDO' AND m.deleted_at IS NULL${matriculaScope.clause}) AS total_concluidos,
         (SELECT json_group_array(json_object('id', s.id, 'nome', s.nome))
          FROM lms_cursos_setores lcs
          JOIN setores s ON s.id = lcs.setor_id
@@ -1296,7 +1366,7 @@ app.get('/', async (c) => {
       LIMIT ? OFFSET ?
     `,
     )
-    .bind(...binds, limit, offset)
+    .bind(...matriculaScope.bindings, ...matriculaScope.bindings, ...binds, limit, offset)
     .all<Record<string, unknown>>();
 
   const data = (rows.results ?? []).map((row) => {
@@ -1321,17 +1391,21 @@ async function handleLmsStats(
   const db = c.env.DB as D1Database;
   const empresaId = getEmpresaIdSafe(c);
 
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const courseSectorScope = buildCourseSetorScope(access, 'c');
+  const employeeScope = employeeSectorSql(access, 'f');
+
   const [totaisCursos, totaisMatriculas, topCursos, atrasadas, recentCompletions, featuredCourses] =
     await Promise.all([
       db
         .prepare(
           `SELECT
            COUNT(*) AS total_cursos,
-           SUM(CASE WHEN publicado = 1 THEN 1 ELSE 0 END) AS cursos_publicados
-         FROM lms_cursos
-         WHERE empresa_id = ? AND deleted_at IS NULL AND ativo = 1`,
+           SUM(CASE WHEN c.publicado = 1 THEN 1 ELSE 0 END) AS cursos_publicados
+         FROM lms_cursos c
+         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1${courseSectorScope.clause}`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...courseSectorScope.bindings)
         .first<{ total_cursos: number; cursos_publicados: number }>(),
 
       db
@@ -1349,9 +1423,11 @@ async function handleLmsStats(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         WHERE m.empresa_id = ? AND m.deleted_at IS NULL`,
+         WHERE m.empresa_id = ?
+           AND m.deleted_at IS NULL
+           AND ${employeeScope.clause}`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...employeeScope.bindings)
         .first<{
           total_matriculas: number;
           concluidas: number;
@@ -1372,12 +1448,12 @@ async function handleLmsStats(
            c.carga_horaria_minutos,
            c.thumbnail_r2_key,
            c.created_at,
-           COUNT(m.id) AS total_matriculas,
-           ROUND(COALESCE(AVG(m.progresso_pct), 0), 0) AS progresso_medio_pct,
-           SUM(CASE WHEN m.status = 'CONCLUIDO' THEN 1 ELSE 0 END) AS concluidas,
+           COUNT(f.id) AS total_matriculas,
+           ROUND(COALESCE(AVG(CASE WHEN f.id IS NOT NULL THEN m.progresso_pct END), 0), 0) AS progresso_medio_pct,
+           SUM(CASE WHEN f.id IS NOT NULL AND m.status = 'CONCLUIDO' THEN 1 ELSE 0 END) AS concluidas,
            CASE
-             WHEN COUNT(m.id) = 0 THEN 0
-             ELSE ROUND(SUM(CASE WHEN m.status = 'CONCLUIDO' THEN 1.0 ELSE 0 END) / COUNT(m.id) * 100, 0)
+             WHEN COUNT(f.id) = 0 THEN 0
+             ELSE ROUND(SUM(CASE WHEN f.id IS NOT NULL AND m.status = 'CONCLUIDO' THEN 1.0 ELSE 0 END) / COUNT(f.id) * 100, 0)
            END AS taxa_conclusao_pct
          FROM lms_cursos c
          LEFT JOIN lms_matriculas m ON m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL
@@ -1386,7 +1462,8 @@ async function handleLmsStats(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1
+          AND ${employeeScope.clause}
+         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1${courseSectorScope.clause}
         GROUP BY c.id, c.titulo, c.tipo_conteudo, c.categoria, c.descricao, c.carga_horaria_minutos, c.thumbnail_r2_key, c.created_at
         ORDER BY
           CASE WHEN COUNT(f.id) > 0 THEN 0 ELSE 1 END,
@@ -1395,7 +1472,7 @@ async function handleLmsStats(
           c.created_at DESC
          LIMIT 5`,
         )
-        .bind(empresaId)
+        .bind(...employeeScope.bindings, empresaId, ...courseSectorScope.bindings)
         .all<{
           id: number;
           titulo: string;
@@ -1428,15 +1505,16 @@ async function handleLmsStats(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+          AND ${employeeScope.clause}
          WHERE m.empresa_id = ?
            AND m.deleted_at IS NULL
            AND m.status = 'EM_ANDAMENTO'
            AND m.progresso_pct < 10
-           AND m.data_matricula < datetime('now', '-14 days')
+           AND m.data_matricula < datetime('now', '-14 days')${courseSectorScope.clause}
          ORDER BY m.data_matricula ASC
          LIMIT 20`,
         )
-        .bind(empresaId)
+        .bind(...employeeScope.bindings, empresaId, ...courseSectorScope.bindings)
         .all<{
           id: number;
           funcionario_id: number;
@@ -1462,16 +1540,17 @@ async function handleLmsStats(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+          AND ${employeeScope.clause}
          INNER JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
          WHERE m.empresa_id = ?
            AND m.deleted_at IS NULL
            AND m.status = 'CONCLUIDO'
            AND m.data_conclusao IS NOT NULL
-           AND m.data_conclusao >= datetime('now', '-7 days')
+           AND m.data_conclusao >= datetime('now', '-7 days')${courseSectorScope.clause}
          ORDER BY m.data_conclusao DESC
          LIMIT 8`,
         )
-        .bind(empresaId)
+        .bind(...employeeScope.bindings, empresaId, ...courseSectorScope.bindings)
         .all<{
           id: number;
           funcionario_id: number;
@@ -1493,7 +1572,7 @@ async function handleLmsStats(
            c.thumbnail_r2_key,
            c.publicado,
            c.created_at,
-           COUNT(m.id) AS total_matriculas
+           COUNT(f.id) AS total_matriculas
          FROM lms_cursos c
          LEFT JOIN lms_matriculas m ON m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL
          LEFT JOIN funcionarios f
@@ -1501,12 +1580,13 @@ async function handleLmsStats(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1
+          AND ${employeeScope.clause}
+         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1${courseSectorScope.clause}
          GROUP BY c.id, c.titulo, c.tipo_conteudo, c.categoria, c.descricao, c.carga_horaria_minutos, c.thumbnail_r2_key, c.publicado, c.created_at
          ORDER BY COUNT(f.id) DESC, c.created_at DESC
          LIMIT 3`,
         )
-        .bind(empresaId)
+        .bind(...employeeScope.bindings, empresaId, ...courseSectorScope.bindings)
         .all<{
           id: number;
           titulo: string;
@@ -1571,6 +1651,8 @@ app.get('/:id{[0-9]+}', async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
 
+  const access = await getEmployeeSectorAccess(c, empresaId);
+
   const curso = await db
     .prepare(
       `
@@ -1597,6 +1679,22 @@ app.get('/:id{[0-9]+}', async (c) => {
     .first<Record<string, unknown>>();
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
+
+  // ── Sector scope check for restricted users ─────────────────────────
+  if (access.mode !== 'all') {
+    const courseSectorScope = buildCourseSetorScope(access, 'c');
+    const inScope = await db
+      .prepare(
+        `SELECT 1 as ok FROM lms_cursos c
+         WHERE c.id = ? AND c.empresa_id = ? AND c.deleted_at IS NULL
+         ${courseSectorScope.clause}`,
+      )
+      .bind(cursoId, empresaId, ...courseSectorScope.bindings)
+      .first();
+    if (!inScope) {
+      return c.json({ success: false, error: 'Acesso negado: curso fora do seu escopo de setor' }, 403);
+    }
+  }
 
   const setoresJson = curso.setores_json as string | null;
   const { setores_json: _, ...cursoRest } = curso;

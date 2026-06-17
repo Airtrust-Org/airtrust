@@ -125,35 +125,76 @@ export async function resolveEmployeeSectorAccess(
 
   if (isManagerRole(userRole)) {
     const hasUsuarioId = await tableHasColumn(db, 'setores_gestores', 'usuario_id');
+    const hasGestorId = await tableHasColumn(db, 'setores_gestores', 'gestor_id');
 
-    if (!hasUsuarioId) {
+    // If neither column exists, fail closed (empty scope)
+    if (!hasUsuarioId && !hasGestorId) {
       return { mode: 'restricted', setorIds: [], funcionarioId: null };
     }
 
-    const rows = await db
-      .prepare(
-        `SELECT DISTINCT sg.setor_id
-           FROM setores_gestores sg
-           INNER JOIN setores s
-             ON s.id = sg.setor_id
-            AND s.empresa_id = sg.empresa_id
-            AND s.deleted_at IS NULL
-            AND s.ativo = 1
-          WHERE sg.empresa_id = ?
-            AND sg.usuario_id = ?
-            AND sg.deleted_at IS NULL
-            AND sg.ativo = 1
-          ORDER BY sg.setor_id`,
-      )
-      .bind(empresaId, userId)
-      .all<{ setor_id: number }>();
+    let setorIds: number[] = [];
+
+    // Path 1: query by usuario_id (direct user FK, modern path)
+    if (hasUsuarioId) {
+      const rows = await db
+        .prepare(
+          `SELECT DISTINCT sg.setor_id
+             FROM setores_gestores sg
+             INNER JOIN setores s
+               ON s.id = sg.setor_id
+              AND s.empresa_id = sg.empresa_id
+              AND s.deleted_at IS NULL
+              AND s.ativo = 1
+            WHERE sg.empresa_id = ?
+              AND sg.usuario_id = ?
+              AND sg.deleted_at IS NULL
+              AND sg.ativo = 1
+            ORDER BY sg.setor_id`,
+        )
+        .bind(empresaId, userId)
+        .all<{ setor_id: number }>();
+
+      setorIds = (rows.results || [])
+        .map((row) => Number(row.setor_id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+    }
+
+    // Path 2: fallback via gestor_id → notificacoes_convocacao_cc_gestores.email → usuarios.id
+    if (setorIds.length === 0 && hasGestorId) {
+      const fallbackRows = await db
+        .prepare(
+          `SELECT DISTINCT sg.setor_id
+             FROM setores_gestores sg
+             INNER JOIN notificacoes_convocacao_cc_gestores g
+               ON g.id = sg.gestor_id
+              AND g.deleted_at IS NULL
+              AND g.ativo = 1
+             INNER JOIN usuarios u
+               ON LOWER(TRIM(u.email)) = LOWER(TRIM(g.email))
+              AND u.deleted_at IS NULL
+              AND u.id = ?
+             INNER JOIN setores s
+               ON s.id = sg.setor_id
+              AND s.empresa_id = sg.empresa_id
+              AND s.deleted_at IS NULL
+              AND s.ativo = 1
+            WHERE sg.empresa_id = ?
+              AND sg.deleted_at IS NULL
+              AND sg.ativo = 1
+            ORDER BY sg.setor_id`,
+        )
+        .bind(userId, empresaId)
+        .all<{ setor_id: number }>();
+
+      setorIds = (fallbackRows.results || [])
+        .map((row) => Number(row.setor_id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+    }
 
     return {
       mode: 'restricted',
       funcionarioId: null,
-      setorIds: (rows.results || [])
-        .map((row) => Number(row.setor_id))
-        .filter((id) => Number.isInteger(id) && id > 0),
+      setorIds,
     };
   }
 
