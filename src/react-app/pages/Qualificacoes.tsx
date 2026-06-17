@@ -371,6 +371,7 @@ export default function Qualificacoes() {
     undefined,
     ['PLANEJADA'],
     undefined,
+    undefined,
     shouldLoadPlannedRelatedHistorico,
   );
 
