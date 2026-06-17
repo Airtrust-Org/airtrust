@@ -2,6 +2,10 @@ import { Hono } from 'hono';
 import type { Env, ApiResponse } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
+import {
+  appendEmployeeSectorFilter,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import {
   tableHasColumn,
@@ -17,6 +21,10 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
   const db = c.env.DB;
   const id = parseInt(c.req.param('id'));
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scopeConditions: string[] = [];
+  const scopeBindings: unknown[] = [];
+  appendEmployeeSectorFilter(scopeConditions, scopeBindings, access, 'fd');
 
   if (isNaN(id)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -79,12 +87,13 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
                ON qh_current.certificado_arquivo_id = d.id
               AND qh_current.deleted_at IS NULL
              WHERE d.deleted_at IS NULL
+               AND ${scopeConditions.join(' AND ')}
                AND (
                  pv.id IS NOT NULL
                  OR (d.funcionario_id = ? AND d.id = ?)
                )
              ORDER BY d.created_at DESC, d.id DESC`
-          : `SELECT 
+          : `SELECT
                d.id,
                d.uuid,
                d.funcionario_id,
@@ -102,13 +111,14 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
               AND fd.empresa_id = ?
              LEFT JOIN qualificacoes_historico qh ON qh.certificado_arquivo_id = d.id
              WHERE d.deleted_at IS NULL
+               AND ${scopeConditions.join(' AND ')}
                AND d.id = ?
              ORDER BY d.created_at DESC, d.id DESC`,
       )
       .bind(
         ...(storageColumns.pastaVirtualHasCertificacaoId
-          ? [empresaId, id, context.historico.funcionario_id, certificadoId ?? 0]
-          : [empresaId, certificadoId ?? 0]),
+          ? [empresaId, ...scopeBindings, id, context.historico.funcionario_id, certificadoId ?? 0]
+          : [empresaId, ...scopeBindings, certificadoId ?? 0]),
       )
       .all<Documento>();
 
@@ -353,6 +363,10 @@ app.get('/funcionario/:id', auth(), async (c) => {
   const db = c.env.DB;
   const funcionarioId = parseInt(c.req.param('id'));
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scopeConditions: string[] = [];
+  const scopeBindings: unknown[] = [];
+  appendEmployeeSectorFilter(scopeConditions, scopeBindings, access, 'f');
 
   if (isNaN(funcionarioId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -361,7 +375,7 @@ app.get('/funcionario/:id', auth(), async (c) => {
   try {
     // Buscar documentos agrupados por categoria
     const query = `
-      SELECT 
+      SELECT
         d.id,
         d.uuid,
         d.nome_arquivo,
@@ -376,11 +390,12 @@ app.get('/funcionario/:id', auth(), async (c) => {
       INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
       WHERE d.funcionario_id = ?
         AND f.empresa_id = ?
+        AND ${scopeConditions.join(' AND ')}
         AND d.deleted_at IS NULL
       ORDER BY d.created_at DESC
     `;
 
-    const { results } = await db.prepare(query).bind(funcionarioId, empresaId).all();
+    const { results } = await db.prepare(query).bind(funcionarioId, empresaId, ...scopeBindings).all();
 
     const response: ApiResponse = {
       success: true,
@@ -422,6 +437,10 @@ app.get('/download/:id', auth(), async (c) => {
   const db = c.env.DB;
   const docId = parseInt(c.req.param('id'));
   const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scopeConditions: string[] = [];
+  const scopeBindings: unknown[] = [];
+  appendEmployeeSectorFilter(scopeConditions, scopeBindings, access, 'f');
 
   if (isNaN(docId)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
@@ -433,10 +452,10 @@ app.get('/download/:id', auth(), async (c) => {
       SELECT d.id, d.uuid, d.r2_key, d.nome_arquivo, d.funcionario_id
       FROM documentos d
       INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
-      WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ?
+      WHERE d.id = ? AND d.deleted_at IS NULL AND f.empresa_id = ? AND ${scopeConditions.join(' AND ')}
     `;
 
-    const doc = await db.prepare(query).bind(docId, empresaId).first();
+    const doc = await db.prepare(query).bind(docId, empresaId, ...scopeBindings).first();
 
     if (!doc) {
       return c.json({ success: false, error: 'Certificado não encontrado' }, 404);
