@@ -24,7 +24,11 @@ import {
 import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
-import { getEmployeeSectorAccess, appendEmployeeSectorFilter, assertFuncionarioInScope } from '../services/employee-sector-access';
+import {
+  assertFuncionarioInScope,
+  employeeSectorSql,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -529,7 +533,10 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
   const offset = (page - 1) * limit;
 
   const access = await getEmployeeSectorAccess(c, empresaId);
-  if (access.mode === 'restricted' && access.setorIds.length > 0) {
+  if (access.mode === 'restricted') {
+    if (access.setorIds.length === 0) {
+      throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+    }
     const setorPlaceholders = access.setorIds.map(() => '?').join(',');
     const sectorOk = await db
       .prepare(
@@ -550,6 +557,7 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
     if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
   }
 
+  const funcionarioScope = employeeSectorSql(access, 'fx');
   let where = `WHERE m.curso_id = ?
                  AND m.empresa_id = ?
                  AND m.deleted_at IS NULL
@@ -560,12 +568,9 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
                       AND fx.deleted_at IS NULL
                       AND COALESCE(fx.ativo, 1) = 1
                       AND UPPER(COALESCE(NULLIF(TRIM(fx.status), ''), 'ATIVO')) = 'ATIVO'
+                      AND ${funcionarioScope.clause}
                  )`;
-  const binds: (string | number)[] = [cursoId, empresaId];
-  if (access.mode === 'restricted' && access.setorIds.length > 0) {
-    where += ` AND f.setor_id IN (${access.setorIds.map(() => '?').join(',')})`;
-    binds.push(...access.setorIds);
-  }
+  const binds: (string | number)[] = [cursoId, empresaId, ...funcionarioScope.bindings];
   if (status) {
     where += ' AND m.status = ?';
     binds.push(status);
@@ -718,7 +723,7 @@ app.post('/', async (c) => {
 
   if (canManage) {
     const access = await getEmployeeSectorAccess(c, empresaId);
-    if (access.mode === 'restricted' && access.setorIds.length > 0) {
+    if (access.mode === 'restricted') {
       // Verificar escopo setorial: funcionário pertence aos setores do gestor
       await assertFuncionarioInScope(db, empresaId, funcionario_id, access);
     }
@@ -954,7 +959,10 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
 
   const loteAccess = await getEmployeeSectorAccess(c, empresaId);
-  if (loteAccess.mode === 'restricted' && loteAccess.setorIds.length > 0) {
+  if (loteAccess.mode === 'restricted') {
+    if (loteAccess.setorIds.length === 0) {
+      throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+    }
     const loteSetorPlaceholders = loteAccess.setorIds.map(() => '?').join(',');
     const sectorOk = await db
       .prepare(
@@ -984,7 +992,7 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
           AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
           AND id IN (${funcionarioPlaceholders})`;
   const funcionarioBinds: (number | string)[] = [empresaId, ...funcionarioIdsUnicos];
-  if (loteAccess.mode === 'restricted' && loteAccess.setorIds.length > 0) {
+  if (loteAccess.mode === 'restricted') {
     funcionarioQuery += ` AND setor_id IN (${loteAccess.setorIds.map(() => '?').join(',')})`;
     funcionarioBinds.push(...loteAccess.setorIds);
   }
