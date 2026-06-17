@@ -40,6 +40,7 @@ import {
   QUALIFICACAO_STATUS,
   sqlStatusEqualsAny,
 } from '../../lib/status/status-codes';
+import { getCertificadosStorageColumns } from '../qualificacoes-certificados-helpers';
 import writeRouter from './historico-write';
 
 const router = new Hono<{ Bindings: Env }>();
@@ -189,6 +190,7 @@ router.get(
       parseRequestedSetorIds(setor_id, setor_ids),
       access,
     );
+    const storageColumns = await getCertificadosStorageColumns(db);
 
     const conditions: string[] = [
       'f.id IS NOT NULL',
@@ -388,6 +390,25 @@ router.get(
     }
 
     // DADOS PAGINADOS
+    const fallbackCertificadoDocIdExpr = storageColumns.pastaVirtualHasCertificacaoId
+      ? `(SELECT pv_doc.id
+            FROM pasta_virtual pv_cert
+            INNER JOIN documentos pv_doc
+              ON pv_doc.r2_key = pv_cert.caminho_arquivo
+             AND pv_doc.funcionario_id = qh.funcionario_id
+             AND pv_doc.deleted_at IS NULL
+           WHERE pv_cert.certificacao_id = qh.id
+             AND pv_cert.funcionario_id = qh.funcionario_id
+             ${storageColumns.pastaVirtualHasEmpresaId ? 'AND pv_cert.empresa_id = f.empresa_id' : ''}
+             AND pv_cert.deleted_at IS NULL
+           ORDER BY COALESCE(pv_doc.created_at, pv_cert.created_at) DESC, pv_doc.id DESC
+           LIMIT 1)`
+      : 'NULL';
+    const fallbackCertificadoExistsExpr =
+      storageColumns.pastaVirtualHasCertificacaoId
+        ? `${fallbackCertificadoDocIdExpr} IS NOT NULL`
+        : '0 = 1';
+
     const dataQuery = `SELECT 
       qh.id,
       qh.funcionario_id,
@@ -427,9 +448,14 @@ router.get(
       qh.created_at,
       qh.updated_at,
       qh.certificado_arquivo_id,
-      CASE WHEN cert_doc.id IS NOT NULL THEN 1 ELSE 0 END AS tem_certificado,
+      CASE
+        WHEN cert_doc.id IS NOT NULL THEN 1
+        WHEN ${fallbackCertificadoExistsExpr} THEN 1
+        ELSE 0
+      END AS tem_certificado,
       CASE
         WHEN cert_doc.id IS NOT NULL THEN COALESCE(qh.arquivo_url, '/api/pasta-virtual/stream/' || cert_doc.id)
+        WHEN ${fallbackCertificadoExistsExpr} THEN '/api/pasta-virtual/stream/' || ${fallbackCertificadoDocIdExpr}
         ELSE NULL
       END AS certificado_url,
       qc.cor AS categoria_cor,

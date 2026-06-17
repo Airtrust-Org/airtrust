@@ -9,6 +9,7 @@ import type { Env, ApiResponse } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { gerarNomeArquivoPadronizado } from '../utils/nomenclatura-padronizada';
 import { type CertificadoData } from '../services/pdf-generator';
 import { htmlToPdf, processTemplateWithQR } from '../services/html-to-pdf';
@@ -18,6 +19,7 @@ import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import {
   adaptTemplateHtmlForInstrutor,
   adaptTemplateHtmlForSinglePageA4,
+  assertScopedHistoricoAccess,
   tableHasColumn,
   normalizeTipoTreinamento,
   resolveCargaHorariaCertificado,
@@ -911,15 +913,29 @@ app.post(
     const db = c.env.DB;
     const bucket = c.env.BUCKET;
     const id = parseInt(c.req.param('id'));
+    const empresaId = getEmpresaId(c);
 
     if (isNaN(id)) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
     }
 
+    let uploadedR2Key: string | null = null;
+    let documentoId: number | null = null;
+    let funcionarioId: number | null = null;
+    let storageColumns:
+      | Awaited<ReturnType<typeof getCertificadosStorageColumns>>
+      | null = null;
+
     try {
+      const access = await getEmployeeSectorAccess(c, empresaId);
+      const scopedHistorico = await assertScopedHistoricoAccess(db, {
+        historicoId: id,
+        empresaId,
+        access,
+      });
       const { historico, nomeFuncionario, cpf, codigo } = await resolveCertificadoContext(db, id);
-      const storageColumns = await getCertificadosStorageColumns(db);
-      const empresaId = getEmpresaId(c);
+      storageColumns = await getCertificadosStorageColumns(db);
+      funcionarioId = scopedHistorico.funcionario_id;
       await backfillCertificadoAtualNaPastaVirtual(db, storageColumns, {
         historicoId: id,
         funcionarioId: historico.funcionario_id,
@@ -1038,6 +1054,7 @@ app.post(
           hash_sha256: hash,
         },
       });
+      uploadedR2Key = r2Key;
 
       const result = await db
         .prepare(
@@ -1081,39 +1098,72 @@ app.post(
         )
         .run();
 
-      const documentoId = result.meta.last_row_id;
-      console.log(`✅ [UPLOAD CERT] Certificado salvo: ID ${documentoId}`);
-
-      // ✅ INSERIR na pasta_virtual para exibir na UI e manter histórico de múltiplos certificados
-      try {
-        await insertCertificadoNaPastaVirtual(db, storageColumns, {
-          funcionarioId: historico.funcionario_id,
-          documentoId: Number(documentoId),
-          historicoId: id,
-          empresaId,
-          r2Key,
-          nomeArquivo,
-          descricao: `Certificado ${codigo} - ${nomeFuncionario}`,
-        });
-        console.log('✅ [UPLOAD CERT] Certificado inserido na pasta_virtual');
-      } catch (e) {
-        console.error('❌ [UPLOAD CERT] Erro ao inserir na pasta_virtual:', e);
-        // Não falhar o processo todo por isso
+      documentoId = Number(result.meta.last_row_id || 0);
+      if (Number(result.meta.changes || 0) !== 1 || !documentoId) {
+        throw new Error('Falha ao registrar documento do certificado no tenant');
       }
 
-      // ✅ LINK certificado_arquivo_id ao historico
+      console.log(`✅ [UPLOAD CERT] Certificado salvo: ID ${documentoId}`);
+
+      await insertCertificadoNaPastaVirtual(db, storageColumns, {
+        funcionarioId: historico.funcionario_id,
+        documentoId,
+        historicoId: id,
+        empresaId,
+        r2Key,
+        nomeArquivo,
+        descricao: `Certificado ${codigo} - ${nomeFuncionario}`,
+      });
+      console.log('✅ [UPLOAD CERT] Certificado inserido na pasta_virtual');
+
       const numeroCertificado = nomeArquivo.replace('.pdf', '');
-      await db
+      const updateResult = await db
         .prepare(
           `UPDATE qualificacoes_historico
            SET certificado_arquivo_id = ?,
                arquivo_url = ?,
                numero_certificado = ?,
                updated_at = datetime('now')
-           WHERE id = ?`,
+           WHERE id = ?
+             AND empresa_id = ?
+             AND deleted_at IS NULL`,
         )
-        .bind(documentoId, `/api/pasta-virtual/stream/${documentoId}`, numeroCertificado, id)
+        .bind(
+          documentoId,
+          `/api/pasta-virtual/stream/${documentoId}`,
+          numeroCertificado,
+          id,
+          empresaId,
+        )
         .run();
+
+      if (Number(updateResult.meta.changes || 0) !== 1) {
+        throw new Error('Falha ao vincular o certificado principal ao histórico do tenant');
+      }
+
+      const visibleAfterUpload = await db
+        .prepare(
+          `SELECT d.id
+             FROM qualificacoes_historico qh
+             INNER JOIN funcionarios f
+               ON f.id = qh.funcionario_id
+              AND f.empresa_id = ?
+              AND f.deleted_at IS NULL
+             INNER JOIN documentos d
+               ON d.id = qh.certificado_arquivo_id
+              AND d.deleted_at IS NULL
+            WHERE qh.id = ?
+              AND qh.empresa_id = ?
+              AND qh.deleted_at IS NULL
+              AND d.id = ?
+            LIMIT 1`,
+        )
+        .bind(empresaId, id, empresaId, documentoId)
+        .first<{ id: number }>();
+
+      if (!visibleAfterUpload?.id) {
+        throw new Error('Upload concluído, mas o certificado não ficou visível após o vínculo');
+      }
 
       console.log(`✅ [UPLOAD CERT] Linked documento ${documentoId} to historico ${id}`);
 
@@ -1139,7 +1189,104 @@ app.post(
 
       return c.json(response, 201);
     } catch (error) {
+      if (documentoId && storageColumns) {
+        try {
+          await db
+            .prepare(
+              storageColumns.documentosHasEmpresaId
+                ? `UPDATE documentos
+                     SET deleted_at = datetime('now'),
+                         updated_at = datetime('now')
+                   WHERE id = ?
+                     AND empresa_id = ?
+                     AND deleted_at IS NULL`
+                : `UPDATE documentos
+                     SET deleted_at = datetime('now'),
+                         updated_at = datetime('now')
+                   WHERE id = ?
+                     AND deleted_at IS NULL`,
+            )
+            .bind(
+              ...(storageColumns.documentosHasEmpresaId
+                ? [documentoId, empresaId]
+                : [documentoId]),
+            )
+            .run();
+        } catch (cleanupError) {
+          console.error('[UPLOAD CERT] Falha ao reverter documento após erro:', cleanupError);
+        }
+
+        try {
+          if (funcionarioId && uploadedR2Key) {
+            const filters = [
+              'funcionario_id = ?',
+              'caminho_arquivo = ?',
+              'deleted_at IS NULL',
+            ];
+            const bindings: Array<number | string> = [funcionarioId, uploadedR2Key];
+
+            if (storageColumns.pastaVirtualHasCertificacaoId) {
+              filters.push('certificacao_id = ?');
+              bindings.push(id);
+            }
+
+            if (storageColumns.pastaVirtualHasEmpresaId) {
+              filters.push('empresa_id = ?');
+              bindings.push(empresaId);
+            }
+
+            await db
+              .prepare(
+                `UPDATE pasta_virtual
+                    SET deleted_at = datetime('now'),
+                        updated_at = datetime('now')
+                  WHERE ${filters.join(' AND ')}`,
+              )
+              .bind(...bindings)
+              .run();
+          }
+        } catch (cleanupError) {
+          console.error('[UPLOAD CERT] Falha ao reverter pasta_virtual após erro:', cleanupError);
+        }
+      }
+
+      if (uploadedR2Key) {
+        try {
+          await bucket.delete(uploadedR2Key);
+        } catch (cleanupError) {
+          console.error('[UPLOAD CERT] Falha ao remover objeto R2 após erro:', cleanupError);
+        }
+      }
+
       console.error('[UPLOAD CERT] Erro:', error);
+      const rawStatus =
+        typeof (error as { status?: unknown }).status === 'number'
+          ? Number((error as { status: number }).status)
+          : typeof (error as { statusCode?: unknown }).statusCode === 'number'
+            ? Number((error as { statusCode: number }).statusCode)
+            : null;
+      const handledStatus =
+        rawStatus && rawStatus >= 400 && rawStatus < 500 ? rawStatus : null;
+      const handledCode =
+        typeof (error as { code?: unknown }).code === 'string'
+          ? String((error as { code: string }).code)
+          : undefined;
+      const handledMessage =
+        typeof (error as { message?: unknown }).message === 'string'
+          ? String((error as { message: string }).message)
+          : 'Erro ao fazer upload do certificado';
+
+      if (handledStatus && handledStatus >= 400 && handledStatus < 500) {
+        return c.json(
+          {
+            success: false,
+            error: handledMessage,
+            code: handledCode,
+          },
+          handledStatus as 400 | 403 | 404,
+        );
+      }
+
       return c.json(
         {
           success: false,

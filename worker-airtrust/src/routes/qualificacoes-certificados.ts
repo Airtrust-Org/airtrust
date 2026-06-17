@@ -2,12 +2,10 @@ import { Hono } from 'hono';
 import type { Env, ApiResponse } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
-import {
-  appendEmployeeSectorFilter,
-  getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import {
+  assertScopedHistoricoAccess,
   tableHasColumn,
   type Documento,
   getCertificadosStorageColumns,
@@ -21,28 +19,19 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
   const db = c.env.DB;
   const id = parseInt(c.req.param('id'));
   const empresaId = getEmpresaId(c);
-  const access = await getEmployeeSectorAccess(c, empresaId);
-  const scopeConditions: string[] = [];
-  const scopeBindings: unknown[] = [];
-  appendEmployeeSectorFilter(scopeConditions, scopeBindings, access, 'fd');
 
   if (isNaN(id)) {
     return c.json({ success: false, error: 'ID inválido' }, 400);
   }
 
   try {
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    await assertScopedHistoricoAccess(db, {
+      historicoId: id,
+      empresaId,
+      access,
+    });
     const context = await resolveCertificadoContext(db, id);
-
-    // Verificar que a qualificação pertence à empresa do usuário autenticado
-    const ownership = await db
-      .prepare(
-        `SELECT f.empresa_id FROM qualificacoes_historico qh JOIN funcionarios f ON f.id = qh.funcionario_id WHERE qh.id = ? AND qh.deleted_at IS NULL LIMIT 1`,
-      )
-      .bind(id)
-      .first<{ empresa_id: number }>();
-    if (!ownership || ownership.empresa_id !== empresaId) {
-      return c.json({ success: false, error: 'Qualificação não encontrada' }, 404);
-    }
 
     console.log(
       `[LISTAR CERTIFICADOS] historico_id=${id}, funcionario_id=${context.historico.funcionario_id}, codigo=${context.codigo}`,
@@ -78,6 +67,7 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
              LEFT JOIN pasta_virtual pv
                ON pv.certificacao_id = ?
               AND pv.deleted_at IS NULL
+              ${storageColumns.pastaVirtualHasEmpresaId ? 'AND pv.empresa_id = ?' : ''}
               AND pv.funcionario_id = d.funcionario_id
               AND pv.caminho_arquivo = d.r2_key
              LEFT JOIN qualificacoes_historico qh_link
@@ -87,7 +77,6 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
                ON qh_current.certificado_arquivo_id = d.id
               AND qh_current.deleted_at IS NULL
              WHERE d.deleted_at IS NULL
-               AND ${scopeConditions.join(' AND ')}
                AND (
                  pv.id IS NOT NULL
                  OR (d.funcionario_id = ? AND d.id = ?)
@@ -111,14 +100,19 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
               AND fd.empresa_id = ?
              LEFT JOIN qualificacoes_historico qh ON qh.certificado_arquivo_id = d.id
              WHERE d.deleted_at IS NULL
-               AND ${scopeConditions.join(' AND ')}
                AND d.id = ?
              ORDER BY d.created_at DESC, d.id DESC`,
       )
       .bind(
         ...(storageColumns.pastaVirtualHasCertificacaoId
-          ? [empresaId, ...scopeBindings, id, context.historico.funcionario_id, certificadoId ?? 0]
-          : [empresaId, ...scopeBindings, certificadoId ?? 0]),
+          ? [
+              empresaId,
+              id,
+              ...(storageColumns.pastaVirtualHasEmpresaId ? [empresaId] : []),
+              context.historico.funcionario_id,
+              certificadoId ?? 0,
+            ]
+          : [empresaId, certificadoId ?? 0]),
       )
       .all<Documento>();
 
@@ -139,16 +133,11 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
                   numero_certificado = NULL,
                   updated_at = datetime('now')
             WHERE id = ?
-              AND certificado_arquivo_id = ?
-              AND EXISTS (
-                SELECT 1
-                FROM funcionarios f
-                WHERE f.id = qualificacoes_historico.funcionario_id
-                  AND f.empresa_id = ?
-                  AND f.deleted_at IS NULL
-              )`,
+              AND empresa_id = ?
+              AND deleted_at IS NULL
+              AND certificado_arquivo_id = ?`,
         )
-        .bind(id, certificadoId, empresaId)
+        .bind(id, empresaId, certificadoId)
         .run();
       if (!storageColumns.pastaVirtualHasCertificacaoId) {
         return c.json({ success: true, data: [] });
@@ -167,6 +156,34 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
     return c.json(response);
   } catch (error) {
     console.error('[LISTAR CERTIFICADOS] Erro:', error);
+    const rawStatus =
+      typeof (error as { status?: unknown }).status === 'number'
+        ? Number((error as { status: number }).status)
+        : typeof (error as { statusCode?: unknown }).statusCode === 'number'
+          ? Number((error as { statusCode: number }).statusCode)
+          : null;
+    const handledStatus =
+      rawStatus && rawStatus >= 400 && rawStatus < 500 ? rawStatus : null;
+    const handledCode =
+      typeof (error as { code?: unknown }).code === 'string'
+        ? String((error as { code: string }).code)
+        : undefined;
+    const handledMessage =
+      typeof (error as { message?: unknown }).message === 'string'
+        ? String((error as { message: string }).message)
+        : 'Erro ao listar certificados';
+
+    if (handledStatus && handledStatus >= 400 && handledStatus < 500) {
+      return c.json(
+        {
+          success: false,
+          error: handledMessage,
+          code: handledCode,
+        },
+        handledStatus as 400 | 403 | 404,
+      );
+    }
+
     return c.json(
       {
         success: false,
