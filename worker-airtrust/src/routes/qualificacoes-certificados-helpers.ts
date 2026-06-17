@@ -3,6 +3,11 @@
  * de qualificacoes-certificados.
  */
 import type { D1Database } from '@cloudflare/workers-types';
+import { notFound } from '../middleware/error-handler';
+import {
+  assertFuncionarioInScope,
+  type EmployeeSectorAccess,
+} from '../services/employee-sector-access';
 
 // ─── Tipos locais ────────────────────────────────────────────────────────────
 
@@ -53,6 +58,12 @@ type FuncionarioLookupRow = {
   codigo_anac?: string | null;
   matricula?: string | null;
   funcao?: string | null;
+};
+
+type ScopedHistoricoAccessRow = {
+  id: number;
+  funcionario_id: number;
+  empresa_id: number;
 };
 
 // ─── Helpers de formatação ───────────────────────────────────────────────────
@@ -220,6 +231,40 @@ export async function getCertificadosStorageColumns(
     pastaVirtualHasEmpresaId,
     documentosHasEmpresaId,
   };
+}
+
+export async function assertScopedHistoricoAccess(
+  db: D1Database,
+  params: {
+    historicoId: number;
+    empresaId: number;
+    access?: EmployeeSectorAccess | null;
+  },
+): Promise<ScopedHistoricoAccessRow> {
+  const historico = await db
+    .prepare(
+      `SELECT qh.id, qh.funcionario_id, f.empresa_id
+         FROM qualificacoes_historico qh
+         INNER JOIN funcionarios f
+           ON f.id = qh.funcionario_id
+          AND f.deleted_at IS NULL
+        WHERE qh.id = ?
+          AND qh.deleted_at IS NULL
+          AND f.empresa_id = ?
+        LIMIT 1`,
+    )
+    .bind(params.historicoId, params.empresaId)
+    .first<ScopedHistoricoAccessRow>();
+
+  if (!historico) {
+    notFound('Qualificação não encontrada', 'QUALIFICACAO_NOT_FOUND');
+  }
+
+  if (params.access) {
+    await assertFuncionarioInScope(db, params.empresaId, historico.funcionario_id, params.access);
+  }
+
+  return historico;
 }
 
 export async function insertCertificadoNaPastaVirtual(

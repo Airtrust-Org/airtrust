@@ -212,6 +212,19 @@ function createMockEnv() {
           return null;
         }
 
+        if (query.includes('SELECT qh.id, qh.funcionario_id, f.empresa_id')) {
+          const historicoId = Number(args[0]);
+          const empresaId = Number(args[1]);
+          const historico = historicos.find((row) => row.id === historicoId && !row.deleted_at);
+          return historico && historico.empresa_id === empresaId
+            ? {
+                id: historico.id,
+                funcionario_id: historico.funcionario_id,
+                empresa_id: historico.empresa_id,
+              }
+            : null;
+        }
+
         if (query.includes('qt.nome as qualificacao_nome')) {
           const historicoId = Number(args[0]);
           const historico = historicos.find((row) => row.id === historicoId && !row.deleted_at);
@@ -572,7 +585,7 @@ describe('documentos tenant isolation', () => {
     expect(response.status).toBe(200);
     expect(body.data).toEqual([]);
     expect(runs).toHaveLength(1);
-    expect(runs[0].args).toEqual([701, 202, 1]);
+    expect(runs[0].args).toEqual([701, 1, 202]);
     expect(bucket.get).not.toHaveBeenCalled();
     expect(bucket.put).not.toHaveBeenCalled();
     expect(bucket.delete).not.toHaveBeenCalled();
