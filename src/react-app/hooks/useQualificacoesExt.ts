@@ -4,7 +4,7 @@
  */
 
 import { useApi } from './useApi';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { hasActiveCertificateFlag } from '@/react-app/utils/certificadoStatus';
@@ -191,126 +191,144 @@ export function useQualificacoesHistorico(
     [carregarHistorico],
   );
 
-  // Extrai o array de histórico de forma segura
-  const historicoRaw: HistoricoQualificacao[] = Array.isArray(data)
-    ? (data as unknown as HistoricoQualificacao[])
-    : Array.isArray(data?.data)
-      ? (data.data as HistoricoQualificacao[])
-      : [];
+  // Extrai e normaliza o array de histórico apenas quando o payload muda. Sem
+  // isso, a página recria listas a cada render e efeitos dependentes entram em
+  // cascata em bases grandes.
+  const historicoRaw: HistoricoQualificacao[] = useMemo(() => {
+    if (Array.isArray(data)) {
+      return data as unknown as HistoricoQualificacao[];
+    }
+    if (Array.isArray(data?.data)) {
+      return data.data as HistoricoQualificacao[];
+    }
+    return [];
+  }, [data]);
 
-  // Enriquecer com status calculado
-  const today = new Date().toISOString().split('T')[0];
-  const d30 = new Date();
-  d30.setDate(d30.getDate() + 30);
-  const today30 = d30.toISOString().split('T')[0];
-  const STATUS_NORMALIZADOS = new Set([
-    'VALIDA',
-    'VENCIDA',
-    'VENCENDO_30',
-    'RENOVADA',
-    'PLANEJADA',
-    'CANCELADA',
-    'INDEFINIDA',
-    'INDETERMINADA',
-  ]);
+  const historico: HistoricoQualificacao[] = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const d30 = new Date();
+    d30.setDate(d30.getDate() + 30);
+    const today30 = d30.toISOString().split('T')[0];
+    const statusNormalizados = new Set([
+      'VALIDA',
+      'VENCIDA',
+      'VENCENDO_30',
+      'RENOVADA',
+      'PLANEJADA',
+      'CANCELADA',
+      'INDEFINIDA',
+      'INDETERMINADA',
+    ]);
 
-  const historico: HistoricoQualificacao[] = historicoRaw.map((h) => {
-    const temCertificadoAtivo =
-      Boolean(h.certificado_url) && hasActiveCertificateFlag(h.tem_certificado);
+    return historicoRaw.map((h) => {
+      const temCertificadoAtivo =
+        Boolean(h.certificado_url) && hasActiveCertificateFlag(h.tem_certificado);
 
-    const statusPersistidoRaw = String(h.status || h.qualificacao_status || '')
-      .trim()
-      .toUpperCase();
-    const statusPersistido =
-      statusPersistidoRaw === 'PROXIMA_VENCIMENTO' ? 'VENCENDO_30' : statusPersistidoRaw;
+      const statusPersistidoRaw = String(h.status || h.qualificacao_status || '')
+        .trim()
+        .toUpperCase();
+      const statusPersistido =
+        statusPersistidoRaw === 'PROXIMA_VENCIMENTO' ? 'VENCENDO_30' : statusPersistidoRaw;
 
-    // Fonte de verdade: se backend já classificou status conhecido, preservar.
-    if (STATUS_NORMALIZADOS.has(statusPersistido)) {
+      // Fonte de verdade: se backend já classificou status conhecido, preservar.
+      if (statusNormalizados.has(statusPersistido)) {
+        return {
+          ...h,
+          qualificacao_status: statusPersistido || null,
+          tem_certificado: temCertificadoAtivo ? 1 : 0,
+          certificado_url: temCertificadoAtivo ? h.certificado_url : null,
+          status: statusPersistido,
+        };
+      }
+
+      // Fallback para bases antigas sem status derivado no backend.
+      if (h.renovada === 1 || statusPersistido === 'RENOVADA') {
+        return {
+          ...h,
+          qualificacao_status: statusPersistido || 'RENOVADA',
+          tem_certificado: temCertificadoAtivo ? 1 : 0,
+          certificado_url: temCertificadoAtivo ? h.certificado_url : null,
+          status: 'RENOVADA',
+        };
+      }
+
+      // PRIORIDADE 2: Calcular status baseado em vencimento
+      if (!h.data_vencimento) {
+        return {
+          ...h,
+          qualificacao_status: statusPersistido || null,
+          tem_certificado: temCertificadoAtivo ? 1 : 0,
+          certificado_url: temCertificadoAtivo ? h.certificado_url : null,
+          status: 'INDETERMINADA',
+        };
+      }
+      const dataVenc = String(h.data_vencimento || '')
+        .trim()
+        .slice(0, 10);
+      if (!dataVenc || dataVenc.length !== 10) {
+        return {
+          ...h,
+          qualificacao_status: statusPersistido || null,
+          tem_certificado: temCertificadoAtivo ? 1 : 0,
+          certificado_url: temCertificadoAtivo ? h.certificado_url : null,
+          status: 'INDETERMINADA',
+        };
+      }
+      let status: string;
+      if (dataVenc < today) status = 'VENCIDA';
+      else if (dataVenc <= today30) status = 'VENCENDO_30';
+      else status = 'VALIDA';
+
       return {
         ...h,
         qualificacao_status: statusPersistido || null,
         tem_certificado: temCertificadoAtivo ? 1 : 0,
         certificado_url: temCertificadoAtivo ? h.certificado_url : null,
-        status: statusPersistido,
+        status,
       };
-    }
-
-    // Fallback para bases antigas sem status derivado no backend.
-    if (h.renovada === 1 || statusPersistido === 'RENOVADA') {
-      return {
-        ...h,
-        qualificacao_status: statusPersistido || 'RENOVADA',
-        tem_certificado: temCertificadoAtivo ? 1 : 0,
-        certificado_url: temCertificadoAtivo ? h.certificado_url : null,
-        status: 'RENOVADA',
-      };
-    }
-
-    // PRIORIDADE 2: Calcular status baseado em vencimento
-    if (!h.data_vencimento) {
-      return {
-        ...h,
-        qualificacao_status: statusPersistido || null,
-        tem_certificado: temCertificadoAtivo ? 1 : 0,
-        certificado_url: temCertificadoAtivo ? h.certificado_url : null,
-        status: 'INDETERMINADA',
-      };
-    }
-    const dataVenc = String(h.data_vencimento || '')
-      .trim()
-      .slice(0, 10);
-    if (!dataVenc || dataVenc.length !== 10) {
-      return {
-        ...h,
-        qualificacao_status: statusPersistido || null,
-        tem_certificado: temCertificadoAtivo ? 1 : 0,
-        certificado_url: temCertificadoAtivo ? h.certificado_url : null,
-        status: 'INDETERMINADA',
-      };
-    }
-    let status: string;
-    if (dataVenc < today) status = 'VENCIDA';
-    else if (dataVenc <= today30) status = 'VENCENDO_30';
-    else status = 'VALIDA';
-
-    return {
-      ...h,
-      qualificacao_status: statusPersistido || null,
-      tem_certificado: temCertificadoAtivo ? 1 : 0,
-      certificado_url: temCertificadoAtivo ? h.certificado_url : null,
-      status,
-    };
-  });
+    });
+  }, [historicoRaw]);
 
   const meta = data?.meta;
   const apiStats = data?.stats;
 
   // Calcular stats localmente (mais rápido que chamada extra à API)
-  const statsLocal = {
-    total: historico.length,
-    validas: historico.filter((q) => q.status === 'VALIDA').length,
-    vencendo: historico.filter((q) => q.status === 'VENCENDO_30').length,
-    vencidas: historico.filter((q) => q.status === 'VENCIDA').length,
-    renovadas: historico.filter((q) => q.renovada === 1 || q.status === 'RENOVADA').length,
-  };
+  const statsLocal = useMemo(
+    () =>
+      historico.reduce(
+        (acc, q) => {
+          acc.total += 1;
+          if (q.status === 'VALIDA') acc.validas += 1;
+          if (q.status === 'VENCENDO_30') acc.vencendo += 1;
+          if (q.status === 'VENCIDA') acc.vencidas += 1;
+          if (q.renovada === 1 || q.status === 'RENOVADA') acc.renovadas += 1;
+          return acc;
+        },
+        { total: 0, validas: 0, vencendo: 0, vencidas: 0, renovadas: 0 },
+      ),
+    [historico],
+  );
 
-  const stats =
-    apiStats && typeof apiStats.total === 'number'
-      ? {
-          total: Number(apiStats.total || 0),
-          validas: Number(apiStats.validas || 0),
-          vencendo: Number(apiStats.vencendo || 0),
-          vencidas: Number(apiStats.vencidas || 0),
-          renovadas:
-            typeof apiStats.renovadas === 'number'
-              ? Number(apiStats.renovadas || 0)
-              : statsLocal.renovadas,
-          planejadas:
-            typeof (apiStats as { planejadas?: unknown }).planejadas === 'number'
-              ? Number((apiStats as { planejadas?: number }).planejadas || 0)
-              : 0,
-        }
-      : { ...statsLocal, planejadas: 0 };
+  const stats = useMemo(
+    () =>
+      apiStats && typeof apiStats.total === 'number'
+        ? {
+            total: Number(apiStats.total || 0),
+            validas: Number(apiStats.validas || 0),
+            vencendo: Number(apiStats.vencendo || 0),
+            vencidas: Number(apiStats.vencidas || 0),
+            renovadas:
+              typeof apiStats.renovadas === 'number'
+                ? Number(apiStats.renovadas || 0)
+                : statsLocal.renovadas,
+            planejadas:
+              typeof (apiStats as { planejadas?: unknown }).planejadas === 'number'
+                ? Number((apiStats as { planejadas?: number }).planejadas || 0)
+                : 0,
+          }
+        : { ...statsLocal, planejadas: 0 },
+    [apiStats, statsLocal],
+  );
 
   return {
     historico,
