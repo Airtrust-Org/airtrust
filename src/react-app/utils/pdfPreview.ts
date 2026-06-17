@@ -192,19 +192,41 @@ function renderErrorState(previewWindow: Window, title: string, message: string)
   previewWindow.document.close();
 }
 
-function renderPdfPreview(
+type PreviewRendererWindow = Window & {
+  __pdfError?: (message?: string) => void;
+  __renderPdf?: (buffer: ArrayBuffer, mimeType: string, fileName: string) => void;
+};
+
+function hasPreviewRenderer(previewWindow: Window): previewWindow is PreviewRendererWindow {
+  const candidate = previewWindow as PreviewRendererWindow;
+  return (
+    typeof candidate.__renderPdf === 'function' && typeof candidate.__pdfError === 'function'
+  );
+}
+
+async function waitForPreviewRenderer(previewWindow: Window, timeoutMs = 1_500): Promise<void> {
+  const startedAt = Date.now();
+
+  while (!previewWindow.closed && Date.now() - startedAt < timeoutMs) {
+    if (hasPreviewRenderer(previewWindow)) return;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 25));
+  }
+
+  throw new Error('A janela de preview não ficou pronta a tempo');
+}
+
+async function renderPdfPreview(
   previewWindow: Window,
   buffer: ArrayBuffer,
   mimeType: string,
   fileName: string,
-): void {
+): Promise<void> {
   // Delegates to __renderPdf which was injected into the preview window's own
   // document by renderLoadingState. Running inside the child window's script context
   // means new Blob(), URL.createObjectURL(), and iframe.src are all scoped to the
   // same document, eliminating every cross-window blob-ownership issue.
-  (
-    previewWindow as unknown as Record<string, (b: ArrayBuffer, m: string, f: string) => void>
-  )['__renderPdf'](buffer, mimeType, fileName);
+  await waitForPreviewRenderer(previewWindow);
+  (previewWindow as PreviewRendererWindow).__renderPdf?.(buffer, mimeType, fileName);
 }
 
 interface PdfPreviewOptions {
@@ -220,8 +242,22 @@ interface PdfPreviewOptions {
  * Opens a blank preview window synchronously (before any async work).
  * Pass the returned reference as `existingWindow` to previewPdfBeforeDownload.
  */
-export function openPreviewWindow(): Window | null {
-  return window.open('', '_blank');
+export function openPreviewWindow(title = 'Visualizacao de PDF'): Window | null {
+  const previewWindow = window.open('', '_blank');
+  if (previewWindow) {
+    renderLoadingState(previewWindow, title);
+  }
+  return previewWindow;
+}
+
+export function showPdfPreviewError(
+  previewWindow: Window | null | undefined,
+  title: string,
+  message: string,
+): void {
+  if (previewWindow && !previewWindow.closed) {
+    renderErrorState(previewWindow, title, message);
+  }
 }
 
 export async function previewPdfBeforeDownload({
@@ -233,6 +269,8 @@ export async function previewPdfBeforeDownload({
 }: PdfPreviewOptions): Promise<void> {
   const previewTitle = title || fileName || 'Visualizacao de PDF';
   const previewWindow = existingWindow ?? window.open('', '_blank');
+  let downloadedFallback = false;
+  let pdfBlob: Blob | null = null;
 
   if (previewWindow) {
     renderLoadingState(previewWindow, previewTitle);
@@ -246,6 +284,7 @@ export async function previewPdfBeforeDownload({
 
     const responseMimeType = response.headers.get('content-type') || mimeType || '';
     const blob = await response.blob();
+    pdfBlob = blob;
     const blobMimeType = blob.type || responseMimeType;
 
     if (!isPdfFile(fileName, blobMimeType)) {
@@ -264,7 +303,7 @@ export async function previewPdfBeforeDownload({
     const effectiveMime = blobMimeType || 'application/pdf';
 
     if (previewWindow && !previewWindow.closed) {
-      renderPdfPreview(previewWindow, arrayBuffer, effectiveMime, fileName);
+      await renderPdfPreview(previewWindow, arrayBuffer, effectiveMime, fileName);
       return;
     }
 
@@ -274,14 +313,25 @@ export async function previewPdfBeforeDownload({
       return;
     }
     renderLoadingState(fallbackWindow, previewTitle);
-    // Small yield to let the script in the new window register __renderPdf
-    await new Promise<void>((r) => setTimeout(r, 80));
-    renderPdfPreview(fallbackWindow, arrayBuffer, effectiveMime, fileName);
+    await renderPdfPreview(fallbackWindow, arrayBuffer, effectiveMime, fileName);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro ao abrir o arquivo';
-    if (previewWindow && !previewWindow.closed) {
-      renderErrorState(previewWindow, previewTitle, message);
+    const baseMessage = error instanceof Error ? error.message : 'Erro ao abrir o arquivo';
+    let finalMessage = baseMessage;
+
+    if (pdfBlob) {
+      try {
+        triggerBlobDownload(pdfBlob, fileName);
+        downloadedFallback = true;
+        finalMessage = `${baseMessage}. O download foi iniciado automaticamente.`;
+      } catch {
+        // Mantém a mensagem original quando nem o fallback de download é possível.
+      }
     }
-    throw error;
+
+    if (previewWindow && !previewWindow.closed) {
+      renderErrorState(previewWindow, previewTitle, finalMessage);
+    }
+
+    throw new Error(finalMessage);
   }
 }

@@ -557,7 +557,7 @@ router.get(
         total: statsPayload.total,
         etag,
       },
-      stats: statsPayload,
+      ...(includeStats ? { stats: statsPayload } : {}),
       pagination: {
         page: pageNum,
         limit: limitNum,

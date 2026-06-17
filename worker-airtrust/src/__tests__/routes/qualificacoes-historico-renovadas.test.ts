@@ -231,17 +231,14 @@ describe('qualificacoes historico renovadas contract', () => {
     const response = await app.request('/historico?statuses=PLANEJADA&stats=false&limit=500');
     const body = (await response.json()) as {
       success: boolean;
-      stats: { total: number; validas: number; renovadas: number; planejadas: number };
       meta: { total: number };
+      stats?: unknown;
     };
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.stats.total).toBe(590);
-    expect(body.stats.validas).toBe(0);
-    expect(body.stats.renovadas).toBe(0);
-    expect(body.stats.planejadas).toBe(0);
     expect(body.meta.total).toBe(590);
+    expect(body).not.toHaveProperty('stats');
 
     const fullStatsQueries = calls.filter(
       (call) => call.query.includes('COUNT(*) as total') && call.query.includes('SUM(CASE'),
@@ -259,6 +256,27 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(fullStatsQueries).toHaveLength(0);
     expect(globalCountsQueries).toHaveLength(0);
     expect(totalOnlyQueries).toHaveLength(1);
+  });
+
+  it('mantem stats populado no comportamento padrao', async () => {
+    const { db } = createMockDb();
+    const app = createApp(db);
+
+    const response = await app.request('/historico?limit=1');
+    const body = (await response.json()) as {
+      success: boolean;
+      stats?: { total: number; validas: number; renovadas: number; planejadas: number };
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.stats).toBeDefined();
+    expect(body.stats).toMatchObject({
+      total: 590,
+      validas: 300,
+      renovadas: 160,
+      planejadas: 5,
+    });
   });
 
   it('memoiza o PRAGMA de renovacao_de por isolate', async () => {

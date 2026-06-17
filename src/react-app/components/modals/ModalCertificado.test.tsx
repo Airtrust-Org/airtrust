@@ -3,7 +3,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModalCertificado } from './ModalCertificado';
 import { apiFetch } from '@/react-app/lib/apiFetch';
-import { openPreviewWindow, previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import {
+  openPreviewWindow,
+  previewPdfBeforeDownload,
+  showPdfPreviewError,
+} from '@/react-app/utils/pdfPreview';
 import { toast } from 'sonner';
 import { gerarPDFListaPresenca } from '@/react-app/services/pdf-lista-presenca';
 
@@ -26,6 +30,7 @@ vi.mock('@/react-app/lib/apiFetch', () => ({
 vi.mock('@/react-app/utils/pdfPreview', () => ({
   openPreviewWindow: vi.fn(),
   previewPdfBeforeDownload: vi.fn(),
+  showPdfPreviewError: vi.fn(),
 }));
 
 vi.mock('@/react-app/services/pdf-lista-presenca', () => ({
@@ -132,6 +137,10 @@ describe('ModalCertificado', () => {
     });
 
     expect(previewPdfBeforeDownload).not.toHaveBeenCalled();
-    expect(previewWindow.close).toHaveBeenCalledTimes(1);
+    expect(showPdfPreviewError).toHaveBeenCalledWith(
+      previewWindow,
+      'Lista de Presença — CRM',
+      'falha pdf',
+    );
   });
 });
