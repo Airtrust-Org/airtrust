@@ -15,10 +15,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
-import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import { openPreviewWindow, previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
-interface ModalCertificadoProps {
+export interface ModalCertificadoProps {
   isOpen: boolean;
   onClose: () => void;
   onCertificadosChange?: (historicoId: number, temCertificados: boolean) => void | Promise<void>;
@@ -105,7 +105,10 @@ export function ModalCertificado({
     const year = dateValue.getFullYear();
     const month = String(dateValue.getMonth() + 1).padStart(2, '0');
     const day = String(dateValue.getDate()).padStart(2, '0');
-    const uuid = crypto.randomUUID().substring(0, 8);
+    const uuid =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID().substring(0, 8)
+        : Math.random().toString(36).slice(2, 10).padEnd(8, '0').slice(0, 8);
     return `PRESENCA-${matriculaPadded}-${codigoLimpo}-${year}${month}${day}-${uuid}.pdf`;
   };
 
@@ -287,6 +290,7 @@ export function ModalCertificado({
 
   const handleGerarListaPresenca = async () => {
     setGerandoLista(true);
+    const previewWindow = openPreviewWindow();
     try {
       const { gerarPDFListaPresenca } = await import('@/react-app/services/pdf-lista-presenca');
       const blob = await gerarPDFListaPresenca({
@@ -305,10 +309,14 @@ export function ModalCertificado({
         fileName,
         title: `Lista de Presença — ${qualificacao.codigo}`,
         mimeType: 'application/pdf',
+        existingWindow: previewWindow,
         fetcher: () =>
           Promise.resolve(new Response(blob, { headers: { 'Content-Type': 'application/pdf' } })),
       });
     } catch (err) {
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.close();
+      }
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       toast.error(`❌ Erro ao gerar lista: ${msg}`);
     } finally {

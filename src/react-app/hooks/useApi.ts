@@ -341,7 +341,10 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
 
   useEffect(() => {
     isMountedRef.current = true;
-    if (!enabled) return;
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     // Dedup por instância: evita duplo-fetch em React StrictMode (mount→unmount→mount).
     // O cleanup reseta o flag para que remontagens legítimas (troca de url/id) sempre busquem.
     if (dedupeInitial) {

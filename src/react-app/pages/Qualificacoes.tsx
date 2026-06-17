@@ -56,6 +56,7 @@ import { MultiSelect, type MultiSelectOption } from '@/react-app/components/UI/M
 import { useTablePreferences } from '@/react-app/hooks/useTablePreferences';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
+import { CertificadoModalLoader } from '@/react-app/components/qualificacoes/CertificadoModalLoader';
 // 🚀 LAZY LOADING: Modais carregados apenas quando necessário
 const ModalAtribuirQualificacao = lazyWithRetry(
   () =>
@@ -80,13 +81,6 @@ import { apiFetch } from '@/react-app/lib/apiFetch';
 const TreinamentosPlanejadosPage = lazyWithRetry(
   () => import('./TreinamentosPlanejadosPage'),
   'TreinamentosPlanejadosPage',
-);
-const ModalCertificado = lazyWithRetry(
-  () =>
-    import('@/react-app/components/modals/ModalCertificado').then((m) => ({
-      default: m.ModalCertificado,
-    })),
-  'ModalCertificado',
 );
 import ConfirmDeleteModal from '@/react-app/components/modals/ConfirmDeleteModal';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
@@ -243,6 +237,7 @@ export default function Qualificacoes() {
   const isHistoricoTab = activeTab === 'historico';
   const isPlanejadosTab = activeTab === 'planejados';
   const usesHistoricoDataset = isHistoricoTab;
+  const shouldLoadPlannedRelatedHistorico = isHistoricoTab;
 
   useEffect(() => {
     writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
@@ -312,6 +307,8 @@ export default function Qualificacoes() {
     undefined,
     undefined,
     ['PLANEJADA'],
+    undefined,
+    shouldLoadPlannedRelatedHistorico,
   );
 
   const treinamentosPlanejadosConvocacaoQuery = useTreinamentosPlanejados({
@@ -5066,41 +5063,35 @@ export default function Qualificacoes() {
       </Modal>
 
       {historicoSelecionado && historicoSelecionado.id && (
-        <Suspense fallback={null}>
-          <ModalCertificado
-            isOpen={showCertModal}
-            onClose={() => {
-              setShowCertModal(false);
-              setHistoricoSelecionado(null);
-              // Forçar refetch completo para atualizar indicador de certificado
-              carregarHistorico();
-            }}
-            onCertificadosChange={handleCertificadosChange}
-            qualificacao={{
-              id: historicoSelecionado.id,
-              funcionario_id: historicoSelecionado.funcionario_id,
-              funcionario_nome: historicoSelecionado.funcionario_nome || '',
-              matricula: historicoSelecionado.funcionario_matricula || '',
-              qualificacao_nome:
-                historicoSelecionado.qualificacao_nome ||
-                String(
-                  (historicoSelecionado as unknown as Record<string, unknown>).tipo_nome || '',
-                ),
-              codigo:
-                historicoSelecionado.qualificacao_codigo ||
-                String(
-                  (historicoSelecionado as unknown as Record<string, unknown>).tipo_codigo ||
-                    historicoSelecionado.codigo ||
-                    '',
-                ),
-              data_conclusao:
-                historicoSelecionado.data_conclusao || historicoSelecionado.data_realizacao || '',
-              instrutor: historicoSelecionado.instrutor,
-            }}
-            onUploadSuccess={handleCertificadosUploadSuccess}
-            onDeleteSuccess={handleCertificadosDeleteSuccess}
-          />
-        </Suspense>
+        <CertificadoModalLoader
+          isOpen={showCertModal}
+          onClose={() => {
+            setShowCertModal(false);
+            setHistoricoSelecionado(null);
+          }}
+          onCertificadosChange={handleCertificadosChange}
+          qualificacao={{
+            id: historicoSelecionado.id,
+            funcionario_id: historicoSelecionado.funcionario_id,
+            funcionario_nome: historicoSelecionado.funcionario_nome || '',
+            matricula: historicoSelecionado.funcionario_matricula || '',
+            qualificacao_nome:
+              historicoSelecionado.qualificacao_nome ||
+              String((historicoSelecionado as unknown as Record<string, unknown>).tipo_nome || ''),
+            codigo:
+              historicoSelecionado.qualificacao_codigo ||
+              String(
+                (historicoSelecionado as unknown as Record<string, unknown>).tipo_codigo ||
+                  historicoSelecionado.codigo ||
+                  '',
+              ),
+            data_conclusao:
+              historicoSelecionado.data_conclusao || historicoSelecionado.data_realizacao || '',
+            instrutor: historicoSelecionado.instrutor,
+          }}
+          onUploadSuccess={handleCertificadosUploadSuccess}
+          onDeleteSuccess={handleCertificadosDeleteSuccess}
+        />
       )}
 
       {/* Modal de Confirmação de Delete */}
