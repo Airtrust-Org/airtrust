@@ -66,6 +66,7 @@ interface Ficha {
   sessao_modelo: string;
   sessao_titulo?: string;
   tipo_sessao?: string;
+  data_sessao?: string;
   hora_inicio?: string;
   hora_fim?: string;
   data_hora: string;
@@ -694,7 +695,13 @@ export function FichasAvaliacaoContent() {
   // Handlers dos modais
   const handleAvaliar = (fichaId: number) => {
     const ficha = fichas.find((f) => f.id === fichaId);
-    if (isFichaFutureEvaluation(ficha?.data_hora)) {
+    if (
+      isFichaFutureEvaluation({
+        dataHora: ficha?.data_hora,
+        dataSessao: ficha?.data_sessao,
+        horaInicio: ficha?.hora_inicio,
+      })
+    ) {
       toast.warning('Ficha disponível no dia da sessão');
       return;
     }
@@ -874,7 +881,11 @@ export function FichasAvaliacaoContent() {
 
   const renderFichaActions = (ficha: Ficha, compact = false) => {
     const isPendente = ficha.status === 'AVALIACAO_PENDENTE';
-    const isFichaFutura = isFichaFutureEvaluation(ficha.data_hora);
+    const isFichaFutura = isFichaFutureEvaluation({
+      dataHora: ficha.data_hora,
+      dataSessao: ficha.data_sessao,
+      horaInicio: ficha.hora_inicio,
+    });
 
     const baseActionClass = compact
       ? 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-all'
@@ -1428,6 +1439,7 @@ export function FichasAvaliacaoContent() {
           title="Fichas Modelo para Impressão"
           subtitle="Selecione um ou mais modelos para gerar os PDFs de uma vez."
           size="xl"
+          placement="top"
           footer={
             <>
               <button

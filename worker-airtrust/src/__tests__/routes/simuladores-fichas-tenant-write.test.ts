@@ -275,4 +275,53 @@ describe('simuladores fichas tenant-aware writes', () => {
       ),
     ).toBe(false);
   });
+
+  it('PUT /fichas-simulador/:fichaId/manobras/:ordem bloqueia edição de sessão futura', async () => {
+    const { db, runs } = createDbMock({
+      sessionDate: '2999-01-01',
+      sessionTime: '08:00',
+    });
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas-simulador/901/manobras/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultado: 8, observacoes: 'Tentativa antecipada' }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      code: 'FICHA_NOT_AVAILABLE_YET',
+      error: 'Ficha disponível no dia da sessão',
+    });
+    expect(runs.some((item) => item.query.includes('UPDATE fichas_sessao_manobras SET resultado='))).toBe(false);
+    expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao_manobras'))).toBe(false);
+  });
+
+  it('POST /fichas-simulador/:id/popular-manobras bloqueia sessão futura', async () => {
+    const { db, runs } = createDbMock({
+      sessionDate: '2999-01-01',
+      sessionTime: '08:00',
+    });
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas-simulador/901/popular-manobras', {
+        method: 'POST',
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      code: 'FICHA_NOT_AVAILABLE_YET',
+      error: 'Ficha disponível no dia da sessão',
+    });
+    expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao_manobras'))).toBe(false);
+  });
 });
