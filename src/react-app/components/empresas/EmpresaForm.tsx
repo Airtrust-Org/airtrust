@@ -758,8 +758,7 @@ export function EmpresaForm({
                     placeholder="exemplo.com.br"
                   />
                   <p className="mt-1 text-xs text-gray-500">
-                    Usuários com e-mail neste domínio serão automaticamente vinculados a esta
-                    empresa no login.
+                    Campo informativo. Convites e acessos usam o vínculo explícito com a empresa.
                   </p>
                 </div>
               </div>
