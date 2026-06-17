@@ -810,7 +810,7 @@ empresasRoutes.put('/:id', requireTenantRole('admin'), async (c) => {
       'max_funcionarios',
       'max_storage_mb',
       'ativo', // ✅ Adicionado para permitir ativar/desativar empresa
-      'dominio', // ✅ Domínio de e-mail para auto-detecção de empresa no login
+      'dominio', // Campo informativo/legado; vínculo de usuário vem de usuarios_empresas.
     ];
 
     const fields: string[] = [];

@@ -102,7 +102,7 @@ function escapeInviteHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function buildInviteLink(frontendUrl: string | undefined, inviteToken: string): string {
+export function buildInviteLink(frontendUrl: string | undefined, inviteToken: string): string {
   const baseUrl = (frontendUrl || 'https://airtrust.online').replace(/\/$/, '');
   return `${baseUrl}/aceitar-convite?token=${encodeURIComponent(inviteToken)}`;
 }
@@ -377,7 +377,8 @@ adminUsuariosRoutes.post('/', async (c) => {
   requireAdminOrGestor(getCallerRole(c), 'criar usuário');
   const callerId = getCallerId(c);
   const callerRole = getCallerRole(c);
-  const { empresaId } = getTenantContext(c);
+  const tenantCtx = getTenantContext(c);
+  const { empresaId, empresaCodigo } = tenantCtx;
   const db = c.env.DB;
   const logger = createLogger(c, 'AdminUsuarios.create');
 
@@ -395,10 +396,18 @@ adminUsuariosRoutes.post('/', async (c) => {
   const nome = String(body?.nome || '').trim();
   const perfil = String(body?.perfil || 'ALUNO').toUpperCase();
   const funcionarioId = body?.funcionario_id ?? null;
-  const targetEmpresaId = body?.empresa_id ?? empresaId;
+  const targetEmpresaId = Number(body?.empresa_id ?? empresaId);
 
   if (!email || !nome) {
     throw badRequest('email e nome são obrigatórios', 'MISSING_FIELDS');
+  }
+
+  if (!Number.isFinite(targetEmpresaId) || targetEmpresaId <= 0) {
+    throw badRequest('empresa_id inválido', 'INVALID_EMPRESA_ID');
+  }
+
+  if (empresaCodigo !== 'airtrust' && targetEmpresaId !== empresaId) {
+    throw forbidden('Sem permissão para convidar usuários para outra empresa', 'WRONG_TENANT');
   }
 
   // Gestor não pode criar ADMINISTRADOR

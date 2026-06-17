@@ -160,56 +160,10 @@ async function resolveUserEmpresaId(db: D1Database, userId: number): Promise<num
       }
     }
 
-    // FALLBACK: tentar resolver pelo domínio do e-mail
-    const emailDomainResolved = await resolveEmpresaByEmailDomain(db, userId);
-    if (emailDomainResolved) return emailDomainResolved;
-
     throw unauthorized('Usuário sem vínculo ativo com empresa', 'USER_WITHOUT_EMPRESA');
   }
 
   return empresa.empresa_id;
-}
-
-/**
- * Resolve a empresa pelo domínio do e-mail do usuário.
- * Extrai o domínio após '@' e procura em empresas.dominio.
- * Se encontrar, cria automaticamente o vínculo em usuarios_empresas.
- */
-async function resolveEmpresaByEmailDomain(db: D1Database, userId: number): Promise<number | null> {
-  const usuario = await db
-    .prepare(`SELECT id, email FROM usuarios WHERE id = ? AND deleted_at IS NULL LIMIT 1`)
-    .bind(userId)
-    .first<{ id: number; email: string }>();
-
-  if (!usuario?.email) return null;
-
-  const atIndex = usuario.email.indexOf('@');
-  if (atIndex === -1) return null;
-  const domain = usuario.email.slice(atIndex + 1).toLowerCase();
-
-  const empresa = await db
-    .prepare(
-      `SELECT id FROM empresas
-       WHERE LOWER(dominio) = ?
-         AND ativo = 1
-         AND deleted_at IS NULL
-       LIMIT 1`,
-    )
-    .bind(domain)
-    .first<{ id: number }>();
-
-  if (!empresa?.id) return null;
-
-  // Auto-criar vínculo para que próximos logins sejam resolvidos diretamente
-  await db
-    .prepare(
-      `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary, created_at)
-       VALUES (?, ?, 'member', 1, datetime('now'))`,
-    )
-    .bind(userId, empresa.id)
-    .run();
-
-  return empresa.id;
 }
 
 function normalizeAuthRole(value: unknown): string {
@@ -567,14 +521,21 @@ authRoutes.post('/invite/accept', async (c) => {
   const convite = await db
     .prepare(
       `
-      SELECT id, usuario_id, expires_at, used_at
+      SELECT id, usuario_id, empresa_id, role, expires_at, used_at
       FROM convites_usuarios
       WHERE token = ?
       LIMIT 1
     `,
     )
     .bind(token)
-    .first<{ id: number; usuario_id: number; expires_at: string; used_at: string | null }>();
+    .first<{
+      id: number;
+      usuario_id: number;
+      empresa_id: number;
+      role: string | null;
+      expires_at: string;
+      used_at: string | null;
+    }>();
 
   if (!convite) {
     throw unauthorized('Convite inválido', 'INVALID_INVITE_TOKEN');
@@ -604,6 +565,40 @@ authRoutes.post('/invite/accept', async (c) => {
       : `UPDATE usuarios SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`;
 
   await db.prepare(updateUserSql).bind(passwordHash, convite.usuario_id).run();
+
+  const inviteRole = convite.role || 'member';
+
+  await db
+    .prepare(
+      `
+      INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary, created_at)
+      SELECT
+        ?,
+        ?,
+        ?,
+        CASE
+          WHEN EXISTS (
+            SELECT 1 FROM usuarios_empresas
+            WHERE usuario_id = ?
+              AND is_primary = 1
+          ) THEN 0
+          ELSE 1
+        END,
+        datetime('now')
+    `,
+    )
+    .bind(convite.usuario_id, convite.empresa_id, inviteRole, convite.usuario_id)
+    .run();
+
+  await db
+    .prepare(
+      `UPDATE usuarios_empresas
+       SET role = ?
+       WHERE usuario_id = ?
+         AND empresa_id = ?`,
+    )
+    .bind(inviteRole, convite.usuario_id, convite.empresa_id)
+    .run();
 
   await db
     .prepare(`UPDATE convites_usuarios SET used_at = datetime('now') WHERE id = ?`)
