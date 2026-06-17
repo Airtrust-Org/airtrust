@@ -1,5 +1,11 @@
 const OPERATIONAL_TIMEZONE = 'America/Sao_Paulo';
 
+interface FichaAvailabilityInput {
+  dataHora?: string | null;
+  dataSessao?: string | null;
+  horaInicio?: string | null;
+}
+
 function extractIsoDateOnly(value?: string | null): string | null {
   const raw = String(value || '').trim();
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T|\s)/);
@@ -31,14 +37,29 @@ function getOperationalNowKey(now = new Date()): string {
   return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
 }
 
-export function isFichaAvailableForEvaluation(dataHora?: string | null, now = new Date()): boolean {
-  const date = extractIsoDateOnly(dataHora);
-  if (!date) return true;
+function resolveSessionDateTime(input: FichaAvailabilityInput): string | null {
+  const date = extractIsoDateOnly(input.dataSessao) || extractIsoDateOnly(input.dataHora);
+  if (!date) return null;
 
-  const sessionKey = `${date} ${extractHourMinute(dataHora)}`;
+  const timeSource = input.horaInicio || input.dataHora;
+  return `${date} ${extractHourMinute(timeSource)}`;
+}
+
+export function isFichaAvailableForEvaluation(
+  input: FichaAvailabilityInput | string | null | undefined,
+  now = new Date(),
+): boolean {
+  const normalizedInput =
+    typeof input === 'string' || input == null ? { dataHora: input } : input;
+  const sessionKey = resolveSessionDateTime(normalizedInput);
+  if (!sessionKey) return true;
+
   return getOperationalNowKey(now) >= sessionKey;
 }
 
-export function isFichaFutureEvaluation(dataHora?: string | null, now = new Date()): boolean {
-  return !isFichaAvailableForEvaluation(dataHora, now);
+export function isFichaFutureEvaluation(
+  input: FichaAvailabilityInput | string | null | undefined,
+  now = new Date(),
+): boolean {
+  return !isFichaAvailableForEvaluation(input, now);
 }
