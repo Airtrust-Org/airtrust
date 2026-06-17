@@ -32,7 +32,7 @@ type ControlFilters = FrmsOperationalSnapshotFilters & {
 
 type OperationalBucket = 'escalado' | 'checkin_sem_escala' | 'jornada_sem_escala' | 'sem_atividade';
 
-const FRMS_FORTNIGHT_DETAIL_ENABLED = false;
+const FRMS_FORTNIGHT_DETAIL_ENABLED = true;
 
 function getTodayLocalIsoDate(): string {
   const now = new Date();
@@ -137,7 +137,7 @@ function sourceLabel(value: string): string {
 function toneBySnapshotStatus(status: FrmsOperationalSnapshotStatus): string {
   if (status === 'CRITICO') return 'border-red-200 bg-red-50 text-red-700';
   if (status === 'ATENCAO') return 'border-amber-200 bg-amber-50 text-amber-700';
-  if (status === 'INCOMPLETO') return 'border-violet-200 bg-violet-50 text-violet-700';
+  if (status === 'INCOMPLETO') return 'border-slate-200 bg-slate-100 text-slate-600';
   return 'border-emerald-200 bg-emerald-50 text-emerald-700';
 }
 
@@ -159,7 +159,7 @@ function toneBySource(value: string): string {
 function toneByReadAckSeverity(severity: FrmsReadAckEvent['severity']): string {
   if (severity === 'CRITICO') return 'border-red-200 bg-red-50 text-red-700';
   if (severity === 'ATENCAO') return 'border-amber-200 bg-amber-50 text-amber-700';
-  if (severity === 'INCOMPLETO') return 'border-violet-200 bg-violet-50 text-violet-700';
+  if (severity === 'INCOMPLETO') return 'border-slate-200 bg-slate-100 text-slate-600';
   return 'border-slate-200 bg-slate-100 text-slate-700';
 }
 
@@ -263,7 +263,7 @@ function FortnightDetailPanel({ indicator }: { indicator: FrmsFortnightIndicator
       <div className="mt-2 space-y-2 text-xs text-slate-600">
         <p>Indicador operacional descritivo — não é compliance regulatório.</p>
         {!hasCompleteData ? (
-          <p>Dados quinzenais insuficientes</p>
+          <p>Dados quinzenais ainda nao consolidados para este periodo.</p>
         ) : (
           <>
             <div className="grid gap-x-3 gap-y-1 sm:grid-cols-2">
