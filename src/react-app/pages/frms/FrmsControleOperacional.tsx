@@ -18,6 +18,7 @@ import {
   type FrmsReadAckQueryStatus,
 } from '@/react-app/hooks/useFrmsReadAckEvents';
 import {
+  type FrmsFortnightIndicator,
   type FrmsOperationalSnapshotAlertCode,
   type FrmsOperationalSnapshotFilters,
   type FrmsOperationalSnapshotItem,
@@ -30,6 +31,8 @@ type ControlFilters = FrmsOperationalSnapshotFilters & {
 };
 
 type OperationalBucket = 'escalado' | 'checkin_sem_escala' | 'jornada_sem_escala' | 'sem_atividade';
+
+const FRMS_FORTNIGHT_DETAIL_ENABLED = false;
 
 function getTodayLocalIsoDate(): string {
   const now = new Date();
@@ -188,6 +191,24 @@ function formatMinutesAsHours(value: number | null): string {
   return `${(value / 60).toFixed(1)}h`;
 }
 
+function formatFortnightMinutes(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '--';
+  const totalMinutes = Math.max(0, Math.trunc(value));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}m`;
+}
+
+function formatFortnightNumber(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '--';
+  return String(value);
+}
+
+function formatFortnightPeriod(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start || !end) return '--';
+  return `${formatDisplayDate(start)} -> ${formatDisplayDate(end)}`;
+}
+
 function formatTripulante(item: FrmsOperationalSnapshotItem): string {
   return item.nome_guerra || item.nome || `ID ${item.funcionario_id}`;
 }
@@ -213,6 +234,82 @@ const FORTNIGHT_STATUS_LABELS: Record<string, string> = {
   CRITICO: 'Quinzena critica',
   INCOMPLETO: 'Quinzena incompleta',
 };
+
+function toneByFortnightStatus(status: string): string {
+  if (status === 'CRITICO') return 'border-red-200 bg-red-50 text-red-700';
+  if (status === 'ATENCAO') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (status === 'INCOMPLETO') return 'border-slate-200 bg-slate-100 text-slate-600';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+function FortnightStatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneByFortnightStatus(status)}`}>
+      {FORTNIGHT_STATUS_LABELS[status] || status}
+    </span>
+  );
+}
+
+function FortnightDetailPanel({ indicator }: { indicator: FrmsFortnightIndicator | null }) {
+  const hasCompleteData = Boolean(indicator) && indicator?.status_quinzena !== 'INCOMPLETO';
+  const alerts = indicator?.alertas_quinzena.filter((value) => value?.trim());
+  const notes = indicator?.limitation_notes.filter((value) => value?.trim());
+
+  return (
+    <details className="mt-2 rounded-md border border-slate-200 bg-slate-50/80 p-2">
+      <summary className="cursor-pointer text-[11px] font-medium text-slate-600">
+        Detalhes da quinzena
+      </summary>
+      <div className="mt-2 space-y-2 text-xs text-slate-600">
+        <p>Indicador operacional descritivo — não é compliance regulatório.</p>
+        {!hasCompleteData ? (
+          <p>Dados quinzenais insuficientes</p>
+        ) : (
+          <>
+            <div className="grid gap-x-3 gap-y-1 sm:grid-cols-2">
+              <div>
+                <span className="font-medium text-slate-700">Periodo:</span>{' '}
+                {formatFortnightPeriod(indicator?.periodo_inicio, indicator?.periodo_fim)}
+              </div>
+              <div>
+                <span className="font-medium text-slate-700">Jornada no periodo:</span>{' '}
+                {formatFortnightMinutes(indicator?.duty_time_periodo_min)}
+              </div>
+              <div>
+                <span className="font-medium text-slate-700">HV no periodo:</span>{' '}
+                {formatFortnightMinutes(indicator?.horas_voo_periodo_min)}
+              </div>
+              <div>
+                <span className="font-medium text-slate-700">Dias consecutivos:</span>{' '}
+                {formatFortnightNumber(indicator?.dias_consecutivos_com_jornada)}
+              </div>
+              <div>
+                <span className="font-medium text-slate-700">Menor descanso:</span>{' '}
+                {formatFortnightMinutes(indicator?.menor_descanso_entre_jornadas_min)}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-700">Status da quinzena:</span>
+                <FortnightStatusBadge status={indicator?.status_quinzena || 'INCOMPLETO'} />
+              </div>
+            </div>
+            {alerts && alerts.length > 0 && (
+              <div>
+                <span className="font-medium text-slate-700">Alertas da quinzena:</span>{' '}
+                {alerts.join(' • ')}
+              </div>
+            )}
+            {notes && notes.length > 0 && (
+              <div>
+                <span className="font-medium text-slate-700">Observacoes/limitacoes:</span>{' '}
+                {notes.join(' • ')}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </details>
+  );
+}
 
 function operationalBucket(item: FrmsOperationalSnapshotItem): OperationalBucket {
   if (item.escalado) return 'escalado';
@@ -743,6 +840,9 @@ export default function FrmsControleOperacional() {
                         <div className="text-xs text-slate-500">
                           {formatFortnightLabel(item.fortnight_indicator)}
                         </div>
+                        {FRMS_FORTNIGHT_DETAIL_ENABLED && (
+                          <FortnightDetailPanel indicator={item.fortnight_indicator} />
+                        )}
                         {item.fatorizacao_status === 'AUSENTE' && item.teve_jornada && (
                           <div className="text-xs text-rose-700">Jornada sem fatorizacao</div>
                         )}
