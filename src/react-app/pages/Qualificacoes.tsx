@@ -111,6 +111,60 @@ const historicoActionDangerButtonClass =
 
 const QUALIFICACOES_PREFS_KEY = 'qualificacoes_prefs_v1';
 
+function normalizeCategoriaKey(value?: string | null) {
+  return (value ?? '').toString().trim().toUpperCase();
+}
+
+function getCategoriaCorDisplay(categoriaNome?: string | null, corOriginal?: string | null) {
+  const categoriaKey = normalizeCategoriaKey(categoriaNome)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (categoriaKey === 'LICENCA') {
+    return '#0f766e';
+  }
+  return corOriginal || undefined;
+}
+
+function parseDateLocal(value?: string | null): Date | null {
+  if (!value) return null;
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(value);
+  if (m) {
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    return new Date(year, month - 1, day);
+  }
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function getStatusColor(status: string) {
+  if (status === 'RENOVADA') return 'bg-blue-600/10 text-blue-600';
+  if (status === 'VALIDA') return 'bg-success-600/10 text-success-600';
+  if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30')
+    return 'bg-warning-600/10 text-warning-600';
+  if (status === 'PLANEJADA') return 'bg-purple-600/10 text-purple-600';
+  if (status === 'CANCELADA') return 'bg-slate-600/10 text-slate-600';
+  return 'bg-danger-600/10 text-danger-600';
+}
+
+function getStatusDotColor(status: string) {
+  if (status === 'VALIDA') return 'bg-success-600';
+  if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30') return 'bg-warning-600';
+  if (status === 'PLANEJADA') return 'bg-purple-600';
+  if (status === 'CANCELADA') return 'bg-slate-600';
+  return 'bg-danger-600';
+}
+
+function getStatusLabel(status: string) {
+  if (status === 'RENOVADA') return 'Renovada';
+  if (status === 'VALIDA') return 'Válida';
+  if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30') return 'Vencendo';
+  if (status === 'PLANEJADA') return 'Planejada';
+  if (status === 'CANCELADA') return 'Cancelada';
+  return 'Vencida';
+}
+
 interface QualificacoesPrefs {
   activeTab?: 'historico' | 'planejados' | 'tipos' | 'categorias';
   plannedView?: 'lista' | 'calendario' | 'turmas';
@@ -237,7 +291,6 @@ export default function Qualificacoes() {
   const isHistoricoTab = activeTab === 'historico';
   const isPlanejadosTab = activeTab === 'planejados';
   const usesHistoricoDataset = isHistoricoTab;
-  const shouldLoadPlannedRelatedHistorico = isHistoricoTab;
 
   useEffect(() => {
     writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
@@ -294,8 +347,18 @@ export default function Qualificacoes() {
     highlightedHistoricoId || undefined,
   );
 
+  const shouldLoadPlannedRelatedHistorico = useMemo(
+    () =>
+      isHistoricoTab &&
+      (historico as HistoricoItem[]).some(
+        (item) => getHistoricoDisplayStatus(item) === 'VENCIDA',
+      ),
+    [historico, isHistoricoTab],
+  );
+
   // Planejadas query: uses clean params — must NOT inherit Histórico tab filters
   // (search, aeronave, categoria) to avoid items disappearing when those filters are active.
+  // Só é necessária quando a página atual contém vencidas que podem exibir o badge "Já planejada".
   const { historico: historicoPlanejadoRelacionado } = useQualificacoesHistorico(
     undefined,
     500,
@@ -427,15 +490,22 @@ export default function Qualificacoes() {
 
   const [showModal, setShowModal] = useState(false);
   const canManageTipos = ['ADMINISTRADOR', 'ADMIN'].includes(String(user?.role || '').toUpperCase());
+  const defaultModelosPrefs = useMemo<QualificacoesModelosPrefs>(
+    () => ({
+      searchTerm: '',
+      categoriaFilter: '',
+      setorFilter: [],
+    }),
+    [],
+  );
   const {
     preferences: modelosPrefs,
     setPreferences: setModelosPrefs,
     ready: modelosPrefsReady,
-  } = useTablePreferences<QualificacoesModelosPrefs>('table.qualificacoes.modelos', {
-    searchTerm: '',
-    categoriaFilter: '',
-    setorFilter: [],
-  });
+  } = useTablePreferences<QualificacoesModelosPrefs>(
+    'table.qualificacoes.modelos',
+    defaultModelosPrefs,
+  );
   // Tipos agora são fornecidos pelo hook dedicado useQualificacaoTipos
   type TipoQualificacao = {
     id: string | number;
@@ -892,19 +962,6 @@ export default function Qualificacoes() {
     }
   }, [categoriasData]);
 
-  const normalizeCategoriaKey = (value?: string | null) =>
-    (value ?? '').toString().trim().toUpperCase();
-
-  const getCategoriaCorDisplay = (categoriaNome?: string | null, corOriginal?: string | null) => {
-    const categoriaKey = normalizeCategoriaKey(categoriaNome)
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-    if (categoriaKey === 'LICENCA') {
-      return '#0f766e';
-    }
-    return corOriginal || undefined;
-  };
-
   const normalizeTipoCodigo = (value?: string | null) =>
     (value ?? '').toString().trim().toUpperCase();
 
@@ -1184,18 +1241,15 @@ export default function Qualificacoes() {
         filteredHistorico,
         statusFiltro,
         historicoMeta?.total ?? filteredHistorico.length,
-        historicoPlanejadoRelacionado.length,
+        Number(stats.planejadas || 0),
       ),
-    [filteredHistorico, historicoMeta?.total, historicoPlanejadoRelacionado.length, statusFiltro],
+    [filteredHistorico, historicoMeta?.total, stats.planejadas, statusFiltro],
   );
 
   // renovadas/planejadas are always global (from API), never derived from the filtered page.
   // Only total/validas/vencendo/vencidas follow the local-vs-api split.
   const globalRenovadas = Number(stats.renovadas || 0);
-  const globalPlanejadas = Math.max(
-    Number(stats.planejadas || 0),
-    historicoPlanejadoRelacionado.length,
-  );
+  const globalPlanejadas = Number(stats.planejadas || 0);
 
   const historicoHeaderStats = shouldUseLocalHistoricoHeaderStats
     ? { ...localHistoricoStats, renovadas: globalRenovadas, planejadas: globalPlanejadas }
@@ -1216,33 +1270,6 @@ export default function Qualificacoes() {
       );
     });
   }, [searchTipos, tipos]);
-
-  const getStatusColor = (status: string) => {
-    if (status === 'RENOVADA') return 'bg-blue-600/10 text-blue-600';
-    if (status === 'VALIDA') return 'bg-success-600/10 text-success-600';
-    if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30')
-      return 'bg-warning-600/10 text-warning-600';
-    if (status === 'PLANEJADA') return 'bg-purple-600/10 text-purple-600';
-    if (status === 'CANCELADA') return 'bg-slate-600/10 text-slate-600';
-    return 'bg-danger-600/10 text-danger-600';
-  };
-
-  const getStatusDotColor = (status: string) => {
-    if (status === 'VALIDA') return 'bg-success-600';
-    if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30') return 'bg-warning-600';
-    if (status === 'PLANEJADA') return 'bg-purple-600';
-    if (status === 'CANCELADA') return 'bg-slate-600';
-    return 'bg-danger-600';
-  };
-
-  const getStatusLabel = (status: string) => {
-    if (status === 'RENOVADA') return 'Renovada';
-    if (status === 'VALIDA') return 'Válida';
-    if (status === 'PROXIMA_VENCIMENTO' || status === 'VENCENDO_30') return 'Vencendo';
-    if (status === 'PLANEJADA') return 'Planejada';
-    if (status === 'CANCELADA') return 'Cancelada';
-    return 'Vencida';
-  };
 
   const handleNew = () => {
     setEditingQualificacao(null);
@@ -1537,19 +1564,6 @@ export default function Qualificacoes() {
   };
 
   // Definir colunas da tabela de histórico (limpas e corrigidas)
-  function parseDateLocal(value?: string | null): Date | null {
-    if (!value) return null;
-    const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(value);
-    if (m) {
-      const year = Number(m[1]);
-      const month = Number(m[2]);
-      const day = Number(m[3]);
-      return new Date(year, month - 1, day);
-    }
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? null : d;
-  }
-
   const formatDateInputValue = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -1979,7 +1993,8 @@ export default function Qualificacoes() {
     planejadosHistorico,
   ]);
 
-  const historicoColumns: Column<HistoricoItem>[] = [
+  const historicoColumns = useMemo<Column<HistoricoItem>[]>(
+    () => [
     {
       id: 'acoes',
       label: 'Ações',
@@ -2444,7 +2459,27 @@ export default function Qualificacoes() {
         );
       },
     },
-  ];
+    ],
+    [
+      abrirModalConvocacaoPlanejada,
+      abrirModalPlanejada,
+      categorias,
+      categoriasMap,
+      getCategoriaCorDisplay,
+      getHistoricoStatus,
+      getStatusColor,
+      getStatusDotColor,
+      getStatusLabel,
+      getPlanejadaRelacionada,
+      handleCancelar,
+      handleDeletear,
+      handleEdit,
+      handleRenovar,
+      hasArchivedCertificate,
+      normalizeCategoriaKey,
+      parseDateLocal,
+    ],
+  );
 
   return (
     <AppLayout>
