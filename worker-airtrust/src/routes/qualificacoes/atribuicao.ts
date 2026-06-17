@@ -15,6 +15,11 @@ import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
 import { requireRole } from '../../middleware/rbac';
+import {
+  appendEmployeeSectorFilter,
+  assertFuncionarioInScope,
+  getEmployeeSectorAccess,
+} from '../../services/employee-sector-access';
 import { z } from 'zod';
 
 const router = new Hono<{ Bindings: Env }>();
@@ -115,7 +120,7 @@ async function renovacaoPertenceEmpresa(
 ) {
   return db
     .prepare(
-      `SELECT qr.id
+      `SELECT qr.id, f.id as funcionario_id
        FROM qualificacoes_renovacoes qr
        INNER JOIN qualificacoes_historico qh ON qh.id = qr.qualificacao_historico_id
        INNER JOIN funcionarios f ON f.id = qh.funcionario_id
@@ -168,6 +173,12 @@ router.post(
       .first();
     if (!func) {
       return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+    }
+
+    // Verificar escopo setorial: gestor restrito não pode atribuir qualificação a funcionário de setor não autorizado
+    const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
+    if (access.mode === 'restricted') {
+      await assertFuncionarioInScope(db, tenantCtx.empresaId, data.funcionario_id, access);
     }
 
     // Verificar se tipo existe
@@ -251,10 +262,10 @@ router.post(
 
     const data = parsed.data;
 
-    // Verificar se qualificação existe
+    // Verificar se qualificação existe (e capturar funcionario_id para verificação de escopo)
     const qual = await db
       .prepare(
-        `SELECT qh.id
+        `SELECT qh.id, f.id as funcionario_id
          FROM qualificacoes_historico qh
          INNER JOIN funcionarios f ON f.id = qh.funcionario_id
          WHERE qh.id = ?
@@ -267,6 +278,13 @@ router.post(
       .first();
     if (!qual) {
       return c.json({ success: false, error: 'Qualificação não encontrada' }, 404);
+    }
+
+    // Verificar escopo setorial: gestor restrito não pode renovar qualificação de funcionário fora do seu escopo
+    const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
+    if (access.mode === 'restricted') {
+      const qualFuncId = Number((qual as any)?.funcionario_id || 0);
+      await assertFuncionarioInScope(db, tenantCtx.empresaId, qualFuncId, access);
     }
 
     // Criar registro de renovação
@@ -307,6 +325,10 @@ router.get(
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
+    const scopeConditions: string[] = [];
+    const scopeBindings: unknown[] = [];
+    appendEmployeeSectorFilter(scopeConditions, scopeBindings, access, 'f');
     const limit = Math.min(parseInt(c.req.query('limit') || '100'), 500);
     const status = c.req.query('status');
 
@@ -317,9 +339,10 @@ router.get(
       WHERE qr.deleted_at IS NULL
         AND qh.deleted_at IS NULL
         AND f.deleted_at IS NULL
-        AND f.empresa_id = ?`;
+        AND f.empresa_id = ?
+        AND ${scopeConditions.join(' AND ')}`;
     const binds: unknown[] = [];
-    binds.push(tenantCtx.empresaId);
+    binds.push(tenantCtx.empresaId, ...scopeBindings);
 
     if (status && ['pendente', 'aprovada', 'rejeitada'].includes(status)) {
       sql += ' AND status = ?';
@@ -363,6 +386,12 @@ router.put(
     const existing = await renovacaoPertenceEmpresa(db, id, tenantCtx.empresaId);
     if (!existing) {
       return c.json({ success: false, error: 'Renovação não encontrada' }, 404);
+    }
+
+    // Verificar escopo setorial
+    const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
+    if (access.mode === 'restricted') {
+      await assertFuncionarioInScope(db, tenantCtx.empresaId, Number((existing as any)?.funcionario_id || 0), access);
     }
 
     const updateParts: string[] = [];
@@ -430,6 +459,12 @@ router.delete(
     const existing = await renovacaoPertenceEmpresa(db, id, tenantCtx.empresaId);
     if (!existing) {
       return c.json({ success: false, error: 'Renovação não encontrada' }, 404);
+    }
+
+    // Verificar escopo setorial
+    const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
+    if (access.mode === 'restricted') {
+      await assertFuncionarioInScope(db, tenantCtx.empresaId, Number((existing as any)?.funcionario_id || 0), access);
     }
 
     const result = await db

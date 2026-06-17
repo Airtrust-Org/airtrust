@@ -24,7 +24,11 @@ import {
 import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import {
+  assertFuncionarioInScope,
+  employeeSectorSql,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -529,26 +533,31 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
   const offset = (page - 1) * limit;
 
   const access = await getEmployeeSectorAccess(c, empresaId);
-  if (access.mode === 'restricted' && access.setorIds.length > 0) {
+  if (access.mode === 'restricted') {
+    if (access.setorIds.length === 0) {
+      throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+    }
+    const setorPlaceholders = access.setorIds.map(() => '?').join(',');
     const sectorOk = await db
       .prepare(
         `SELECT 1 FROM lms_cursos lc
          WHERE lc.id = ? AND lc.empresa_id = ?
-           AND lc.qualificacao_tipo_id IS NOT NULL
-           AND EXISTS (
-             SELECT 1 FROM qualificacoes_tipos_setores qts
-             WHERE qts.tipo_id = lc.qualificacao_tipo_id
-               AND qts.empresa_id = lc.empresa_id
-               AND qts.setor_id IN (${access.setorIds.map(() => '?').join(',')})
-               AND qts.deleted_at IS NULL
+           AND (
+             EXISTS (SELECT 1 FROM lms_cursos_setores lcs WHERE lcs.curso_id = lc.id AND lcs.empresa_id = lc.empresa_id AND lcs.setor_id IN (${setorPlaceholders}) AND lcs.deleted_at IS NULL)
+             OR (
+               NOT EXISTS (SELECT 1 FROM lms_cursos_setores lcs_chk WHERE lcs_chk.curso_id = lc.id AND lcs_chk.empresa_id = lc.empresa_id AND lcs_chk.deleted_at IS NULL)
+               AND lc.qualificacao_tipo_id IS NOT NULL
+               AND EXISTS (SELECT 1 FROM qualificacoes_tipos_setores qts WHERE qts.tipo_id = lc.qualificacao_tipo_id AND qts.empresa_id = lc.empresa_id AND qts.setor_id IN (${setorPlaceholders}) AND qts.deleted_at IS NULL)
+             )
            )
          LIMIT 1`,
       )
-      .bind(cursoId, empresaId, ...access.setorIds)
+      .bind(cursoId, empresaId, ...access.setorIds, ...access.setorIds)
       .first();
     if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
   }
 
+  const funcionarioScope = employeeSectorSql(access, 'fx');
   let where = `WHERE m.curso_id = ?
                  AND m.empresa_id = ?
                  AND m.deleted_at IS NULL
@@ -559,8 +568,9 @@ app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
                       AND fx.deleted_at IS NULL
                       AND COALESCE(fx.ativo, 1) = 1
                       AND UPPER(COALESCE(NULLIF(TRIM(fx.status), ''), 'ATIVO')) = 'ATIVO'
+                      AND ${funcionarioScope.clause}
                  )`;
-  const binds: (string | number)[] = [cursoId, empresaId];
+  const binds: (string | number)[] = [cursoId, empresaId, ...funcionarioScope.bindings];
   if (status) {
     where += ' AND m.status = ?';
     binds.push(status);
@@ -708,6 +718,14 @@ app.post('/', async (c) => {
     }
     if (callerFuncionarioId !== funcionario_id) {
       throw new ApiError('Acesso negado para matricular outro funcionário', 403);
+    }
+  }
+
+  if (canManage) {
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    if (access.mode === 'restricted') {
+      // Verificar escopo setorial: funcionário pertence aos setores do gestor
+      await assertFuncionarioInScope(db, empresaId, funcionario_id, access);
     }
   }
 
@@ -941,34 +959,46 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
 
   const loteAccess = await getEmployeeSectorAccess(c, empresaId);
-  if (loteAccess.mode === 'restricted' && loteAccess.setorIds.length > 0) {
-    const sectorOk =
-      curso.qualificacao_tipo_id != null &&
-      (await db
-        .prepare(
-          `SELECT 1 FROM qualificacoes_tipos_setores qts
-           WHERE qts.tipo_id = ? AND qts.empresa_id = ?
-             AND qts.setor_id IN (${loteAccess.setorIds.map(() => '?').join(',')})
-             AND qts.deleted_at IS NULL
-           LIMIT 1`,
-        )
-        .bind(curso.qualificacao_tipo_id, empresaId, ...loteAccess.setorIds)
-        .first());
+  if (loteAccess.mode === 'restricted') {
+    if (loteAccess.setorIds.length === 0) {
+      throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+    }
+    const loteSetorPlaceholders = loteAccess.setorIds.map(() => '?').join(',');
+    const sectorOk = await db
+      .prepare(
+        `SELECT 1 FROM lms_cursos lc
+         WHERE lc.id = ? AND lc.empresa_id = ?
+           AND (
+             EXISTS (SELECT 1 FROM lms_cursos_setores lcs WHERE lcs.curso_id = lc.id AND lcs.empresa_id = lc.empresa_id AND lcs.setor_id IN (${loteSetorPlaceholders}) AND lcs.deleted_at IS NULL)
+             OR (
+               NOT EXISTS (SELECT 1 FROM lms_cursos_setores lcs_chk WHERE lcs_chk.curso_id = lc.id AND lcs_chk.empresa_id = lc.empresa_id AND lcs_chk.deleted_at IS NULL)
+               AND lc.qualificacao_tipo_id IS NOT NULL
+               AND EXISTS (SELECT 1 FROM qualificacoes_tipos_setores qts WHERE qts.tipo_id = lc.qualificacao_tipo_id AND qts.empresa_id = lc.empresa_id AND qts.setor_id IN (${loteSetorPlaceholders}) AND qts.deleted_at IS NULL)
+             )
+           )
+         LIMIT 1`,
+      )
+      .bind(curso_id, empresaId, ...loteAccess.setorIds, ...loteAccess.setorIds)
+      .first();
     if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
   }
 
   const funcionarioPlaceholders = funcionarioIdsUnicos.map(() => '?').join(', ');
-  const funcionarios = await db
-    .prepare(
-      `SELECT id, nome
+  let funcionarioQuery = `SELECT id, nome
          FROM funcionarios
         WHERE empresa_id = ?
           AND deleted_at IS NULL
           AND COALESCE(ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-          AND id IN (${funcionarioPlaceholders})`,
-    )
-    .bind(empresaId, ...funcionarioIdsUnicos)
+          AND id IN (${funcionarioPlaceholders})`;
+  const funcionarioBinds: (number | string)[] = [empresaId, ...funcionarioIdsUnicos];
+  if (loteAccess.mode === 'restricted') {
+    funcionarioQuery += ` AND setor_id IN (${loteAccess.setorIds.map(() => '?').join(',')})`;
+    funcionarioBinds.push(...loteAccess.setorIds);
+  }
+  const funcionarios = await db
+    .prepare(funcionarioQuery)
+    .bind(...funcionarioBinds)
     .all<{ id: number; nome: string }>();
   const funcionariosPorId = new Map(
     (funcionarios.results ?? []).map((funcionario) => [Number(funcionario.id), funcionario]),

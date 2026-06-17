@@ -28,12 +28,9 @@ function resolveRelatorioSetorIds(
     .filter((n) => Number.isFinite(n) && n > 0);
 
   if (access.mode === 'all') return requested; // admin: use explicit param or no filter
-  if (access.mode === 'sector') {
-    // sector manager: intersect requested with allowed; if none requested, use all allowed
-    if (requested.length === 0) return access.setorIds;
-    return requested.filter((id) => access.setorIds.includes(id));
-  }
-  return access.setorIds;
+  // restricted or self: intersect requested with allowed; if none requested, use all allowed
+  if (requested.length === 0) return access.setorIds;
+  return requested.filter((id) => access.setorIds.includes(id));
 }
 
 app.get('/relatorios/conformidade', auth(), requireRole('admin', 'manager'), async (c) => {
