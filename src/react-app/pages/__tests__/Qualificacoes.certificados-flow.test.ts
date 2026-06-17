@@ -19,6 +19,7 @@ describe('Qualificacoes — fluxo de certificados', () => {
     expect(qualificacoesSource).toContain(
       "(item) => getHistoricoDisplayStatus(item) === 'VENCIDA'",
     );
+    expect(qualificacoesSource).toContain("    undefined,\n    shouldLoadPlannedRelatedHistorico,");
     expect(qualificacoesSource).toContain('shouldLoadPlannedRelatedHistorico,');
   });
 
