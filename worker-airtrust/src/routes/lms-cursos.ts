@@ -1321,17 +1321,38 @@ async function handleLmsStats(
   const db = c.env.DB as D1Database;
   const empresaId = getEmpresaIdSafe(c);
 
+  const access = await getEmployeeSectorAccess(c, empresaId);
+
+  let courseSectorFilter = '';
+  const courseSectorBinds: number[] = [];
+  if (access.mode === 'restricted' && access.setorIds.length > 0) {
+    const placeholders = access.setorIds.map(() => '?').join(', ');
+    courseSectorFilter = ` AND (
+      EXISTS (
+        SELECT 1 FROM lms_cursos_setores lcs_f
+        WHERE lcs_f.curso_id = c.id AND lcs_f.empresa_id = c.empresa_id
+          AND lcs_f.setor_id IN (${placeholders}) AND lcs_f.deleted_at IS NULL
+      )
+      OR (
+        NOT EXISTS (SELECT 1 FROM lms_cursos_setores lcs_chk WHERE lcs_chk.curso_id = c.id AND lcs_chk.empresa_id = c.empresa_id AND lcs_chk.deleted_at IS NULL)
+        AND c.qualificacao_tipo_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM qualificacoes_tipos_setores qts WHERE qts.tipo_id = c.qualificacao_tipo_id AND qts.empresa_id = c.empresa_id AND qts.setor_id IN (${placeholders}) AND qts.deleted_at IS NULL)
+      )
+    )`;
+    courseSectorBinds.push(...access.setorIds, ...access.setorIds);
+  }
+
   const [totaisCursos, totaisMatriculas, topCursos, atrasadas, recentCompletions, featuredCourses] =
     await Promise.all([
       db
         .prepare(
           `SELECT
            COUNT(*) AS total_cursos,
-           SUM(CASE WHEN publicado = 1 THEN 1 ELSE 0 END) AS cursos_publicados
-         FROM lms_cursos
-         WHERE empresa_id = ? AND deleted_at IS NULL AND ativo = 1`,
+           SUM(CASE WHEN c.publicado = 1 THEN 1 ELSE 0 END) AS cursos_publicados
+         FROM lms_cursos c
+         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1${courseSectorFilter}`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...courseSectorBinds)
         .first<{ total_cursos: number; cursos_publicados: number }>(),
 
       db
@@ -1386,7 +1407,7 @@ async function handleLmsStats(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1
+         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1${courseSectorFilter}
         GROUP BY c.id, c.titulo, c.tipo_conteudo, c.categoria, c.descricao, c.carga_horaria_minutos, c.thumbnail_r2_key, c.created_at
         ORDER BY
           CASE WHEN COUNT(f.id) > 0 THEN 0 ELSE 1 END,
@@ -1395,7 +1416,7 @@ async function handleLmsStats(
           c.created_at DESC
          LIMIT 5`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...courseSectorBinds)
         .all<{
           id: number;
           titulo: string;
@@ -1432,11 +1453,11 @@ async function handleLmsStats(
            AND m.deleted_at IS NULL
            AND m.status = 'EM_ANDAMENTO'
            AND m.progresso_pct < 10
-           AND m.data_matricula < datetime('now', '-14 days')
+           AND m.data_matricula < datetime('now', '-14 days')${courseSectorFilter}
          ORDER BY m.data_matricula ASC
          LIMIT 20`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...courseSectorBinds)
         .all<{
           id: number;
           funcionario_id: number;
@@ -1467,11 +1488,11 @@ async function handleLmsStats(
            AND m.deleted_at IS NULL
            AND m.status = 'CONCLUIDO'
            AND m.data_conclusao IS NOT NULL
-           AND m.data_conclusao >= datetime('now', '-7 days')
+           AND m.data_conclusao >= datetime('now', '-7 days')${courseSectorFilter}
          ORDER BY m.data_conclusao DESC
          LIMIT 8`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...courseSectorBinds)
         .all<{
           id: number;
           funcionario_id: number;
@@ -1501,12 +1522,12 @@ async function handleLmsStats(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1
+         WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1${courseSectorFilter}
          GROUP BY c.id, c.titulo, c.tipo_conteudo, c.categoria, c.descricao, c.carga_horaria_minutos, c.thumbnail_r2_key, c.publicado, c.created_at
          ORDER BY COUNT(f.id) DESC, c.created_at DESC
          LIMIT 3`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...courseSectorBinds)
         .all<{
           id: number;
           titulo: string;
@@ -1571,6 +1592,8 @@ app.get('/:id{[0-9]+}', async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
 
+  const access = await getEmployeeSectorAccess(c, empresaId);
+
   const curso = await db
     .prepare(
       `
@@ -1597,6 +1620,40 @@ app.get('/:id{[0-9]+}', async (c) => {
     .first<Record<string, unknown>>();
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
+
+  // ── Sector scope check for restricted managers ──────────────────────
+  if (access.mode === 'restricted' && access.setorIds.length > 0) {
+    const placeholders = access.setorIds.map(() => '?').join(', ');
+    const inScope = await db
+      .prepare(
+        `SELECT 1 as ok FROM lms_cursos c
+         WHERE c.id = ? AND c.empresa_id = ? AND c.deleted_at IS NULL
+         AND (
+           EXISTS (
+             SELECT 1 FROM lms_cursos_setores lcs_f
+             WHERE lcs_f.curso_id = c.id AND lcs_f.empresa_id = c.empresa_id
+               AND lcs_f.setor_id IN (${placeholders}) AND lcs_f.deleted_at IS NULL
+           )
+           OR (
+             NOT EXISTS (
+               SELECT 1 FROM lms_cursos_setores lcs_chk
+               WHERE lcs_chk.curso_id = c.id AND lcs_chk.empresa_id = c.empresa_id AND lcs_chk.deleted_at IS NULL
+             )
+             AND c.qualificacao_tipo_id IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM qualificacoes_tipos_setores qts
+               WHERE qts.tipo_id = c.qualificacao_tipo_id AND qts.empresa_id = c.empresa_id
+                 AND qts.setor_id IN (${placeholders}) AND qts.deleted_at IS NULL
+             )
+           )
+         )`,
+      )
+      .bind(cursoId, empresaId, ...access.setorIds, ...access.setorIds)
+      .first();
+    if (!inScope) {
+      return c.json({ success: false, error: 'Acesso negado: curso fora do seu escopo de setor' }, 403);
+    }
+  }
 
   const setoresJson = curso.setores_json as string | null;
   const { setores_json: _, ...cursoRest } = curso;
