@@ -5,6 +5,14 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { API_BASE_URL } from '@/react-app/config/api';
 
+const { mockUseApi } = vi.hoisted(() => ({
+  mockUseApi: vi.fn(),
+}));
+
+vi.mock('../hooks/useApi', () => ({
+  useApi: mockUseApi,
+}));
+
 // Mock useAuth so the hook doesn't require AuthProvider
 vi.mock('@/react-app/hooks/useAuth', () => ({
   useAuth: () => ({ token: 'test-token', logout: vi.fn() }),
@@ -21,9 +29,17 @@ describe('useQualificacoesHistorico - renovarQualificacao', () => {
   afterEach(() => {
     server.resetHandlers();
     vi.clearAllMocks();
+    mockUseApi.mockReset();
   });
 
   it('renova uma qualificacao com sucesso e recarrega historico', async () => {
+    mockUseApi.mockReturnValue({
+      data: [],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
     server.use(
       // useApi initial list fetch uses the full production URL (via buildFullUrl)
       http.get(`${API}/qualificacoes/historico`, () =>
@@ -46,6 +62,13 @@ describe('useQualificacoesHistorico - renovarQualificacao', () => {
   });
 
   it('retorna null em erro de renovacao', async () => {
+    mockUseApi.mockReturnValue({
+      data: [],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
     server.use(
       http.get(`${API}/qualificacoes/historico`, () =>
         HttpResponse.json({ success: true, data: [], total: 0 }),
@@ -66,25 +89,23 @@ describe('useQualificacoesHistorico - renovarQualificacao', () => {
   });
 
   it('mantem referencias derivadas estaveis quando o payload nao muda', async () => {
-    server.use(
-      http.get(`${API}/qualificacoes/historico`, () =>
-        HttpResponse.json({
-          success: true,
-          data: [
-            {
-              id: 1,
-              funcionario_id: 10,
-              qualificacao_id: 20,
-              funcionario_nome: 'Tripulante Teste',
-              qualificacao_desc: 'G1',
-              data_registro: '2026-06-01',
-              data_vencimento: '2026-12-01',
-              status: 'VALIDA',
-            },
-          ],
-        }),
-      ),
-    );
+    mockUseApi.mockReturnValue({
+      data: [
+        {
+          id: 1,
+          funcionario_id: 10,
+          qualificacao_id: 20,
+          funcionario_nome: 'Tripulante Teste',
+          qualificacao_desc: 'G1',
+          data_registro: '2026-06-01',
+          data_vencimento: '2026-12-01',
+          status: 'VALIDA',
+        },
+      ],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
 
     const { result, rerender } = renderHook(() => useQualificacoesHistorico());
 
