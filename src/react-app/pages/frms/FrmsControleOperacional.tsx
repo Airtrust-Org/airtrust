@@ -263,7 +263,7 @@ function FortnightDetailPanel({ indicator }: { indicator: FrmsFortnightIndicator
       <div className="mt-2 space-y-2 text-xs text-slate-600">
         <p>Indicador operacional descritivo — não é compliance regulatório.</p>
         {!hasCompleteData ? (
-          <p>Dados quinzenais ainda nao consolidados para este periodo.</p>
+          <p>Dados quinzenais ainda não consolidados para este período.</p>
         ) : (
           <>
             <div className="grid gap-x-3 gap-y-1 sm:grid-cols-2">
