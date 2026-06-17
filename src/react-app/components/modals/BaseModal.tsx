@@ -23,6 +23,7 @@ export interface BaseModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  placement?: 'center' | 'top';
   /** Impede fechar clicando no backdrop */
   disableBackdropClose?: boolean;
   className?: string;
@@ -44,6 +45,7 @@ export function BaseModal({
   children,
   footer,
   size = 'md',
+  placement = 'center',
   disableBackdropClose = false,
   className,
 }: BaseModalProps) {
@@ -80,7 +82,13 @@ export function BaseModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center p-4" role="presentation">
+    <div
+      className={cn(
+        'fixed inset-0 z-modal flex justify-center p-4',
+        placement === 'top' ? 'items-start pt-20' : 'items-center',
+      )}
+      role="presentation"
+    >
       {/* Backdrop com blur */}
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"

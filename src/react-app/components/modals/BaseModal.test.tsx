@@ -36,4 +36,19 @@ describe('BaseModal', () => {
     fireEvent.click(backdrop as HTMLElement);
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('aplica posicionamento no topo quando solicitado', () => {
+    render(
+      <BaseModal isOpen onClose={() => undefined} title="Teste modal" placement="top">
+        <div>Conteudo</div>
+      </BaseModal>,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const wrapper = dialog.parentElement;
+
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.className).toContain('items-start');
+    expect(wrapper?.className).toContain('pt-20');
+  });
 });

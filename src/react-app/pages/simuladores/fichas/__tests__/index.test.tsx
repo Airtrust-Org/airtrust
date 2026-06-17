@@ -58,6 +58,33 @@ function renderPage() {
   );
 }
 
+function buildFicha(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 901,
+    participante_nome: 'Tripulante Teste',
+    participante_funcao: 'PIC',
+    simulador_codigo: 'AW139',
+    simulador_nome: 'SIM AW139',
+    sessao_modelo: 'A139-P-C1/IFR',
+    sessao_titulo: 'A139-P-C1/IFR',
+    data_hora: '2026-06-16 08:00',
+    data_sessao: '2026-06-16',
+    hora_inicio: '08:00',
+    instrutor_nome: 'Instrutor Teste',
+    status: 'AVALIACAO_PENDENTE',
+    ...overrides,
+  };
+}
+
+function formatOperationalDate(date: Date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
 describe('FichasAvaliacaoContent modal de ficha modelo', () => {
   beforeEach(() => {
     permissionsMock.mockReturnValue({
@@ -120,6 +147,7 @@ describe('FichasAvaliacaoContent modal de ficha modelo', () => {
     await userEvent.click(trigger);
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('presentation')).toHaveClass('items-start', 'pt-20');
     expect(screen.getByText('Fichas Modelo para Impressão')).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -207,18 +235,11 @@ describe('FichasAvaliacaoContent modal de ficha modelo', () => {
         return jsonResponse({
           success: true,
           data: [
-            {
-              id: 901,
-              participante_nome: 'Tripulante Teste',
-              participante_funcao: 'PIC',
-              simulador_codigo: 'AW139',
-              simulador_nome: 'SIM AW139',
-              sessao_modelo: 'A139-P-C1/IFR',
-              sessao_titulo: 'A139-P-C1/IFR',
-              data_hora: '2999-01-01 08:00',
-              instrutor_nome: 'Instrutor Teste',
-              status: 'AVALIACAO_PENDENTE',
-            },
+            buildFicha({
+              data_hora: '2999-01-01',
+              data_sessao: '2999-01-01',
+              hora_inicio: '08:00',
+            }),
           ],
         });
       }
@@ -241,5 +262,65 @@ describe('FichasAvaliacaoContent modal de ficha modelo', () => {
     expect(blockedActions.length).toBeGreaterThan(0);
     blockedActions.forEach((button) => expect(button).toBeDisabled());
     expect(screen.queryByRole('button', { name: /Avaliar Tripulante/ })).toBeNull();
+  });
+
+  it('mantém avaliação liberada para sessão de hoje já iniciada', async () => {
+    const today = formatOperationalDate(new Date());
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/simuladores/fichas?')) {
+        return jsonResponse({
+          success: true,
+          data: [buildFicha({ data_hora: today, data_sessao: today, hora_inicio: '00:00' })],
+        });
+      }
+
+      if (url.includes('/simuladores/instrutores')) {
+        return jsonResponse({ success: true, data: [] });
+      }
+
+      return jsonResponse({ success: true, data: [] });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage();
+
+    const evaluateButtons = await screen.findAllByRole('button', { name: /Avaliar Tripulante/ });
+    expect(evaluateButtons.length).toBeGreaterThan(0);
+    evaluateButtons.forEach((button) => expect(button).toBeEnabled());
+    expect(screen.queryByRole('button', { name: /Ficha disponível no dia da sessão/ })).toBeNull();
+  });
+
+  it('mantém avaliação liberada para sessão passada', async () => {
+    const yesterday = formatOperationalDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/simuladores/fichas?')) {
+        return jsonResponse({
+          success: true,
+          data: [buildFicha({ data_hora: yesterday, data_sessao: yesterday, hora_inicio: '08:00' })],
+        });
+      }
+
+      if (url.includes('/simuladores/instrutores')) {
+        return jsonResponse({ success: true, data: [] });
+      }
+
+      return jsonResponse({ success: true, data: [] });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage();
+
+    const evaluateButtons = await screen.findAllByRole('button', { name: /Avaliar Tripulante/ });
+    expect(evaluateButtons.length).toBeGreaterThan(0);
+    evaluateButtons.forEach((button) => expect(button).toBeEnabled());
+    expect(screen.queryByRole('button', { name: /Ficha disponível no dia da sessão/ })).toBeNull();
   });
 });
