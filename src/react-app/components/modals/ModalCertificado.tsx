@@ -15,7 +15,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
-import { openPreviewWindow, previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import {
+  openPreviewWindow,
+  previewPdfBeforeDownload,
+  showPdfPreviewError,
+} from '@/react-app/utils/pdfPreview';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 
 export interface ModalCertificadoProps {
@@ -290,7 +294,8 @@ export function ModalCertificado({
 
   const handleGerarListaPresenca = async () => {
     setGerandoLista(true);
-    const previewWindow = openPreviewWindow();
+    const previewTitle = `Lista de Presença — ${qualificacao.codigo}`;
+    const previewWindow = openPreviewWindow(previewTitle);
     try {
       const { gerarPDFListaPresenca } = await import('@/react-app/services/pdf-lista-presenca');
       const blob = await gerarPDFListaPresenca({
@@ -307,17 +312,15 @@ export function ModalCertificado({
 
       await previewPdfBeforeDownload({
         fileName,
-        title: `Lista de Presença — ${qualificacao.codigo}`,
+        title: previewTitle,
         mimeType: 'application/pdf',
         existingWindow: previewWindow,
         fetcher: () =>
           Promise.resolve(new Response(blob, { headers: { 'Content-Type': 'application/pdf' } })),
       });
     } catch (err) {
-      if (previewWindow && !previewWindow.closed) {
-        previewWindow.close();
-      }
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      showPdfPreviewError(previewWindow, previewTitle, msg);
       toast.error(`❌ Erro ao gerar lista: ${msg}`);
     } finally {
       setGerandoLista(false);
