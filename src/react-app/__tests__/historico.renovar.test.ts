@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useQualificacoesHistorico } from '../hooks/useQualificacoesExt';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { API_BASE_URL } from '@/react-app/config/api';
@@ -63,5 +63,39 @@ describe('useQualificacoesHistorico - renovarQualificacao', () => {
     });
 
     expect(retorno).toBeNull();
+  });
+
+  it('mantem referencias derivadas estaveis quando o payload nao muda', async () => {
+    server.use(
+      http.get(`${API}/qualificacoes/historico`, () =>
+        HttpResponse.json({
+          success: true,
+          data: [
+            {
+              id: 1,
+              funcionario_id: 10,
+              qualificacao_id: 20,
+              funcionario_nome: 'Tripulante Teste',
+              qualificacao_desc: 'G1',
+              data_registro: '2026-06-01',
+              data_vencimento: '2026-12-01',
+              status: 'VALIDA',
+            },
+          ],
+        }),
+      ),
+    );
+
+    const { result, rerender } = renderHook(() => useQualificacoesHistorico());
+
+    await waitFor(() => expect(result.current.historico).toHaveLength(1));
+
+    const historicoRef = result.current.historico;
+    const statsRef = result.current.stats;
+
+    rerender();
+
+    expect(result.current.historico).toBe(historicoRef);
+    expect(result.current.stats).toBe(statsRef);
   });
 });

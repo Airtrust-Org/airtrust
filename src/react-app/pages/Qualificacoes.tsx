@@ -1072,8 +1072,12 @@ export default function Qualificacoes() {
     });
   }, [historicoItensPaginaEstado]);
 
-  const filteredHistorico = (historico as HistoricoItem[]).filter((item) =>
-    statusFiltro.has(getHistoricoStatus(item)),
+  const filteredHistorico = useMemo(
+    () =>
+      (historico as HistoricoItem[]).filter((item) =>
+        statusFiltro.has(getHistoricoStatus(item)),
+      ),
+    [getHistoricoStatus, historico, statusFiltro],
   );
 
   const prioritizedHistorico = useMemo(() => {
@@ -1204,15 +1208,17 @@ export default function Qualificacoes() {
   const planejadosTableLoading = loading && planejadosHistorico.length === 0;
 
   // Filtrar tipos baseado no searchTipos
-  const filteredTipos = tipos.filter((tipo) => {
-    if (!searchTipos.trim()) return true;
-    const searchLower = searchTipos.toLowerCase();
-    return (
-      tipo.nome?.toLowerCase().includes(searchLower) ||
-      tipo.codigo?.toLowerCase().includes(searchLower) ||
-      tipo.categoria?.toLowerCase().includes(searchLower)
-    );
-  });
+  const filteredTipos = useMemo(() => {
+    const searchLower = searchTipos.trim().toLowerCase();
+    if (!searchLower) return tipos;
+    return tipos.filter((tipo) => {
+      return (
+        tipo.nome?.toLowerCase().includes(searchLower) ||
+        tipo.codigo?.toLowerCase().includes(searchLower) ||
+        tipo.categoria?.toLowerCase().includes(searchLower)
+      );
+    });
+  }, [searchTipos, tipos]);
 
   const getStatusColor = (status: string) => {
     if (status === 'RENOVADA') return 'bg-blue-600/10 text-blue-600';
