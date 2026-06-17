@@ -20,6 +20,23 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
+function ensureAtLeastOneVisibleColumn<T>(
+  columns: Column<T>[],
+  preferredVisibleColumnId?: string,
+): Column<T>[] {
+  if (columns.some((column) => column.visible !== false)) {
+    return columns;
+  }
+
+  return columns.map((column, index) => ({
+    ...column,
+    visible:
+      preferredVisibleColumnId != null
+        ? column.id === preferredVisibleColumnId
+        : index === 0,
+  }));
+}
+
 interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
@@ -128,11 +145,13 @@ export function DataTable<T extends { id?: string | number }>({
         const widths = (config.widths ?? {}) as Record<string, string | undefined>;
 
         // Apply saved column visibility
-        const updatedColumns = initialColumns.map((col) => ({
-          ...col,
-          visible: config.visibility?.[col.id] !== false,
-          width: widths[col.id] || col.width,
-        }));
+        const updatedColumns = ensureAtLeastOneVisibleColumn(
+          initialColumns.map((col) => ({
+            ...col,
+            visible: config.visibility?.[col.id] !== false,
+            width: widths[col.id] || col.width,
+          })),
+        );
 
         if (typeof config.pageSize === 'number' && config.pageSize > 0) {
           setInternalPageSize(config.pageSize);
@@ -140,19 +159,21 @@ export function DataTable<T extends { id?: string | number }>({
 
         // Apply saved column order if available
         if (config.order && config.order.length === updatedColumns.length) {
-          const orderedColumns = config.order
-            .map((id: string) => updatedColumns.find((col) => col.id === id))
-            .filter(Boolean) as Column<T>[];
+          const orderedColumns = ensureAtLeastOneVisibleColumn(
+            config.order
+              .map((id: string) => updatedColumns.find((col) => col.id === id))
+              .filter(Boolean) as Column<T>[],
+          );
           setColumns(orderedColumns);
         } else {
           setColumns(updatedColumns);
         }
       } catch {
         // If JSON parsing fails, just use initial columns
-        setColumns(initialColumns);
+        setColumns(ensureAtLeastOneVisibleColumn(initialColumns));
       }
     } else {
-      setColumns(initialColumns);
+      setColumns(ensureAtLeastOneVisibleColumn(initialColumns));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableId]); // Apenas tableId como dependência para evitar resetar config
@@ -172,12 +193,12 @@ export function DataTable<T extends { id?: string | number }>({
       });
 
       const previousOrder = prevColumns.map((column) => column.id);
-      const orderedColumns = [
+      const orderedColumns = ensureAtLeastOneVisibleColumn([
         ...previousOrder
           .map((id) => mergedColumns.find((column) => column.id === id))
           .filter(Boolean),
         ...mergedColumns.filter((column) => !previousOrder.includes(column.id)),
-      ] as Column<T>[];
+      ] as Column<T>[]);
 
       const changed =
         orderedColumns.length !== prevColumns.length ||
@@ -267,7 +288,11 @@ export function DataTable<T extends { id?: string | number }>({
   const isServerSorted = typeof onSortChange === 'function';
   const displayData =
     isServerPaginated || isServerSorted ? sortedData : sortedData.slice(startIndex, endIndex);
-  const shouldVirtualize = virtualizeRows && displayData.length >= virtualizeThreshold;
+  const shouldVirtualize =
+    virtualizeRows &&
+    !isServerPaginated &&
+    !isServerSorted &&
+    displayData.length >= virtualizeThreshold;
   const rowVirtualizer = useVirtualizer({
     count: displayData.length,
     getScrollElement: () => tableContainerRef.current,
@@ -309,8 +334,11 @@ export function DataTable<T extends { id?: string | number }>({
   };
 
   const toggleColumnVisibility = (columnId: string) => {
-    const newColumns = columns.map((col) =>
-      col.id === columnId ? { ...col, visible: col.visible === false ? true : false } : col,
+    const newColumns = ensureAtLeastOneVisibleColumn(
+      columns.map((col) =>
+        col.id === columnId ? { ...col, visible: col.visible === false ? true : false } : col,
+      ),
+      columnId,
     );
     setColumns(newColumns);
     saveConfiguration(newColumns);
