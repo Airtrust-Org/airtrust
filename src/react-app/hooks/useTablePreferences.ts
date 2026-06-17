@@ -14,10 +14,15 @@ export function useTablePreferences<T extends Record<string, unknown>>(
   const [preferences, setPreferences] = useState<T>(defaultValue);
   const [ready, setReady] = useState(false);
   const saveTimerRef = useRef<number | null>(null);
+  const defaultValueRef = useRef(defaultValue);
   const localKey = useMemo(
     () => buildLocalKey(tableKey, empresaAtualId, user?.id ?? null),
     [empresaAtualId, tableKey, user?.id],
   );
+
+  useEffect(() => {
+    defaultValueRef.current = defaultValue;
+  }, [defaultValue]);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +33,7 @@ export function useTablePreferences<T extends Record<string, unknown>>(
       try {
         const local = localStorage.getItem(localKey);
         if (local && !cancelled) {
-          setPreferences({ ...defaultValue, ...JSON.parse(local) });
+          setPreferences({ ...defaultValueRef.current, ...JSON.parse(local) });
         }
       } catch (error) {
         console.error('[useTablePreferences] erro ao carregar fallback local:', error);
@@ -43,7 +48,7 @@ export function useTablePreferences<T extends Record<string, unknown>>(
 
         const payload = (await response.json().catch(() => ({}))) as { data?: T | null };
         if (!cancelled && payload.data) {
-          const merged = { ...defaultValue, ...payload.data };
+          const merged = { ...defaultValueRef.current, ...payload.data };
           setPreferences(merged);
           localStorage.setItem(localKey, JSON.stringify(merged));
         }
@@ -59,7 +64,7 @@ export function useTablePreferences<T extends Record<string, unknown>>(
     return () => {
       cancelled = true;
     };
-  }, [defaultValue, localKey, tableKey]);
+  }, [localKey, tableKey]);
 
   useEffect(() => {
     if (!ready) return;
@@ -92,7 +97,7 @@ export function useTablePreferences<T extends Record<string, unknown>>(
   }, [localKey, preferences, ready, tableKey]);
 
   function resetPreferences() {
-    setPreferences(defaultValue);
+    setPreferences(defaultValueRef.current);
   }
 
   return {

@@ -12,9 +12,12 @@ describe('Qualificacoes — fluxo de certificados', () => {
     expect(qualificacoesSource).toContain('setShowCertModal(true);');
   });
 
-  it('query planejada de 500 registros fica gateada ao historico', () => {
+  it('query planejada de 500 registros so roda quando ha vencidas na pagina atual', () => {
     expect(qualificacoesSource).toContain(
-      'const shouldLoadPlannedRelatedHistorico = isHistoricoTab;',
+      "const shouldLoadPlannedRelatedHistorico = useMemo(",
+    );
+    expect(qualificacoesSource).toContain(
+      "(item) => getHistoricoDisplayStatus(item) === 'VENCIDA'",
     );
     expect(qualificacoesSource).toContain('shouldLoadPlannedRelatedHistorico,');
   });
