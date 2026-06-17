@@ -50,6 +50,7 @@ const cancelledQualificationPredicate = sqlStatusEqualsAny(
   QUALIFICATION_STATUS_EXPR,
   CANCELLED_STATUS_VALUES,
 );
+let historicoRenovacaoDeColumnPromise: Promise<boolean> | null = null;
 
 function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
   const renewalLinkPredicate = hasRenovacaoDe
@@ -79,12 +80,19 @@ function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
 }
 
 async function hasHistoricoRenovacaoDeColumn(db: D1Database): Promise<boolean> {
-  try {
-    const { results } = await db.prepare('PRAGMA table_info(qualificacoes_historico)').all();
-    return (results || []).some((column: any) => column?.name === 'renovacao_de');
-  } catch {
-    return false;
+  if (!historicoRenovacaoDeColumnPromise) {
+    historicoRenovacaoDeColumnPromise = db
+      .prepare('PRAGMA table_info(qualificacoes_historico)')
+      .all()
+      .then(
+        ({ results }) =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (results || []).some((column: any) => column?.name === 'renovacao_de'),
+      )
+      .catch(() => false);
   }
+
+  return historicoRenovacaoDeColumnPromise;
 }
 
 function parseRequestedSetorIds(rawSetorId?: string, rawSetorIds?: string): number[] {
@@ -151,6 +159,7 @@ router.get(
       id = '',
       page = '1',
       limit = '20',
+      stats = 'true',
       search = '',
       status = '',
       statuses = '',
@@ -167,6 +176,7 @@ router.get(
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 500);
     const offset = (pageNum - 1) * limitNum;
+    const includeStats = String(stats).toLowerCase() !== 'false';
     const selectedStatuses = Array.from(
       new Set(
         String(statuses || status)
@@ -293,70 +303,89 @@ router.get(
 
     const whereClause = conditions.join(' AND ');
 
-    // STATS GLOBAIS
-    const statsQuery = `SELECT 
-      COUNT(*) as total,
-      SUM(CASE 
-        WHEN ${renewedQualificationPredicate} THEN 0
-        WHEN qh.data_conclusao IS NULL THEN 0
-        WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) >= julianday('now') 
-         AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) - julianday('now') > 30 THEN 1 
-        ELSE 0 
-      END) as validas,
-      SUM(CASE 
-        WHEN ${renewedQualificationPredicate} THEN 0
-        WHEN qh.data_conclusao IS NULL THEN 0
-        WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) - julianday('now') <= 30 
-         AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) >= julianday('now') THEN 1 
-        ELSE 0 
-      END) as vencendo,
-      SUM(CASE 
-        WHEN ${renewedQualificationPredicate} THEN 0
-        WHEN qh.data_conclusao IS NULL THEN 0
-        WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) < julianday('now') THEN 1 
-        ELSE 0 
-      END) as vencidas,
-      SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
-      SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
-    FROM qualificacoes_historico qh
-    LEFT JOIN funcionarios f ON f.id = qh.funcionario_id 
-      AND f.deleted_at IS NULL 
-      AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-    LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
-    LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
-    WHERE ${whereClause}`;
-
-    const statsResult = await db
-      .prepare(statsQuery)
-      .bind(...params)
-      .first();
-
-    // Global counts (independent of status filter) for badge chips
-    const nonStatusWhere = nonStatusConditions.join(' AND ');
-    const globalCountsQuery = `SELECT
-      SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
-      SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
-    FROM qualificacoes_historico qh
-    LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
-      AND f.deleted_at IS NULL
-      AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-    LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
-    LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
-    WHERE ${nonStatusWhere}`;
-
-    const globalCountsResult = await db
-      .prepare(globalCountsQuery)
-      .bind(...nonStatusParams)
-      .first();
-
-    const stats = {
-      total: Number((statsResult as any)?.total || 0),
-      validas: Number((statsResult as any)?.validas || 0),
-      vencendo: Number((statsResult as any)?.vencendo || 0),
-      vencidas: Number((statsResult as any)?.vencidas || 0),
-      renovadas: Number((globalCountsResult as any)?.renovadas || 0),
-      planejadas: Number((globalCountsResult as any)?.planejadas || 0),
+    let statsPayload = {
+      total: 0,
+      validas: 0,
+      vencendo: 0,
+      vencidas: 0,
+      renovadas: 0,
+      planejadas: 0,
     };
+
+    if (includeStats) {
+      const statsQuery = `SELECT
+        COUNT(*) as total,
+        SUM(CASE
+          WHEN ${renewedQualificationPredicate} THEN 0
+          WHEN qh.data_conclusao IS NULL THEN 0
+          WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) >= julianday('now')
+           AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) - julianday('now') > 30 THEN 1
+          ELSE 0
+        END) as validas,
+        SUM(CASE
+          WHEN ${renewedQualificationPredicate} THEN 0
+          WHEN qh.data_conclusao IS NULL THEN 0
+          WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) - julianday('now') <= 30
+           AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) >= julianday('now') THEN 1
+          ELSE 0
+        END) as vencendo,
+        SUM(CASE
+          WHEN ${renewedQualificationPredicate} THEN 0
+          WHEN qh.data_conclusao IS NULL THEN 0
+          WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))) < julianday('now') THEN 1
+          ELSE 0
+        END) as vencidas,
+        SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
+        SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
+      FROM qualificacoes_historico qh
+      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+        AND f.deleted_at IS NULL
+        AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
+      LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
+      WHERE ${whereClause}`;
+
+      const statsResult = await db.prepare(statsQuery).bind(...params).first();
+
+      // Global counts (independent of status filter) for badge chips
+      const nonStatusWhere = nonStatusConditions.join(' AND ');
+      const globalCountsQuery = `SELECT
+        SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
+        SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
+      FROM qualificacoes_historico qh
+      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+        AND f.deleted_at IS NULL
+        AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
+      LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
+      WHERE ${nonStatusWhere}`;
+
+      const globalCountsResult = await db
+        .prepare(globalCountsQuery)
+        .bind(...nonStatusParams)
+        .first();
+
+      statsPayload = {
+        total: Number((statsResult as any)?.total || 0),
+        validas: Number((statsResult as any)?.validas || 0),
+        vencendo: Number((statsResult as any)?.vencendo || 0),
+        vencidas: Number((statsResult as any)?.vencidas || 0),
+        renovadas: Number((globalCountsResult as any)?.renovadas || 0),
+        planejadas: Number((globalCountsResult as any)?.planejadas || 0),
+      };
+    } else {
+      const totalOnlyQuery = `SELECT COUNT(*) as total
+      FROM qualificacoes_historico qh
+      LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+        AND f.deleted_at IS NULL
+        AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
+      LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
+      WHERE ${whereClause}`;
+
+      const totalOnlyResult = await db.prepare(totalOnlyQuery).bind(...params).first();
+      statsPayload.total = Number((totalOnlyResult as any)?.total || 0);
+    }
 
     // DADOS PAGINADOS
     const dataQuery = `SELECT 
@@ -507,7 +536,7 @@ router.get(
 
     const etag = generateETag([
       'historico',
-      stats.total,
+      statsPayload.total,
       pageNum,
       limitNum,
       id,
@@ -525,16 +554,16 @@ router.get(
         limit: limitNum,
         offset,
         page: pageNum,
-        total: stats.total,
+        total: statsPayload.total,
         etag,
       },
-      stats,
+      stats: statsPayload,
       pagination: {
         page: pageNum,
         limit: limitNum,
         offset,
-        total: stats.total,
-        pages: Math.ceil(stats.total / limitNum),
+        total: statsPayload.total,
+        pages: Math.ceil(statsPayload.total / limitNum),
       },
     });
   }),

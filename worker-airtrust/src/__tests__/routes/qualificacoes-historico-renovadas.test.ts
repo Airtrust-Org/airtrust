@@ -223,4 +223,57 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(body.success).toBe(true);
     expect(body.data[1]).toMatchObject({ id: 502, status: 'VALIDA', renovacao_de: 321 });
   });
+
+  it('honra stats=false e evita agregacoes pesadas para a query planejada', async () => {
+    const { db, calls } = createMockDb();
+    const app = createApp(db);
+
+    const response = await app.request('/historico?statuses=PLANEJADA&stats=false&limit=500');
+    const body = (await response.json()) as {
+      success: boolean;
+      stats: { total: number; validas: number; renovadas: number; planejadas: number };
+      meta: { total: number };
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.stats.total).toBe(590);
+    expect(body.stats.validas).toBe(0);
+    expect(body.stats.renovadas).toBe(0);
+    expect(body.stats.planejadas).toBe(0);
+    expect(body.meta.total).toBe(590);
+
+    const fullStatsQueries = calls.filter(
+      (call) => call.query.includes('COUNT(*) as total') && call.query.includes('SUM(CASE'),
+    );
+    const globalCountsQueries = calls.filter(
+      (call) =>
+        !call.query.includes('COUNT(*) as total') &&
+        call.query.includes('SUM(CASE WHEN') &&
+        call.query.toUpperCase().includes('AS RENOVADAS'),
+    );
+    const totalOnlyQueries = calls.filter(
+      (call) => call.query.includes('COUNT(*) as total') && !call.query.includes('SUM(CASE'),
+    );
+
+    expect(fullStatsQueries).toHaveLength(0);
+    expect(globalCountsQueries).toHaveLength(0);
+    expect(totalOnlyQueries).toHaveLength(1);
+  });
+
+  it('memoiza o PRAGMA de renovacao_de por isolate', async () => {
+    const { db, calls } = createMockDb();
+    const app = createApp(db);
+
+    const first = await app.request('/historico');
+    const second = await app.request('/historico?statuses=RENOVADA');
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+
+    const pragmaCalls = calls.filter((call) =>
+      call.query.includes('PRAGMA table_info(qualificacoes_historico)'),
+    );
+    expect(pragmaCalls.length).toBeLessThanOrEqual(1);
+  });
 });

@@ -137,6 +137,7 @@ export function useQualificacoesHistorico(
   statusFilter?: string[], // Backend status filters
   setorIds?: string[],
   historicoId?: number,
+  enabled: boolean = true,
 ) {
   const [loadingExtra, setLoadingExtra] = useState(false);
   const safeLimit = Math.min(limit, 500); // Máximo 500 por página
@@ -157,9 +158,9 @@ export function useQualificacoesHistorico(
   if (historicoId) endpoint += `&id=${historicoId}`;
 
   const { data, loading, error, refetch } = useApi<ApiResponse>(endpoint, {
-    enabled: true,
+    enabled,
     requireAuth: true,
-    bypassGetCache: true,
+    staleTime: 30_000,
   });
 
   const carregarHistorico = useCallback(() => refetch(), [refetch]);

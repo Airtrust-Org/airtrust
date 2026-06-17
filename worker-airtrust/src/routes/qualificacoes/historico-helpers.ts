@@ -238,20 +238,24 @@ export function resolveParametrosRenovacaoQualificacao(params: {
   };
 }
 
+let modelosAeronaveModeloColumnPromise: Promise<boolean> | null = null;
+
 export const ensureModelosAeronaveModeloColumn = async (db: D1Database) => {
-  try {
-    const col = await db.prepare('PRAGMA table_info(modelos_aeronave)').all();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const hasModelo = (col.results || []).some((r: any) => r.name === 'modelo');
-    if (!hasModelo) return;
-    await db
-      .prepare(
-        "UPDATE modelos_aeronave SET modelo = COALESCE(modelo, codigo, nome) WHERE modelo IS NULL OR modelo = ''",
+  if (!modelosAeronaveModeloColumnPromise) {
+    modelosAeronaveModeloColumnPromise = db
+      .prepare('PRAGMA table_info(modelos_aeronave)')
+      .all()
+      .then((col) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (col.results || []).some((r: any) => r.name === 'modelo'),
       )
-      .run();
-  } catch (e) {
-    console.warn('[ensureModelosAeronaveModeloColumn] Falha:', (e as Error).message);
+      .catch((e) => {
+        console.warn('[ensureModelosAeronaveModeloColumn] Falha:', (e as Error).message);
+        return false;
+      });
   }
+
+  await modelosAeronaveModeloColumnPromise;
 };
 
 // Mapeamento de colunas para ordenação segura (evita SQL injection)
