@@ -23,10 +23,92 @@ import {
   getUtilizacaoSimuladoresMetricRows,
 } from '../repositories/dashboardMetricsRepository';
 import {
+  buildFuncionarioScopeWhere,
+  type EmployeeSectorAccess,
+} from './employee-sector-access';
+import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
   getQualificacoesVencimentoExpr,
 } from '../utils/qualificacoes-alerta-config';
+
+function getFullDashboardAccess(): EmployeeSectorAccess {
+  return { mode: 'all', setorIds: [], funcionarioId: null };
+}
+
+function resolveDashboardAccess(access?: EmployeeSectorAccess): EmployeeSectorAccess {
+  return access ?? getFullDashboardAccess();
+}
+
+function buildEmployeeScopeSql(
+  access: EmployeeSectorAccess | undefined,
+  funcionarioAlias = 'f',
+): { clause: string; bindings: number[] } {
+  return buildFuncionarioScopeWhere(resolveDashboardAccess(access), funcionarioAlias);
+}
+
+function buildSessionScopeSql(
+  access: EmployeeSectorAccess | undefined,
+  sessionAlias = 'sa',
+): { clause: string; bindings: number[] } {
+  const normalizedAccess = resolveDashboardAccess(access);
+  if (normalizedAccess.mode === 'all') {
+    return { clause: '1 = 1', bindings: [] };
+  }
+
+  const scope = buildFuncionarioScopeWhere(normalizedAccess, 'f_scope');
+  return {
+    clause: `EXISTS (
+      SELECT 1
+      FROM sessoes_participantes sp_scope
+      JOIN funcionarios f_scope
+        ON f_scope.id = sp_scope.funcionario_id
+       AND f_scope.deleted_at IS NULL
+      WHERE sp_scope.sessao_id = ${sessionAlias}.id
+        AND sp_scope.deleted_at IS NULL
+        AND ${scope.clause}
+    )`,
+    bindings: scope.bindings,
+  };
+}
+
+function buildEscalaScopeSql(
+  access: EmployeeSectorAccess | undefined,
+  escalaAlias = 'em',
+): { clause: string; bindings: number[] } {
+  const normalizedAccess = resolveDashboardAccess(access);
+  if (normalizedAccess.mode === 'all') {
+    return { clause: '1 = 1', bindings: [] };
+  }
+
+  const scope = buildFuncionarioScopeWhere(normalizedAccess, 'f_scope');
+  return {
+    clause: `(
+      EXISTS (
+        SELECT 1
+        FROM escala_alocacoes ea
+        JOIN funcionarios f_scope
+          ON f_scope.id = ea.funcionario_id
+         AND f_scope.deleted_at IS NULL
+        WHERE ea.escala_id = ${escalaAlias}.id
+          AND ea.deleted_at IS NULL
+          AND ea.status != 'cancelado'
+          AND ${scope.clause}
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM escala_tripulacoes et
+        JOIN funcionarios f_scope
+          ON (f_scope.id = et.pic_id OR f_scope.id = et.sic_id)
+         AND f_scope.deleted_at IS NULL
+        WHERE et.escala_id = ${escalaAlias}.id
+          AND et.deleted_at IS NULL
+          AND ${scope.clause}
+      )
+    )`,
+    bindings: [...scope.bindings, ...scope.bindings],
+  };
+}
 
 /**
  * Busca métricas principais do dashboard
@@ -36,11 +118,14 @@ import {
 export async function getDashboardMetrics(
   db: D1Database,
   empresaId: number,
+  access?: EmployeeSectorAccess,
 ): Promise<DashboardMetrics> {
   try {
     const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
+    const employeeScope = buildEmployeeScopeSql(access, 'f');
+    const sessionScope = buildSessionScopeSql(access, 'simulador_agendamentos');
 
     // Query otimizada: busca todas as métricas em uma única execução paralela
     const [tripulantes, qualificacoes, taxaConclusao, demanda, lmsStats] = await Promise.all([
@@ -51,9 +136,10 @@ export async function getDashboardMetrics(
            FROM funcionarios
            WHERE deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-           AND empresa_id = ?`,
+           AND empresa_id = ?
+           AND ${employeeScope.clause}`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...employeeScope.bindings)
         .first<{ total: number }>(),
 
       // Qualificações: contagem por status usando cálculo DINÂMICO de vencimento
@@ -99,7 +185,8 @@ export async function getDashboardMetrics(
            WHERE qh.deleted_at IS NULL
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-           AND f.empresa_id = ?`,
+           AND f.empresa_id = ?
+           AND ${employeeScope.clause}`,
         )
         .bind(
           hojeSp,
@@ -113,6 +200,7 @@ export async function getDashboardMetrics(
           thresholdDias,
           hojeSp,
           empresaId,
+          ...employeeScope.bindings,
         )
         .first<{
           total_qualificacoes: number;
@@ -135,9 +223,10 @@ export async function getDashboardMetrics(
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
            AND empresa_id = ?
+           AND ${sessionScope.clause}
            AND strftime('%Y-%m', data) = strftime('%Y-%m', date('now', '-1 month'))`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...sessionScope.bindings)
         .first<{ taxa_conclusao: number }>(),
 
       // Demanda Futura
@@ -150,10 +239,11 @@ export async function getDashboardMetrics(
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
            AND empresa_id = ?
+           AND ${sessionScope.clause}
            AND status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND data >= date('now')`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...sessionScope.bindings)
         .first<{ proximos_30: number; dias_31_60: number; dias_61_90: number }>(),
 
       db
@@ -170,6 +260,9 @@ export async function getDashboardMetrics(
              ) AS taxa_conclusao_pct
            FROM lms_cursos c
            LEFT JOIN lms_matriculas m ON m.curso_id = c.id AND m.deleted_at IS NULL
+           LEFT JOIN funcionarios f ON f.id = m.funcionario_id
+             AND f.deleted_at IS NULL
+             AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            WHERE c.empresa_id = ? AND c.deleted_at IS NULL`,
         )
         .bind(empresaId)
@@ -195,9 +288,10 @@ export async function getDashboardMetrics(
            FROM simulador_agendamentos
            WHERE deleted_at IS NULL
            AND empresa_id = ?
+           AND ${sessionScope.clause}
            AND strftime('%Y-%m', data) = strftime('%Y-%m', date('now', '-2 months'))`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...sessionScope.bindings)
         .first<{ taxa: number }>();
       const taxaAtual = taxaConclusao?.taxa_conclusao || 0;
       const taxaPrev = taxaAnterior?.taxa || 0;
@@ -242,11 +336,13 @@ export async function getDashboardMetrics(
 export async function getDashboardAlerts(
   db: D1Database,
   empresaId: number,
+  access?: EmployeeSectorAccess,
 ): Promise<AlertaCritico[]> {
   try {
     const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
+    const employeeScope = buildEmployeeScopeSql(access, 'f');
 
     const results = await db
       .prepare(
@@ -274,6 +370,7 @@ export async function getDashboardAlerts(
          AND f.deleted_at IS NULL
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
          AND f.empresa_id = ?
+         AND ${employeeScope.clause}
          AND qh.renovada = 0
          AND ${vencimentoExpr} IS NOT NULL
          AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days')
@@ -286,7 +383,18 @@ export async function getDashboardAlerts(
            date(${vencimentoExpr}) ASC
          LIMIT 50`,
       )
-      .bind(hojeSp, hojeSp, hojeSp, hojeSp, empresaId, hojeSp, thresholdDias, hojeSp, hojeSp)
+      .bind(
+        hojeSp,
+        hojeSp,
+        hojeSp,
+        hojeSp,
+        empresaId,
+        ...employeeScope.bindings,
+        hojeSp,
+        thresholdDias,
+        hojeSp,
+        hojeSp,
+      )
       .all();
 
     const alertasQual: AlertaCritico[] = (results.results || []).map(
@@ -338,6 +446,7 @@ export async function getDashboardAlerts(
              AND m.deleted_at IS NULL
              AND m.status NOT IN ('CANCELADO', 'REPROVADO')
            WHERE rc.empresa_id = ?
+             AND ${employeeScope.clause}
              AND rc.deleted_at IS NULL
              AND rc.tipo_recurso = 'curso_lms'
              AND rc.obrigatorio = 1
@@ -345,7 +454,7 @@ export async function getDashboardAlerts(
            ORDER BY f.nome, c.titulo
            LIMIT 30`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...employeeScope.bindings)
         .all();
 
       alertasLms = (lmsResults.results || []).map((row: Record<string, unknown>, idx: number) => {
@@ -398,8 +507,11 @@ export async function getDashboardAlerts(
 export async function getComplianceScore(
   db: D1Database,
   empresaId: number,
+  access?: EmployeeSectorAccess,
 ): Promise<ComplianceScore> {
   try {
+    const employeeScope = buildEmployeeScopeSql(access, 'f');
+    const sessionScope = buildSessionScopeSql(access, 'simulador_agendamentos');
     const [qualificacoes, simuladores, qualificacoesAnterior, lmsCompliance] = await Promise.all([
       // % de qualificações válidas (cálculo dinâmico de vencimento)
       db
@@ -425,10 +537,11 @@ export async function getComplianceScore(
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND f.empresa_id = ?
+           AND ${employeeScope.clause}
            AND qh.renovada = 0
            AND qh.data_conclusao IS NOT NULL`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...employeeScope.bindings)
         .first<{
           percentual_qualificacoes_validas: number;
           total_qualificacoes: number;
@@ -441,18 +554,20 @@ export async function getComplianceScore(
           `SELECT
              COALESCE(
                (SELECT COUNT(*) FROM simulador_agendamentos
-                WHERE deleted_at IS NULL
-                AND empresa_id = ?
-                AND status IN ${COMPLETED_STATUS_SQL}
-                AND data >= date('now', '-3 months')) * 100.0 /
+               WHERE deleted_at IS NULL
+               AND empresa_id = ?
+               AND ${sessionScope.clause}
+               AND status IN ${COMPLETED_STATUS_SQL}
+               AND data >= date('now', '-3 months')) * 100.0 /
                NULLIF((SELECT COUNT(*) FROM simulador_agendamentos
                        WHERE deleted_at IS NULL
                        AND empresa_id = ?
+                       AND ${sessionScope.clause}
                        AND data >= date('now', '-3 months')), 0),
                100
              ) as percentual_sessoes_concluidas`,
         )
-        .bind(empresaId, empresaId)
+        .bind(empresaId, ...sessionScope.bindings, empresaId, ...sessionScope.bindings)
         .first<{ percentual_sessoes_concluidas: number }>(),
 
       // % de qualificações válidas do mês anterior (para calcular tendência)
@@ -474,11 +589,12 @@ export async function getComplianceScore(
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND f.empresa_id = ?
+           AND ${employeeScope.clause}
            AND qh.renovada = 0
            AND qh.data_conclusao IS NOT NULL
            AND qh.data_conclusao <= date('now', '-1 month')`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...employeeScope.bindings)
         .first<{ percentual_qualificacoes_validas_anterior: number }>(),
 
       // % de cursos LMS obrigatórios concluídos por funcionário ativo
@@ -501,11 +617,12 @@ export async function getComplianceScore(
              AND m.deleted_at IS NULL
              AND m.status NOT IN ('CANCELADO', 'REPROVADO')
            WHERE rc.empresa_id = ?
+             AND ${employeeScope.clause}
              AND rc.deleted_at IS NULL
              AND rc.tipo_recurso = 'curso_lms'
              AND rc.obrigatorio = 1`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...employeeScope.bindings)
         .first<{ percentual_lms_concluido: number }>(),
     ]);
 
@@ -550,8 +667,11 @@ export async function getComplianceScore(
 export async function getDemandaTreinamento(
   db: D1Database,
   empresaId: number,
+  access?: EmployeeSectorAccess,
 ): Promise<DemandaTreinamento> {
   try {
+    const sessionScope = buildSessionScopeSql(access, 'simulador_agendamentos');
+    const aliasedSessionScope = buildSessionScopeSql(access, 'sa');
     const [periodos, porTipo, porSimulador, instrutores] = await Promise.all([
       // Por período
       db
@@ -565,9 +685,10 @@ export async function getDemandaTreinamento(
            WHERE deleted_at IS NULL
            AND status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND empresa_id = ?
+           AND ${sessionScope.clause}
            AND data BETWEEN date('now') AND date('now', '+90 days')`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...sessionScope.bindings)
         .first<{ proximos_30: number; dias_31_60: number; dias_61_90: number; total: number }>(),
 
       // Por tipo de sessão
@@ -580,10 +701,11 @@ export async function getDemandaTreinamento(
            WHERE deleted_at IS NULL
            AND status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND empresa_id = ?
+           AND ${sessionScope.clause}
            AND data BETWEEN date('now') AND date('now', '+90 days')
            GROUP BY tipo_sessao`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...sessionScope.bindings)
         .all(),
 
       // Por simulador
@@ -598,11 +720,12 @@ export async function getDemandaTreinamento(
            WHERE sa.deleted_at IS NULL
            AND sa.status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND sa.empresa_id = ?
+           AND ${aliasedSessionScope.clause}
            AND sa.data BETWEEN date('now') AND date('now', '+90 days')
            GROUP BY s.id, s.nome
            ORDER BY quantidade DESC`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...aliasedSessionScope.bindings)
         .all(),
 
       // Por instrutor (agendamentos futuros por instrutor responsável)
@@ -617,13 +740,14 @@ export async function getDemandaTreinamento(
            WHERE sa.deleted_at IS NULL
            AND sa.status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND sa.empresa_id = ?
+           AND ${aliasedSessionScope.clause}
            AND sa.data BETWEEN date('now') AND date('now', '+90 days')
            AND sa.instrutor_id IS NOT NULL
            GROUP BY sa.instrutor_id, f.nome
            ORDER BY sessoesProgramadas DESC
            LIMIT 20`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...aliasedSessionScope.bindings)
         .all(),
     ]);
 
@@ -675,8 +799,11 @@ export async function getDemandaTreinamento(
 export async function getAtividadesRecentes(
   db: D1Database,
   empresaId: number,
+  access?: EmployeeSectorAccess,
 ): Promise<AtividadeRecente[]> {
   try {
+    const sessionScope = buildSessionScopeSql(access, 'sa');
+    const employeeScope = buildEmployeeScopeSql(access, 'f');
     // Buscar últimas sessões concluídas e qualificações emitidas
     const [sessoes, qualificacoes] = await Promise.all([
       db
@@ -695,10 +822,11 @@ export async function getAtividadesRecentes(
            WHERE sa.deleted_at IS NULL
            AND sa.status IN ${COMPLETED_STATUS_SQL}
            AND f.empresa_id = ?
+           AND ${sessionScope.clause}
            ORDER BY sa.updated_at DESC
            LIMIT 10`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...sessionScope.bindings)
         .all(),
 
       db
@@ -717,10 +845,11 @@ export async function getAtividadesRecentes(
            AND f.deleted_at IS NULL
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND f.empresa_id = ?
+           AND ${employeeScope.clause}
            ORDER BY qh.created_at DESC
            LIMIT 10`,
         )
-        .bind(empresaId)
+        .bind(empresaId, ...employeeScope.bindings)
         .all(),
     ]);
 
@@ -772,11 +901,12 @@ export async function getAtividadesRecentes(
 export async function getTaxaConclusaoMensal(
   db: D1Database,
   empresaId: number,
+  access?: EmployeeSectorAccess,
 ): Promise<TaxaConclusaoMensal> {
   try {
     const meses: string[] = [];
     const taxas: number[] = [];
-    const rows = await getTaxaConclusaoMensalMetricRows(db, empresaId);
+    const rows = await getTaxaConclusaoMensalMetricRows(db, empresaId, access);
 
     rows.forEach((row) => {
       // Converter YYYY-MM para nome do mês
@@ -821,9 +951,10 @@ export async function getTaxaConclusaoMensal(
 export async function getUtilizacaoSimuladores(
   db: D1Database,
   empresaId: number,
+  access?: EmployeeSectorAccess,
 ): Promise<UtilizacaoSimuladores> {
   try {
-    const rows = await getUtilizacaoSimuladoresMetricRows(db, empresaId);
+    const rows = await getUtilizacaoSimuladoresMetricRows(db, empresaId, access);
 
     const simuladores = rows.map((row) => ({
       id: Number(row.id || 0),
@@ -842,6 +973,139 @@ export async function getUtilizacaoSimuladores(
     console.error('[DASHBOARD] Erro ao buscar utilização de simuladores:', error);
     return { simuladores: [] };
   }
+}
+
+export async function getDashboardFrmsAlerts(
+  db: D1Database,
+  empresaId: number,
+  access: EmployeeSectorAccess | undefined,
+  dataInicio: string,
+  limit = 200,
+): Promise<Array<Record<string, unknown>>> {
+  const employeeScope = buildEmployeeScopeSql(access, 'f');
+  const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 200) : 200;
+
+  const results = await db
+    .prepare(
+      `SELECT
+         a.id,
+         a.tripulante_id,
+         a.nivel,
+         a.descricao,
+         a.tipo,
+         a.data_jornada,
+         a.resolvido,
+         COALESCE(f.nome, a.nome_tripulante, 'Tripulante') as nome_tripulante
+       FROM frms_alerta a
+       JOIN funcionarios f
+         ON f.id = CAST(a.tripulante_id AS INTEGER)
+        AND f.deleted_at IS NULL
+        AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+       WHERE a.deleted_at IS NULL
+         AND COALESCE(a.resolvido, 0) = 0
+         AND f.empresa_id = ?
+         AND ${employeeScope.clause}
+         AND date(a.data_jornada) >= date(?)
+       ORDER BY date(a.data_jornada) DESC, a.created_at DESC
+       LIMIT ?`,
+    )
+    .bind(empresaId, ...employeeScope.bindings, dataInicio, safeLimit)
+    .all<Record<string, unknown>>();
+
+  return results.results || [];
+}
+
+export async function getDashboardUpcomingSessions(
+  db: D1Database,
+  empresaId: number,
+  access: EmployeeSectorAccess | undefined,
+  dataInicio: string,
+  limit = 24,
+): Promise<Array<Record<string, unknown>>> {
+  const sessionScope = buildSessionScopeSql(access, 'sa');
+  const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 24;
+
+  const results = await db
+    .prepare(
+      `SELECT
+         sa.id,
+         sa.data,
+         sa.hora_inicio as horario_inicio,
+         sa.hora_fim as horario_fim,
+         sa.tipo_sessao,
+         sa.nome as tema_sessao,
+         sa.status,
+         s.nome as simulador_nome,
+         s.modelo as simulador_modelo,
+         fi.nome as instrutor_nome
+       FROM simulador_agendamentos sa
+       LEFT JOIN simuladores s
+         ON sa.simulador_id = s.id
+        AND s.deleted_at IS NULL
+       INNER JOIN funcionarios fi
+         ON sa.instrutor_id = fi.id
+        AND fi.deleted_at IS NULL
+       WHERE sa.deleted_at IS NULL
+         AND sa.empresa_id = ?
+         AND ${sessionScope.clause}
+         AND sa.data >= date(?)
+         AND UPPER(COALESCE(sa.status, '')) IN ('AGENDADO', 'PENDENTE', 'CONFIRMADO')
+       ORDER BY sa.data ASC, sa.hora_inicio ASC
+       LIMIT ?`,
+    )
+    .bind(empresaId, ...sessionScope.bindings, dataInicio, safeLimit)
+    .all<Record<string, unknown>>();
+
+  return results.results || [];
+}
+
+export async function getDashboardEscalasResumo(
+  db: D1Database,
+  empresaId: number,
+  access: EmployeeSectorAccess | undefined,
+  mes: number,
+  ano: number,
+  limit = 6,
+): Promise<Array<Record<string, unknown>>> {
+  const escalaScope = buildEscalaScopeSql(access, 'em');
+  const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 12) : 6;
+
+  const results = await db
+    .prepare(
+      `SELECT
+         em.id,
+         em.mes,
+         em.ano,
+         em.status,
+         COALESCE(
+           NULLIF((
+             SELECT COUNT(*)
+             FROM escala_alocacoes ea
+             WHERE ea.escala_id = em.id
+               AND ea.deleted_at IS NULL
+               AND ea.status != 'cancelado'
+               AND ea.situacao_tipo IS NULL
+           ), 0),
+           (
+             SELECT COUNT(*)
+             FROM escala_tripulacoes et
+             WHERE et.escala_id = em.id
+               AND et.deleted_at IS NULL
+           )
+         ) as total_tripulacoes
+       FROM escalas_mensais em
+       WHERE em.deleted_at IS NULL
+         AND em.empresa_id = ?
+         AND em.mes = ?
+         AND em.ano = ?
+         AND ${escalaScope.clause}
+       ORDER BY em.ano DESC, em.mes DESC
+       LIMIT ?`,
+    )
+    .bind(empresaId, mes, ano, ...escalaScope.bindings, safeLimit)
+    .all<Record<string, unknown>>();
+
+  return results.results || [];
 }
 
 /**
