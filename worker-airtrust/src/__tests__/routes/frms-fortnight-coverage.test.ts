@@ -68,7 +68,7 @@ describe('GET /maintenance/fortnight-coverage', () => {
     expect(getCoverageMock).not.toHaveBeenCalled();
   });
 
-  it('exige token valido mesmo em localhost', async () => {
+  it('responde 401 sem secret valido', async () => {
     const response = await frmsRoutes.request(
       'http://localhost/maintenance/fortnight-coverage?data_inicio=2026-06-01&data_fim=2026-06-07',
       { method: 'GET' },
@@ -78,12 +78,61 @@ describe('GET /maintenance/fortnight-coverage', () => {
       } as unknown as Env,
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
       error: 'Token de manutencao invalido.',
     });
     expect(getCoverageMock).not.toHaveBeenCalled();
+  });
+
+  it('aceita o header legado x-airtrust-maintenance', async () => {
+    getCoverageMock.mockResolvedValueOnce({
+      periodo: {
+        data_inicio: '2026-06-01',
+        data_fim: '2026-06-07',
+      },
+      resumo: {
+        total_fatorizacoes: 1,
+        com_dia_periodo: 1,
+        sem_dia_periodo: 0,
+        pct_cobertura: 100,
+        com_total_dias: 1,
+        sem_total_dias: 0,
+      },
+      por_origem: [],
+      por_status_jornada: [],
+      por_fonte_periodo: [],
+      recuperaveis_estimados: {
+        com_escala_alocacoes: 0,
+        com_frms_escala_quinzenal: 0,
+        sem_escala_detectada: 0,
+      },
+      notas: ['Endpoint read-only; nao executa reprocessamento.'],
+    });
+
+    const response = await frmsRoutes.request(
+      'http://localhost/maintenance/fortnight-coverage?empresa_id=6&data_inicio=2026-06-01&data_fim=2026-06-07',
+      {
+        method: 'GET',
+        headers: {
+          'x-airtrust-maintenance': 'segredo-correto',
+        },
+      },
+      {
+        DB: createDb(),
+        MAINTENANCE_SECRET: 'segredo-correto',
+      } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(getCoverageMock).toHaveBeenCalledWith(expect.anything(), {
+      empresaId: 6,
+      dataInicio: '2026-06-01',
+      dataFim: '2026-06-07',
+      origem: undefined,
+      status: undefined,
+    });
   });
 
   it('rejeita janelas acima do limite maximo', async () => {

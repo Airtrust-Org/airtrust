@@ -187,7 +187,7 @@ app.all('*', async (c, next) => {
     c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     c.header(
       'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires, X-AirTrust-Bypass-Cache, X-EdApp-Secret',
+      'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires, X-AirTrust-Bypass-Cache, X-EdApp-Secret, X-Maintenance-Secret, X-AirTrust-Maintenance',
     );
     c.header('Access-Control-Allow-Credentials', 'true');
     c.header('Access-Control-Max-Age', '86400');
@@ -249,6 +249,7 @@ app.use('*', async (c, next) => {
 // Multi-tenant global guard (auth + tenant context), com exclusões explícitas de rotas públicas
 app.use('/api/*', async (c, next) => {
   const pathname = new URL(c.req.url).pathname;
+  const method = c.req.method.toUpperCase();
   const isPublicPath =
     pathname === '/api/health' ||
     pathname === '/api/version' ||
@@ -266,8 +267,9 @@ app.use('/api/*', async (c, next) => {
     pathname === '/api/integracoes/edapp/webhook' ||
     pathname === '/api/alertas/whatsapp/status-callback' ||
     pathname === '/api/integracoes/sigvoos/maintenance/sincronizar-frms' ||
-    pathname === '/api/frms/maintenance/reprocessar-lote' ||
-    pathname === '/api/frms/maintenance/reprocessar-faixa';
+    (pathname === '/api/frms/maintenance/fortnight-coverage' && method === 'GET') ||
+    (pathname === '/api/frms/maintenance/reprocessar-lote' && method === 'POST') ||
+    (pathname === '/api/frms/maintenance/reprocessar-faixa' && method === 'POST');
 
   if (isPublicPath) {
     await next();
