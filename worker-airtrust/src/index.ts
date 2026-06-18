@@ -249,6 +249,7 @@ app.use('*', async (c, next) => {
 // Multi-tenant global guard (auth + tenant context), com exclusões explícitas de rotas públicas
 app.use('/api/*', async (c, next) => {
   const pathname = new URL(c.req.url).pathname;
+  const method = c.req.method.toUpperCase();
   const isPublicPath =
     pathname === '/api/health' ||
     pathname === '/api/version' ||
@@ -266,9 +267,9 @@ app.use('/api/*', async (c, next) => {
     pathname === '/api/integracoes/edapp/webhook' ||
     pathname === '/api/alertas/whatsapp/status-callback' ||
     pathname === '/api/integracoes/sigvoos/maintenance/sincronizar-frms' ||
-    pathname === '/api/frms/maintenance/fortnight-coverage' ||
-    pathname === '/api/frms/maintenance/reprocessar-lote' ||
-    pathname === '/api/frms/maintenance/reprocessar-faixa';
+    (pathname === '/api/frms/maintenance/fortnight-coverage' && method === 'GET') ||
+    (pathname === '/api/frms/maintenance/reprocessar-lote' && method === 'POST') ||
+    (pathname === '/api/frms/maintenance/reprocessar-faixa' && method === 'POST');
 
   if (isPublicPath) {
     await next();
