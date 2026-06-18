@@ -1,0 +1,34 @@
+-- ============================================================
+-- TEMPLATE: Diagnóstico de criação de usuário
+-- DO NOT RUN DIRECTLY — substitua <EMAIL_USUARIO> e <EMPRESA_ID> antes de executar
+-- Executar apenas em ambiente local ou staging, nunca em produção sem autorização explícita
+-- ============================================================
+
+-- 1. Verificar se o funcionário existe
+SELECT '--- FUNCIONARIO ---' AS check_name;
+SELECT id, nome, email, cargo, setor, status, empresa_id, ativo, deleted_at
+FROM funcionarios
+WHERE email = '<EMAIL_USUARIO>';
+
+-- 2. Verificar se o usuário existe
+SELECT '--- USUARIO ---' AS check_name;
+SELECT id, email, nome, perfil, active, funcionario_id, deleted_at
+FROM usuarios
+WHERE email = '<EMAIL_USUARIO>';
+
+-- 3. Verificar vínculo com empresa
+SELECT '--- USUARIOS_EMPRESAS ---' AS check_name;
+SELECT ue.*, e.nome AS empresa_nome, e.ativo AS empresa_ativo, e.deleted_at AS empresa_deleted
+FROM usuarios_empresas ue
+JOIN empresas e ON e.id = ue.empresa_id
+WHERE ue.usuario_id = (SELECT id FROM usuarios WHERE email = '<EMAIL_USUARIO>' AND deleted_at IS NULL);
+
+-- 4. Verificar se a empresa está ativa
+SELECT '--- EMPRESA ---' AS check_name;
+SELECT id, nome, codigo, ativo, deleted_at, plano
+FROM empresas
+WHERE id = <EMPRESA_ID>;
+
+-- 5. Schema do funcionarios (verificar se setor_id existe)
+SELECT '--- SCHEMA FUNCIONARIOS ---' AS check_name;
+PRAGMA table_info(funcionarios);
