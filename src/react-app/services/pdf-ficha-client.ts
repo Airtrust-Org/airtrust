@@ -107,7 +107,7 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
-const FICHA_AVALIACAO_SCALE_HEIGHT = 26;
+const FICHA_AVALIACAO_SCALE_HEIGHT = 32;
 
 export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
   return {
