@@ -1247,7 +1247,8 @@ async function isLocalMaintenanceRequest(
   c: FrmsAppContext,
 ): Promise<boolean> {
   const maintenanceSecret = c.env.MAINTENANCE_SECRET;
-  const providedHeader = c.req.header('x-maintenance-secret');
+  const providedHeader =
+    c.req.header('x-airtrust-maintenance') ?? c.req.header('x-maintenance-secret');
   if (maintenanceSecret && providedHeader && (await secureCompare(providedHeader, maintenanceSecret))) {
     return true;
   }
@@ -1328,11 +1329,8 @@ frmsRoutes.get(
     if (!c.env.MAINTENANCE_SECRET) {
       return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
     }
-    if (!(await isLocalMaintenanceRequest(c))) {
-      return c.json({ success: false, error: 'Rota disponivel apenas em localhost.' }, 403);
-    }
     if (!(await hasValidMaintenanceSecret(c))) {
-      return c.json({ success: false, error: 'Token de manutencao invalido.' }, 403);
+      return c.json({ success: false, error: 'Token de manutencao invalido.' }, 401);
     }
 
     const parsed = FortnightCoverageMaintenanceQuerySchema.safeParse({
