@@ -64,6 +64,9 @@ jobs:
       - name: Setup local database
         run: npm run setup:lms:local:reset
 
+      - name: Run integrity guardrails
+        run: npm run integrity:ci
+
       - name: Start local worker
         run: |
           npm run dev:worker:local > /tmp/airtrust-worker.log 2>&1 &
