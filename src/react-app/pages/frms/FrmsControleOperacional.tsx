@@ -235,11 +235,56 @@ const FORTNIGHT_STATUS_LABELS: Record<string, string> = {
   INCOMPLETO: 'Quinzena incompleta',
 };
 
+type FortnightNotice = {
+  message: string;
+  toneClassName: string;
+};
+
 function toneByFortnightStatus(status: string): string {
   if (status === 'CRITICO') return 'border-red-200 bg-red-50 text-red-700';
   if (status === 'ATENCAO') return 'border-amber-200 bg-amber-50 text-amber-700';
   if (status === 'INCOMPLETO') return 'border-slate-200 bg-slate-100 text-slate-600';
   return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+function toneByFortnightSource(source: string | null | undefined): string {
+  if (source === 'REAL') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (source === 'DERIVADO') return 'border-sky-200 bg-sky-50 text-sky-700';
+  if (source === 'ESTIMADO') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (source === 'INCOMPLETO') return 'border-slate-200 bg-slate-100 text-slate-700';
+  return 'border-slate-200 bg-slate-100 text-slate-600';
+}
+
+function resolveFortnightNotice(indicator: FrmsFortnightIndicator | null): FortnightNotice | null {
+  if (!indicator) {
+    return {
+      message: 'Sem jornada FRMS registrada nesta data.',
+      toneClassName: 'border-slate-200 bg-slate-100 text-slate-700',
+    };
+  }
+
+  const alerts = new Set(indicator.alertas_quinzena.map((value) => value?.trim()).filter(Boolean));
+
+  if (indicator.fonte_periodo === 'AUSENTE' || alerts.has('PERIODO_QUINZENA_AUSENTE')) {
+    return {
+      message: 'Período de embarque não localizado nesta data. Verifique se a escala quinzenal foi cadastrada.',
+      toneClassName: 'border-slate-200 bg-slate-100 text-slate-700',
+    };
+  }
+
+  if (
+    indicator.fonte_periodo === 'INCOMPLETO' ||
+    indicator.status_quinzena === 'INCOMPLETO' ||
+    alerts.has('PERIODO_PARCIAL_NA_CONSULTA')
+  ) {
+    return {
+      message:
+        'Período identificado, mas a janela de consulta cobre apenas parte dele. Os acumulados refletem somente os dias visíveis.',
+      toneClassName: 'border-amber-200 bg-amber-50 text-amber-700',
+    };
+  }
+
+  return null;
 }
 
 function FortnightStatusBadge({ status }: { status: string }) {
@@ -251,7 +296,7 @@ function FortnightStatusBadge({ status }: { status: string }) {
 }
 
 function FortnightDetailPanel({ indicator }: { indicator: FrmsFortnightIndicator | null }) {
-  const hasCompleteData = Boolean(indicator) && indicator?.status_quinzena !== 'INCOMPLETO';
+  const notice = resolveFortnightNotice(indicator);
   const alerts = indicator?.alertas_quinzena.filter((value) => value?.trim());
   const notes = indicator?.limitation_notes.filter((value) => value?.trim());
 
@@ -262,8 +307,8 @@ function FortnightDetailPanel({ indicator }: { indicator: FrmsFortnightIndicator
       </summary>
       <div className="mt-2 space-y-2 text-xs text-slate-600">
         <p>Indicador operacional descritivo — não é compliance regulatório.</p>
-        {!hasCompleteData ? (
-          <p>Dados quinzenais ainda não consolidados para este período.</p>
+        {notice ? (
+          <p className={`rounded-md border px-2 py-2 ${notice.toneClassName}`}>{notice.message}</p>
         ) : (
           <>
             <div className="grid gap-x-3 gap-y-1 sm:grid-cols-2">
@@ -290,6 +335,16 @@ function FortnightDetailPanel({ indicator }: { indicator: FrmsFortnightIndicator
               <div className="flex items-center gap-2">
                 <span className="font-medium text-slate-700">Status da quinzena:</span>
                 <FortnightStatusBadge status={indicator?.status_quinzena || 'INCOMPLETO'} />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-700">Fonte do periodo:</span>
+                <span
+                  className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+                    toneByFortnightSource(indicator?.fonte_periodo)
+                  }`}
+                >
+                  {sourceLabel(indicator?.fonte_periodo || 'AUSENTE')}
+                </span>
               </div>
             </div>
             {alerts && alerts.length > 0 && (

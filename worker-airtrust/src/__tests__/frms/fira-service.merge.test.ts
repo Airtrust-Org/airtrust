@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { shouldUseForOperationalFrms } from '../../lib/frms/frms-source-policy';
 
 vi.mock('../../lib/frms/db-service', () => ({
   atualizarJornada: vi.fn(),
@@ -155,11 +156,150 @@ describe('confirmarImportacaoFira duplicate merge', () => {
     );
 
     expect(atualizarJornada).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(atualizarJornada).mock.calls[0]?.[2]).toMatchObject({ origem: 'SIGVOOS' });
+    expect(shouldUseForOperationalFrms({ origem: vi.mocked(atualizarJornada).mock.calls[0]?.[2]?.origem })).toBe(true);
     expect(salvarJornada).not.toHaveBeenCalled();
     expect(result.substituidos).toBe(1);
     expect(result.importados).toBe(0);
     expect(result.ignorados).toBe(0);
     expect(result.erros).toBe(0);
+  });
+
+  it('persists new SIGVOOS journeys with canonical operational origin', async () => {
+    const preview = {
+      importacao_id: 'imp-3',
+      tripulante_encontrado: true,
+      tripulante_id: '22',
+      tripulante_nome_fira: 'Lia',
+      tripulante_nome_sistema: 'Lia',
+      canac: '777777',
+      ano: 2026,
+      mes: 5,
+      mes_nome: 'maio',
+      total_dias: 1,
+      totais_fira: { jornada: '05:30', voo: '02:45' },
+      totais_calculados: { jornada_min: 330, voo_min: 165 },
+      divergencia_totais: false,
+      avisos: [],
+      erros: [],
+      linhas: [
+        {
+          dia: 26,
+          data: '2026-05-26',
+          status_fira: 'SIGVOOS',
+          status_frms: 'ES',
+          hora_apresentacao: '09:00',
+          hora_termino: '14:30',
+          duracao_jornada_min: 330,
+          horas_voo_min: 165,
+          local_base: 'SBSP',
+          situacao: 'NOVO',
+          jornada_existente_id: null,
+          marcado: true,
+        },
+      ],
+    };
+
+    const db = createDbStub({
+      importacao: {
+        id: 'imp-3',
+        tripulante_id: '22',
+        canac: '777777',
+        ano: 2026,
+        mes: 5,
+        preview_json: JSON.stringify(preview),
+        status: 'REVISAO',
+        total_dias_importados: 0,
+      },
+    });
+
+    const result = await confirmarImportacaoFira(
+      db,
+      'imp-3',
+      { dias_selecionados: [{ dia: 26 }] },
+      '30',
+      {} as any,
+      6,
+    );
+
+    expect(salvarJornada).toHaveBeenCalledTimes(1);
+    expect(atualizarJornada).not.toHaveBeenCalled();
+    expect(vi.mocked(salvarJornada).mock.calls[0]?.[1]).toMatchObject({
+      data: '2026-05-26',
+      origem: 'SIGVOOS',
+      local_base: 'SBSP',
+    });
+    expect(shouldUseForOperationalFrms({ origem: vi.mocked(salvarJornada).mock.calls[0]?.[1]?.origem })).toBe(true);
+    expect(result.importados).toBe(1);
+    expect(result.substituidos).toBe(0);
+    expect(result.ignorados).toBe(0);
+    expect(result.erros).toBe(0);
+  });
+
+  it('keeps real FIRA imports labeled as FIRA on new inserts', async () => {
+    const preview = {
+      importacao_id: 'imp-4',
+      tripulante_encontrado: true,
+      tripulante_id: '23',
+      tripulante_nome_fira: 'Rafa',
+      tripulante_nome_sistema: 'Rafa',
+      canac: '888888',
+      ano: 2026,
+      mes: 5,
+      mes_nome: 'maio',
+      total_dias: 1,
+      totais_fira: { jornada: '04:00', voo: '01:30' },
+      totais_calculados: { jornada_min: 240, voo_min: 90 },
+      divergencia_totais: false,
+      avisos: [],
+      erros: [],
+      linhas: [
+        {
+          dia: 27,
+          data: '2026-05-27',
+          status_fira: 'VOO',
+          status_frms: 'TR',
+          hora_apresentacao: '10:00',
+          hora_termino: '14:00',
+          duracao_jornada_min: 240,
+          horas_voo_min: 90,
+          local_base: 'SBRJ',
+          situacao: 'NOVO',
+          jornada_existente_id: null,
+          marcado: true,
+        },
+      ],
+    };
+
+    const db = createDbStub({
+      importacao: {
+        id: 'imp-4',
+        tripulante_id: '23',
+        canac: '888888',
+        ano: 2026,
+        mes: 5,
+        preview_json: JSON.stringify(preview),
+        status: 'REVISAO',
+        total_dias_importados: 0,
+      },
+    });
+
+    await confirmarImportacaoFira(
+      db,
+      'imp-4',
+      { dias_selecionados: [{ dia: 27 }] },
+      'operador-humano',
+      {} as any,
+      6,
+    );
+
+    expect(salvarJornada).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(salvarJornada).mock.calls[0]?.[1]).toMatchObject({
+      data: '2026-05-27',
+      origem: 'FIRA',
+      local_base: 'SBRJ',
+    });
+    expect(shouldUseForOperationalFrms({ origem: vi.mocked(salvarJornada).mock.calls[0]?.[1]?.origem })).toBe(false);
   });
 
   it('does not cross dates when preview points to a duplicate id from another day', async () => {
