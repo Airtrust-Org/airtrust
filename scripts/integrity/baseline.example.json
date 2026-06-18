@@ -1,0 +1,11 @@
+{
+  "_comment": "Exemplo de baseline. Nao grave snapshot real de producao neste arquivo.",
+  "checks": {
+    "I1b": {
+      "_comment": "Use o menor volume aceitavel de relacoes modelos_sessao_manobras no ambiente alvo.",
+      "minimum": {
+        "total_relacoes": 1000
+      }
+    }
+  }
+}
