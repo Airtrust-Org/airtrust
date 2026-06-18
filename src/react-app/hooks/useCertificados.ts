@@ -4,6 +4,9 @@ import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
 
 export interface Certificado {
   id: number;
+  documento_id?: number;
+  pasta_virtual_id?: number | null;
+  historico_id?: number;
   nome_arquivo: string;
   arquivo_nome?: string;
   url?: string;
@@ -73,6 +76,9 @@ export function useCertificados(qualificacao_id: number | null): UseCertificados
       // Normalizar nomes de propriedades
       const normalized = certs.map((c: any) => ({
         id: c.id,
+        documento_id: c.documento_id ?? c.id,
+        pasta_virtual_id: c.pasta_virtual_id ?? null,
+        historico_id: c.historico_id ?? qualificacao_id,
         nome_arquivo: c.nome_arquivo || c.arquivo_nome || 'CERTIFICADO.pdf',
         arquivo_nome: c.nome_arquivo || c.arquivo_nome || 'CERTIFICADO.pdf',
         url: c.r2_key || c.url || '',

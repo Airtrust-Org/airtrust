@@ -13,6 +13,9 @@ import {
 
 export interface Documento {
   id: number;
+  documento_id?: number;
+  pasta_virtual_id?: number | null;
+  historico_id?: number;
   uuid: string;
   funcionario_id: number;
   nome_arquivo: string;
@@ -231,6 +234,124 @@ export async function getCertificadosStorageColumns(
     pastaVirtualHasEmpresaId,
     documentosHasEmpresaId,
   };
+}
+
+export async function listHistoricoCertificados(
+  db: D1Database,
+  params: {
+    historicoId: number;
+    empresaId: number;
+    funcionarioId: number;
+    certificadoArquivoId: number | null;
+  },
+): Promise<Documento[]> {
+  const storageColumns = await getCertificadosStorageColumns(db);
+
+  if (!params.certificadoArquivoId && !storageColumns.pastaVirtualHasCertificacaoId) {
+    return [];
+  }
+
+  const { results } = await db
+    .prepare(
+      storageColumns.pastaVirtualHasCertificacaoId
+        ? `SELECT
+             d.id,
+             d.id AS documento_id,
+             MIN(pv.id) AS pasta_virtual_id,
+             ? AS historico_id,
+             d.uuid,
+             d.funcionario_id,
+             d.nome_arquivo,
+             d.tipo,
+             d.tamanho,
+             d.r2_key,
+             d.created_at,
+             d.updated_at,
+             COALESCE(
+               MAX(qh_link.numero_certificado),
+               MAX(qh_current.numero_certificado),
+               REPLACE(d.nome_arquivo, '.pdf', '')
+             ) AS numero_certificado
+           FROM documentos d
+           JOIN funcionarios fd
+             ON fd.id = d.funcionario_id
+            AND fd.deleted_at IS NULL
+            AND fd.empresa_id = ?
+           LEFT JOIN pasta_virtual pv
+             ON pv.certificacao_id = ?
+            AND pv.deleted_at IS NULL
+            ${storageColumns.pastaVirtualHasEmpresaId ? 'AND pv.empresa_id = ?' : ''}
+            AND pv.funcionario_id = d.funcionario_id
+            AND (
+              ${
+                storageColumns.pastaVirtualHasDocumentoId
+                  ? '(pv.documento_id = d.id OR pv.caminho_arquivo = d.r2_key)'
+                  : 'pv.caminho_arquivo = d.r2_key'
+              }
+            )
+           LEFT JOIN qualificacoes_historico qh_link
+             ON qh_link.id = pv.certificacao_id
+            AND qh_link.deleted_at IS NULL
+           LEFT JOIN qualificacoes_historico qh_current
+             ON qh_current.certificado_arquivo_id = d.id
+            AND qh_current.deleted_at IS NULL
+           WHERE d.deleted_at IS NULL
+             AND (
+               pv.id IS NOT NULL
+               OR (d.funcionario_id = ? AND d.id = ?)
+             )
+           GROUP BY
+             d.id,
+             d.uuid,
+             d.funcionario_id,
+             d.nome_arquivo,
+             d.tipo,
+             d.tamanho,
+             d.r2_key,
+             d.created_at,
+             d.updated_at
+           ORDER BY d.created_at DESC, d.id DESC`
+        : `SELECT
+             d.id,
+             d.id AS documento_id,
+             NULL AS pasta_virtual_id,
+             ? AS historico_id,
+             d.uuid,
+             d.funcionario_id,
+             d.nome_arquivo,
+             d.tipo,
+             d.tamanho,
+             d.r2_key,
+             d.created_at,
+             d.updated_at,
+             qh.numero_certificado
+           FROM documentos d
+           JOIN funcionarios fd
+             ON fd.id = d.funcionario_id
+            AND fd.deleted_at IS NULL
+            AND fd.empresa_id = ?
+           LEFT JOIN qualificacoes_historico qh
+             ON qh.certificado_arquivo_id = d.id
+            AND qh.deleted_at IS NULL
+           WHERE d.deleted_at IS NULL
+             AND d.id = ?
+           ORDER BY d.created_at DESC, d.id DESC`,
+    )
+    .bind(
+      ...(storageColumns.pastaVirtualHasCertificacaoId
+        ? [
+            params.historicoId,
+            params.empresaId,
+            params.historicoId,
+            ...(storageColumns.pastaVirtualHasEmpresaId ? [params.empresaId] : []),
+            params.funcionarioId,
+            params.certificadoArquivoId ?? 0,
+          ]
+        : [params.historicoId, params.empresaId, params.certificadoArquivoId ?? 0]),
+    )
+    .all<Documento>();
+
+  return results || [];
 }
 
 export async function assertScopedHistoricoAccess(
