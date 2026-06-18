@@ -10,6 +10,10 @@ import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
 import {
+  buildFuncionarioScopeWhere,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
+import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
   getQualificacoesVencimentoExpr,
@@ -60,6 +64,8 @@ app.get('/qualificacoes', async (c) => {
   try {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const employeeScope = buildFuncionarioScopeWhere(access, 'f');
     const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
@@ -113,9 +119,19 @@ app.get('/qualificacoes', async (c) => {
         LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
         WHERE qh.deleted_at IS NULL
           AND f.id IS NOT NULL
-          AND f.empresa_id = ?`,
+          AND f.empresa_id = ?
+          AND ${employeeScope.clause}`,
       )
-      .bind(hojeSp, thresholdDias, hojeSp, hojeSp, thresholdDias, hojeSp, empresaId)
+      .bind(
+        hojeSp,
+        thresholdDias,
+        hojeSp,
+        hojeSp,
+        thresholdDias,
+        hojeSp,
+        empresaId,
+        ...employeeScope.bindings,
+      )
       .first<{
         total: number;
         validas: number;
@@ -147,11 +163,12 @@ app.get('/qualificacoes', async (c) => {
           AND NOT (${effectiveRenewedPredicate})
           AND qh.data_conclusao IS NOT NULL
           AND f.empresa_id = ?
+          AND ${employeeScope.clause}
         GROUP BY qt.categoria
         ORDER BY total DESC
       `,
       )
-      .bind(empresaId)
+      .bind(empresaId, ...employeeScope.bindings)
       .all<{ categoria: string; total: number }>();
 
     const por_categoria = porCategoriaResult.results || [];
@@ -197,6 +214,8 @@ app.get('/licencas', async (c) => {
   try {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const employeeScope = buildFuncionarioScopeWhere(access, 'f');
     const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
     const hojeSp = getTodayIsoSaoPaulo();
 
@@ -207,10 +226,11 @@ app.get('/licencas', async (c) => {
         SELECT COUNT(*) as total 
         FROM licencas l
         INNER JOIN funcionarios f ON l.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
+          AND ${employeeScope.clause}
         WHERE l.deleted_at IS NULL
       `,
       )
-      .bind(empresaId)
+      .bind(empresaId, ...employeeScope.bindings)
       .first<{ total: number }>();
 
     const total_ativas = totalResult?.total || 0;
@@ -222,11 +242,12 @@ app.get('/licencas', async (c) => {
         SELECT COUNT(*) as total 
         FROM licencas l
         INNER JOIN funcionarios f ON l.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
+          AND ${employeeScope.clause}
         WHERE date(l.data_vencimento) < date(?) 
         AND l.deleted_at IS NULL
       `,
       )
-      .bind(empresaId, hojeSp)
+      .bind(empresaId, ...employeeScope.bindings, hojeSp)
       .first<{ total: number }>();
 
     const vencidas = vencidasResult?.total || 0;
@@ -238,11 +259,12 @@ app.get('/licencas', async (c) => {
         SELECT COUNT(*) as total 
         FROM licencas l
         INNER JOIN funcionarios f ON l.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
+          AND ${employeeScope.clause}
         WHERE date(l.data_vencimento) BETWEEN date(?) AND date(?, '+' || ? || ' days')
         AND l.deleted_at IS NULL
       `,
       )
-      .bind(empresaId, hojeSp, hojeSp, thresholdDias)
+      .bind(empresaId, ...employeeScope.bindings, hojeSp, hojeSp, thresholdDias)
       .first<{ total: number }>();
 
     const a_vencer_30_dias = aVencerResult?.total || 0;
@@ -254,11 +276,12 @@ app.get('/licencas', async (c) => {
         SELECT COUNT(*) as total 
         FROM licencas l
         INNER JOIN funcionarios f ON l.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
+          AND ${employeeScope.clause}
         WHERE date(l.data_vencimento) > date(?, '+' || ? || ' days')
         AND l.deleted_at IS NULL
       `,
       )
-      .bind(empresaId, hojeSp, thresholdDias)
+      .bind(empresaId, ...employeeScope.bindings, hojeSp, thresholdDias)
       .first<{ total: number }>();
 
     const validas = validasResult?.total || 0;
@@ -270,12 +293,13 @@ app.get('/licencas', async (c) => {
         SELECT l.tipo, COUNT(*) as total 
         FROM licencas l
         INNER JOIN funcionarios f ON l.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
+          AND ${employeeScope.clause}
         WHERE l.deleted_at IS NULL 
         GROUP BY l.tipo
         ORDER BY total DESC
       `,
       )
-      .bind(empresaId)
+      .bind(empresaId, ...employeeScope.bindings)
       .all<{ tipo: string; total: number }>();
 
     const por_tipo = porTipoResult.results || [];
@@ -318,6 +342,9 @@ import {
   getComplianceScore,
   getDemandaTreinamento,
   getAtividadesRecentes,
+  getDashboardEscalasResumo,
+  getDashboardFrmsAlerts,
+  getDashboardUpcomingSessions,
   getTaxaConclusaoMensal,
   getUtilizacaoSimuladores,
   getSystemHealth,
@@ -330,7 +357,8 @@ import {
 app.get('/metrics', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
-    const metrics = await getDashboardMetrics(c.env.DB, empresaId);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const metrics = await getDashboardMetrics(c.env.DB, empresaId, access);
     return c.json({ success: true, data: metrics });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error('Erro ao buscar métricas', toError(error));
@@ -345,7 +373,8 @@ app.get('/metrics', async (c) => {
 app.get('/alertas-criticos', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
-    const alertas = await getDashboardAlerts(c.env.DB, empresaId);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const alertas = await getDashboardAlerts(c.env.DB, empresaId, access);
     return c.json({ success: true, data: alertas });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error(
@@ -363,7 +392,8 @@ app.get('/alertas-criticos', async (c) => {
 app.get('/compliance-score', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
-    const score = await getComplianceScore(c.env.DB, empresaId);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const score = await getComplianceScore(c.env.DB, empresaId, access);
     return c.json({ success: true, data: score });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error(
@@ -381,7 +411,8 @@ app.get('/compliance-score', async (c) => {
 app.get('/demanda-treinamento', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
-    const demanda = await getDemandaTreinamento(c.env.DB, empresaId);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const demanda = await getDemandaTreinamento(c.env.DB, empresaId, access);
     return c.json({ success: true, data: demanda });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error(
@@ -399,7 +430,8 @@ app.get('/demanda-treinamento', async (c) => {
 app.get('/atividades-recentes', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
-    const atividades = await getAtividadesRecentes(c.env.DB, empresaId);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const atividades = await getAtividadesRecentes(c.env.DB, empresaId, access);
     return c.json({ success: true, data: atividades });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error(
@@ -417,7 +449,8 @@ app.get('/atividades-recentes', async (c) => {
 app.get('/taxa-conclusao-mensal', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
-    const taxas = await getTaxaConclusaoMensal(c.env.DB, empresaId);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const taxas = await getTaxaConclusaoMensal(c.env.DB, empresaId, access);
     return c.json({ success: true, data: taxas });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error(
@@ -435,7 +468,8 @@ app.get('/taxa-conclusao-mensal', async (c) => {
 app.get('/utilizacao-simuladores', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
-    const utilizacao = await getUtilizacaoSimuladores(c.env.DB, empresaId);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const utilizacao = await getUtilizacaoSimuladores(c.env.DB, empresaId, access);
     return c.json({ success: true, data: utilizacao });
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error(
@@ -460,6 +494,50 @@ app.get('/system-health', async (c) => {
       toError(error),
     );
     return c.json({ success: false, error: 'Erro ao verificar saúde do sistema' }, 500);
+  }
+});
+
+app.get('/frms-alertas', async (c) => {
+  try {
+    const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const dataInicio = c.req.query('data_inicio') || `${getTodayIsoSaoPaulo().slice(0, 7)}-01`;
+    const limit = Number(c.req.query('limit') || '200');
+    const alertas = await getDashboardFrmsAlerts(c.env.DB, empresaId, access, dataInicio, limit);
+    return c.json({ success: true, data: alertas, total: alertas.length });
+  } catch (error) {
+    createLogger(c as Context, 'Dashboard').error('Erro ao buscar alertas FRMS do dashboard', toError(error));
+    return c.json({ success: false, error: 'Erro ao buscar alertas FRMS do dashboard' }, 500);
+  }
+});
+
+app.get('/proximas-sessoes', async (c) => {
+  try {
+    const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const dataInicio = c.req.query('data_inicio') || getTodayIsoSaoPaulo();
+    const limit = Number(c.req.query('limit') || '24');
+    const sessoes = await getDashboardUpcomingSessions(c.env.DB, empresaId, access, dataInicio, limit);
+    return c.json({ success: true, data: sessoes });
+  } catch (error) {
+    createLogger(c as Context, 'Dashboard').error('Erro ao buscar próximas sessões do dashboard', toError(error));
+    return c.json({ success: false, error: 'Erro ao buscar próximas sessões do dashboard' }, 500);
+  }
+});
+
+app.get('/escalas-resumo', async (c) => {
+  try {
+    const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const hoje = getTodayIsoSaoPaulo();
+    const mes = Number(c.req.query('mes') || hoje.slice(5, 7));
+    const ano = Number(c.req.query('ano') || hoje.slice(0, 4));
+    const limit = Number(c.req.query('limit') || '6');
+    const escalas = await getDashboardEscalasResumo(c.env.DB, empresaId, access, mes, ano, limit);
+    return c.json({ success: true, data: escalas });
+  } catch (error) {
+    createLogger(c as Context, 'Dashboard').error('Erro ao buscar resumo de escalas do dashboard', toError(error));
+    return c.json({ success: false, error: 'Erro ao buscar resumo de escalas do dashboard' }, 500);
   }
 });
 

@@ -165,39 +165,14 @@ export function useFrmsAlertasQuery() {
     queryFn: async () => {
       const pageLimit = 200;
       const firstRes = await fetchWithAuth(
-        `${API_BASE}/frms/alertas?resolvido=false&limit=${pageLimit}&page=1&data_inicio=${mesInicio}`,
+        `${API_BASE}/dashboard/frms-alertas?limit=${pageLimit}&data_inicio=${mesInicio}`,
         { headers: getHeaders() },
       );
       const firstJson = await readJsonOrThrow<FrmsAlertaRaw[]>(
         firstRes,
         'Falha ao buscar alertas FRMS',
       );
-      let alertas: FrmsAlertaRaw[] = Array.isArray(firstJson.data) ? firstJson.data : [];
-
-      // Buscar páginas remanescentes sem mascarar erro
-      const total = Number(firstJson.total ?? alertas.length ?? 0);
-      const totalPages = Math.max(1, Math.ceil(total / pageLimit));
-      if (totalPages > 1) {
-        const extraPages = await Promise.all(
-          Array.from({ length: totalPages - 1 }, (_, idx) => idx + 2).map(async (page) => {
-            const pageRes = await fetchWithAuth(
-              `${API_BASE}/frms/alertas?resolvido=false&limit=${pageLimit}&page=${page}&data_inicio=${mesInicio}`,
-              { headers: getHeaders() },
-            );
-            const pageJson = await readJsonOrThrow<FrmsAlertaRaw[]>(
-              pageRes,
-              'Falha ao buscar alertas FRMS',
-            );
-            return Array.isArray(pageJson.data) ? pageJson.data : [];
-          }),
-        );
-        const extras = extraPages.flat();
-        const byId = new Map<string, FrmsAlertaRaw>();
-        for (const alerta of [...alertas, ...extras]) {
-          byId.set(String(alerta.id), alerta);
-        }
-        alertas = Array.from(byId.values());
-      }
+      const alertas: FrmsAlertaRaw[] = Array.isArray(firstJson.data) ? firstJson.data : [];
 
       // Filter to current month
       return alertas.filter((f) => {
@@ -218,7 +193,9 @@ export function useEscalasQuery(enabled: boolean) {
       const hoje = new Date();
       const mes = hoje.getMonth() + 1;
       const ano = hoje.getFullYear();
-      const res = await fetchWithAuth(`${API_BASE}/escalas?mes=${mes}&ano=${ano}`, { headers: getHeaders() });
+      const res = await fetchWithAuth(`${API_BASE}/dashboard/escalas-resumo?mes=${mes}&ano=${ano}`, {
+        headers: getHeaders(),
+      });
       const json = await readJsonOrThrow<EscalaItem[]>(res, 'Falha ao buscar escalas');
       return (Array.isArray(json.data) ? json.data.slice(0, 5) : []) as EscalaItem[];
     },
@@ -325,7 +302,7 @@ export function useSessoesSimuladorQuery(enabled: boolean) {
     queryKey: dashboardKeys.sessoes(todayIso),
     queryFn: async () => {
       const res = await fetchWithAuth(
-        `${API_BASE}/simuladores/sessoes?view=summary&status=AGENDADO,PENDENTE,CONFIRMADO&data_inicio=${todayIso}&order=asc&limit=24`,
+        `${API_BASE}/dashboard/proximas-sessoes?data_inicio=${todayIso}&limit=24`,
         { headers: getHeaders() },
       );
       const json = await readJsonOrThrow<Array<Record<string, unknown>>>(
