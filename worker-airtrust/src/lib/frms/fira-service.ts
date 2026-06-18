@@ -1023,7 +1023,7 @@ export async function confirmarImportacaoFira(
         hora_corte_motor: null,
         observacao: null,
         registrado_por: operadorId,
-        origem: 'FIRA' as const,
+        origem: String(linha.status_fira || '').trim().toUpperCase() === 'SIGVOOS' ? ('SIGVOOS' as const) : ('FIRA' as const),
         local_base: linha.local_base ?? null,
       };
 
