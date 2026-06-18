@@ -594,6 +594,101 @@ describe('FrmsControleOperacional', () => {
       expect(screen.getByText(/Quinzena completa · jornada 30\.0h/)).toBeInTheDocument();
       expect(screen.getByText(/jornada 30\.0h/)).toBeInTheDocument();
     });
+
+    it('renderiza mensagem de periodo ausente quando a fonte da quinzena esta ausente', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'AUSENTE',
+            status_quinzena: 'INCOMPLETO',
+            alertas_quinzena: ['PERIODO_QUINZENA_AUSENTE'],
+          },
+        }),
+      ]);
+
+      renderControle();
+      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+
+      expect(
+        screen.getByText('Período de embarque não localizado nesta data. Verifique se a escala quinzenal foi cadastrada.'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Indicador operacional descritivo — não é compliance regulatório.')).toBeInTheDocument();
+    });
+
+    it('renderiza mensagem de periodo parcial quando a janela cobre apenas parte da quinzena', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'INCOMPLETO',
+            status_quinzena: 'INCOMPLETO',
+            alertas_quinzena: ['PERIODO_PARCIAL_NA_CONSULTA'],
+          },
+        }),
+      ]);
+
+      renderControle();
+      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+
+      expect(
+        screen.getByText(
+          'Período identificado, mas a janela de consulta cobre apenas parte dele. Os acumulados refletem somente os dias visíveis.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('renderiza mensagem quando nao ha indicador de quinzena para a data', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          fortnight_indicator: null,
+        }),
+      ]);
+
+      renderControle();
+      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+
+      expect(screen.getByText('Sem jornada FRMS registrada nesta data.')).toBeInTheDocument();
+    });
+
+    it('mantem grid completo e badge de fonte quando o periodo esta derivado', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'DERIVADO',
+            status_quinzena: 'ATENCAO',
+            alertas_quinzena: ['DESCANSO_MINIMO'],
+          },
+        }),
+      ]);
+
+      renderControle();
+      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+
+      expect(screen.getByText('Status da quinzena:')).toBeInTheDocument();
+      expect(screen.getByText('Fonte do periodo:')).toBeInTheDocument();
+      expect(screen.getByText('Derivado')).toBeInTheDocument();
+      expect(screen.getByText('Alertas da quinzena:')).toBeInTheDocument();
+    });
+
+    it('nao exibe linguagem regulatoria indevida no painel quinzenal', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'REAL',
+            status_quinzena: 'OK',
+          },
+        }),
+      ]);
+
+      renderControle();
+      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+
+      expect(screen.queryByText(/homologado|aprovado|ANAC/i)).not.toBeInTheDocument();
+      expect(screen.getByText('Indicador operacional descritivo — não é compliance regulatório.')).toBeInTheDocument();
+    });
   });
 
   describe('Escala indisponivel — banner e ajustes de classificacao', () => {
