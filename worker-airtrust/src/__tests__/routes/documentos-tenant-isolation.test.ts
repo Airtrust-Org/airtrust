@@ -53,6 +53,15 @@ vi.mock('../../utils/auditoria', () => ({
   extrairUsuarioAuditoria: () => ({ usuario_id: 10, origem: 'test' }),
 }));
 
+vi.mock('../../services/html-to-pdf', () => ({
+  htmlToPdf: vi.fn(),
+  processTemplateWithQR: vi.fn(),
+}));
+
+vi.mock('../../utils/qualificacoes-expiration', () => ({
+  calcularDataVencimento: vi.fn(() => '2027-01-01'),
+}));
+
 vi.mock('../../shared/domainEvents', () => ({
   publishDomainEvent: vi.fn(),
 }));
