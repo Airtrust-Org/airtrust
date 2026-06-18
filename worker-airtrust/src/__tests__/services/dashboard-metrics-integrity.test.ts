@@ -23,17 +23,23 @@ describe('dashboard metrics integrity service', () => {
       })),
     } as unknown as D1Database;
 
-    const result = await getTaxaConclusaoMensal(db, 33);
+    const result = await getTaxaConclusaoMensal(db, 33, {
+      mode: 'restricted',
+      setorIds: [4, 9],
+      funcionarioId: null,
+    });
 
     expect(result.meses).toEqual(['Mai']);
     expect(result.taxas).toEqual([91]);
     expect(calls).toHaveLength(1);
 
     const [{ query, args }] = calls;
-    expect(args).toEqual([33]);
+    expect(args).toEqual([33, 4, 9]);
     expect(query).toContain('empresa_id = ?');
     expect(query).toContain('deleted_at IS NULL');
     expect(query).toContain("status IN ('CONCLUIDA', 'CONCLUIDO')");
+    expect(query).toContain('FROM sessoes_participantes sp_scope');
+    expect(query).toContain('f_scope.setor_id IN (?, ?)');
   });
 
   it('enforce tenant + soft-delete + cancelled exclusion in utilizacao simuladores', async () => {
@@ -62,18 +68,48 @@ describe('dashboard metrics integrity service', () => {
       })),
     } as unknown as D1Database;
 
-    const result = await getUtilizacaoSimuladores(db, 19);
+    const result = await getUtilizacaoSimuladores(db, 19, {
+      mode: 'restricted',
+      setorIds: [7],
+      funcionarioId: null,
+    });
 
     expect(result.simuladores).toHaveLength(1);
     expect(calls).toHaveLength(1);
 
     const [{ query, args }] = calls;
-    expect(args).toEqual([19, 19]);
+    expect(args).toEqual([19, 7, 19]);
     expect(query).toContain('s.empresa_id = ?');
     expect(query).toContain('sa.empresa_id = ?');
     expect(query).toContain('sa.deleted_at IS NULL');
     expect(query).toContain('s.deleted_at IS NULL');
     expect(query).toContain("sa.status IN ('AGENDADO', 'AGENDADA', 'CONCLUIDA', 'CONCLUIDO')");
     expect(query).not.toContain('CANCELADA');
+    expect(query).toContain('FROM sessoes_participantes sp_scope');
+    expect(query).toContain('f_scope.setor_id IN (?)');
+  });
+
+  it('fails closed for empty manager scope in taxa conclusao mensal', async () => {
+    const calls: QueryCall[] = [];
+    const db = {
+      prepare: vi.fn((query: string) => ({
+        bind: (...args: unknown[]) => {
+          calls.push({ query, args });
+          return {
+            all: async () => ({ results: [] }),
+          };
+        },
+      })),
+    } as unknown as D1Database;
+
+    await getTaxaConclusaoMensal(db, 21, {
+      mode: 'restricted',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.args).toEqual([21]);
+    expect(calls[0]?.query).toContain('1 = 0');
   });
 });

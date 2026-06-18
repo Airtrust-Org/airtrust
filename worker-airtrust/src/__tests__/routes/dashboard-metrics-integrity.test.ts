@@ -4,6 +4,10 @@ import type { Env } from '../../types';
 
 const getTaxaConclusaoMensalMock = vi.fn();
 const getUtilizacaoSimuladoresMock = vi.fn();
+const getEmployeeSectorAccessMock = vi.fn();
+const getDashboardFrmsAlertsMock = vi.fn();
+const getDashboardUpcomingSessionsMock = vi.fn();
+const getDashboardEscalasResumoMock = vi.fn();
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (_c: any, next: () => Promise<void>) => next(),
@@ -26,9 +30,17 @@ vi.mock('../../services/dashboardService', () => ({
   getComplianceScore: vi.fn(async () => ({})),
   getDemandaTreinamento: vi.fn(async () => ({})),
   getAtividadesRecentes: vi.fn(async () => []),
+  getDashboardFrmsAlerts: (...args: unknown[]) => getDashboardFrmsAlertsMock(...args),
+  getDashboardUpcomingSessions: (...args: unknown[]) => getDashboardUpcomingSessionsMock(...args),
+  getDashboardEscalasResumo: (...args: unknown[]) => getDashboardEscalasResumoMock(...args),
   getTaxaConclusaoMensal: (...args: unknown[]) => getTaxaConclusaoMensalMock(...args),
   getUtilizacaoSimuladores: (...args: unknown[]) => getUtilizacaoSimuladoresMock(...args),
   getSystemHealth: vi.fn(async () => ({})),
+}));
+
+vi.mock('../../services/employee-sector-access', () => ({
+  getEmployeeSectorAccess: (...args: unknown[]) => getEmployeeSectorAccessMock(...args),
+  buildFuncionarioScopeWhere: vi.fn(() => ({ clause: '1 = 1', bindings: [] })),
 }));
 
 import dashboardRoutes from '../../routes/dashboard';
@@ -79,6 +91,15 @@ describe('dashboard metrics integrity routes', () => {
   beforeEach(() => {
     getTaxaConclusaoMensalMock.mockReset();
     getUtilizacaoSimuladoresMock.mockReset();
+    getEmployeeSectorAccessMock.mockReset();
+    getDashboardFrmsAlertsMock.mockReset();
+    getDashboardUpcomingSessionsMock.mockReset();
+    getDashboardEscalasResumoMock.mockReset();
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'restricted',
+      setorIds: [10],
+      funcionarioId: null,
+    });
   });
 
   it('propaga tenant em /dashboard/taxa-conclusao-mensal', async () => {
@@ -99,7 +120,11 @@ describe('dashboard metrics integrity routes', () => {
 
     expect(response.status).toBe(200);
     expect(getTaxaConclusaoMensalMock).toHaveBeenCalledTimes(1);
-    expect(getTaxaConclusaoMensalMock).toHaveBeenCalledWith(db, 42);
+    expect(getTaxaConclusaoMensalMock).toHaveBeenCalledWith(db, 42, {
+      mode: 'restricted',
+      setorIds: [10],
+      funcionarioId: null,
+    });
   });
 
   it('propaga tenant em /dashboard/utilizacao-simuladores', async () => {
@@ -120,7 +145,81 @@ describe('dashboard metrics integrity routes', () => {
 
     expect(response.status).toBe(200);
     expect(getUtilizacaoSimuladoresMock).toHaveBeenCalledTimes(1);
-    expect(getUtilizacaoSimuladoresMock).toHaveBeenCalledWith(db, 7);
+    expect(getUtilizacaoSimuladoresMock).toHaveBeenCalledWith(db, 7, {
+      mode: 'restricted',
+      setorIds: [10],
+      funcionarioId: null,
+    });
+  });
+
+  it('escopa alertas FRMS do home pelo access setorial resolvido no backend', async () => {
+    getDashboardFrmsAlertsMock.mockResolvedValueOnce([]);
+
+    const app = createApp();
+    const db = {} as D1Database;
+    const response = await app.fetch(
+      new Request('http://localhost/dashboard/frms-alertas?data_inicio=2026-06-01&limit=50', {
+        method: 'GET',
+        headers: {
+          'x-empresa-id': '6',
+        },
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(getEmployeeSectorAccessMock).toHaveBeenCalledTimes(1);
+    expect(getDashboardFrmsAlertsMock).toHaveBeenCalledWith(
+      db,
+      6,
+      { mode: 'restricted', setorIds: [10], funcionarioId: null },
+      '2026-06-01',
+      50,
+    );
+  });
+
+  it('escopa próximas sessões e resumo de escalas pelo access setorial resolvido no backend', async () => {
+    getDashboardUpcomingSessionsMock.mockResolvedValueOnce([]);
+    getDashboardEscalasResumoMock.mockResolvedValueOnce([]);
+
+    const app = createApp();
+    const db = {} as D1Database;
+
+    const sessoesResponse = await app.fetch(
+      new Request('http://localhost/dashboard/proximas-sessoes?data_inicio=2026-06-18&limit=12', {
+        method: 'GET',
+        headers: { 'x-empresa-id': '6' },
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    const escalasResponse = await app.fetch(
+      new Request('http://localhost/dashboard/escalas-resumo?mes=6&ano=2026&limit=4', {
+        method: 'GET',
+        headers: { 'x-empresa-id': '6' },
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(sessoesResponse.status).toBe(200);
+    expect(escalasResponse.status).toBe(200);
+    expect(getDashboardUpcomingSessionsMock).toHaveBeenCalledWith(
+      db,
+      6,
+      { mode: 'restricted', setorIds: [10], funcionarioId: null },
+      '2026-06-18',
+      12,
+    );
+    expect(getDashboardEscalasResumoMock).toHaveBeenCalledWith(
+      db,
+      6,
+      { mode: 'restricted', setorIds: [10], funcionarioId: null },
+      6,
+      2026,
+      4,
+    );
   });
 
   it('mantem /dashboard/qualificacoes com no-cache e agregados numericos coerentes', async () => {
