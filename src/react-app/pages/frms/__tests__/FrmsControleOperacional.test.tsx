@@ -591,7 +591,7 @@ describe('FrmsControleOperacional', () => {
         }),
       ]);
       renderControle();
-      expect(screen.getByText(/Quinzena completa/)).toBeInTheDocument();
+      expect(screen.getByText(/Quinzena completa · jornada 30\.0h/)).toBeInTheDocument();
       expect(screen.getByText(/jornada 30\.0h/)).toBeInTheDocument();
     });
   });
