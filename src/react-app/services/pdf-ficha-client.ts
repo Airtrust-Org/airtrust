@@ -107,22 +107,30 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
-const FICHA_AVALIACAO_SCALE_HEIGHT = 32;
+// Height reserved for the compact evaluation ruler section (title + cell row + 2-row legend)
+const FICHA_AVALIACAO_SCALE_HEIGHT = 22;
 
 export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
+  // Column layout (all positions are absolute mm from left edge of page):
+  //   #      : margin+3   — 5mm wide
+  //   CÓDIGO : margin+10  — 20mm wide  → ends at margin+30
+  //   TRIP.  : margin+33  — 12mm wide (badge 8mm centered) → badge spans margin+29–margin+37
+  //   ITENS  : margin+46  — 40mm wide  → ends at margin+86
+  //   OBS    : margin+88  — 75mm wide  → ends at margin+163
+  //   NOTA   : margin+172 — centred badge, 10mm wide
   return {
     positions: {
       num: margin + 3,
       codigo: margin + 10,
-      tripulante: margin + 28,
-      itens: margin + 35,
-      obs: margin + 80,
+      tripulante: margin + 33,
+      itens: margin + 46,
+      obs: margin + 88,
       nota: margin + 172,
     },
-    codigoWidth: 16,
-    tripulanteWidth: 10,
-    itensWidth: 43,
-    obsWidth: 80,
+    codigoWidth: 20,
+    tripulanteWidth: 12,
+    itensWidth: 40,
+    obsWidth: 75,
     notaBadgeWidth: 10,
     notaBadgeHeight: 4,
   };
@@ -165,14 +173,16 @@ function drawFichaAvaliacaoScale(
   y: number,
   width: number,
 ): number {
+  // Compact title — smaller font, less vertical space
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(6.5);
   doc.setTextColor(COLORS.text);
   doc.text('REGUA DE AVALIACAO', x, y);
 
-  const tableY = y + 3;
+  // Colour-coded note cells — reduced height (4mm instead of 7mm)
+  const tableY = y + 2.5;
   const cellWidth = width / FICHA_AVALIACAO_NOTAS.length;
-  const cellHeight = 7;
+  const cellHeight = 4;
 
   FICHA_AVALIACAO_NOTAS.forEach((nota, index) => {
     const faixa = FICHA_AVALIACAO_FAIXAS.find((candidate) => candidate.noteIndexes.includes(index));
@@ -180,38 +190,42 @@ function drawFichaAvaliacaoScale(
     doc.setFillColor(fill);
     doc.setDrawColor(COLORS.text);
     doc.rect(x + index * cellWidth, tableY, cellWidth, cellHeight, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6);
     doc.setTextColor(getContrastTextColor(fill));
-    doc.text(String(nota), x + index * cellWidth + cellWidth / 2, tableY + 4.7, { align: 'center' });
+    doc.text(String(nota), x + index * cellWidth + cellWidth / 2, tableY + 2.9, { align: 'center' });
   });
 
-  const legendTop = tableY + cellHeight + 2;
-  const legendGap = 2;
-  const legendWidth = (width - legendGap) / 2;
-  const legendHeight = 6.5;
+  // Descriptor legend — all 4 bands in a single row (4 columns) to save vertical space
+  const legendTop = tableY + cellHeight + 1.5;
+  const legendGap = 1.5;
+  const colCount = FICHA_AVALIACAO_FAIXAS.length; // 4 columns
+  const legendWidth = (width - legendGap * (colCount - 1)) / colCount;
+  const legendHeight = 5;
 
   FICHA_AVALIACAO_FAIXAS.forEach((faixa, index) => {
-    const column = index % 2;
-    const row = Math.floor(index / 2);
-    const bandX = x + column * (legendWidth + legendGap);
-    const bandY = legendTop + row * (legendHeight + 1.5);
+    const bandX = x + index * (legendWidth + legendGap);
+    const bandY = legendTop;
 
     doc.setFillColor(COLORS.bgLight);
     doc.setDrawColor(COLORS.border);
-    doc.roundedRect(bandX, bandY, legendWidth, legendHeight, 1.5, 1.5, 'FD');
+    doc.roundedRect(bandX, bandY, legendWidth, legendHeight, 1, 1, 'FD');
 
+    // Range label in band colour
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(5.7);
+    doc.setFontSize(5);
     doc.setTextColor(faixa.color);
-    doc.text(faixa.rangeLabel, bandX + 2, bandY + 2.5);
+    doc.text(faixa.rangeLabel, bandX + 1.5, bandY + 2.2);
 
+    // Descriptor text — 1 line max, slightly smaller font
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(4.9);
+    doc.setFontSize(4.5);
     doc.setTextColor(COLORS.textSecondary);
-    const lines = doc.splitTextToSize(faixa.description, legendWidth - 12).slice(0, 3);
-    doc.text(lines, bandX + 10, bandY + 2.5);
+    const lines = doc.splitTextToSize(faixa.description, legendWidth - 2).slice(0, 2);
+    doc.text(lines, bandX + 1.5, bandY + 4);
   });
 
-  return legendTop + legendHeight * 2 + 2.5;
+  return legendTop + legendHeight + 1;
 }
 
 /**
