@@ -2,8 +2,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import DOMPurify from 'dompurify';
 
-import { API_BASE_URL } from '@/react-app/config/api';
 import { Eye, Download } from 'lucide-react';
+import { apiFetch } from '@/react-app/lib/apiFetch';
+import {
+  buildFichaAvaliacaoScaleHtml,
+  getFichaAvaliacaoScaleCss,
+} from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
 
 interface PDFData {
   ficha: any;
@@ -214,6 +218,8 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
         
         .aprovado { color: #008000; }
         .reprovado { color: #ff0000; }
+
+        ${getFichaAvaliacaoScaleCss()}
         
         /* ASSINATURAS */
         .assinaturas {
@@ -356,6 +362,8 @@ export const PDFGeneratorNativo: React.FC<PDFGeneratorProps> = ({ fichaUuid, onP
         </div>
     </div>
     
+    ${buildFichaAvaliacaoScaleHtml()}
+
     <!-- ASSINATURAS -->
     <div class="assinaturas">
         <div class="assinatura-box">

@@ -69,6 +69,7 @@ export function getFichaPdfTableHeaders() {
 import { getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import { FICHA_AVALIACAO_FAIXAS, FICHA_AVALIACAO_NOTAS } from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
 
 function isSafariBrowser(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -106,6 +107,8 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
+const FICHA_AVALIACAO_SCALE_HEIGHT = 26;
+
 export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
   return {
     positions: {
@@ -135,6 +138,80 @@ function getTripulanteBadgeColors(tripulante?: 'A' | 'B' | 'AB') {
   }
 
   return { fill: '#E2E8F0', text: '#334155' };
+}
+
+function getContrastTextColor(hex: string): string {
+  const normalized = hex.replace('#', '');
+  const red = parseInt(normalized.slice(0, 2), 16);
+  const green = parseInt(normalized.slice(2, 4), 16);
+  const blue = parseInt(normalized.slice(4, 6), 16);
+  const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
+  return brightness > 150 ? '#111827' : '#FFFFFF';
+}
+
+function drawFichaAvaliacaoScale(
+  doc: {
+    setFont: (family: string, style?: string) => void;
+    setFontSize: (size: number) => void;
+    setTextColor: (color: string | number, g?: number, b?: number) => void;
+    setDrawColor: (color: string | number, g?: number, b?: number) => void;
+    setFillColor: (color: string | number, g?: number, b?: number) => void;
+    rect: (x: number, y: number, w: number, h: number, style?: string) => void;
+    roundedRect: (x: number, y: number, w: number, h: number, rx: number, ry: number, style?: string) => void;
+    text: (text: string | string[], x: number, y: number, options?: Record<string, unknown>) => void;
+    splitTextToSize: (text: string, maxWidth: number) => string[];
+  },
+  x: number,
+  y: number,
+  width: number,
+): number {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(COLORS.text);
+  doc.text('REGUA DE AVALIACAO', x, y);
+
+  const tableY = y + 3;
+  const cellWidth = width / FICHA_AVALIACAO_NOTAS.length;
+  const cellHeight = 7;
+
+  FICHA_AVALIACAO_NOTAS.forEach((nota, index) => {
+    const faixa = FICHA_AVALIACAO_FAIXAS.find((candidate) => candidate.noteIndexes.includes(index));
+    const fill = faixa?.color || '#94A3B8';
+    doc.setFillColor(fill);
+    doc.setDrawColor(COLORS.text);
+    doc.rect(x + index * cellWidth, tableY, cellWidth, cellHeight, 'FD');
+    doc.setTextColor(getContrastTextColor(fill));
+    doc.text(String(nota), x + index * cellWidth + cellWidth / 2, tableY + 4.7, { align: 'center' });
+  });
+
+  const legendTop = tableY + cellHeight + 2;
+  const legendGap = 2;
+  const legendWidth = (width - legendGap) / 2;
+  const legendHeight = 6.5;
+
+  FICHA_AVALIACAO_FAIXAS.forEach((faixa, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const bandX = x + column * (legendWidth + legendGap);
+    const bandY = legendTop + row * (legendHeight + 1.5);
+
+    doc.setFillColor(COLORS.bgLight);
+    doc.setDrawColor(COLORS.border);
+    doc.roundedRect(bandX, bandY, legendWidth, legendHeight, 1.5, 1.5, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.7);
+    doc.setTextColor(faixa.color);
+    doc.text(faixa.rangeLabel, bandX + 2, bandY + 2.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(4.9);
+    doc.setTextColor(COLORS.textSecondary);
+    const lines = doc.splitTextToSize(faixa.description, legendWidth - 12).slice(0, 3);
+    doc.text(lines, bandX + 10, bandY + 2.5);
+  });
+
+  return legendTop + legendHeight * 2 + 2.5;
 }
 
 /**
@@ -661,7 +738,9 @@ export async function gerarPDFFichaCliente(
   const FOOTER_H = 6; // espaço do rodapé no fundo
   const SIG_RESERVED = 40; // altura máxima reservada para as caixas de assinatura
   const OBS_RESERVED = 14; // obs gerais max
-  const tableBodyBudget = pageHeight - currentY - 4 - OBS_RESERVED - 3 - SIG_RESERVED - FOOTER_H;
+  const SCALE_RESERVED = FICHA_AVALIACAO_SCALE_HEIGHT;
+  const tableBodyBudget =
+    pageHeight - currentY - 4 - SCALE_RESERVED - OBS_RESERVED - 3 - SIG_RESERVED - FOOTER_H;
 
   // Factor de escala — só encolhe, nunca cresce
   const scaleFactor = totalNatural > tableBodyBudget ? tableBodyBudget / totalNatural : 1;
@@ -784,6 +863,7 @@ export async function gerarPDFFichaCliente(
   });
 
   currentY += 4;
+  currentY = drawFichaAvaliacaoScale(doc, margin, currentY, contentWidth) + 4;
 
   // ========== OBSERVAÇÕES GERAIS — mínimo 3 linhas de texto ==========
   if (dados.observacoes_gerais || isModoModelo) {
