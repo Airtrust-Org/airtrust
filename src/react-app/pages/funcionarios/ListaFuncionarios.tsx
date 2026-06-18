@@ -148,6 +148,24 @@ interface FuncionarioRow {
   [key: string]: unknown; // permite acesso dinâmico em colunas configuráveis
 }
 
+function buildEmptyPaginationState(previous: {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}) {
+  return {
+    ...previous,
+    page: 1,
+    total: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrev: false,
+  };
+}
+
 export function resolveFuncionarioRoleLabel(
   funcionario: Pick<FuncionarioRow, 'funcao' | 'cargo'> | null | undefined,
 ): string {
@@ -382,6 +400,7 @@ export function ListaFuncionarios({
             setError(`Falha na API (HTTP ${response.status})`);
           }
           setFuncionarios([]);
+          setPagination((prev) => buildEmptyPaginationState(prev));
           return;
         }
         const data = await response.json();
@@ -453,6 +472,8 @@ export function ListaFuncionarios({
         if (didTimeout) {
           if (requestId === activeRequestIdRef.current) {
             setError('Tempo limite ao carregar funcionários. Tente novamente.');
+            setFuncionarios([]);
+            setPagination((prev) => buildEmptyPaginationState(prev));
           }
           return;
         }
@@ -464,6 +485,7 @@ export function ListaFuncionarios({
         if (requestId === activeRequestIdRef.current) {
           setError('Erro de rede ao carregar funcionários');
           setFuncionarios([]);
+          setPagination((prev) => buildEmptyPaginationState(prev));
         }
       } finally {
         if (requestId === activeRequestIdRef.current) {
