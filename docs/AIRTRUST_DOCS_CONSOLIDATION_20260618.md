@@ -13,13 +13,13 @@ Foi identificado um subconjunto pequeno de documentacao segura e util para PR, u
 | `docs/AIRTRUST_PERFORMANCE_QUALIFICACOES_CERTIFICADOS_AUDIT_20260617.md` | `SAFE_COMMIT` | Incluir em PR documental |
 | `docs/AIRTRUST_CERTIFICADOS_YNGRID_VALIDATION_ROADMAP_20260617.md` | `SANITIZE_THEN_COMMIT` | Substituido por versao sanitizada |
 | `docs/AIRTRUST_CERTIFICADOS_SETORIAIS_VALIDATION_ROADMAP_SANITIZED_20260618.md` | `SAFE_COMMIT` | Incluir em PR documental |
-| `docs/RBAC_SETORIAL_PR69_POST_DEPLOY_VALIDATION_20260617.md` | `SANITIZE_THEN_COMMIT` | Preservar localmente nesta etapa |
-| `docs/RBAC_SETORIAL_VALIDACAO_FINAL_20260618.md` | `KEEP_LOCAL_SENSITIVE` | Manter fora do Git |
+| `Documento de validacao RBAC setorial A` | `SANITIZE_THEN_COMMIT` | Preservar localmente nesta etapa |
+| `Documento de validacao RBAC setorial B` | `KEEP_LOCAL_SENSITIVE` | Manter fora do Git |
 | `docs/AIRTRUST_CONSOLIDACAO_POS_INCIDENTES_20260617.md` | `DUPLICATE_OR_OBSOLETE` | Remover localmente |
 | `docs/AIRTRUST_DATA_INTEGRITY_BRANCH_CONSOLIDATION_20260618.md` | `DUPLICATE_OR_OBSOLETE` | Preservar localmente por conter conteudo misto |
 | `docs/AIRTRUST_OPEN_PRS_TRIAGE_20260618.md` | `DUPLICATE_OR_OBSOLETE` | Remover localmente |
 | `docs/AIRTRUST_PR32_REVIEW_20260618.md` | `DUPLICATE_OR_OBSOLETE` | Remover localmente |
-| `docs/AIRTRUST_REPO_CLEANUP_STATUS_20260618.md` | `KEEP_LOCAL_SENSITIVE` | Manter fora do Git |
+| `Documento de inventario operacional local` | `KEEP_LOCAL_SENSITIVE` | Manter fora do Git |
 | `docs/AIRTRUST_SAFE_TESTS_RECONCILIATION_20260618.md` | `DUPLICATE_OR_OBSOLETE` | Remover localmente |
 
 ## Docs sanitizados
@@ -41,11 +41,9 @@ Foi identificado um subconjunto pequeno de documentacao segura e util para PR, u
 
 ## Docs preservados fora do Git
 
-- `docs/RBAC_SETORIAL_VALIDACAO_FINAL_20260618.md`
-  Motivo: contem PII, IDs internos, contagens operacionais e SQL de rollback.
-- `docs/RBAC_SETORIAL_PR69_POST_DEPLOY_VALIDATION_20260617.md`
-  Motivo: ainda exige sanitizacao adicional antes de eventual publicacao.
-- `docs/AIRTRUST_REPO_CLEANUP_STATUS_20260618.md`
-  Motivo: inventario operacional com paths locais, worktrees e estado efemero.
-- `docs/AIRTRUST_DATA_INTEGRITY_BRANCH_CONSOLIDATION_20260618.md`
-  Motivo: mistura fatos ja absorvidos com detalhes sensiveis-adjacentes e notas operacionais locais.
+- Dois documentos de validacao RBAC setorial.
+  Motivo: contem ou fazem referencia a dados pessoais e detalhes operacionais que exigem sanitizacao adicional.
+- Um documento de inventario operacional local.
+  Motivo: descreve estado efemero do ambiente de trabalho e nao agrega valor canonico ao repositorio.
+- Um documento misto de consolidacao tecnica local.
+  Motivo: combina fatos ja absorvidos com notas operacionais que nao devem entrar neste PR.
