@@ -63,6 +63,10 @@ import {
 import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms.handler';
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
+import {
+  FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS,
+  getFrmsFortnightCoverage,
+} from '../lib/frms/fortnight-coverage';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import fadigaAcumulada from './frms-fadiga-acumulada';
 import firaRoutes from './frms-fira';
@@ -1271,6 +1275,105 @@ async function hasValidMaintenanceSecret(
   if (!headerToken) return false;
   return secureCompare(headerToken, maintenanceSecret);
 }
+
+const FortnightCoverageMaintenanceQuerySchema = z
+  .object({
+    empresa_id: z
+      .string()
+      .optional()
+      .transform((value) => {
+        if (!value) return undefined;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+      }),
+    data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    origem: z
+      .string()
+      .optional()
+      .transform((value) =>
+        value
+          ? value
+              .split(',')
+              .map((item) => item.trim().toUpperCase())
+              .filter(Boolean)
+          : undefined,
+      ),
+    status: z
+      .string()
+      .optional()
+      .transform((value) =>
+        value
+          ? value
+              .split(',')
+              .map((item) => item.trim().toUpperCase())
+              .filter(Boolean)
+          : undefined,
+      ),
+  })
+  .refine((data) => data.data_fim >= data.data_inicio, {
+    message: 'data_fim deve ser >= data_inicio',
+    path: ['data_fim'],
+  });
+
+function isoDateDiffInDays(startIso: string, endIso: string): number {
+  const start = new Date(`${startIso}T00:00:00Z`).getTime();
+  const end = new Date(`${endIso}T00:00:00Z`).getTime();
+  return Math.floor((end - start) / 86400000);
+}
+
+frmsRoutes.get(
+  '/maintenance/fortnight-coverage',
+  safe(async (c) => {
+    if (!c.env.MAINTENANCE_SECRET) {
+      return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
+    }
+    if (!(await isLocalMaintenanceRequest(c))) {
+      return c.json({ success: false, error: 'Rota disponivel apenas em localhost.' }, 403);
+    }
+    if (!(await hasValidMaintenanceSecret(c))) {
+      return c.json({ success: false, error: 'Token de manutencao invalido.' }, 403);
+    }
+
+    const parsed = FortnightCoverageMaintenanceQuerySchema.safeParse({
+      empresa_id: c.req.query('empresa_id'),
+      data_inicio: c.req.query('data_inicio'),
+      data_fim: c.req.query('data_fim'),
+      origem: c.req.query('origem'),
+      status: c.req.query('status'),
+    });
+
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    }
+
+    const empresaId = parsed.data.empresa_id ?? getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json({ success: false, error: 'empresa_id e obrigatorio para o diagnostico.' }, 400);
+    }
+
+    const windowDays = isoDateDiffInDays(parsed.data.data_inicio, parsed.data.data_fim) + 1;
+    if (windowDays > FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS) {
+      return c.json(
+        {
+          success: false,
+          error: `Janela maxima excedida. Use ate ${FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS} dias.`,
+        },
+        400,
+      );
+    }
+
+    const result = await getFrmsFortnightCoverage(c.env.DB, {
+      empresaId,
+      dataInicio: parsed.data.data_inicio,
+      dataFim: parsed.data.data_fim,
+      origem: parsed.data.origem,
+      status: parsed.data.status,
+    });
+
+    return c.json({ success: true, ...result });
+  }),
+);
 
 frmsRoutes.post(
   '/maintenance/reprocessar-lote',
