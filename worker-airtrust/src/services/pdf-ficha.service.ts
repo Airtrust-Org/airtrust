@@ -51,6 +51,38 @@ const COLOR = {
   white: rgb(1, 1, 1),
 };
 
+const AVALIACAO_SCALE_NOTAS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+const AVALIACAO_SCALE_FAIXAS = [
+  {
+    rangeLabel: '1-2',
+    color: rgb(0.78, 0.16, 0.16),
+    description:
+      'Padrao Nao Satisfatorio. Ocorreram erros criticos e/ou foram utilizadas tecnicas ou procedimentos incorretos, resultando em desempenho inaceitavel. Voo perigoso.',
+    noteIndexes: [0, 1],
+  },
+  {
+    rangeLabel: '3-4',
+    color: rgb(0.94, 0.43, 0),
+    description: 'Abaixo da Media. Nao atendeu ao padrao exigido.',
+    noteIndexes: [2, 3],
+  },
+  {
+    rangeLabel: '5-7',
+    color: rgb(0.96, 0.77, 0.26),
+    description:
+      'Padrao de Medio a Bom. Desempenho aceitavel com apenas erros menores e/ou criticos. Sem areas fracas evidentes.',
+    noteIndexes: [4, 5, 6],
+  },
+  {
+    rangeLabel: '8-10',
+    color: rgb(0.18, 0.49, 0.2),
+    description:
+      'Acima da Media. Exercicios e procedimentos executados com habilidade, utilizando tecnicas corretas. O piloto demonstra proficiencia em todos os aspectos.',
+    noteIndexes: [7, 8, 9],
+  },
+];
+
 export async function gerarPDFFicha(dados: FichaPDFData): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([PAGE.width, PAGE.height]);
@@ -78,6 +110,9 @@ export async function gerarPDFFicha(dados: FichaPDFData): Promise<Buffer> {
   currentY -= 14;
 
   currentY = drawManobrasSection(page, fontRegular, fontBold, dados, currentY, contentWidth);
+  currentY -= 10;
+
+  currentY = drawAvaliacaoScaleSection(page, fontRegular, fontBold, currentY, contentWidth);
   currentY -= 10;
 
   currentY = drawObservacoesSection(page, fontRegular, fontBold, dados, currentY, contentWidth);
@@ -402,6 +437,63 @@ function drawObservacoesSection(
   drawWrappedText(page, textLines, PAGE.margin + 5, boxTop - 8, fontRegular, 6, 8, COLOR.text);
 
   return boxTop - boxHeight;
+}
+
+function drawAvaliacaoScaleSection(
+  page: PDFPage,
+  fontRegular: PDFFont,
+  fontBold: PDFFont,
+  startY: number,
+  contentWidth: number,
+): number {
+  drawText(page, 'REGUA DE AVALIACAO', PAGE.margin, startY, fontBold, 7, COLOR.text);
+
+  const tableTop = startY - 10;
+  const cellWidth = contentWidth / AVALIACAO_SCALE_NOTAS.length;
+  const cellHeight = 14;
+
+  AVALIACAO_SCALE_NOTAS.forEach((nota, index) => {
+    const faixa = AVALIACAO_SCALE_FAIXAS.find((candidate) => candidate.noteIndexes.includes(index));
+    const x = PAGE.margin + index * cellWidth;
+    page.drawRectangle({
+      x,
+      y: tableTop - cellHeight,
+      width: cellWidth,
+      height: cellHeight,
+      color: faixa?.color || COLOR.textSecondary,
+      borderColor: COLOR.white,
+      borderWidth: 0.6,
+    });
+    drawTextCentered(page, String(nota), x, tableTop - 9, cellWidth, fontBold, 8, COLOR.white);
+  });
+
+  const legendTop = tableTop - cellHeight - 8;
+  const legendGap = 8;
+  const legendWidth = (contentWidth - legendGap) / 2;
+  const legendHeight = 28;
+
+  AVALIACAO_SCALE_FAIXAS.forEach((faixa, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const x = PAGE.margin + column * (legendWidth + legendGap);
+    const y = legendTop - row * (legendHeight + 6);
+
+    page.drawRectangle({
+      x,
+      y: y - legendHeight,
+      width: legendWidth,
+      height: legendHeight,
+      color: COLOR.bgLight,
+      borderColor: COLOR.border,
+      borderWidth: 0.5,
+    });
+
+    drawText(page, faixa.rangeLabel, x + 4, y - 8, fontBold, 7, faixa.color);
+    const lines = wrapText(faixa.description, fontRegular, 5.5, legendWidth - 20).slice(0, 4);
+    drawWrappedText(page, lines, x + 18, y - 8, fontRegular, 5.5, 7, COLOR.textSecondary);
+  });
+
+  return legendTop - legendHeight * 2 - 8;
 }
 
 function drawAssinaturasSection(
