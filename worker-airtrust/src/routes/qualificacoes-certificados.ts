@@ -1,14 +1,15 @@
 import { Hono } from 'hono';
 import type { Env, ApiResponse } from '../types';
 import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import {
   assertScopedHistoricoAccess,
+  listHistoricoCertificados,
   tableHasColumn,
   type Documento,
-  getCertificadosStorageColumns,
   resolveCertificadoContext,
 } from './qualificacoes-certificados-helpers';
 import certificadosWriteRoutes from './qualificacoes-certificados-write';
@@ -38,90 +39,17 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
     );
 
     const certificadoId = context.historico.certificado_arquivo_id;
-    const storageColumns = await getCertificadosStorageColumns(db);
-
-    if (!certificadoId && !storageColumns.pastaVirtualHasCertificacaoId) {
-      console.log(`[LISTAR CERTIFICADOS] Nenhum certificado vinculado ao historico_id=${id}`);
-      return c.json({ success: true, data: [] });
-    }
-
-    const { results } = await db
-      .prepare(
-        storageColumns.pastaVirtualHasCertificacaoId
-          ? `SELECT DISTINCT
-               d.id,
-               d.uuid,
-               d.funcionario_id,
-               d.nome_arquivo,
-               d.tipo,
-               d.tamanho,
-               d.r2_key,
-               d.created_at,
-               d.updated_at,
-               COALESCE(qh_link.numero_certificado, qh_current.numero_certificado, REPLACE(d.nome_arquivo, '.pdf', '')) AS numero_certificado
-             FROM documentos d
-             JOIN funcionarios fd
-               ON fd.id = d.funcionario_id
-              AND fd.deleted_at IS NULL
-              AND fd.empresa_id = ?
-             LEFT JOIN pasta_virtual pv
-               ON pv.certificacao_id = ?
-              AND pv.deleted_at IS NULL
-              ${storageColumns.pastaVirtualHasEmpresaId ? 'AND pv.empresa_id = ?' : ''}
-              AND pv.funcionario_id = d.funcionario_id
-              AND pv.caminho_arquivo = d.r2_key
-             LEFT JOIN qualificacoes_historico qh_link
-               ON qh_link.id = pv.certificacao_id
-              AND qh_link.deleted_at IS NULL
-             LEFT JOIN qualificacoes_historico qh_current
-               ON qh_current.certificado_arquivo_id = d.id
-              AND qh_current.deleted_at IS NULL
-             WHERE d.deleted_at IS NULL
-               AND (
-                 pv.id IS NOT NULL
-                 OR (d.funcionario_id = ? AND d.id = ?)
-               )
-             ORDER BY d.created_at DESC, d.id DESC`
-          : `SELECT
-               d.id,
-               d.uuid,
-               d.funcionario_id,
-               d.nome_arquivo,
-               d.tipo,
-               d.tamanho,
-               d.r2_key,
-               d.created_at,
-               d.updated_at,
-               qh.numero_certificado
-             FROM documentos d
-             JOIN funcionarios fd
-               ON fd.id = d.funcionario_id
-              AND fd.deleted_at IS NULL
-              AND fd.empresa_id = ?
-             LEFT JOIN qualificacoes_historico qh ON qh.certificado_arquivo_id = d.id
-             WHERE d.deleted_at IS NULL
-               AND d.id = ?
-             ORDER BY d.created_at DESC, d.id DESC`,
-      )
-      .bind(
-        ...(storageColumns.pastaVirtualHasCertificacaoId
-          ? [
-              empresaId,
-              id,
-              ...(storageColumns.pastaVirtualHasEmpresaId ? [empresaId] : []),
-              context.historico.funcionario_id,
-              certificadoId ?? 0,
-            ]
-          : [empresaId, certificadoId ?? 0]),
-      )
-      .all<Documento>();
+    const results = await listHistoricoCertificados(db, {
+      historicoId: id,
+      empresaId,
+      funcionarioId: context.historico.funcionario_id,
+      certificadoArquivoId: certificadoId,
+    });
 
     console.log(
-      `[LISTAR CERTIFICADOS] Encontrado ${
-        results?.length || 0
-      } certificado(s) para historico_id=${id}`,
+      `[LISTAR CERTIFICADOS] Encontrado ${results.length || 0} certificado(s) para historico_id=${id}`,
     );
-    if ((!results || results.length === 0) && certificadoId) {
+    if (results.length === 0 && certificadoId) {
       console.warn(
         `[LISTAR CERTIFICADOS] Referência órfã detectada em historico_id=${id} para certificado_arquivo_id=${certificadoId}; limpando vínculo.`,
       );
@@ -139,18 +67,16 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
         )
         .bind(id, empresaId, certificadoId)
         .run();
-      if (!storageColumns.pastaVirtualHasCertificacaoId) {
-        return c.json({ success: true, data: [] });
-      }
+      return c.json({ success: true, data: [] });
     }
 
-    if (results && results.length > 0) {
+    if (results.length > 0) {
       console.log(`[LISTAR CERTIFICADOS] Certificado:`, results[0]);
     }
 
     const response: ApiResponse<Documento[]> = {
       success: true,
-      data: results || [],
+      data: results,
     };
 
     return c.json(response);
@@ -198,9 +124,8 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
 app.route('/', certificadosWriteRoutes);
 
 
-app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
+app.delete('/historico/:id/certificados/:certId', auth(), requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
-  const bucket = c.env.BUCKET;
   const historicoId = parseInt(c.req.param('id'));
   const certId = parseInt(c.req.param('certId'));
   const empresaId = getEmpresaId(c);
@@ -210,99 +135,82 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
   }
 
   try {
-    const documento = await db
-      .prepare(
-        `SELECT d.*
-         FROM documentos d
-         INNER JOIN funcionarios f ON f.id = d.funcionario_id AND f.deleted_at IS NULL
-         LEFT JOIN qualificacoes_historico qh
-           ON qh.id = ?
-          AND qh.funcionario_id = d.funcionario_id
-          AND qh.certificado_arquivo_id = d.id
-          AND qh.deleted_at IS NULL
-         WHERE d.id = ?
-           AND f.empresa_id = ?
-           AND (qh.id IS NOT NULL OR NOT EXISTS (
-             SELECT 1 FROM qualificacoes_historico qh_check
-             WHERE qh_check.id = ? AND qh_check.deleted_at IS NULL
-           ))`,
-      )
-      .bind(historicoId, certId, empresaId, historicoId)
-      .first<Documento>();
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const scopedHistorico = await assertScopedHistoricoAccess(db, {
+      historicoId,
+      empresaId,
+      access,
+    });
+    const context = await resolveCertificadoContext(db, historicoId);
+    const certificados = await listHistoricoCertificados(db, {
+      historicoId,
+      empresaId,
+      funcionarioId: scopedHistorico.funcionario_id,
+      certificadoArquivoId: context.historico.certificado_arquivo_id,
+    });
+    const documento = certificados.find(
+      (item) =>
+        item.id === certId ||
+        item.documento_id === certId ||
+        (typeof item.pasta_virtual_id === 'number' && item.pasta_virtual_id === certId),
+    );
 
-    if (!documento) {
-      console.warn(`[DELETE CERT] Certificado ID ${certId} não encontrado`);
+    if (!documento?.documento_id) {
+      console.warn(
+        `[DELETE CERT] Certificado ID ${certId} não encontrado no historico_id=${historicoId}`,
+      );
       return c.json({ success: false, error: 'Certificado não encontrado' }, 404);
     }
 
-    if (!documento.deleted_at) {
-      // GAP #8: Mover para pasta "deleted/" antes de soft delete
-      const oldKey = documento.r2_key;
-      const newKey = oldKey.replace('certificados/', 'certificados/deleted/');
+    // Soft-delete apenas no D1; o binário em R2 permanece intacto.
+    await db
+      .prepare(
+        `UPDATE documentos
+            SET deleted_at = datetime('now'),
+                updated_at = datetime('now')
+          WHERE id = ?
+            AND funcionario_id = ?
+            AND deleted_at IS NULL`,
+      )
+      .bind(documento.documento_id, scopedHistorico.funcionario_id)
+      .run();
 
-      console.log(`🗑️  [SOFT DELETE CASCATA] Movendo: ${oldKey} → ${newKey}`);
-
-      try {
-        // Copiar para pasta deleted
-        const existingObj = await bucket.get(oldKey);
-        if (existingObj) {
-          await bucket.put(newKey, existingObj.body, {
-            httpMetadata: existingObj.httpMetadata,
-            customMetadata: {
-              ...(existingObj.customMetadata || {}),
-              deleted_at: new Date().toISOString(),
-              original_key: oldKey,
-            },
-          });
-
-          // Deletar arquivo original
-          await bucket.delete(oldKey);
-          console.log(`✅ [SOFT DELETE] Arquivo movido para ${newKey}`);
-        } else {
-          console.warn(
-            `⚠️  [SOFT DELETE] Arquivo ${oldKey} não encontrado no R2, apenas marcando no D1`,
-          );
-        }
-      } catch (r2Error) {
-        console.error('❌ [SOFT DELETE] Erro ao mover arquivo no R2:', r2Error);
-        // Continua mesmo se R2 falhar (soft delete no D1 é mais importante)
-      }
-
-      // EXCLUSÃO EM CASCATA:
-      // 1. Soft delete na tabela documentos
-      await db
-        .prepare(
-          "UPDATE documentos SET deleted_at = datetime('now') WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL",
-        )
-        .bind(certId, empresaId)
-        .run();
-    } else {
-      console.log(
-        `ℹ️ [DELETE CERT] Documento ${certId} já estava soft-deletado; concluindo limpeza.`,
-      );
-    }
-
-    // 2. Remover de pasta_virtual (se existir)
-    console.log(`🗑️  [CASCATA] Verificando pasta_virtual para documento ID ${certId}...`);
     const pastaVirtualHasDocumentoId = await tableHasColumn(db, 'pasta_virtual', 'documento_id');
+    const pastaVirtualHasEmpresaId = await tableHasColumn(db, 'pasta_virtual', 'empresa_id');
     const pastaVirtualResult = pastaVirtualHasDocumentoId
       ? await db
           .prepare(
-            "UPDATE pasta_virtual SET deleted_at = datetime('now') WHERE documento_id = ? AND empresa_id = ? AND deleted_at IS NULL",
+            `UPDATE pasta_virtual
+                SET deleted_at = datetime('now')
+              WHERE funcionario_id = ?
+                AND certificacao_id = ?
+                AND documento_id = ?
+                ${pastaVirtualHasEmpresaId ? 'AND empresa_id = ?' : ''}
+                AND deleted_at IS NULL`,
           )
-          .bind(certId, empresaId)
+          .bind(
+            scopedHistorico.funcionario_id,
+            historicoId,
+            documento.documento_id,
+            ...(pastaVirtualHasEmpresaId ? [empresaId] : []),
+          )
           .run()
       : await db
           .prepare(
             `UPDATE pasta_virtual
                 SET deleted_at = datetime('now')
               WHERE funcionario_id = ?
+                AND certificacao_id = ?
                 AND caminho_arquivo = ?
-                AND nome_arquivo = ?
-                AND empresa_id = ?
+                ${pastaVirtualHasEmpresaId ? 'AND empresa_id = ?' : ''}
                 AND deleted_at IS NULL`,
           )
-          .bind(documento.funcionario_id, documento.r2_key, documento.nome_arquivo, empresaId)
+          .bind(
+            scopedHistorico.funcionario_id,
+            historicoId,
+            documento.r2_key,
+            ...(pastaVirtualHasEmpresaId ? [empresaId] : []),
+          )
           .run();
 
     if (pastaVirtualResult.meta.changes > 0) {
@@ -326,7 +234,7 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
             AND empresa_id = ?
             AND deleted_at IS NULL`,
       )
-      .bind(certId, empresaId)
+      .bind(documento.documento_id, empresaId)
       .run();
 
     if (historicoResult.meta.changes > 0) {
@@ -345,7 +253,7 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
         db,
         tabela: 'documentos',
         acao: 'DELETE',
-        registro_id: certId,
+        registro_id: documento.documento_id,
         dados_anteriores: { r2_key: documento.r2_key },
         ...uaDel,
       });
@@ -361,6 +269,34 @@ app.delete('/historico/:id/certificados/:certId', auth(), async (c) => {
     return c.json(response);
   } catch (error) {
     console.error('[DELETE CERT] Erro:', error);
+    const rawStatus =
+      typeof (error as { status?: unknown }).status === 'number'
+        ? Number((error as { status: number }).status)
+        : typeof (error as { statusCode?: unknown }).statusCode === 'number'
+          ? Number((error as { statusCode: number }).statusCode)
+          : null;
+    const handledStatus =
+      rawStatus && rawStatus >= 400 && rawStatus < 500 ? rawStatus : null;
+    const handledCode =
+      typeof (error as { code?: unknown }).code === 'string'
+        ? String((error as { code: string }).code)
+        : undefined;
+    const handledMessage =
+      typeof (error as { message?: unknown }).message === 'string'
+        ? String((error as { message: string }).message)
+        : 'Erro ao remover certificado';
+
+    if (handledStatus) {
+      return c.json(
+        {
+          success: false,
+          error: handledMessage,
+          code: handledCode,
+        },
+        handledStatus as 400 | 403 | 404,
+      );
+    }
+
     return c.json(
       {
         success: false,

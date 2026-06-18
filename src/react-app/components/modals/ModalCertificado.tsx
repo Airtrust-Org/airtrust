@@ -42,6 +42,9 @@ export interface ModalCertificadoProps {
 
 interface Certificado {
   id: number;
+  documento_id?: number;
+  pasta_virtual_id?: number | null;
+  historico_id?: number;
   nome_arquivo: string;
   arquivo_nome: string;
   url: string;
@@ -185,6 +188,9 @@ export function ModalCertificado({
         success: boolean;
         data: Array<{
           id: number;
+          documento_id?: number;
+          pasta_virtual_id?: number | null;
+          historico_id?: number;
           nome_arquivo?: string;
           r2_key?: string;
           tipo?: string;
@@ -202,6 +208,9 @@ export function ModalCertificado({
 
       const mapped = (data.data || []).map((cert) => ({
         id: cert.id,
+        documento_id: cert.documento_id ?? cert.id,
+        pasta_virtual_id: cert.pasta_virtual_id ?? null,
+        historico_id: cert.historico_id ?? qualificacao.id,
         nome_arquivo: cert.nome_arquivo || 'CERTIFICADO.pdf',
         arquivo_nome: cert.nome_arquivo || 'CERTIFICADO.pdf',
         url: cert.r2_key || '',
@@ -391,6 +400,8 @@ export function ModalCertificado({
     }
   };
 
+  const resolveDocumentoId = (certificado: Certificado) => certificado.documento_id ?? certificado.id;
+
   const handlePreview = async (certificado: Certificado) => {
     try {
       await previewPdfBeforeDownload({
@@ -398,7 +409,7 @@ export function ModalCertificado({
         title: `Certificado ${qualificacao.codigo}`,
         mimeType: certificado.tipo,
         fetcher: () =>
-          apiFetch(`/api/pasta-virtual/stream/${certificado.id}`, {
+          apiFetch(`/api/pasta-virtual/stream/${resolveDocumentoId(certificado)}`, {
             headers: authHeader(),
           }),
       });
@@ -410,9 +421,12 @@ export function ModalCertificado({
 
   const handleDownload = async (certificado: Certificado) => {
     try {
-      const response = await apiFetch(`/api/pasta-virtual/stream/${certificado.id}?download=1`, {
-        headers: authHeader(),
-      });
+      const response = await apiFetch(
+        `/api/pasta-virtual/stream/${resolveDocumentoId(certificado)}?download=1`,
+        {
+          headers: authHeader(),
+        },
+      );
 
       if (!response.ok) {
         throw new Error(`Erro ao baixar arquivo (${response.status})`);
@@ -431,7 +445,10 @@ export function ModalCertificado({
       '[ModalCertificado] handleDelete - abrindo confirmação para:',
       certificado.nome_arquivo,
     );
-    setShowConfirmDelete({ id: certificado.id, nome: certificado.nome_arquivo });
+    setShowConfirmDelete({
+      id: resolveDocumentoId(certificado),
+      nome: certificado.nome_arquivo,
+    });
   };
 
   const handleConfirmDelete = async () => {

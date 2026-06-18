@@ -42,6 +42,15 @@ vi.mock('../../utils/auditoria', () => ({
   extrairUsuarioAuditoria: () => ({ usuario_id: 10, origem: 'test' }),
 }));
 
+vi.mock('../../services/html-to-pdf', () => ({
+  htmlToPdf: vi.fn(),
+  processTemplateWithQR: vi.fn(),
+}));
+
+vi.mock('../../utils/qualificacoes-expiration', () => ({
+  calcularDataVencimento: vi.fn(() => '2027-01-10'),
+}));
+
 vi.mock('../../services/employee-sector-access', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../services/employee-sector-access')>();
   return {
@@ -295,20 +304,26 @@ function createMockEnv() {
             return documento ? { r2_key: documento.r2_key } : null;
           }
 
-          if (query.includes('SELECT d.id') && query.includes('INNER JOIN documentos d')) {
-            const historico = findHistorico(Number(args[1]));
-            const documento = historico?.certificado_arquivo_id
-              ? findDocumento(historico.certificado_arquivo_id)
-              : null;
+          if (
+            query.includes('SELECT d.id') &&
+            query.includes('FROM qualificacoes_historico qh') &&
+            query.includes('INNER JOIN documentos d')
+          ) {
+            const empresaId = Number(args[0]);
+            const historicoId = Number(args[1]);
+            const historicoEmpresaId = Number(args[2]);
+            const documentoId = Number(args[3]);
+            const historico = findHistorico(historicoId);
+            const documento = findDocumento(documentoId);
             const funcionario = historico ? findFuncionario(historico.funcionario_id) : null;
 
             if (
               !historico ||
               !documento ||
               !funcionario ||
-              funcionario.empresa_id !== Number(args[0]) ||
-              historico.empresa_id !== Number(args[2]) ||
-              documento.id !== Number(args[3])
+              funcionario.empresa_id !== empresaId ||
+              historico.empresa_id !== historicoEmpresaId ||
+              historico.certificado_arquivo_id !== documentoId
             ) {
               return null;
             }
@@ -333,9 +348,13 @@ function createMockEnv() {
             };
           }
 
-          if (query.includes('SELECT DISTINCT') && query.includes('FROM documentos d')) {
-            const empresaId = Number(args[0]);
-            const historicoId = Number(args[1]);
+          if (
+            query.includes('FROM documentos d') &&
+            query.includes('GROUP BY') &&
+            query.includes('AS documento_id')
+          ) {
+            const historicoId = Number(args[0]);
+            const empresaId = Number(args[1]);
             const funcionarioId = Number(args[args.length - 2]);
             const documentoPrincipalId = Number(args[args.length - 1]);
 
@@ -356,6 +375,17 @@ function createMockEnv() {
               .sort((a, b) => b.id - a.id)
               .map((doc) => ({
                 id: doc.id,
+                documento_id: doc.id,
+                pasta_virtual_id:
+                  pastaVirtual.find(
+                    (row) =>
+                      !row.deleted_at &&
+                      row.empresa_id === empresaId &&
+                      row.certificacao_id === historicoId &&
+                      row.funcionario_id === doc.funcionario_id &&
+                      row.caminho_arquivo === doc.r2_key,
+                  )?.id ?? null,
+                historico_id: historicoId,
                 uuid: doc.uuid,
                 funcionario_id: doc.funcionario_id,
                 nome_arquivo: doc.nome_arquivo,
@@ -430,7 +460,7 @@ function createMockEnv() {
             const documento = documentos.find(
               (row) =>
                 row.id === Number(args[0]) &&
-                row.empresa_id === Number(args[1]) &&
+                row.funcionario_id === Number(args[1]) &&
                 row.deleted_at === null,
             );
             if (documento) {
@@ -444,8 +474,10 @@ function createMockEnv() {
             for (const row of pastaVirtual) {
               if (
                 row.funcionario_id === Number(args[0]) &&
-                row.caminho_arquivo === String(args[1]) &&
-                row.certificacao_id === Number(args[2]) &&
+                row.certificacao_id === Number(args[1]) &&
+                ((query.includes('documento_id = ?') && row.documento_id === Number(args[2])) ||
+                  (!query.includes('documento_id = ?') &&
+                    row.caminho_arquivo === String(args[2]))) &&
                 row.empresa_id === Number(args[3]) &&
                 row.deleted_at === null
               ) {
@@ -453,6 +485,26 @@ function createMockEnv() {
               }
             }
             return { meta: { changes: 1 } };
+          }
+
+          if (
+            query.includes('UPDATE qualificacoes_historico') &&
+            query.includes('SET certificado_arquivo_id = NULL')
+          ) {
+            let changes = 0;
+            for (const historico of historicos) {
+              if (
+                historico.certificado_arquivo_id === Number(args[0]) &&
+                historico.empresa_id === Number(args[1]) &&
+                historico.deleted_at === null
+              ) {
+                historico.certificado_arquivo_id = null;
+                historico.arquivo_url = null;
+                historico.numero_certificado = null;
+                changes += 1;
+              }
+            }
+            return { meta: { changes } };
           }
 
           return { meta: { changes: 1, last_row_id: 1 } };
@@ -555,6 +607,12 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.data.map((row) => row.id)).toEqual([5002]);
+    expect(body.data[0]).toMatchObject({
+      id: 5002,
+      documento_id: 5002,
+      pasta_virtual_id: 7002,
+      historico_id: 2002,
+    });
   });
 
   it('gestor setorial autorizado lista anexos do proprio historico', async () => {
@@ -708,5 +766,137 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(response.status).toBe(404);
     expect(bucket.put).not.toHaveBeenCalled();
     expect(documentos).toHaveLength(2);
+  });
+
+  it('admin exclui anexo via id retornado pela listagem quando certificado_arquivo_id esta NULL', async () => {
+    const { env, bucket, documentos, pastaVirtual, historicos } = createMockEnv();
+
+    const listResponse = await request('/api/certificados/historico/2001/certificados', env);
+    const listBody = (await listResponse.json()) as {
+      success: boolean;
+      data: Array<{ id: number; documento_id: number }>;
+    };
+
+    const cert = listBody.data[0];
+    const deleteResponse = await request(
+      `/api/certificados/historico/2001/certificados/${cert.id}`,
+      env,
+      { method: 'DELETE' },
+    );
+
+    expect(deleteResponse.status).toBe(200);
+    expect(documentos.find((row) => row.id === cert.documento_id)?.deleted_at).not.toBeNull();
+    expect(
+      pastaVirtual.find((row) => row.documento_id === cert.documento_id && row.certificacao_id === 2001)
+        ?.deleted_at,
+    ).not.toBeNull();
+    expect(historicos.find((row) => row.id === 2001)?.certificado_arquivo_id).toBeNull();
+    expect(bucket.get).not.toHaveBeenCalled();
+    expect(bucket.put).not.toHaveBeenCalled();
+    expect(bucket.delete).not.toHaveBeenCalled();
+
+    const afterList = await request('/api/certificados/historico/2001/certificados', env);
+    const afterBody = (await afterList.json()) as { data: Array<{ id: number }> };
+    expect(afterBody.data).toEqual([]);
+  });
+
+  it('gestor autorizado exclui anexo dentro do setor', async () => {
+    const { env, documentos } = createMockEnv();
+
+    const response = await request(
+      '/api/certificados/historico/2001/certificados/5001',
+      env,
+      { method: 'DELETE' },
+      {
+        'x-test-role': 'manager',
+        'x-test-scope': 'manager-tripulacao',
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(documentos.find((row) => row.id === 5001)?.deleted_at).not.toBeNull();
+  });
+
+  it('gestor fora do escopo nao exclui anexo', async () => {
+    const { env, documentos } = createMockEnv();
+
+    const response = await request(
+      '/api/certificados/historico/2002/certificados/5002',
+      env,
+      { method: 'DELETE' },
+      {
+        'x-test-role': 'manager',
+        'x-test-scope': 'manager-tripulacao',
+      },
+    );
+
+    expect(response.status).toBe(403);
+    expect(documentos.find((row) => row.id === 5002)?.deleted_at).toBeNull();
+  });
+
+  it('escopo vazio fail-closed no delete', async () => {
+    const { env, documentos } = createMockEnv();
+
+    const response = await request(
+      '/api/certificados/historico/2001/certificados/5001',
+      env,
+      { method: 'DELETE' },
+      {
+        'x-test-role': 'manager',
+        'x-test-scope': 'manager-empty',
+      },
+    );
+
+    expect(response.status).toBe(403);
+    expect(documentos.find((row) => row.id === 5001)?.deleted_at).toBeNull();
+  });
+
+  it('delete de anexo de outro historico retorna 404 seguro', async () => {
+    const { env, documentos } = createMockEnv();
+
+    const response = await request('/api/certificados/historico/2001/certificados/5002', env, {
+      method: 'DELETE',
+    });
+
+    expect(response.status).toBe(404);
+    expect(documentos.find((row) => row.id === 5002)?.deleted_at).toBeNull();
+  });
+
+  it('excluir um anexo preserva os demais quando ha multiplos documentos no historico', async () => {
+    const { env, documentos, pastaVirtual } = createMockEnv();
+
+    documentos.push({
+      id: 5003,
+      uuid: 'doc-5003',
+      funcionario_id: 101,
+      empresa_id: 6,
+      nome_arquivo: 'CERT-ESCOPO-2.pdf',
+      tipo: 'application/pdf',
+      tamanho: 1024,
+      r2_key: 'certificados/escopo-2.pdf',
+      descricao: 'Certificado escopo 2',
+      created_at: '2026-01-11T10:00:00.000Z',
+      updated_at: '2026-01-11T10:00:00.000Z',
+      deleted_at: null,
+    });
+    pastaVirtual.push({
+      id: 7003,
+      funcionario_id: 101,
+      documento_id: 5003,
+      certificacao_id: 2001,
+      empresa_id: 6,
+      caminho_arquivo: 'certificados/escopo-2.pdf',
+      nome_arquivo: 'CERT-ESCOPO-2.pdf',
+      deleted_at: null,
+    });
+
+    const response = await request('/api/certificados/historico/2001/certificados/5001', env, {
+      method: 'DELETE',
+    });
+    expect(response.status).toBe(200);
+
+    const listResponse = await request('/api/certificados/historico/2001/certificados', env);
+    const listBody = (await listResponse.json()) as { data: Array<{ id: number }> };
+    expect(listBody.data.map((row) => row.id)).toEqual([5003]);
   });
 });
