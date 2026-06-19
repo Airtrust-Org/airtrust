@@ -246,6 +246,8 @@ export function buildTripulantesSemAeronaveRows(params: {
 
       const situacoesVisiveis = situacoesOrdenadas.filter((situacao) => {
         if (situacao.situacao_tipo !== 'FOLGA') return true;
+        const folgaManual = !(situacao.auto_gerado === 1 || situacao.auto_gerado === true);
+        if (folgaManual) return true;
         const quinzenaSituacao = inferirNumeroQuinzenaSituacao(situacao, quinzenasMes);
         if (quinzenaFolgaEsperada == null) return true;
         return quinzenaSituacao === quinzenaFolgaEsperada;
@@ -1067,6 +1069,7 @@ export default function GradeGantt({
                               key={tripulante.funcionarioId}
                               tripulante={tripulante}
                               diasDoMes={diasFiltrados}
+                              quinzenasMes={quinzenasMes}
                               mesReferencia={escala.mes}
                               anoReferencia={escala.ano}
                               q1Fim={q1Fim}

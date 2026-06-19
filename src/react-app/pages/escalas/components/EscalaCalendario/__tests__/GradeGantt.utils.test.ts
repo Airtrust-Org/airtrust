@@ -391,4 +391,47 @@ describe('buildTripulantesSemAeronaveRows', () => {
     expect(rows[0].situacaoReferencia?.id).toBe('sit-1');
     expect(rows[0].situacoesVisiveis).toHaveLength(1);
   });
+
+  it('preserva folga manual na quinzena ativa para bloquear disponibilidade base', () => {
+    const rows = buildTripulantesSemAeronaveRows({
+      situacoes: [
+        createAlocacao({
+          id: 'folga-manual-q1',
+          funcionario_id: 'castro',
+          funcionario_nome: 'Carlos Castro',
+          funcionario_guerra: 'Castro',
+          funcionario_role: 'PIC',
+          situacao_tipo: 'FOLGA',
+          situacao_nome: 'Folga Formal',
+          quinzena_id: 1,
+          auto_gerado: 0,
+          data_inicio: '2026-05-05',
+          data_fim: '2026-05-05',
+        }),
+      ],
+      tripulantesCobertura: [
+        createCoberturaTripulante({
+          id: 'castro',
+          nome: 'Carlos Castro',
+          nome_guerra: 'Castro',
+          cargo: 'comandante',
+          quinzena_numero: 1,
+          modelos_habilitados: ['S76'],
+        }),
+      ],
+      funcionariosComAeronaveAtiva: new Set(),
+      filtroNomeNormalizado: '',
+      filtroModeloNormalizado: '',
+      quinzenasMes: QUINZENAS_MES,
+      intervaloVisivelInicio: '2026-05-01',
+      intervaloVisivelFim: '2026-05-31',
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].situacoesVisiveis).toHaveLength(1);
+    expect(rows[0].situacoesVisiveis[0]).toMatchObject({
+      id: 'folga-manual-q1',
+      situacao_tipo: 'FOLGA',
+    });
+  });
 });
