@@ -105,6 +105,8 @@ function mapEventoType(evento: EscalaEvento, isAvulsa?: boolean): DayEvent['type
 
 function getPlaceholderCode(placeholderType?: DayEvent['type']): string {
   switch (placeholderType) {
+    case 'DISPONIVEL':
+      return '';
     case 'FOLGA':
       return 'FOL';
     case 'FERIAS':
@@ -202,27 +204,34 @@ function buildDayEvents(
     const isAlocacaoSlot =
       !placeholderType || placeholderType === 'ALOCACAO' || placeholderType === 'ALOCACAO_Q2';
     const isFolgaSlot = placeholderType === 'FOLGA';
+    const isDisponivelSlot = placeholderType === 'DISPONIVEL';
     const placeholderColor = isAvulsa
       ? '#F59E0B'
       : placeholderConf?.cor
         ? placeholderConf.cor
         : isFolgaSlot
           ? (configMap?.['FOL']?.cor ?? corAtivo ?? '#E2E8F0')
+          : isDisponivelSlot
+            ? (corAtivo ?? '#10B981')
           : isAlocacaoSlot
-          ? (configMap?.['VOO']?.cor ?? '#3B82F6')
-          : (corAtivo ?? '#6b7280');
+            ? (configMap?.['VOO']?.cor ?? '#3B82F6')
+            : (corAtivo ?? '#6b7280');
     const placeholderBadge = placeholderConf?.sigla
       ? placeholderConf.sigla
       : isFolgaSlot
         ? configMap?.['FOL']?.sigla || 'FO'
-        : placeholderLabel || (isAvulsa ? 'A' : configMap?.['VOO']?.sigla || 'V');
+        : isDisponivelSlot
+          ? 'DIS'
+          : placeholderLabel || (isAvulsa ? 'A' : configMap?.['VOO']?.sigla || 'V');
     mapped.push({
       type: placeholderType || (isAvulsa ? 'AVULSA' : 'ALOCACAO'),
       label: placeholderConf?.label
         ? placeholderConf.label
         : isFolgaSlot
           ? configMap?.['FOL']?.label || 'Folga'
-          : placeholderLabel || (isAvulsa ? 'Avulso' : 'Voo'),
+          : isDisponivelSlot
+            ? placeholderLabel || 'Disponível'
+            : placeholderLabel || (isAvulsa ? 'Avulso' : 'Voo'),
       badgeLabel: placeholderBadge,
       extra: placeholderExtra || (isAvulsa ? 'Sem aeronave' : undefined),
       backgroundColor: placeholderColor,

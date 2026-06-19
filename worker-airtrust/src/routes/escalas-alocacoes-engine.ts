@@ -11,6 +11,10 @@
 
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import { publishDomainEvent } from '../shared/domainEvents';
+import {
+  isDateWithinActiveFortnight,
+  resolveFuncionarioActiveFortnightForDate,
+} from '../lib/escalas/active-fortnight';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // removerFolgaAutomaticaOrfa
@@ -308,6 +312,11 @@ export async function regenerarEventosAutomaticosFuncionarioEscala(
       } else {
         tipoEvento = 'voo';
         motivo = 'Auto-gerado — VOO dentro de alocação operacional ativa';
+      }
+    } else {
+      const quinzenaBase = await resolveFuncionarioActiveFortnightForDate(db, funcionario_id, dateStr);
+      if (isDateWithinActiveFortnight(quinzenaBase, dateStr)) {
+        continue;
       }
     }
 
