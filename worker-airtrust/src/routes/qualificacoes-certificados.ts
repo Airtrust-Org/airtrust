@@ -4,7 +4,10 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import {
+  appendEmployeeSectorFilter,
+  getEmployeeSectorAccess,
+} from '../services/employee-sector-access';
 import {
   assertScopedHistoricoAccess,
   listHistoricoCertificados,
