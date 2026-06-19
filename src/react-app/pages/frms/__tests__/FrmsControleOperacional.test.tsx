@@ -638,6 +638,27 @@ describe('FrmsControleOperacional', () => {
       ).toBeInTheDocument();
     });
 
+    it('renderiza mensagem de quinzena base localizada sem jornada frms quando nao ha jornada no dia', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          teve_jornada: false,
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'DERIVADO',
+            status_quinzena: 'ATENCAO',
+            alertas_quinzena: [],
+          },
+        }),
+      ]);
+
+      renderControle();
+      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+
+      expect(
+        screen.getByText('Quinzena base identificada. Não há jornada FRMS vinculada neste dia.'),
+      ).toBeInTheDocument();
+    });
+
     it('renderiza mensagem quando nao ha indicador de quinzena para a data', () => {
       mockSnapshotData([
         buildSnapshotItem({
@@ -692,12 +713,27 @@ describe('FrmsControleOperacional', () => {
   });
 
   describe('Escala indisponivel — banner e ajustes de classificacao', () => {
-    it('mostra banner quando nenhum tripulante tem escala', () => {
+    it('mostra banner quando nenhum tripulante tem escala nem quinzena localizada', () => {
       mockSnapshotData([
-        buildSnapshotItem({ escalado: false, escala_source: 'AUSENTE' as any }),
+        buildSnapshotItem({
+          escalado: false,
+          escala_source: 'AUSENTE' as any,
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'AUSENTE',
+            status_quinzena: 'INCOMPLETO',
+            alertas_quinzena: ['PERIODO_QUINZENA_AUSENTE'],
+          },
+        }),
         buildSnapshotItem({
           funcionario_id: 20, tripulante_id: 20, nome: 'Ana', nome_guerra: 'Ana',
           escalado: false, escala_source: 'AUSENTE' as any,
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'AUSENTE',
+            status_quinzena: 'INCOMPLETO',
+            alertas_quinzena: ['PERIODO_QUINZENA_AUSENTE'],
+          },
         }),
       ]);
       renderControle();
@@ -710,16 +746,60 @@ describe('FrmsControleOperacional', () => {
       expect(screen.queryByText(/Dados de escala indisponiveis/)).not.toBeInTheDocument();
     });
 
-    it('substitui "Check-in sem escala" por "Check-in (escala indisponivel)"', () => {
+    it('substitui "Check-in sem escala" por "Check-in (escala indisponivel)" quando nao ha fallback de quinzena', () => {
       mockSnapshotData([
         buildSnapshotItem({
-          escalado: false, escala_source: 'AUSENTE' as any,
-          teve_jornada: false, checkin_status: 'RECEBIDO',
+          escalado: false,
+          escala_source: 'AUSENTE' as any,
+          teve_jornada: false,
+          checkin_status: 'RECEBIDO',
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'AUSENTE',
+            status_quinzena: 'INCOMPLETO',
+            alertas_quinzena: ['PERIODO_QUINZENA_AUSENTE'],
+          },
         }),
       ]);
       renderControle();
       expect(screen.getByText('Check-in (escala indisponivel)')).toBeInTheDocument();
       expect(screen.queryByText('Check-in sem escala')).not.toBeInTheDocument();
+    });
+
+    it('usa rotulo de quinzena base quando o fallback foi localizado sem escala diaria', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          escalado: false, escala_source: 'AUSENTE' as any,
+          teve_jornada: false, checkin_status: 'RECEBIDO',
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'INCOMPLETO',
+            status_quinzena: 'INCOMPLETO',
+            alertas_quinzena: ['PERIODO_PARCIAL_NA_CONSULTA'],
+          },
+        }),
+      ]);
+      renderControle();
+      expect(screen.getByText('Check-in com quinzena base')).toBeInTheDocument();
+      expect(screen.queryByText('Check-in (escala indisponivel)')).not.toBeInTheDocument();
+    });
+
+    it('substitui o banner global por aviso de quinzena base localizada quando nao ha escala diaria', () => {
+      mockSnapshotData([
+        buildSnapshotItem({
+          escalado: false, escala_source: 'AUSENTE' as any,
+          teve_jornada: false, checkin_status: 'RECEBIDO',
+          fortnight_indicator: {
+            ...buildSnapshotItem().fortnight_indicator,
+            fonte_periodo: 'INCOMPLETO',
+            status_quinzena: 'INCOMPLETO',
+            alertas_quinzena: ['PERIODO_PARCIAL_NA_CONSULTA'],
+          },
+        }),
+      ]);
+      renderControle();
+      expect(screen.getByText(/Quinzena base localizada para os registros visiveis/)).toBeInTheDocument();
+      expect(screen.queryByText(/Dados de escala indisponiveis/)).not.toBeInTheDocument();
     });
 
     it('oculta alertas JORNADA_FRMS_SEM_ESCALA e ESCALADO_SEM_JORNADA_FRMS quando sem escala', () => {
