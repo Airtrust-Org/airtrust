@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFrmsOperationalSnapshot,
   type BuildOperationalSnapshotInput,
   type FrmsOperationalSnapshotItem,
+  listFrmsOperationalSnapshot,
 } from '../../lib/frms/operational-snapshot';
+import * as configModule from '../../lib/frms/db-service-config';
+import * as frmsConfigModule from '../../lib/frms/frms-config';
+import * as jornadasModule from '../../lib/frms/db-service-jornadas';
 
 function createBaseInput(): BuildOperationalSnapshotInput {
   return {
@@ -42,6 +46,10 @@ function getByKey(items: FrmsOperationalSnapshotItem[], data: string, funcionari
     (item) => item.data_operacional === data && item.funcionario_id === funcionarioId,
   );
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('frms operational snapshot builder', () => {
   it('1) escalado com check-in real e fatorização', () => {
@@ -276,5 +284,78 @@ describe('frms operational snapshot builder', () => {
     expect(defaultItem?.hora_acordar).toBe('07:30');
     expect(customItem?.wake_data_source).toBe('ESTIMADO');
     expect(customItem?.hora_acordar).toBe('07:45');
+  });
+
+  it('8) snapshot operacional usa fallback de quinzena base quando falta fatorizacao do dia', async () => {
+    vi.spyOn(configModule, 'carregarLimites').mockResolvedValue({} as never);
+    vi.spyOn(frmsConfigModule, 'resolverFrmsConfig').mockReturnValue({
+      minutosAntesApresentacao: 90,
+    } as never);
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue({ dia: 4, total: 15 });
+
+    const emptyAll = () => ({ all: async () => ({ results: [] }) });
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        if (sql.includes('FROM frms_fadiga_checkin')) {
+          return {
+            bind: () => ({
+              all: async () => ({
+                results: [
+                  {
+                    data_operacional: '2026-06-19',
+                    funcionario_id: 10,
+                    hora_checkin: '05:40',
+                    kss_score: 4,
+                    horas_sono: 7,
+                    qualidade_sono: 4,
+                    wake_time: '05:10',
+                    score_fadiga: 20,
+                    nivel_fadiga: 'VERDE',
+                    status_operacional: 'APTO',
+                    computed_risk_level: 'normal',
+                  },
+                ],
+              }),
+            }),
+          };
+        }
+
+        if (sql.includes('FROM funcionarios') && sql.includes('id IN')) {
+          return {
+            bind: () => ({
+              all: async () => ({
+                results: [
+                  {
+                    id: 10,
+                    nome: 'Tripulante Dez',
+                    nome_guerra: 'DEZ',
+                    funcao: 'PILOTO',
+                    cargo: 'COMANDANTE',
+                    base: 'SBJR',
+                    aeronave: 'AW139',
+                  },
+                ],
+              }),
+            }),
+          };
+        }
+
+        return { bind: emptyAll };
+      }),
+    } as never;
+
+    const result = await listFrmsOperationalSnapshot(db, {
+      empresaId: 77,
+      dataInicio: '2026-06-19',
+      dataFim: '2026-06-19',
+    });
+
+    const item = getByKey(result.items, '2026-06-19', 10);
+
+    expect(item).toBeTruthy();
+    expect(item?.fortnight_indicator?.fonte_periodo).toBe('INCOMPLETO');
+    expect(item?.fortnight_indicator?.dia_periodo).toBe(4);
+    expect(item?.fortnight_indicator?.total_dias_periodo).toBe(15);
+    expect(item?.fortnight_indicator?.alertas_quinzena).not.toContain('PERIODO_QUINZENA_AUSENTE');
   });
 });
