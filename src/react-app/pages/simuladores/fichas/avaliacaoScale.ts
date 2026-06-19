@@ -102,7 +102,7 @@ export function getFichaAvaliacaoScaleCss(): string {
 
     .avaliacao-scale-legend {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: 2fr 2fr 3fr 3fr;
       gap: 2px 4px;
       font-size: 6px;
       line-height: 1.2;
