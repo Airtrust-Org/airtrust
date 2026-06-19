@@ -66,6 +66,7 @@ interface GrupoTripulante {
 
 const MODEL_ORDER = ['AW139', 'SK76'];
 const FOLGA_PLACEHOLDER_COLOR = '#E2E8F0';
+const DISPONIVEL_PLACEHOLDER_COLOR = '#10B981';
 
 function getNome(tripulante: EscalaCoberturaTripulante, modo: 'completo' | 'guerra') {
   return modo === 'guerra' && tripulante.nome_guerra ? tripulante.nome_guerra : tripulante.nome;
@@ -152,6 +153,23 @@ function getAlocacaoExtra(alocacao: EscalaAlocacao) {
 
 function getQuinzenaByDia(quinzenas: QuinzenaEscala[], diaIso: string) {
   return quinzenas.find((item) => item.data_inicio <= diaIso && item.data_fim >= diaIso) || null;
+}
+
+function isDiaDentroQuinzenaAtiva(
+  tripulanteQuinzena: number | null | undefined,
+  diaIso: string,
+  quinzenas: QuinzenaEscala[],
+) {
+  if (tripulanteQuinzena !== 1 && tripulanteQuinzena !== 2) {
+    return false;
+  }
+
+  return quinzenas.some(
+    (quinzena) =>
+      quinzena.numero === tripulanteQuinzena &&
+      diaIso >= quinzena.data_inicio &&
+      diaIso <= quinzena.data_fim,
+  );
 }
 
 function StatusBar({ status }: { status: EscalaCoberturaTripulante['status_geral'] }) {
@@ -623,6 +641,11 @@ function TripulanteRow({
 
         const alocacaoAtiva = chooseTripulanteDayAlocacao(alocacoes, diaIso);
         if (!alocacaoAtiva) {
+          const dentroQuinzenaAtiva = isDiaDentroQuinzenaAtiva(
+            tripulante.quinzena_numero,
+            diaIso,
+            quinzenasMes,
+          );
           return (
             <DayCell
               key={`${tripulante.id}-${diaIso}`}
@@ -631,10 +654,13 @@ function TripulanteRow({
               mesReferencia={escalaMes}
               anoReferencia={escalaAno}
               ativo
-              corAtivo={FOLGA_PLACEHOLDER_COLOR}
+              corAtivo={
+                dentroQuinzenaAtiva ? DISPONIVEL_PLACEHOLDER_COLOR : FOLGA_PLACEHOLDER_COLOR
+              }
               eventos={[]}
-              placeholderType="FOLGA"
-              placeholderLabel="Folga"
+              placeholderType={dentroQuinzenaAtiva ? 'DISPONIVEL' : 'FOLGA'}
+              placeholderLabel={dentroQuinzenaAtiva ? 'Disponível' : 'Folga'}
+              placeholderExtra={dentroQuinzenaAtiva ? 'Em escala' : undefined}
               onClick={() => onAlocarLivre(payloadBase)}
             />
           );
