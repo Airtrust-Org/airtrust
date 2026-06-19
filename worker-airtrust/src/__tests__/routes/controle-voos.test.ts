@@ -393,6 +393,69 @@ function seedShadowCompareFrmsState(databasePath: string) {
   );
 }
 
+function seedShadowCompareComparableJourneyState(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      UPDATE cv_voos
+      SET origem_importacao = 'SIGVOOS',
+          sigvoos_importado_em = '2026-06-15T12:00:00Z',
+          sigvoos_content_hash = 'hash-shadow'
+      WHERE id IN (601, 602);
+
+      UPDATE cv_voos
+      SET data_programacao = '2026-06-14',
+          horario_previsto_partida = '2026-06-14T12:00:00Z',
+          horario_previsto_chegada = '2026-06-14T13:00:00Z'
+      WHERE id = 602;
+
+      INSERT INTO cv_voos (
+        id, empresa_id, prefixo, data_programacao, origem_id, destino_id,
+        tipo_voo_id, natureza_voo_id, horario_previsto_partida,
+        horario_previsto_chegada, status, observacoes, created_by, updated_by,
+        origem_importacao, sigvoos_importado_em, sigvoos_content_hash
+      ) VALUES (
+        603, 1, 'ATX-1003', '2026-06-14', 103, 101,
+        301, 401, '2026-06-14T14:00:00Z',
+        '2026-06-14T15:00:00Z', 'planejado', 'Tenant A 3', 10, 10,
+        'SIGVOOS', '2026-06-15T12:00:00Z', 'hash-shadow-603'
+      );
+
+      INSERT INTO cv_voo_etapas (
+        id, empresa_id, voo_id, numero_etapa, sigvoos_leg_number,
+        origem_icao, destino_icao, origem_dados, sigvoos_importado_em
+      ) VALUES
+        (9011, 1, 601, 1, 1, 'SBRJ', 'SBSP', 'SIGVOOS', '2026-06-15T12:00:00Z'),
+        (9012, 1, 602, 1, 1, 'SBSP', 'SBMI', 'SIGVOOS', '2026-06-15T12:00:00Z'),
+        (9013, 1, 603, 1, 1, 'SBMI', 'SBRJ', 'SIGVOOS', '2026-06-15T12:00:00Z');
+
+      INSERT INTO cv_voo_tripulantes (
+        id, empresa_id, voo_id, funcionario_id, funcao, etapa_id, sigvoos_staff_id, sigvoos_staff_inscription
+      ) VALUES
+        (9111, 1, 601, 1001, 'PIC', 9011, 7001, '01234'),
+        (9112, 1, 602, 1001, 'PIC', 9012, 7002, '01234'),
+        (9113, 1, 603, 1002, 'PIC', 9013, 7003, '04567');
+
+      INSERT INTO cv_sigvoos_staging (
+        id, empresa_id, sigvoos_flight_report_id, sigvoos_leg_number,
+        data_operacional, source_window_start, source_window_end,
+        payload_hash, import_status, cv_voo_id, cv_etapa_id, cv_tripulante_id
+      ) VALUES
+        ('cmp-601', 1, 760101, 1, '2026-06-14', '2026-06-14', '2026-06-14', 'cmp-hash-1', 'PROCESSED', 601, 9011, 9111),
+        ('cmp-602', 1, 760102, 1, '2026-06-14', '2026-06-14', '2026-06-14', 'cmp-hash-2', 'PROCESSED', 602, 9012, 9112),
+        ('cmp-603', 1, 760103, 1, '2026-06-14', '2026-06-14', '2026-06-14', 'cmp-hash-3', 'PROCESSED', 603, 9013, 9113);
+
+      INSERT INTO funcionarios (id, empresa_id, nome)
+      VALUES (1001, 1, 'Trip A'), (1002, 1, 'Trip B');
+
+      INSERT INTO frms_jornada (id, tripulante_id, empresa_id, data, origem, local_base, matricula_aeronave)
+      VALUES
+        ('fj-cmp-1', 1001, 1, '2026-06-14', 'SIGVOOS', 'SBRJ', 'ATX-1001'),
+        ('fj-cmp-2', 1002, 1, '2026-06-14', 'SIGVOOS', 'SBMI', 'ATX-1003');
+    `,
+  );
+}
+
 function seedShadowCompareFrmsStateWithoutEmpresaId(databasePath: string) {
   runSql(
     databasePath,
@@ -1845,6 +1908,54 @@ describe('controle voos routes', () => {
     expect(body.data.normalizationErrors).toContain('FRMS_FLIGHT_TYPE_DIMENSION_UNAVAILABLE');
     expect(body.data.recommendation.status).toBe('PARTIAL');
     expect(statements.join('\n')).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i);
+  });
+
+  it('compara jornadas equivalentes sem penalizar varios voos do mesmo tripulante no mesmo dia', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    applyShadowCompareFrmsSchema(db.databasePath);
+    seedShadowCompareComparableJourneyState(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-06-14&to=2026-06-14',
+      {},
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED: 'true', ENVIRONMENT: 'staging' },
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: {
+        totals: {
+          cvFlights: number;
+          frmsJourneysSigvoos: number;
+        };
+        divergences: {
+          byDate: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number; status: string }>;
+          byBase: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number; status: string }>;
+          byAircraft: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number; status: string }>;
+        };
+        recommendation: { status: string; reasons: string[] };
+      };
+    };
+
+    expect(body.data.totals.cvFlights).toBe(3);
+    expect(body.data.totals.frmsJourneysSigvoos).toBe(2);
+    expect(body.data.divergences.byDate).toEqual([
+      { key: '2026-06-14', cvTotal: 2, frmsTotal: 2, delta: 0, status: 'MATCH' },
+    ]);
+    expect(body.data.divergences.byBase).toEqual([
+      { key: 'SBMI', cvTotal: 1, frmsTotal: 1, delta: 0, status: 'MATCH' },
+      { key: 'SBRJ', cvTotal: 1, frmsTotal: 1, delta: 0, status: 'MATCH' },
+    ]);
+    expect(body.data.divergences.byAircraft).toEqual([
+      { key: 'ATX-1001', cvTotal: 1, frmsTotal: 1, delta: 0, status: 'MATCH' },
+      { key: 'ATX-1003', cvTotal: 1, frmsTotal: 1, delta: 0, status: 'MATCH' },
+    ]);
+    expect(body.data.recommendation.status).toBe('READY');
+    expect(body.data.recommendation.reasons).toEqual([]);
   });
 
   it('falha fechado para comparacao FRMS quando frms_jornada nao tem empresa_id', async () => {
