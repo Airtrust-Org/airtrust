@@ -87,6 +87,8 @@ self_protected_files=(
   "scripts/run-audit-v2-staging-schema-apply.sh"
   "scripts/run-dq01-staging-backfill-apply.sh"
   "scripts/run-0389-staging-schema-apply.sh"
+  "scripts/staging/seed-frms-sigvoos-comparable-from-cv.mjs"
+  "scripts/staging/resolve-sigvoos-artificial-conflict-09999.mjs"
 )
 
 # Scripts legados já bloqueados com banner + exit 1 (verificação relaxada)

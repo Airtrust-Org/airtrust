@@ -1810,6 +1810,7 @@ describe('controle voos routes', () => {
           byAircraft: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number }>;
           byFlightType: Array<{ key: string; cvTotal: number; frmsTotal: number | null; delta: number | null }>;
         };
+        normalizationErrors: string[];
         missingFields: string[];
         recommendation: { status: string };
       };
@@ -1840,7 +1841,8 @@ describe('controle voos routes', () => {
     expect(body.data.divergences.byFlightType).toEqual([
       { key: 'REG', cvTotal: 1, frmsTotal: null, delta: null, status: 'CV_ONLY_DIMENSION' },
     ]);
-    expect(body.data.missingFields).toContain('frms_jornada.flight_type_dimension');
+    expect(body.data.missingFields).not.toContain('frms_jornada.flight_type_dimension');
+    expect(body.data.normalizationErrors).toContain('FRMS_FLIGHT_TYPE_DIMENSION_UNAVAILABLE');
     expect(body.data.recommendation.status).toBe('PARTIAL');
     expect(statements.join('\n')).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i);
   });
