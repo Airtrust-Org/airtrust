@@ -37,7 +37,9 @@ export function buildDayCellState(events: DayEvent[]): DayCellState {
     };
   }
 
-  const realEvents = events.filter((event) => event.type !== 'FOLGA' && event.type !== 'VAZIO');
+  const realEvents = events.filter(
+    (event) => event.type !== 'FOLGA' && event.type !== 'VAZIO' && event.type !== 'DISPONIVEL',
+  );
   const hasConflict = realEvents.length > 1;
 
   const effectiveType: EventType = hasConflict

@@ -29,6 +29,7 @@ import {
   resolveFrmsSourceStatus,
   shouldUseForOperationalFrms,
 } from './frms-source-policy';
+import { resolveFuncionarioActiveFortnightForDate } from '../escalas/active-fortnight';
 
 // ────────────────────────────────────────────────────────
 // Período embarcado
@@ -52,10 +53,19 @@ export function calcularPeriodoEmbarcadoPorFaixa(
 ): PeriodoEmbarcadoCalculado | null {
   if (!fonte) return null;
 
-  const dataInicio = fonte.quinzena_data_inicio || fonte.data_inicio;
-  const dataFim = fonte.quinzena_data_fim || fonte.data_fim;
+  const hasQuinzenaRange = Boolean(fonte.quinzena_data_inicio && fonte.quinzena_data_fim);
+  const hasAlocacaoRange = Boolean(fonte.data_inicio && fonte.data_fim);
 
-  if (!dataInicio || !dataFim || dataReferencia < dataInicio || dataReferencia > dataFim) {
+  const dataInicio = hasQuinzenaRange ? fonte.quinzena_data_inicio : fonte.data_inicio;
+  const dataFim = hasQuinzenaRange ? fonte.quinzena_data_fim : fonte.data_fim;
+
+  if (
+    (!hasQuinzenaRange && !hasAlocacaoRange) ||
+    !dataInicio ||
+    !dataFim ||
+    dataReferencia < dataInicio ||
+    dataReferencia > dataFim
+  ) {
     return null;
   }
 
@@ -453,6 +463,10 @@ export async function calcularDiaDoCiclo(
 
     const periodoCalculadoEscalas = calcularPeriodoEmbarcadoPorFaixa(data, periodoEscalas);
     if (periodoCalculadoEscalas) return periodoCalculadoEscalas;
+
+    const quinzenaBase = await resolveFuncionarioActiveFortnightForDate(db, tripulanteId, data);
+    const periodoCalculadoBase = calcularPeriodoEmbarcadoPorFaixa(data, quinzenaBase);
+    if (periodoCalculadoBase) return periodoCalculadoBase;
 
     const escala = await db
       .prepare(

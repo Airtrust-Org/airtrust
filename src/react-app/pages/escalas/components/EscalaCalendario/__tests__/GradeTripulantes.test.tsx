@@ -20,7 +20,7 @@ vi.mock('../../../hooks/useTiposEventoResolvidos', () => ({
 
 function renderGrade({
   eventos = [],
-  escalaMes = 5,
+  escalaMes = 6,
   escalaAno = 2026,
 }: {
   eventos?: EscalaEvento[];
@@ -90,10 +90,11 @@ function renderGrade({
 }
 
 describe('GradeTripulantes', () => {
-  it('preenche dias sem evento com folga para nao deixar celulas vazias', () => {
+  it('mostra disponibilidade apenas na quinzena ativa e folga fora dela quando nao ha alocacao', () => {
     renderGrade();
 
-    expect(screen.getAllByTitle('Folga').length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle('Disponível · Em escala')).toHaveLength(15);
+    expect(screen.getAllByTitle('Folga')).toHaveLength(15);
     expect(screen.queryByText('+')).not.toBeInTheDocument();
   });
 
@@ -154,6 +155,8 @@ describe('GradeTripulantes', () => {
 
     expect(screen.getAllByTitle('CURSO · CRM — Gerenciamento de Recursos da Tripulação')).toHaveLength(2);
     expect(screen.getByTitle('SIM · SK76 - PERIÓDICO - 03/03: LOFT E CHECK')).toBeInTheDocument();
+    expect(screen.getAllByTitle('Disponível · Em escala')).toHaveLength(14);
+    expect(screen.getAllByTitle('Folga')).toHaveLength(13);
     expect(screen.queryByText('+')).not.toBeInTheDocument();
   });
 });
