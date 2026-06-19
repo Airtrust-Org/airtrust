@@ -3,11 +3,17 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 import { useEscalaStore } from '../../hooks/useEscalaStore';
 import type { EscalaAlocacao } from '../../hooks/queries/useEscalasQuery';
+import type { QuinzenaEscala } from '../../hooks/queries/useEscalasQuery';
 import { getQuinzenaBadgeClasses, getQuinzenaShortLabel } from '../../quinzena-tokens';
 import { getFuncaoVisualToken } from '../../funcao-tokens';
 import { DayCell } from './DayCell';
 import { GEOMETRY_TOKENS } from '../../constants/escala-theme';
 import { CELL } from '../../constants/escalaTokens';
+import {
+  DISPONIVEL_PLACEHOLDER_COLOR,
+  hasDisponibilidadeBaseVisivel,
+  isDiaDentroQuinzenaAtiva,
+} from './activeFortnightBase';
 
 const DIAS_SEMANA_CURTO = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
 
@@ -128,6 +134,7 @@ export interface LinhaSituacaoTripulante {
 
 interface Props {
   q1Fim?: string;
+  quinzenasMes: QuinzenaEscala[];
   tripulante: LinhaSituacaoTripulante;
   diasDoMes: Date[];
   mesReferencia: number;
@@ -146,6 +153,7 @@ export default function LinhaSituacao({
   onRegistrarSituacao,
   onRemover,
   q1Fim,
+  quinzenasMes,
 }: Props) {
   const { exibirNome, modoEdicao } = useEscalaStore();
   const nomeExibido =
@@ -172,6 +180,11 @@ export default function LinhaSituacao({
   ]
     .filter(Boolean)
     .join(' · ');
+  const temDisponibilidadeBaseVisivel = hasDisponibilidadeBaseVisivel(
+    tripulante.quinzenaPreferencial,
+    diasDoMes,
+    quinzenasMes,
+  );
 
   return (
     <tr className="group border-b border-slate-100 last:border-b-0">
@@ -211,7 +224,7 @@ export default function LinhaSituacao({
                 </span>
               )}
             </div>
-            {tripulante.situacoesVisiveis.length === 0 && (
+            {tripulante.situacoesVisiveis.length === 0 && !temDisponibilidadeBaseVisivel && (
               <p className="mt-1 text-[11px] text-slate-400">Sem situação registrada no período</p>
             )}
           </div>
@@ -268,6 +281,11 @@ export default function LinhaSituacao({
           null,
         );
         const legenda = situacaoAtiva?.situacao_nome || situacaoAtiva?.situacao_tipo || 'Situação';
+        const dentroQuinzenaAtiva = isDiaDentroQuinzenaAtiva(
+          tripulante.quinzenaPreferencial,
+          diaIso,
+          quinzenasMes,
+        );
         return (
           <DayCell
             key={`${tripulante.funcionarioId}-${diaIso}`}
@@ -275,12 +293,23 @@ export default function LinhaSituacao({
             isBoundary={diaIso === q1Fim}
             mesReferencia={mesReferencia}
             anoReferencia={anoReferencia}
-            ativo={!!situacaoAtiva}
-            corAtivo={situacaoAtiva?.situacao_cor || '#6b7280'}
+            ativo={!!situacaoAtiva || dentroQuinzenaAtiva}
+            corAtivo={
+              situacaoAtiva?.situacao_cor ||
+              (dentroQuinzenaAtiva ? DISPONIVEL_PLACEHOLDER_COLOR : undefined)
+            }
             eventos={[]}
-            placeholderType={situacaoAtiva ? mapSituacaoPlaceholderType(situacaoAtiva) : undefined}
-            placeholderLabel={situacaoAtiva ? legenda : undefined}
-            placeholderExtra={nomeExibido}
+            placeholderType={
+              situacaoAtiva
+                ? mapSituacaoPlaceholderType(situacaoAtiva)
+                : dentroQuinzenaAtiva
+                  ? 'DISPONIVEL'
+                  : undefined
+            }
+            placeholderLabel={situacaoAtiva ? legenda : dentroQuinzenaAtiva ? 'Disponível' : undefined}
+            placeholderExtra={
+              situacaoAtiva ? nomeExibido : dentroQuinzenaAtiva ? 'Em escala' : undefined
+            }
             onClick={
               situacaoAtiva && onEditarSituacao
                 ? () => onEditarSituacao(situacaoAtiva.id)
