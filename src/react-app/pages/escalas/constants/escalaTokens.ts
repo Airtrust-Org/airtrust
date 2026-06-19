@@ -36,6 +36,7 @@ export const Q2 = {
 export const quinzenaToken = (numero: 1 | 2) => (numero === 1 ? Q1 : Q2);
 
 export const EVENT_TOKENS = {
+  DISPONIVEL: { bg: 'bg-emerald-400', text: 'text-white' },
   ALOCACAO: { bg: 'bg-fuchsia-400', text: 'text-white' },
   ALOCACAO_Q2: { bg: 'bg-amber-400', text: 'text-white' },
   FOLGA: { bg: 'bg-slate-200', text: 'text-slate-500' },
@@ -65,6 +66,7 @@ export const EVENT_PRIORITY: EventType[] = [
   'ALOCACAO',
   'ALOCACAO_Q2',
   'AVULSA',
+  'DISPONIVEL',
   'FOLGA',
   'VAZIO',
 ];
