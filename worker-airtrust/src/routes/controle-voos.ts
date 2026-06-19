@@ -10,6 +10,11 @@ import {
   runSigvoosRealApiPreview,
   SigvoosRealPreviewError,
 } from '../services/controle-voos/sigvoos-real-preview';
+import {
+  buildSigvoosShadowCompareReport,
+  parseSigvoosShadowCompareWindow,
+  SigvoosShadowCompareError,
+} from '../services/controle-voos/sigvoos-shadow-compare';
 
 type FlightStatus =
   | 'planejado'
@@ -1208,6 +1213,49 @@ controleVoos.post('/sigvoos/real-preview', auth(), requireControleVoosSigvoosPre
       'Preview real SIGVOOS indisponivel',
       502,
       'CONTROLE_VOOS_SIGVOOS_REAL_PREVIEW_FAILED',
+    );
+  }
+});
+
+controleVoos.get('/sigvoos/shadow-compare', auth(), requireControleVoosSigvoosPreview(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  if (!empresaId) {
+    throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
+  }
+
+  if (c.env.ENVIRONMENT !== 'staging') {
+    throw new ApiError(
+      'Shadow compare SIGVOOS indisponivel',
+      404,
+      'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_STAGING_ONLY',
+    );
+  }
+
+  const enabled = c.env.CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED === 'true';
+  if (!enabled) {
+    throw new ApiError('Shadow compare SIGVOOS indisponivel', 404, 'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_DISABLED');
+  }
+
+  try {
+    const window = parseSigvoosShadowCompareWindow({
+      from: c.req.query('from'),
+      to: c.req.query('to'),
+    });
+    const report = await buildSigvoosShadowCompareReport(c.env.DB, empresaId, window);
+    return c.json({ success: true, data: report });
+  } catch (error) {
+    const safeError = error as { name?: string; code?: unknown; status?: unknown };
+    if (
+      error instanceof SigvoosShadowCompareError ||
+      (safeError.name === 'SigvoosShadowCompareError' && typeof safeError.code === 'string')
+    ) {
+      const status = typeof safeError.status === 'number' ? safeError.status : 400;
+      throw new ApiError('Shadow compare SIGVOOS indisponivel', status, String(safeError.code));
+    }
+    throw new ApiError(
+      'Shadow compare SIGVOOS indisponivel',
+      502,
+      'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_FAILED',
     );
   }
 });
