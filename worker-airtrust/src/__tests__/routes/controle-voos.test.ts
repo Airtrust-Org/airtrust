@@ -274,6 +274,65 @@ function applySigvoosSchema(databasePath: string) {
   runSql(databasePath, readFileSync(sigvoosMigrationPath, 'utf8'));
 }
 
+function applyShadowCompareFrmsSchema(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      CREATE TABLE IF NOT EXISTS funcionarios (
+        id INTEGER PRIMARY KEY,
+        empresa_id INTEGER NOT NULL,
+        nome TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS frms_jornada (
+        id TEXT PRIMARY KEY,
+        tripulante_id INTEGER NOT NULL,
+        empresa_id INTEGER,
+        data TEXT NOT NULL,
+        origem TEXT,
+        local_base TEXT,
+        matricula_aeronave TEXT,
+        deleted_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS frms_alerta (
+        id TEXT PRIMARY KEY,
+        jornada_id TEXT,
+        deleted_at TEXT
+      );
+    `,
+  );
+}
+
+function applyShadowCompareFrmsSchemaWithoutEmpresaId(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      CREATE TABLE IF NOT EXISTS funcionarios (
+        id INTEGER PRIMARY KEY,
+        empresa_id INTEGER NOT NULL,
+        nome TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS frms_jornada (
+        id TEXT PRIMARY KEY,
+        tripulante_id INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        origem TEXT,
+        local_base TEXT,
+        matricula_aeronave TEXT,
+        deleted_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS frms_alerta (
+        id TEXT PRIMARY KEY,
+        jornada_id TEXT,
+        deleted_at TEXT
+      );
+    `,
+  );
+}
+
 function seedSigvoosPreviewState(databasePath: string) {
   runSql(
     databasePath,
@@ -311,6 +370,44 @@ function seedSigvoosPreviewState(databasePath: string) {
         valor_airtrust, valor_sigvoos, staging_id, severidade, status
       ) VALUES
         (9201, 1, 'voo', 601, 'prefixo', 'ATX-1001', 'ATX-EXT', 'tenant-a-processed', 'MEDIA', 'ABERTO');
+    `,
+  );
+}
+
+function seedShadowCompareFrmsState(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      INSERT INTO funcionarios (id, empresa_id, nome)
+      VALUES (1001, 1, 'Trip A'), (1002, 1, 'Trip B'), (2001, 2, 'Trip C');
+
+      INSERT INTO frms_jornada (id, tripulante_id, empresa_id, data, origem, local_base, matricula_aeronave)
+      VALUES
+        ('fj-a-1', 1001, 1, '2026-06-14', 'SIGVOOS', 'SBRJ', 'ATX-1001'),
+        ('fj-a-2', 1002, 1, '2026-06-15', 'SIGVOOS', 'SBSP', 'ATX-1002'),
+        ('fj-b-1', 2001, 2, '2026-06-14', 'SIGVOOS', 'SBBR', 'BTX-2001');
+
+      INSERT INTO frms_alerta (id, jornada_id)
+      VALUES ('fa-a-1', 'fj-a-1');
+    `,
+  );
+}
+
+function seedShadowCompareFrmsStateWithoutEmpresaId(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      INSERT INTO funcionarios (id, empresa_id, nome)
+      VALUES (1001, 1, 'Trip A'), (1002, 1, 'Trip B'), (2001, 2, 'Trip C');
+
+      INSERT INTO frms_jornada (id, tripulante_id, data, origem, local_base, matricula_aeronave)
+      VALUES
+        ('fj-a-1', 1001, '2026-06-14', 'SIGVOOS', 'SBRJ', 'ATX-1001'),
+        ('fj-a-2', 1002, '2026-06-15', 'SIGVOOS', 'SBSP', 'ATX-1002'),
+        ('fj-b-1', 2001, '2026-06-14', 'SIGVOOS', 'SBBR', 'BTX-2001');
+
+      INSERT INTO frms_alerta (id, jornada_id)
+      VALUES ('fa-a-1', 'fj-a-1');
     `,
   );
 }
@@ -1599,6 +1696,221 @@ describe('controle voos routes', () => {
     expect(serviceSource).not.toMatch(/\.\.\/lib\/frms|frms-source-policy/i);
     expect(routeSource).not.toMatch(/frms-source-policy/i);
     expect(serviceSource).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i);
+  });
+
+  it('bloqueia shadow compare SIGVOOS quando a flag estiver ausente', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-06-14&to=2026-06-15',
+      {},
+      1,
+      'manager',
+      { ENVIRONMENT: 'staging' },
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_DISABLED',
+    });
+  });
+
+  it('bloqueia shadow compare SIGVOOS fora de staging mesmo com a flag ativa', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-06-14&to=2026-06-15',
+      {},
+      1,
+      'manager',
+      {
+        CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED: 'true',
+        ENVIRONMENT: 'production',
+      },
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_STAGING_ONLY',
+    });
+  });
+
+  it('bloqueia usuario sem permissao no shadow compare SIGVOOS', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-06-14&to=2026-06-15',
+      {},
+      1,
+      'viewer',
+      { CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED: 'true' },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_RBAC_FORBIDDEN',
+    });
+  });
+
+  it('retorna agregados read-only no shadow compare SIGVOOS sem expor PII', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    seedSigvoosPreviewState(db.databasePath);
+    applyShadowCompareFrmsSchema(db.databasePath);
+    seedShadowCompareFrmsState(db.databasePath);
+
+    const statements: string[] = [];
+    const readOnlyDb = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'prepare') {
+          return (sql: string) => {
+            statements.push(sql);
+            return target.prepare(sql);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as D1Database;
+
+    const response = await request(
+      readOnlyDb,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-06-14&to=2026-06-15',
+      {},
+      1,
+      'manager',
+      { CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED: 'true', ENVIRONMENT: 'staging' },
+    );
+
+    expect(response.status).toBe(200);
+    const bodyText = await response.text();
+    expect(bodyText).not.toContain('Trip A');
+    expect(bodyText).not.toContain('Trip B');
+
+    const body = JSON.parse(bodyText) as {
+      data: {
+        writesEnabled: boolean;
+        totals: {
+          previewStagingRecords: number;
+          cvFlights: number;
+          cvStages: number;
+          cvCrew: number;
+          frmsJourneysSigvoos: number;
+          frmsAlertsSigvoos: number;
+          openIntegrationConflicts: number;
+        };
+        divergences: {
+          byDate: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number }>;
+          byBase: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number }>;
+          byAircraft: Array<{ key: string; cvTotal: number; frmsTotal: number; delta: number }>;
+          byFlightType: Array<{ key: string; cvTotal: number; frmsTotal: number | null; delta: number | null }>;
+        };
+        missingFields: string[];
+        recommendation: { status: string };
+      };
+    };
+
+    expect(body.data.writesEnabled).toBe(false);
+    expect(body.data.totals).toMatchObject({
+      previewStagingRecords: 2,
+      cvFlights: 1,
+      cvStages: 1,
+      cvCrew: 1,
+      frmsJourneysSigvoos: 2,
+      frmsAlertsSigvoos: 1,
+      openIntegrationConflicts: 1,
+    });
+    expect(body.data.divergences.byDate).toEqual([
+      { key: '2026-06-14', cvTotal: 1, frmsTotal: 1, delta: 0, status: 'MATCH' },
+      { key: '2026-06-15', cvTotal: 0, frmsTotal: 1, delta: -1, status: 'DIVERGENT' },
+    ]);
+    expect(body.data.divergences.byBase).toEqual([
+      { key: 'SBRJ', cvTotal: 1, frmsTotal: 1, delta: 0, status: 'MATCH' },
+      { key: 'SBSP', cvTotal: 0, frmsTotal: 1, delta: -1, status: 'DIVERGENT' },
+    ]);
+    expect(body.data.divergences.byAircraft).toEqual([
+      { key: 'ATX-1001', cvTotal: 1, frmsTotal: 1, delta: 0, status: 'MATCH' },
+      { key: 'ATX-1002', cvTotal: 0, frmsTotal: 1, delta: -1, status: 'DIVERGENT' },
+    ]);
+    expect(body.data.divergences.byFlightType).toEqual([
+      { key: 'REG', cvTotal: 1, frmsTotal: null, delta: null, status: 'CV_ONLY_DIMENSION' },
+    ]);
+    expect(body.data.missingFields).toContain('frms_jornada.flight_type_dimension');
+    expect(body.data.recommendation.status).toBe('PARTIAL');
+    expect(statements.join('\n')).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i);
+  });
+
+  it('falha fechado para comparacao FRMS quando frms_jornada nao tem empresa_id', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    seedSigvoosPreviewState(db.databasePath);
+    applyShadowCompareFrmsSchemaWithoutEmpresaId(db.databasePath);
+    seedShadowCompareFrmsStateWithoutEmpresaId(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-06-14&to=2026-06-15',
+      {},
+      1,
+      'manager',
+      {
+        CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED: 'true',
+        ENVIRONMENT: 'staging',
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: {
+        totals: {
+          frmsJourneysSigvoos: number;
+          frmsAlertsSigvoos: number;
+        };
+        missingFields: string[];
+        normalizationErrors: string[];
+        recommendation: { status: string; reasons: string[] };
+        divergences: {
+          byDate: Array<{ key: string; frmsTotal: number | null; status: string }>;
+        };
+      };
+    };
+
+    expect(body.data.totals.frmsJourneysSigvoos).toBe(0);
+    expect(body.data.totals.frmsAlertsSigvoos).toBe(0);
+    expect(body.data.missingFields).toContain('frms_jornada.empresa_id');
+    expect(body.data.normalizationErrors).toContain('FRMS_TENANT_SCOPE_UNAVAILABLE');
+    expect(body.data.recommendation.status).toBe('BLOCKED');
+    expect(body.data.recommendation.reasons).toContain('NO_FRMS_SIGVOOS_JOURNEYS');
+    expect(body.data.divergences.byDate).toEqual([
+      { key: '2026-06-14', cvTotal: 1, frmsTotal: 0, delta: 1, status: 'DIVERGENT' },
+    ]);
+  });
+
+  it('rejeita janela maior que 31 dias no shadow compare SIGVOOS', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-05-01&to=2026-06-15',
+      {},
+      1,
+      'manager',
+      {
+        CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED: 'true',
+        ENVIRONMENT: 'staging',
+      },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_WINDOW_TOO_WIDE',
+    });
   });
 
   it('rejeita campos e termos fora do escopo', async () => {

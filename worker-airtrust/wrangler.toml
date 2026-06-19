@@ -46,6 +46,9 @@ name = "airtrust-api-staging"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED = "true"
+CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED = "true"
+CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env staging
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env staging
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env staging
