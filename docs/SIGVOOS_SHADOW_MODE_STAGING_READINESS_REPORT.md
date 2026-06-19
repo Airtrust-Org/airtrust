@@ -84,9 +84,159 @@ Os valores nao foram solicitados nem usados nesta fase.
 - Nenhum deploy, migration remota, seed remota ou sync real foi executado nesta fase.
 - A validacao funcional remota existente em staging permanece como referencia, mas nao foi reexecutada aqui.
 
+## Validacao autenticada em staging
+
+- `GET /api/version` em `https://airtrust-api-staging.airtrust.workers.dev` respondeu `200` com `environment=staging`.
+- `GET /api/health` respondeu `200` com `database=ok` e `storage=ok`.
+- `GET /api/controle-voos/sigvoos/shadow-compare` sem token respondeu `401 MISSING_TOKEN`, confirmando protecao por auth.
+- O Worker de staging respondeu com a rota nova ativa e a execucao autenticada confirmou `tenant scope` e RBAC `manager`.
+
+### Caminho de autenticacao usado
+
+- Nao havia token staging preexistente no shell nem no Keychain consultado por nome.
+- Foi usado um caminho operacional seguro e reversivel apenas em `staging`:
+  - completar o tenant sintético `empresa_id=906`, que já possuía dados `cv_*` e `cv_sigvoos_staging`, mas estava sem registro correspondente em `empresas`
+  - criar um usuario temporario com role efetiva `manager`
+  - autenticar por `POST /api/auth/login`
+  - validar sessao por `GET /api/auth/me`
+  - remover o acesso temporario ao final
+- Nenhum token, senha, email real ou secret foi registrado neste relatório.
+
+### Resultado do shadow-compare
+
+Janela executada: `from=2026-06-12` e `to=2026-06-18`
+
+Agregados retornados:
+
+- `previewStagingRecords=7`
+- `cvFlights=7`
+- `cvStages=8`
+- `cvCrew=5`
+- `frmsJourneysSigvoos=4`
+- `frmsAlertsSigvoos=0`
+- `openIntegrationConflicts=1`
+- `conflictsBySeverity`: `MEDIA=1`
+
+Divergencias agregadas:
+
+- por data:
+  - `2026-06-13`: `cv=1`, `frms=1`, `delta=0`
+  - `2026-06-14`: `cv=6`, `frms=3`, `delta=3`
+- por base:
+  - `SBMI`: `cv=1`, `frms=1`, `delta=0`
+  - `SBRJ`: `cv=5`, `frms=2`, `delta=3`
+  - `SBSP`: `cv=2`, `frms=1`, `delta=1`
+- por aeronave:
+  - houve match para `ATX-MAP`, `ATX7001`, `ATX7002` e `ATX7006`
+  - seguem divergentes `ATX7210`, `ATX7218` e `ATX7220`
+- por tipo de voo:
+  - `REG`: dimensão apenas CV (`CV_ONLY_DIMENSION`)
+
+Gaps e readiness:
+
+- `normalizationErrors`: `FRMS_FLIGHT_TYPE_DIMENSION_UNAVAILABLE`
+- `missingFields`: vazio para a dimensão de `flight_type_dimension`
+- `recommendation.status=PARTIAL`
+- `recommendation.reasons`:
+  - `OPEN_INTEGRATION_CONFLICTS`
+  - `NON_ZERO_AGGREGATE_DELTAS`
+
+### Leitura operacional
+
+- O bloqueio atual nao é mais de deploy nem de autenticacao.
+- O Worker de staging publicado já reflete a nova classificação de `flight_type_dimension` como limitação de normalização, não como `missingFields`.
+- Em staging, o caminho novo `SIGVOOS -> cv_*` e `cv_sigvoos_staging` esta populado o suficiente para comparacao read-only.
+- O readiness agora fica corretamente `PARTIAL`: existe comparabilidade suficiente para a janela curta, mas ainda resta `1` conflito de integração aberto e divergências agregadas reais.
+
+### Macroetapa de comparabilidade FRMS em staging
+
+- Foi adicionado o script controlado `scripts/staging/seed-frms-sigvoos-comparable-from-cv.mjs`.
+- Escopo fixo e nao expansivel pelo operador:
+  - apenas `env=staging`
+  - apenas `empresa_id=906`
+  - apenas janela `2026-06-12..2026-06-18`
+  - apenas `frms_jornada`
+  - sem `clearExisting`, sem `DELETE` fisico, sem qualquer caminho de producao
+- O script deriva jornadas sinteticas a partir de `cv_voos`, `cv_voo_etapas`, `cv_voo_tripulantes` e `funcionarios`, marcando tudo com `registrado_por=STAGING_SHADOW_COMPARE` e `observacao=STAGING_SIGVOOS_SHADOW_COMPARE_FROM_CV`.
+- Foi necessario agregar por `tripulante_id + data`, porque o schema de `frms_jornada` em staging permite apenas uma jornada ativa por combinacao.
+
+Dry-run aprovado:
+
+- `sourceRows=7`
+- `candidateJourneyRows=4`
+- agregados previstos:
+  - por data: `2026-06-13=1`, `2026-06-14=3`
+  - por base: `SBMI=1`, `SBRJ=2`, `SBSP=1`
+  - por aeronave: `ATX-MAP=1`, `ATX7001=1`, `ATX7002=1`, `ATX7006=1`
+
+Resultado do apply controlado seguido de reexecucao autenticada do compare:
+
+- antes do seed:
+  - `frmsJourneysSigvoos=3`
+  - `openIntegrationConflicts=2`
+  - `recommendation.status=PARTIAL`
+  - `recommendation.reasons`:
+    - `OPEN_INTEGRATION_CONFLICTS`
+    - `NON_ZERO_AGGREGATE_DELTAS`
+- correção artificial e reversível aplicada em staging:
+  - foi adicionado apenas o funcionário sintético faltante para a matrícula `09999`
+  - foi criado apenas o `cv_voo_tripulantes` correspondente ao voo `906605`
+  - o conflito artificial de matrícula ausente passou de `ABERTO` para `IGNORADO`
+  - nenhum ajuste foi feito no conflito real remanescente de `staff.id` versus `staff.inscription`
+- apply:
+  - `changes=4`
+  - `after.frmsSigvoos906=4`
+  - `after.syntheticActiveRows=4`
+- depois do seed:
+  - `previewStagingRecords=7`
+  - `cvFlights=7`
+  - `cvStages=8`
+  - `cvCrew=5`
+  - `frmsJourneysSigvoos=4`
+  - `frmsAlertsSigvoos=0`
+  - `openIntegrationConflicts=1`
+  - `recommendation.status=PARTIAL`
+  - `recommendation.reasons`:
+    - `OPEN_INTEGRATION_CONFLICTS`
+    - `NON_ZERO_AGGREGATE_DELTAS`
+
+Divergencias remanescentes apos o seed:
+
+- por data:
+  - `2026-06-13`: `cv=1`, `frms=1`, `delta=0`
+  - `2026-06-14`: `cv=6`, `frms=3`, `delta=3`
+- por base:
+  - `SBMI`: `cv=1`, `frms=1`, `delta=0`
+  - `SBRJ`: `cv=5`, `frms=2`, `delta=3`
+  - `SBSP`: `cv=2`, `frms=1`, `delta=1`
+- por aeronave:
+  - houve match para `ATX-MAP`, `ATX7001`, `ATX7002` e `ATX7006`
+  - seguem divergentes `ATX7210`, `ATX7218` e `ATX7220`
+- por tipo de voo:
+  - `REG`: dimensão apenas CV (`CV_ONLY_DIMENSION`)
+- gaps estruturais:
+  - `normalizationErrors`: `FRMS_FLIGHT_TYPE_DIMENSION_UNAVAILABLE`
+  - `missingFields`: nenhum para a classificação de `flight_type_dimension`
+
+Conclusao desta macroetapa:
+
+- staging passou de `BLOCKED` para `PARTIAL` quando recebeu jornadas FRMS sinteticas suficientes para a mesma janela curta.
+- o bloqueio `NO_FRMS_SIGVOOS_JOURNEYS` saiu, provando que o `shadow-compare` ficou operacionalmente comparavel.
+- a comparabilidade ainda nao e completa porque permanece `1` conflito aberto de integracao e o agregado de jornadas continua abaixo do volume CV do dia `2026-06-14`.
+- o teste autenticado inicial que comprovou `PARTIAL` foi executado com cleanup automatico ao final.
+- em seguida, foi corrigido apenas o conflito artificial e reversível de matrícula ausente, o seed foi reaplicado sem rollback automático e o endpoint autenticado foi validado novamente no estado persistido.
+- estado final confirmado em staging:
+  - `frmsJourneysSigvoos=4`
+  - `openIntegrationConflicts=1`
+  - `missingFields=[]`
+  - `normalizationErrors=['FRMS_FLIGHT_TYPE_DIMENSION_UNAVAILABLE']`
+  - `recommendation.status=PARTIAL`
+  - `recommendation.reasons`:
+    - `OPEN_INTEGRATION_CONFLICTS`
+    - `NON_ZERO_AGGREGATE_DELTAS`
+
 ## Próximos passos seguros
 
-1. Deployar apenas o Worker de `staging` com esse endpoint e flags rastreadas.
-2. Validar `sync-preview`, `real-preview` e `shadow-compare` em `staging` autenticado.
-3. Se necessario, reutilizar apenas o seed sintético controlado já embutido no runner remoto de staging.
-4. Só depois discutir adaptador `CV -> FRMS` em shadow, ainda sem virada canônica.
+1. Tratar o `1` conflito aberto de integração antes de qualquer shadow window mais longa.
+2. Definir se a dimensão `flight_type_dimension` continuará apenas como limitação de normalização documentada ou se haverá uma estratégia futura explícita para comparação sem migration.
+3. Se for necessario encerrar a comparabilidade temporaria, executar apenas o rollback controlado dos scripts staging para remover as `4` jornadas sinteticas e o vínculo sintético criado para `09999`.

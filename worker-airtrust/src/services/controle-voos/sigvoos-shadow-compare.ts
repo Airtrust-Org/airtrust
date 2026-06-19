@@ -246,7 +246,6 @@ export async function buildSigvoosShadowCompareReport(
     }
   }
 
-  missingFields.push('frms_jornada.flight_type_dimension');
   normalizationErrors.push('FRMS_FLIGHT_TYPE_DIMENSION_UNAVAILABLE');
 
   const totalsPromise = Promise.all([
