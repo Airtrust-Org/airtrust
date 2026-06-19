@@ -11,11 +11,11 @@ function parseFuncionarioQuinzena(value: string | null | undefined): 1 | 2 | nul
     .trim()
     .toLowerCase();
 
-  if (['primeira', '1', '1q', '1ª', '1a', 'primeira quinzena'].includes(normalized)) {
+  if (['primeira', '1', '1q', 'q1', '1ª', '1a', 'primeira quinzena'].includes(normalized)) {
     return 1;
   }
 
-  if (['segunda', '2', '2q', '2ª', '2a', 'segunda quinzena'].includes(normalized)) {
+  if (['segunda', '2', '2q', 'q2', '2ª', '2a', 'segunda quinzena'].includes(normalized)) {
     return 2;
   }
 
@@ -27,9 +27,10 @@ export async function resolveFuncionarioActiveFortnightForDate(
   funcionarioId: string | number,
   dataReferencia: string,
 ): Promise<ActiveFortnightRange | null> {
-  const quinzena = await db
+  const quinzenasResult = await db
     .prepare(
       `SELECT
+         f.quinzena AS funcionario_quinzena,
          eq.numero,
          eq.data_inicio,
          eq.data_fim
@@ -41,21 +42,23 @@ export async function resolveFuncionarioActiveFortnightForDate(
         AND eq.deleted_at IS NULL
        WHERE CAST(f.id AS TEXT) = ?
          AND f.deleted_at IS NULL
-         AND eq.numero = CASE
-           WHEN LOWER(TRIM(COALESCE(f.quinzena, ''))) IN ('primeira', '1', '1q', '1ª', '1a', 'primeira quinzena') THEN 1
-           WHEN LOWER(TRIM(COALESCE(f.quinzena, ''))) IN ('segunda', '2', '2q', '2ª', '2a', 'segunda quinzena') THEN 2
-           ELSE NULL
-         END
          AND eq.data_inicio <= ?
-         AND eq.data_fim >= ?
-       LIMIT 1`,
+         AND eq.data_fim >= ?`,
     )
     .bind(dataReferencia, dataReferencia, String(funcionarioId), dataReferencia, dataReferencia)
-    .first<{
+    .all<{
+      funcionario_quinzena: string | null;
       numero: number | null;
       data_inicio: string | null;
       data_fim: string | null;
     }>();
+
+  const quinzenas = quinzenasResult.results || [];
+  const quinzenaNumero = parseFuncionarioQuinzena(quinzenas[0]?.funcionario_quinzena);
+  const quinzena =
+    quinzenaNumero == null
+      ? null
+      : quinzenas.find((item) => item.numero === quinzenaNumero) ?? null;
 
   if (
     !quinzena ||
