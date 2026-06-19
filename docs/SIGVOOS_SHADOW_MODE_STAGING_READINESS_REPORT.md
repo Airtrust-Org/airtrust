@@ -188,3 +188,16 @@ Divergencias finais:
 `PARTIAL` justificado e correto.
 
 O readiness nao pode ser promovido para `READY` porque ainda existe um conflito real de identidade `staff.id` versus `staff.inscription`. O bloqueio falso de agregacao foi removido com seguranca.
+
+## Addendum 2026-06-19
+
+Atualizacao posterior:
+
+- o conflito residual de identidade foi reclassificado como artefato sintetico de `staging`;
+- a reconciliacao controlada foi documentada em `docs/SIGVOOS_IDENTITY_RECONCILIATION_STAGING_20260619.md`;
+- apos a reconciliacao somente em `staging`, o `shadow-compare` passou para:
+  - `recommendation.status=READY`
+  - `recommendation.reasons=[]`
+  - `openIntegrationConflicts=0`
+  - `cvCrew=6`
+- `FRMS_FLIGHT_TYPE_DIMENSION_UNAVAILABLE` permaneceu como `normalizationErrors`, sem bloquear o comparador atual.
