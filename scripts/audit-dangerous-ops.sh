@@ -89,6 +89,7 @@ self_protected_files=(
   "scripts/run-0389-staging-schema-apply.sh"
   "scripts/staging/seed-frms-sigvoos-comparable-from-cv.mjs"
   "scripts/staging/resolve-sigvoos-artificial-conflict-09999.mjs"
+  "scripts/staging/reconcile-sigvoos-synthetic-staff-conflict-8899.mjs"
 )
 
 # Scripts legados já bloqueados com banner + exit 1 (verificação relaxada)
