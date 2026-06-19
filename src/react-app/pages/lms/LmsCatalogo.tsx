@@ -87,6 +87,21 @@ const DEFAULT_CATEGORIES = [
 ];
 const EAD_QUALIFICACAO_CATEGORIAS = new Set(['EAD', 'TREINAMENTO EAD']);
 
+export function resolveLmsCatalogRoleView(params: {
+  canManage: boolean;
+  restrictToEnrolledCourses: boolean;
+}) {
+  const { canManage, restrictToEnrolledCourses } = params;
+  return {
+    showAdministrativeFilters: canManage || !restrictToEnrolledCourses,
+    title: canManage
+      ? 'Catálogo LMS'
+      : restrictToEnrolledCourses
+        ? 'Meus treinamentos'
+        : 'Catálogo de treinamentos',
+  };
+}
+
 function normCat(v?: string | null) {
   return (v ?? '').trim().toUpperCase();
 }
@@ -1503,6 +1518,8 @@ export default function LmsCatalogo() {
   const { isAdmin, isGestor, isAluno, isInstrutor } = usePermissions();
   const canManage = isAdmin || isGestor;
   const restrictToEnrolledCourses = isAluno || isInstrutor;
+  const roleView = resolveLmsCatalogRoleView({ canManage, restrictToEnrolledCourses });
+  const showAdministrativeFilters = roleView.showAdministrativeFilters;
   const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
 
   const [tab, setTab] = useState<TabId>(restrictToEnrolledCourses ? 'meus' : 'catalogo');
@@ -1822,7 +1839,7 @@ export default function LmsCatalogo() {
       <LmsPageShell>
         <PageHeader
           className="mb-6"
-          title={canManage ? 'Catálogo LMS' : 'Catálogo de treinamentos'}
+          title={roleView.title}
           subtitle={statsBar}
           actions={
             !canManage ? (
@@ -1885,98 +1902,99 @@ export default function LmsCatalogo() {
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
           <LmsModuleTabs canManage={canManage} />
 
-          {/* Filters */}
-          <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-950/60">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr]">
-              <label className="relative block">
-                <span className="sr-only">Buscar cursos</span>
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por título, categoria ou descrição"
-                  aria-label="Buscar cursos por título, categoria ou descrição"
-                  className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
-                />
-              </label>
-              <label className="block">
-                <span className="sr-only">Filtrar por setor</span>
-                <select
-                  value={sectorFilter}
-                  onChange={(e) => setSectorFilter(e.target.value)}
-                  aria-label="Filtrar por setor"
-                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                >
-                  <option value="all">Todos os setores</option>
-                  {setores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="sr-only">Filtrar por tipo de conteúdo</span>
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value as 'all' | TipoConteudo)}
-                  aria-label="Filtrar por tipo de conteúdo"
-                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                >
-                  <option value="all">Todos os tipos</option>
-                  <option value="scorm">SCORM</option>
-                  <option value="h5p">H5P</option>
-                  <option value="video">Vídeo</option>
-                  <option value="pdf">PDF</option>
-                  <option value="pptx">PowerPoint</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="sr-only">Filtrar por categoria</span>
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  aria-label="Filtrar por categoria"
-                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                >
-                  <option value="all">Todas as categorias</option>
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="sr-only">Filtrar por compliance</span>
-                <select
-                  value={complianceFilter}
-                  onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'critical')}
-                  aria-label="Filtrar por impacto em compliance"
-                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                >
-                  <option value="all">Todos os cursos</option>
-                  <option value="critical">Impactam compliance</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="sr-only">Filtrar por status</span>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as 'all' | MatriculaStatus)}
-                  aria-label="Filtrar por status da matrícula"
-                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                >
-                  <option value="all">Todos os status</option>
-                  {!canManage ? <option value="NAO_INICIADO">Não iniciado</option> : null}
-                  <option value="EM_ANDAMENTO">Em andamento</option>
-                  <option value="CONCLUIDO">Concluído</option>
-                  <option value="REPROVADO">Reprovado</option>
-                </select>
-              </label>
+          {showAdministrativeFilters ? (
+            <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-950/60">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr]">
+                <label className="relative block">
+                  <span className="sr-only">Buscar cursos</span>
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Buscar por título, categoria ou descrição"
+                    aria-label="Buscar cursos por título, categoria ou descrição"
+                    className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
+                  />
+                </label>
+                <label className="block">
+                  <span className="sr-only">Filtrar por setor</span>
+                  <select
+                    value={sectorFilter}
+                    onChange={(e) => setSectorFilter(e.target.value)}
+                    aria-label="Filtrar por setor"
+                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="all">Todos os setores</option>
+                    {setores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="sr-only">Filtrar por tipo de conteúdo</span>
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value as 'all' | TipoConteudo)}
+                    aria-label="Filtrar por tipo de conteúdo"
+                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="all">Todos os tipos</option>
+                    <option value="scorm">SCORM</option>
+                    <option value="h5p">H5P</option>
+                    <option value="video">Vídeo</option>
+                    <option value="pdf">PDF</option>
+                    <option value="pptx">PowerPoint</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="sr-only">Filtrar por categoria</span>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    aria-label="Filtrar por categoria"
+                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="all">Todas as categorias</option>
+                    {categories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="sr-only">Filtrar por compliance</span>
+                  <select
+                    value={complianceFilter}
+                    onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'critical')}
+                    aria-label="Filtrar por impacto em compliance"
+                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="all">Todos os cursos</option>
+                    <option value="critical">Impactam compliance</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="sr-only">Filtrar por status</span>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as 'all' | MatriculaStatus)}
+                    aria-label="Filtrar por status da matrícula"
+                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="all">Todos os status</option>
+                    {!canManage ? <option value="NAO_INICIADO">Não iniciado</option> : null}
+                    <option value="EM_ANDAMENTO">Em andamento</option>
+                    <option value="CONCLUIDO">Concluído</option>
+                    <option value="REPROVADO">Reprovado</option>
+                  </select>
+                </label>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           {/* Course grid */}
           <div className="p-5 sm:p-6">
