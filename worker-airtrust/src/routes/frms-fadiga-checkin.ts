@@ -16,6 +16,10 @@ import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
 import { canSeeFrmsTeamScope } from '../lib/frms/access';
 import {
+  getEmployeeSectorAccess,
+  buildFuncionarioScopeWhere,
+} from '../services/employee-sector-access';
+import {
   CheckinCreateSchema,
   GestorRespostaSchema,
   type CheckinCreateInput,
@@ -768,6 +772,12 @@ router.get('/daily-fatigue', async (c) => {
     const limit = Math.min(Math.max(Number(c.req.query('limit') || 100), 1), 500);
     const offset = Math.max(Number(c.req.query('offset') || 0), 0);
 
+    const sectorAccess = await getEmployeeSectorAccess(
+      c as unknown as Context<{ Bindings: Env }>,
+      empresaId,
+    );
+    const sectorScope = buildFuncionarioScopeWhere(sectorAccess, 'f');
+
     const defaults = await getFrmsSleepDefaults(c.env.DB);
     const rows = await c.env.DB
       .prepare(
@@ -803,6 +813,7 @@ router.get('/daily-fatigue', async (c) => {
            AND COALESCE(f.ativo, 1) = 1
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
+           AND ${sectorScope.clause}
          ORDER BY
            CASE
              WHEN ch.id IS NULL AND fj.id IS NOT NULL THEN 1
@@ -813,7 +824,7 @@ router.get('/daily-fatigue', async (c) => {
            f.nome ASC
          LIMIT ? OFFSET ?`,
       )
-      .bind(date, date, empresaId, limit, offset)
+      .bind(date, date, empresaId, ...sectorScope.bindings, limit, offset)
       .all<Record<string, unknown>>();
 
     const itens = (rows.results || []).map((row) => {
@@ -936,6 +947,12 @@ router.get('/daily-fatigue/alerts', async (c) => {
       });
     }
 
+    const alertsSectorAccess = await getEmployeeSectorAccess(
+      c as unknown as Context<{ Bindings: Env }>,
+      empresaId,
+    );
+    const alertsSectorScope = buildFuncionarioScopeWhere(alertsSectorAccess, 'f');
+
     const rows = await c.env.DB
       .prepare(
         `SELECT a.id, a.tripulante_id, a.nivel, a.tipo_limite, a.mensagem, a.created_at, a.resolvido, a.resolvido_em,
@@ -947,11 +964,12 @@ router.get('/daily-fatigue/alerts', async (c) => {
            AND a.mensagem LIKE '[FADIGA_DIARIA]%'
            AND date(a.created_at) = ?
            AND f.empresa_id = ?
+           AND ${alertsSectorScope.clause}
          ORDER BY
            CASE a.nivel WHEN 'CRITICO' THEN 1 WHEN 'ATENCAO' THEN 2 ELSE 3 END,
            a.created_at DESC`,
       )
-      .bind(date, empresaId)
+      .bind(date, empresaId, ...alertsSectorScope.bindings)
       .all<Record<string, unknown>>();
 
     const teamResponse = await router.fetch(
@@ -1549,6 +1567,12 @@ router.get('/fadiga-checkin/painel-gestor', requireRole('manager'), async (c) =>
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
     const data = c.req.query('data') || todayIso();
 
+    const painelSectorAccess = await getEmployeeSectorAccess(
+      c as unknown as Context<{ Bindings: Env }>,
+      empresaId,
+    );
+    const painelSectorScope = buildFuncionarioScopeWhere(painelSectorAccess, 'f');
+
     const rows = await c.env.DB.prepare(
       `SELECT
            f.id AS funcionario_id,
@@ -1587,6 +1611,7 @@ router.get('/fadiga-checkin/painel-gestor', requireRole('manager'), async (c) =>
            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
            AND COALESCE(f.ativo, 1) = 1
            AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
+           AND ${painelSectorScope.clause}
          ORDER BY
            CASE ch.nivel_fadiga
              WHEN 'VERMELHO' THEN 1
@@ -1598,7 +1623,7 @@ router.get('/fadiga-checkin/painel-gestor', requireRole('manager'), async (c) =>
            CASE WHEN ch.id IS NULL THEN 1 ELSE 0 END,
            f.nome ASC`,
     )
-      .bind(data, data, data, empresaId)
+      .bind(data, data, data, empresaId, ...painelSectorScope.bindings)
       .all<Record<string, unknown>>();
 
     return c.json({ success: true, data: rows.results || [] });
@@ -1658,35 +1683,45 @@ router.get('/fadiga-checkin/analytics', requireRole('manager'), async (c) => {
       c.req.query('data_inicio') || new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
     const dataFim = c.req.query('data_fim') || todayIso();
 
+    const analyticsSectorAccess = await getEmployeeSectorAccess(
+      c as unknown as Context<{ Bindings: Env }>,
+      empresaId,
+    );
+    const analyticsSectorScope = buildFuncionarioScopeWhere(analyticsSectorAccess, 'f');
+
     const evolucaoDiaria = await c.env.DB.prepare(
       `SELECT
-           data_checkin AS data,
-           AVG(kss_score) AS media_kss,
-           AVG(horas_sono) AS media_sono,
-           AVG(score_fadiga) AS media_score,
+           ch.data_checkin AS data,
+           AVG(ch.kss_score) AS media_kss,
+           AVG(ch.horas_sono) AS media_sono,
+           AVG(ch.score_fadiga) AS media_score,
            COUNT(*) AS total_checkins
-         FROM frms_fadiga_checkin
-         WHERE empresa_id = ?
-           AND deleted_at IS NULL
-           AND data_checkin BETWEEN ? AND ?
-         GROUP BY data_checkin
-         ORDER BY data_checkin`,
+         FROM frms_fadiga_checkin ch
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         WHERE ch.empresa_id = ?
+           AND ch.deleted_at IS NULL
+           AND ch.data_checkin BETWEEN ? AND ?
+           AND ${analyticsSectorScope.clause}
+         GROUP BY ch.data_checkin
+         ORDER BY ch.data_checkin`,
     )
-      .bind(empresaId, dataInicio, dataFim)
+      .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .all<Record<string, unknown>>();
 
     const distribuicao = await c.env.DB.prepare(
       `SELECT
-           SUM(CASE WHEN nivel_fadiga = 'VERDE' THEN 1 ELSE 0 END) AS verde,
-           SUM(CASE WHEN nivel_fadiga = 'AMARELO' THEN 1 ELSE 0 END) AS amarelo,
-           SUM(CASE WHEN nivel_fadiga = 'LARANJA' THEN 1 ELSE 0 END) AS laranja,
-           SUM(CASE WHEN nivel_fadiga = 'VERMELHO' THEN 1 ELSE 0 END) AS vermelho
-         FROM frms_fadiga_checkin
-         WHERE empresa_id = ?
-           AND deleted_at IS NULL
-           AND data_checkin BETWEEN ? AND ?`,
+           SUM(CASE WHEN ch.nivel_fadiga = 'VERDE' THEN 1 ELSE 0 END) AS verde,
+           SUM(CASE WHEN ch.nivel_fadiga = 'AMARELO' THEN 1 ELSE 0 END) AS amarelo,
+           SUM(CASE WHEN ch.nivel_fadiga = 'LARANJA' THEN 1 ELSE 0 END) AS laranja,
+           SUM(CASE WHEN ch.nivel_fadiga = 'VERMELHO' THEN 1 ELSE 0 END) AS vermelho
+         FROM frms_fadiga_checkin ch
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         WHERE ch.empresa_id = ?
+           AND ch.deleted_at IS NULL
+           AND ch.data_checkin BETWEEN ? AND ?
+           AND ${analyticsSectorScope.clause}`,
     )
-      .bind(empresaId, dataInicio, dataFim)
+      .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .first<Record<string, number>>();
 
     const rankingAtencao = await c.env.DB.prepare(
@@ -1700,21 +1735,24 @@ router.get('/fadiga-checkin/analytics', requireRole('manager'), async (c) => {
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
            AND ch.data_checkin BETWEEN ? AND ?
+           AND ${analyticsSectorScope.clause}
          GROUP BY f.id, f.nome, f.cargo, f.funcao
          ORDER BY ocorrencias_laranja_vermelho DESC, media_kss DESC
          LIMIT 10`,
     )
-      .bind(empresaId, dataInicio, dataFim)
+      .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .all<Record<string, unknown>>();
 
     const correlacaoSonoKss = await c.env.DB.prepare(
-      `SELECT horas_sono, kss_score
-         FROM frms_fadiga_checkin
-         WHERE empresa_id = ?
-           AND deleted_at IS NULL
-           AND data_checkin BETWEEN ? AND ?`,
+      `SELECT ch.horas_sono, ch.kss_score
+         FROM frms_fadiga_checkin ch
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         WHERE ch.empresa_id = ?
+           AND ch.deleted_at IS NULL
+           AND ch.data_checkin BETWEEN ? AND ?
+           AND ${analyticsSectorScope.clause}`,
     )
-      .bind(empresaId, dataInicio, dataFim)
+      .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .all<Record<string, unknown>>();
 
     const correlacaoScoreEffectiveness = await c.env.DB.prepare(
@@ -1732,9 +1770,10 @@ router.get('/fadiga-checkin/analytics', requireRole('manager'), async (c) => {
          JOIN frms_fatorizacao_jornada ffj ON ffj.jornada_id = fj.id AND ffj.deleted_at IS NULL
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
-           AND ch.data_checkin BETWEEN ? AND ?`,
+           AND ch.data_checkin BETWEEN ? AND ?
+           AND ${analyticsSectorScope.clause}`,
     )
-      .bind(empresaId, dataInicio, dataFim)
+      .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .all<Record<string, unknown>>();
 
     return c.json({
@@ -1826,6 +1865,12 @@ router.get('/fadiga-checkin/export', requireRole('manager'), async (c) => {
     const dataInicio = c.req.query('data_inicio') || todayIso().slice(0, 8) + '01';
     const dataFim = c.req.query('data_fim') || todayIso();
 
+    const exportSectorAccess = await getEmployeeSectorAccess(
+      c as unknown as Context<{ Bindings: Env }>,
+      empresaId,
+    );
+    const exportSectorScope = buildFuncionarioScopeWhere(exportSectorAccess, 'f');
+
     const rows = await c.env.DB.prepare(
       `SELECT
            ch.data_checkin,
@@ -1845,9 +1890,10 @@ router.get('/fadiga-checkin/export', requireRole('manager'), async (c) => {
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
            AND ch.data_checkin BETWEEN ? AND ?
+           AND ${exportSectorScope.clause}
          ORDER BY ch.data_checkin DESC, f.nome ASC`,
     )
-      .bind(empresaId, dataInicio, dataFim)
+      .bind(empresaId, dataInicio, dataFim, ...exportSectorScope.bindings)
       .all<Record<string, unknown>>();
 
     const header = [
