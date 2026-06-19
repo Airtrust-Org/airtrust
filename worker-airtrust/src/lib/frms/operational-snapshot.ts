@@ -1,5 +1,6 @@
 import type { Origem } from './types';
 import { carregarLimites } from './db-service-config';
+import { calcularDiaDoCiclo } from './db-service-jornadas';
 import { resolverFrmsConfig } from './frms-config';
 import {
   buildFrmsFortnightIndicatorMap,
@@ -830,11 +831,41 @@ export async function listFrmsOperationalSnapshot(
     effectivenessByKey.set(key, row);
   }
 
+  const derivedFortnightByKey = new Map<
+    string,
+    { dia_periodo_embarcado: number | null; total_dias_periodo: number | null }
+  >();
+  for (const row of effectivenessResult.results || []) {
+    const key = `${row.data_operacional}::${Number(row.funcionario_id)}`;
+    derivedFortnightByKey.set(key, {
+      dia_periodo_embarcado:
+        row.dia_periodo_embarcado == null ? null : Number(row.dia_periodo_embarcado),
+      total_dias_periodo: row.total_dias_periodo == null ? null : Number(row.total_dias_periodo),
+    });
+  }
+
+  const missingFortnightKeys = snapshot.items.filter((item) => {
+    const key = `${item.data_operacional}::${item.funcionario_id}`;
+    return derivedFortnightByKey.get(key)?.dia_periodo_embarcado == null;
+  });
+
+  await Promise.all(
+    missingFortnightKeys.map(async (item) => {
+      const key = `${item.data_operacional}::${item.funcionario_id}`;
+      const period = await calcularDiaDoCiclo(db, item.funcionario_id, item.data_operacional);
+      if (!period) return;
+      derivedFortnightByKey.set(key, {
+        dia_periodo_embarcado: period.dia,
+        total_dias_periodo: period.total,
+      });
+    }),
+  );
+
   const fortnightIndicatorMap = buildFrmsFortnightIndicatorMap({
     items: snapshot.items.map((item) => {
-      const effectivenessRow = effectivenessByKey.get(
-        `${item.data_operacional}::${Number(item.funcionario_id)}`,
-      );
+      const itemKey = `${item.data_operacional}::${Number(item.funcionario_id)}`;
+      const effectivenessRow = effectivenessByKey.get(itemKey);
+      const derivedFortnight = derivedFortnightByKey.get(itemKey);
       return {
         data_operacional: item.data_operacional,
         funcionario_id: item.funcionario_id,
@@ -849,13 +880,15 @@ export async function listFrmsOperationalSnapshot(
         horas_voo_minutos: item.horas_voo_minutos,
         teve_jornada: item.teve_jornada,
         dia_periodo_embarcado:
-          effectivenessRow?.dia_periodo_embarcado != null
+          derivedFortnight?.dia_periodo_embarcado ??
+          (effectivenessRow?.dia_periodo_embarcado != null
             ? Number(effectivenessRow.dia_periodo_embarcado)
-            : null,
+            : null),
         total_dias_periodo:
-          effectivenessRow?.total_dias_periodo != null
+          derivedFortnight?.total_dias_periodo ??
+          (effectivenessRow?.total_dias_periodo != null
             ? Number(effectivenessRow.total_dias_periodo)
-            : null,
+            : null),
       };
     }),
     windowStart: params.dataInicio,
