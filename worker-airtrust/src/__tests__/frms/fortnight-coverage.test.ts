@@ -39,6 +39,8 @@ describe('getFrmsFortnightCoverage', () => {
         total_dias_periodo: 14,
         has_frms_escala_quinzenal: 1,
         has_escala_alocacoes: 1,
+        has_quinzena_base_ativa: 0,
+        has_ausencia_bloqueante: 0,
       },
       {
         fatorizacao_id: 'fat-2',
@@ -55,6 +57,8 @@ describe('getFrmsFortnightCoverage', () => {
         total_dias_periodo: null,
         has_frms_escala_quinzenal: 1,
         has_escala_alocacoes: 1,
+        has_quinzena_base_ativa: 0,
+        has_ausencia_bloqueante: 0,
       },
       {
         fatorizacao_id: 'fat-3',
@@ -71,6 +75,8 @@ describe('getFrmsFortnightCoverage', () => {
         total_dias_periodo: null,
         has_frms_escala_quinzenal: 0,
         has_escala_alocacoes: 1,
+        has_quinzena_base_ativa: 0,
+        has_ausencia_bloqueante: 0,
       },
       {
         fatorizacao_id: 'fat-4',
@@ -87,6 +93,8 @@ describe('getFrmsFortnightCoverage', () => {
         total_dias_periodo: null,
         has_frms_escala_quinzenal: 0,
         has_escala_alocacoes: 0,
+        has_quinzena_base_ativa: 0,
+        has_ausencia_bloqueante: 0,
       },
     ];
     const { db, run, prepare } = createDb(fixtureRows);
@@ -175,12 +183,78 @@ describe('getFrmsFortnightCoverage', () => {
     ]);
 
     expect(result.recuperaveis_estimados).toEqual({
-      com_escala_alocacoes: 1,
-      com_frms_escala_quinzenal: 1,
+      com_escala_alocacoes: 2,
+      com_frms_escala_quinzenal: 0,
+      com_quinzena_base_ativa: 0,
       sem_escala_detectada: 1,
+    });
+
+    expect(result.cobertura_estimada_quinzena_base).toEqual({
+      recuperaveis: 0,
+      pct_potencial: 75,
     });
 
     expect(result.notas).toContain('Indicador operacional descritivo; nao e compliance regulatorio.');
     expect(result.notas).toContain('Endpoint read-only; nao executa reprocessamento.');
+  });
+
+  it('classifica recuperaveis pela quinzena base ativa sem ausencia bloqueante', async () => {
+    const fixtureRows = [
+      {
+        fatorizacao_id: 'fat-5',
+        jornada_id: 'jor-5',
+        data_operacional: '2026-06-18',
+        funcionario_id: 105,
+        origem: 'SIGVOOS',
+        status_jornada: 'ES',
+        hora_apresentacao: '06:00',
+        hora_termino: '12:00',
+        duracao_jornada_minutos: 360,
+        horas_voo_minutos: 180,
+        dia_periodo_embarcado: null,
+        total_dias_periodo: null,
+        has_frms_escala_quinzenal: 0,
+        has_escala_alocacoes: 0,
+        has_quinzena_base_ativa: 1,
+        has_ausencia_bloqueante: 0,
+      },
+      {
+        fatorizacao_id: 'fat-6',
+        jornada_id: 'jor-6',
+        data_operacional: '2026-06-18',
+        funcionario_id: 106,
+        origem: 'SIGVOOS',
+        status_jornada: 'ES',
+        hora_apresentacao: '06:00',
+        hora_termino: '12:00',
+        duracao_jornada_minutos: 360,
+        horas_voo_minutos: 180,
+        dia_periodo_embarcado: null,
+        total_dias_periodo: null,
+        has_frms_escala_quinzenal: 0,
+        has_escala_alocacoes: 0,
+        has_quinzena_base_ativa: 1,
+        has_ausencia_bloqueante: 1,
+      },
+    ];
+    const { db } = createDb(fixtureRows);
+
+    const result = await getFrmsFortnightCoverage(db, {
+      empresaId: 6,
+      dataInicio: '2026-06-12',
+      dataFim: '2026-06-18',
+    });
+
+    expect(result.recuperaveis_estimados).toEqual({
+      com_escala_alocacoes: 0,
+      com_frms_escala_quinzenal: 0,
+      com_quinzena_base_ativa: 1,
+      sem_escala_detectada: 1,
+    });
+
+    expect(result.cobertura_estimada_quinzena_base).toEqual({
+      recuperaveis: 1,
+      pct_potencial: 50,
+    });
   });
 });

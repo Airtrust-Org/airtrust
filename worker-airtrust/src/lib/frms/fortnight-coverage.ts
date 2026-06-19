@@ -40,7 +40,12 @@ export interface FrmsFortnightCoverageResponse {
   recuperaveis_estimados: {
     com_escala_alocacoes: number;
     com_frms_escala_quinzenal: number;
+    com_quinzena_base_ativa: number;
     sem_escala_detectada: number;
+  };
+  cobertura_estimada_quinzena_base: {
+    recuperaveis: number;
+    pct_potencial: number;
   };
   notas: string[];
 }
@@ -60,6 +65,8 @@ type CoverageRow = {
   total_dias_periodo: number | null;
   has_frms_escala_quinzenal: number | null;
   has_escala_alocacoes: number | null;
+  has_quinzena_base_ativa: number | null;
+  has_ausencia_bloqueante: number | null;
 };
 
 function pct(part: number, total: number): number {
@@ -183,7 +190,41 @@ export async function getFrmsFortnightCoverage(
              )
         )
         THEN 1 ELSE 0
-      END AS has_escala_alocacoes
+      END AS has_escala_alocacoes,
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+            FROM funcionarios f2
+            JOIN escalas_quinzenas eqb
+              ON eqb.empresa_id = f2.empresa_id
+             AND eqb.ano = CAST(strftime('%Y', j.data) AS INTEGER)
+             AND eqb.mes = CAST(strftime('%m', j.data) AS INTEGER)
+             AND eqb.deleted_at IS NULL
+           WHERE CAST(f2.id AS TEXT) = CAST(j.tripulante_id AS TEXT)
+             AND f2.deleted_at IS NULL
+             AND eqb.numero = CASE
+               WHEN LOWER(TRIM(COALESCE(f2.quinzena, ''))) IN ('primeira', '1', '1q', '1ª', '1a', 'primeira quinzena') THEN 1
+               WHEN LOWER(TRIM(COALESCE(f2.quinzena, ''))) IN ('segunda', '2', '2q', '2ª', '2a', 'segunda quinzena') THEN 2
+               ELSE NULL
+             END
+             AND eqb.data_inicio <= j.data
+             AND eqb.data_fim >= j.data
+        )
+        THEN 1 ELSE 0
+      END AS has_quinzena_base_ativa,
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+            FROM escala_alocacoes eab
+           WHERE CAST(eab.funcionario_id AS TEXT) = CAST(j.tripulante_id AS TEXT)
+             AND eab.data_inicio <= j.data
+             AND eab.data_fim >= j.data
+             AND eab.deleted_at IS NULL
+             AND eab.status != 'cancelado'
+             AND UPPER(COALESCE(eab.situacao_tipo, '')) IN ('FOLGA', 'FERIAS', 'AFT')
+        )
+        THEN 1 ELSE 0
+      END AS has_ausencia_bloqueante
     FROM frms_fatorizacao_jornada fj
     JOIN frms_jornada j
       ON j.id = fj.jornada_id
@@ -224,6 +265,7 @@ export async function getFrmsFortnightCoverage(
   const rowsByFonte = new Map<FrmsFortnightDataSource, CoverageRow[]>();
   let comEscalaAlocacoes = 0;
   let comFrmsEscalaQuinzenal = 0;
+  let comQuinzenaBaseAtiva = 0;
   let semEscalaDetectada = 0;
 
   for (const row of rows) {
@@ -232,16 +274,29 @@ export async function getFrmsFortnightCoverage(
     rowsByFonte.set(fonte, [...(rowsByFonte.get(fonte) || []), row]);
 
     if (row.dia_periodo_embarcado != null) continue;
-    if (Number(row.has_frms_escala_quinzenal || 0) > 0) {
-      comFrmsEscalaQuinzenal += 1;
-      continue;
-    }
     if (Number(row.has_escala_alocacoes || 0) > 0) {
       comEscalaAlocacoes += 1;
       continue;
     }
+    if (
+      Number(row.has_quinzena_base_ativa || 0) > 0 &&
+      Number(row.has_ausencia_bloqueante || 0) === 0
+    ) {
+      comQuinzenaBaseAtiva += 1;
+      continue;
+    }
+    if (Number(row.has_frms_escala_quinzenal || 0) > 0) {
+      comFrmsEscalaQuinzenal += 1;
+      continue;
+    }
     semEscalaDetectada += 1;
   }
+
+  const recuperaveisQuinzenaBase = comQuinzenaBaseAtiva;
+  const coberturaPotencial =
+    resumo.total_fatorizacoes > 0
+      ? resumo.com_dia_periodo + recuperaveisQuinzenaBase + comEscalaAlocacoes + comFrmsEscalaQuinzenal
+      : 0;
 
   return {
     periodo: {
@@ -267,12 +322,19 @@ export async function getFrmsFortnightCoverage(
     recuperaveis_estimados: {
       com_escala_alocacoes: comEscalaAlocacoes,
       com_frms_escala_quinzenal: comFrmsEscalaQuinzenal,
+      com_quinzena_base_ativa: comQuinzenaBaseAtiva,
       sem_escala_detectada: semEscalaDetectada,
+    },
+    cobertura_estimada_quinzena_base: {
+      recuperaveis: recuperaveisQuinzenaBase,
+      pct_potencial: pct(coberturaPotencial, resumo.total_fatorizacoes),
     },
     notas: [
       'Indicador operacional descritivo; nao e compliance regulatorio.',
       'Endpoint read-only; nao executa reprocessamento.',
-      'Buckets recuperaveis priorizam frms_escala_quinzenal antes de escala_alocacoes.',
+      'Cobertura persistida mede apenas dia_periodo_embarcado ja gravado em frms_fatorizacao_jornada.',
+      'Buckets recuperaveis seguem a prioridade de calcularDiaDoCiclo: escala_alocacoes, quinzena base, frms_escala_quinzenal.',
+      'com_quinzena_base_ativa estima recuperacao via funcionarios.quinzena + escalas_quinzenas sem escrever dados.',
     ],
   };
 }
