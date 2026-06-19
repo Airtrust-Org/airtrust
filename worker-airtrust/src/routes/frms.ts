@@ -60,13 +60,17 @@ import {
   reprocessarTripulanteCompleto,
   listarTripulantesAtivos,
 } from '../lib/frms/db-service';
+import { getFrmsFortnightCoverage, FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS } from '../lib/frms/fortnight-coverage';
+import {
+  applyFortnightBaseMaterialization,
+  FRMS_FORTNIGHT_MATERIALIZATION_APPLY_MAX_WINDOW_DAYS,
+  FRMS_FORTNIGHT_MATERIALIZATION_CONFIRM_TOKEN,
+  normalizeFortnightMaterializationFilters,
+  previewFortnightBaseMaterialization,
+} from '../lib/frms/fortnight-materialization';
 import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms.handler';
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
-import {
-  FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS,
-  getFrmsFortnightCoverage,
-} from '../lib/frms/fortnight-coverage';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import fadigaAcumulada from './frms-fadiga-acumulada';
 import firaRoutes from './frms-fira';
@@ -84,6 +88,23 @@ import {
 } from './frms-shared';
 
 const frmsRoutes = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
+
+const FortnightCoverageMaintenanceQuerySchema = z.object({
+  empresa_id: z.coerce.number().int().positive(),
+  data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  origem: z.string().optional(),
+  status: z.string().optional(),
+});
+
+const FortnightMaterializationApplySchema = z.object({
+  empresa_id: z.coerce.number().int().positive(),
+  data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  origem: z.union([z.string(), z.array(z.string())]).optional(),
+  status: z.union([z.string(), z.array(z.string())]).optional(),
+  confirm: z.string(),
+});
 
 const FRMS_JORNADA_SELECT_COLUMNS = `
   id,
@@ -1247,8 +1268,7 @@ async function isLocalMaintenanceRequest(
   c: FrmsAppContext,
 ): Promise<boolean> {
   const maintenanceSecret = c.env.MAINTENANCE_SECRET;
-  const providedHeader =
-    c.req.header('x-airtrust-maintenance') ?? c.req.header('x-maintenance-secret');
+  const providedHeader = c.req.header('x-maintenance-secret');
   if (maintenanceSecret && providedHeader && (await secureCompare(providedHeader, maintenanceSecret))) {
     return true;
   }
@@ -1277,50 +1297,37 @@ async function hasValidMaintenanceSecret(
   return secureCompare(headerToken, maintenanceSecret);
 }
 
-const FortnightCoverageMaintenanceQuerySchema = z
-  .object({
-    empresa_id: z
-      .string()
-      .optional()
-      .transform((value) => {
-        if (!value) return undefined;
-        const parsed = Number(value);
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-      }),
-    data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    origem: z
-      .string()
-      .optional()
-      .transform((value) =>
-        value
-          ? value
-              .split(',')
-              .map((item) => item.trim().toUpperCase())
-              .filter(Boolean)
-          : undefined,
-      ),
-    status: z
-      .string()
-      .optional()
-      .transform((value) =>
-        value
-          ? value
-              .split(',')
-              .map((item) => item.trim().toUpperCase())
-              .filter(Boolean)
-          : undefined,
-      ),
-  })
-  .refine((data) => data.data_fim >= data.data_inicio, {
-    message: 'data_fim deve ser >= data_inicio',
-    path: ['data_fim'],
-  });
+function diffDaysInclusive(dataInicio: string, dataFim: string): number {
+  const start = Date.parse(`${dataInicio}T00:00:00Z`);
+  const end = Date.parse(`${dataFim}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+  return Math.floor((end - start) / 86400000) + 1;
+}
 
-function isoDateDiffInDays(startIso: string, endIso: string): number {
-  const start = new Date(`${startIso}T00:00:00Z`).getTime();
-  const end = new Date(`${endIso}T00:00:00Z`).getTime();
-  return Math.floor((end - start) / 86400000);
+function normalizeQueryFilters(
+  input: string | string[] | undefined,
+  fallback: string,
+): string[] {
+  if (Array.isArray(input)) {
+    return [...new Set(input.map((item) => String(item).trim().toUpperCase()).filter(Boolean))];
+  }
+  return normalizeFortnightMaterializationFilters(input, fallback);
+}
+
+function assertMaintenanceWindow(
+  dataInicio: string,
+  dataFim: string,
+  maxDays: number,
+  errorMessage: string,
+): Response | null {
+  const totalDays = diffDaysInclusive(dataInicio, dataFim);
+  if (totalDays <= 0 || totalDays > maxDays) {
+    return new Response(JSON.stringify({ success: false, error: errorMessage }), {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  return null;
 }
 
 frmsRoutes.get(
@@ -1329,47 +1336,159 @@ frmsRoutes.get(
     if (!c.env.MAINTENANCE_SECRET) {
       return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
     }
+    if (!(await isLocalMaintenanceRequest(c))) {
+      return c.json({ success: false, error: 'Rota disponível apenas em localhost.' }, 403);
+    }
     if (!(await hasValidMaintenanceSecret(c))) {
-      return c.json({ success: false, error: 'Token de manutencao invalido.' }, 401);
+      return c.json({ success: false, error: 'Token de manutenção inválido.' }, 403);
     }
 
     const parsed = FortnightCoverageMaintenanceQuerySchema.safeParse({
       empresa_id: c.req.query('empresa_id'),
       data_inicio: c.req.query('data_inicio'),
       data_fim: c.req.query('data_fim'),
-      origem: c.req.query('origem'),
-      status: c.req.query('status'),
+      origem: c.req.query('origem') ?? undefined,
+      status: c.req.query('status') ?? undefined,
     });
-
     if (!parsed.success) {
-      return c.json({ success: false, error: parsed.error.flatten() }, 400);
-    }
-
-    const empresaId = parsed.data.empresa_id ?? getEmpresaIdSafe(c);
-    if (!empresaId) {
-      return c.json({ success: false, error: 'empresa_id e obrigatorio para o diagnostico.' }, 400);
-    }
-
-    const windowDays = isoDateDiffInDays(parsed.data.data_inicio, parsed.data.data_fim) + 1;
-    if (windowDays > FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS) {
       return c.json(
         {
           success: false,
-          error: `Janela maxima excedida. Use ate ${FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS} dias.`,
+          error: 'Parâmetros inválidos.',
+          details: parsed.error.flatten(),
         },
         400,
       );
     }
 
-    const result = await getFrmsFortnightCoverage(c.env.DB, {
-      empresaId,
-      dataInicio: parsed.data.data_inicio,
-      dataFim: parsed.data.data_fim,
-      origem: parsed.data.origem,
-      status: parsed.data.status,
+    const { empresa_id, data_inicio, data_fim } = parsed.data;
+    const invalidWindow = assertMaintenanceWindow(
+      data_inicio,
+      data_fim,
+      FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS,
+      `Janela máxima de ${FRMS_FORTNIGHT_COVERAGE_MAX_WINDOW_DAYS} dias para coverage.`,
+    );
+    if (invalidWindow) return invalidWindow;
+
+    const coverage = await getFrmsFortnightCoverage(c.env.DB, {
+      empresaId: empresa_id,
+      dataInicio: data_inicio,
+      dataFim: data_fim,
+      origem: parsed.data.origem ? normalizeQueryFilters(parsed.data.origem, 'SIGVOOS') : undefined,
+      status: parsed.data.status ? normalizeQueryFilters(parsed.data.status, 'ES') : undefined,
     });
 
-    return c.json({ success: true, ...result });
+    return c.json({ success: true, ...coverage });
+  }),
+);
+
+frmsRoutes.get(
+  '/maintenance/fortnight-materialization-preview',
+  safe(async (c) => {
+    if (!c.env.MAINTENANCE_SECRET) {
+      return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
+    }
+    if (!(await isLocalMaintenanceRequest(c))) {
+      return c.json({ success: false, error: 'Rota disponível apenas em localhost.' }, 403);
+    }
+    if (!(await hasValidMaintenanceSecret(c))) {
+      return c.json({ success: false, error: 'Token de manutenção inválido.' }, 403);
+    }
+
+    const parsed = FortnightCoverageMaintenanceQuerySchema.safeParse({
+      empresa_id: c.req.query('empresa_id'),
+      data_inicio: c.req.query('data_inicio'),
+      data_fim: c.req.query('data_fim'),
+      origem: c.req.query('origem') ?? undefined,
+      status: c.req.query('status') ?? undefined,
+    });
+    if (!parsed.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Parâmetros inválidos.',
+          details: parsed.error.flatten(),
+        },
+        400,
+      );
+    }
+
+    const { empresa_id, data_inicio, data_fim } = parsed.data;
+    const invalidWindow = assertMaintenanceWindow(
+      data_inicio,
+      data_fim,
+      31,
+      'Janela máxima de 31 dias para preview.',
+    );
+    if (invalidWindow) return invalidWindow;
+
+    const preview = await previewFortnightBaseMaterialization(c.env.DB, {
+      empresaId: empresa_id,
+      dataInicio: data_inicio,
+      dataFim: data_fim,
+      origem: normalizeQueryFilters(parsed.data.origem, 'SIGVOOS'),
+      status: normalizeQueryFilters(parsed.data.status, 'ES'),
+    });
+
+    return c.json({ success: true, data: preview });
+  }),
+);
+
+frmsRoutes.post(
+  '/maintenance/fortnight-materialization-apply',
+  safe(async (c) => {
+    if (!c.env.MAINTENANCE_SECRET) {
+      return c.json({ success: false, error: 'Maintenance endpoint not configured.' }, 503);
+    }
+    if (!(await isLocalMaintenanceRequest(c))) {
+      return c.json({ success: false, error: 'Rota disponível apenas em localhost.' }, 403);
+    }
+    if (!(await hasValidMaintenanceSecret(c))) {
+      return c.json({ success: false, error: 'Token de manutenção inválido.' }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = FortnightMaterializationApplySchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Parâmetros inválidos.',
+          details: parsed.error.flatten(),
+        },
+        400,
+      );
+    }
+
+    if (parsed.data.confirm !== FRMS_FORTNIGHT_MATERIALIZATION_CONFIRM_TOKEN) {
+      return c.json({ success: false, error: 'Confirmação explícita inválida.' }, 400);
+    }
+
+    const invalidWindow = assertMaintenanceWindow(
+      parsed.data.data_inicio,
+      parsed.data.data_fim,
+      FRMS_FORTNIGHT_MATERIALIZATION_APPLY_MAX_WINDOW_DAYS,
+      `Janela máxima de ${FRMS_FORTNIGHT_MATERIALIZATION_APPLY_MAX_WINDOW_DAYS} dias para apply.`,
+    );
+    if (invalidWindow) return invalidWindow;
+
+    const result = await applyFortnightBaseMaterialization(c.env.DB, {
+      empresaId: parsed.data.empresa_id,
+      dataInicio: parsed.data.data_inicio,
+      dataFim: parsed.data.data_fim,
+      origem: normalizeQueryFilters(parsed.data.origem, 'SIGVOOS'),
+      status: normalizeQueryFilters(parsed.data.status, 'ES'),
+    });
+
+    console.info('[frms-maintenance] fortnight materialization apply', {
+      empresaId: parsed.data.empresa_id,
+      dataInicio: parsed.data.data_inicio,
+      dataFim: parsed.data.data_fim,
+      updated: result.updated,
+      unchangedAfterGuard: result.unchanged_after_guard,
+    });
+
+    return c.json({ success: true, data: result });
   }),
 );
 
