@@ -35,7 +35,25 @@ vi.mock('../../services/sigvoos-frms', async (importOriginal) => {
   };
 });
 
+vi.mock('../../lib/frms/fortnight-materialization', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/frms/fortnight-materialization')>();
+  return {
+    ...actual,
+    previewFortnightBaseMaterialization: vi.fn().mockResolvedValue({
+      dry_run: true,
+      atualizaveis: 5,
+      resumo: { candidatos_quinzena_base: 5 },
+    }),
+    applyFortnightBaseMaterialization: vi.fn().mockResolvedValue({
+      dry_run: false,
+      updated: 5,
+      unchanged_after_guard: 0,
+    }),
+  };
+});
+
 import * as frmsDbService from '../../lib/frms/db-service';
+import * as fortnightMaterialization from '../../lib/frms/fortnight-materialization';
 import * as sigvoosService from '../../services/sigvoos-frms';
 import frmsRoutes from '../../routes/frms';
 import { sigvoosRouter } from '../../routes/integracoes_sigvoos';
@@ -174,6 +192,125 @@ describe('maintenance guards', () => {
       '0',
       expect.objectContaining({ from: '2026-06-01', to: '2026-06-02' }),
       expect.objectContaining({ MAINTENANCE_SECRET: 'segredo-correto' }),
+    );
+  });
+
+  it('FRMS preview de materialização falha fechado sem token válido e só libera dry-run com secret', async () => {
+    const forbiddenResponse = await frmsRoutes.request(
+      'http://localhost/maintenance/fortnight-materialization-preview?empresa_id=6&data_inicio=2026-06-12&data_fim=2026-06-18',
+      {
+        method: 'GET',
+      },
+      {
+        DB: createDb(),
+        MAINTENANCE_SECRET: 'segredo-correto',
+      } as unknown as Env,
+    );
+
+    expect(forbiddenResponse.status).toBe(403);
+    await expect(forbiddenResponse.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Token de manutenção inválido.',
+    });
+    expect(fortnightMaterialization.previewFortnightBaseMaterialization).not.toHaveBeenCalled();
+
+    const allowedResponse = await frmsRoutes.request(
+      'http://localhost/maintenance/fortnight-materialization-preview?empresa_id=6&data_inicio=2026-06-12&data_fim=2026-06-18',
+      {
+        method: 'GET',
+        headers: {
+          'x-maintenance-secret': 'segredo-correto',
+        },
+      },
+      {
+        DB: createDb(),
+        MAINTENANCE_SECRET: 'segredo-correto',
+      } as unknown as Env,
+    );
+
+    expect(allowedResponse.status).toBe(200);
+    await expect(allowedResponse.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        dry_run: true,
+        atualizaveis: 5,
+      },
+    });
+    expect(fortnightMaterialization.previewFortnightBaseMaterialization).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        empresaId: 6,
+        dataInicio: '2026-06-12',
+        dataFim: '2026-06-18',
+      }),
+    );
+  });
+
+  it('FRMS apply de materialização exige confirmação explícita antes de escrever', async () => {
+    const invalidConfirmResponse = await frmsRoutes.request(
+      'http://localhost/maintenance/fortnight-materialization-apply',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-maintenance-secret': 'segredo-correto',
+        },
+        body: JSON.stringify({
+          empresa_id: 6,
+          data_inicio: '2026-06-12',
+          data_fim: '2026-06-18',
+          confirm: 'WRONG',
+        }),
+      },
+      {
+        DB: createDb(),
+        MAINTENANCE_SECRET: 'segredo-correto',
+      } as unknown as Env,
+    );
+
+    expect(invalidConfirmResponse.status).toBe(400);
+    await expect(invalidConfirmResponse.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Confirmação explícita inválida.',
+    });
+    expect(fortnightMaterialization.applyFortnightBaseMaterialization).not.toHaveBeenCalled();
+
+    const allowedResponse = await frmsRoutes.request(
+      'http://localhost/maintenance/fortnight-materialization-apply',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-airtrust-maintenance': 'segredo-correto',
+        },
+        body: JSON.stringify({
+          empresa_id: 6,
+          data_inicio: '2026-06-12',
+          data_fim: '2026-06-18',
+          confirm: 'APPLY_FORTNIGHT_BASE',
+        }),
+      },
+      {
+        DB: createDb(),
+        MAINTENANCE_SECRET: 'segredo-correto',
+      } as unknown as Env,
+    );
+
+    expect(allowedResponse.status).toBe(200);
+    await expect(allowedResponse.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        dry_run: false,
+        updated: 5,
+      },
+    });
+    expect(fortnightMaterialization.applyFortnightBaseMaterialization).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        empresaId: 6,
+        dataInicio: '2026-06-12',
+        dataFim: '2026-06-18',
+      }),
     );
   });
 });
