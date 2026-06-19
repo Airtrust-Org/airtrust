@@ -41,6 +41,12 @@ type CompareDimensions = {
   byFlightType: AggregateDiffRow[];
 };
 
+type ComparableJourneyAggregate = {
+  data: string | null;
+  localBase: string | null;
+  aircraft: string | null;
+};
+
 type Recommendation = {
   status: 'READY' | 'PARTIAL' | 'BLOCKED';
   reasons: string[];
@@ -134,6 +140,74 @@ async function tableExists(db: D1Database, tableName: string): Promise<boolean> 
 async function columnExists(db: D1Database, tableName: string, columnName: string): Promise<boolean> {
   const rows = await queryRows<{ name: string }>(db, `PRAGMA table_info(${tableName})`);
   return rows.some((row) => row.name === columnName);
+}
+
+async function queryComparableCvJourneys(
+  db: D1Database,
+  empresaId: number,
+  window: Window,
+): Promise<ComparableJourneyAggregate[]> {
+  return queryRows<ComparableJourneyAggregate>(
+    db,
+    `
+      WITH cv_trip_day AS (
+        SELECT
+          t.funcionario_id AS tripulante_id,
+          v.data_programacao AS data,
+          MIN(v.id) AS representative_voo_id
+        FROM cv_voo_tripulantes t
+        JOIN cv_voos v ON v.id = t.voo_id
+        WHERE t.empresa_id = ?
+          AND t.deleted_at IS NULL
+          AND v.empresa_id = ?
+          AND v.deleted_at IS NULL
+          AND v.origem_importacao = 'SIGVOOS'
+          AND date(v.data_programacao) BETWEEN date(?) AND date(?)
+        GROUP BY t.funcionario_id, v.data_programacao
+      ),
+      first_stage AS (
+        SELECT
+          e.voo_id,
+          MIN(e.id) AS representative_etapa_id
+        FROM cv_voo_etapas e
+        WHERE e.empresa_id = ?
+          AND e.deleted_at IS NULL
+          AND e.origem_dados = 'SIGVOOS'
+        GROUP BY e.voo_id
+      )
+      SELECT
+        c.data AS data,
+        COALESCE(e.origem_icao, 'SEM_BASE') AS localBase,
+        COALESCE(v.prefixo, 'SEM_AERONAVE') AS aircraft
+      FROM cv_trip_day c
+      JOIN cv_voos v ON v.id = c.representative_voo_id
+      LEFT JOIN first_stage fs ON fs.voo_id = v.id
+      LEFT JOIN cv_voo_etapas e ON e.id = fs.representative_etapa_id
+      ORDER BY c.data, c.tripulante_id
+    `,
+    empresaId,
+    empresaId,
+    window.from,
+    window.to,
+    empresaId,
+  );
+}
+
+function aggregateComparableJourneys(
+  rows: ComparableJourneyAggregate[],
+  dimension: 'data' | 'localBase' | 'aircraft',
+): AggregateRow[] {
+  const totals = new Map<string, number>();
+
+  for (const row of rows) {
+    const rawKey = row[dimension];
+    const key = rawKey || 'SEM_VALOR';
+    totals.set(key, (totals.get(key) || 0) + 1);
+  }
+
+  return [...totals.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, total]) => ({ key, total }));
 }
 
 function mergeAggregateRows(cvRows: AggregateRow[], frmsRows: AggregateRow[], frmsComparable = true): AggregateDiffRow[] {
@@ -248,6 +322,8 @@ export async function buildSigvoosShadowCompareReport(
 
   normalizationErrors.push('FRMS_FLIGHT_TYPE_DIMENSION_UNAVAILABLE');
 
+  const comparableCvJourneysPromise = queryComparableCvJourneys(db, empresaId, window);
+
   const totalsPromise = Promise.all([
     queryCount(
       db,
@@ -354,19 +430,7 @@ export async function buildSigvoosShadowCompareReport(
   );
 
   const byDatePromise = Promise.all([
-    queryRows<AggregateRow>(
-      db,
-      `SELECT data_programacao AS key, COUNT(*) AS total
-         FROM cv_voos
-        WHERE empresa_id = ?
-          AND deleted_at IS NULL
-          AND origem_importacao = 'SIGVOOS'
-          AND date(data_programacao) BETWEEN date(?) AND date(?)
-        GROUP BY data_programacao`,
-      empresaId,
-      window.from,
-      window.to,
-    ),
+    comparableCvJourneysPromise.then((rows) => aggregateComparableJourneys(rows, 'data')),
     frmsJornadaExists && frmsHasEmpresaId
       ? queryRows<AggregateRow>(
           db,
@@ -385,21 +449,7 @@ export async function buildSigvoosShadowCompareReport(
   ]);
 
   const byBasePromise = Promise.all([
-    queryRows<AggregateRow>(
-      db,
-      `SELECT COALESCE(e.origem_icao, 'SEM_BASE') AS key, COUNT(*) AS total
-         FROM cv_voo_etapas e
-         JOIN cv_voos v ON v.id = e.voo_id
-        WHERE e.empresa_id = ?
-          AND e.deleted_at IS NULL
-          AND v.deleted_at IS NULL
-          AND e.origem_dados = 'SIGVOOS'
-          AND date(v.data_programacao) BETWEEN date(?) AND date(?)
-        GROUP BY COALESCE(e.origem_icao, 'SEM_BASE')`,
-      empresaId,
-      window.from,
-      window.to,
-    ),
+    comparableCvJourneysPromise.then((rows) => aggregateComparableJourneys(rows, 'localBase')),
     frmsJornadaExists && frmsHasEmpresaId && frmsHasLocalBase
       ? queryRows<AggregateRow>(
           db,
@@ -418,19 +468,7 @@ export async function buildSigvoosShadowCompareReport(
   ]);
 
   const byAircraftPromise = Promise.all([
-    queryRows<AggregateRow>(
-      db,
-      `SELECT COALESCE(prefixo, 'SEM_AERONAVE') AS key, COUNT(*) AS total
-         FROM cv_voos
-        WHERE empresa_id = ?
-          AND deleted_at IS NULL
-          AND origem_importacao = 'SIGVOOS'
-          AND date(data_programacao) BETWEEN date(?) AND date(?)
-        GROUP BY COALESCE(prefixo, 'SEM_AERONAVE')`,
-      empresaId,
-      window.from,
-      window.to,
-    ),
+    comparableCvJourneysPromise.then((rows) => aggregateComparableJourneys(rows, 'aircraft')),
     frmsJornadaExists && frmsHasEmpresaId && frmsHasMatriculaAeronave
       ? queryRows<AggregateRow>(
           db,
