@@ -107,30 +107,31 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
-// Height reserved for the compact evaluation ruler section (title + cell row + 2-row legend)
+// Height reserved for the compact evaluation ruler section (title + cell row + 1-row proportional legend)
 const FICHA_AVALIACAO_SCALE_HEIGHT = 22;
 
 export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
   // Column layout (all positions are absolute mm from left edge of page):
   //   #      : margin+3   — 5mm wide
   //   CÓDIGO : margin+10  — 20mm wide  → ends at margin+30
-  //   TRIP.  : margin+33  — 12mm wide (badge 8mm centered) → badge spans margin+29–margin+37
-  //   ITENS  : margin+46  — 40mm wide  → ends at margin+86
-  //   OBS    : margin+88  — 75mm wide  → ends at margin+163
+  //   TRIP.  : margin+35  — 12mm wide (badge 8mm centered) → badge spans margin+31–margin+39
+  //             gap from CÓDIGO end (+30) to badge start (+31) = 1mm clear
+  //   ITENS  : margin+48  — 40mm wide  → ends at margin+88
+  //   OBS    : margin+90  — 73mm wide  → ends at margin+163
   //   NOTA   : margin+172 — centred badge, 10mm wide
   return {
     positions: {
       num: margin + 3,
       codigo: margin + 10,
-      tripulante: margin + 33,
-      itens: margin + 46,
-      obs: margin + 88,
+      tripulante: margin + 35,
+      itens: margin + 48,
+      obs: margin + 90,
       nota: margin + 172,
     },
     codigoWidth: 20,
     tripulanteWidth: 12,
     itensWidth: 40,
-    obsWidth: 75,
+    obsWidth: 73,
     notaBadgeWidth: 10,
     notaBadgeHeight: 4,
   };
@@ -196,20 +197,34 @@ function drawFichaAvaliacaoScale(
     doc.text(String(nota), x + index * cellWidth + cellWidth / 2, tableY + 2.9, { align: 'center' });
   });
 
-  // Descriptor legend — all 4 bands in a single row (4 columns) to save vertical space
+  // Descriptor legend — all 4 bands in a single row with PROPORTIONAL widths.
+  // Each band width is proportional to its note count relative to the total (10 notes):
+  //   1-2 (2 notes) = 20%, 3-4 (2 notes) = 20%, 5-7 (3 notes) = 30%, 8-10 (3 notes) = 30%
   const legendTop = tableY + cellHeight + 1.5;
   const legendGap = 1.5;
-  const colCount = FICHA_AVALIACAO_FAIXAS.length; // 4 columns
-  const legendWidth = (width - legendGap * (colCount - 1)) / colCount;
+  const colCount = FICHA_AVALIACAO_FAIXAS.length;
+  const totalNotes = FICHA_AVALIACAO_NOTAS.length;
+  const totalGapWidth = legendGap * (colCount - 1);
+  const availableWidth = width - totalGapWidth;
   const legendHeight = 5;
 
+  // Pre-compute proportional widths and cumulative x offsets
+  const bandWidths = FICHA_AVALIACAO_FAIXAS.map(
+    (faixa) => (faixa.noteIndexes.length / totalNotes) * availableWidth,
+  );
+  const bandOffsets = bandWidths.reduce<number[]>((acc, bw, i) => {
+    acc.push(i === 0 ? 0 : acc[i - 1] + bandWidths[i - 1] + legendGap);
+    return acc;
+  }, []);
+
   FICHA_AVALIACAO_FAIXAS.forEach((faixa, index) => {
-    const bandX = x + index * (legendWidth + legendGap);
+    const bandX = x + bandOffsets[index];
     const bandY = legendTop;
+    const bw = bandWidths[index];
 
     doc.setFillColor(COLORS.bgLight);
     doc.setDrawColor(COLORS.border);
-    doc.roundedRect(bandX, bandY, legendWidth, legendHeight, 1, 1, 'FD');
+    doc.roundedRect(bandX, bandY, bw, legendHeight, 1, 1, 'FD');
 
     // Range label in band colour
     doc.setFont('helvetica', 'bold');
@@ -217,11 +232,11 @@ function drawFichaAvaliacaoScale(
     doc.setTextColor(faixa.color);
     doc.text(faixa.rangeLabel, bandX + 1.5, bandY + 2.2);
 
-    // Descriptor text — 1 line max, slightly smaller font
+    // Descriptor text — up to 2 lines, slightly smaller font
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(4.5);
     doc.setTextColor(COLORS.textSecondary);
-    const lines = doc.splitTextToSize(faixa.description, legendWidth - 2).slice(0, 2);
+    const lines = doc.splitTextToSize(faixa.description, bw - 2).slice(0, 2);
     doc.text(lines, bandX + 1.5, bandY + 4);
   });
 
