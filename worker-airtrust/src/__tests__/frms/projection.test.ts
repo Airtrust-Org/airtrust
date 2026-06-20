@@ -164,7 +164,11 @@ describe('FRMS projection', () => {
       filters: expect.objectContaining({ funcionario_id: 99 }),
     });
     expect(runs).toHaveLength(0);
-    const payload = (await response.json()) as { data: Array<{ decisao: string }> };
+    const payload = (await response.json()) as {
+      data: Array<{ decisao: string }>;
+      meta: { writes: number };
+    };
+    expect(payload.meta.writes).toBe(0);
     expect(payload.data.every((entry) => entry.decisao !== 'EXIGE_OVERRIDE')).toBe(true);
     expect(payload.data.every((entry) => entry.decisao !== 'BLOQUEIA')).toBe(true);
   });

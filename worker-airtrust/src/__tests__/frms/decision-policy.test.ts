@@ -79,8 +79,21 @@ describe('FRMS decision policy', () => {
   it('resolve decisao sem BLOQUEIA por default e sem override para projecao/subjetivo', () => {
     expect(resolveDecisao('OK', 'JORNADA_REALIZADA')).toBe('INFORMA');
     expect(resolveDecisao('ATENCAO', 'JORNADA_REALIZADA')).toBe('ALERTA');
-    expect(resolveDecisao('CRITICO', 'PROJECAO')).toBe('ALERTA');
-    expect(resolveDecisao('CRITICO', 'CHECKIN_SUBJETIVO')).toBe('ALERTA');
+
+    const politicaQueTentaPromover = {
+      atencao: 'BLOQUEIA',
+      incompleto: 'BLOQUEIA',
+      critico: 'BLOQUEIA',
+      violacao: 'BLOQUEIA',
+      allowBloqueia: true,
+    } as const;
+    for (const natureza of ['PROJECAO', 'CHECKIN_SUBJETIVO'] as const) {
+      expect(resolveDecisao('OK', natureza, politicaQueTentaPromover)).toBe('INFORMA');
+      for (const status of ['ATENCAO', 'INCOMPLETO', 'CRITICO', 'VIOLACAO'] as const) {
+        expect(resolveDecisao(status, natureza, politicaQueTentaPromover)).toBe('ALERTA');
+      }
+    }
+
     expect(resolveDecisao('CRITICO', 'JORNADA_REALIZADA')).toBe('EXIGE_OVERRIDE');
     expect(resolveDecisao('CRITICO', 'JORNADA_REALIZADA', { critico: 'BLOQUEIA' })).toBe(
       'EXIGE_OVERRIDE',

@@ -7,7 +7,10 @@ import { getEmpresaId } from '../middleware/tenant';
 import { normalizeAirtrustRole } from '../utils/role-resolution';
 import {
   buildFrmsOverridePayload,
+  isValidFrmsOverrideEventId,
   parseStoredOverrideAckNote,
+  sanitizeOverrideEvidenceRef,
+  sanitizeOverrideJustificativa,
 } from '../lib/frms/override';
 
 type FrmsOverrideContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
@@ -19,6 +22,7 @@ const bodySchema = z.object({
   justificativa: z.string(),
   evidencia_ref: z.string().optional().nullable(),
 });
+const eventIdSchema = z.string().refine(isValidFrmsOverrideEventId);
 
 interface ReadAckEventRow {
   id: string;
@@ -31,6 +35,17 @@ interface ReadAckEventRow {
 function canApplyOverride(c: FrmsOverrideContext): boolean {
   const role = normalizeAirtrustRole(c.get('userRole'));
   return role === 'ADMINISTRADOR' || role === 'GESTOR';
+}
+
+function getEmpresaIdSafe(c: FrmsOverrideContext): number | null {
+  try {
+    const empresaId = getEmpresaId(
+      c as unknown as Context<{ Bindings: Env; Variables: Variables }>,
+    );
+    return Number.isSafeInteger(empresaId) && empresaId > 0 ? empresaId : null;
+  } catch {
+    return null;
+  }
 }
 
 function safeOverrideResponse(input: {
@@ -57,19 +72,93 @@ function safeOverrideResponse(input: {
   };
 }
 
+function summarizeAckNoteState(value: string | null): 'ABSENT' | 'OVERRIDE_SCHEMA_1' | 'OTHER_PRESENT' {
+  if (!value) return 'ABSENT';
+  return parseStoredOverrideAckNote(value) ? 'OVERRIDE_SCHEMA_1' : 'OTHER_PRESENT';
+}
+
+function buildSanitizedAuditBeforePayload(existing: ReadAckEventRow): string {
+  return JSON.stringify({
+    event_id: existing.id,
+    empresa_id: existing.empresa_id,
+    lifecycle_status: existing.lifecycle_status,
+    ack_note_state: summarizeAckNoteState(existing.ack_note),
+    snapshot_payload_present: Boolean(existing.snapshot_payload_json),
+  });
+}
+
+function buildSanitizedAuditAfterPayload(input: {
+  eventId: string;
+  empresaId: number;
+  acknowledgedAt: string;
+  acknowledgedBy: number;
+  evidenciaRefPresent: boolean;
+}): string {
+  return JSON.stringify({
+    event_id: input.eventId,
+    empresa_id: input.empresaId,
+    lifecycle_status: 'ACKED',
+    acknowledged_at: input.acknowledgedAt,
+    acknowledged_by: input.acknowledgedBy,
+    override_schema: 1,
+    evidencia_ref_present: input.evidenciaRefPresent,
+  });
+}
+
 router.post('/override/:eventId', async (c) => {
   if (!canApplyOverride(c)) {
     return c.json({ success: false, error: 'Permissao negada', code: 'RBAC_FORBIDDEN' }, 403);
   }
 
-  const eventId = c.req.param('eventId') ?? '';
+  const parsedEventId = eventIdSchema.safeParse(c.req.param('eventId'));
+  if (!parsedEventId.success) {
+    return c.json(
+      { success: false, error: 'Identificador de evento invalido', code: 'INVALID_EVENT_ID' },
+      422,
+    );
+  }
+
+  const empresaId = getEmpresaIdSafe(c);
+  if (empresaId === null) {
+    return c.json(
+      { success: false, error: 'Contexto de empresa invalido', code: 'TENANT_REQUIRED' },
+      403,
+    );
+  }
+
+  const eventId = parsedEventId.data;
   const body = await c.req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.flatten(), code: 'VALIDATION_ERROR' }, 422);
   }
 
-  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env; Variables: Variables }>);
+  if (!sanitizeOverrideJustificativa(parsed.data.justificativa)) {
+    return c.json(
+      {
+        success: false,
+        error: 'Justificativa de override invalida',
+        code: 'INVALID_JUSTIFICATIVA',
+      },
+      422,
+    );
+  }
+
+  if (
+    parsed.data.evidencia_ref != null &&
+    parsed.data.evidencia_ref !== '' &&
+    !sanitizeOverrideEvidenceRef(parsed.data.evidencia_ref)
+  ) {
+    return c.json(
+      {
+        success: false,
+        error: 'Referencia de evidencia invalida',
+        code: 'INVALID_EVIDENCIA_REF',
+      },
+      422,
+    );
+  }
+
   const userId = Number(c.get('userId') || 0);
   const overrideAt = new Date().toISOString();
   const overridePayload = buildFrmsOverridePayload({
@@ -85,8 +174,8 @@ router.post('/override/:eventId', async (c) => {
     return c.json(
       {
         success: false,
-        error: 'Justificativa de override invalida',
-        code: 'INVALID_JUSTIFICATIVA',
+        error: 'Dados de override invalidos',
+        code: 'INVALID_OVERRIDE_PAYLOAD',
       },
       422,
     );
@@ -106,7 +195,7 @@ router.post('/override/:eventId', async (c) => {
     return c.json({ success: false, error: 'Evento nao encontrado', code: 'NOT_FOUND' }, 404);
   }
 
-  await c.env.DB.prepare(
+  const updateResult = await c.env.DB.prepare(
     `UPDATE frms_read_ack_events
         SET lifecycle_status = 'ACKED',
             acknowledged_at = ?,
@@ -118,12 +207,9 @@ router.post('/override/:eventId', async (c) => {
     .bind(overrideAt, userId, overridePayload.ackNoteJson, eventId, empresaId)
     .run();
 
-  const afterPayload = {
-    event_id: eventId,
-    empresa_id: empresaId,
-    lifecycle_status: 'ACKED',
-    ack_note: overridePayload.ackNote,
-  };
+  if ((updateResult.meta?.changes ?? 0) !== 1) {
+    return c.json({ success: false, error: 'Evento nao encontrado', code: 'NOT_FOUND' }, 404);
+  }
 
   await c.env.DB.prepare(
     `INSERT INTO frms_read_ack_event_audit
@@ -137,9 +223,15 @@ router.post('/override/:eventId', async (c) => {
       eventId,
       userId,
       overrideAt,
-      overridePayload.override.justificativa,
-      existing.snapshot_payload_json ?? existing.ack_note ?? null,
-      JSON.stringify(afterPayload),
+      'Override operacional FRMS aplicado',
+      buildSanitizedAuditBeforePayload(existing),
+      buildSanitizedAuditAfterPayload({
+        eventId,
+        empresaId,
+        acknowledgedAt: overrideAt,
+        acknowledgedBy: userId,
+        evidenciaRefPresent: Boolean(overridePayload.override.evidencia_ref),
+      }),
     )
     .run();
 
