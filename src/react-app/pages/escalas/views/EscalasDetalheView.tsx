@@ -265,6 +265,7 @@ export default function EscalasDetalheView() {
     confirmarRemoverSituacao,
     setConfirmarRemoverSituacao,
     mutating,
+    podeGerenciarOperacoes,
     refetchCalendario,
     // handlers
     handleSaveQuinzena,
@@ -719,7 +720,7 @@ export default function EscalasDetalheView() {
                   </button>
 
                   {/* Botão de ação principal por status */}
-                  {escalaAtual.status === 'rascunho' && (
+                  {podeGerenciarOperacoes && escalaAtual.status === 'rascunho' && (
                     <Button
                       size="sm"
                       isLoading={mutating}
@@ -730,7 +731,7 @@ export default function EscalasDetalheView() {
                       Enviar para Revisão
                     </Button>
                   )}
-                  {escalaAtual.status === 'em_revisao' && (
+                  {podeGerenciarOperacoes && escalaAtual.status === 'em_revisao' && (
                     <Button
                       size="sm"
                       isLoading={mutating}
@@ -741,7 +742,8 @@ export default function EscalasDetalheView() {
                       Aprovar Escala
                     </Button>
                   )}
-                  {escalaAtual.status === 'aprovada' &&
+                  {podeGerenciarOperacoes &&
+                    escalaAtual.status === 'aprovada' &&
                     (escalaAtual.publicado_em ? (
                       /* Re-publicação após revisão: mostra número da próxima revisão */
                       <Button
@@ -785,7 +787,7 @@ export default function EscalasDetalheView() {
                     </button>
                     {maisMenuAberto && (
                       <div className="absolute right-0 mt-1 z-50 min-w-[220px] space-y-0.5 rounded-xl border border-slate-200 bg-white p-1.5 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                        {exibirAcoesOperacionais && (
+                        {podeGerenciarOperacoes && exibirAcoesOperacionais && (
                           <>
                             <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase">
                               Ações
