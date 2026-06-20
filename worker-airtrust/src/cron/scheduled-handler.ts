@@ -9,10 +9,8 @@ import { createStructuredConsole } from '../utils/logger';
 import { processarEventosParaModulo } from '../shared/handlers';
 import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 import {
-  canReuseMatriculaCycle,
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
-  resetMatriculaForNewCycle,
 } from '../services/lms-matricula-cycle';
 import {
   getSigvoosConfig,
@@ -335,7 +333,7 @@ export async function runScheduledJobs(
             empresaId: row.empresa_id,
           });
 
-          if (hasActiveMatriculaCycle(existente)) {
+          if (existente) {
             continue;
           }
 
@@ -345,62 +343,35 @@ export async function runScheduledJobs(
 
           let matriculaId = 0;
 
-          if (canReuseMatriculaCycle(existente)) {
-            await resetMatriculaForNewCycle(env.DB, {
-              matriculaId: existente!.id,
-              dataExpiracao: dataExpiracaoStr,
-              observacoes: 'Matrícula automática: renovação de qualificação EAD vencendo',
-              matriculadoPor: null,
+          try {
+            const insertResult = await env.DB.prepare(
+              `INSERT INTO lms_matriculas (empresa_id, curso_id, funcionario_id, data_expiracao, observacoes)
+               VALUES (?, ?, ?, ?, 'Matrícula automática: renovação de qualificação EAD vencendo')`,
+            )
+              .bind(row.empresa_id, row.curso_id, row.funcionario_id, dataExpiracaoStr)
+              .run();
+
+            matriculaId = Number(insertResult.meta.last_row_id);
+            await ensureMatriculaCycle(env.DB, {
+              matriculaId,
               origin: 'AUTO_RENOVACAO',
             });
-            matriculaId = Number(existente!.id);
-          } else {
-            try {
-              const insertResult = await env.DB.prepare(
-                `INSERT INTO lms_matriculas (empresa_id, curso_id, funcionario_id, data_expiracao, observacoes)
-                 VALUES (?, ?, ?, ?, 'Matrícula automática: renovação de qualificação EAD vencendo')`,
-              )
-                .bind(row.empresa_id, row.curso_id, row.funcionario_id, dataExpiracaoStr)
-                .run();
-
-              matriculaId = Number(insertResult.meta.last_row_id);
-              await ensureMatriculaCycle(env.DB, {
-                matriculaId,
-                origin: 'AUTO_RENOVACAO',
-              });
-            } catch (error) {
-              if (!isMatriculaUniqueConstraintError(error)) {
-                throw error;
-              }
-
-              const concorrente = await findLatestMatriculaForFuncionario(env.DB, {
-                cursoId: row.curso_id,
-                funcionarioId: row.funcionario_id,
-                empresaId: row.empresa_id,
-              });
-
-              if (!concorrente) {
-                throw error;
-              }
-              const concorrenteAtual = concorrente;
-
-              if (hasActiveMatriculaCycle(concorrenteAtual)) {
-                continue;
-              }
-
-              if (!canReuseMatriculaCycle(concorrenteAtual)) {
-                throw error;
-              }
-
-              await resetMatriculaForNewCycle(env.DB, {
-                matriculaId: concorrenteAtual.id,
-                dataExpiracao: dataExpiracaoStr,
-                observacoes: 'Matrícula automática: renovação de qualificação EAD vencendo',
-                matriculadoPor: null,
-                origin: 'AUTO_RENOVACAO',
-              });
-              matriculaId = Number(concorrenteAtual.id);
+          } catch (error) {
+            if (!isMatriculaUniqueConstraintError(error)) {
+              throw error;
             }
+
+            const concorrente = await findLatestMatriculaForFuncionario(env.DB, {
+              cursoId: row.curso_id,
+              funcionarioId: row.funcionario_id,
+              empresaId: row.empresa_id,
+            });
+
+            if (concorrente) {
+              continue;
+            }
+
+            throw error;
           }
 
           // Notificar o funcionário via inapp
