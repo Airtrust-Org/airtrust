@@ -309,7 +309,7 @@ main() {
     run_request "Version" "GET" "/api/version" "200" "no"
     run_request "Health" "GET" "/api/health" "200" "no"
     smoke_assets_policy_read_only
-    record_skip "Authenticated read-only smoke" "SKIPPED_AUTH_REQUIRED" "set AIRTRUST_AUTH_TOKEN or AIRTRUST_COOKIE"
+    record_fail "Authenticated read-only smoke" "AUTHENTICATED_SESSION_UNAVAILABLE"
     print_summary_and_exit
   fi
 

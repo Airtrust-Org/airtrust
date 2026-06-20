@@ -985,7 +985,7 @@ export default function App() {
                     <Route
                       path="/lms/admin/cursos"
                       element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
                           <LmsAdminCursos />
                         </ProtectedRoute>
                       }
@@ -1057,7 +1057,7 @@ export default function App() {
                     <Route
                       path="/lms/matriculas"
                       element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
                           <LmsMatriculas />
                         </ProtectedRoute>
                       }
@@ -1065,7 +1065,7 @@ export default function App() {
                     <Route
                       path="/lms/matriculas/:cursoId"
                       element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
                           <LmsMatriculas />
                         </ProtectedRoute>
                       }

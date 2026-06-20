@@ -1,6 +1,3 @@
-// Keep the historical userId===1 fallback active while gradual enforcement is rolled out.
-const LEGACY_PLATFORM_ADMIN_USER_ID = 1;
-
 export type PlatformRoleCode = 'platform_admin' | 'support_read_only' | 'support_elevated';
 export type SupportAccessLevel = 'read_only' | 'elevated';
 
@@ -16,7 +13,7 @@ export interface PlatformAccessState {
   hasSupportReadOnlyRole: boolean;
   hasSupportElevatedRole: boolean;
   supportGrants: SupportGrant[];
-  source: 'persisted' | 'legacy' | 'none';
+  source: 'persisted' | 'none';
 }
 
 type RoleRow = {
@@ -48,7 +45,6 @@ export async function resolvePlatformAccessState(
   userId: number | string | null | undefined,
 ): Promise<PlatformAccessState> {
   const normalizedUserId = normalizeUserId(userId);
-  const isLegacyPlatformAdmin = normalizedUserId === LEGACY_PLATFORM_ADMIN_USER_ID;
 
   if (normalizedUserId <= 0) {
     return {
@@ -110,7 +106,7 @@ export async function resolvePlatformAccessState(
 
   return {
     userId: normalizedUserId,
-    isLegacyPlatformAdmin,
+    isLegacyPlatformAdmin: false,
     hasPersistedPlatformAdmin,
     hasSupportReadOnlyRole,
     hasSupportElevatedRole,
@@ -118,14 +114,12 @@ export async function resolvePlatformAccessState(
     source:
       hasPersistedPlatformAdmin || hasSupportReadOnlyRole || hasSupportElevatedRole
         ? 'persisted'
-        : isLegacyPlatformAdmin
-          ? 'legacy'
-          : 'none',
+        : 'none',
   };
 }
 
 export function isPlatformAdminAccess(state: PlatformAccessState): boolean {
-  return state.hasPersistedPlatformAdmin || state.isLegacyPlatformAdmin;
+  return state.hasPersistedPlatformAdmin;
 }
 
 export function canStartSupportReadOnlySession(

@@ -14,7 +14,7 @@ import {
 } from '../utils/security';
 import { badRequest, internalError, unauthorized } from '../middleware/error-handler';
 import { auth } from '../middleware/auth';
-import { rateLimiter } from '../middleware/rate-limit';
+import { rateLimiter, rateLimitPresets } from '../middleware/rate-limit';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { createLogger, toError } from '../utils/logger';
 import { hasUsuariosEmpresasTable, getUsuariosSchema } from '../utils/db-schema';
@@ -792,7 +792,7 @@ authRoutes.post(
  */
 authRoutes.post(
   '/login',
-  rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'auth-login' }),
+  rateLimiter({ ...rateLimitPresets.login, keyPrefix: 'auth-login' }),
   async (c) => {
     const logger = createLogger(c, 'AuthRoutes.login');
     try {

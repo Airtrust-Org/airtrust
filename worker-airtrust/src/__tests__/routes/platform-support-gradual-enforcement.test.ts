@@ -16,12 +16,12 @@ vi.mock('../../lib/rbac/platform-access', () => ({
     if (normalized === 1) {
       return {
         userId: 1,
-        isLegacyPlatformAdmin: true,
+        isLegacyPlatformAdmin: false,
         hasPersistedPlatformAdmin: false,
         hasSupportReadOnlyRole: false,
         hasSupportElevatedRole: false,
         supportGrants: [],
-        source: 'legacy',
+        source: 'none',
       };
     }
     if (normalized === 88) {
@@ -59,7 +59,7 @@ vi.mock('../../lib/rbac/platform-access', () => ({
   isPlatformAdminAccess: (state: {
     hasPersistedPlatformAdmin: boolean;
     isLegacyPlatformAdmin: boolean;
-  }) => state.hasPersistedPlatformAdmin || state.isLegacyPlatformAdmin,
+  }) => state.hasPersistedPlatformAdmin,
   canStartSupportReadOnlySession: (
     state: {
       hasSupportReadOnlyRole: boolean;
@@ -148,7 +148,7 @@ describe('platform support gradual enforcement', () => {
     expect(vi.mocked(recordLegacyAndCanonicalAudit)).not.toHaveBeenCalled();
   });
 
-  it('keeps the legacy userId 1 fallback active', async () => {
+  it('does not allow userId 1 through a platform shortcut without persisted role', async () => {
     const response = await buildApp().request(
       '/controlled',
       {
@@ -161,7 +161,7 @@ describe('platform support gradual enforcement', () => {
       { DB: createDbStub(), ENVIRONMENT: 'test' } as unknown as Env,
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(403);
   });
 
   it('denies read-only support on mutation scope and records the denial audit', async () => {
