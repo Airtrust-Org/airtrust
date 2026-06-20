@@ -102,6 +102,12 @@ const ALERT_PRIORITY: FrmsOperationalSnapshotAlertCode[] = [
   'SONO_ESTIMADO',
 ];
 
+// Defaults tecnicos conservadores usados somente como referencia quando nao ha
+// limite contextual disponivel. Nao sao configuracao por empresa nem evidencia
+// ou afirmacao de limite regulatorio.
+const TECHNICAL_DEFAULT_FDP_DAILY_LIMIT_MINUTES = 11 * 60;
+const TECHNICAL_DEFAULT_HV_DAILY_LIMIT_MINUTES = 8 * 60;
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -188,7 +194,9 @@ export function resolveDecisao(
   if (status === 'OK') return 'INFORMA';
 
   if (natureza === 'PROJECAO' || natureza === 'CHECKIN_SUBJETIVO') {
-    return status === 'OK' ? 'INFORMA' : 'ALERTA';
+    // Dado projetado ou subjetivo nunca sustenta decisao acima de ALERTA,
+    // mesmo quando uma policy configurada solicite override ou bloqueio.
+    return 'ALERTA';
   }
 
   if (status === 'ATENCAO') {
@@ -223,8 +231,10 @@ export function resolveLimiteReferencia(
     return {
       tipo: 'FDP_DIARIO',
       valor_atual: item.duracao_jornada_minutos,
-      valor_limite: 660,
-      pct_atingido: round1((item.duracao_jornada_minutos / 660) * 100),
+      valor_limite: TECHNICAL_DEFAULT_FDP_DAILY_LIMIT_MINUTES,
+      pct_atingido: round1(
+        (item.duracao_jornada_minutos / TECHNICAL_DEFAULT_FDP_DAILY_LIMIT_MINUTES) * 100,
+      ),
     };
   }
 
@@ -232,14 +242,16 @@ export function resolveLimiteReferencia(
     return {
       tipo: 'HV_DIARIA',
       valor_atual: item.horas_voo_minutos,
-      valor_limite: 480,
-      pct_atingido: round1((item.horas_voo_minutos / 480) * 100),
+      valor_limite: TECHNICAL_DEFAULT_HV_DAILY_LIMIT_MINUTES,
+      pct_atingido: round1(
+        (item.horas_voo_minutos / TECHNICAL_DEFAULT_HV_DAILY_LIMIT_MINUTES) * 100,
+      ),
     };
   }
 
   const fortnight = item.fortnight_indicator;
   if (fortnight?.duty_time_periodo_min != null && fortnight.total_dias_periodo) {
-    const limit = fortnight.total_dias_periodo * 660;
+    const limit = fortnight.total_dias_periodo * TECHNICAL_DEFAULT_FDP_DAILY_LIMIT_MINUTES;
     return {
       tipo: 'QUINZENA',
       valor_atual: fortnight.duty_time_periodo_min,
