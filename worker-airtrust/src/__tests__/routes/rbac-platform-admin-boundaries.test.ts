@@ -1,10 +1,7 @@
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import type { Env, Variables } from '../../types';
-import {
-  isLegacyPlatformAdminUserId,
-  isPlatformAdminContext,
-} from '../../middleware/tenant';
+import { isLegacyPlatformAdminUserId, isPlatformAdminContext } from '../../middleware/tenant';
 import type { PlatformAccessState } from '../../lib/rbac/platform-access';
 
 function buildPlatformProbeApp(params: {
@@ -58,13 +55,13 @@ describe('RBAC platform admin boundaries', () => {
     });
   });
 
-  it('keeps legacy user 1 compatibility as the only user-id platform shortcut', async () => {
-    expect(isLegacyPlatformAdminUserId(1)).toBe(true);
-    expect(isLegacyPlatformAdminUserId('1')).toBe(true);
+  it('does not promote userId=1 through the removed legacy shortcut', async () => {
+    expect(isLegacyPlatformAdminUserId(1)).toBe(false);
+    expect(isLegacyPlatformAdminUserId('1')).toBe(false);
     expect(isLegacyPlatformAdminUserId(2)).toBe(false);
 
     await expect(hitPlatformProbe({ empresaCodigo: 'tenant-a', userId: 1 })).resolves.toEqual({
-      platform: true,
+      platform: false,
     });
   });
 

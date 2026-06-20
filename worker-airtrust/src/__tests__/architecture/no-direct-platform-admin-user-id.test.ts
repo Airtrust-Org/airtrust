@@ -4,10 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const SRC_ROOT = resolve(join(dirname(fileURLToPath(import.meta.url)), '../..'));
-const ALLOWED_LEGACY_HELPER_FILES = new Set([
-  'middleware/tenant.ts',
-  'lib/rbac/platform-access.ts',
-]);
+const ALLOWED_LEGACY_HELPER_FILES = new Set<string>();
 
 const FORBIDDEN_DIRECT_PLATFORM_ADMIN_PATTERNS = [
   /\buserId(?:Raw|Number)?\s*={2,3}\s*1\b/,

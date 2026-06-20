@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { rateLimitPresets } from '../middleware/rate-limit';
 
 // Mock do rateLimitStore
 const mockStore = new Map<string, { count: number; resetAt: number }>();
@@ -143,23 +144,16 @@ describe('Security Headers', () => {
 });
 
 describe('Rate Limit Presets', () => {
-  const presets = {
-    login: { maxRequests: 5, windowSeconds: 60, keyPrefix: 'login' },
-    api: { maxRequests: 100, windowSeconds: 60, keyPrefix: 'api' },
-    webhook: { maxRequests: 30, windowSeconds: 60, keyPrefix: 'webhook' },
-    upload: { maxRequests: 10, windowSeconds: 60, keyPrefix: 'upload' },
-    export: { maxRequests: 5, windowSeconds: 60, keyPrefix: 'export' },
-  };
-
   it('login deve ter limite baixo (5/min)', () => {
-    expect(presets.login.maxRequests).toBe(5);
+    expect(rateLimitPresets.login.maxRequests).toBe(5);
+    expect(rateLimitPresets.login.windowSeconds).toBe(60);
   });
 
   it('api geral deve ter limite alto (100/min)', () => {
-    expect(presets.api.maxRequests).toBe(100);
+    expect(rateLimitPresets.api.maxRequests).toBe(100);
   });
 
   it('webhook deve ter limite moderado (30/min)', () => {
-    expect(presets.webhook.maxRequests).toBe(30);
+    expect(rateLimitPresets.webhook.maxRequests).toBe(30);
   });
 });
