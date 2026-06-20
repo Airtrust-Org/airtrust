@@ -13,6 +13,10 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { createLmsQualificationOnCompletion } from '../services/lms-qualification';
 import { syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
+import {
+  mergeMonotonicMatriculaStatus,
+  mergeMonotonicNumber,
+} from '../services/lms-progress-guardrails';
 import { logAudit } from '../utils/db';
 import type { Env } from '../types';
 
@@ -189,7 +193,7 @@ app.post('/xapi/statements', async (c) => {
   const matricula = await db
     .prepare(
       `
-      SELECT m.id, m.funcionario_id, m.status, m.empresa_id,
+      SELECT m.id, m.funcionario_id, m.status, m.empresa_id, m.progresso_pct, m.score_final,
         m.qualificacao_historico_id,
         c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
         c.titulo AS curso_titulo,
@@ -209,6 +213,8 @@ app.post('/xapi/statements', async (c) => {
       funcionario_id: number;
       status: string;
       empresa_id: number;
+      progresso_pct: number | null;
+      score_final: number | null;
       qualificacao_historico_id: number | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
@@ -282,13 +288,13 @@ app.post('/xapi/statements', async (c) => {
   const statusAnterior = matricula.status;
 
   if (matricula.status === 'NAO_INICIADO') {
-    novoStatus = 'EM_ANDAMENTO';
+    novoStatus = mergeMonotonicMatriculaStatus(matricula.status, 'EM_ANDAMENTO');
   }
 
-  if (shouldConcluir && matricula.status !== 'CONCLUIDO') {
-    novoStatus = 'CONCLUIDO';
-  } else if (shouldReprovar && matricula.status !== 'REPROVADO') {
-    novoStatus = 'REPROVADO';
+  if (shouldConcluir) {
+    novoStatus = mergeMonotonicMatriculaStatus(novoStatus, 'CONCLUIDO');
+  } else if (shouldReprovar) {
+    novoStatus = mergeMonotonicMatriculaStatus(novoStatus, 'REPROVADO');
   }
 
   // Calcular progresso a partir do score se disponível
@@ -297,7 +303,7 @@ app.post('/xapi/statements', async (c) => {
   const progressoPct = shouldConcluir
     ? 100
     : scoreRaw != null && scoreMax != null && scoreMax > 0
-      ? Math.round((scoreRaw / scoreMax) * 100)
+      ? mergeMonotonicNumber(matricula.progresso_pct, Math.round((scoreRaw / scoreMax) * 100))
       : undefined;
 
   // Atualizar matrícula
@@ -311,10 +317,14 @@ app.post('/xapi/statements', async (c) => {
         `
         UPDATE lms_matriculas
         SET status = ?,
-            progresso_pct = COALESCE(?, progresso_pct),
+            progresso_pct = MAX(COALESCE(progresso_pct, 0), COALESCE(?, 0)),
             data_inicio = COALESCE(data_inicio, datetime('now')),
             data_conclusao = COALESCE(?, data_conclusao),
-            score_final = COALESCE(?, score_final),
+            score_final = CASE
+              WHEN ? IS NULL THEN score_final
+              WHEN score_final IS NULL THEN ?
+              ELSE MAX(score_final, ?)
+            END,
             updated_at = datetime('now')
         WHERE id = ? AND empresa_id = ?
       `,
@@ -323,7 +333,9 @@ app.post('/xapi/statements', async (c) => {
         novoStatus,
         progressoPct ?? null,
         dataConclusao,
-        scoreRaw ?? null,
+        mergeMonotonicNumber(matricula.score_final as number | null | undefined, scoreRaw ?? null),
+        mergeMonotonicNumber(matricula.score_final as number | null | undefined, scoreRaw ?? null),
+        mergeMonotonicNumber(matricula.score_final as number | null | undefined, scoreRaw ?? null),
         stmt.matricula_id,
         empresaId,
       )

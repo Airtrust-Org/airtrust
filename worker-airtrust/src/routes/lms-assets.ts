@@ -1450,6 +1450,7 @@ ${resolveScormResumeTargetSlide.toString()}
       }
 
       if (response && response.ok) {
+        setStatus('Progresso salvo', true);
         if (payloadFingerprint) lastCommittedFingerprint = payloadFingerprint;
         response.clone().json().then(function(json) {
           if (!json || !json.success || !json.data) return;
@@ -1464,10 +1465,26 @@ ${resolveScormResumeTargetSlide.toString()}
             postToParent({ type: 'lms:completed', matriculaId: MATRICULA_ID });
           }
         }).catch(function() { return null; });
+      } else if (response) {
+        setStatus('Falha ao salvar progresso. Tentando novamente...', true);
+        if ((attempt || 0) < 2) {
+          window.setTimeout(function() {
+            commit(data, (attempt || 0) + 1);
+          }, 1200);
+        }
       }
 
       return response;
-    }).catch(function(e) { console.warn('[SCORM] commit error', e); });
+    }).catch(function(e) {
+      console.warn('[SCORM] commit error', e);
+      setStatus('Falha ao salvar progresso. Tentando novamente...', true);
+      if ((attempt || 0) < 2) {
+        window.setTimeout(function() {
+          commit(data, (attempt || 0) + 1);
+        }, 1200);
+      }
+      return null;
+    });
   }
 
   function scheduleCommit(delayMs) {
