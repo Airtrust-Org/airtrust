@@ -15,12 +15,17 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { createLmsQualificationOnCompletion } from '../services/lms-qualification';
 import {
-  canReuseMatriculaCycle,
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
-  resetMatriculaForNewCycle,
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
+import {
+  extractScormLocationFromCmiJson,
+  mergeMonotonicMatriculaStatus,
+  mergeMonotonicNumber,
+  preferScormValue,
+  shouldPreferIncomingScormState,
+} from '../services/lms-progress-guardrails';
 import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
@@ -761,52 +766,37 @@ app.post('/', async (c) => {
   });
 
   if (existente) {
-    if (hasActiveMatriculaCycle(existente)) {
-      throw new ApiError('Funcionário já matriculado neste curso', 409);
-    }
-    if (canReuseMatriculaCycle(existente)) {
-      await resetMatriculaForNewCycle(db, {
-        matriculaId: existente.id,
-        dataExpiracao: data_expiracao ?? null,
+    await logLmsMatriculaAudit(db, c, {
+      action: 'LMS_MATRICULA_PRESERVADA',
+      matriculaId: existente.id,
+      oldValues: { status: existente.status, deleted_at: existente.deleted_at },
+      newValues: {
+        curso_id,
+        funcionario_id,
+        data_expiracao: data_expiracao ?? null,
         observacoes: observacoes ?? null,
-        matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
-      });
-      const updated = await db
-        .prepare('SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?')
-        .bind(existente.id, empresaId)
-        .first();
-      await createLmsInAppNotification(db, {
-        funcionarioId: funcionario_id,
-        empresaId,
-        tipo: 'lms_nova_matricula',
-        titulo: 'Novo ciclo de treinamento LMS',
-        mensagem: `Você foi matriculado novamente em ${curso.titulo}.`,
-        referenciaId: existente.id,
-        referenciaTipo: 'lms_matricula',
-      });
-      await logLmsMatriculaAudit(db, c, {
-        action: 'LMS_MATRICULA_CRIADA',
-        matriculaId: existente.id,
-        oldValues: { status: existente.status, deleted_at: existente.deleted_at },
-        newValues: {
-          status: 'NAO_INICIADO',
+        preserved_existing_enrollment: true,
+        explicit_reset_required: true,
+      },
+    });
+    return c.json(
+      {
+        success: true,
+        data: {
+          id: existente.id,
+          empresa_id: empresaId,
           curso_id,
           funcionario_id,
+          status: existente.status,
+          deleted_at: existente.deleted_at,
           data_expiracao: data_expiracao ?? null,
           observacoes: observacoes ?? null,
-          novo_ciclo: true,
+          preserved_existing_enrollment: true,
+          explicit_reset_required: true,
         },
-      });
-      await sendMatriculaEmail(c.env, db, {
-        funcionarioId: funcionario_id,
-        empresaId,
-        cursoId: curso_id,
-        cursoTitulo: curso.titulo,
-        dataExpiracao: data_expiracao ?? null,
-        isNovoCiclo: true,
-      });
-      return c.json({ success: true, data: updated }, 200);
-    }
+      },
+      200,
+    );
   }
 
   try {
@@ -876,61 +866,41 @@ app.post('/', async (c) => {
       empresaId,
     });
 
-    if (hasActiveMatriculaCycle(concorrente)) {
-      throw new ApiError('Funcionário já matriculado neste curso', 409);
-    }
-
-    if (!canReuseMatriculaCycle(concorrente)) {
-      throw error;
-    }
-
     if (!concorrente) {
       throw error;
     }
-
-    await resetMatriculaForNewCycle(db, {
-      matriculaId: concorrente.id,
-      dataExpiracao: data_expiracao ?? null,
-      observacoes: observacoes ?? null,
-      matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
-      origin: 'MANUAL',
-    });
-    const updated = await db
-      .prepare('SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?')
-      .bind(concorrente.id, empresaId)
-      .first();
-    await createLmsInAppNotification(db, {
-      funcionarioId: funcionario_id,
-      empresaId,
-      tipo: 'lms_nova_matricula',
-      titulo: 'Novo ciclo de treinamento LMS',
-      mensagem: `Você foi matriculado novamente em ${curso.titulo}.`,
-      referenciaId: concorrente.id,
-      referenciaTipo: 'lms_matricula',
-    });
     await logLmsMatriculaAudit(db, c, {
-      action: 'LMS_MATRICULA_CRIADA',
+      action: 'LMS_MATRICULA_PRESERVADA',
       matriculaId: concorrente.id,
       oldValues: { status: concorrente.status, deleted_at: concorrente.deleted_at },
       newValues: {
-        status: 'NAO_INICIADO',
         curso_id,
         funcionario_id,
         data_expiracao: data_expiracao ?? null,
         observacoes: observacoes ?? null,
-        novo_ciclo: true,
+        preserved_existing_enrollment: true,
+        explicit_reset_required: true,
         reconciled_unique_conflict: true,
       },
     });
-    await sendMatriculaEmail(c.env, db, {
-      funcionarioId: funcionario_id,
-      empresaId,
-      cursoId: curso_id,
-      cursoTitulo: curso.titulo,
-      dataExpiracao: data_expiracao ?? null,
-      isNovoCiclo: true,
-    });
-    return c.json({ success: true, data: updated }, 200);
+    return c.json(
+      {
+        success: true,
+        data: {
+          id: concorrente.id,
+          empresa_id: empresaId,
+          curso_id,
+          funcionario_id,
+          status: concorrente.status,
+          deleted_at: concorrente.deleted_at,
+          data_expiracao: data_expiracao ?? null,
+          observacoes: observacoes ?? null,
+          preserved_existing_enrollment: true,
+          explicit_reset_required: true,
+        },
+      },
+      200,
+    );
   }
 });
 
@@ -1030,114 +1000,64 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
         empresaId,
       });
 
-      if (hasActiveMatriculaCycle(existente)) {
+      if (existente) {
         results.ignoradas++;
         continue;
       }
-
-      if (canReuseMatriculaCycle(existente)) {
-        await resetMatriculaForNewCycle(db, {
-          matriculaId: existente!.id,
-          dataExpiracao: data_expiracao ?? null,
+      const insertResult = await db
+        .prepare(
+          'INSERT INTO lms_matriculas (empresa_id, curso_id, funcionario_id, data_expiracao, observacoes, matriculado_por) VALUES (?,?,?,?,?,?)',
+        )
+        .bind(
+          empresaId,
+          curso_id,
+          funcionarioId,
+          data_expiracao ?? null,
+          observacoes ?? null,
+          Number.isFinite(userId) && userId > 0 ? userId : null,
+        )
+        .run();
+      const matriculaId = Number(insertResult.meta.last_row_id);
+      await ensureMatriculaCycle(db, {
+        matriculaId,
+        origin: 'MANUAL',
+      });
+      await createLmsInAppNotification(db, {
+        funcionarioId,
+        empresaId,
+        tipo: 'lms_nova_matricula',
+        titulo: 'Novo treinamento LMS',
+        mensagem: `Você foi matriculado em ${curso.titulo}.`,
+        referenciaId: matriculaId,
+        referenciaTipo: 'lms_matricula',
+      });
+      await logLmsMatriculaAudit(db, c, {
+        action: 'LMS_MATRICULA_CRIADA',
+        matriculaId,
+        newValues: {
+          curso_id,
+          curso_titulo: curso.titulo,
+          funcionario_id: funcionario.id,
+          funcionario_nome: funcionario.nome,
+          data_expiracao: data_expiracao ?? null,
           observacoes: observacoes ?? null,
-          matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
-        });
-        await createLmsInAppNotification(db, {
-          funcionarioId,
-          empresaId,
-          tipo: 'lms_nova_matricula',
-          titulo: 'Novo ciclo de treinamento LMS',
-          mensagem: `Sua matrícula em ${curso.titulo} foi reativada para um novo ciclo.`,
-          referenciaId: existente!.id,
-          referenciaTipo: 'lms_matricula',
-        });
-        await logLmsMatriculaAudit(db, c, {
-          action: 'LMS_MATRICULA_CRIADA',
-          matriculaId: existente!.id,
-          oldValues: { status: existente!.status, deleted_at: existente!.deleted_at },
-          newValues: {
-            status: 'NAO_INICIADO',
-            curso_id,
-            curso_titulo: curso.titulo,
-            funcionario_id: funcionario.id,
-            funcionario_nome: funcionario.nome,
-            data_expiracao: data_expiracao ?? null,
-            observacoes: observacoes ?? null,
-            novo_ciclo: true,
-          },
-        });
-        await sendMatriculaEmail(c.env, db, {
-          funcionarioId,
-          empresaId,
-          cursoId: curso_id,
-          cursoTitulo: curso.titulo,
-          dataExpiracao: data_expiracao ?? null,
-          isNovoCiclo: true,
-        });
+        },
+      });
+      await sendMatriculaEmail(c.env, db, {
+        funcionarioId,
+        empresaId,
+        cursoId: curso_id,
+        cursoTitulo: curso.titulo,
+        dataExpiracao: data_expiracao ?? null,
+        isNovoCiclo: false,
+      });
 
-        const matriculaAtualizada = await readMatriculaForCourseList(db, {
-          matriculaId: existente!.id,
-          empresaId,
-        });
-        if (matriculaAtualizada) {
-          matriculasCriadas.push(matriculaAtualizada);
-        }
-      } else {
-        const insertResult = await db
-          .prepare(
-            'INSERT INTO lms_matriculas (empresa_id, curso_id, funcionario_id, data_expiracao, observacoes, matriculado_por) VALUES (?,?,?,?,?,?)',
-          )
-          .bind(
-            empresaId,
-            curso_id,
-            funcionarioId,
-            data_expiracao ?? null,
-            observacoes ?? null,
-            Number.isFinite(userId) && userId > 0 ? userId : null,
-          )
-          .run();
-        const matriculaId = Number(insertResult.meta.last_row_id);
-        await ensureMatriculaCycle(db, {
-          matriculaId,
-          origin: 'MANUAL',
-        });
-        await createLmsInAppNotification(db, {
-          funcionarioId,
-          empresaId,
-          tipo: 'lms_nova_matricula',
-          titulo: 'Novo treinamento LMS',
-          mensagem: `Você foi matriculado em ${curso.titulo}.`,
-          referenciaId: matriculaId,
-          referenciaTipo: 'lms_matricula',
-        });
-        await logLmsMatriculaAudit(db, c, {
-          action: 'LMS_MATRICULA_CRIADA',
-          matriculaId,
-          newValues: {
-            curso_id,
-            curso_titulo: curso.titulo,
-            funcionario_id: funcionario.id,
-            funcionario_nome: funcionario.nome,
-            data_expiracao: data_expiracao ?? null,
-            observacoes: observacoes ?? null,
-          },
-        });
-        await sendMatriculaEmail(c.env, db, {
-          funcionarioId,
-          empresaId,
-          cursoId: curso_id,
-          cursoTitulo: curso.titulo,
-          dataExpiracao: data_expiracao ?? null,
-          isNovoCiclo: false,
-        });
-
-        const matriculaCriada = await readMatriculaForCourseList(db, {
-          matriculaId,
-          empresaId,
-        });
-        if (matriculaCriada) {
-          matriculasCriadas.push(matriculaCriada);
-        }
+      const matriculaCriada = await readMatriculaForCourseList(db, {
+        matriculaId,
+        empresaId,
+      });
+      if (matriculaCriada) {
+        matriculasCriadas.push(matriculaCriada);
       }
       results.criadas++;
     } catch (error) {
@@ -1152,74 +1072,11 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
         empresaId,
       });
 
-      if (hasActiveMatriculaCycle(concorrente)) {
+      if (concorrente) {
         results.ignoradas++;
         continue;
       }
-
-      if (!canReuseMatriculaCycle(concorrente)) {
-        results.erros++;
-        continue;
-      }
-
-      if (!concorrente) {
-        results.erros++;
-        continue;
-      }
-
-      try {
-        await resetMatriculaForNewCycle(db, {
-          matriculaId: concorrente.id,
-          dataExpiracao: data_expiracao ?? null,
-          observacoes: observacoes ?? null,
-          matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
-          origin: 'MANUAL',
-        });
-        await createLmsInAppNotification(db, {
-          funcionarioId,
-          empresaId,
-          tipo: 'lms_nova_matricula',
-          titulo: 'Novo ciclo de treinamento LMS',
-          mensagem: `Sua matrícula em ${curso.titulo} foi reativada para um novo ciclo.`,
-          referenciaId: concorrente.id,
-          referenciaTipo: 'lms_matricula',
-        });
-        await logLmsMatriculaAudit(db, c, {
-          action: 'LMS_MATRICULA_CRIADA',
-          matriculaId: concorrente.id,
-          oldValues: { status: concorrente.status, deleted_at: concorrente.deleted_at },
-          newValues: {
-            status: 'NAO_INICIADO',
-            curso_id,
-            curso_titulo: curso.titulo,
-            funcionario_id: funcionarioId,
-            funcionario_nome: funcionariosPorId.get(funcionarioId)?.nome ?? null,
-            data_expiracao: data_expiracao ?? null,
-            observacoes: observacoes ?? null,
-            novo_ciclo: true,
-            reconciled_unique_conflict: true,
-          },
-        });
-        await sendMatriculaEmail(c.env, db, {
-          funcionarioId,
-          empresaId,
-          cursoId: curso_id,
-          cursoTitulo: curso.titulo,
-          dataExpiracao: data_expiracao ?? null,
-          isNovoCiclo: true,
-        });
-
-        const matriculaAtualizada = await readMatriculaForCourseList(db, {
-          matriculaId: concorrente.id,
-          empresaId,
-        });
-        if (matriculaAtualizada) {
-          matriculasCriadas.push(matriculaAtualizada);
-        }
-        results.criadas++;
-      } catch {
-        results.erros++;
-      }
+      results.erros++;
     }
   }
 
@@ -1321,6 +1178,30 @@ app.post('/scorm/commit', async (c) => {
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
     }>();
+  const scormAtual = await db
+    .prepare(
+      `SELECT lesson_status, completion_status, success_status,
+              score_raw, score_max, score_min, score_scaled,
+              session_time, total_time, suspend_data, launch_data, cmi_json
+         FROM lms_progresso_scorm
+        WHERE matricula_id = ?
+          AND empresa_id = ?`,
+    )
+    .bind(d.matricula_id, empresaId)
+    .first<{
+      lesson_status: string | null;
+      completion_status: string | null;
+      success_status: string | null;
+      score_raw: number | null;
+      score_max: number | null;
+      score_min: number | null;
+      score_scaled: number | null;
+      session_time: string | null;
+      total_time: string | null;
+      suspend_data: string | null;
+      launch_data: string | null;
+      cmi_json: string | null;
+    }>();
 
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
   if (!canManage) {
@@ -1361,6 +1242,28 @@ app.post('/scorm/commit', async (c) => {
   // Progresso não deve regredir entre commits.
   progressoPct = Math.max(progressoAnterior, clampPct(progressoPct));
 
+  const preferIncomingScormState = shouldPreferIncomingScormState({
+    current: {
+      ...scormAtual,
+      progresso_pct: progressoAnterior,
+    },
+    incoming: {
+      lesson_status: d.lesson_status ?? null,
+      completion_status: d.completion_status ?? null,
+      success_status: d.success_status ?? null,
+      suspend_data: d.suspend_data ?? null,
+      cmi_json: d.cmi_json ?? null,
+      progresso_pct: progressoPct,
+    },
+  });
+
+  const mergedCmiJson = preferScormValue(
+    scormAtual?.cmi_json ?? null,
+    d.cmi_json ?? null,
+    preferIncomingScormState,
+  );
+  const mergedLocation = extractScormLocationFromCmiJson(mergedCmiJson);
+
   // Upsert progresso SCORM
   await db
     .prepare(
@@ -1392,18 +1295,22 @@ app.post('/scorm/commit', async (c) => {
     .bind(
       d.matricula_id,
       empresaId,
-      d.lesson_status ?? null,
-      d.completion_status ?? null,
-      d.success_status ?? null,
-      d.score_raw ?? null,
-      d.score_max ?? null,
-      d.score_min ?? null,
-      d.score_scaled ?? null,
-      d.session_time ?? null,
-      d.total_time ?? null,
-      d.suspend_data ?? null,
-      d.launch_data ?? null,
-      d.cmi_json ?? null,
+      preferScormValue(scormAtual?.lesson_status ?? null, d.lesson_status ?? null, preferIncomingScormState),
+      preferScormValue(
+        scormAtual?.completion_status ?? null,
+        d.completion_status ?? null,
+        preferIncomingScormState,
+      ),
+      preferScormValue(scormAtual?.success_status ?? null, d.success_status ?? null, preferIncomingScormState),
+      mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null),
+      mergeMonotonicNumber(scormAtual?.score_max ?? null, d.score_max ?? null),
+      mergeMonotonicNumber(scormAtual?.score_min ?? null, d.score_min ?? null),
+      mergeMonotonicNumber(scormAtual?.score_scaled ?? null, d.score_scaled ?? null),
+      preferScormValue(scormAtual?.session_time ?? null, d.session_time ?? null, preferIncomingScormState),
+      preferScormValue(scormAtual?.total_time ?? null, d.total_time ?? null, preferIncomingScormState),
+      preferScormValue(scormAtual?.suspend_data ?? null, d.suspend_data ?? null, preferIncomingScormState),
+      preferScormValue(scormAtual?.launch_data ?? null, d.launch_data ?? null, preferIncomingScormState),
+      mergedCmiJson,
     )
     .run();
 
@@ -1413,13 +1320,13 @@ app.post('/scorm/commit', async (c) => {
   const statusAnterior = matricula.status;
 
   if (matricula.status === 'NAO_INICIADO') {
-    novoStatus = 'EM_ANDAMENTO';
+    novoStatus = mergeMonotonicMatriculaStatus(matricula.status, 'EM_ANDAMENTO');
   }
-  if (sucesso && matricula.status !== 'CONCLUIDO') {
-    novoStatus = 'CONCLUIDO';
+  if (sucesso) {
+    novoStatus = mergeMonotonicMatriculaStatus(novoStatus, 'CONCLUIDO');
     dataConclusao = new Date().toISOString().slice(0, 10);
-  } else if (falha && matricula.status !== 'REPROVADO') {
-    novoStatus = 'REPROVADO';
+  } else if (falha) {
+    novoStatus = mergeMonotonicMatriculaStatus(novoStatus, 'REPROVADO');
     dataConclusao = new Date().toISOString().slice(0, 10);
   }
 
@@ -1427,11 +1334,16 @@ app.post('/scorm/commit', async (c) => {
     .prepare(
       `
       UPDATE lms_matriculas
-      SET status = ?, progresso_pct = ?,
+      SET status = ?, progresso_pct = MAX(COALESCE(progresso_pct, 0), ?),
+          ultimo_slide = MAX(COALESCE(ultimo_slide, 0), COALESCE(?, 0)),
           data_inicio = COALESCE(data_inicio, datetime('now')),
           data_conclusao = COALESCE(?, data_conclusao),
           tentativas = tentativas + CASE WHEN ? = 1 THEN 1 ELSE 0 END,
-          score_final = COALESCE(?, score_final),
+          score_final = CASE
+            WHEN ? IS NULL THEN score_final
+            WHEN score_final IS NULL THEN ?
+            ELSE MAX(score_final, ?)
+          END,
           updated_at = datetime('now')
       WHERE id = ? AND empresa_id = ?
     `,
@@ -1439,9 +1351,12 @@ app.post('/scorm/commit', async (c) => {
     .bind(
       novoStatus,
       progressoPct,
+      mergedLocation?.current ?? null,
       dataConclusao,
       sucesso || falha ? 1 : 0,
-      d.score_raw ?? null,
+      mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null),
+      mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null),
+      mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null),
       d.matricula_id,
       empresaId,
     )
