@@ -2,18 +2,35 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   isDateWithinActiveFortnight,
+  parseFuncionarioQuinzena,
   resolveFuncionarioActiveFortnightForDate,
 } from '../../lib/escalas/active-fortnight';
 
 describe('active fortnight helpers', () => {
+  it.each([
+    ['Q1', 1],
+    ['q1', 1],
+    ['Q2', 2],
+    ['q2', 2],
+    ['1Q', 1],
+    ['2Q', 2],
+  ])('normaliza %s para quinzena %s', (input, expected) => {
+    expect(parseFuncionarioQuinzena(input)).toBe(expected);
+  });
+
   it('detecta data dentro da quinzena ativa derivada do funcionario', async () => {
     const db = {
       prepare: vi.fn(() => ({
         bind: () => ({
-          first: async () => ({
-            numero: 2,
-            data_inicio: '2026-06-16',
-            data_fim: '2026-06-30',
+          all: async () => ({
+            results: [
+              {
+                funcionario_quinzena: 'Q2',
+                numero: 2,
+                data_inicio: '2026-06-16',
+                data_fim: '2026-06-30',
+              },
+            ],
           }),
         }),
       })),
@@ -34,7 +51,7 @@ describe('active fortnight helpers', () => {
     const db = {
       prepare: vi.fn(() => ({
         bind: () => ({
-          first: async () => null,
+          all: async () => ({ results: [] }),
         }),
       })),
     } as any;
