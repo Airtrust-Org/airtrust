@@ -6,6 +6,14 @@ import {
   buildFrmsFortnightIndicatorMap,
   type FrmsFortnightIndicator,
 } from './fortnight-indicator';
+import {
+  buildDecisaoFields,
+  type FrmsDecisaoCodigo,
+  type FrmsDecisaoPolicy,
+  type FrmsLimiteReferencia,
+  type FrmsMitigacaoRecomendada,
+  type FrmsNaturezaDado,
+} from './decision-policy';
 
 export type FrmsOperationalSnapshotAlertCode =
   | 'CHECKIN_PENDENTE'
@@ -61,6 +69,11 @@ export interface FrmsOperationalSnapshotItem {
   fortnight_indicator: FrmsFortnightIndicator | null;
 
   alertas: FrmsOperationalSnapshotAlertCode[];
+  natureza_dado: FrmsNaturezaDado;
+  causa: string;
+  mitigacao_recomendada: FrmsMitigacaoRecomendada;
+  decisao: FrmsDecisaoCodigo;
+  limite_referencia: FrmsLimiteReferencia | null;
 }
 
 export interface FrmsOperationalSnapshotSummary {
@@ -94,6 +107,8 @@ export interface FrmsOperationalSnapshotFilters {
 export interface BuildOperationalSnapshotInput {
   empresaId: number;
   wakeFallbackLeadMinutes?: number;
+  policy?: FrmsDecisaoPolicy;
+  hoje?: string;
   rows: {
     escalas: ScaleSnapshotRow[];
     jornadas: JornadaSnapshotRow[];
@@ -515,7 +530,7 @@ export function buildFrmsOperationalSnapshot(
           ? 'ATENCAO'
           : 'OK';
 
-    items.push({
+    const baseItem = {
       empresa_id: input.empresaId,
       data_operacional,
       funcionario_id,
@@ -565,7 +580,24 @@ export function buildFrmsOperationalSnapshot(
       fortnight_indicator: null,
 
       alertas: alertasUnicos,
-    });
+    } as Omit<
+      FrmsOperationalSnapshotItem,
+      | 'natureza_dado'
+      | 'causa'
+      | 'mitigacao_recomendada'
+      | 'decisao'
+      | 'limite_referencia'
+    >;
+
+    const item = {
+      ...baseItem,
+      ...buildDecisaoFields(baseItem as FrmsOperationalSnapshotItem, {
+        hoje: input.hoje,
+        policy: input.policy,
+      }),
+    };
+
+    items.push(item);
   }
 
   const statusFilterSet =
@@ -623,6 +655,8 @@ export interface ListFrmsOperationalSnapshotParams {
   dataInicio: string;
   dataFim: string;
   filters?: FrmsOperationalSnapshotFilters;
+  policy?: FrmsDecisaoPolicy;
+  hoje?: string;
 }
 
 function buildPlaceholders(length: number): string {
@@ -815,6 +849,8 @@ export async function listFrmsOperationalSnapshot(
   const snapshot = buildFrmsOperationalSnapshot({
     empresaId: params.empresaId,
     wakeFallbackLeadMinutes: frmsConfig.minutosAntesApresentacao,
+    policy: params.policy,
+    hoje: params.hoje,
     rows: {
       escalas: escalasResult.results || [],
       jornadas: jornadasResult.results || [],
@@ -897,9 +933,16 @@ export async function listFrmsOperationalSnapshot(
 
   const itemsWithFortnight = snapshot.items.map((item) => {
     const key = `${item.data_operacional}::${item.funcionario_id}`;
-    return {
+    const itemWithFortnight = {
       ...item,
       fortnight_indicator: fortnightIndicatorMap.get(key) ?? null,
+    };
+    return {
+      ...itemWithFortnight,
+      ...buildDecisaoFields(itemWithFortnight, {
+        hoje: params.hoje,
+        policy: params.policy,
+      }),
     };
   });
 
