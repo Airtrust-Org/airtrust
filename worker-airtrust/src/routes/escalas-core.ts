@@ -29,7 +29,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import { getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
+import { getEmpresaIdOptional, getEscalaVerificada } from './escalas-shared';
 
 // ── Prefixed sub-modules ────────────────────────────────────────────────────
 import padroes from './escalas-padroes';
@@ -80,6 +80,90 @@ escalas.route('/', visaoMensalIntegrada);
 // ================================================================
 // GET /situacao-tipos is defined in alocacoes but /:id from crud captures it first
 // when both are root-mounted via escalas.route('/', ...). Add it here explicitly.
+escalas.get('/minha-escala', auth(), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaIdOptional(c);
+  const userId = String(c.get('userId') || '');
+  const mes = Number(c.req.query('mes') || new Date().getMonth() + 1);
+  const ano = Number(c.req.query('ano') || new Date().getFullYear());
+
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Empresa não identificada' }, 400);
+  }
+
+  try {
+    const escala = await db
+      .prepare(
+        `SELECT id, nome, mes, ano, status
+           FROM escalas_mensais
+          WHERE empresa_id = ?
+            AND mes = ?
+            AND ano = ?
+            AND deleted_at IS NULL
+          ORDER BY CASE status WHEN 'publicada' THEN 1 WHEN 'aprovada' THEN 2 ELSE 3 END
+          LIMIT 1`,
+      )
+      .bind(empresaId, mes, ano)
+      .first<{ id: string; nome: string; mes: number; ano: number; status: string }>();
+
+    if (!escala) {
+      return c.json({ success: true, data: { eventos: [], escala: null } });
+    }
+
+    let funcId: string | undefined;
+    if (userId) {
+      const funcRow = await db
+        .prepare(
+          `SELECT f.id
+             FROM usuarios u
+             JOIN funcionarios f ON f.id = u.funcionario_id
+            WHERE u.id = ?
+              AND f.empresa_id = ?
+              AND (u.deleted_at IS NULL OR u.deleted_at = 0)
+              AND f.deleted_at IS NULL
+            LIMIT 1`,
+        )
+        .bind(userId, empresaId)
+        .first<{ id: string }>();
+      funcId = funcRow?.id;
+    }
+
+    if (!funcId) {
+      return c.json({ success: true, data: { eventos: [], escala } });
+    }
+
+    const evtRows = await db
+      .prepare(
+        `SELECT id, tipo_evento, data_inicio, data_fim, turno, local, aeronave,
+                observacoes, status, gerado_automaticamente
+           FROM escala_eventos
+          WHERE escala_id = ?
+            AND funcionario_id = ?
+            AND deleted_at IS NULL
+          ORDER BY data_inicio, turno`,
+      )
+      .bind(escala.id, funcId)
+      .all();
+
+    return c.json({
+      success: true,
+      data: {
+        eventos: evtRows.results || [],
+        escala: {
+          id: escala.id,
+          nome: escala.nome,
+          mes: escala.mes,
+          ano: escala.ano,
+          status: escala.status,
+          total_eventos: (evtRows.results || []).length,
+        },
+      },
+    });
+  } catch {
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
+  }
+});
+
 escalas.get('/situacao-tipos', auth(), async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT id, codigo, nome, cor, icone, bloqueia_alocacao, ativo, ordem
@@ -251,8 +335,29 @@ escalas.post('/:id/notificar', auth(), requireRole('admin', 'manager'), async (c
 escalas.get('/frms-score/:funcionarioId', auth(), async (c) => {
   const funcId = c.req.param('funcionarioId');
   const db = c.env.DB;
+  const empresaId = getEmpresaIdOptional(c);
+
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Empresa não identificada' }, 400);
+  }
 
   try {
+    const funcionario = await db
+      .prepare(
+        `SELECT id
+           FROM funcionarios
+          WHERE CAST(id AS TEXT) = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(funcId, empresaId)
+      .first<{ id: string }>();
+
+    if (!funcionario) {
+      return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+    }
+
     const [horasRow, diasRows] = await Promise.all([
       db
         .prepare(
@@ -260,20 +365,34 @@ escalas.get('/frms-score/:funcionarioId', auth(), async (c) => {
              COALESCE(SUM(horas_voo_minutos), 0) AS total_minutos
            FROM frms_jornada
            WHERE tripulante_id = ?
+             AND EXISTS (
+               SELECT 1
+                 FROM funcionarios f
+                WHERE CAST(f.id AS TEXT) = CAST(frms_jornada.tripulante_id AS TEXT)
+                  AND f.empresa_id = ?
+                  AND f.deleted_at IS NULL
+             )
              AND data >= date('now', '-30 days')
              AND deleted_at IS NULL`,
         )
-        .bind(funcId)
+        .bind(funcId, empresaId)
         .first<{ total_minutos: number }>(),
       db
         .prepare(
           `SELECT DISTINCT data FROM frms_jornada
            WHERE tripulante_id = ?
+             AND EXISTS (
+               SELECT 1
+                 FROM funcionarios f
+                WHERE CAST(f.id AS TEXT) = CAST(frms_jornada.tripulante_id AS TEXT)
+                  AND f.empresa_id = ?
+                  AND f.deleted_at IS NULL
+             )
              AND data >= date('now', '-14 days')
              AND deleted_at IS NULL
            ORDER BY data`,
         )
-        .bind(funcId)
+        .bind(funcId, empresaId)
         .all<{ data: string }>(),
     ]);
 
