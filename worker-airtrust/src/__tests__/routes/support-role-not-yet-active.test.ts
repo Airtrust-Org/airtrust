@@ -38,5 +38,6 @@ describe('support role not yet active', () => {
     expect(response.status).toBe(403);
     expect(payload.code).toBe('RBAC_FORBIDDEN');
     expect(isLegacyPlatformAdminUserId(44)).toBe(false);
+    expect(isLegacyPlatformAdminUserId(1)).toBe(false);
   });
 });

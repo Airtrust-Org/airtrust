@@ -1900,7 +1900,7 @@ frmsRoutes.post(
         await publishDomainEvent(c.env.DB, 'frms', 'FRMS_AVALIACAO_CRIADA', {
           origem_modulo: 'frms',
           funcionario_id: String(parsed.data.tripulante_id),
-          empresa_id: getEmpresaIdSafe(c) ?? 0,
+          empresa_id: empresaId,
           frms_score: estado.frms_score,
           status: estado.frms_status,
           jornada_id: jornadaId,
@@ -1909,7 +1909,7 @@ frmsRoutes.post(
           await publishDomainEvent(c.env.DB, 'frms', 'FRMS_STATUS_CRITICO', {
             origem_modulo: 'frms',
             funcionario_id: String(parsed.data.tripulante_id),
-            empresa_id: getEmpresaIdSafe(c) ?? 0,
+            empresa_id: empresaId,
             frms_score: estado.frms_score,
             jornada_id: jornadaId,
           });
@@ -1936,7 +1936,7 @@ frmsRoutes.post(
       await publishDomainEvent(c.env.DB, 'frms', 'FRMS_AVALIACAO_CRIADA', {
         origem_modulo: 'frms',
         funcionario_id: String(parsed.data.tripulante_id),
-        empresa_id: empresaId ?? 0,
+        empresa_id: empresaId,
         frms_score: estado.frms_score,
         status: estado.frms_status,
         jornada_id: jornadaId,
@@ -1945,7 +1945,7 @@ frmsRoutes.post(
         await publishDomainEvent(c.env.DB, 'frms', 'FRMS_STATUS_CRITICO', {
           origem_modulo: 'frms',
           funcionario_id: String(parsed.data.tripulante_id),
-          empresa_id: empresaId ?? 0,
+          empresa_id: empresaId,
           frms_score: estado.frms_score,
           jornada_id: jornadaId,
         });
@@ -2000,12 +2000,11 @@ frmsRoutes.put(
         .first<{ tripulante_id: string | number }>();
       const funcionarioId = String(parsed.data.tripulante_id ?? jornada?.tripulante_id ?? '');
       if (funcionarioId) {
-        const empresaAtual = getEmpresaIdSafe(c) ?? 0;
         const estado = await getFrmsOperationalState(c.env.DB, funcionarioId);
         await publishDomainEvent(c.env.DB, 'frms', 'FRMS_AVALIACAO_CRIADA', {
           origem_modulo: 'frms',
           funcionario_id: funcionarioId,
-          empresa_id: empresaAtual,
+          empresa_id: empresaId,
           frms_score: estado.frms_score,
           status: estado.frms_status,
           jornada_id: id,

@@ -64,14 +64,15 @@ function createDb(options: {
 }
 
 describe('platform access foundation', () => {
-  it('keeps legacy user 1 compatibility as platform admin while no persisted role exists', async () => {
+  it('does not grant platform admin to user 1 without persisted role', async () => {
     const state = await resolvePlatformAccessState(
       createDb({ hasPlatformRolesTable: false, hasSupportGrantsTable: false }),
       1,
     );
 
-    expect(state.source).toBe('legacy');
-    expect(isPlatformAdminAccess(state)).toBe(true);
+    expect(state.source).toBe('none');
+    expect(state.isLegacyPlatformAdmin).toBe(false);
+    expect(isPlatformAdminAccess(state)).toBe(false);
     expect(canStartSupportReadOnlySession(state, 7, 'ticket-1')).toBe(false);
   });
 

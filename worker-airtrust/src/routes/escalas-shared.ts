@@ -5,6 +5,7 @@
 
 import { z } from 'zod';
 import { getEmpresaId } from '../middleware/tenant';
+import { AppError } from '../utils/errors';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import type { Context } from 'hono';
 
@@ -19,11 +20,20 @@ import type { Context } from 'hono';
  * Este wrapper tenta ambos os caminhos.
  */
 export function getEmpresaIdSafe(c: Context<any>): number {
+  let empresaId: number | undefined;
+
   try {
-    return getEmpresaId(c);
+    empresaId = getEmpresaId(c);
   } catch {
-    return (c.get('empresaId' as never) as number) || 0;
+    const raw = c.get('empresaId' as never) as unknown;
+    empresaId = typeof raw === 'string' ? Number(raw) : (raw as number | undefined);
   }
+
+  if (!Number.isFinite(empresaId) || Number(empresaId) <= 0) {
+    throw new AppError('Empresa não identificada no contexto da requisição', 401, 'TENANT_REQUIRED');
+  }
+
+  return Number(empresaId);
 }
 
 export function getEmpresaIdOptional(c: Context<any>): number | undefined {

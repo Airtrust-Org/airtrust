@@ -17,14 +17,14 @@ vi.mock('@/react-app/i18n/useLanguage', () => ({
   }),
 }));
 
-function renderAt(pathname: string) {
+function renderAt(pathname: string, requiredRole?: string[]) {
   return render(
     <MemoryRouter initialEntries={[pathname]}>
       <Routes>
         <Route
           path="*"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole={requiredRole}>
               <div>conteudo liberado</div>
             </ProtectedRoute>
           }
@@ -154,5 +154,20 @@ describe('ProtectedRoute module gating', () => {
 
     expect(screen.queryByText('protected.denied.title')).toBeNull();
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
+
+  it('bloqueia rota administrativa LMS quando requiredRole exclui aluno', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Aluno', role: 'ALUNO' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['lms'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/lms/admin/cursos', ['ADMIN', 'GESTOR']);
+
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
   });
 });
