@@ -39,6 +39,7 @@ export default function EscalasListagemView() {
     confirmarExcluirId,
     setConfirmarExcluirId,
     deletarEscala,
+    podeGerenciarOperacoes,
     abrirEscala,
     abrirModal,
     fecharModal,
@@ -63,13 +64,15 @@ export default function EscalasListagemView() {
         subtitle="Planejamento operacional mensal"
         actions={
           <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
-            <Button
-              leftIcon={<Plus className="w-4 h-4" />}
-              className="border-transparent bg-primary text-white hover:bg-primary-700 focus:ring-primary"
-              onClick={() => abrirModal({ tipo: 'criar-escala' })}
-            >
-              Incluir Escala
-            </Button>
+            {podeGerenciarOperacoes && (
+              <Button
+                leftIcon={<Plus className="w-4 h-4" />}
+                className="border-transparent bg-primary text-white hover:bg-primary-700 focus:ring-primary"
+                onClick={() => abrirModal({ tipo: 'criar-escala' })}
+              >
+                Incluir Escala
+              </Button>
+            )}
             <Button
               variant="secondary"
               size="sm"
@@ -346,7 +349,7 @@ export default function EscalasListagemView() {
                         : 'Escala em construção operacional'}
                     </div>
                     <div className="flex items-center gap-2">
-                      {confirmarExcluirId === escala.id ? (
+                      {podeGerenciarOperacoes && confirmarExcluirId === escala.id ? (
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] text-red-600 font-medium">Confirmar?</span>
                           <button
@@ -381,7 +384,7 @@ export default function EscalasListagemView() {
                             Não
                           </button>
                         </div>
-                      ) : (
+                      ) : podeGerenciarOperacoes ? (
                         <button
                           className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 dark:text-slate-500 dark:hover:bg-red-500/10 dark:hover:text-red-300"
                           title="Excluir escala"
@@ -392,7 +395,7 @@ export default function EscalasListagemView() {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                      )}
+                      ) : null}
                       <button
                         className="text-xs text-primary font-medium group-hover:underline flex items-center gap-0.5"
                         onClick={(e) => {

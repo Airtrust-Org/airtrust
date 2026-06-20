@@ -29,12 +29,14 @@ import PageHeader from '@/react-app/components/PageHeader';
 import TimeInput from '@/react-app/components/TimeInput';
 import EscalasTabBar from './components/EscalasTabBar';
 import Button from '@/react-app/components/Button';
+import { useAuth } from '@/react-app/hooks/useAuth';
 import { useApi } from '@/react-app/hooks/useApi';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
+import { canManageEscalaOperations } from './utils/operationalPermissions';
 
 function authHeaders(): Record<string, string> {
   const token = getAccessToken();
@@ -603,6 +605,8 @@ function normalizeHorarioInput(raw: string): string | null {
 }
 
 export default function EvdPage() {
+  const { user } = useAuth();
+  const podeGerenciarOperacoes = canManageEscalaOperations(user?.role);
   const [searchParams] = useSearchParams();
   const [data, setData] = useState(() => resolveInitialEvdDate(searchParams));
   const [showForm, setShowForm] = useState(false);
@@ -1885,7 +1889,7 @@ export default function EvdPage() {
                         </td>
                         <td className="px-3 py-3.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
-                            {voo.status === 'RASCUNHO' && (
+                            {podeGerenciarOperacoes && voo.status === 'RASCUNHO' && (
                               <>
                                 <button
                                   onClick={() => handlePublish(voo)}

@@ -47,6 +47,8 @@ import type {
 } from './hooks/queries/useEscalasQuery';
 import { STATUS_CONFIG } from './utils/statusConfig';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { canManageEscalaOperations } from './utils/operationalPermissions';
+import { isValidQuinzenaRange } from './utils/quinzenaValidation';
 
 export const MESES = [
   'Janeiro',
@@ -82,6 +84,7 @@ export const MESES_CURTOS = [
 export interface EscalaPageCtxValue {
   // Auth
   user: ReturnType<typeof useAuth>['user'];
+  podeGerenciarOperacoes: boolean;
   navigate: ReturnType<typeof useNavigate>;
 
   // Zustand store (re-exposed for convenience in views)
@@ -305,6 +308,7 @@ export function useEscalaPageCtx(): EscalaPageCtxValue {
 
 export function EscalaPageProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const podeGerenciarOperacoes = canManageEscalaOperations(user?.role);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -737,6 +741,10 @@ export function EscalaPageProvider({ children }: { children: ReactNode }) {
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleSaveQuinzena = useCallback(
     async (q: QuinzenaEscala, vals: { data_inicio: string; data_fim: string }) => {
+      if (!isValidQuinzenaRange(vals.data_inicio, vals.data_fim)) {
+        toast.error('A data final da quinzena deve ser posterior à data inicial.');
+        return;
+      }
       setSavingQid(q.id);
       try {
         await mutateApi(`/api/escalas/quinzenas/${q.id}`, 'PUT', {
@@ -1065,6 +1073,7 @@ export function EscalaPageProvider({ children }: { children: ReactNode }) {
   // ── Context value ──────────────────────────────────────────────────────────
   const value: EscalaPageCtxValue = {
     user,
+    podeGerenciarOperacoes,
     navigate,
     // Zustand
     escalaAtualId,

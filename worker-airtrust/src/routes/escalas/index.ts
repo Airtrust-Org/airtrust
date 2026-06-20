@@ -12,7 +12,7 @@
 // Import the original monolith (renamed to escalas-core.ts)
 import escalas from '../escalas-core';
 import { auth } from '../../middleware/auth';
-import { getEmpresaIdSafe, getEscalaVerificada } from '../escalas-shared';
+import { getEmpresaIdOptional, getEscalaVerificada } from '../escalas-shared';
 
 // ================================================================
 // MKT-04: GET /api/escalas/minha-escala
@@ -20,18 +20,22 @@ import { getEmpresaIdSafe, getEscalaVerificada } from '../escalas-shared';
 // ================================================================
 escalas.get('/minha-escala', auth(), async (c) => {
   const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
+  const empresaId = getEmpresaIdOptional(c);
   const contextWithGet = c as unknown as { get: (key: string) => unknown };
   const userId = String(contextWithGet.get('userId') || '');
   const mes = Number(c.req.query('mes') || new Date().getMonth() + 1);
   const ano = Number(c.req.query('ano') || new Date().getFullYear());
+
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Empresa não identificada' }, 400);
+  }
 
   try {
     // Find the active escala for this month
     const escala = await db
       .prepare(
         `SELECT id, nome, mes, ano, status
-         FROM escala_mensal
+         FROM escalas_mensais
          WHERE empresa_id = ? AND mes = ? AND ano = ? AND deleted_at IS NULL
          ORDER BY CASE status WHEN 'publicada' THEN 1 WHEN 'aprovada' THEN 2 ELSE 3 END
          LIMIT 1`,
@@ -235,9 +239,29 @@ escalas.post('/:id/verificar-fdp', auth(), async (c) => {
 escalas.get('/frms-score/:funcionarioId', auth(), async (c) => {
   const funcId = c.req.param('funcionarioId');
   const db = c.env.DB;
-  getEmpresaIdSafe(c);
+  const empresaId = getEmpresaIdOptional(c);
+
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Empresa não identificada' }, 400);
+  }
 
   try {
+    const funcionario = await db
+      .prepare(
+        `SELECT id
+           FROM funcionarios
+          WHERE CAST(id AS TEXT) = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(funcId, empresaId)
+      .first<{ id: string }>();
+
+    if (!funcionario) {
+      return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+    }
+
     // Get accumulated flight hours in last 30 days from frms_jornada
     const rows = await db
       .prepare(
@@ -246,10 +270,17 @@ escalas.get('/frms-score/:funcionarioId', auth(), async (c) => {
            COALESCE(SUM(horas_voo_minutos), 0) AS total_minutos
          FROM frms_jornada
          WHERE tripulante_id = ?
+           AND EXISTS (
+             SELECT 1
+               FROM funcionarios f
+              WHERE CAST(f.id AS TEXT) = CAST(frms_jornada.tripulante_id AS TEXT)
+                AND f.empresa_id = ?
+                AND f.deleted_at IS NULL
+           )
            AND data >= date('now', '-30 days')
            AND deleted_at IS NULL`,
       )
-      .bind(funcId)
+      .bind(funcId, empresaId)
       .first<{ total_jornadas: number; total_minutos: number }>();
 
     const totalMinutos = rows?.total_minutos ?? 0;
@@ -263,11 +294,18 @@ escalas.get('/frms-score/:funcionarioId', auth(), async (c) => {
       .prepare(
         `SELECT DISTINCT data FROM frms_jornada
          WHERE tripulante_id = ?
+           AND EXISTS (
+             SELECT 1
+               FROM funcionarios f
+              WHERE CAST(f.id AS TEXT) = CAST(frms_jornada.tripulante_id AS TEXT)
+                AND f.empresa_id = ?
+                AND f.deleted_at IS NULL
+           )
            AND data >= date('now', '-14 days')
            AND deleted_at IS NULL
          ORDER BY data`,
       )
-      .bind(funcId)
+      .bind(funcId, empresaId)
       .all<{ data: string }>();
 
     const dias = (diasRows.results || []).map((r) => r.data);

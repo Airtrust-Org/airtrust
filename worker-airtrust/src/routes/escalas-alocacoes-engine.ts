@@ -195,7 +195,7 @@ async function atualizarAlertasCoberturaBatch(
 
 interface RegenerarEventosFuncionarioParams {
   db: D1Database;
-  empresa_id?: string | number | null;
+  empresa_id: string | number;
   escala_id: string;
   funcionario_id: string;
   created_by: string;
@@ -208,10 +208,20 @@ export async function regenerarEventosAutomaticosFuncionarioEscala(
   params: RegenerarEventosFuncionarioParams,
 ): Promise<number> {
   const { db, escala_id, funcionario_id, created_by } = params;
+  const empresaId = Number(params.empresa_id);
+
+  if (!Number.isFinite(empresaId) || empresaId <= 0) return 0;
 
   const escala = await db
-    .prepare(`SELECT ano, mes FROM escalas_mensais WHERE id = ? AND deleted_at IS NULL LIMIT 1`)
-    .bind(escala_id)
+    .prepare(
+      `SELECT ano, mes
+         FROM escalas_mensais
+        WHERE id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(escala_id, empresaId)
     .first<{ ano: number; mes: number }>();
 
   if (!escala) return 0;
@@ -224,9 +234,16 @@ export async function regenerarEventosAutomaticosFuncionarioEscala(
           AND funcionario_id = ?
           AND gerado_automaticamente = 1
           AND tipo_evento IN ('voo', 'folga', 'standby', 'ferias', 'treinamento_simulador', 'licenca')
+          AND EXISTS (
+            SELECT 1
+              FROM escalas_mensais em
+             WHERE em.id = escala_eventos.escala_id
+               AND em.empresa_id = ?
+               AND em.deleted_at IS NULL
+          )
           AND deleted_at IS NULL`,
     )
-    .bind(escala_id, funcionario_id)
+    .bind(escala_id, funcionario_id, empresaId)
     .run();
 
   const alocacoesAtivas = await db
@@ -235,14 +252,17 @@ export async function regenerarEventosAutomaticosFuncionarioEscala(
               a.prefixo AS aeronave_prefixo,
               a.modelo AS aeronave_modelo
          FROM escala_alocacoes ea
+         JOIN escalas_mensais em ON em.id = ea.escala_id
          LEFT JOIN aeronaves a ON a.id = ea.aeronave_id
         WHERE ea.escala_id = ?
           AND ea.funcionario_id = ?
+          AND em.empresa_id = ?
+          AND em.deleted_at IS NULL
           AND ea.deleted_at IS NULL
           AND ea.status != 'cancelado'
         ORDER BY ea.data_inicio, ea.created_at, ea.id`,
     )
-    .bind(escala_id, funcionario_id)
+    .bind(escala_id, funcionario_id, empresaId)
     .all<{
       id: string;
       data_inicio: string;

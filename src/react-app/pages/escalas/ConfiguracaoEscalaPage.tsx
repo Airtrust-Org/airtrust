@@ -46,6 +46,7 @@ import {
 import { formatDate } from '@/react-app/utils/formatDate';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { getDefaultQuinzenaRange } from './utils/quinzenas';
+import { isValidQuinzenaRange } from './utils/quinzenaValidation';
 import CompactColorPicker from './components/CompactColorPicker';
 
 const MESES = [
@@ -125,6 +126,10 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
     const key = `${mes}_${num}`;
     const vals = editando[key];
     if (!vals) return;
+    if (!isValidQuinzenaRange(vals.inicio, vals.fim)) {
+      toast.error('A data final da quinzena deve ser posterior à data inicial.');
+      return;
+    }
     setSavingKey(key);
     setSaving(true);
     try {
