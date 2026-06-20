@@ -9,7 +9,7 @@ import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
 import { auth } from '../middleware/auth';
 import { generateJWT, verifyJWT } from '../utils/security';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdOptional } from './escalas-shared';
 import type { Env, JwtPayload } from '../types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -717,7 +717,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     return new Response('Token inválido ou expirado', { status: 401 });
   }
 
-  const empresaId = getEmpresaIdSafe(c) || Number(payload.empresa_id ?? 0);
+  const empresaId = getEmpresaIdOptional(c) || Number(payload.empresa_id ?? 0);
   if (!empresaId) {
     return new Response('Empresa não identificada no token', { status: 401 });
   }
@@ -839,7 +839,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
     return new Response('Acesso negado', { status: 403 });
   }
 
-  const empresaId = getEmpresaIdSafe(c) || Number(payload.empresa_id ?? 0);
+  const empresaId = getEmpresaIdOptional(c) || Number(payload.empresa_id ?? 0);
   const cursoId = Number(c.req.param('curso_id'));
   const db = c.env.DB;
 
