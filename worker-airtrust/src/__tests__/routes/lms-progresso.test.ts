@@ -179,4 +179,88 @@ describe('lms progresso xapi router', () => {
       }),
     );
   });
+
+  it('does not regress a completed matrícula on later failed xAPI statements', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 10,
+            funcionario_id: 77,
+            status: 'CONCLUIDO',
+            empresa_id: 1,
+            progresso_pct: 100,
+            score_final: 92,
+            qualificacao_historico_id: 300,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 55,
+            curso_titulo: 'AW139',
+            qualificacao_codigo: 'AW139',
+            qualificacao_nome: 'AW139',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      [
+        'INSERT INTO lms_xapi_statements',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 777 } }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@airtrust.online' },
+          verb: {
+            id: 'http://adlnet.gov/expapi/verbs/failed',
+            display: { 'en-US': 'failed' },
+          },
+          object: {
+            id: 'h5p:20',
+            objectType: 'Activity',
+          },
+          result: {
+            success: false,
+            score: { raw: 10, max: 100 },
+          },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        statement_id: 777,
+        matricula_id: 10,
+        novo_status: 'CONCLUIDO',
+      },
+    });
+
+    const updateCall = calls.find(
+      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
+    );
+    expect(updateCall?.args[0]).toBe('CONCLUIDO');
+    expect(updateCall?.args[1]).toBe(100);
+    expect(updateCall?.args[3]).toBe(92);
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+  });
 });
