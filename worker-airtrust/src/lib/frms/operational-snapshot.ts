@@ -932,6 +932,7 @@ export async function listFrmsOperationalSnapshot(
     }),
     windowStart: params.dataInicio,
     windowEnd: params.dataFim,
+    today: params.hoje,
   });
 
   const itemsWithFortnight = snapshot.items.map((item) => {
