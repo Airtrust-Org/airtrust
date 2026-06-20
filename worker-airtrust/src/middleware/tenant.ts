@@ -33,15 +33,14 @@ export interface TenantContext {
   permissions: string[];
 }
 
-export const LEGACY_PLATFORM_ADMIN_USER_ID = 1;
-
 export function normalizeContextUserId(userId: unknown): number {
   const normalized = typeof userId === 'string' ? Number(userId) : Number(userId || 0);
   return Number.isFinite(normalized) ? normalized : 0;
 }
 
 export function isLegacyPlatformAdminUserId(userId: unknown): boolean {
-  return normalizeContextUserId(userId) === LEGACY_PLATFORM_ADMIN_USER_ID;
+  normalizeContextUserId(userId);
+  return false;
 }
 
 export function isAirtrustPlatformTenant(
@@ -61,7 +60,7 @@ export function isPlatformAdminContext(
   if (accessState) {
     return isPlatformAdminAccess(accessState);
   }
-  return isLegacyPlatformAdminUserId(c.get('userId'));
+  return false;
 }
 
 // Roles hierarchy para verificação de permissões
@@ -280,91 +279,6 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
           }>();
 
     if (!result) {
-      const userIdNumber = normalizeContextUserId(userId);
-
-      if (isPlatformAdminAccess(platformAccessState)) {
-        const platformFallbackAtivo = await db
-          .prepare(
-            `
-              SELECT
-                e.id as empresa_id,
-                e.codigo,
-                e.nome,
-                e.plano,
-                e.ativo,
-                'admin' as role
-              FROM empresas e
-              WHERE e.deleted_at IS NULL
-                AND e.ativo = 1
-              ORDER BY
-                CASE
-                  WHEN e.codigo = 'airtrust' THEN 0
-                  ELSE 1
-                END,
-                e.id ASC
-              LIMIT 1
-            `,
-          )
-          .first<{
-            empresa_id: number;
-            codigo: string;
-            nome: string;
-            plano: string;
-            ativo: number;
-            role: string;
-          }>();
-
-        const platformFallback =
-          platformFallbackAtivo ||
-          (await db
-            .prepare(
-              `
-                SELECT
-                  e.id as empresa_id,
-                  e.codigo,
-                  e.nome,
-                  e.plano,
-                  e.ativo,
-                  'admin' as role
-                FROM empresas e
-                WHERE e.deleted_at IS NULL
-                ORDER BY
-                  CASE
-                    WHEN e.codigo = 'airtrust' THEN 0
-                    ELSE 1
-                  END,
-                  e.id ASC
-                LIMIT 1
-              `,
-            )
-            .first<{
-              empresa_id: number;
-              codigo: string;
-              nome: string;
-              plano: string;
-              ativo: number;
-              role: string;
-            }>());
-
-        if (platformFallback) {
-          const tenantContext: TenantContext = {
-            empresaId: platformFallback.empresa_id,
-            empresaCodigo: platformFallback.codigo,
-            empresaNome: platformFallback.nome,
-            role: 'admin',
-            plano: platformFallback.plano,
-            permissions: buildPermissions('admin'),
-          };
-
-          c.set('tenantContext', tenantContext);
-          console.log(
-            `[TENANT] platform fallback empresa=${platformFallback.codigo} user=${userIdNumber} source=${platformAccessState.source}`,
-          );
-
-          return next();
-        }
-      }
-
       throw new AppError(
         'Acesso negado: usuário não pertence a esta empresa ou empresa inativa',
         403,

@@ -2,6 +2,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { assertDevProxyTargetIsSafe } from './src/react-app/config/devProxyGuard';
 
 function getBuildVersion(): string {
   const explicitVersion = process.env.APP_VERSION?.trim();
@@ -25,9 +26,7 @@ export default defineConfig(({ mode }) => {
   const apiUrl =
     env.VITE_API_URL || (mode === 'development' ? '' : 'https://api.airtrust.online/api');
   const devProxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://localhost:8787';
-  if (devProxyTarget.includes('airtrust.online')) {
-    console.warn('[vite] ⚠️  DEV PROXY apontando para PRODUÇÃO:', devProxyTarget);
-  }
+  assertDevProxyTargetIsSafe(mode, devProxyTarget, env.AIRTRUST_ALLOW_PROD_DEV_PROXY);
 
   return {
     plugins: [

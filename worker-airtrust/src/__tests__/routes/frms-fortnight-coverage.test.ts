@@ -68,7 +68,7 @@ describe('GET /maintenance/fortnight-coverage', () => {
     expect(getCoverageMock).not.toHaveBeenCalled();
   });
 
-  it('responde 401 sem secret valido', async () => {
+  it('responde 403 sem secret valido', async () => {
     const response = await frmsRoutes.request(
       'http://localhost/maintenance/fortnight-coverage?data_inicio=2026-06-01&data_fim=2026-06-07',
       { method: 'GET' },
@@ -78,10 +78,10 @@ describe('GET /maintenance/fortnight-coverage', () => {
       } as unknown as Env,
     );
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
-      error: 'Token de manutencao invalido.',
+      error: 'Token de manutenção inválido.',
     });
     expect(getCoverageMock).not.toHaveBeenCalled();
   });
@@ -153,7 +153,7 @@ describe('GET /maintenance/fortnight-coverage', () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
-      error: 'Janela maxima excedida. Use ate 31 dias.',
+      error: 'Janela máxima de 31 dias para coverage.',
     });
     expect(getCoverageMock).not.toHaveBeenCalled();
   });

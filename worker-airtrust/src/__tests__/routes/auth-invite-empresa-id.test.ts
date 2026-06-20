@@ -4,13 +4,17 @@ import type { Env } from '../../types';
 import { resetSchemaCache } from '../../utils/db-schema';
 import { errorHandler } from '../../middleware/error-handler';
 
-vi.mock('../../middleware/rate-limit', () => ({
-  rateLimiter:
-    () =>
-    async (_c: any, next: () => Promise<void>) => {
-      await next();
-    },
-}));
+vi.mock('../../middleware/rate-limit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/rate-limit')>();
+  return {
+    ...actual,
+    rateLimiter:
+      () =>
+      async (_c: any, next: () => Promise<void>) => {
+        await next();
+      },
+  };
+});
 
 vi.mock('../../utils/security', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/security')>();

@@ -5,7 +5,7 @@ import type { Env } from '../../types';
 type AccessPreset = {
   isLegacyPlatformAdmin: boolean;
   hasPersistedPlatformAdmin: boolean;
-  source: 'persisted' | 'legacy' | 'none';
+  source: 'persisted' | 'none';
 };
 
 const accessByUserId = new Map<number, AccessPreset>();
@@ -43,7 +43,7 @@ vi.mock('../../lib/rbac/platform-access', () => ({
       source: preset.source,
     };
   }),
-  isPlatformAdminAccess: vi.fn((state: any) => state.hasPersistedPlatformAdmin || state.isLegacyPlatformAdmin),
+  isPlatformAdminAccess: vi.fn((state: any) => state.hasPersistedPlatformAdmin),
 }));
 
 import { authRoutes } from '../../routes/auth';
@@ -278,18 +278,19 @@ describe('auth platform admin boundaries', () => {
     expect(selectJson.data.empresa.id).toBe(3);
   });
 
-  it('userId=1 without persisted role keeps legacy bridge behavior', async () => {
+  it('userId=1 without persisted role does not receive platform bridge behavior', async () => {
     accessByUserId.set(1, {
-      isLegacyPlatformAdmin: true,
+      isLegacyPlatformAdmin: false,
       hasPersistedPlatformAdmin: false,
-      source: 'legacy',
+      source: 'none',
     });
     const db = createDb([{ usuario_id: 1, empresa_id: 1, role: 'admin', is_primary: 1 }]);
 
     const response = await hit(db, '/api/auth/empresas', { userId: 1 });
     const json = (await response.json()) as any;
     expect(response.status).toBe(200);
-    expect(json.data.empresas).toHaveLength(3);
+    expect(json.data.empresas).toHaveLength(1);
+    expect(json.data.empresas[0].codigo).toBe('airtrust');
   });
 
   it('regular user in airtrust tenant is not platform admin and cannot select arbitrary empresa', async () => {
