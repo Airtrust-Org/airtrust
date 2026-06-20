@@ -105,7 +105,7 @@ type AlocacaoLoteContexto = {
   alertas: Array<{ tipo: string; detalhe: string }>;
 };
 
-async function substituirAlocacaoSobreposta(
+export async function substituirAlocacaoSobreposta(
   db: D1Database,
   params: {
     conflitoId: string;
@@ -180,9 +180,18 @@ async function substituirAlocacaoSobreposta(
           SET deleted_at = ?, updated_at = ?
         WHERE alocacao_id = ?
           AND gerado_automaticamente = 1
+          AND EXISTS (
+            SELECT 1
+              FROM escala_alocacoes ea
+              JOIN escalas_mensais em ON em.id = ea.escala_id
+             WHERE ea.id = escala_eventos.alocacao_id
+               AND ea.deleted_at IS NULL
+               AND em.deleted_at IS NULL
+               AND em.empresa_id = ?
+          )
           AND deleted_at IS NULL`,
     )
-    .bind(now, now, conflito.id)
+    .bind(now, now, conflito.id, params.empresaId)
     .run();
 
   if (conflito.situacao_tipo) {
