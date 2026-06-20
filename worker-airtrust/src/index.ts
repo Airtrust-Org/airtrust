@@ -100,6 +100,8 @@ import frmsRoutes from './routes/frms';
 import frmsFadigaCheckinRoutes from './routes/frms-fadiga-checkin';
 import frmsOperationalSnapshotRoutes from './routes/frms-operational-snapshot';
 import frmsReadAckRoutes from './routes/frms-read-ack';
+import frmsOverrideRoutes from './routes/frms-override';
+import frmsProjectionRoutes from './routes/frms-projection';
 // SGSO — Sistema de Gerenciamento de Segurança Operacional
 import sgsoRoutes from './routes/sgso';
 import sgsoNextGenRoutes from './routes/sgso-next-gen';
@@ -706,6 +708,10 @@ app.route('/api/frms', frmsFadigaCheckinRoutes);
 app.route('/api/frms', frmsOperationalSnapshotRoutes);
 // FRMS — D1 read/ack operacional sem mitigação
 app.route('/api/frms', frmsReadAckRoutes);
+// FRMS — Override operacional temporário em read/ack dedicado
+app.route('/api/frms', frmsOverrideRoutes);
+// FRMS — Projeção operacional read-only para planejamento
+app.route('/api/frms', frmsProjectionRoutes);
 
 // Caderneta de Horas de Voo
 app.route('/api/horas-voo', horasVooRoutes);
