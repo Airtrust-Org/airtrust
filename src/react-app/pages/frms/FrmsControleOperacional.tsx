@@ -240,6 +240,15 @@ type FortnightNotice = {
   toneClassName: string;
 };
 
+type GlobalScaleNotice = {
+  message: string;
+  toneClassName: string;
+};
+
+function hasLocatedFortnight(indicator: FrmsFortnightIndicator | null | undefined): boolean {
+  return Boolean(indicator && indicator.fonte_periodo !== 'AUSENTE');
+}
+
 function toneByFortnightStatus(status: string): string {
   if (status === 'CRITICO') return 'border-red-200 bg-red-50 text-red-700';
   if (status === 'ATENCAO') return 'border-amber-200 bg-amber-50 text-amber-700';
@@ -255,7 +264,10 @@ function toneByFortnightSource(source: string | null | undefined): string {
   return 'border-slate-200 bg-slate-100 text-slate-600';
 }
 
-function resolveFortnightNotice(indicator: FrmsFortnightIndicator | null): FortnightNotice | null {
+function resolveFortnightNotice(
+  indicator: FrmsFortnightIndicator | null,
+  item?: Pick<FrmsOperationalSnapshotItem, 'teve_jornada'> | null,
+): FortnightNotice | null {
   if (!indicator) {
     return {
       message: 'Sem jornada FRMS registrada nesta data.',
@@ -279,8 +291,17 @@ function resolveFortnightNotice(indicator: FrmsFortnightIndicator | null): Fortn
   ) {
     return {
       message:
-        'Período identificado, mas a janela de consulta cobre apenas parte dele. Os acumulados refletem somente os dias visíveis.',
+        item?.teve_jornada === false
+          ? 'Quinzena base identificada. Não há jornada FRMS vinculada neste dia. Os acumulados refletem apenas os dias visíveis na consulta.'
+          : 'Período identificado, mas a janela de consulta cobre apenas parte dele. Os acumulados refletem somente os dias visíveis.',
       toneClassName: 'border-amber-200 bg-amber-50 text-amber-700',
+    };
+  }
+
+  if (item?.teve_jornada === false && hasLocatedFortnight(indicator)) {
+    return {
+      message: 'Quinzena base identificada. Não há jornada FRMS vinculada neste dia.',
+      toneClassName: 'border-sky-200 bg-sky-50 text-sky-700',
     };
   }
 
@@ -295,8 +316,14 @@ function FortnightStatusBadge({ status }: { status: string }) {
   );
 }
 
-function FortnightDetailPanel({ indicator }: { indicator: FrmsFortnightIndicator | null }) {
-  const notice = resolveFortnightNotice(indicator);
+function FortnightDetailPanel({
+  indicator,
+  item,
+}: {
+  indicator: FrmsFortnightIndicator | null;
+  item: Pick<FrmsOperationalSnapshotItem, 'teve_jornada'>;
+}) {
+  const notice = resolveFortnightNotice(indicator, item);
   const alerts = indicator?.alertas_quinzena.filter((value) => value?.trim());
   const notes = indicator?.limitation_notes.filter((value) => value?.trim());
 
@@ -377,11 +404,42 @@ function hasAnyEscalaData(items: FrmsOperationalSnapshotItem[]): boolean {
   return items.some((item) => item.escalado);
 }
 
+function buildGlobalScaleNotice(items: FrmsOperationalSnapshotItem[]): GlobalScaleNotice | null {
+  const relevantItems = items.filter((item) => operationalBucket(item) !== 'sem_atividade');
+  if (relevantItems.length === 0 || hasAnyEscalaData(relevantItems)) return null;
+
+  const itemsWithLocatedFortnight = relevantItems.filter((item) => hasLocatedFortnight(item.fortnight_indicator));
+  if (itemsWithLocatedFortnight.length === 0) {
+    return {
+      message:
+        'Dados de escala indisponiveis para este periodo. As verificacoes de vinculo com escala nao puderam ser realizadas — tripulantes com check-in ou jornada sao exibidos sem a confirmacao de escala.',
+      toneClassName: 'border-amber-200 bg-amber-50 text-amber-900',
+    };
+  }
+
+  if (itemsWithLocatedFortnight.length === relevantItems.length) {
+    return {
+      message:
+        'Quinzena base localizada para os registros visiveis. Parte do recorte nao possui jornada FRMS vinculada neste dia, e os acumulados usam apenas os dias disponiveis na consulta.',
+      toneClassName: 'border-sky-200 bg-sky-50 text-sky-900',
+    };
+  }
+
+  return {
+    message:
+      'Ha registros sem jornada FRMS vinculada; a quinzena base foi localizada para parte dos tripulantes, mas ainda existem casos sem escala ou fallback confirmado neste recorte.',
+    toneClassName: 'border-amber-200 bg-amber-50 text-amber-900',
+  };
+}
+
 function operationalBucketLabel(item: FrmsOperationalSnapshotItem, escalaAvailable: boolean): string {
   const bucket = operationalBucket(item);
   if (bucket === 'escalado') return item.escala_source === 'EVD' ? 'Escala diaria' : `Escala ${item.escala_source}`;
   if (!escalaAvailable) {
-    // When escala data is unavailable for the period, don't say "sem escala"
+    if (hasLocatedFortnight(item.fortnight_indicator)) {
+      if (bucket === 'checkin_sem_escala') return 'Check-in com quinzena base';
+      if (bucket === 'jornada_sem_escala') return 'Jornada com quinzena base';
+    }
     if (bucket === 'checkin_sem_escala') return 'Check-in (escala indisponivel)';
     if (bucket === 'jornada_sem_escala') return 'Jornada (escala indisponivel)';
   }
@@ -561,6 +619,7 @@ export default function FrmsControleOperacional() {
 
   const visibleItems = useMemo(() => filterItems(data, appliedFilters), [data, appliedFilters]);
   const escalaAvailable = useMemo(() => hasAnyEscalaData(visibleItems), [visibleItems]);
+  const globalScaleNotice = useMemo(() => buildGlobalScaleNotice(visibleItems), [visibleItems]);
   const visibleIds = useMemo(() => new Set(visibleItems.map((item) => item.funcionario_id)), [visibleItems]);
   const visibleReadAckEvents = useMemo(
     () => readAck.events.filter((event) => isVisibleReadAckEvent(event, visibleIds)),
@@ -790,9 +849,9 @@ export default function FrmsControleOperacional() {
           </div>
         )}
 
-        {!escalaAvailable && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Dados de escala indisponiveis para este periodo. As verificacoes de vinculo com escala nao puderam ser realizadas — tripulantes com check-in ou jornada sao exibidos sem a confirmacao de escala.
+        {globalScaleNotice && (
+          <div className={`rounded-lg border px-4 py-3 text-sm ${globalScaleNotice.toneClassName}`}>
+            {globalScaleNotice.message}
           </div>
         )}
         {!appliedFilters.include_inconsistencies && (
@@ -896,7 +955,7 @@ export default function FrmsControleOperacional() {
                           {formatFortnightLabel(item.fortnight_indicator)}
                         </div>
                         {FRMS_FORTNIGHT_DETAIL_ENABLED && (
-                          <FortnightDetailPanel indicator={item.fortnight_indicator} />
+                          <FortnightDetailPanel indicator={item.fortnight_indicator} item={item} />
                         )}
                         {item.fatorizacao_status === 'AUSENTE' && item.teve_jornada && (
                           <div className="text-xs text-rose-700">Jornada sem fatorizacao</div>
