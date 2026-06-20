@@ -144,6 +144,7 @@ describe('frms fortnight indicator', () => {
     expect(indicator?.fonte_periodo).toBe('INCOMPLETO');
     expect(indicator?.freshness_dado).toBe('PARCIAL');
     expect(indicator?.status_quinzena).toBe('INCOMPLETO');
+    expect(indicator?.natureza_dado).toBe('JORNADA_REALIZADA');
     expect(indicator?.decisao).toBe('ALERTA');
     expect(indicator?.mitigacao_recomendada).toBe('AGUARDAR_SIGVOOS');
     expect(indicator?.alertas_quinzena).toContain('PERIODO_PARCIAL_NA_CONSULTA');
@@ -201,6 +202,7 @@ describe('frms fortnight indicator', () => {
     expect(indicator?.fonte_periodo).toBe('DERIVADO');
     expect(indicator?.freshness_dado).toBe('COMPLETO');
     expect(indicator?.status_quinzena).toBe('CRITICO');
+    expect(indicator?.natureza_dado).toBe('ACUMULADO_LEGAL');
     expect(indicator?.score_acumulado).toBeGreaterThanOrEqual(75);
     expect(indicator?.tendencia).toBe('CRESCENTE');
     expect(indicator?.decisao).toBe('EXIGE_OVERRIDE');
@@ -241,5 +243,23 @@ describe('frms fortnight indicator', () => {
         'JORNADA_MEDIA_CURTA',
       ]),
     );
+  });
+
+  it('rotula apenas data futura como PROJECAO', () => {
+    const indicator = buildFrmsFortnightIndicatorMap({
+      windowStart: '2026-05-01',
+      windowEnd: '2026-05-14',
+      today: '2026-05-10',
+      items: [
+        seed('2026-05-12', 12, {
+          jornada_data_source: 'ESTIMADO',
+          sleep_data_source: 'ESTIMADO',
+          wake_data_source: 'ESTIMADO',
+        }),
+      ],
+    }).get('2026-05-12::10');
+
+    expect(indicator?.natureza_dado).toBe('PROJECAO');
+    expect(indicator?.decisao).toBe('ALERTA');
   });
 });

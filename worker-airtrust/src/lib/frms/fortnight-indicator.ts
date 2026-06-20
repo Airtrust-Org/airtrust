@@ -108,6 +108,7 @@ export interface BuildFrmsFortnightIndicatorInput {
   items: FrmsFortnightIndicatorItemSeed[];
   windowStart: string;
   windowEnd: string;
+  today?: string;
 }
 
 interface PeriodAnchor {
@@ -153,6 +154,10 @@ function dayDiff(startIso: string, endIso: string): number {
   const start = parseDate(startIso).getTime();
   const end = parseDate(endIso).getTime();
   return Math.floor((end - start) / 86400000);
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function parseTimeToMinutes(value: string | null): number | null {
@@ -287,9 +292,11 @@ function resolveTendencia(
 function resolveNaturezaDado(
   item: FrmsFortnightIndicatorItemSeed,
   periodFullyCoveredByQuery: boolean,
+  today: string,
 ): FrmsFortnightNaturezaDado {
-  if (!periodFullyCoveredByQuery) return 'PROJECAO';
+  if (item.data_operacional > today) return 'PROJECAO';
   if (item.checkin_status === 'RECEBIDO' && !item.teve_jornada) return 'CHECKIN_SUBJETIVO';
+  if (periodFullyCoveredByQuery) return 'ACUMULADO_LEGAL';
   if (item.jornada_data_source === 'REAL') return 'JORNADA_REALIZADA';
   if (
     item.jornada_data_source === 'MANUAL' ||
@@ -299,7 +306,7 @@ function resolveNaturezaDado(
   ) {
     return 'JORNADA_PLANEJADA';
   }
-  return 'ACUMULADO_LEGAL';
+  return 'JORNADA_PLANEJADA';
 }
 
 function buildModifiers(input: {
@@ -594,6 +601,7 @@ export function buildFrmsFortnightIndicatorMap(
 ): Map<string, FrmsFortnightIndicator> {
   const result = new Map<string, FrmsFortnightIndicator>();
   const employeeMap = new Map<number, FrmsFortnightIndicatorItemSeed[]>();
+  const today = input.today ?? todayIso();
 
   for (const item of input.items) {
     if (!employeeMap.has(item.funcionario_id)) {
@@ -746,7 +754,7 @@ export function buildFrmsFortnightIndicatorMap(
       diasComCheckinPendente,
       diasComDadoEstimado,
     });
-    const naturezaDado = resolveNaturezaDado(item, periodFullyCoveredByQuery);
+    const naturezaDado = resolveNaturezaDado(item, periodFullyCoveredByQuery, today);
     const decisao = resolveDecisaoFromStatus(statusQuinzena, naturezaDado);
     const mitigacaoRecomendada = resolveMitigacaoFromStatus({
       status: statusQuinzena,
