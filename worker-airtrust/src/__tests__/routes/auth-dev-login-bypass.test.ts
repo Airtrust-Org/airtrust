@@ -3,13 +3,17 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { resetSchemaCache } from '../../utils/db-schema';
 
-vi.mock('../../middleware/rate-limit', () => ({
-  rateLimiter:
-    () =>
-    async (_c: any, next: () => Promise<void>) => {
-      await next();
-    },
-}));
+vi.mock('../../middleware/rate-limit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/rate-limit')>();
+  return {
+    ...actual,
+    rateLimiter:
+      () =>
+      async (_c: any, next: () => Promise<void>) => {
+        await next();
+      },
+  };
+});
 
 vi.mock('../../utils/security', () => ({
   generateJWT: vi.fn(async (payload: Record<string, unknown>) => ({
