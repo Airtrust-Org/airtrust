@@ -9,6 +9,8 @@ import {
   useAlertasQuery,
   useFrmsAlertasQuery,
   useMetricsQuery,
+  useSgsoChecklistQuery,
+  useSimuladoresAlertasQuery,
 } from '@/react-app/pages/dashboard/queries';
 import {
   buildManagerAlerts,
@@ -140,7 +142,7 @@ function ErrorState({ partialSources }: { partialSources: string[] }) {
 
 export default function ManagerAlertCenter() {
   const { empresas, empresaAtualId } = useAuth();
-  const { isAdmin, isGestor } = usePermissions();
+  const { isAdmin, isGestor, can } = usePermissions();
 
   if (!isAdmin && !isGestor) {
     return null;
@@ -148,11 +150,19 @@ export default function ManagerAlertCenter() {
 
   const modulosAtivos = empresas.find((empresa) => empresa.id === empresaAtualId)?.modulos_ativos;
 
-  return <ManagerAlertCenterContent modulosAtivos={modulosAtivos} />;
+  return <ManagerAlertCenterContent modulosAtivos={modulosAtivos} canViewSgso={can('sgso.view')} />;
 }
 
-function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }) {
+function ManagerAlertCenterContent({
+  modulosAtivos,
+  canViewSgso,
+}: {
+  modulosAtivos: unknown;
+  canViewSgso: boolean;
+}) {
   const enableFrms = canAccessModule('frms', modulosAtivos);
+  const enableSgso = canAccessModule('sgso', modulosAtivos) && canViewSgso;
+  const enableSimuladores = canAccessModule('simuladores', modulosAtivos);
   const enableQualificacoes = canAccessModule('qualificacoes', modulosAtivos);
   const enableLms = canAccessModule('lms', modulosAtivos);
   const usesDashboardAlerts = enableQualificacoes || enableLms;
@@ -160,6 +170,8 @@ function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }
   const metricsQ = useMetricsQuery(enableQualificacoes);
   const alertasQ = useAlertasQuery(usesDashboardAlerts);
   const frmsAlertasQ = useFrmsAlertasQuery(enableFrms);
+  const sgsoChecklistQ = useSgsoChecklistQuery(enableSgso);
+  const simuladoresAlertasQ = useSimuladoresAlertasQuery(enableSimuladores);
 
   const todayIso = getTodayIsoSaoPaulo();
   const frmsSnapshot = useFrmsOperationalSnapshot({
@@ -174,18 +186,28 @@ function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }
     if (usesDashboardAlerts && alertasQ.isError && !alertasQ.data) failures.push('Qualificações/LMS');
     if (enableFrms && frmsAlertasQ.isError && !frmsAlertasQ.data) failures.push('FRMS');
     if (enableFrms && frmsSnapshot.error && frmsSnapshot.data.length === 0) failures.push('Snapshot operacional');
+    if (enableSgso && sgsoChecklistQ.isError && !sgsoChecklistQ.data) failures.push('SGSO');
+    if (enableSimuladores && simuladoresAlertasQ.isError && !simuladoresAlertasQ.data) {
+      failures.push('Simuladores/Fichas');
+    }
     return failures;
   }, [
     alertasQ.data,
     alertasQ.isError,
     enableFrms,
     enableQualificacoes,
+    enableSgso,
+    enableSimuladores,
     frmsAlertasQ.data,
     frmsAlertasQ.isError,
     frmsSnapshot.data.length,
     frmsSnapshot.error,
     metricsQ.data,
     metricsQ.isError,
+    sgsoChecklistQ.data,
+    sgsoChecklistQ.isError,
+    simuladoresAlertasQ.data,
+    simuladoresAlertasQ.isError,
     usesDashboardAlerts,
   ]);
 
@@ -199,18 +221,26 @@ function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }
         snapshotItems: frmsSnapshot.data,
         snapshotSummary: frmsSnapshot.summary,
         enableFrms,
+        sgsoChecklist: sgsoChecklistQ.data,
+        simuladoresAlerts: simuladoresAlertasQ.data,
         enableQualificacoes,
         enableLms,
+        enableSgso,
+        enableSimuladores,
       }),
     [
       alertasQ.data,
       enableFrms,
       enableLms,
       enableQualificacoes,
+      enableSgso,
+      enableSimuladores,
       frmsAlertasQ.data,
       frmsSnapshot.data,
       frmsSnapshot.summary,
       metricsQ.data,
+      sgsoChecklistQ.data,
+      simuladoresAlertasQ.data,
       todayIso,
     ],
   );
@@ -223,7 +253,9 @@ function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }
       (enableLms && alertasQ.isLoading && !alertasQ.data)) ||
     (enableFrms &&
       ((frmsAlertasQ.isLoading && !frmsAlertasQ.data) ||
-        (frmsSnapshot.loading && frmsSnapshot.data.length === 0)));
+        (frmsSnapshot.loading && frmsSnapshot.data.length === 0))) ||
+    (enableSgso && sgsoChecklistQ.isLoading && !sgsoChecklistQ.data) ||
+    (enableSimuladores && simuladoresAlertasQ.isLoading && !simuladoresAlertasQ.data);
 
   const metricsFailed = enableQualificacoes && metricsQ.isError && !metricsQ.data;
   const dashboardAlertsFailed = usesDashboardAlerts && alertasQ.isError && !alertasQ.data;
@@ -232,17 +264,31 @@ function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }
   const frmsAlertsFailed = enableFrms && frmsAlertasQ.isError && !frmsAlertasQ.data;
   const frmsSnapshotFailed = enableFrms && Boolean(frmsSnapshot.error) && frmsSnapshot.data.length === 0;
   const frmsSourcesFailed = enableFrms && frmsAlertsFailed && frmsSnapshotFailed;
+  const sgsoSourcesFailed = enableSgso && sgsoChecklistQ.isError && !sgsoChecklistQ.data;
+  const simuladoresSourcesFailed =
+    enableSimuladores && simuladoresAlertasQ.isError && !simuladoresAlertasQ.data;
 
   const allTrackedSourcesFailed =
     partialSources.length > 0 &&
     alerts.length === 0 &&
     (!enableQualificacoes || qualificacoesSourcesFailed) &&
     (!enableLms || lmsSourcesFailed) &&
-    (!enableFrms || frmsSourcesFailed);
+    (!enableFrms || frmsSourcesFailed) &&
+    (!enableSgso || sgsoSourcesFailed) &&
+    (!enableSimuladores || simuladoresSourcesFailed);
 
   const criticalCount = alerts.filter((item) => item.severity === 'CRITICO').length;
   const attentionCount = alerts.filter((item) => item.severity === 'ATENCAO').length;
   const informativeCount = alerts.filter((item) => item.severity === 'INFORMATIVO').length;
+  const includedSources = [
+    enableFrms ? 'FRMS/checagem operacional' : null,
+    enableSgso ? 'SGSO' : null,
+    enableSimuladores ? 'simuladores/fichas' : null,
+    enableQualificacoes ? 'qualificações' : null,
+    enableLms ? 'LMS obrigatório' : null,
+  ].filter(Boolean) as string[];
+  const includedSourcesLabel =
+    includedSources.length > 0 ? includedSources.join(', ') : 'nenhuma fonte operacional habilitada';
 
   return (
     <section className="mb-6 rounded-3xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-amber-50/50 p-5 shadow-[0_18px_45px_-28px_rgba(15,23,42,0.35)]">
@@ -299,10 +345,10 @@ function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }
           <BellRing className="mt-0.5 h-4 w-4 text-slate-500" />
           <div>
             <p className="font-semibold text-slate-700">
-              Fontes incluídas nesta versão: FRMS/checagem operacional, qualificações e LMS obrigatório.
+              Fontes incluídas nesta versão: {includedSourcesLabel}.
             </p>
             <p className="mt-0.5">
-              Fontes pendentes: simuladores/fichas com pendência operacional dedicada e bloco SGSO com priorização própria.
+              Fontes pendentes: refinamentos de agregação backend, parametrização de limites e validação autenticada ponta a ponta.
             </p>
           </div>
         </div>

@@ -107,6 +107,35 @@ export interface SessaoSimulador {
   participantes?: Array<{ id: number; nome: string; funcao?: string }> | string;
 }
 
+export interface SgsoChecklistItem {
+  codigo: string;
+  referencia: string;
+  status: 'OK' | 'ATENCAO' | 'NAO_CONFORME';
+  valor: number;
+  detalhe: string;
+}
+
+export interface SgsoChecklistResumo {
+  ok: number;
+  atencao: number;
+  nao_conforme: number;
+}
+
+export interface SgsoChecklistData {
+  checklist: SgsoChecklistItem[];
+  resumo: SgsoChecklistResumo;
+}
+
+export interface SimuladoresAlertasData {
+  fichas_pendentes_avaliacao: number;
+  fichas_aguardando_assinatura_aluno: number;
+  fichas_aguardando_assinatura_instrutor: number;
+  fichas_aguardando_assinatura: number;
+  sessoes_proximas_sem_ficha_completa: number;
+  edicoes_pendentes: number;
+  janela_sessoes_proximas_horas?: number;
+}
+
 export interface SectionErrors {
   metrics: string | null;
   compliance: string | null;
