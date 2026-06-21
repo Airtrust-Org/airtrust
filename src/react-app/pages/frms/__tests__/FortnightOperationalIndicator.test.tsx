@@ -70,6 +70,13 @@ describe('FortnightOperationalIndicator components', () => {
     expect(screen.getByText(FORTNIGHT_NO_DATA_MESSAGE)).toBeInTheDocument();
   });
 
+  it('card simplificado não expõe score acumulado', () => {
+    render(<FortnightCrewSummaryCard indicator={buildIndicator()} simplified />);
+    expect(screen.getByText('Resumo da quinzena')).toBeInTheDocument();
+    expect(screen.queryByText(/Score acumulado:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tendência:/)).not.toBeInTheDocument();
+  });
+
   it('painel consolidado mostra mitigação e tendência', () => {
     render(<FortnightConsolidatedPanel indicator={buildIndicator()} />);
     expect(screen.getByText(/Tendência:/)).toBeInTheDocument();

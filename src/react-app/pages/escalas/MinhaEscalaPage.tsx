@@ -134,12 +134,20 @@ export default function MinhaEscalaPage() {
   const eventos = calendarioData?.eventos ?? [];
   const escala = calendarioData?.escala;
   const todayIso = getTodayLocalIsoDate();
+  const myFuncionarioId =
+    user?.funcionario_id != null && Number.isFinite(user.funcionario_id)
+      ? String(user.funcionario_id)
+      : undefined;
   const { data: frmsSnapshotItems, loading: loadingFrmsSnapshot } = useFrmsOperationalSnapshot({
     data_inicio: todayIso,
     data_fim: todayIso,
+    funcionario_id: myFuncionarioId,
   });
-  const myFortnightIndicator = frmsSnapshotItems[0]?.fortnight_indicator ?? null;
-  const myCheckinPendente = frmsSnapshotItems[0]?.checkin_status === 'PENDENTE';
+  const mySnapshotItem = myFuncionarioId
+    ? frmsSnapshotItems.find((item) => String(item.funcionario_id) === myFuncionarioId)
+    : null;
+  const myFortnightIndicator = mySnapshotItem?.fortnight_indicator ?? null;
+  const myCheckinPendente = mySnapshotItem?.checkin_status === 'PENDENTE';
 
   // ── GAP 7: Ciência da escala — PRC-OPS-009 §6.3.3 ──
   const queryClient = useQueryClient();
@@ -241,6 +249,7 @@ export default function MinhaEscalaPage() {
           indicator={myFortnightIndicator}
           checkinPendente={myCheckinPendente}
           loading={loadingFrmsSnapshot}
+          simplified
         />
 
         {/* Month Navigation */}

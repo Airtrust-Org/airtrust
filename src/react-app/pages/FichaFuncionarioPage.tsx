@@ -19,8 +19,6 @@ import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo'
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { FortnightConsolidatedPanel } from '@/react-app/pages/frms/components/FortnightOperationalIndicator';
-import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
-import { FortnightConsolidatedPanel } from '@/react-app/pages/frms/components/FortnightOperationalIndicator';
 import {
   ArrowLeft,
   User,
@@ -437,23 +435,28 @@ export default function FichaFuncionarioPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const todayIso = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }, []);
+  const todayIso = useMemo(() => getTodayLocalIsoDate(), []);
 
-  const { data: frmsSnapshotItems, loading: loadingFrmsSnapshot } = useFrmsOperationalSnapshot({
+  const requestedFuncionarioId = Number(id);
+  const {
+    data: frmsSnapshotItems,
+    loading: loadingFrmsSnapshot,
+    meta: frmsSnapshotMeta,
+  } = useFrmsOperationalSnapshot({
     data_inicio: todayIso,
     data_fim: todayIso,
     funcionario_id: id,
   });
+  const fortnightSnapshotItem = frmsSnapshotItems.find(
+    (item) => item.funcionario_id === requestedFuncionarioId,
+  );
+  const shouldExposeFortnightIndicator =
+    Number.isFinite(requestedFuncionarioId) &&
+    requestedFuncionarioId > 0 &&
+    (!frmsSnapshotMeta?.forced_funcionario_id ||
+      frmsSnapshotMeta.forced_funcionario_id === requestedFuncionarioId);
   const fortnightIndicator =
-    frmsSnapshotItems.find((item) => String(item.funcionario_id) === String(id))?.fortnight_indicator ??
-    frmsSnapshotItems[0]?.fortnight_indicator ??
-    null;
+    shouldExposeFortnightIndicator ? fortnightSnapshotItem?.fortnight_indicator ?? null : null;
 
   useEffect(() => {
     const tabFromUrl = normalizeFichaTab(searchParams.get('tab'));
