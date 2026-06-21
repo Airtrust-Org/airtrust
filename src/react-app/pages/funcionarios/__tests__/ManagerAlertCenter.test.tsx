@@ -1,0 +1,219 @@
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import ManagerAlertCenter from '../ManagerAlertCenter';
+
+const useAuthMock = vi.fn();
+const usePermissionsMock = vi.fn();
+const useMetricsQueryMock = vi.fn();
+const useAlertasQueryMock = vi.fn();
+const useFrmsAlertasQueryMock = vi.fn();
+const useFrmsOperationalSnapshotMock = vi.fn();
+
+vi.mock('@/react-app/hooks/useAuth', () => ({
+  useAuth: () => useAuthMock(),
+}));
+
+vi.mock('@/react-app/hooks/usePermissions', () => ({
+  usePermissions: () => usePermissionsMock(),
+}));
+
+vi.mock('@/react-app/pages/dashboard/queries', () => ({
+  useMetricsQuery: () => useMetricsQueryMock(),
+  useAlertasQuery: () => useAlertasQueryMock(),
+  useFrmsAlertasQuery: () => useFrmsAlertasQueryMock(),
+}));
+
+vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
+  useFrmsOperationalSnapshot: (filters: unknown) => useFrmsOperationalSnapshotMock(filters),
+}));
+
+function renderCenter() {
+  return render(
+    <MemoryRouter>
+      <ManagerAlertCenter />
+    </MemoryRouter>,
+  );
+}
+
+function baseMetricsQuery() {
+  return {
+    data: {
+      qualificacoesVencidas: 0,
+      qualificacoesAVencer: 0,
+    },
+    isLoading: false,
+    isError: false,
+  };
+}
+
+function baseAlertasQuery() {
+  return {
+    data: [],
+    isLoading: false,
+    isError: false,
+  };
+}
+
+function baseFrmsAlertasQuery() {
+  return {
+    data: [],
+    isLoading: false,
+    isError: false,
+  };
+}
+
+function baseSnapshotHook() {
+  return {
+    data: [],
+    summary: {
+      total_tripulantes: 0,
+      total_escalados: 0,
+      checkins_recebidos: 0,
+      checkins_pendentes: 0,
+      alertas_criticos: 0,
+      alertas_atencao: 0,
+      dados_estimados: 0,
+      inconsistencias: 0,
+      sem_fatorizacao: 0,
+      quinzena_incompleta: 0,
+      quinzena_atencao: 0,
+      quinzena_critica: 0,
+    },
+    meta: { scope: 'team' },
+    loading: false,
+    error: null,
+    unauthorized: false,
+    refetch: vi.fn(),
+  };
+}
+
+function setManagerContext(modulosAtivos = ['frms', 'qualificacoes', 'lms']) {
+  useAuthMock.mockReturnValue({
+    empresaAtualId: 7,
+    empresas: [{ id: 7, modulos_ativos: modulosAtivos }],
+  });
+  usePermissionsMock.mockReturnValue({
+    isAdmin: false,
+    isGestor: true,
+  });
+}
+
+describe('ManagerAlertCenter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setManagerContext();
+    useMetricsQueryMock.mockReturnValue(baseMetricsQuery());
+    useAlertasQueryMock.mockReturnValue(baseAlertasQuery());
+    useFrmsAlertasQueryMock.mockReturnValue(baseFrmsAlertasQuery());
+    useFrmsOperationalSnapshotMock.mockReturnValue(baseSnapshotHook());
+  });
+
+  it('renderiza estado vazio quando não há alertas prioritários', () => {
+    renderCenter();
+
+    expect(screen.getByText('Sem alertas críticos')).toBeInTheDocument();
+  });
+
+  it('renderiza alerta crítico FRMS antes dos alertas de atenção', () => {
+    useFrmsAlertasQueryMock.mockReturnValue({
+      ...baseFrmsAlertasQuery(),
+      data: [{ id: 'fr-1', nivel: 'CRITICO', descricao: 'Fadiga crítica' }],
+    });
+    useAlertasQueryMock.mockReturnValue({
+      ...baseAlertasQuery(),
+      data: [
+        {
+          id: 'q-1',
+          tipo: 'qualificacao_vencendo',
+          criticidade: 'MEDIA',
+          mensagem: 'Qualificação vence em 4 dias',
+          diasRestantes: 4,
+        },
+      ],
+    });
+    useMetricsQueryMock.mockReturnValue({
+      ...baseMetricsQuery(),
+      data: {
+        qualificacoesVencidas: 0,
+        qualificacoesAVencer: 1,
+      },
+    });
+
+    const { container } = renderCenter();
+    const headings = Array.from(container.querySelectorAll('article h3')).map((node) => node.textContent);
+    expect(headings[0]).toContain('FRMS');
+    expect(screen.getByText(/alerta FRMS crítico/i)).toBeInTheDocument();
+  });
+
+  it('renderiza alerta de check-in pendente', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue({
+      ...baseSnapshotHook(),
+      data: [
+        {
+          alertas: ['CHECKIN_PENDENTE'],
+          checkin_status: 'PENDENTE',
+        },
+      ],
+      summary: {
+        ...baseSnapshotHook().summary,
+        checkins_pendentes: 1,
+      },
+    });
+
+    renderCenter();
+
+    expect(screen.getByText(/check-in de fadiga pendente/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Solicitar check-in/i })).toHaveAttribute(
+      'href',
+      '/frms/controle-operacional',
+    );
+  });
+
+  it('não quebra sem dados em uma fonte parcial', () => {
+    useFrmsAlertasQueryMock.mockReturnValue({
+      ...baseFrmsAlertasQuery(),
+      data: undefined,
+      isError: true,
+    });
+
+    renderCenter();
+
+    expect(screen.getByText(/Fontes parciais/i)).toBeInTheDocument();
+    expect(screen.getByText('Sem alertas críticos')).toBeInTheDocument();
+  });
+
+  it('não mostra alerta de módulo desabilitado', () => {
+    setManagerContext(['qualificacoes']);
+    useFrmsAlertasQueryMock.mockReturnValue({
+      ...baseFrmsAlertasQuery(),
+      data: [{ id: 'fr-1', nivel: 'CRITICO', descricao: 'Fadiga crítica' }],
+    });
+
+    renderCenter();
+
+    expect(screen.queryByRole('link', { name: /Ver fadiga/i })).not.toBeInTheDocument();
+  });
+
+  it('mantém links seguros quando a origem devolve URL externa', () => {
+    useAlertasQueryMock.mockReturnValue({
+      ...baseAlertasQuery(),
+      data: [
+        {
+          id: 'lms-1',
+          tipo: 'lms_curso_pendente',
+          criticidade: 'ALTA',
+          mensagem: 'Curso obrigatório pendente',
+          urlAcao: 'https://malicioso.exemplo',
+        },
+      ],
+    });
+
+    renderCenter();
+
+    expect(screen.getByRole('link', { name: /Ver detalhe/i })).toHaveAttribute(
+      'href',
+      '/lms/dashboard',
+    );
+  });
+});
