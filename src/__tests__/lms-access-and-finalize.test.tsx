@@ -1,4 +1,5 @@
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -55,6 +56,30 @@ function FinalizarHarness() {
   );
 }
 
+const funcionariosRoutes = [
+  '/funcionarios',
+  '/funcionarios/7',
+  '/funcionarios/7/perfil',
+  '/funcionarios/7/ficha',
+] as const;
+
+function renderFuncionariosRoute(pathname: string) {
+  return render(
+    <MemoryRouter initialEntries={[pathname]}>
+      <Routes>
+        <Route
+          path="*"
+          element={
+            <ProtectedRoute requiredPermission="funcionarios.view">
+              <div>Gestao de funcionarios</div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe('LMS access and finalize regressions', () => {
   beforeEach(() => {
     authState.user.role = 'ADMIN';
@@ -97,48 +122,57 @@ describe('LMS access and finalize regressions', () => {
     expect(screen.queryByText('Acesso Negado')).not.toBeInTheDocument();
   });
 
-  it('blocks direct /funcionarios access when the user lacks funcionarios.view', () => {
-    authState.user.role = 'USUARIO';
+  it.each(funcionariosRoutes)(
+    'blocks direct %s access when the user lacks funcionarios.view',
+    (pathname) => {
+      authState.user.role = 'USUARIO';
 
-    render(
-      <MemoryRouter initialEntries={['/funcionarios']}>
-        <Routes>
-          <Route
-            path="/funcionarios"
-            element={
-              <ProtectedRoute requiredPermission="funcionarios.view">
-                <div>Gestao de funcionarios</div>
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
+      renderFuncionariosRoute(pathname);
 
-    expect(screen.queryByText('Gestao de funcionarios')).not.toBeInTheDocument();
-    expect(screen.getByText('Acesso Negado')).toBeInTheDocument();
-  });
+      expect(screen.queryByText('Gestao de funcionarios')).not.toBeInTheDocument();
+      expect(screen.getByText('Acesso Negado')).toBeInTheDocument();
+    },
+  );
 
-  it('keeps /funcionarios available for non-manager roles that do have funcionarios.view', () => {
-    authState.user.role = 'COMPLIANCE';
+  it.each(funcionariosRoutes)(
+    'keeps %s available for non-manager roles that do have funcionarios.view',
+    (pathname) => {
+      authState.user.role = 'COMPLIANCE';
 
-    render(
-      <MemoryRouter initialEntries={['/funcionarios']}>
-        <Routes>
-          <Route
-            path="/funcionarios"
-            element={
-              <ProtectedRoute requiredPermission="funcionarios.view">
-                <div>Gestao de funcionarios</div>
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
+      renderFuncionariosRoute(pathname);
+
+      expect(screen.getByText('Gestao de funcionarios')).toBeInTheDocument();
+      expect(screen.queryByText('Acesso Negado')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['ADMIN', '/funcionarios/7/perfil'],
+    ['GESTOR', '/funcionarios/7/ficha'],
+  ])('keeps %s access to protected funcionarios deep links', (role, pathname) => {
+    authState.user.role = role;
+
+    renderFuncionariosRoute(pathname);
 
     expect(screen.getByText('Gestao de funcionarios')).toBeInTheDocument();
     expect(screen.queryByText('Acesso Negado')).not.toBeInTheDocument();
+  });
+
+  it('keeps App funcionarios route config protected on every direct deep link', () => {
+    const appSource = readFileSync('src/react-app/App.tsx', 'utf8');
+
+    expect(appSource).toMatch(
+      /path="\/funcionarios"[\s\S]*?<ProtectedRoute requiredPermission="funcionarios\.view">/,
+    );
+    expect(appSource).toMatch(
+      /path="\/funcionarios\/:id\/ficha"[\s\S]*?<ProtectedRoute requiredPermission="funcionarios\.view">/,
+    );
+    expect(appSource).toMatch(
+      /path="\/funcionarios\/:id"[\s\S]*?<ProtectedRoute requiredPermission="funcionarios\.view">/,
+    );
+    expect(appSource).toMatch(
+      /path="\/funcionarios\/:id\/perfil"[\s\S]*?<ProtectedRoute requiredPermission="funcionarios\.view">/,
+    );
   });
 
   it('posts manual LMS finalization to the endpoint used by content players', async () => {
