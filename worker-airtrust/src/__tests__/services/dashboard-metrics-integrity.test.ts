@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  getDashboardSimuladoresAlerts,
   getTaxaConclusaoMensal,
   getUtilizacaoSimuladores,
 } from '../../services/dashboardService';
@@ -111,5 +112,51 @@ describe('dashboard metrics integrity service', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.args).toEqual([21]);
     expect(calls[0]?.query).toContain('1 = 0');
+  });
+
+  it('resume alertas operacionais de simuladores sem PII e com fallback de edicoes', async () => {
+    const calls: QueryCall[] = [];
+    const firstQueue = [
+      { name: 'fichas_sessao_edicoes' },
+      {
+        fichas_pendentes_avaliacao: 2,
+        fichas_aguardando_assinatura_aluno: 1,
+        fichas_aguardando_assinatura_instrutor: 3,
+      },
+      { total: 4 },
+      { total: 5 },
+    ];
+
+    const db = {
+      prepare: vi.fn((query: string) => ({
+        bind: (...args: unknown[]) => {
+          calls.push({ query, args });
+          const row = firstQueue.shift() ?? null;
+          return {
+            first: async () => row,
+          };
+        },
+      })),
+    } as unknown as D1Database;
+
+    const result = await getDashboardSimuladoresAlerts(db, 12, {
+      mode: 'restricted',
+      setorIds: [3],
+      funcionarioId: null,
+    });
+
+    expect(result).toEqual({
+      fichas_pendentes_avaliacao: 2,
+      fichas_aguardando_assinatura_aluno: 1,
+      fichas_aguardando_assinatura_instrutor: 3,
+      fichas_aguardando_assinatura: 4,
+      sessoes_proximas_sem_ficha_completa: 4,
+      edicoes_pendentes: 5,
+      janela_sessoes_proximas_horas: 24,
+    });
+    expect(calls[0]?.args).toEqual(['fichas_sessao_edicoes']);
+    expect(calls[1]?.query).toContain('AVALIACAO_PENDENTE');
+    expect(calls[2]?.query).toContain('COUNT(*) AS total');
+    expect(calls[3]?.query).toContain("fe.status = 'PENDENTE'");
   });
 });

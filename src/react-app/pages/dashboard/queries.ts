@@ -9,6 +9,8 @@ import type {
   AtividadeRecente,
   FrmsAlertaRaw,
   EscalaItem,
+  SgsoChecklistData,
+  SimuladoresAlertasData,
   TreinamentoPlanejadoItem,
   SessaoSimulador,
   SolicitacaoTreinamentoItem,
@@ -65,6 +67,8 @@ export const dashboardKeys = {
   alertas: () => [...dashboardKeys.all, 'alertas'] as const,
   atividades: () => [...dashboardKeys.all, 'atividades'] as const,
   frmsAlertas: (mesInicio: string) => [...dashboardKeys.all, 'frms-alertas', mesInicio] as const,
+  sgsoChecklist: () => [...dashboardKeys.all, 'sgso-checklist'] as const,
+  simuladoresAlertas: () => [...dashboardKeys.all, 'simuladores-alertas'] as const,
   escalas: () => [...dashboardKeys.all, 'escalas'] as const,
   treinamentos: () => [...dashboardKeys.all, 'treinamentos-planejados'] as const,
   sessoes: (today: string) => [...dashboardKeys.all, 'sessoes', today] as const,
@@ -181,6 +185,44 @@ export function useFrmsAlertasQuery(enabled = true) {
         const dataMes = normalizeIsoDate(f.data_jornada).slice(0, 7);
         return dataMes === mesAtual;
       });
+    },
+    staleTime: STALE_CRITICAL_MS,
+    enabled,
+  });
+}
+
+export function useSgsoChecklistQuery(enabled = true) {
+  return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
+    queryKey: dashboardKeys.sgsoChecklist(),
+    queryFn: async () => {
+      const res = await fetchWithAuth(`${API_BASE}/sgso/compliance/rbac121/checklist`, {
+        headers: getHeaders(),
+      });
+      const json = await readJsonOrThrow<SgsoChecklistData>(
+        res,
+        'Falha ao buscar checklist SGSO',
+      );
+      return json.data as SgsoChecklistData;
+    },
+    staleTime: STALE_STANDARD_MS,
+    enabled,
+  });
+}
+
+export function useSimuladoresAlertasQuery(enabled = true) {
+  return useQuery({
+    ...BASE_QUERY_BEHAVIOR,
+    queryKey: dashboardKeys.simuladoresAlertas(),
+    queryFn: async () => {
+      const res = await fetchWithAuth(`${API_BASE}/dashboard/simuladores-alertas`, {
+        headers: getHeaders(),
+      });
+      const json = await readJsonOrThrow<SimuladoresAlertasData>(
+        res,
+        'Falha ao buscar alertas de simuladores',
+      );
+      return json.data as SimuladoresAlertasData;
     },
     staleTime: STALE_CRITICAL_MS,
     enabled,
