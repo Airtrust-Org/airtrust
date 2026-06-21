@@ -113,5 +113,6 @@ describe('managerAlertCenter.utils', () => {
       '/lms/dashboard',
     );
     expect(sanitizeInternalHref('/sgso/frat', '/lms/dashboard')).toBe('/sgso/frat');
+    expect(sanitizeInternalHref('/\\evil.example', '/lms/dashboard')).toBe('/lms/dashboard');
   });
 });

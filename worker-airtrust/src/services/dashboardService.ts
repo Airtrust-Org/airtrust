@@ -105,6 +105,28 @@ function buildSessionScopeSql(
   };
 }
 
+function buildFichaScopeSql(
+  access: EmployeeSectorAccess | undefined,
+  fichaAlias = 'f',
+): { clause: string; bindings: number[] } {
+  const normalizedAccess = resolveDashboardAccess(access);
+  if (normalizedAccess.mode === 'all') {
+    return { clause: '1 = 1', bindings: [] };
+  }
+
+  const scope = buildFuncionarioScopeWhere(normalizedAccess, 'f_alert_scope');
+  return {
+    clause: `EXISTS (
+      SELECT 1
+      FROM funcionarios f_alert_scope
+      WHERE f_alert_scope.id = ${fichaAlias}.colaborador_id_aluno
+        AND f_alert_scope.deleted_at IS NULL
+        AND ${scope.clause}
+    )`,
+    bindings: scope.bindings,
+  };
+}
+
 function buildEscalaScopeSql(
   access: EmployeeSectorAccess | undefined,
   escalaAlias = 'em',
@@ -1099,9 +1121,15 @@ export async function getDashboardSimuladoresAlerts(
   horizonHours = 24,
 ): Promise<Record<string, number>> {
   const sessionScope = buildSessionScopeSql(access, 'sa');
+  const fichaScope = buildFichaScopeSql(access, 'f');
+  const participantScope = buildEmployeeScopeSql(access, 'f_alert_participant');
   const nowKey = getSaoPauloDateTimeKey();
-  const windowEndKey = getSaoPauloDateTimeKey(new Date(Date.now() + horizonHours * 60 * 60 * 1000));
-  const safeHorizonHours = Number.isInteger(horizonHours) && horizonHours > 0 ? horizonHours : 24;
+  const safeHorizonHours = Number.isInteger(horizonHours) && horizonHours > 0
+    ? Math.min(horizonHours, 168)
+    : 24;
+  const windowEndKey = getSaoPauloDateTimeKey(
+    new Date(Date.now() + safeHorizonHours * 60 * 60 * 1000),
+  );
   const hasEdicoesTable = await tableExists(db, 'fichas_sessao_edicoes');
 
   const normalizedStatusSql = `
@@ -1146,7 +1174,9 @@ export async function getDashboardSimuladoresAlerts(
          WHERE f.deleted_at IS NULL
            AND f.empresa_id = ?
            AND sa.empresa_id = ?
-           AND ${sessionScope.clause}`,
+           AND UPPER(COALESCE(sa.status, '')) NOT IN ('CANCELADA', 'CANCELADO')
+           AND ${sessionScope.clause}
+           AND ${fichaScope.clause}`,
       )
       .bind(
         nowKey,
@@ -1155,6 +1185,7 @@ export async function getDashboardSimuladoresAlerts(
         empresaId,
         empresaId,
         ...sessionScope.bindings,
+        ...fichaScope.bindings,
       )
       .first<{
         fichas_pendentes_avaliacao: number;
@@ -1167,27 +1198,33 @@ export async function getDashboardSimuladoresAlerts(
          FROM (
            SELECT
              sa.id,
-             COUNT(f.id) AS total_fichas,
-             SUM(CASE WHEN ${normalizedStatusSql} IN ('APROVADO', 'NAO_APROVADO') THEN 1 ELSE 0 END) AS fichas_finalizadas
+             SUM(CASE WHEN f.id IS NULL OR ${normalizedStatusSql} NOT IN ('APROVADO', 'NAO_APROVADO') THEN 1 ELSE 0 END) AS fichas_incompletas
            FROM simulador_agendamentos sa
+           INNER JOIN sessoes_participantes sp_alert
+             ON sp_alert.sessao_id = sa.id
+            AND sp_alert.deleted_at IS NULL
+           INNER JOIN funcionarios f_alert_participant
+             ON f_alert_participant.id = sp_alert.funcionario_id
+            AND f_alert_participant.deleted_at IS NULL
            LEFT JOIN fichas_sessao f
              ON f.agendamento_slot_id = sa.id
+            AND f.colaborador_id_aluno = sp_alert.funcionario_id
             AND f.deleted_at IS NULL
             AND f.empresa_id = ?
            WHERE sa.deleted_at IS NULL
              AND sa.empresa_id = ?
-             AND ${sessionScope.clause}
+             AND ${participantScope.clause}
              AND ${sessionKeyOnlySql} > ?
              AND ${sessionKeyOnlySql} <= ?
              AND UPPER(COALESCE(sa.status, '')) IN ('AGENDADO', 'PENDENTE', 'CONFIRMADO')
            GROUP BY sa.id
-           HAVING total_fichas = 0 OR fichas_finalizadas < total_fichas
+           HAVING fichas_incompletas > 0
          ) pendencias`,
       )
       .bind(
         empresaId,
         empresaId,
-        ...sessionScope.bindings,
+        ...participantScope.bindings,
         nowKey,
         windowEndKey,
       )
@@ -1207,9 +1244,15 @@ export async function getDashboardSimuladoresAlerts(
               AND sa.empresa_id = ?
              WHERE fe.deleted_at IS NULL
                AND fe.status = 'PENDENTE'
-               AND ${sessionScope.clause}`,
+               AND ${sessionScope.clause}
+               AND ${fichaScope.clause}`,
           )
-          .bind(empresaId, empresaId, ...sessionScope.bindings)
+          .bind(
+            empresaId,
+            empresaId,
+            ...sessionScope.bindings,
+            ...fichaScope.bindings,
+          )
           .first<{ total: number }>()
       : Promise.resolve({ total: 0 }),
   ]);

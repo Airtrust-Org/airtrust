@@ -530,7 +530,10 @@ app.get('/simuladores-alertas', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
-    const horizonHours = Number(c.req.query('janela_horas') || '24');
+    const requestedHorizonHours = Number(c.req.query('janela_horas') || '24');
+    const horizonHours = Number.isInteger(requestedHorizonHours) && requestedHorizonHours > 0
+      ? Math.min(requestedHorizonHours, 168)
+      : 24;
     const data = await getDashboardSimuladoresAlerts(c.env.DB, empresaId, access, horizonHours);
     return c.json({ success: true, data });
   } catch (error) {

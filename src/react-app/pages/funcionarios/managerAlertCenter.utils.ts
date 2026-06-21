@@ -42,7 +42,7 @@ interface BuildManagerAlertsParams {
   enableSimuladores?: boolean;
 }
 
-const INTERNAL_ROUTE_RE = /^\/(?!\/)/;
+const INTERNAL_ROUTE_RE = /^\/(?!\/)[^\\\u0000-\u001f\u007f]*$/;
 
 function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;

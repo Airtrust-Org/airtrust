@@ -196,7 +196,7 @@ export function useSgsoChecklistQuery(enabled = true) {
     ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.sgsoChecklist(),
     queryFn: async () => {
-      const res = await fetchWithAuth(`${API_BASE}/sgso/compliance/rbac121/checklist`, {
+      const res = await fetchWithAuth(`${API_BASE}/sgso/next/compliance/rbac121/checklist`, {
         headers: getHeaders(),
       });
       const json = await readJsonOrThrow<SgsoChecklistData>(

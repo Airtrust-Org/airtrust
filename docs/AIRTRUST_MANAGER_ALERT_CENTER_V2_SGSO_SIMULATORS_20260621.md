@@ -54,7 +54,20 @@ A ordenação continua limitada à janela de maior prioridade da Central.
 - sem alteração global de RBAC/tenant/auth;
 - sem renderização de PII na Home;
 - SGSO consumido por fonte agregada;
-- simuladores consumidos por resumo agregado tenant-scoped.
+- simuladores consumidos por resumo agregado tenant-scoped;
+- Central só consulta SGSO quando o módulo está ativo e `sgso.view` é permitido;
+- resumo de simuladores/fichas filtra fichas e participantes pelo escopo operacional aplicável;
+- `janela_horas` do endpoint de simuladores é saneada antes do cálculo e limitada a 168h;
+- CTAs internos rejeitam URL externa, protocolo implícito por `//`, barra invertida e caracteres de controle.
+
+## Correções de fechamento PR #117
+
+- corrigido consumo SGSO para `/api/sgso/next/compliance/rbac121/checklist`;
+- corrigido respeito a `DENY:sgso.view` na Central;
+- corrigido escopo agregado de simuladores para não contar ficha de participante fora do escopo;
+- corrigida exclusão de sessões canceladas nos passivos de avaliação/assinatura;
+- corrigida sanitização de links internos com barra invertida;
+- corrigida validação tardia de `janela_horas` no endpoint `GET /api/dashboard/simuladores-alertas`.
 
 ## Testes
 
@@ -67,6 +80,16 @@ A ordenação continua limitada à janela de maior prioridade da Central.
 - `npm run build`
 
 Todos os comandos acima passaram nesta worktree.
+
+Reexecutado após as correções de fechamento:
+
+- `npm run test:run -- src/react-app/pages/funcionarios/__tests__/ManagerAlertCenter.test.tsx` — PASS, 14 testes;
+- `npm run test:run -- src/react-app/pages/funcionarios/__tests__/managerAlertCenter.utils.test.ts` — PASS, 4 testes;
+- `npm run test:worker -- --run dashboard-metrics-integrity` — PASS, 11 testes;
+- `npm run test:run -- --run alert` — PASS, 20 testes;
+- `npm run test:run -- --run sgso simulador ficha dashboard frms` — PASS, 218 testes;
+- `npm run lint` — PASS;
+- `npm run build` — PASS.
 
 ## Limitações
 
