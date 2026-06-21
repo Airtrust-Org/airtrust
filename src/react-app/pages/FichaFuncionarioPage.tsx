@@ -17,6 +17,8 @@ import PastaVirtualCompleta from '@/react-app/components/funcionarios/PastaVirtu
 import Ficha360TreinamentoVooSection from '@/react-app/components/funcionarios/Ficha360TreinamentoVooSection';
 import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
+import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { FortnightConsolidatedPanel } from '@/react-app/pages/frms/components/FortnightOperationalIndicator';
 import {
   ArrowLeft,
   User,
@@ -410,6 +412,14 @@ function normalizeFichaTab(tab: string | null): FichaTab {
   return 'resumo';
 }
 
+function getTodayLocalIsoDate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // ============================================================
 // Componente Principal
 // ============================================================
@@ -424,6 +434,29 @@ export default function FichaFuncionarioPage() {
   const [requisitosFuncao, setRequisitosFuncao] = useState<MatrizRequisito[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const todayIso = useMemo(() => getTodayLocalIsoDate(), []);
+
+  const requestedFuncionarioId = Number(id);
+  const {
+    data: frmsSnapshotItems,
+    loading: loadingFrmsSnapshot,
+    meta: frmsSnapshotMeta,
+  } = useFrmsOperationalSnapshot({
+    data_inicio: todayIso,
+    data_fim: todayIso,
+    funcionario_id: id,
+  });
+  const fortnightSnapshotItem = frmsSnapshotItems.find(
+    (item) => item.funcionario_id === requestedFuncionarioId,
+  );
+  const shouldExposeFortnightIndicator =
+    Number.isFinite(requestedFuncionarioId) &&
+    requestedFuncionarioId > 0 &&
+    (!frmsSnapshotMeta?.forced_funcionario_id ||
+      frmsSnapshotMeta.forced_funcionario_id === requestedFuncionarioId);
+  const fortnightIndicator =
+    shouldExposeFortnightIndicator ? fortnightSnapshotItem?.fortnight_indicator ?? null : null;
 
   useEffect(() => {
     const tabFromUrl = normalizeFichaTab(searchParams.get('tab'));
@@ -698,6 +731,7 @@ export default function FichaFuncionarioPage() {
 
         {/* === ABA RESUMO === */}
         {tab === 'resumo' && (
+          <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {/* Card 1: Situação de requisitos */}
             <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -898,6 +932,12 @@ export default function FichaFuncionarioPage() {
                 </li>
               </ul>
             </div>
+          </div>
+
+          <FortnightConsolidatedPanel
+            indicator={fortnightIndicator}
+            loading={loadingFrmsSnapshot}
+          />
           </div>
         )}
 
