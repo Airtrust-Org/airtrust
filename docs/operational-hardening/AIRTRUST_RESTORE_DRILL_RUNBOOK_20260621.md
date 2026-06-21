@@ -36,7 +36,7 @@ Executar um drill seguro para responder se os artefatos de backup permitem resta
 
 ## Passos do drill
 
-1. Rodar [scripts/audit-observability-dr-readiness.sh](/tmp/airtrust-observability-dr-readiness/scripts/audit-observability-dr-readiness.sh:1) para inventario read-only.
+1. Rodar [scripts/audit-observability-dr-readiness.sh](../../scripts/audit-observability-dr-readiness.sh) para inventario read-only.
 2. Verificar integridade do artefato D1 por checksum e leitura local.
 3. Restaurar o artefato em SQLite local ou D1 local controlado, nunca em producao.
 4. Validar integridade basica:
@@ -87,5 +87,5 @@ Executar um drill seguro para responder se os artefatos de backup permitem resta
 
 ## Observacoes importantes
 
-- O `RestoreService` em [worker-airtrust/src/services/backup/restore.ts](/tmp/airtrust-observability-dr-readiness/worker-airtrust/src/services/backup/restore.ts:1) nao substitui este runbook operacional.
+- O `RestoreService` em [worker-airtrust/src/services/backup/restore.ts](../../worker-airtrust/src/services/backup/restore.ts) nao substitui este runbook operacional.
 - O objetivo aqui e provar recuperabilidade em ambiente seguro, nao automatizar restore produtivo.

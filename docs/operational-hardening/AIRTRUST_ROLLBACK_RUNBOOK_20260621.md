@@ -4,6 +4,17 @@ Data: 2026-06-21
 Escopo: Worker, Pages e fallback operacional de modulos read-only
 Fora de escopo: rollback de banco em producao, migration rollback remota, restore real.
 
+## Gate de autorizacao
+
+Qualquer excecao operacional que toque producao exige autorizacao explicita do responsavel tecnico antes de qualquer acao.
+
+Sem essa autorizacao explicita:
+
+- nao abrir janela de producao;
+- nao executar rollback operacional em producao;
+- nao tocar D1/R2 produtivos;
+- nao contornar gates de deploy ou runtime.
+
 ## Objetivo
 
 Definir a sequencia minima para voltar rapidamente a um estado anterior de aplicacao quando uma release quebrar comportamento publico ou tenant-scoped.
@@ -26,7 +37,7 @@ Definir a sequencia minima para voltar rapidamente a um estado anterior de aplic
 
 1. Confirmar ultimo commit estavel conhecido.
 2. Validar se a release atual teve migration; se sim, este runbook para aqui.
-3. Preparar rollback apenas de codigo do Worker com a mesma disciplina de gate descrita em [DEPLOYMENT_AND_DEVOPS.md](/tmp/airtrust-observability-dr-readiness/DEPLOYMENT_AND_DEVOPS.md:1).
+3. Preparar rollback apenas de codigo do Worker com a mesma disciplina de gate descrita em [DEPLOYMENT_AND_DEVOPS.md](../../DEPLOYMENT_AND_DEVOPS.md).
 4. Revalidar `/api/version`, `/api/health` e smoke publico read-only.
 
 ## Pages rollback
