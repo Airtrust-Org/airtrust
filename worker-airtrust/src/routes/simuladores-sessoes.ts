@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
 import {
@@ -53,6 +54,114 @@ function parseOffset(raw: string | undefined): number {
     return 0;
   }
   return parsed;
+}
+
+function uniquePositiveIds(values: unknown[]): number[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  );
+}
+
+async function getAllowedFuncionariosBySetorScope(
+  db: D1Database,
+  empresaId: number,
+  funcionarioIds: number[],
+  setorIds: number[],
+): Promise<Set<number>> {
+  const ids = uniquePositiveIds(funcionarioIds);
+  if (ids.length === 0 || setorIds.length === 0) {
+    return new Set<number>();
+  }
+
+  try {
+    const rows = await db
+      .prepare(
+        `SELECT id, setor_id
+           FROM funcionarios
+          WHERE id IN (${ids.map(() => '?').join(',')})
+            AND empresa_id = ?
+            AND deleted_at IS NULL`,
+      )
+      .bind(...ids, empresaId)
+      .all<{ id: number; setor_id?: number | null }>();
+
+    const allowedSetores = new Set(
+      setorIds.filter((setorId) => Number.isInteger(setorId) && setorId > 0),
+    );
+
+    return new Set(
+      (rows.results || [])
+        .filter((row) => allowedSetores.has(Number(row.setor_id || 0)))
+        .map((row) => Number(row.id))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    );
+  } catch (error) {
+    if (String(error).toLowerCase().includes('setor_id')) {
+      return new Set<number>();
+    }
+    throw error;
+  }
+}
+
+async function areFuncionariosInsideSetorScope(
+  db: D1Database,
+  empresaId: number,
+  funcionarioIds: number[],
+  setorIds: number[],
+): Promise<boolean> {
+  const ids = uniquePositiveIds(funcionarioIds);
+  if (ids.length === 0) {
+    return false;
+  }
+
+  const allowed = await getAllowedFuncionariosBySetorScope(db, empresaId, ids, setorIds);
+  return ids.every((id) => allowed.has(id));
+}
+
+async function resolveSessaoReadAccess(
+  c: any,
+  empresaId: number,
+  sessao: { instrutor_id?: unknown; examinador_id?: unknown },
+  linkedFuncionarioIds: number[],
+): Promise<{ actorFuncionarioId: number | null; canViewAllRelatedData: boolean } | null> {
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  if (access.mode === 'all') {
+    return { actorFuncionarioId: null, canViewAllRelatedData: true };
+  }
+
+  if (access.mode === 'restricted') {
+    const inScope = await areFuncionariosInsideSetorScope(
+      c.env.DB,
+      empresaId,
+      linkedFuncionarioIds,
+      access.setorIds,
+    );
+    return inScope ? { actorFuncionarioId: null, canViewAllRelatedData: true } : null;
+  }
+
+  const ctx = c as unknown as { get: (k: string) => unknown };
+  const userId = String(ctx.get('userId') || '');
+  const funcId = Number(await getFuncId(c.env.DB, userId, empresaId));
+  if (!Number.isInteger(funcId) || funcId <= 0) {
+    return null;
+  }
+
+  const linkedIds = new Set(uniquePositiveIds(linkedFuncionarioIds));
+  if (!linkedIds.has(funcId)) {
+    return null;
+  }
+
+  const canViewAllRelatedData =
+    Number(sessao.instrutor_id || 0) === funcId || Number(sessao.examinador_id || 0) === funcId;
+
+  return {
+    actorFuncionarioId: funcId,
+    canViewAllRelatedData,
+  };
 }
 
 function buildWhatsAppManualLink(telefone: string, mensagem?: string): string {
@@ -554,6 +663,7 @@ app.get('/sessoes', async (c) => {
 app.post('/sessoes', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
     const b = await c.req.json();
     const {
       simulador_id,
@@ -643,6 +753,61 @@ app.post('/sessoes', async (c) => {
         { success: false, error: 'Instrutor, examinador ou participante fora do tenant' },
         400,
       );
+    }
+
+    if (tipoDispositivo === 'SIMULADOR' && simulador_id) {
+      const simulador = await c.env.DB.prepare(
+        `SELECT id
+           FROM simuladores
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+        .bind(simulador_id, empresaId)
+        .first<{ id: number }>();
+
+      if (!simulador?.id) {
+        return c.json({ success: false, error: 'Simulador não encontrado' }, 404);
+      }
+    }
+
+    if (tipoDispositivo === 'AERONAVE' && aeronave_id) {
+      const aeronave = await c.env.DB.prepare(
+        `SELECT id
+           FROM aeronaves
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+        .bind(aeronave_id, empresaId)
+        .first<{ id: number }>();
+
+      if (!aeronave?.id) {
+        return c.json({ success: false, error: 'Aeronave não encontrada' }, 404);
+      }
+    }
+
+    if (access.mode === 'restricted') {
+      const inScope = await areFuncionariosInsideSetorScope(
+        c.env.DB,
+        empresaId,
+        funcionarioIdsSessao,
+        access.setorIds,
+      );
+      if (!inScope) {
+        return c.json(
+          {
+            success: false,
+            error: 'Instrutor, examinador ou participante fora do escopo setorial',
+            code: 'FUNCIONARIO_OUT_OF_SCOPE',
+          },
+          403,
+        );
+      }
+    } else if (access.mode !== 'all') {
+      return c.json({ success: false, error: 'Acesso negado', code: 'FORBIDDEN' }, 403);
     }
 
     // Validação de horário
@@ -1189,51 +1354,97 @@ app.get('/sessoes/:id', async (c) => {
        AND ts_ref.deleted_at IS NULL
        AND ts_ref.empresa_id = sa.empresa_id
       LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
-      WHERE sa.id = ? AND sa.deleted_at IS NULL`,
+      WHERE sa.id = ?
+        AND sa.deleted_at IS NULL
+        ${empresaId ? 'AND sa.empresa_id = ?' : ''}`,
     )
-      .bind(id)
+      .bind(id, ...(empresaId ? [empresaId] : []))
       .first();
     if (!s) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
-    // Tenant isolation: verify empresa_id matches auth context
-    if (empresaId && s.empresa_id && Number(s.empresa_id) !== Number(empresaId)) {
-      return c.json({ success: false, error: 'Não encontrada' }, 404);
-    }
-
     // 2. Buscar participantes
     const p = await c.env.DB.prepare(
-      'SELECT sp.*,f.nome as funcionario_nome,f.matricula as funcionario_matricula FROM sessoes_participantes sp LEFT JOIN funcionarios f ON sp.funcionario_id=f.id WHERE sp.sessao_id=? AND sp.deleted_at IS NULL',
+      `SELECT sp.*, f.nome as funcionario_nome, f.matricula as funcionario_matricula
+         FROM sessoes_participantes sp
+         LEFT JOIN funcionarios f
+           ON sp.funcionario_id = f.id
+          AND f.deleted_at IS NULL
+          AND f.empresa_id = ?
+        WHERE sp.sessao_id = ?
+          AND sp.deleted_at IS NULL`,
     )
-      .bind(id)
+      .bind(s.empresa_id, id)
       .all();
 
     // 3. Buscar instrutor
     const instrutor = await c.env.DB.prepare(
-      'SELECT id, nome, matricula FROM funcionarios WHERE id=? AND deleted_at IS NULL',
+      'SELECT id, nome, matricula FROM funcionarios WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(s.instrutor_id)
+      .bind(s.instrutor_id, s.empresa_id)
       .first();
 
     // 4. Buscar fichas desta sessão
     const fichas = await c.env.DB.prepare(
-      'SELECT f.*,aluno.nome as aluno_nome,aluno.matricula as aluno_matricula FROM fichas_sessao f LEFT JOIN funcionarios aluno ON f.colaborador_id_aluno=aluno.id WHERE f.agendamento_slot_id=? AND f.deleted_at IS NULL',
+      `SELECT f.*, aluno.nome as aluno_nome, aluno.matricula as aluno_matricula
+         FROM fichas_sessao f
+         LEFT JOIN funcionarios aluno
+           ON f.colaborador_id_aluno = aluno.id
+          AND aluno.deleted_at IS NULL
+          AND aluno.empresa_id = f.empresa_id
+        WHERE f.agendamento_slot_id = ?
+          AND f.empresa_id = ?
+          AND f.deleted_at IS NULL`,
     )
-      .bind(id)
+      .bind(id, s.empresa_id)
       .all();
+
+    const linkedFuncionarioIds = uniquePositiveIds([
+      s.instrutor_id,
+      s.examinador_id,
+      ...(p.results || []).map((part: any) => part?.funcionario_id),
+      ...(fichas.results || []).flatMap((ficha: any) => [
+        ficha?.colaborador_id_aluno,
+        ficha?.instrutor_id,
+      ]),
+    ]);
+    const sessaoAccess = await resolveSessaoReadAccess(
+      c,
+      Number(s.empresa_id || empresaId || 0),
+      s as { instrutor_id?: unknown; examinador_id?: unknown },
+      linkedFuncionarioIds,
+    );
+    if (!sessaoAccess) {
+      return c.json({ success: false, error: 'Não encontrada' }, 404);
+    }
+
+    const participantesFiltrados = sessaoAccess.canViewAllRelatedData
+      ? p.results
+      : (p.results || []).filter(
+          (part: any) => Number(part?.funcionario_id || 0) === sessaoAccess.actorFuncionarioId,
+        );
+    const fichasFiltradas = sessaoAccess.canViewAllRelatedData
+      ? fichas.results
+      : (fichas.results || []).filter((ficha: any) => {
+          const actorId = Number(sessaoAccess.actorFuncionarioId || 0);
+          return (
+            Number(ficha?.colaborador_id_aluno || 0) === actorId ||
+            Number(ficha?.instrutor_id || 0) === actorId
+          );
+        });
 
     // 5. Montar estrutura esperada pelo frontend
     const sessao = {
       ...s,
       instrutor: instrutor || { nome: 'N/A', matricula: 'N/A' },
-      participantes: p.results,
-      alunos: p.results.map((part: any) => ({
+      participantes: participantesFiltrados,
+      alunos: participantesFiltrados.map((part: any) => ({
         id: part.funcionario_id,
         nome: part.funcionario_nome,
         matricula: part.funcionario_matricula,
         funcao: part.funcao,
         status: part.status,
       })),
-      fichas: fichas.results,
+      fichas: fichasFiltradas,
     };
 
     return c.json({ success: true, sessao });
@@ -1247,6 +1458,22 @@ app.get('/sessoes/:id', async (c) => {
 app.get('/sessoes/:id/fichas', async (c) => {
   try {
     const sessao_id = c.req.param('id');
+    const empresaId = Number((c as unknown as { get: (k: string) => unknown }).get('empresaId') || 0);
+
+    const sessao = await c.env.DB.prepare(
+      `SELECT id, empresa_id, instrutor_id, examinador_id
+         FROM simulador_agendamentos
+        WHERE id = ?
+          ${empresaId ? 'AND empresa_id = ?' : ''}
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(sessao_id, ...(empresaId ? [empresaId] : []))
+      .first<{ id: number; empresa_id: number; instrutor_id?: number | null; examinador_id?: number | null }>();
+
+    if (!sessao) {
+      return c.json({ success: false, error: 'Não encontrada' }, 404);
+    }
 
     // Buscar fichas vinculadas à sessão com JOINs completos (mesma query do GET /fichas)
     const fichas = await c.env.DB.prepare(
@@ -1294,13 +1521,44 @@ app.get('/sessoes/:id/fichas', async (c) => {
       LEFT JOIN simuladores sim ON sa.simulador_id = sim.id
       LEFT JOIN funcionarios aluno ON f.colaborador_id_aluno = aluno.id
       LEFT JOIN funcionarios instrutor ON f.instrutor_id = instrutor.id
-      WHERE f.agendamento_slot_id = ? AND f.deleted_at IS NULL
+      WHERE f.agendamento_slot_id = ?
+        AND f.deleted_at IS NULL
+        AND f.empresa_id = ?
+        AND sa.empresa_id = f.empresa_id
       ORDER BY aluno.nome`,
     )
-      .bind(sessao_id)
+      .bind(sessao_id, sessao.empresa_id)
       .all();
 
-    return c.json({ success: true, data: fichas.results });
+    const linkedFuncionarioIds = uniquePositiveIds([
+      sessao.instrutor_id,
+      sessao.examinador_id,
+      ...(fichas.results || []).flatMap((ficha: any) => [
+        ficha?.colaborador_id_aluno,
+        ficha?.instrutor_id,
+      ]),
+    ]);
+    const sessaoAccess = await resolveSessaoReadAccess(
+      c,
+      Number(sessao.empresa_id || empresaId || 0),
+      sessao,
+      linkedFuncionarioIds,
+    );
+    if (!sessaoAccess) {
+      return c.json({ success: false, error: 'Não encontrada' }, 404);
+    }
+
+    const data = sessaoAccess.canViewAllRelatedData
+      ? fichas.results
+      : (fichas.results || []).filter((ficha: any) => {
+          const actorId = Number(sessaoAccess.actorFuncionarioId || 0);
+          return (
+            Number(ficha?.colaborador_id_aluno || 0) === actorId ||
+            Number(ficha?.instrutor_id || 0) === actorId
+          );
+        });
+
+    return c.json({ success: true, data });
   } catch (e: any) {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
