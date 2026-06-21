@@ -132,6 +132,74 @@ function validateRequestedSetorScope(
   return allowed;
 }
 
+function normalizeCacheIdentifier(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function normalizeCacheRole(value: unknown): string {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
+  return normalized || 'unknown';
+}
+
+function normalizeCacheSetorIds(values: readonly number[]): number[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  ).sort((left, right) => left - right);
+}
+
+function hashStatsExtendedScopeKey(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `scope-${(hash >>> 0).toString(36)}`;
+}
+
+function buildStatsExtendedCacheScope(params: {
+  empresaId: number;
+  userId: unknown;
+  userRole: unknown;
+  contextFuncionarioId: unknown;
+  access: Awaited<ReturnType<typeof getEmployeeSectorAccess>>;
+  employeeScope: { hasSetorId: boolean };
+  funcionarioId?: string;
+  qualificacaoId?: string;
+}): { cacheKey: string; scopeToken: string } {
+  const userId = normalizeCacheIdentifier(params.userId);
+  const userRole = normalizeCacheRole(params.userRole);
+  const contextFuncionarioId = normalizeCacheIdentifier(params.contextFuncionarioId);
+  const scopedSetorIds =
+    params.access.mode === 'all' ? [] : normalizeCacheSetorIds(params.access.setorIds);
+  const parts = [
+    `empresa:${params.empresaId}`,
+    `user:${userId}`,
+    `perfil:${userRole}`,
+    `ctx-func:${contextFuncionarioId}`,
+    `scope:${params.access.mode}`,
+    `scope-setor-col:${params.employeeScope.hasSetorId ? 1 : 0}`,
+    params.access.mode === 'self' ? `scope-func:${params.access.funcionarioId}` : '',
+    params.access.mode === 'all'
+      ? ''
+      : `scope-setores:${scopedSetorIds.length > 0 ? scopedSetorIds.join(',') : 'none'}`,
+    `filtro-func:${String(params.funcionarioId || '').trim() || 'all'}`,
+    `filtro-qual:${String(params.qualificacaoId || '').trim() || 'all'}`,
+  ].filter(Boolean);
+  const cacheKey = parts.join('|');
+
+  return {
+    cacheKey,
+    scopeToken: hashStatsExtendedScopeKey(cacheKey),
+  };
+}
+
 async function hasTableColumn(
   db: D1Database,
   tableName: string,
@@ -714,6 +782,7 @@ router.get(
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
+    const getContextValue = c.get as (key: string) => unknown;
     const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
     const employeeScope = await buildHistoricoEmployeeScopeCompat(db, access, 'f');
     const funcionarioId = c.req.query('funcionario_id');
@@ -747,7 +816,16 @@ router.get(
     }
 
     const whereClause = whereClauses.join(' AND ');
-    const cacheKey = `${tenantCtx.empresaId}|${funcionarioId || ''}|${qualificacaoId || ''}`;
+    const { cacheKey, scopeToken } = buildStatsExtendedCacheScope({
+      empresaId: tenantCtx.empresaId,
+      userId: getContextValue('userId'),
+      userRole: getContextValue('userRole') || tenantCtx.role,
+      contextFuncionarioId: getContextValue('funcionarioId'),
+      access,
+      employeeScope,
+      funcionarioId,
+      qualificacaoId,
+    });
     const now = Date.now();
 
     let stats: {
@@ -792,7 +870,6 @@ router.get(
         };
 
         if (materialized) {
-          const scopeHash = `${tenantCtx.empresaId}|${funcionarioId || ''}|${qualificacaoId || ''}`;
           const day = new Date().toISOString().substring(0, 10);
           const statsResult = await db
             .prepare(statsQuery)
@@ -812,7 +889,7 @@ router.get(
             )
             .bind(
               day,
-              scopeHash,
+              cacheKey,
               result.total,
               result.validas,
               result.vencendo,
@@ -855,6 +932,7 @@ router.get(
       stats.vencidas,
       stats.renovadas,
       materialized ? 'mat' : 'live',
+      scopeToken,
     ]);
 
     const ifNone = c.req.header('If-None-Match');

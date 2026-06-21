@@ -12,6 +12,7 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
   employeeSectorSql,
+  filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
@@ -156,6 +157,78 @@ async function getCourseSetorSchema(db: D1Database): Promise<{
   ]);
 
   return { hasCursoSetores, hasQualificacaoTipoSetores };
+}
+
+function assertSetorIdsWithinWriteScope(
+  access: EmployeeSectorAccess,
+  setorIds: number[],
+): void {
+  if (access.mode === 'all') return;
+  if (setorIds.length === 0) {
+    throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+  }
+
+  const allowedSetorIds = filterRequestedSetorIdsByAccess(setorIds, access);
+  if (allowedSetorIds.length !== setorIds.length) {
+    throw new ApiError('Acesso negado: setor fora do seu escopo', 403);
+  }
+}
+
+async function listQualificacaoTipoSetorIds(
+  db: D1Database,
+  empresaId: number,
+  qualificacaoTipoId: number | null | undefined,
+  schema: { hasQualificacaoTipoSetores: boolean },
+): Promise<number[]> {
+  if (!schema.hasQualificacaoTipoSetores || !qualificacaoTipoId) return [];
+
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT qts.setor_id
+         FROM qualificacoes_tipos_setores qts
+        WHERE qts.tipo_id = ?
+          AND qts.empresa_id = ?
+          AND qts.deleted_at IS NULL
+        ORDER BY qts.setor_id ASC`,
+    )
+    .bind(qualificacaoTipoId, empresaId)
+    .all<{ setor_id: number }>();
+
+  return (rows.results ?? [])
+    .map((row) => Number(row.setor_id))
+    .filter((setorId) => Number.isInteger(setorId) && setorId > 0);
+}
+
+async function assertCursoWriteScope(params: {
+  db: D1Database;
+  empresaId: number;
+  access: EmployeeSectorAccess;
+  schema: { hasCursoSetores: boolean; hasQualificacaoTipoSetores: boolean };
+  setorIds: number[];
+  qualificacaoTipoId: number | null | undefined;
+}): Promise<void> {
+  const { db, empresaId, access, schema, setorIds, qualificacaoTipoId } = params;
+
+  if (access.mode === 'all') return;
+  if (!schema.hasCursoSetores && !schema.hasQualificacaoTipoSetores) {
+    throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+  }
+
+  if (setorIds.length > 0) {
+    if (!schema.hasCursoSetores) {
+      throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+    }
+    assertSetorIdsWithinWriteScope(access, setorIds);
+    return;
+  }
+
+  const qualificacaoTipoSetorIds = await listQualificacaoTipoSetorIds(
+    db,
+    empresaId,
+    qualificacaoTipoId,
+    schema,
+  );
+  assertSetorIdsWithinWriteScope(access, qualificacaoTipoSetorIds);
 }
 
 function buildMatriculaEmployeeScope(
@@ -897,6 +970,17 @@ async function getCursoSetores(
     .bind(cursoId, empresaId)
     .all<{ id: number; nome: string }>();
   return rows.results ?? [];
+}
+
+async function getCursoSetorIds(
+  db: D1Database,
+  empresaId: number,
+  cursoId: number,
+  schema: { hasCursoSetores: boolean },
+): Promise<number[]> {
+  if (!schema.hasCursoSetores) return [];
+  const setores = await getCursoSetores(db, empresaId, cursoId);
+  return setores.map((setor) => Number(setor.id)).filter((setorId) => setorId > 0);
 }
 
 /** Extrai launch file do imsmanifest.xml (SCORM 1.2 e 2004) */
@@ -1787,6 +1871,8 @@ app.get('/:id{[0-9]+}', async (c) => {
 app.post('/', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const courseSetorSchema = await getCourseSetorSchema(db);
 
   const { data: d, uploadFile } = await parseCursoCreateRequest(c);
   ensureQualificacaoBinding(
@@ -1802,6 +1888,14 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   );
 
   const setorIds = Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : [];
+  await assertCursoWriteScope({
+    db,
+    empresaId,
+    access,
+    schema: courseSetorSchema,
+    setorIds,
+    qualificacaoTipoId: resolvedQualificacaoTipoId,
+  });
   if (setorIds.length > 0) {
     await validateSetorIds(db, empresaId, setorIds);
   }
@@ -1839,7 +1933,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
 
   const id = result.meta.last_row_id;
 
-  if (setorIds.length > 0) {
+  if (setorIds.length > 0 && courseSetorSchema.hasCursoSetores) {
     await upsertCursoSetores(db, empresaId, id, setorIds);
   }
 
@@ -1877,7 +1971,9 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     });
   }
 
-  const cursoSetores = await getCursoSetores(db, empresaId, id);
+  const cursoSetores = courseSetorSchema.hasCursoSetores
+    ? await getCursoSetores(db, empresaId, id)
+    : [];
   const curso = {
     ...(await db
       .prepare(`SELECT ${LMS_CURSOS_SELECT_COLUMNS} FROM lms_cursos WHERE id = ?`)
@@ -1934,6 +2030,8 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const courseSetorSchema = await getCourseSetorSchema(db);
 
   const existing = await db
     .prepare(
@@ -1951,6 +2049,16 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
       gerar_qualificacao_ao_concluir: number;
     }>();
   if (!existing) throw new ApiError('Curso não encontrado', 404);
+
+  const currentCursoSetorIds = await getCursoSetorIds(db, empresaId, cursoId, courseSetorSchema);
+  await assertCursoWriteScope({
+    db,
+    empresaId,
+    access,
+    schema: courseSetorSchema,
+    setorIds: currentCursoSetorIds,
+    qualificacaoTipoId: existing.qualificacao_tipo_id,
+  });
 
   const body = await c.req.json<unknown>();
   const parsed = CursoUpdateSchema.safeParse(body);
@@ -2033,6 +2141,15 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
 
   const updateSetorIds =
     Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : null;
+  const nextCursoSetorIds = updateSetorIds ?? currentCursoSetorIds;
+  await assertCursoWriteScope({
+    db,
+    empresaId,
+    access,
+    schema: courseSetorSchema,
+    setorIds: nextCursoSetorIds,
+    qualificacaoTipoId: resolvedQualificacaoTipoId,
+  });
   if (updateSetorIds !== null) {
     await validateSetorIds(db, empresaId, updateSetorIds);
   }
@@ -2047,7 +2164,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
       .run();
   }
 
-  if (updateSetorIds !== null) {
+  if (updateSetorIds !== null && courseSetorSchema.hasCursoSetores) {
     await replaceCursoSetores(db, empresaId, cursoId, updateSetorIds);
   }
 
@@ -2082,7 +2199,9 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     }
   }
 
-  const cursoSetores = await getCursoSetores(db, empresaId, cursoId);
+  const cursoSetores = courseSetorSchema.hasCursoSetores
+    ? await getCursoSetores(db, empresaId, cursoId)
+    : [];
   const curso = {
     ...(await db
       .prepare(

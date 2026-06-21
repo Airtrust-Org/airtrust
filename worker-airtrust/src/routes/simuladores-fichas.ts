@@ -23,6 +23,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { resolveFichaScope } from '../utils/ficha-role-scope';
 import { audit, requireAdminForDelete } from './simuladores-shared';
@@ -66,6 +67,72 @@ async function getFuncionarioId(
 // ─── Helper: perfis com acesso total ───────────────────────────────────────
 function isFullAccess(role: string): boolean {
   return resolveFichaScope(role) === 'FULL_ACCESS';
+}
+
+function uniquePositiveIds(values: unknown[]): number[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  );
+}
+
+async function getAllowedFuncionariosBySetorScope(
+  db: D1Database,
+  empresaId: number,
+  funcionarioIds: number[],
+  setorIds: number[],
+): Promise<Set<number>> {
+  const ids = uniquePositiveIds(funcionarioIds);
+  if (ids.length === 0 || setorIds.length === 0) {
+    return new Set<number>();
+  }
+
+  try {
+    const rows = await db
+      .prepare(
+        `SELECT id, setor_id
+           FROM funcionarios
+          WHERE id IN (${ids.map(() => '?').join(',')})
+            AND empresa_id = ?
+            AND deleted_at IS NULL`,
+      )
+      .bind(...ids, empresaId)
+      .all<{ id: number; setor_id?: number | null }>();
+
+    const allowedSetores = new Set(
+      setorIds.filter((setorId) => Number.isInteger(setorId) && setorId > 0),
+    );
+
+    return new Set(
+      (rows.results || [])
+        .filter((row) => allowedSetores.has(Number(row.setor_id || 0)))
+        .map((row) => Number(row.id))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    );
+  } catch (error) {
+    if (String(error).toLowerCase().includes('setor_id')) {
+      return new Set<number>();
+    }
+    throw error;
+  }
+}
+
+async function areFuncionariosInsideSetorScope(
+  db: D1Database,
+  empresaId: number,
+  funcionarioIds: number[],
+  setorIds: number[],
+): Promise<boolean> {
+  const ids = uniquePositiveIds(funcionarioIds);
+  if (ids.length === 0) {
+    return false;
+  }
+
+  const allowed = await getAllowedFuncionariosBySetorScope(db, empresaId, ids, setorIds);
+  return ids.every((id) => allowed.has(id));
 }
 
 function extractIsoDateOnly(value?: string | null): string | null {
@@ -176,6 +243,8 @@ app.get('/fichas', async (c) => {
     const userId = String(ctx.get('userId') || '');
     const role = String(ctx.get('userRole') || '');
     const empresaId = String(ctx.get('empresaId') || '');
+    const tenantEmpresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
 
     const statusFilter = c.req.query('status') || '';
     const tipoFilter = c.req.query('tipo_sessao') || '';
@@ -226,10 +295,11 @@ app.get('/fichas', async (c) => {
       LEFT JOIN funcionarios aluno ON f.colaborador_id_aluno = aluno.id
       LEFT JOIN funcionarios instrutor ON f.instrutor_id = instrutor.id
       WHERE f.deleted_at IS NULL
+        AND f.empresa_id = ?
         AND aluno.empresa_id = ?
+        AND (sa.id IS NULL OR sa.empresa_id = ?)
     `;
-    const tenantEmpresaId = getEmpresaId(c);
-    const params: (string | number)[] = [tenantEmpresaId];
+    const params: (string | number)[] = [tenantEmpresaId, tenantEmpresaId, tenantEmpresaId];
 
     // ── Controle de acesso por perfil ────────────────────────────────────────
     if (!isFullAccess(role)) {
@@ -268,7 +338,19 @@ app.get('/fichas', async (c) => {
     const r = await c.env.DB.prepare(q)
       .bind(...params)
       .all();
-    return c.json({ success: true, data: r.results });
+
+    let data = r.results || [];
+    if (access.mode === 'restricted') {
+      const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
+        c.env.DB,
+        tenantEmpresaId,
+        data.map((row: any) => row?.colaborador_id_aluno),
+        access.setorIds,
+      );
+      data = data.filter((row: any) => allowedAlunoIds.has(Number(row?.colaborador_id_aluno || 0)));
+    }
+
+    return c.json({ success: true, data });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Erro desconhecido';
     return c.json({ success: false, error: msg }, 500);
@@ -278,6 +360,7 @@ app.get('/fichas', async (c) => {
 app.post('/fichas', async (c) => {
   try {
     const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
     const b = await c.req.json();
     if (!b.colaborador_id_aluno || !b.tipo_sessao)
       return c.json(
@@ -307,6 +390,44 @@ app.post('/fichas', async (c) => {
 
     if (Number(ownership?.total || 0) !== funcionarioIds.length) {
       return c.json({ success: false, error: 'Aluno ou instrutor fora do tenant' }, 400);
+    }
+
+    if (b.agendamento_slot_id != null) {
+      const sessao = await c.env.DB.prepare(
+        `SELECT id
+           FROM simulador_agendamentos
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+        .bind(b.agendamento_slot_id, empresaId)
+        .first<{ id: number }>();
+
+      if (!sessao?.id) {
+        return c.json({ success: false, error: 'Sessão não encontrada' }, 404);
+      }
+    }
+
+    if (access.mode === 'restricted') {
+      const inScope = await areFuncionariosInsideSetorScope(
+        c.env.DB,
+        empresaId,
+        funcionarioIds,
+        access.setorIds,
+      );
+      if (!inScope) {
+        return c.json(
+          {
+            success: false,
+            error: 'Aluno ou instrutor fora do escopo setorial',
+            code: 'FUNCIONARIO_OUT_OF_SCOPE',
+          },
+          403,
+        );
+      }
+    } else if (access.mode !== 'all') {
+      return c.json({ success: false, error: 'Acesso negado', code: 'FORBIDDEN' }, 403);
     }
 
     const uuid = crypto.randomUUID();
@@ -360,6 +481,7 @@ app.get('/fichas/:id', async (c) => {
     const role = String(ctx.get('userRole') || '');
     const empresaId = String(ctx.get('empresaId') || '');
     const tenantEmpresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, tenantEmpresaId);
 
     const f = await c.env.DB.prepare(
       `SELECT 
@@ -428,7 +550,10 @@ app.get('/fichas/:id', async (c) => {
             AND fe.deleted_at IS NULL
         ) as edicoes_pendentes_count
       FROM fichas_sessao fs
-      INNER JOIN simulador_agendamentos sa ON fs.agendamento_slot_id = sa.id AND sa.deleted_at IS NULL
+      INNER JOIN simulador_agendamentos sa
+        ON fs.agendamento_slot_id = sa.id
+       AND sa.deleted_at IS NULL
+       AND sa.empresa_id = fs.empresa_id
       INNER JOIN funcionarios ft ON fs.colaborador_id_aluno = ft.id AND ft.deleted_at IS NULL
       INNER JOIN funcionarios fi ON fs.instrutor_id = fi.id AND fi.deleted_at IS NULL
       LEFT JOIN simuladores s ON sa.simulador_id = s.id AND s.deleted_at IS NULL
@@ -446,6 +571,18 @@ app.get('/fichas/:id', async (c) => {
       .first<any>();
 
     if (!f) return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+
+    if (access.mode === 'restricted') {
+      const allowedAlunoIds = await getAllowedFuncionariosBySetorScope(
+        c.env.DB,
+        tenantEmpresaId,
+        [Number(f.colaborador_id_aluno || 0)],
+        access.setorIds,
+      );
+      if (!allowedAlunoIds.has(Number(f.colaborador_id_aluno || 0))) {
+        return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+      }
+    }
 
     // ── Verificar acesso por perfil ───────────────────────────────────────────
     if (!isFullAccess(role)) {

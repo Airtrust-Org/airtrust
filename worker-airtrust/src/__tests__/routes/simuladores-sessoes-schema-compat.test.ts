@@ -147,7 +147,10 @@ function createCompatDb(opts: CompatDbOptions) {
         };
       }
 
-      if (query === 'SELECT id, nome, matricula FROM funcionarios WHERE id=? AND deleted_at IS NULL') {
+      if (
+        query ===
+        'SELECT id, nome, matricula FROM funcionarios WHERE id=? AND empresa_id = ? AND deleted_at IS NULL'
+      ) {
         return {
           bind: (..._args: unknown[]) => ({
             all: async () => ({ results: [] }),

@@ -2,24 +2,47 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const { histCacheMock, ensureHistoricoSchemaMock, ensureModelosAeronaveModeloColumnMock } =
-  vi.hoisted(() => ({
-    histCacheMock: {
-      cache: null as null | { key: string; ts: number; data: Record<string, number> },
-      inflight: new Map<string, Promise<Record<string, number>>>(),
-    },
-    ensureHistoricoSchemaMock: vi.fn(),
-    ensureModelosAeronaveModeloColumnMock: vi.fn(),
-  }));
+const {
+  histCacheMock,
+  ensureHistoricoSchemaMock,
+  ensureModelosAeronaveModeloColumnMock,
+  employeeSectorAccessMock,
+} = vi.hoisted(() => ({
+  histCacheMock: {
+    cache: null as null | { key: string; ts: number; data: Record<string, number> },
+    inflight: new Map<string, Promise<Record<string, number>>>(),
+  },
+  ensureHistoricoSchemaMock: vi.fn(),
+  ensureModelosAeronaveModeloColumnMock: vi.fn(),
+  employeeSectorAccessMock: vi.fn(),
+}));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (_c: unknown, next: () => Promise<void>) => {
-    await next();
-  },
+  auth: () =>
+    async (
+      c: {
+        req: { header: (name: string) => string | undefined };
+        set: (key: string, value: unknown) => void;
+      },
+      next: () => Promise<void>,
+    ) => {
+      c.set('userId', Number(c.req.header('x-test-user-id') || '101'));
+      c.set('userRole', c.req.header('x-test-user-role') || 'GESTOR');
+      c.set(
+        'funcionarioId',
+        c.req.header('x-test-context-funcionario-id')
+          ? Number(c.req.header('x-test-context-funcionario-id'))
+          : null,
+      );
+      await next();
+    },
 }));
 
 vi.mock('../../middleware/tenant', () => ({
-  getTenantContext: () => ({ empresaId: 6 }),
+  getTenantContext: (c: { req: { header: (name: string) => string | undefined } }) => ({
+    empresaId: Number(c.req.header('x-test-empresa-id') || '6'),
+    role: c.req.header('x-test-tenant-role') || 'manager',
+  }),
 }));
 
 vi.mock('../../utils/auditoria', () => ({
@@ -44,22 +67,46 @@ vi.mock('../../routes/qualificacoes/historico-helpers', () => ({
   calcularDataVencimento: ({ dataConclusao }: { dataConclusao: string }) => dataConclusao,
 }));
 
+vi.mock('../../services/employee-sector-access', () => ({
+  getEmployeeSectorAccess: employeeSectorAccessMock,
+  filterRequestedSetorIdsByAccess: (ids: number[]) => ids,
+}));
+
 import historicoRouter from '../../routes/qualificacoes/historico';
 
 function createApp(db: D1Database) {
   const app = new Hono<{ Bindings: Env }>();
   app.route('/historico', historicoRouter);
   return {
-    request: (path: string) =>
-      app.request(path, undefined, {
-        DB: db,
-      } as Env),
+    request: (path: string, headers?: Record<string, string>) =>
+      app.request(
+        path,
+        headers
+          ? {
+              headers,
+            }
+          : undefined,
+        {
+          DB: db,
+        } as Env,
+      ),
   };
 }
 
-function createMockDb(options: { hasRenovacaoDe?: boolean } = {}) {
+function createMockDb(options: {
+  hasRenovacaoDe?: boolean;
+  statsResults?: Array<{
+    total: number;
+    validas: number;
+    vencendo: number;
+    vencidas: number;
+    renovadas: number;
+    planejadas: number;
+  }>;
+} = {}) {
   const hasRenovacaoDe = options.hasRenovacaoDe ?? true;
   const calls: Array<{ query: string; args: unknown[]; method: 'first' | 'all' | 'run' }> = [];
+  const statsResults = [...(options.statsResults || [])];
 
   const db = {
     prepare: vi.fn((query: string) => {
@@ -67,16 +114,19 @@ function createMockDb(options: { hasRenovacaoDe?: boolean } = {}) {
         first: async () => {
           calls.push({ query, args, method: 'first' });
           const statsQuery = query.includes('COUNT(*) as total');
-          const globalQuery = query.includes('SUM(CASE WHEN') && query.toUpperCase().includes('AS RENOVADAS');
+          const globalQuery =
+            query.includes('SUM(CASE WHEN') && query.toUpperCase().includes('AS RENOVADAS');
           if (statsQuery || globalQuery) {
-            return {
-              total: 590,
-              validas: 300,
-              vencendo: 20,
-              vencidas: 105,
-              renovadas: 160,
-              planejadas: 5,
-            };
+            return (
+              statsResults.shift() || {
+                total: 590,
+                validas: 300,
+                vencendo: 20,
+                vencidas: 105,
+                renovadas: 160,
+                planejadas: 5,
+              }
+            );
           }
           return null;
         },
@@ -148,6 +198,11 @@ describe('qualificacoes historico renovadas contract', () => {
     histCacheMock.inflight.clear();
     ensureHistoricoSchemaMock.mockResolvedValue(undefined);
     ensureModelosAeronaveModeloColumnMock.mockResolvedValue(undefined);
+    employeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
   });
 
   it('calcula renovadas no stats-extended sem zerar o contador', async () => {
@@ -179,7 +234,8 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(body.success).toBe(true);
     expect(body.data.renovadas).toBe(160);
 
-    const statsQuery = calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
+    const statsQuery =
+      calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
     expect(statsQuery).not.toContain('qh.renovacao_de');
     expect(statsQuery).toContain('COALESCE(qh.renovada, 0) = 1');
     expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
@@ -201,10 +257,13 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(body.stats.renovadas).toBe(160);
     expect(body.data[0]).toMatchObject({ id: 501, status: 'RENOVADA', renovacao_de: null });
 
-    const dataQuery = calls.find((call) => call.method === 'all' && call.query.includes('LIMIT ? OFFSET ?'))?.query || '';
+    const dataQuery =
+      calls.find((call) => call.method === 'all' && call.query.includes('LIMIT ? OFFSET ?'))
+        ?.query || '';
     expect(dataQuery).toContain('qh.renovacao_de');
 
-    const statsQuery = calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
+    const statsQuery =
+      calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
     expect(statsQuery).toContain('qh_renovadora.renovacao_de = qh.id');
     expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
   });
@@ -293,5 +352,67 @@ describe('qualificacoes historico renovadas contract', () => {
       call.query.includes('PRAGMA table_info(qualificacoes_historico)'),
     );
     expect(pragmaCalls.length).toBeLessThanOrEqual(1);
+  });
+
+  it('isola o cache de stats-extended por usuario, perfil e escopo setorial', async () => {
+    employeeSectorAccessMock
+      .mockResolvedValueOnce({
+        mode: 'restricted',
+        setorIds: [7],
+        funcionarioId: null,
+      })
+      .mockResolvedValueOnce({
+        mode: 'restricted',
+        setorIds: [9],
+        funcionarioId: null,
+      });
+    const { db, calls } = createMockDb({
+      statsResults: [
+        {
+          total: 11,
+          validas: 7,
+          vencendo: 1,
+          vencidas: 2,
+          renovadas: 1,
+          planejadas: 0,
+        },
+        {
+          total: 22,
+          validas: 14,
+          vencendo: 2,
+          vencidas: 4,
+          renovadas: 2,
+          planejadas: 0,
+        },
+      ],
+    });
+    const app = createApp(db);
+
+    const firstResponse = await app.request('/historico/stats-extended', {
+      'x-test-user-id': '101',
+      'x-test-user-role': 'GESTOR',
+      'x-test-tenant-role': 'manager',
+    });
+    const secondResponse = await app.request('/historico/stats-extended', {
+      'x-test-user-id': '202',
+      'x-test-user-role': 'GESTOR',
+      'x-test-tenant-role': 'manager',
+    });
+
+    const firstBody = (await firstResponse.json()) as { data: { total: number } };
+    const secondBody = (await secondResponse.json()) as { data: { total: number } };
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(firstBody.data.total).toBe(11);
+    expect(secondBody.data.total).toBe(22);
+
+    const statsQueries = calls.filter((call) => call.query.includes('COUNT(*) as total'));
+    expect(statsQueries).toHaveLength(2);
+    expect(histCacheMock.cache?.key).toContain('empresa:6');
+    expect(histCacheMock.cache?.key).toContain('user:202');
+    expect(histCacheMock.cache?.key).toContain('perfil:gestor');
+    expect(histCacheMock.cache?.key).toContain('scope:restricted');
+    expect(histCacheMock.cache?.key).toContain('scope-setores:9');
   });
 });
