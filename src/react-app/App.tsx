@@ -382,7 +382,7 @@ export default function App() {
                       <Route
                         path="/funcionarios"
                         element={
-                          <ProtectedRoute>
+                          <ProtectedRoute requiredPermission="funcionarios.view">
                             <Funcionarios />
                           </ProtectedRoute>
                         }

@@ -57,6 +57,8 @@ function FinalizarHarness() {
 
 describe('LMS access and finalize regressions', () => {
   beforeEach(() => {
+    authState.user.role = 'ADMIN';
+    authState.user.permissions = [];
     fetchWithAuthMock.mockReset();
     fetchWithAuthMock.mockResolvedValue({
       ok: true,
@@ -92,6 +94,50 @@ describe('LMS access and finalize regressions', () => {
     );
 
     expect(screen.getByText('Central liberada')).toBeInTheDocument();
+    expect(screen.queryByText('Acesso Negado')).not.toBeInTheDocument();
+  });
+
+  it('blocks direct /funcionarios access when the user lacks funcionarios.view', () => {
+    authState.user.role = 'USUARIO';
+
+    render(
+      <MemoryRouter initialEntries={['/funcionarios']}>
+        <Routes>
+          <Route
+            path="/funcionarios"
+            element={
+              <ProtectedRoute requiredPermission="funcionarios.view">
+                <div>Gestao de funcionarios</div>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText('Gestao de funcionarios')).not.toBeInTheDocument();
+    expect(screen.getByText('Acesso Negado')).toBeInTheDocument();
+  });
+
+  it('keeps /funcionarios available for non-manager roles that do have funcionarios.view', () => {
+    authState.user.role = 'COMPLIANCE';
+
+    render(
+      <MemoryRouter initialEntries={['/funcionarios']}>
+        <Routes>
+          <Route
+            path="/funcionarios"
+            element={
+              <ProtectedRoute requiredPermission="funcionarios.view">
+                <div>Gestao de funcionarios</div>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Gestao de funcionarios')).toBeInTheDocument();
     expect(screen.queryByText('Acesso Negado')).not.toBeInTheDocument();
   });
 

@@ -1,12 +1,14 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { Ban } from 'lucide-react';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { canAccessModule, getModuleKeyForPath } from '@/react-app/lib/module-access';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredRole?: string[]; // Opcional: ['ADMIN', 'GESTOR']
+  requiredPermission?: string | string[];
 }
 
 const ADMIN_ONLY_PATH_PREFIXES = ['/admin'];
@@ -55,8 +57,13 @@ export function resolveImplicitRequiredRole(pathname: string): string[] | undefi
   return undefined;
 }
 
-export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
+export default function ProtectedRoute({
+  children,
+  requiredRole,
+  requiredPermission,
+}: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, user, empresas = [], empresaAtualId = null } = useAuth();
+  const { can } = usePermissions();
   const location = useLocation();
   const { t } = useLanguage();
 
@@ -121,6 +128,26 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
             className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             Voltar ao dashboard
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (requiredPermission && !can(requiredPermission)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
+          <Ban className="w-14 h-14 text-red-500 mb-4 mx-auto" />
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">
+            {t('protected.denied.title')}
+          </h2>
+          <p className="text-sm text-slate-600 mb-6">{t('protected.denied.description')}</p>
+          <a
+            href="/"
+            className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            {t('protected.denied.backHome')}
           </a>
         </div>
       </div>
