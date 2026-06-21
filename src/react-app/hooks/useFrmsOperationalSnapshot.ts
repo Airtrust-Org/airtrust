@@ -17,6 +17,36 @@ export type FrmsOperationalSnapshotStatus = 'OK' | 'ATENCAO' | 'CRITICO' | 'INCO
 
 export type FrmsFortnightDataSource = 'REAL' | 'DERIVADO' | 'ESTIMADO' | 'AUSENTE' | 'INCOMPLETO';
 export type FrmsFortnightStatus = 'OK' | 'ATENCAO' | 'CRITICO' | 'INCOMPLETO';
+export type FrmsFortnightTendencia = 'ESTAVEL' | 'CRESCENTE' | 'REDUZINDO' | 'INDETERMINADA';
+export type FrmsFortnightFreshness = 'COMPLETO' | 'PARCIAL' | 'ESTIMADO' | 'AUSENTE';
+export type FrmsFortnightNaturezaDado =
+  | 'PROJECAO'
+  | 'CHECKIN_SUBJETIVO'
+  | 'JORNADA_PLANEJADA'
+  | 'JORNADA_REALIZADA'
+  | 'ACUMULADO_LEGAL';
+export type FrmsFortnightDecisaoCodigo = 'INFORMA' | 'ALERTA' | 'EXIGE_OVERRIDE' | 'BLOQUEIA';
+export type FrmsFortnightMitigacaoRecomendada =
+  | 'TROCAR_TRIPULANTE'
+  | 'REDUZIR_JORNADA'
+  | 'INSERIR_REPOUSO'
+  | 'REVISAR_CHECKIN'
+  | 'AGUARDAR_SIGVOOS'
+  | 'ACEITAR_COM_RESSALVA'
+  | 'SEM_ACAO';
+
+export interface FrmsFortnightModifier {
+  codigo: string;
+  descricao: string;
+  impacto_score: number;
+}
+
+export interface FrmsFortnightLimiteReferencia {
+  tipo: 'QUINZENA_DUTY' | 'DUTY_168H' | 'VOO_168H';
+  valor_atual: number;
+  valor_limite: number;
+  pct_atingido: number;
+}
 
 export interface FrmsFortnightIndicator {
   periodo_inicio: string | null;
@@ -37,7 +67,17 @@ export interface FrmsFortnightIndicator {
   setores_periodo: number | null;
   sit_periods_estimados: number | null;
   fonte_periodo: FrmsFortnightDataSource;
+  freshness_dado?: FrmsFortnightFreshness;
   status_quinzena: FrmsFortnightStatus;
+  score_acumulado?: number | null;
+  tendencia?: FrmsFortnightTendencia;
+  atenuadores_aplicados?: FrmsFortnightModifier[];
+  agravantes_aplicados?: FrmsFortnightModifier[];
+  natureza_dado?: FrmsFortnightNaturezaDado;
+  explicacao_operacional?: string;
+  mitigacao_recomendada?: FrmsFortnightMitigacaoRecomendada;
+  decisao?: FrmsFortnightDecisaoCodigo;
+  limite_referencia?: FrmsFortnightLimiteReferencia | null;
   alertas_quinzena: string[];
   limitation_notes: string[];
 }

@@ -18,13 +18,17 @@ import {
   type FrmsReadAckQueryStatus,
 } from '@/react-app/hooks/useFrmsReadAckEvents';
 import {
-  type FrmsFortnightIndicator,
   type FrmsOperationalSnapshotAlertCode,
   type FrmsOperationalSnapshotFilters,
   type FrmsOperationalSnapshotItem,
   type FrmsOperationalSnapshotStatus,
   useFrmsOperationalSnapshot,
 } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { FortnightDetailPanel } from './components/FortnightOperationalIndicator';
+import {
+  formatFortnightLabel,
+  hasLocatedFortnight,
+} from './fortnightOperationalLabels';
 
 type ControlFilters = FrmsOperationalSnapshotFilters & {
   tripulante_query?: string;
@@ -191,207 +195,14 @@ function formatMinutesAsHours(value: number | null): string {
   return `${(value / 60).toFixed(1)}h`;
 }
 
-function formatFortnightMinutes(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '--';
-  const totalMinutes = Math.max(0, Math.trunc(value));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${hours}h ${minutes}m`;
-}
-
-function formatFortnightNumber(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '--';
-  return String(value);
-}
-
-function formatFortnightPeriod(start: string | null | undefined, end: string | null | undefined): string {
-  if (!start || !end) return '--';
-  return `${formatDisplayDate(start)} -> ${formatDisplayDate(end)}`;
-}
-
 function formatTripulante(item: FrmsOperationalSnapshotItem): string {
   return item.nome_guerra || item.nome || `ID ${item.funcionario_id}`;
 }
-
-function formatFortnightLabel(indicator: FrmsFortnightIndicator | null): string {
-  if (!indicator) return 'Quinzena sem indicador';
-  const statusMap: Record<string, string> = {
-    OK: 'completa',
-    ATENCAO: 'com atencao',
-    CRITICO: 'critica',
-    INCOMPLETO: 'incompleta',
-  };
-  const statusLabel = statusMap[indicator.status_quinzena] || indicator.status_quinzena.toLowerCase();
-  const dutyText = indicator.duty_time_periodo_min != null && Number.isFinite(indicator.duty_time_periodo_min)
-    ? ` · jornada ${formatMinutesAsHours(indicator.duty_time_periodo_min)}`
-    : '';
-  return `Quinzena ${statusLabel}${dutyText}`;
-}
-
-const FORTNIGHT_STATUS_LABELS: Record<string, string> = {
-  OK: 'Quinzena completa',
-  ATENCAO: 'Quinzena com atencao',
-  CRITICO: 'Quinzena critica',
-  INCOMPLETO: 'Quinzena incompleta',
-};
-
-type FortnightNotice = {
-  message: string;
-  toneClassName: string;
-};
 
 type GlobalScaleNotice = {
   message: string;
   toneClassName: string;
 };
-
-function hasLocatedFortnight(indicator: FrmsFortnightIndicator | null | undefined): boolean {
-  return Boolean(indicator && indicator.fonte_periodo !== 'AUSENTE');
-}
-
-function toneByFortnightStatus(status: string): string {
-  if (status === 'CRITICO') return 'border-red-200 bg-red-50 text-red-700';
-  if (status === 'ATENCAO') return 'border-amber-200 bg-amber-50 text-amber-700';
-  if (status === 'INCOMPLETO') return 'border-slate-200 bg-slate-100 text-slate-600';
-  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-}
-
-function toneByFortnightSource(source: string | null | undefined): string {
-  if (source === 'REAL') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (source === 'DERIVADO') return 'border-sky-200 bg-sky-50 text-sky-700';
-  if (source === 'ESTIMADO') return 'border-amber-200 bg-amber-50 text-amber-700';
-  if (source === 'INCOMPLETO') return 'border-slate-200 bg-slate-100 text-slate-700';
-  return 'border-slate-200 bg-slate-100 text-slate-600';
-}
-
-function resolveFortnightNotice(
-  indicator: FrmsFortnightIndicator | null,
-  item?: Pick<FrmsOperationalSnapshotItem, 'teve_jornada'> | null,
-): FortnightNotice | null {
-  if (!indicator) {
-    return {
-      message: 'Sem jornada FRMS registrada nesta data.',
-      toneClassName: 'border-slate-200 bg-slate-100 text-slate-700',
-    };
-  }
-
-  const alerts = new Set(indicator.alertas_quinzena.map((value) => value?.trim()).filter(Boolean));
-
-  if (indicator.fonte_periodo === 'AUSENTE' || alerts.has('PERIODO_QUINZENA_AUSENTE')) {
-    return {
-      message: 'Período de embarque não localizado nesta data. Verifique se a escala quinzenal foi cadastrada.',
-      toneClassName: 'border-slate-200 bg-slate-100 text-slate-700',
-    };
-  }
-
-  if (
-    indicator.fonte_periodo === 'INCOMPLETO' ||
-    indicator.status_quinzena === 'INCOMPLETO' ||
-    alerts.has('PERIODO_PARCIAL_NA_CONSULTA')
-  ) {
-    return {
-      message:
-        item?.teve_jornada === false
-          ? 'Quinzena base identificada. Não há jornada FRMS vinculada neste dia. Os acumulados refletem apenas os dias visíveis na consulta.'
-          : 'Período identificado, mas a janela de consulta cobre apenas parte dele. Os acumulados refletem somente os dias visíveis.',
-      toneClassName: 'border-amber-200 bg-amber-50 text-amber-700',
-    };
-  }
-
-  if (item?.teve_jornada === false && hasLocatedFortnight(indicator)) {
-    return {
-      message: 'Quinzena base identificada. Não há jornada FRMS vinculada neste dia.',
-      toneClassName: 'border-sky-200 bg-sky-50 text-sky-700',
-    };
-  }
-
-  return null;
-}
-
-function FortnightStatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneByFortnightStatus(status)}`}>
-      {FORTNIGHT_STATUS_LABELS[status] || status}
-    </span>
-  );
-}
-
-function FortnightDetailPanel({
-  indicator,
-  item,
-}: {
-  indicator: FrmsFortnightIndicator | null;
-  item: Pick<FrmsOperationalSnapshotItem, 'teve_jornada'>;
-}) {
-  const notice = resolveFortnightNotice(indicator, item);
-  const alerts = indicator?.alertas_quinzena.filter((value) => value?.trim());
-  const notes = indicator?.limitation_notes.filter((value) => value?.trim());
-
-  return (
-    <details className="mt-2 rounded-md border border-slate-200 bg-slate-50/80 p-2">
-      <summary className="cursor-pointer text-[11px] font-medium text-slate-600">
-        Detalhes da quinzena
-      </summary>
-      <div className="mt-2 space-y-2 text-xs text-slate-600">
-        <p>Indicador operacional descritivo — não é compliance regulatório.</p>
-        {notice ? (
-          <p className={`rounded-md border px-2 py-2 ${notice.toneClassName}`}>{notice.message}</p>
-        ) : (
-          <>
-            <div className="grid gap-x-3 gap-y-1 sm:grid-cols-2">
-              <div>
-                <span className="font-medium text-slate-700">Periodo:</span>{' '}
-                {formatFortnightPeriod(indicator?.periodo_inicio, indicator?.periodo_fim)}
-              </div>
-              <div>
-                <span className="font-medium text-slate-700">Jornada no periodo:</span>{' '}
-                {formatFortnightMinutes(indicator?.duty_time_periodo_min)}
-              </div>
-              <div>
-                <span className="font-medium text-slate-700">HV no periodo:</span>{' '}
-                {formatFortnightMinutes(indicator?.horas_voo_periodo_min)}
-              </div>
-              <div>
-                <span className="font-medium text-slate-700">Dias consecutivos:</span>{' '}
-                {formatFortnightNumber(indicator?.dias_consecutivos_com_jornada)}
-              </div>
-              <div>
-                <span className="font-medium text-slate-700">Menor descanso:</span>{' '}
-                {formatFortnightMinutes(indicator?.menor_descanso_entre_jornadas_min)}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-slate-700">Status da quinzena:</span>
-                <FortnightStatusBadge status={indicator?.status_quinzena || 'INCOMPLETO'} />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-slate-700">Fonte do periodo:</span>
-                <span
-                  className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${
-                    toneByFortnightSource(indicator?.fonte_periodo)
-                  }`}
-                >
-                  {sourceLabel(indicator?.fonte_periodo || 'AUSENTE')}
-                </span>
-              </div>
-            </div>
-            {alerts && alerts.length > 0 && (
-              <div>
-                <span className="font-medium text-slate-700">Alertas da quinzena:</span>{' '}
-                {alerts.join(' • ')}
-              </div>
-            )}
-            {notes && notes.length > 0 && (
-              <div>
-                <span className="font-medium text-slate-700">Observacoes/limitacoes:</span>{' '}
-                {notes.join(' • ')}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </details>
-  );
-}
 
 function operationalBucket(item: FrmsOperationalSnapshotItem): OperationalBucket {
   if (item.escalado) return 'escalado';

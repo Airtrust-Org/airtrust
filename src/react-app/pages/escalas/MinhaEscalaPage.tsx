@@ -33,6 +33,16 @@ import { useAuth } from '@/react-app/hooks/useAuth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from './hooks/queries/useEscalasQuery';
 import { formatDate, formatDateShort, formatDateRelative } from '@/react-app/utils/formatDate';
+import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { FortnightCrewSummaryCard } from '@/react-app/pages/frms/components/FortnightOperationalIndicator';
+
+function getTodayLocalIsoDate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface MeuEvento {
@@ -123,6 +133,13 @@ export default function MinhaEscalaPage() {
 
   const eventos = calendarioData?.eventos ?? [];
   const escala = calendarioData?.escala;
+  const todayIso = getTodayLocalIsoDate();
+  const { data: frmsSnapshotItems, loading: loadingFrmsSnapshot } = useFrmsOperationalSnapshot({
+    data_inicio: todayIso,
+    data_fim: todayIso,
+  });
+  const myFortnightIndicator = frmsSnapshotItems[0]?.fortnight_indicator ?? null;
+  const myCheckinPendente = frmsSnapshotItems[0]?.checkin_status === 'PENDENTE';
 
   // ── GAP 7: Ciência da escala — PRC-OPS-009 §6.3.3 ──
   const queryClient = useQueryClient();
@@ -218,6 +235,12 @@ export default function MinhaEscalaPage() {
           title="Minha Escala"
           subtitle={`${user?.nome ?? 'Tripulante'} — Visão pessoal da escala mensal`}
           icon="calendar_month"
+        />
+
+        <FortnightCrewSummaryCard
+          indicator={myFortnightIndicator}
+          checkinPendente={myCheckinPendente}
+          loading={loadingFrmsSnapshot}
         />
 
         {/* Month Navigation */}

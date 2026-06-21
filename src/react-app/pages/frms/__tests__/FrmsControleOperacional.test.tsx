@@ -613,7 +613,7 @@ describe('FrmsControleOperacional', () => {
       expect(
         screen.getByText('Período de embarque não localizado nesta data. Verifique se a escala quinzenal foi cadastrada.'),
       ).toBeInTheDocument();
-      expect(screen.getByText('Indicador operacional descritivo — não é compliance regulatório.')).toBeInTheDocument();
+      expect(screen.getByText(/Indicador operacional estimado/)).toBeInTheDocument();
     });
 
     it('renderiza mensagem de periodo parcial quando a janela cobre apenas parte da quinzena', () => {
@@ -687,8 +687,8 @@ describe('FrmsControleOperacional', () => {
       renderControle();
       fireEvent.click(screen.getByText('Detalhes da quinzena'));
 
-      expect(screen.getByText('Status da quinzena:')).toBeInTheDocument();
-      expect(screen.getByText('Fonte do periodo:')).toBeInTheDocument();
+      expect(screen.getByText('Quinzena com atenção')).toBeInTheDocument();
+      expect(screen.getByText('Fonte do período:')).toBeInTheDocument();
       expect(screen.getByText('Derivado')).toBeInTheDocument();
       expect(screen.getByText('Alertas da quinzena:')).toBeInTheDocument();
     });
@@ -708,7 +708,8 @@ describe('FrmsControleOperacional', () => {
       fireEvent.click(screen.getByText('Detalhes da quinzena'));
 
       expect(screen.queryByText(/homologado|aprovado|ANAC/i)).not.toBeInTheDocument();
-      expect(screen.getByText('Indicador operacional descritivo — não é compliance regulatório.')).toBeInTheDocument();
+      expect(screen.getByText(/Indicador operacional estimado/)).toBeInTheDocument();
+      expect(screen.getByText(/Não substitui avaliação operacional do gestor/)).toBeInTheDocument();
     });
   });
 

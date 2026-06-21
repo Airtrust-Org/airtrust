@@ -32,6 +32,8 @@ import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { formatFrmsDate } from './frmsUtils';
 import { buildJornadaMensalPresentation } from './frmsJornadasMensaisPresentation';
+import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { FortnightConsolidatedPanel } from './components/FortnightOperationalIndicator';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
@@ -247,6 +249,13 @@ export default function FrmsFichaTripulante() {
   const [selectedExplanationDate, setSelectedExplanationDate] = useState<string | null>(null);
   const hojeIso = new Date().toISOString().slice(0, 10);
 
+  const { data: frmsSnapshotItems, loading: loadingFrmsSnapshot } = useFrmsOperationalSnapshot({
+    data_inicio: hojeIso,
+    data_fim: hojeIso,
+    funcionario_id: id,
+  });
+  const fortnightIndicator = frmsSnapshotItems[0]?.fortnight_indicator ?? null;
+
   const { data: recentJornadasRaw } = useFrmsJornadasEffectiveness(id, 7);
   const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: hojeIso });
   const recentJornadas = recentJornadasRaw as FrmsEffectivenessJornadaRow[] | null;
@@ -446,6 +455,11 @@ export default function FrmsFichaTripulante() {
             </button>
           </div>
         </section>
+
+        <FortnightConsolidatedPanel
+          indicator={fortnightIndicator}
+          loading={loadingFrmsSnapshot}
+        />
 
         {/* Effectiveness Panel (Painel A) + Compliance Cards (Painel B) */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
