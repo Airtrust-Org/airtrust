@@ -1,4 +1,11 @@
-import type { AlertaRaw, DashboardMetrics, FrmsAlertaRaw } from '@/react-app/pages/dashboard/types';
+import type {
+  AlertaRaw,
+  DashboardMetrics,
+  FrmsAlertaRaw,
+  SgsoChecklistData,
+  SgsoChecklistItem,
+  SimuladoresAlertasData,
+} from '@/react-app/pages/dashboard/types';
 import type {
   FrmsOperationalSnapshotItem,
   FrmsOperationalSnapshotSummary,
@@ -13,7 +20,7 @@ export interface ManagerAlertItem {
   description: string;
   actionLabel: string;
   href: string;
-  module: 'FRMS' | 'QUALIFICACOES' | 'LMS' | 'ESCALAS';
+  module: 'FRMS' | 'QUALIFICACOES' | 'LMS' | 'ESCALAS' | 'SGSO' | 'SIMULADORES';
   freshness: string;
   count: number;
   orderWeight: number;
@@ -26,9 +33,13 @@ interface BuildManagerAlertsParams {
   frmsAlerts?: FrmsAlertaRaw[];
   snapshotItems?: FrmsOperationalSnapshotItem[];
   snapshotSummary?: FrmsOperationalSnapshotSummary | null;
+  sgsoChecklist?: SgsoChecklistData | null;
+  simuladoresAlerts?: SimuladoresAlertasData | null;
   enableFrms?: boolean;
   enableQualificacoes?: boolean;
   enableLms?: boolean;
+  enableSgso?: boolean;
+  enableSimuladores?: boolean;
 }
 
 const INTERNAL_ROUTE_RE = /^\/(?!\/)/;
@@ -88,6 +99,53 @@ function getQualificationUrgencyWeight(alerts: AlertaRaw[]) {
   return 680;
 }
 
+function getSgsoAlertConfig(item: SgsoChecklistItem) {
+  switch (item.codigo) {
+    case 'RBAC121_RELATOS_TRIAGEM':
+      return {
+        title: `${pluralize(item.valor, 'relato')} SGSO fora do SLA de triagem`,
+        description: 'Priorizar triagem de relatos abertos para evitar degradação operacional.',
+        actionLabel: 'Abrir RELPREV',
+        href: '/sgso/relprev',
+        orderWeight: 930,
+      };
+    case 'RBAC121_INVESTIGACOES':
+      return {
+        title: `${pluralize(item.valor, 'investigação', 'investigações')} SGSO fora do prazo`,
+        description: 'Revisar investigações abertas com prazo vencido e destravar o fluxo corretivo.',
+        actionLabel: 'Abrir SGSO',
+        href: '/sgso',
+        orderWeight: 900,
+      };
+    case 'RBAC121_BARREIRAS':
+      return {
+        title: `${pluralize(item.valor, 'barreira', 'barreiras')} Bowtie degradada${item.valor === 1 ? '' : 's'}`,
+        description: 'Revalidar barreiras degradadas ou inoperantes antes que o risco avance.',
+        actionLabel: 'Ver Bowtie',
+        href: '/sgso/bowtie',
+        orderWeight: 840,
+      };
+    case 'RBAC121_FRAT_APROVACAO':
+      return {
+        title: `${pluralize(item.valor, 'FRAT')} de alto risco sem aprovação final`,
+        description: 'Despachos com risco alto precisam de decisão final registrada no fluxo SGSO.',
+        actionLabel: 'Ver FRAT',
+        href: '/sgso/frat',
+        orderWeight: 820,
+      };
+    case 'RBAC121_MITIGACOES':
+      return {
+        title: `${pluralize(item.valor, 'ação corretiva', 'ações corretivas')} vencida${item.valor === 1 ? '' : 's'}`,
+        description: 'Cobrar correções SGSO fora do prazo para evitar acúmulo de passivo operacional.',
+        actionLabel: 'Abrir SGSO',
+        href: '/sgso',
+        orderWeight: 880,
+      };
+    default:
+      return null;
+  }
+}
+
 export function buildManagerAlerts({
   todayLabel,
   metrics,
@@ -95,9 +153,13 @@ export function buildManagerAlerts({
   frmsAlerts = [],
   snapshotItems = [],
   snapshotSummary = null,
+  sgsoChecklist = null,
+  simuladoresAlerts = null,
   enableFrms = true,
   enableQualificacoes = true,
   enableLms = true,
+  enableSgso = true,
+  enableSimuladores = true,
 }: BuildManagerAlertsParams): ManagerAlertItem[] {
   const items: ManagerAlertItem[] = [];
 
@@ -261,6 +323,105 @@ export function buildManagerAlerts({
         freshness: `Compliance LMS · ${todayLabel}`,
         count: lmsAlerts.length,
         orderWeight: criticalLms ? 820 : 380,
+      });
+    }
+  }
+
+  if (enableSgso) {
+    const checklistItems = Array.isArray(sgsoChecklist?.checklist) ? sgsoChecklist.checklist : [];
+
+    checklistItems.forEach((checkItem) => {
+      if (!checkItem || checkItem.valor <= 0 || checkItem.status === 'OK') return;
+
+      const config = getSgsoAlertConfig(checkItem);
+      if (!config) return;
+
+      items.push({
+        id: `sgso-${String(checkItem.codigo).toLowerCase()}`,
+        severity: checkItem.status === 'NAO_CONFORME' ? 'CRITICO' : 'ATENCAO',
+        title: config.title,
+        description: config.description,
+        actionLabel: config.actionLabel,
+        href: config.href,
+        module: 'SGSO',
+        freshness: `Checklist SGSO · ${todayLabel}`,
+        count: checkItem.valor,
+        orderWeight: config.orderWeight,
+      });
+    });
+  }
+
+  if (enableSimuladores && simuladoresAlerts) {
+    const pendentesAvaliacao = Number(simuladoresAlerts.fichas_pendentes_avaliacao || 0);
+    const aguardandoInstrutor = Number(simuladoresAlerts.fichas_aguardando_assinatura_instrutor || 0);
+    const aguardandoAluno = Number(simuladoresAlerts.fichas_aguardando_assinatura_aluno || 0);
+    const aguardandoAssinatura =
+      Number(simuladoresAlerts.fichas_aguardando_assinatura || 0) ||
+      aguardandoInstrutor + aguardandoAluno;
+    const sessoesIncompletas = Number(simuladoresAlerts.sessoes_proximas_sem_ficha_completa || 0);
+    const edicoesPendentes = Number(simuladoresAlerts.edicoes_pendentes || 0);
+    const janelaHoras = Number(simuladoresAlerts.janela_sessoes_proximas_horas || 0) || 24;
+
+    if (pendentesAvaliacao > 0) {
+      items.push({
+        id: 'simuladores-avaliacao-pendente',
+        severity: 'ATENCAO',
+        title: `${pluralize(pendentesAvaliacao, 'ficha')} de simulador pendente${pendentesAvaliacao === 1 ? '' : 's'} de avaliação`,
+        description: 'Sessões já iniciadas ou concluídas ainda aguardam fechamento operacional da ficha.',
+        actionLabel: 'Ver fichas',
+        href: '/simuladores/fichas',
+        module: 'SIMULADORES',
+        freshness: `Operação atual · ${todayLabel}`,
+        count: pendentesAvaliacao,
+        orderWeight: 700,
+      });
+    }
+
+    if (aguardandoAssinatura > 0) {
+      items.push({
+        id: 'simuladores-assinatura-pendente',
+        severity: aguardandoInstrutor > 0 ? 'ATENCAO' : 'INFORMATIVO',
+        title: `${pluralize(aguardandoAssinatura, 'ficha')} aguardando assinatura`,
+        description:
+          aguardandoInstrutor > 0
+            ? 'Há fichas finalizadas aguardando assinatura do instrutor ou acompanhamento do gestor.'
+            : 'Existem fichas aguardando assinatura do aluno antes do encerramento final.',
+        actionLabel: 'Acompanhar fichas',
+        href: '/simuladores/fichas',
+        module: 'SIMULADORES',
+        freshness: `Fluxo de ficha · ${todayLabel}`,
+        count: aguardandoAssinatura,
+        orderWeight: aguardandoInstrutor > 0 ? 640 : 420,
+      });
+    }
+
+    if (sessoesIncompletas > 0) {
+      items.push({
+        id: 'simuladores-sessoes-incompletas',
+        severity: 'ATENCAO',
+        title: `${pluralize(sessoesIncompletas, 'sessão', 'sessões')} próxima${sessoesIncompletas === 1 ? '' : 's'} com ficha incompleta`,
+        description: `Acompanhar sessões da janela operacional de ${janelaHoras}h que ainda não têm ficha operacionalmente pronta.`,
+        actionLabel: 'Ver simuladores',
+        href: '/simuladores',
+        module: 'SIMULADORES',
+        freshness: `Próximas ${janelaHoras}h · ${todayLabel}`,
+        count: sessoesIncompletas,
+        orderWeight: 620,
+      });
+    }
+
+    if (edicoesPendentes > 0) {
+      items.push({
+        id: 'simuladores-edicoes-pendentes',
+        severity: 'INFORMATIVO',
+        title: `${pluralize(edicoesPendentes, 'solicitação', 'solicitações')} de edição de ficha pendente${edicoesPendentes === 1 ? '' : 's'}`,
+        description: 'Existem ajustes de ficha aguardando revisão no fluxo de simuladores.',
+        actionLabel: 'Revisar fichas',
+        href: '/simuladores/fichas',
+        module: 'SIMULADORES',
+        freshness: `Revisões em fila · ${todayLabel}`,
+        count: edicoesPendentes,
+        orderWeight: 360,
       });
     }
   }
