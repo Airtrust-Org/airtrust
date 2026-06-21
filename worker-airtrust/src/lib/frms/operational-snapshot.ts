@@ -915,6 +915,9 @@ export async function listFrmsOperationalSnapshot(
         duracao_jornada_minutos: item.duracao_jornada_minutos,
         horas_voo_minutos: item.horas_voo_minutos,
         teve_jornada: item.teve_jornada,
+        horas_sono: item.horas_sono,
+        kss_score: item.kss_score,
+        effectiveness_pct: item.effectiveness_pct,
         dia_periodo_embarcado:
           derivedFortnight?.dia_periodo_embarcado ??
           (effectivenessRow?.dia_periodo_embarcado != null
@@ -929,6 +932,7 @@ export async function listFrmsOperationalSnapshot(
     }),
     windowStart: params.dataInicio,
     windowEnd: params.dataFim,
+    today: params.hoje,
   });
 
   const itemsWithFortnight = snapshot.items.map((item) => {

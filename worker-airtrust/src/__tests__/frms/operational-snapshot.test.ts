@@ -305,8 +305,8 @@ describe('frms operational snapshot builder', () => {
                     data_operacional: '2026-06-19',
                     funcionario_id: 10,
                     hora_checkin: '05:40',
-                    kss_score: 4,
-                    horas_sono: 7,
+                    kss_score: 8,
+                    horas_sono: 5,
                     qualidade_sono: 4,
                     wake_time: '05:10',
                     score_fadiga: 20,
@@ -357,5 +357,8 @@ describe('frms operational snapshot builder', () => {
     expect(item?.fortnight_indicator?.dia_periodo).toBe(4);
     expect(item?.fortnight_indicator?.total_dias_periodo).toBe(15);
     expect(item?.fortnight_indicator?.alertas_quinzena).not.toContain('PERIODO_QUINZENA_AUSENTE');
+    expect(item?.fortnight_indicator?.agravantes_aplicados.map((entry) => entry.codigo)).toEqual(
+      expect.arrayContaining(['SONO_INSUFICIENTE_NO_PERIODO', 'KSS_ALTO_NO_PERIODO']),
+    );
   });
 });
