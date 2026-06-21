@@ -115,6 +115,21 @@ describe('ManagerAlertCenter', () => {
     expect(screen.getByText('Sem alertas críticos')).toBeInTheDocument();
   });
 
+  it('não renderiza nem consulta dados para perfis sem acesso', () => {
+    usePermissionsMock.mockReturnValue({
+      isAdmin: false,
+      isGestor: false,
+    });
+
+    renderCenter();
+
+    expect(screen.queryByText('Central de Alertas do Gestor')).not.toBeInTheDocument();
+    expect(useMetricsQueryMock).not.toHaveBeenCalled();
+    expect(useAlertasQueryMock).not.toHaveBeenCalled();
+    expect(useFrmsAlertasQueryMock).not.toHaveBeenCalled();
+    expect(useFrmsOperationalSnapshotMock).not.toHaveBeenCalled();
+  });
+
   it('renderiza alerta crítico FRMS antes dos alertas de atenção', () => {
     useFrmsAlertasQueryMock.mockReturnValue({
       ...baseFrmsAlertasQuery(),
@@ -170,6 +185,27 @@ describe('ManagerAlertCenter', () => {
     );
   });
 
+  it('eleva pendência LMS crítica para severidade crítica', () => {
+    useAlertasQueryMock.mockReturnValue({
+      ...baseAlertasQuery(),
+      data: [
+        {
+          id: 'lms-1',
+          tipo: 'lms_curso_pendente',
+          criticidade: 'CRITICA',
+          mensagem: 'Curso obrigatório pendente',
+          urlAcao: '/lms/cursos/1',
+        },
+      ],
+    });
+
+    const { container } = renderCenter();
+    const article = container.querySelector('article[data-severity="CRITICO"]');
+
+    expect(article).not.toBeNull();
+    expect(screen.getByText(/pendência de LMS obrigatória/i)).toBeInTheDocument();
+  });
+
   it('não quebra sem dados em uma fonte parcial', () => {
     useFrmsAlertasQueryMock.mockReturnValue({
       ...baseFrmsAlertasQuery(),
@@ -181,6 +217,58 @@ describe('ManagerAlertCenter', () => {
 
     expect(screen.getByText(/Fontes parciais/i)).toBeInTheDocument();
     expect(screen.getByText('Sem alertas críticos')).toBeInTheDocument();
+  });
+
+  it('mantém a central operacional quando apenas uma subfonte FRMS falha', () => {
+    useFrmsAlertasQueryMock.mockReturnValue({
+      ...baseFrmsAlertasQuery(),
+      data: undefined,
+      isError: true,
+    });
+    useFrmsOperationalSnapshotMock.mockReturnValue({
+      ...baseSnapshotHook(),
+      data: [
+        {
+          alertas: ['CHECKIN_PENDENTE'],
+          checkin_status: 'PENDENTE',
+        },
+      ],
+      summary: {
+        ...baseSnapshotHook().summary,
+        checkins_pendentes: 1,
+      },
+    });
+
+    renderCenter();
+
+    expect(screen.queryByText(/Não foi possível montar a central/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/check-in de fadiga pendente/i)).toBeInTheDocument();
+    expect(screen.getByText(/Fontes parciais: FRMS/i)).toBeInTheDocument();
+  });
+
+  it('sinaliza degradação quando métricas falham mas o fallback por alertas mantém a central', () => {
+    useMetricsQueryMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+    useAlertasQueryMock.mockReturnValue({
+      ...baseAlertasQuery(),
+      data: [
+        {
+          id: 'q-1',
+          tipo: 'qualificacao_vencida',
+          criticidade: 'ALTA',
+          mensagem: 'Qualificação vencida',
+          diasRestantes: -1,
+        },
+      ],
+    });
+
+    renderCenter();
+
+    expect(screen.getByText(/Métricas de qualificações/i)).toBeInTheDocument();
+    expect(screen.getByText(/qualificação vencida/i)).toBeInTheDocument();
   });
 
   it('não mostra alerta de módulo desabilitado', () => {
@@ -215,5 +303,26 @@ describe('ManagerAlertCenter', () => {
       'href',
       '/lms/dashboard',
     );
+  });
+
+  it('mostra contagem de informativos quando só há alertas informativos', () => {
+    useAlertasQueryMock.mockReturnValue({
+      ...baseAlertasQuery(),
+      data: [
+        {
+          id: 'lms-1',
+          tipo: 'lms_curso_pendente',
+          criticidade: 'BAIXA',
+          mensagem: 'Curso obrigatório pendente',
+          urlAcao: '/lms/dashboard',
+        },
+      ],
+    });
+
+    renderCenter();
+
+    expect(screen.getByText('0 críticos')).toBeInTheDocument();
+    expect(screen.getByText('0 atenção')).toBeInTheDocument();
+    expect(screen.getByText('1 informativo')).toBeInTheDocument();
   });
 });

@@ -25,6 +25,18 @@ Entregar a primeira versão segura da Central de Alertas do Gestor na entrada op
 - `src/react-app/pages/funcionarios/ManagerAlertCenter.tsx`
 - `src/react-app/pages/funcionarios/managerAlertCenter.utils.ts`
 - `src/react-app/pages/funcionarios/__tests__/ManagerAlertCenter.test.tsx`
+- `src/react-app/pages/dashboard/queries.ts`
+- `src/react-app/hooks/useFrmsOperationalSnapshot.ts`
+
+## Correções aplicadas no fechamento
+
+- Isolado o gate de perfil em volta do conteúdo da Central para evitar hooks condicionais quando o papel do usuário muda entre renders.
+- Adicionado teste para garantir que perfis sem acesso não renderizam a Central nem disparam queries.
+- Corrigido falso erro total quando apenas uma subfonte FRMS falha e outra ainda sustenta alertas válidos.
+- Elevada pendência LMS crítica para severidade `CRITICO`.
+- Passado a sinalizar degradação quando `dashboard/metrics` falha, mesmo com fallback por `alertas-criticos`.
+- Incluído fallback de `qualificacao_vencida` nas fontes de dashboard e ajuste leve de priorização por proximidade em qualificações a vencer.
+- Evitadas queries de FRMS, snapshot, métricas e alertas quando o módulo correspondente está desabilitado.
 
 ## UX
 
@@ -74,23 +86,36 @@ Entregar a primeira versão segura da Central de Alertas do Gestor na entrada op
 - Adicionados testes em `src/react-app/pages/funcionarios/__tests__/ManagerAlertCenter.test.tsx`
 - Coberturas incluídas:
   - estado vazio
+  - bloqueio por perfil sem acesso
   - alerta crítico FRMS
   - alerta de check-in pendente
+  - severidade crítica para LMS bloqueante
   - ordenação por criticidade
   - resiliência sem dados
+  - degradação de métricas com fallback por alertas
+  - carga parcial quando uma subfonte FRMS falha
   - ocultação por módulo desabilitado
   - links seguros
+  - contagem de informativos no resumo
 
 ### Execução
 
-Tentativas realizadas:
+Comandos executados com sucesso em `/tmp/airtrust-manager-alert-center`:
 
 - `npm run test:run -- ManagerAlertCenter`
+- `npm run test:run -- --run alert`
+- `npm run test:run -- --run home dashboard frms`
+- `npm run lint`
+- `npm run build`
 
 Resultado:
 
-- não executado com sucesso porque a worktree limpa não possui `node_modules` e o binário `vitest` não está disponível localmente.
-- pelo mesmo motivo, `npm run lint` e `npm run build` dependem de reinstalar dependências, o que não foi feito nesta macroetapa.
+- `ManagerAlertCenter`: 1 arquivo, 11 testes, tudo passando.
+- `--run alert`: 2 arquivos, 13 testes, tudo passando.
+- `--run home dashboard frms`: 22 arquivos, 205 testes, tudo passando.
+- `npm run lint`: PASS.
+- `npm run build`: PASS.
+- Dependências instaladas localmente via `npm ci` apenas para viabilizar a validação da worktree isolada, sem alteração de dependências versionadas.
 
 ## Riscos
 

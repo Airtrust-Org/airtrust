@@ -172,6 +172,10 @@ interface UseFrmsOperationalSnapshotResult {
   refetch: () => Promise<void>;
 }
 
+interface UseFrmsOperationalSnapshotOptions {
+  enabled?: boolean;
+}
+
 const EMPTY_SUMMARY: FrmsOperationalSnapshotSummary = {
   total_tripulantes: 0,
   total_escalados: 0,
@@ -204,6 +208,7 @@ function buildSnapshotUrl(filters: FrmsOperationalSnapshotFilters): string {
 
 export function useFrmsOperationalSnapshot(
   filters: FrmsOperationalSnapshotFilters,
+  options: UseFrmsOperationalSnapshotOptions = {},
 ): UseFrmsOperationalSnapshotResult {
   const [data, setData] = useState<FrmsOperationalSnapshotItem[]>([]);
   const [summary, setSummary] = useState<FrmsOperationalSnapshotSummary>(EMPTY_SUMMARY);
@@ -211,8 +216,19 @@ export function useFrmsOperationalSnapshot(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
+  const enabled = options.enabled ?? true;
 
   const fetchSnapshot = useCallback(async () => {
+    if (!enabled) {
+      setData([]);
+      setSummary(EMPTY_SUMMARY);
+      setMeta(null);
+      setLoading(false);
+      setError(null);
+      setUnauthorized(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setUnauthorized(false);
@@ -258,6 +274,7 @@ export function useFrmsOperationalSnapshot(
     filters.base,
     filters.data_fim,
     filters.data_inicio,
+    enabled,
     filters.funcionario_id,
     filters.include_inconsistencies,
     filters.status,
