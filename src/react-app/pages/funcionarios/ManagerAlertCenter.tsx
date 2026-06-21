@@ -146,27 +146,32 @@ export default function ManagerAlertCenter() {
     return null;
   }
 
-  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
-  const modulosAtivos = empresaAtual?.modulos_ativos;
+  const modulosAtivos = empresas.find((empresa) => empresa.id === empresaAtualId)?.modulos_ativos;
 
+  return <ManagerAlertCenterContent modulosAtivos={modulosAtivos} />;
+}
+
+function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }) {
   const enableFrms = canAccessModule('frms', modulosAtivos);
   const enableQualificacoes = canAccessModule('qualificacoes', modulosAtivos);
   const enableLms = canAccessModule('lms', modulosAtivos);
+  const usesDashboardAlerts = enableQualificacoes || enableLms;
 
-  const metricsQ = useMetricsQuery();
-  const alertasQ = useAlertasQuery();
-  const frmsAlertasQ = useFrmsAlertasQuery();
+  const metricsQ = useMetricsQuery(enableQualificacoes);
+  const alertasQ = useAlertasQuery(usesDashboardAlerts);
+  const frmsAlertasQ = useFrmsAlertasQuery(enableFrms);
 
   const todayIso = getTodayIsoSaoPaulo();
   const frmsSnapshot = useFrmsOperationalSnapshot({
     data_inicio: todayIso,
     data_fim: todayIso,
     include_inconsistencies: true,
-  });
+  }, { enabled: enableFrms });
 
   const partialSources = useMemo(() => {
     const failures: string[] = [];
-    if (enableQualificacoes && alertasQ.isError && !alertasQ.data) failures.push('Qualificações/LMS');
+    if (enableQualificacoes && metricsQ.isError && !metricsQ.data) failures.push('Métricas de qualificações');
+    if (usesDashboardAlerts && alertasQ.isError && !alertasQ.data) failures.push('Qualificações/LMS');
     if (enableFrms && frmsAlertasQ.isError && !frmsAlertasQ.data) failures.push('FRMS');
     if (enableFrms && frmsSnapshot.error && frmsSnapshot.data.length === 0) failures.push('Snapshot operacional');
     return failures;
@@ -179,6 +184,9 @@ export default function ManagerAlertCenter() {
     frmsAlertasQ.isError,
     frmsSnapshot.data.length,
     frmsSnapshot.error,
+    metricsQ.data,
+    metricsQ.isError,
+    usesDashboardAlerts,
   ]);
 
   const alerts = useMemo(
@@ -208,21 +216,33 @@ export default function ManagerAlertCenter() {
   );
 
   const isLoading =
-    (enableQualificacoes && alertasQ.isLoading && !alertasQ.data) ||
+    ((enableQualificacoes &&
+      !metricsQ.data &&
+      !alertasQ.data &&
+      (metricsQ.isLoading || alertasQ.isLoading)) ||
+      (enableLms && alertasQ.isLoading && !alertasQ.data)) ||
     (enableFrms &&
       ((frmsAlertasQ.isLoading && !frmsAlertasQ.data) ||
         (frmsSnapshot.loading && frmsSnapshot.data.length === 0)));
 
+  const metricsFailed = enableQualificacoes && metricsQ.isError && !metricsQ.data;
+  const dashboardAlertsFailed = usesDashboardAlerts && alertasQ.isError && !alertasQ.data;
+  const qualificacoesSourcesFailed = enableQualificacoes && metricsFailed && dashboardAlertsFailed;
+  const lmsSourcesFailed = enableLms && dashboardAlertsFailed;
+  const frmsAlertsFailed = enableFrms && frmsAlertasQ.isError && !frmsAlertasQ.data;
+  const frmsSnapshotFailed = enableFrms && Boolean(frmsSnapshot.error) && frmsSnapshot.data.length === 0;
+  const frmsSourcesFailed = enableFrms && frmsAlertsFailed && frmsSnapshotFailed;
+
   const allTrackedSourcesFailed =
     partialSources.length > 0 &&
     alerts.length === 0 &&
-    (!enableQualificacoes || (alertasQ.isError && !alertasQ.data)) &&
-    (!enableFrms ||
-      ((frmsAlertasQ.isError && !frmsAlertasQ.data) ||
-        (frmsSnapshot.error && frmsSnapshot.data.length === 0)));
+    (!enableQualificacoes || qualificacoesSourcesFailed) &&
+    (!enableLms || lmsSourcesFailed) &&
+    (!enableFrms || frmsSourcesFailed);
 
   const criticalCount = alerts.filter((item) => item.severity === 'CRITICO').length;
   const attentionCount = alerts.filter((item) => item.severity === 'ATENCAO').length;
+  const informativeCount = alerts.filter((item) => item.severity === 'INFORMATIVO').length;
 
   return (
     <section className="mb-6 rounded-3xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-amber-50/50 p-5 shadow-[0_18px_45px_-28px_rgba(15,23,42,0.35)]">
@@ -245,6 +265,9 @@ export default function ManagerAlertCenter() {
           </span>
           <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">
             {attentionCount} atenção
+          </span>
+          <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-800">
+            {informativeCount} informativo{informativeCount === 1 ? '' : 's'}
           </span>
           {partialSources.length > 0 ? (
             <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
@@ -293,4 +316,3 @@ export default function ManagerAlertCenter() {
     </section>
   );
 }
-

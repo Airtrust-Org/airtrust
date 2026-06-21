@@ -76,6 +76,18 @@ function hasSeverity(alerts: AlertaRaw[], severities: string[]) {
   return alerts.some((alert) => target.has(String(alert.criticidade || '').toUpperCase()));
 }
 
+function getQualificationUrgencyWeight(alerts: AlertaRaw[]) {
+  const nearestDays = alerts
+    .map((item) => Number(item.diasRestantes))
+    .filter((days) => Number.isFinite(days) && days > 0)
+    .sort((a, b) => a - b)[0];
+
+  if (!Number.isFinite(nearestDays)) return 680;
+  if (nearestDays <= 1) return 760;
+  if (nearestDays <= 3) return 720;
+  return 680;
+}
+
 export function buildManagerAlerts({
   todayLabel,
   metrics,
@@ -183,15 +195,24 @@ export function buildManagerAlerts({
 
   if (enableQualificacoes) {
     const qualificationAlerts = dashboardAlerts.filter(
-      (item) => String(item.tipo || '').toLowerCase() === 'qualificacao_vencendo',
+      (item) => ['qualificacao_vencendo', 'qualificacao_vencida'].includes(String(item.tipo || '').toLowerCase()),
     );
+    const upcomingQualificationWeight = getQualificationUrgencyWeight(qualificationAlerts);
 
     const vencidas =
       Number(metrics?.qualificacoesVencidas || 0) ||
-      qualificationAlerts.filter((item) => Number(item.diasRestantes || 0) <= 0).length;
+      qualificationAlerts.filter(
+        (item) =>
+          String(item.tipo || '').toLowerCase() === 'qualificacao_vencida' ||
+          Number(item.diasRestantes || 0) <= 0,
+      ).length;
     const vencendo =
       Number(metrics?.qualificacoesAVencer || 0) ||
-      qualificationAlerts.filter((item) => Number(item.diasRestantes || 0) > 0).length;
+      qualificationAlerts.filter(
+        (item) =>
+          String(item.tipo || '').toLowerCase() !== 'qualificacao_vencida' &&
+          Number(item.diasRestantes || 0) > 0,
+      ).length;
 
     if (vencidas > 0) {
       items.push({
@@ -217,7 +238,7 @@ export function buildManagerAlerts({
         module: 'QUALIFICACOES',
         freshness: `Janela de vencimento ativa · ${todayLabel}`,
         count: vencendo,
-        orderWeight: 680,
+        orderWeight: upcomingQualificationWeight,
       });
     }
   }
@@ -231,7 +252,7 @@ export function buildManagerAlerts({
       const criticalLms = hasSeverity(lmsAlerts, ['CRITICA', 'ALTA']);
       items.push({
         id: 'lms-pending',
-        severity: criticalLms ? 'ATENCAO' : 'INFORMATIVO',
+        severity: criticalLms ? 'CRITICO' : 'INFORMATIVO',
         title: `${pluralize(lmsAlerts.length, 'pendência')} de LMS obrigatória${lmsAlerts.length === 1 ? '' : 's'}`,
         description: 'Acompanhar cursos obrigatórios não concluídos antes que virem bloqueio operacional.',
         actionLabel: 'Ver detalhe',
@@ -239,7 +260,7 @@ export function buildManagerAlerts({
         module: 'LMS',
         freshness: `Compliance LMS · ${todayLabel}`,
         count: lmsAlerts.length,
-        orderWeight: criticalLms ? 540 : 380,
+        orderWeight: criticalLms ? 820 : 380,
       });
     }
   }
