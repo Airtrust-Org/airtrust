@@ -72,7 +72,7 @@ export const dashboardKeys = {
 
 // ─── Individual Query Hooks ─────────────────────────────────────────────────
 
-export function useMetricsQuery() {
+export function useMetricsQuery(enabled = true) {
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.metrics(),
@@ -82,6 +82,7 @@ export function useMetricsQuery() {
       return json.data as DashboardMetrics;
     },
     staleTime: STALE_STANDARD_MS,
+    enabled,
   });
 }
 
@@ -98,7 +99,7 @@ export function useComplianceQuery() {
   });
 }
 
-export function useAlertasQuery() {
+export function useAlertasQuery(enabled = true) {
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
     queryKey: dashboardKeys.alertas(),
@@ -134,6 +135,7 @@ export function useAlertasQuery() {
         });
     },
     staleTime: STALE_STANDARD_MS,
+    enabled,
   });
 }
 
@@ -154,7 +156,7 @@ export function useAtividadesQuery() {
   });
 }
 
-export function useFrmsAlertasQuery() {
+export function useFrmsAlertasQuery(enabled = true) {
   const hoje = new Date();
   const mesInicio = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
   const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
@@ -181,7 +183,7 @@ export function useFrmsAlertasQuery() {
       });
     },
     staleTime: STALE_CRITICAL_MS,
-    enabled: true,
+    enabled,
   });
 }
 
