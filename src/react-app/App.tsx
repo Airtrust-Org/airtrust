@@ -446,7 +446,7 @@ export default function App() {
                     <Route
                       path="/funcionarios/:id/ficha"
                       element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredPermission="funcionarios.view">
                           <FichaFuncionarioPage />
                         </ProtectedRoute>
                       }
@@ -454,7 +454,7 @@ export default function App() {
                     <Route
                       path="/funcionarios/:id"
                       element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredPermission="funcionarios.view">
                           <FichaFuncionarioPage />
                         </ProtectedRoute>
                       }
@@ -462,7 +462,7 @@ export default function App() {
                     <Route
                       path="/funcionarios/:id/perfil"
                       element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredPermission="funcionarios.view">
                           <PerfilFuncionario />
                         </ProtectedRoute>
                       }
