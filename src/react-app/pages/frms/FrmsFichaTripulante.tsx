@@ -249,12 +249,26 @@ export default function FrmsFichaTripulante() {
   const [selectedExplanationDate, setSelectedExplanationDate] = useState<string | null>(null);
   const hojeIso = new Date().toISOString().slice(0, 10);
 
-  const { data: frmsSnapshotItems, loading: loadingFrmsSnapshot } = useFrmsOperationalSnapshot({
+  const requestedFuncionarioId = Number(id);
+  const {
+    data: frmsSnapshotItems,
+    loading: loadingFrmsSnapshot,
+    meta: frmsSnapshotMeta,
+  } = useFrmsOperationalSnapshot({
     data_inicio: hojeIso,
     data_fim: hojeIso,
     funcionario_id: id,
   });
-  const fortnightIndicator = frmsSnapshotItems[0]?.fortnight_indicator ?? null;
+  const fortnightSnapshotItem = frmsSnapshotItems.find(
+    (item) => item.funcionario_id === requestedFuncionarioId,
+  );
+  const shouldExposeFortnightIndicator =
+    Number.isFinite(requestedFuncionarioId) &&
+    requestedFuncionarioId > 0 &&
+    (!frmsSnapshotMeta?.forced_funcionario_id ||
+      frmsSnapshotMeta.forced_funcionario_id === requestedFuncionarioId);
+  const fortnightIndicator =
+    shouldExposeFortnightIndicator ? fortnightSnapshotItem?.fortnight_indicator ?? null : null;
 
   const { data: recentJornadasRaw } = useFrmsJornadasEffectiveness(id, 7);
   const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: hojeIso });

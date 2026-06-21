@@ -38,6 +38,7 @@ import { toast } from 'sonner';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { canManageEscalaOperations } from './utils/operationalPermissions';
 import {
+  buildFrmsInlineSummary,
   buildFrmsLink as buildFrmsLinkFromModule,
   buildFrmsTooltipLabel,
   getFrmsVerboseLabel as getFrmsVerboseLabelFromModule,
@@ -1806,6 +1807,14 @@ export default function EvdPage() {
                     const sicFrms = frmsDailyUnavailable
                       ? { short: '?', long: 'Indisponível' as const }
                       : getFrmsRosterLabel(sicSignal);
+                    const picFortnight = voo.pic_id
+                      ? fortnightByTripulante.get(toNumericId(voo.pic_id) || 0) ?? null
+                      : null;
+                    const sicFortnight = voo.sic_id
+                      ? fortnightByTripulante.get(toNumericId(voo.sic_id) || 0) ?? null
+                      : null;
+                    const picFrmsSummary = buildFrmsInlineSummary(picSignal, picFortnight);
+                    const sicFrmsSummary = buildFrmsInlineSummary(sicSignal, sicFortnight);
                     const prefixoNormalizado = normalizePrefixo(voo.aeronave_prefixo);
                     const aeronaveCadastro = aeronavesByPrefix.get(prefixoNormalizado);
                     const statusAnv = getAircraftStatusMeta(aeronaveCadastro?.status);
@@ -1843,20 +1852,24 @@ export default function EvdPage() {
                           )}
                         </td>
                         <td className="px-3 py-3.5">
-                          <Link
-                            to={buildFrmsLink(frmsReferenceDate, voo.pic_id)}
-                            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(picFrms.short)}`}
-                            title={buildFrmsTooltipLabel(
-                              picSignal,
-                              voo.pic_id ? fortnightByTripulante.get(toNumericId(voo.pic_id) || 0) : null,
-                            )}
-                          >
-                            {picFrms.short}
-                            {picFrms.isEstimated && (
-                              <span className="font-normal opacity-70">Est.</span>
-                            )}
-                            <ExternalLink className="h-2 w-2 opacity-50" />
-                          </Link>
+                          <div className="space-y-1">
+                            <Link
+                              to={buildFrmsLink(frmsReferenceDate, voo.pic_id)}
+                              className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(picFrms.short)}`}
+                              title={buildFrmsTooltipLabel(picSignal, picFortnight)}
+                            >
+                              {picFrms.short}
+                              {picFrms.isEstimated && (
+                                <span className="font-normal opacity-70">Est.</span>
+                              )}
+                              <ExternalLink className="h-2 w-2 opacity-50" />
+                            </Link>
+                            {picFrmsSummary ? (
+                              <div className="max-w-40 text-[10px] leading-tight text-slate-500">
+                                {picFrmsSummary}
+                              </div>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
                           <span
@@ -1876,20 +1889,24 @@ export default function EvdPage() {
                           </span>
                         </td>
                         <td className="px-3 py-3.5">
-                          <Link
-                            to={buildFrmsLink(frmsReferenceDate, voo.sic_id)}
-                            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(sicFrms.short)}`}
-                            title={buildFrmsTooltipLabel(
-                              sicSignal,
-                              voo.sic_id ? fortnightByTripulante.get(toNumericId(voo.sic_id) || 0) : null,
-                            )}
-                          >
-                            {sicFrms.short}
-                            {sicFrms.isEstimated && (
-                              <span className="font-normal opacity-70">Est.</span>
-                            )}
-                            <ExternalLink className="h-2 w-2 opacity-50" />
-                          </Link>
+                          <div className="space-y-1">
+                            <Link
+                              to={buildFrmsLink(frmsReferenceDate, voo.sic_id)}
+                              className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(sicFrms.short)}`}
+                              title={buildFrmsTooltipLabel(sicSignal, sicFortnight)}
+                            >
+                              {sicFrms.short}
+                              {sicFrms.isEstimated && (
+                                <span className="font-normal opacity-70">Est.</span>
+                              )}
+                              <ExternalLink className="h-2 w-2 opacity-50" />
+                            </Link>
+                            {sicFrmsSummary ? (
+                              <div className="max-w-40 text-[10px] leading-tight text-slate-500">
+                                {sicFrmsSummary}
+                              </div>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">
                           <span

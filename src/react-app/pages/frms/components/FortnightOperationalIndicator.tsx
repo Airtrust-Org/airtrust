@@ -199,10 +199,12 @@ export function FortnightCrewSummaryCard({
   indicator,
   checkinPendente = false,
   loading = false,
+  simplified = false,
 }: {
   indicator: FrmsFortnightIndicator | null | undefined;
   checkinPendente?: boolean;
   loading?: boolean;
+  simplified?: boolean;
 }) {
   if (loading) {
     return (
@@ -217,7 +219,9 @@ export function FortnightCrewSummaryCard({
   return (
     <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-4 space-y-3">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900">Fadiga da quinzena</h3>
+        <h3 className="text-sm font-semibold text-slate-900">
+          {simplified ? 'Resumo da quinzena' : 'Fadiga da quinzena'}
+        </h3>
         <FortnightOperationalDisclaimer compact />
       </div>
 
@@ -227,16 +231,18 @@ export function FortnightCrewSummaryCard({
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <FortnightStatusBadge status={indicator.status_quinzena} />
-            <span className="text-xs text-slate-600">
-              Tendência: {formatFortnightTendencia(indicator.tendencia)}
-            </span>
+            {!simplified ? (
+              <span className="text-xs text-slate-600">
+                Tendência: {formatFortnightTendencia(indicator.tendencia)}
+              </span>
+            ) : null}
             {checkinPendente || (indicator.dias_com_checkin_pendente ?? 0) > 0 ? (
               <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
                 Check-in pendente
               </span>
             ) : null}
           </div>
-          {indicator.score_acumulado != null ? (
+          {!simplified && indicator.score_acumulado != null ? (
             <p className="text-sm text-slate-700">
               Score acumulado: <span className="font-semibold">{formatFortnightScore(indicator.score_acumulado)}</span>
             </p>

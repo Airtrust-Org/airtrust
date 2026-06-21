@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildFrmsLink, buildFrmsTooltipLabel, getFrmsVerboseLabel } from '../evdFrmsTooltip';
+import {
+  buildFrmsInlineSummary,
+  buildFrmsLink,
+  buildFrmsTooltipLabel,
+  getFrmsVerboseLabel,
+} from '../evdFrmsTooltip';
 
 type Signal = Parameters<typeof getFrmsVerboseLabel>[0];
 
@@ -155,5 +160,49 @@ describe('buildFrmsTooltipLabel', () => {
     expect(tooltip).toContain('Quinzena:');
     expect(tooltip).toContain('Quinzena com atenção');
     expect(tooltip).toContain('Tendência de alta na quinzena.');
+  });
+});
+
+describe('buildFrmsInlineSummary', () => {
+  it('retorna resumo curto com mitigação quando há indicador quinzenal', () => {
+    const summary = buildFrmsInlineSummary(makeSignal({ status: 'attention' }), {
+      periodo_inicio: '2026-05-16',
+      periodo_fim: '2026-05-31',
+      dia_periodo: 10,
+      total_dias_periodo: 16,
+      dias_consecutivos_com_jornada: 3,
+      dias_com_checkin_pendente: 0,
+      dias_com_dado_estimado: 0,
+      duty_time_periodo_min: 1800,
+      duty_time_168h_min: 900,
+      horas_voo_periodo_min: 600,
+      horas_voo_168h_min: 260,
+      jornadas_periodo: 3,
+      apresentacoes_antes_0600: 0,
+      apresentacoes_antes_0700: 0,
+      menor_descanso_entre_jornadas_min: 720,
+      setores_periodo: null,
+      sit_periods_estimados: null,
+      fonte_periodo: 'REAL',
+      freshness_dado: 'COMPLETO',
+      status_quinzena: 'ATENCAO',
+      score_acumulado: 50,
+      tendencia: 'CRESCENTE',
+      atenuadores_aplicados: [],
+      agravantes_aplicados: [{ codigo: 'G1', descricao: 'Sequência longa', impacto_score: 8 }],
+      natureza_dado: 'PROJECAO',
+      explicacao_operacional: 'Tendência de alta na quinzena.',
+      mitigacao_recomendada: 'REVISAR_CHECKIN',
+      decisao: 'ALERTA',
+      limite_referencia: null,
+      alertas_quinzena: [],
+      limitation_notes: [],
+    });
+
+    expect(summary).toBe('Quinzena com atenção · Revisar check-in');
+  });
+
+  it('não retorna resumo extra para estado ok sem quinzena', () => {
+    expect(buildFrmsInlineSummary(makeSignal({ status: 'normal' }), null)).toBeNull();
   });
 });
