@@ -68,13 +68,14 @@ function buildWhatsAppManualLink(telefone: string, mensagem?: string): string {
 
 async function getSimuladorAgendamentosSchema(
   db: D1Database,
-): Promise<{ hasTipoDispositivo: boolean; hasAeronaveId: boolean }> {
+): Promise<{ hasTipoDispositivo: boolean; hasAeronaveId: boolean; hasModoCompartilhado: boolean }> {
   const colInfo = await db.prepare('PRAGMA table_info(simulador_agendamentos)').bind().all();
   const colNames = new Set((colInfo.results || []).map((row: any) => row.name));
 
   return {
     hasTipoDispositivo: colNames.has('tipo_dispositivo'),
     hasAeronaveId: colNames.has('aeronave_id'),
+    hasModoCompartilhado: colNames.has('modo_compartilhado'),
   };
 }
 
@@ -302,7 +303,8 @@ app.get('/sessoes', async (c) => {
     const maxLimit = !isFullAccessRole(role) ? 500 : 200;
     const limit = parseLimit(c.req.query('limit'), defaultLimit, maxLimit);
     const offset = parseOffset(c.req.query('offset'));
-    const { hasTipoDispositivo, hasAeronaveId } = await getSimuladorAgendamentosSchema(c.env.DB);
+    const { hasTipoDispositivo, hasAeronaveId, hasModoCompartilhado } =
+      await getSimuladorAgendamentosSchema(c.env.DB);
 
     const tipoDispo = c.req.query('tipo_dispositivo'); // SIMULADOR | AERONAVE
     const tipoDispositivoSelect = hasTipoDispositivo
@@ -315,6 +317,9 @@ app.get('/sessoes', async (c) => {
       : `NULL as aeronave_id,
         NULL as aeronave_prefixo,
         NULL as aeronave_modelo,`;
+    const modoCompartilhadoSelect = hasModoCompartilhado
+      ? 'sa.modo_compartilhado,'
+      : 'NULL as modo_compartilhado,';
     const aeronaveJoin = hasAeronaveId
       ? 'LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL'
       : '';
@@ -344,7 +349,7 @@ app.get('/sessoes', async (c) => {
         sa.tipo_sessao,
         sa.nome as tema_sessao,
         sa.status,
-        sa.modo_compartilhado,
+        ${modoCompartilhadoSelect}
         sa.observacoes,
         sa.created_at,
         sa.updated_at,
@@ -387,7 +392,7 @@ app.get('/sessoes', async (c) => {
         sa.tipo_sessao,
         sa.nome as tema_sessao,
         sa.status,
-        sa.modo_compartilhado,
+        ${modoCompartilhadoSelect}
         sa.observacoes,
         sa.created_at,
         sa.updated_at,
