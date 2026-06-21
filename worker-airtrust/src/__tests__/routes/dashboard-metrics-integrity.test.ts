@@ -6,6 +6,7 @@ const getTaxaConclusaoMensalMock = vi.fn();
 const getUtilizacaoSimuladoresMock = vi.fn();
 const getEmployeeSectorAccessMock = vi.fn();
 const getDashboardFrmsAlertsMock = vi.fn();
+const getDashboardSimuladoresAlertsMock = vi.fn();
 const getDashboardUpcomingSessionsMock = vi.fn();
 const getDashboardEscalasResumoMock = vi.fn();
 
@@ -31,6 +32,7 @@ vi.mock('../../services/dashboardService', () => ({
   getDemandaTreinamento: vi.fn(async () => ({})),
   getAtividadesRecentes: vi.fn(async () => []),
   getDashboardFrmsAlerts: (...args: unknown[]) => getDashboardFrmsAlertsMock(...args),
+  getDashboardSimuladoresAlerts: (...args: unknown[]) => getDashboardSimuladoresAlertsMock(...args),
   getDashboardUpcomingSessions: (...args: unknown[]) => getDashboardUpcomingSessionsMock(...args),
   getDashboardEscalasResumo: (...args: unknown[]) => getDashboardEscalasResumoMock(...args),
   getTaxaConclusaoMensal: (...args: unknown[]) => getTaxaConclusaoMensalMock(...args),
@@ -93,6 +95,7 @@ describe('dashboard metrics integrity routes', () => {
     getUtilizacaoSimuladoresMock.mockReset();
     getEmployeeSectorAccessMock.mockReset();
     getDashboardFrmsAlertsMock.mockReset();
+    getDashboardSimuladoresAlertsMock.mockReset();
     getDashboardUpcomingSessionsMock.mockReset();
     getDashboardEscalasResumoMock.mockReset();
     getEmployeeSectorAccessMock.mockResolvedValue({
@@ -219,6 +222,37 @@ describe('dashboard metrics integrity routes', () => {
       6,
       2026,
       4,
+    );
+  });
+
+  it('escopa alertas agregados de simuladores pelo access setorial resolvido no backend', async () => {
+    getDashboardSimuladoresAlertsMock.mockResolvedValueOnce({
+      fichas_pendentes_avaliacao: 2,
+      fichas_aguardando_assinatura_aluno: 1,
+      fichas_aguardando_assinatura_instrutor: 0,
+      fichas_aguardando_assinatura: 1,
+      sessoes_proximas_sem_ficha_completa: 3,
+      edicoes_pendentes: 0,
+      janela_sessoes_proximas_horas: 36,
+    });
+
+    const app = createApp();
+    const db = {} as D1Database;
+    const response = await app.fetch(
+      new Request('http://localhost/dashboard/simuladores-alertas?janela_horas=36', {
+        method: 'GET',
+        headers: { 'x-empresa-id': '8' },
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(getDashboardSimuladoresAlertsMock).toHaveBeenCalledWith(
+      db,
+      8,
+      { mode: 'restricted', setorIds: [10], funcionarioId: null },
+      36,
     );
   });
 

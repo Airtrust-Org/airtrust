@@ -8,6 +8,8 @@ const usePermissionsMock = vi.fn();
 const useMetricsQueryMock = vi.fn();
 const useAlertasQueryMock = vi.fn();
 const useFrmsAlertasQueryMock = vi.fn();
+const useSgsoChecklistQueryMock = vi.fn();
+const useSimuladoresAlertasQueryMock = vi.fn();
 const useFrmsOperationalSnapshotMock = vi.fn();
 
 vi.mock('@/react-app/hooks/useAuth', () => ({
@@ -19,9 +21,11 @@ vi.mock('@/react-app/hooks/usePermissions', () => ({
 }));
 
 vi.mock('@/react-app/pages/dashboard/queries', () => ({
-  useMetricsQuery: () => useMetricsQueryMock(),
-  useAlertasQuery: () => useAlertasQueryMock(),
-  useFrmsAlertasQuery: () => useFrmsAlertasQueryMock(),
+  useMetricsQuery: (enabled?: boolean) => useMetricsQueryMock(enabled),
+  useAlertasQuery: (enabled?: boolean) => useAlertasQueryMock(enabled),
+  useFrmsAlertasQuery: (enabled?: boolean) => useFrmsAlertasQueryMock(enabled),
+  useSgsoChecklistQuery: (enabled?: boolean) => useSgsoChecklistQueryMock(enabled),
+  useSimuladoresAlertasQuery: (enabled?: boolean) => useSimuladoresAlertasQueryMock(enabled),
 }));
 
 vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
@@ -63,6 +67,37 @@ function baseFrmsAlertasQuery() {
   };
 }
 
+function baseSgsoChecklistQuery() {
+  return {
+    data: {
+      checklist: [],
+      resumo: {
+        ok: 0,
+        atencao: 0,
+        nao_conforme: 0,
+      },
+    },
+    isLoading: false,
+    isError: false,
+  };
+}
+
+function baseSimuladoresAlertasQuery() {
+  return {
+    data: {
+      fichas_pendentes_avaliacao: 0,
+      fichas_aguardando_assinatura_aluno: 0,
+      fichas_aguardando_assinatura_instrutor: 0,
+      fichas_aguardando_assinatura: 0,
+      sessoes_proximas_sem_ficha_completa: 0,
+      edicoes_pendentes: 0,
+      janela_sessoes_proximas_horas: 24,
+    },
+    isLoading: false,
+    isError: false,
+  };
+}
+
 function baseSnapshotHook() {
   return {
     data: [],
@@ -88,7 +123,7 @@ function baseSnapshotHook() {
   };
 }
 
-function setManagerContext(modulosAtivos = ['frms', 'qualificacoes', 'lms']) {
+function setManagerContext(modulosAtivos = ['frms', 'sgso', 'simuladores', 'qualificacoes', 'lms']) {
   useAuthMock.mockReturnValue({
     empresaAtualId: 7,
     empresas: [{ id: 7, modulos_ativos: modulosAtivos }],
@@ -96,6 +131,7 @@ function setManagerContext(modulosAtivos = ['frms', 'qualificacoes', 'lms']) {
   usePermissionsMock.mockReturnValue({
     isAdmin: false,
     isGestor: true,
+    can: () => true,
   });
 }
 
@@ -106,6 +142,8 @@ describe('ManagerAlertCenter', () => {
     useMetricsQueryMock.mockReturnValue(baseMetricsQuery());
     useAlertasQueryMock.mockReturnValue(baseAlertasQuery());
     useFrmsAlertasQueryMock.mockReturnValue(baseFrmsAlertasQuery());
+    useSgsoChecklistQueryMock.mockReturnValue(baseSgsoChecklistQuery());
+    useSimuladoresAlertasQueryMock.mockReturnValue(baseSimuladoresAlertasQuery());
     useFrmsOperationalSnapshotMock.mockReturnValue(baseSnapshotHook());
   });
 
@@ -119,6 +157,7 @@ describe('ManagerAlertCenter', () => {
     usePermissionsMock.mockReturnValue({
       isAdmin: false,
       isGestor: false,
+      can: () => false,
     });
 
     renderCenter();
@@ -127,7 +166,57 @@ describe('ManagerAlertCenter', () => {
     expect(useMetricsQueryMock).not.toHaveBeenCalled();
     expect(useAlertasQueryMock).not.toHaveBeenCalled();
     expect(useFrmsAlertasQueryMock).not.toHaveBeenCalled();
+    expect(useSgsoChecklistQueryMock).not.toHaveBeenCalled();
+    expect(useSimuladoresAlertasQueryMock).not.toHaveBeenCalled();
     expect(useFrmsOperationalSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it('não habilita SGSO quando permissão sgso.view está negada', () => {
+    usePermissionsMock.mockReturnValue({
+      isAdmin: false,
+      isGestor: true,
+      can: (permission: string) => permission !== 'sgso.view',
+    });
+
+    renderCenter();
+
+    expect(useSgsoChecklistQueryMock).toHaveBeenCalledWith(false);
+  });
+
+  it('renderiza alerta SGSO crítico antes de atenção de simuladores', () => {
+    useSgsoChecklistQueryMock.mockReturnValue({
+      ...baseSgsoChecklistQuery(),
+      data: {
+        checklist: [
+          {
+            codigo: 'RBAC121_MITIGACOES',
+            referencia: 'RBAC 121 / CAPA em prazo',
+            status: 'NAO_CONFORME',
+            valor: 2,
+            detalhe: 'Ações corretivas/preventivas vencidas',
+          },
+        ],
+        resumo: {
+          ok: 0,
+          atencao: 0,
+          nao_conforme: 1,
+        },
+      },
+    });
+    useSimuladoresAlertasQueryMock.mockReturnValue({
+      ...baseSimuladoresAlertasQuery(),
+      data: {
+        ...baseSimuladoresAlertasQuery().data,
+        fichas_pendentes_avaliacao: 3,
+      },
+    });
+
+    const { container } = renderCenter();
+    const headings = Array.from(container.querySelectorAll('article h3')).map((node) => node.textContent);
+
+    expect(headings[0]).toContain('ações corretivas');
+    expect(screen.getByText(/ações corretivas vencidas/i)).toBeInTheDocument();
+    expect(screen.getByText(/fichas? de simulador pendente/i)).toBeInTheDocument();
   });
 
   it('renderiza alerta crítico FRMS antes dos alertas de atenção', () => {
@@ -219,6 +308,21 @@ describe('ManagerAlertCenter', () => {
     expect(screen.getByText('Sem alertas críticos')).toBeInTheDocument();
   });
 
+  it('renderiza alerta de simuladores sem elevar ficha futura bloqueada para crítico', () => {
+    useSimuladoresAlertasQueryMock.mockReturnValue({
+      ...baseSimuladoresAlertasQuery(),
+      data: {
+        ...baseSimuladoresAlertasQuery().data,
+        sessoes_proximas_sem_ficha_completa: 2,
+      },
+    });
+
+    renderCenter();
+
+    expect(screen.getByText(/sess(ão|ões) próxima(s)? com ficha incompleta/i)).toBeInTheDocument();
+    expect(screen.getByText('0 críticos')).toBeInTheDocument();
+  });
+
   it('mantém a central operacional quando apenas uma subfonte FRMS falha', () => {
     useFrmsAlertasQueryMock.mockReturnValue({
       ...baseFrmsAlertasQuery(),
@@ -281,6 +385,16 @@ describe('ManagerAlertCenter', () => {
     renderCenter();
 
     expect(screen.queryByRole('link', { name: /Ver fadiga/i })).not.toBeInTheDocument();
+  });
+
+  it('não quebra com SGSO e simuladores desabilitados', () => {
+    setManagerContext(['qualificacoes']);
+
+    renderCenter();
+
+    expect(screen.queryByRole('link', { name: /Ver Bowtie/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Ver simuladores/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Sem alertas críticos')).toBeInTheDocument();
   });
 
   it('mantém links seguros quando a origem devolve URL externa', () => {
