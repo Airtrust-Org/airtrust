@@ -37,6 +37,12 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { canManageEscalaOperations } from './utils/operationalPermissions';
+import {
+  buildFrmsLink as buildFrmsLinkFromModule,
+  buildFrmsTooltipLabel,
+  getFrmsVerboseLabel as getFrmsVerboseLabelFromModule,
+} from './evdFrmsTooltip';
+import type { FrmsFortnightIndicator } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 
 function authHeaders(): Record<string, string> {
   const token = getAccessToken();
@@ -138,6 +144,16 @@ interface FrmsTripulanteSignal {
   dataSource: string;
   requiresReview: boolean;
   hasAlert: boolean;
+}
+
+interface FrmsOperationalSnapshotLiteItem {
+  funcionario_id: number;
+  fortnight_indicator: FrmsFortnightIndicator | null;
+}
+
+interface FrmsOperationalSnapshotLiteResponse {
+  success?: boolean;
+  data?: FrmsOperationalSnapshotLiteItem[];
 }
 
 interface EvdJustificativaPayload {
@@ -526,22 +542,11 @@ function getFrmsBadgeTone(short: string): string {
 }
 
 export function getFrmsVerboseLabel(signal: FrmsTripulanteSignal | null | undefined): string {
-  if (!signal) return 'Sem dado FRMS';
-  if (signal.status === 'no_duty') return 'Sem jornada FRMS';
-  if (signal.status === 'not_submitted') return 'Check-in pendente';
-  if (signal.status === 'critical' || signal.status === 'unfit_for_duty') return 'Revisar com gestor';
-  if (signal.requiresReview || signal.hasAlert) return 'Revisar com gestor';
-  if (signal.status === 'attention') return 'Atenção';
-  if (signal.dataSource === 'default_estimate') return 'Dado estimado';
-  if (signal.dataSource === 'crew_reported') return 'Check-in recebido';
-  return 'FRMS OK';
+  return getFrmsVerboseLabelFromModule(signal);
 }
 
 export function buildFrmsLink(data: string, funcionarioId?: number | string | null): string {
-  const params = new URLSearchParams({ data_inicio: data, data_fim: data });
-  const id = toNumericId(funcionarioId);
-  if (id) params.set('funcionario_id', String(id));
-  return `/frms/controle-operacional?${params.toString()}`;
+  return buildFrmsLinkFromModule(data, funcionarioId);
 }
 
 function getQualificacaoBadgeTone(funcao: string | null | undefined): string {
@@ -659,6 +664,13 @@ export default function EvdPage() {
     enabled: frmsFetchReady,
     staleTime: 60_000,
   });
+  const { data: frmsSnapshotRaw } = useApi<FrmsOperationalSnapshotLiteResponse>(
+    `/api/frms/operational-snapshot?data_inicio=${frmsReferenceDate}&data_fim=${frmsReferenceDate}&include_inconsistencies=true`,
+    {
+      enabled: frmsFetchReady,
+      staleTime: 60_000,
+    },
+  );
   const {
     data: aeronavesRaw,
     loading: loadingAeronaves,
@@ -743,6 +755,16 @@ export default function EvdPage() {
 
     return map;
   }, [frmsAlertItems, frmsDailyItems]);
+
+  const fortnightByTripulante = useMemo(() => {
+    const map = new Map<number, FrmsFortnightIndicator>();
+    for (const item of frmsSnapshotRaw?.data || []) {
+      const id = toNumericId(item.funcionario_id);
+      if (!id || !item.fortnight_indicator) continue;
+      map.set(id, item.fortnight_indicator);
+    }
+    return map;
+  }, [frmsSnapshotRaw?.data]);
 
   const resumoAeronavesDoDia = useMemo(() => {
     const alocadasPorPrefixo = new Map(
@@ -1824,7 +1846,10 @@ export default function EvdPage() {
                           <Link
                             to={buildFrmsLink(frmsReferenceDate, voo.pic_id)}
                             className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(picFrms.short)}`}
-                            title={`${getFrmsVerboseLabel(picSignal)} — clique para ver no Controle FRMS`}
+                            title={buildFrmsTooltipLabel(
+                              picSignal,
+                              voo.pic_id ? fortnightByTripulante.get(toNumericId(voo.pic_id) || 0) : null,
+                            )}
                           >
                             {picFrms.short}
                             {picFrms.isEstimated && (
@@ -1854,7 +1879,10 @@ export default function EvdPage() {
                           <Link
                             to={buildFrmsLink(frmsReferenceDate, voo.sic_id)}
                             className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold hover:opacity-80 transition-opacity ${getFrmsBadgeTone(sicFrms.short)}`}
-                            title={`${getFrmsVerboseLabel(sicSignal)} — clique para ver no Controle FRMS`}
+                            title={buildFrmsTooltipLabel(
+                              sicSignal,
+                              voo.sic_id ? fortnightByTripulante.get(toNumericId(voo.sic_id) || 0) : null,
+                            )}
                           >
                             {sicFrms.short}
                             {sicFrms.isEstimated && (
