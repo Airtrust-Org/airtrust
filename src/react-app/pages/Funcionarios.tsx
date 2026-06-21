@@ -10,6 +10,7 @@ import { API_BASE_URL } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useTablePreferences } from '@/react-app/hooks/useTablePreferences';
 import { useSearchParams } from 'react-router-dom';
+import ManagerAlertCenter from './funcionarios/ManagerAlertCenter';
 
 interface ModeloAeronave {
   id: number;
@@ -268,6 +269,8 @@ export default function Funcionarios() {
           </>
         }
       />
+
+      <ManagerAlertCenter />
 
       {/* Main content container */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
