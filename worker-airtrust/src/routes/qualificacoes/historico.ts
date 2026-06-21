@@ -14,7 +14,6 @@ import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
 import {
-  appendEmployeeSectorFilter,
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
 } from '../../services/employee-sector-access';
@@ -133,6 +132,50 @@ function validateRequestedSetorScope(
   return allowed;
 }
 
+async function hasTableColumn(
+  db: D1Database,
+  tableName: string,
+  columnName: string,
+): Promise<boolean> {
+  try {
+    const columns = await db
+      .prepare(`PRAGMA table_info('${tableName}')`)
+      .all<{ name: string }>();
+    if (!columns.results || columns.results.length === 0) {
+      return true;
+    }
+    return (columns.results || []).some((column) => column.name === columnName);
+  } catch {
+    return true;
+  }
+}
+
+async function buildHistoricoEmployeeScopeCompat(
+  db: D1Database,
+  access: Awaited<ReturnType<typeof getEmployeeSectorAccess>>,
+  funcionarioAlias = 'f',
+): Promise<{ clause: string; bindings: number[]; hasSetorId: boolean }> {
+  const hasSetorId = await hasTableColumn(db, 'funcionarios', 'setor_id');
+
+  if (access.mode === 'all') {
+    return { clause: '1 = 1', bindings: [], hasSetorId };
+  }
+
+  if (access.mode === 'self') {
+    return { clause: `${funcionarioAlias}.id = ?`, bindings: [access.funcionarioId], hasSetorId };
+  }
+
+  if (!hasSetorId || access.setorIds.length === 0) {
+    return { clause: '1 = 0', bindings: [], hasSetorId };
+  }
+
+  return {
+    clause: `${funcionarioAlias}.setor_id IN (${access.setorIds.map(() => '?').join(', ')})`,
+    bindings: access.setorIds,
+    hasSetorId,
+  };
+}
+
 // ===== ENDPOINTS =====
 
 /**
@@ -150,6 +193,8 @@ router.get(
     await ensureModelosAeronaveModeloColumn(db);
     await ensureHistoricoSchema(db);
     const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
+    const employeeScope = await buildHistoricoEmployeeScopeCompat(db, access, 'f');
+    const hasCategoriaEmpresaId = await hasTableColumn(db, 'qualificacoes_categorias', 'empresa_id');
     const {
       renewedQualificationPredicate,
       activeRenewedQualificationPredicate,
@@ -200,11 +245,16 @@ router.get(
     ];
     console.log('[HISTORICO] Conditions setup. Deleted_at IS NULL enforced.');
     const params: unknown[] = [tenantCtx.empresaId];
-    appendEmployeeSectorFilter(conditions, params, access, 'f');
+    conditions.push(employeeScope.clause);
+    params.push(...employeeScope.bindings);
 
     if (requestedSetorIds.length > 0) {
-      conditions.push(`f.setor_id IN (${requestedSetorIds.map(() => '?').join(', ')})`);
-      params.push(...requestedSetorIds);
+      if (employeeScope.hasSetorId) {
+        conditions.push(`f.setor_id IN (${requestedSetorIds.map(() => '?').join(', ')})`);
+        params.push(...requestedSetorIds);
+      } else {
+        conditions.push('1 = 0');
+      }
     }
 
     if (search) {
@@ -471,7 +521,7 @@ router.get(
     LEFT JOIN qualificacoes_categorias qc
       ON UPPER(TRIM(qc.nome)) = UPPER(TRIM(COALESCE(qt.categoria, qh.categoria)))
      AND qc.deleted_at IS NULL
-     AND qc.empresa_id = f.empresa_id
+     ${hasCategoriaEmpresaId ? 'AND qc.empresa_id = f.empresa_id' : ''}
     WHERE ${whereClause}
     ORDER BY ${buildOrderByClause(orderBy, order)}
     LIMIT ? OFFSET ?`;
@@ -606,12 +656,10 @@ router.get(
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
+    const employeeScope = await buildHistoricoEmployeeScopeCompat(db, access, 'f');
     const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
     const { renewedQualificationPredicate, activeRenewedQualificationPredicate } =
       buildRenewalSqlPredicates(hasRenovacaoDe);
-    const scopeConditions: string[] = [];
-    const scopeBindings: unknown[] = [];
-    appendEmployeeSectorFilter(scopeConditions, scopeBindings, access, 'f');
 
     const statsResult = await db
       .prepare(
@@ -639,9 +687,9 @@ router.get(
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
         AND f.empresa_id = ?
-        ${scopeConditions.length > 0 ? `AND ${scopeConditions.join(' AND ')}` : ''}`,
+        AND ${employeeScope.clause}`,
       )
-      .bind(tenantCtx.empresaId, ...scopeBindings)
+      .bind(tenantCtx.empresaId, ...employeeScope.bindings)
       .first();
 
     const stats = {
@@ -667,6 +715,7 @@ router.get(
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
+    const employeeScope = await buildHistoricoEmployeeScopeCompat(db, access, 'f');
     const funcionarioId = c.req.query('funcionario_id');
     const qualificacaoId = c.req.query('qualificacao_id');
     const extended = (c.req.query('extended') || 'false') === 'true';
@@ -685,7 +734,8 @@ router.get(
       'f.empresa_id = ?',
     ];
     const bindings: unknown[] = [tenantCtx.empresaId];
-    appendEmployeeSectorFilter(whereClauses, bindings, access, 'f');
+    whereClauses.push(employeeScope.clause);
+    bindings.push(...employeeScope.bindings);
 
     if (funcionarioId) {
       whereClauses.push('qh.funcionario_id = ?');

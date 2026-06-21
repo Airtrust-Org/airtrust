@@ -33,7 +33,6 @@ import {
 } from '../shared/syncEscalaEventosExternos';
 import funcionariosMutationsRoutes from './funcionarios-mutations';
 import {
-  assertFuncionarioInScope,
   employeeSectorSql,
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
@@ -107,6 +106,30 @@ export function buildFuncionarioRoleExpr(funcAlias?: string): string {
   return `COALESCE(NULLIF(TRIM(${funcaoColumn}), ''), NULLIF(TRIM(${cargoColumn}), ''))`;
 }
 
+async function getFuncionariosColumns(db: D1Database): Promise<Set<string>> {
+  const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
+    .results as Array<{ name: string }>;
+  return new Set(cols.map((col) => col.name));
+}
+
+async function buildFuncionarioScopeCompat(
+  db: D1Database,
+  access: Awaited<ReturnType<typeof getEmployeeSectorAccess>>,
+  funcionarioAlias = 'f',
+): Promise<{ clause: string; bindings: number[] }> {
+  if (access.mode === 'all') return { clause: '1 = 1', bindings: [] };
+  if (access.mode === 'self') {
+    return { clause: `${funcionarioAlias}.id = ?`, bindings: [access.funcionarioId] };
+  }
+
+  const cols = await getFuncionariosColumns(db);
+  if (!cols.has('setor_id') || access.setorIds.length === 0) {
+    return { clause: '1 = 0', bindings: [] };
+  }
+
+  return employeeSectorSql(access, funcionarioAlias);
+}
+
 /**
  * GET /api/funcionarios
  * Lista funcionários com paginação e busca
@@ -147,12 +170,12 @@ app.get('/', auth(), async (c) => {
   const order = c.req.query('order')?.toUpperCase() as 'ASC' | 'DESC' | undefined;
 
   // Descobrir schema real (status TEXT vs. ativo INTEGER)
-  const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
-    .results as Array<{ name: string }>;
-  const hasStatus = cols.some((c) => c.name === 'status');
-  const hasAtivo = cols.some((c) => c.name === 'ativo');
-  const hasIsExaminador = cols.some((c) => c.name === 'is_examinador');
-  const hasIsChecador = cols.some((c) => c.name === 'is_checador');
+  const cols = await getFuncionariosColumns(db);
+  const hasStatus = cols.has('status');
+  const hasAtivo = cols.has('ativo');
+  const hasIsExaminador = cols.has('is_examinador');
+  const hasIsChecador = cols.has('is_checador');
+  const hasSetorId = cols.has('setor_id');
 
   // Construir WHERE clauses (main query uses alias `f`; countRecords does not)
   const whereClausesQuery: string[] = ['f.deleted_at IS NULL'];
@@ -162,7 +185,7 @@ app.get('/', auth(), async (c) => {
   // Filtro por empresa (multi-tenant) — fail-closed: sempre exige tenant
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const sectorScope = employeeSectorSql(access, 'f');
+  const sectorScope = await buildFuncionarioScopeCompat(db, access, 'f');
   whereClausesQuery.push('f.empresa_id = ?');
   whereClausesCount.push('empresa_id = ?');
   bindings.push(empresaId);
@@ -254,8 +277,13 @@ app.get('/', auth(), async (c) => {
       forbidden('Filtro de setor fora do escopo permitido', 'SETOR_FORA_DO_ESCOPO');
     }
     const placeholders = allowedSetorIds.map(() => '?').join(', ');
-    whereClausesQuery.push(`f.setor_id IN (${placeholders})`);
-    whereClausesCount.push(`f.setor_id IN (${placeholders})`);
+    if (!hasSetorId) {
+      whereClausesQuery.push('1 = 0');
+      whereClausesCount.push('1 = 0');
+    } else {
+      whereClausesQuery.push(`f.setor_id IN (${placeholders})`);
+      whereClausesCount.push(`f.setor_id IN (${placeholders})`);
+    }
     bindings.push(...allowedSetorIds);
   } else if (setor) {
     whereClausesQuery.push('f.setor = ?');
@@ -341,11 +369,19 @@ app.get('/', auth(), async (c) => {
     : hasAtivo
       ? "CASE WHEN COALESCE(f.ativo, 1) = 1 THEN 'ATIVO' ELSE 'INATIVO' END AS status, COALESCE(f.ativo, 1) AS ativo"
       : "'ATIVO' AS status, 1 AS ativo";
+  const setorIdSelect = hasSetorId ? 'f.setor_id' : 'NULL AS setor_id';
+  const setorSelect = hasSetorId ? 'COALESCE(s.nome, f.setor) AS setor' : 'f.setor AS setor';
+  const setoresJoin = hasSetorId
+    ? `LEFT JOIN setores s
+      ON s.id = f.setor_id
+     AND s.empresa_id = f.empresa_id
+     AND s.deleted_at IS NULL`
+    : '';
 
   const query = `
     SELECT 
       f.id, f.matricula, f.nome, f.guerra, f.cpf, f.email, f.telefone,
-      f.cargo, f.setor_id, COALESCE(s.nome, f.setor) AS setor, f.funcao,
+      f.cargo, ${setorIdSelect}, ${setorSelect}, f.funcao,
       ${aeronaveSelectExpr} AS aeronave,
       f.quinzena,
       f.codigo_anac,
@@ -355,10 +391,7 @@ app.get('/', auth(), async (c) => {
       f.is_instrutor, f.is_checador,
       f.created_at, f.updated_at
     FROM funcionarios f
-    LEFT JOIN setores s
-      ON s.id = f.setor_id
-     AND s.empresa_id = f.empresa_id
-     AND s.deleted_at IS NULL
+    ${setoresJoin}
     WHERE ${whereClauseQuery}
     ORDER BY ${orderByQueryClause}
     LIMIT ? OFFSET ?
@@ -386,13 +419,12 @@ app.get('/stats', auth(), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const sectorScope = employeeSectorSql(access, 'f');
+  const sectorScope = await buildFuncionarioScopeCompat(db, access, 'f');
 
   // Descobrir schema real (status TEXT vs. ativo INTEGER)
-  const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
-    .results as Array<{ name: string }>;
-  const hasStatus = cols.some((col) => col.name === 'status');
-  const hasAtivo = cols.some((col) => col.name === 'ativo');
+  const cols = await getFuncionariosColumns(db);
+  const hasStatus = cols.has('status');
+  const hasAtivo = cols.has('ativo');
 
   // Construir expressão para contar ativos/inativos
   // Observação: alguns registros podem ter status = '' (string vazia). Tratar como ATIVO.
@@ -442,14 +474,13 @@ app.get('/stats/dashboard', auth(), async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
-    const sectorScope = employeeSectorSql(access, 'f');
+    const sectorScope = await buildFuncionarioScopeCompat(db, access, 'f');
     const aeronaveSelectExpr = buildFuncionarioAeronaveDisplayExpr('f');
 
     // Descobrir schema real
-    const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
-      .results as Array<{ name: string }>;
-    const hasStatus = cols.some((col) => col.name === 'status');
-    const hasAtivo = cols.some((col) => col.name === 'ativo');
+    const cols = await getFuncionariosColumns(db);
+    const hasStatus = cols.has('status');
+    const hasAtivo = cols.has('ativo');
 
     let ativoExpr: string;
     if (hasStatus) {
@@ -714,7 +745,7 @@ app.get('/:fid/ferias', auth(), async (c) => {
   const funcionarioId = c.req.param('fid');
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const sectorScope = employeeSectorSql(access, 'f');
+  const sectorScope = await buildFuncionarioScopeCompat(db, access, 'f');
 
   const rows = await db
     .prepare(
@@ -765,7 +796,7 @@ app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
   const funcionarioId = c.req.param('fid');
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const sectorScope = employeeSectorSql(access, 'funcionarios');
+  const sectorScope = await buildFuncionarioScopeCompat(db, access, 'funcionarios');
   const userId = String(extrairUsuarioAuditoria(c) || 'system');
   const body = (await c.req.json().catch(() => null)) as {
     data_inicio?: string;
@@ -879,7 +910,7 @@ app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), as
   const feriasId = c.req.param('feriasId');
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const sectorScope = employeeSectorSql(access, 'f');
+  const sectorScope = await buildFuncionarioScopeCompat(db, access, 'f');
 
   const periodo = await db
     .prepare(
@@ -964,25 +995,41 @@ app.get('/:id', auth(), async (c) => {
   const id = parseInt(c.req.param('id'));
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const sectorScope = employeeSectorSql(access, 'funcionarios');
+  const sectorScope = await buildFuncionarioScopeCompat(db, access, 'funcionarios');
 
   if (isNaN(id)) {
     badRequest('ID inválido');
   }
 
-  await assertFuncionarioInScope(db, empresaId, id, access);
+  const detailScope = await buildFuncionarioScopeCompat(db, access, 'funcionarios');
+  const inScope = await db
+    .prepare(
+      `SELECT id
+         FROM funcionarios
+        WHERE id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
+          AND ${detailScope.clause}
+        LIMIT 1`,
+    )
+    .bind(id, empresaId, ...detailScope.bindings)
+    .first<{ id: number }>();
+  if (!inScope?.id) {
+    forbidden('Acesso negado ao funcionário solicitado', 'FUNCIONARIO_OUT_OF_SCOPE');
+  }
 
   // Descobrir schema real
-  const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
-    .results as Array<{ name: string }>;
-  const hasStatus = cols.some((c) => c.name === 'status');
-  const hasAtivo = cols.some((c) => c.name === 'ativo');
+  const cols = await getFuncionariosColumns(db);
+  const hasStatus = cols.has('status');
+  const hasAtivo = cols.has('ativo');
+  const hasSetorId = cols.has('setor_id');
 
   const statusExpr = hasStatus
     ? `${buildNormalizedFuncionarioStatusExpr('funcionarios')} AS status`
     : hasAtivo
       ? "CASE WHEN ativo = 1 THEN 'ATIVO' ELSE 'INATIVO' END AS status"
       : "'ATIVO' AS status";
+  const setorIdSelect = hasSetorId ? 'setor_id' : 'NULL AS setor_id';
 
   // Query com TODOS os campos incluindo dados pessoais, profissionais e endereço
   const funcionario = await db
@@ -991,7 +1038,7 @@ app.get('/:id', auth(), async (c) => {
     SELECT 
       id, matricula, nome, guerra, cpf, rg, 
       nascimento, email, telefone,
-      funcao, cargo, setor, setor_id, base, aeronave, modelo_aeronave_id,
+      funcao, cargo, setor, ${setorIdSelect}, base, aeronave, modelo_aeronave_id,
       admissao, codigo_anac,
       nivel_icao, data_realizacao_icao, validade_icao, 
       cma, data_realizacao_cma, validade_cma, 
