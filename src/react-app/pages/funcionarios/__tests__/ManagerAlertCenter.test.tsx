@@ -21,11 +21,11 @@ vi.mock('@/react-app/hooks/usePermissions', () => ({
 }));
 
 vi.mock('@/react-app/pages/dashboard/queries', () => ({
-  useMetricsQuery: () => useMetricsQueryMock(),
-  useAlertasQuery: () => useAlertasQueryMock(),
-  useFrmsAlertasQuery: () => useFrmsAlertasQueryMock(),
-  useSgsoChecklistQuery: () => useSgsoChecklistQueryMock(),
-  useSimuladoresAlertasQuery: () => useSimuladoresAlertasQueryMock(),
+  useMetricsQuery: (enabled?: boolean) => useMetricsQueryMock(enabled),
+  useAlertasQuery: (enabled?: boolean) => useAlertasQueryMock(enabled),
+  useFrmsAlertasQuery: (enabled?: boolean) => useFrmsAlertasQueryMock(enabled),
+  useSgsoChecklistQuery: (enabled?: boolean) => useSgsoChecklistQueryMock(enabled),
+  useSimuladoresAlertasQuery: (enabled?: boolean) => useSimuladoresAlertasQueryMock(enabled),
 }));
 
 vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
@@ -131,6 +131,7 @@ function setManagerContext(modulosAtivos = ['frms', 'sgso', 'simuladores', 'qual
   usePermissionsMock.mockReturnValue({
     isAdmin: false,
     isGestor: true,
+    can: () => true,
   });
 }
 
@@ -156,6 +157,7 @@ describe('ManagerAlertCenter', () => {
     usePermissionsMock.mockReturnValue({
       isAdmin: false,
       isGestor: false,
+      can: () => false,
     });
 
     renderCenter();
@@ -167,6 +169,18 @@ describe('ManagerAlertCenter', () => {
     expect(useSgsoChecklistQueryMock).not.toHaveBeenCalled();
     expect(useSimuladoresAlertasQueryMock).not.toHaveBeenCalled();
     expect(useFrmsOperationalSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it('não habilita SGSO quando permissão sgso.view está negada', () => {
+    usePermissionsMock.mockReturnValue({
+      isAdmin: false,
+      isGestor: true,
+      can: (permission: string) => permission !== 'sgso.view',
+    });
+
+    renderCenter();
+
+    expect(useSgsoChecklistQueryMock).toHaveBeenCalledWith(false);
   });
 
   it('renderiza alerta SGSO crítico antes de atenção de simuladores', () => {

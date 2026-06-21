@@ -142,7 +142,7 @@ function ErrorState({ partialSources }: { partialSources: string[] }) {
 
 export default function ManagerAlertCenter() {
   const { empresas, empresaAtualId } = useAuth();
-  const { isAdmin, isGestor } = usePermissions();
+  const { isAdmin, isGestor, can } = usePermissions();
 
   if (!isAdmin && !isGestor) {
     return null;
@@ -150,12 +150,18 @@ export default function ManagerAlertCenter() {
 
   const modulosAtivos = empresas.find((empresa) => empresa.id === empresaAtualId)?.modulos_ativos;
 
-  return <ManagerAlertCenterContent modulosAtivos={modulosAtivos} />;
+  return <ManagerAlertCenterContent modulosAtivos={modulosAtivos} canViewSgso={can('sgso.view')} />;
 }
 
-function ManagerAlertCenterContent({ modulosAtivos }: { modulosAtivos: unknown }) {
+function ManagerAlertCenterContent({
+  modulosAtivos,
+  canViewSgso,
+}: {
+  modulosAtivos: unknown;
+  canViewSgso: boolean;
+}) {
   const enableFrms = canAccessModule('frms', modulosAtivos);
-  const enableSgso = canAccessModule('sgso', modulosAtivos);
+  const enableSgso = canAccessModule('sgso', modulosAtivos) && canViewSgso;
   const enableSimuladores = canAccessModule('simuladores', modulosAtivos);
   const enableQualificacoes = canAccessModule('qualificacoes', modulosAtivos);
   const enableLms = canAccessModule('lms', modulosAtivos);
