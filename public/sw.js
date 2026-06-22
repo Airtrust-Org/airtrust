@@ -14,7 +14,7 @@
  * - Cliente recebe {type: 'AIRTRUST_UPDATE_AVAILABLE'} quando SW atualizou
  */
 
-const CACHE_VERSION = 'airtrust-v9';
+const CACHE_VERSION = 'airtrust-v10';
 const ASSETS_CACHE = `${CACHE_VERSION}-assets`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -38,12 +38,20 @@ const ASSET_PATTERNS = [
 const MINHA_ESCALA_NAV_PATTERNS = [/\/escalas\/minha-escala/];
 
 const LMS_PLAYER_NAV_PATTERNS = [/^\/lms\/player\//];
+const AUTH_BYPASS_PATHS = [/^\/login$/];
 const API_BYPASS_PATHS = [/^\/api\//];
 
 function shouldBypassAirTrustCaching(request) {
   const url = new URL(request.url);
 
   if (API_BYPASS_PATHS.some((pattern) => pattern.test(url.pathname))) {
+    return true;
+  }
+
+  if (
+    url.origin === self.location.origin &&
+    AUTH_BYPASS_PATHS.some((pattern) => pattern.test(url.pathname))
+  ) {
     return true;
   }
 

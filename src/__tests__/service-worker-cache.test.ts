@@ -35,6 +35,7 @@ describe('service worker cache guard', () => {
     expect(serviceWorkerSource).toContain(
       'const LMS_PLAYER_NAV_PATTERNS = [/^\\/lms\\/player\\//];',
     );
+    expect(serviceWorkerSource).toContain("const AUTH_BYPASS_PATHS = [/^\\/login$/];");
     expect(serviceWorkerSource).toContain('const API_BYPASS_PATHS = [/^\\/api\\//];');
     expect(serviceWorkerSource).toMatch(
       /if \(shouldBypassAirTrustCaching\(request\)\) \{\s*event\.respondWith\(\s*fetch\(request\)\.catch/,
