@@ -205,6 +205,12 @@ describe('lms cursos beta contract', () => {
           }),
         },
       ],
+      [
+        'FROM lms_cursos_setores cs',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
     ]);
 
     const app = createTestApp();
@@ -421,6 +427,12 @@ describe('lms cursos beta contract', () => {
           }),
         },
       ],
+      [
+        'FROM lms_cursos_setores cs',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
     ]);
 
     const app = createTestApp();
@@ -478,6 +490,12 @@ describe('lms cursos beta contract', () => {
           }),
         },
       ],
+      [
+        'FROM lms_cursos_setores cs',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
     ]);
 
     const app = createTestApp();
@@ -533,6 +551,12 @@ describe('lms cursos beta contract', () => {
             tipo_conteudo: 'video',
             publicado: 1,
           }),
+        },
+      ],
+      [
+        'FROM lms_cursos_setores cs',
+        {
+          all: () => ({ results: [] }),
         },
       ],
     ]);

@@ -344,7 +344,7 @@ import {
   getAtividadesRecentes,
   getDashboardEscalasResumo,
   getDashboardFrmsAlerts,
-  getDashboardSimuladoresAlerts,
+  getDashboardSimuladoresAlertas,
   getDashboardUpcomingSessions,
   getTaxaConclusaoMensal,
   getUtilizacaoSimuladores,
@@ -526,25 +526,6 @@ app.get('/proximas-sessoes', async (c) => {
   }
 });
 
-app.get('/simuladores-alertas', async (c) => {
-  try {
-    const { empresaId } = getTenantContext(c);
-    const access = await getEmployeeSectorAccess(c, empresaId);
-    const requestedHorizonHours = Number(c.req.query('janela_horas') || '24');
-    const horizonHours = Number.isInteger(requestedHorizonHours) && requestedHorizonHours > 0
-      ? Math.min(requestedHorizonHours, 168)
-      : 24;
-    const data = await getDashboardSimuladoresAlerts(c.env.DB, empresaId, access, horizonHours);
-    return c.json({ success: true, data });
-  } catch (error) {
-    createLogger(c as Context, 'Dashboard').error(
-      'Erro ao buscar alertas de simuladores do dashboard',
-      toError(error),
-    );
-    return c.json({ success: false, error: 'Erro ao buscar alertas de simuladores' }, 500);
-  }
-});
-
 app.get('/escalas-resumo', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
@@ -558,6 +539,24 @@ app.get('/escalas-resumo', async (c) => {
   } catch (error) {
     createLogger(c as Context, 'Dashboard').error('Erro ao buscar resumo de escalas do dashboard', toError(error));
     return c.json({ success: false, error: 'Erro ao buscar resumo de escalas do dashboard' }, 500);
+  }
+});
+
+app.get('/simuladores-alertas', async (c) => {
+  try {
+    const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const resumo = await getDashboardSimuladoresAlertas(c.env.DB, empresaId, access);
+    return c.json({ success: true, data: resumo });
+  } catch (error) {
+    createLogger(c as Context, 'Dashboard').error(
+      'Erro ao buscar resumo de alertas de simuladores do dashboard',
+      toError(error),
+    );
+    return c.json(
+      { success: false, error: 'Erro ao buscar resumo de alertas de simuladores' },
+      500,
+    );
   }
 });
 

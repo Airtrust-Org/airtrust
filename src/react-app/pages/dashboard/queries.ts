@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { API_BASE_URL } from '@/react-app/config/api';
+import { tenantQueryKey } from '@/react-app/lib/query-client';
+import { useTenantQueryKey } from '@/react-app/lib/useTenantQueryKey';
 import { isResolvedRenewalAlert } from './helpers';
 import type {
   DashboardMetrics,
@@ -58,28 +60,33 @@ const BASE_QUERY_BEHAVIOR = {
   refetchOnReconnect: true as const,
 };
 
-// ─── Query Key Factory ──────────────────────────────────────────────────────
-
 export const dashboardKeys = {
-  all: ['dashboard'] as const,
-  metrics: () => [...dashboardKeys.all, 'metrics'] as const,
-  compliance: () => [...dashboardKeys.all, 'compliance'] as const,
-  alertas: () => [...dashboardKeys.all, 'alertas'] as const,
-  atividades: () => [...dashboardKeys.all, 'atividades'] as const,
-  frmsAlertas: (mesInicio: string) => [...dashboardKeys.all, 'frms-alertas', mesInicio] as const,
-  sgsoChecklist: () => [...dashboardKeys.all, 'sgso-checklist'] as const,
-  simuladoresAlertas: () => [...dashboardKeys.all, 'simuladores-alertas'] as const,
-  escalas: () => [...dashboardKeys.all, 'escalas'] as const,
-  treinamentos: () => [...dashboardKeys.all, 'treinamentos-planejados'] as const,
-  sessoes: (today: string) => [...dashboardKeys.all, 'sessoes', today] as const,
+  all: (empresaId?: number | null) => tenantQueryKey(empresaId, 'dashboard'),
+  metrics: (empresaId?: number | null) => tenantQueryKey(empresaId, 'dashboard', 'metrics'),
+  compliance: (empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'dashboard', 'compliance'),
+  alertas: (empresaId?: number | null) => tenantQueryKey(empresaId, 'dashboard', 'alertas'),
+  atividades: (empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'dashboard', 'atividades'),
+  frmsAlertas: (empresaId: number | null | undefined, mesInicio: string) =>
+    tenantQueryKey(empresaId, 'dashboard', 'frms-alertas', mesInicio),
+  sgsoChecklist: (empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'dashboard', 'sgso-checklist'),
+  simuladoresAlertas: (empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'dashboard', 'simuladores-alertas'),
+  escalas: (empresaId?: number | null) => tenantQueryKey(empresaId, 'dashboard', 'escalas'),
+  treinamentos: (empresaId?: number | null) =>
+    tenantQueryKey(empresaId, 'dashboard', 'treinamentos-planejados'),
+  sessoes: (empresaId: number | null | undefined, today: string) =>
+    tenantQueryKey(empresaId, 'dashboard', 'sessoes', today),
 };
 
-// ─── Individual Query Hooks ─────────────────────────────────────────────────
-
 export function useMetricsQuery(enabled = true) {
+  const { empresaId } = useTenantQueryKey();
+
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.metrics(),
+    queryKey: dashboardKeys.metrics(empresaId),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/metrics`, { headers: getHeaders() });
       const json = await readJsonOrThrow<DashboardMetrics>(res, 'Falha ao buscar métricas');
@@ -91,11 +98,15 @@ export function useMetricsQuery(enabled = true) {
 }
 
 export function useComplianceQuery() {
+  const { empresaId } = useTenantQueryKey();
+
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.compliance(),
+    queryKey: dashboardKeys.compliance(empresaId),
     queryFn: async () => {
-      const res = await fetchWithAuth(`${API_BASE}/dashboard/compliance-score`, { headers: getHeaders() });
+      const res = await fetchWithAuth(`${API_BASE}/dashboard/compliance-score`, {
+        headers: getHeaders(),
+      });
       const json = await readJsonOrThrow<ComplianceData>(res, 'Falha ao buscar compliance');
       return json.data as ComplianceData;
     },
@@ -104,11 +115,15 @@ export function useComplianceQuery() {
 }
 
 export function useAlertasQuery(enabled = true) {
+  const { empresaId } = useTenantQueryKey();
+
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.alertas(),
+    queryKey: dashboardKeys.alertas(empresaId),
     queryFn: async () => {
-      const res = await fetchWithAuth(`${API_BASE}/dashboard/alertas-criticos`, { headers: getHeaders() });
+      const res = await fetchWithAuth(`${API_BASE}/dashboard/alertas-criticos`, {
+        headers: getHeaders(),
+      });
       const json = await readJsonOrThrow<Array<Record<string, unknown>>>(
         res,
         'Falha ao buscar alertas',
@@ -126,12 +141,16 @@ export function useAlertasQuery(enabled = true) {
             criticidade: String(alerta.criticidade ?? ''),
             mensagem: String(alerta.mensagem ?? ''),
             tripulanteNome: String(alerta.tripulanteNome ?? alerta.tripulante_nome ?? '-'),
-            tripulanteMatricula: alerta.tripulanteMatricula ? String(alerta.tripulanteMatricula) : undefined,
+            tripulanteMatricula: alerta.tripulanteMatricula
+              ? String(alerta.tripulanteMatricula)
+              : undefined,
             qualificacaoId: alerta.qualificacaoId ? String(alerta.qualificacaoId) : undefined,
             qualificacaoNome: String(alerta.qualificacaoNome ?? alerta.qualificacao_nome ?? '-'),
             dataVencimento: alerta.dataVencimento ? String(alerta.dataVencimento) : undefined,
             diasRestantes: Number(alerta.diasRestantes ?? 0),
-            acaoRecomendada: alerta.acaoRecomendada ? String(alerta.acaoRecomendada) : undefined,
+            acaoRecomendada: alerta.acaoRecomendada
+              ? String(alerta.acaoRecomendada)
+              : undefined,
             urlAcao: alerta.urlAcao ? String(alerta.urlAcao) : undefined,
             tripulanteId: tripulanteDireto || undefined,
             renovada: isResolvedRenewalAlert(alerta),
@@ -144,11 +163,15 @@ export function useAlertasQuery(enabled = true) {
 }
 
 export function useAtividadesQuery() {
+  const { empresaId } = useTenantQueryKey();
+
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.atividades(),
+    queryKey: dashboardKeys.atividades(empresaId),
     queryFn: async () => {
-      const res = await fetchWithAuth(`${API_BASE}/dashboard/atividades-recentes`, { headers: getHeaders() });
+      const res = await fetchWithAuth(`${API_BASE}/dashboard/atividades-recentes`, {
+        headers: getHeaders(),
+      });
       const json = await readJsonOrThrow<AtividadeRecente[]>(
         res,
         'Falha ao buscar atividades recentes',
@@ -161,13 +184,14 @@ export function useAtividadesQuery() {
 }
 
 export function useFrmsAlertasQuery(enabled = true) {
+  const { empresaId } = useTenantQueryKey();
   const hoje = new Date();
   const mesInicio = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
   const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
 
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.frmsAlertas(mesInicio),
+    queryKey: dashboardKeys.frmsAlertas(empresaId, mesInicio),
     queryFn: async () => {
       const pageLimit = 200;
       const firstRes = await fetchWithAuth(
@@ -180,7 +204,6 @@ export function useFrmsAlertasQuery(enabled = true) {
       );
       const alertas: FrmsAlertaRaw[] = Array.isArray(firstJson.data) ? firstJson.data : [];
 
-      // Filter to current month
       return alertas.filter((f) => {
         const dataMes = normalizeIsoDate(f.data_jornada).slice(0, 7);
         return dataMes === mesAtual;
@@ -192,9 +215,11 @@ export function useFrmsAlertasQuery(enabled = true) {
 }
 
 export function useSgsoChecklistQuery(enabled = true) {
+  const { empresaId } = useTenantQueryKey();
+
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.sgsoChecklist(),
+    queryKey: dashboardKeys.sgsoChecklist(empresaId),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/sgso/next/compliance/rbac121/checklist`, {
         headers: getHeaders(),
@@ -211,9 +236,11 @@ export function useSgsoChecklistQuery(enabled = true) {
 }
 
 export function useSimuladoresAlertasQuery(enabled = true) {
+  const { empresaId } = useTenantQueryKey();
+
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.simuladoresAlertas(),
+    queryKey: dashboardKeys.simuladoresAlertas(empresaId),
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_BASE}/dashboard/simuladores-alertas`, {
         headers: getHeaders(),
@@ -226,20 +253,26 @@ export function useSimuladoresAlertasQuery(enabled = true) {
     },
     staleTime: STALE_CRITICAL_MS,
     enabled,
+    placeholderData: (prev) => prev,
   });
 }
 
 export function useEscalasQuery(enabled: boolean) {
+  const { empresaId } = useTenantQueryKey();
+
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.escalas(),
+    queryKey: dashboardKeys.escalas(empresaId),
     queryFn: async () => {
       const hoje = new Date();
       const mes = hoje.getMonth() + 1;
       const ano = hoje.getFullYear();
-      const res = await fetchWithAuth(`${API_BASE}/dashboard/escalas-resumo?mes=${mes}&ano=${ano}`, {
-        headers: getHeaders(),
-      });
+      const res = await fetchWithAuth(
+        `${API_BASE}/dashboard/escalas-resumo?mes=${mes}&ano=${ano}`,
+        {
+          headers: getHeaders(),
+        },
+      );
       const json = await readJsonOrThrow<EscalaItem[]>(res, 'Falha ao buscar escalas');
       return (Array.isArray(json.data) ? json.data.slice(0, 5) : []) as EscalaItem[];
     },
@@ -250,9 +283,11 @@ export function useEscalasQuery(enabled: boolean) {
 }
 
 export function useTreinamentosQuery(enabled: boolean) {
+  const { empresaId } = useTenantQueryKey();
+
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.treinamentos(),
+    queryKey: dashboardKeys.treinamentos(empresaId),
     queryFn: async () => {
       const hojeIso = new Date().toISOString().slice(0, 10);
       const [treinResult, solResult] = await Promise.allSettled([
@@ -339,11 +374,12 @@ export function useTreinamentosQuery(enabled: boolean) {
 }
 
 export function useSessoesSimuladorQuery(enabled: boolean) {
+  const { empresaId } = useTenantQueryKey();
   const todayIso = new Date().toISOString().slice(0, 10);
 
   return useQuery({
     ...BASE_QUERY_BEHAVIOR,
-    queryKey: dashboardKeys.sessoes(todayIso),
+    queryKey: dashboardKeys.sessoes(empresaId, todayIso),
     queryFn: async () => {
       const res = await fetchWithAuth(
         `${API_BASE}/dashboard/proximas-sessoes?data_inicio=${todayIso}&limit=24`,
@@ -374,8 +410,12 @@ export function useSessoesSimuladorQuery(enabled: boolean) {
           return dataStr >= todayIso && ['AGENDADO', 'PENDENTE', 'CONFIRMADO'].includes(status);
         })
         .sort((a, b) => {
-          const aDate = new Date(`${normalizeIsoDate(a.data)}T${String(a.hora_inicio ?? '00:00')}:00`);
-          const bDate = new Date(`${normalizeIsoDate(b.data)}T${String(b.hora_inicio ?? '00:00')}:00`);
+          const aDate = new Date(
+            `${normalizeIsoDate(a.data)}T${String(a.hora_inicio ?? '00:00')}:00`,
+          );
+          const bDate = new Date(
+            `${normalizeIsoDate(b.data)}T${String(b.hora_inicio ?? '00:00')}:00`,
+          );
           return aDate.getTime() - bDate.getTime();
         })
         .slice(0, 6);
