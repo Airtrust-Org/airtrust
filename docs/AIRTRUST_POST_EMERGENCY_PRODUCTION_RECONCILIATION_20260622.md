@@ -8,19 +8,20 @@ Emergencias fechadas nesta consolidacao:
 - LMS/MGM Wagner: persistencia/finalizacao SCORM entregue no PR #125.
 - LMS/AW perda de progresso: parser/resume corrigido no PR #126.
 - React minified error #310: hotfix reconciliado neste branch.
+- Login/cache/service worker antigo: hotfix publicado em Pages e reconciliado neste branch.
 
-Estado de producao confirmado em `2026-06-22T16:54:39Z` a `2026-06-22T16:55:38Z`:
+Estado de producao confirmado em `2026-06-22T16:54:39Z` a `2026-06-22T17:24:56Z`:
 
 - Worker producao: `2026-06-22T15:15:13Z-dfd63efd`
-- Pages producao: `build-version 8abe084f`
+- Pages producao: `build-version 2026-06-22T17:24:30Z-login-cache-hotfix`
 
 Divergencia producao/repositorio encontrada:
 
-- Sim. O hotfix React #310 estava publicado em Pages, mas ainda nao estava rastreado em `origin/main`.
+- Sim. Os hotfixes React #310 e login/cache estavam publicados em Pages, mas ainda nao estavam rastreados em `origin/main`.
 
 Decisao final desta macroetapa:
 
-- `DIVERGENCIA PRODUCAO_REPOSITORIO CORRIGIDA — RETOMAR ROADMAP`
+- `PRODUCAO E MAIN RECONCILIADOS — RETOMAR ROADMAP`
 
 Interpretacao operacional:
 
@@ -62,12 +63,19 @@ Evidencia sanitizada:
 URLs auditadas:
 
 - `https://airtrust.online/`
+- `https://airtrust.online/login`
+- `https://airtrust.online/sw.js`
 - `https://airtrust.online/dashboard`
 - `https://airtrust.online/mro`
 
 Evidencia sanitizada:
 
-- HTML publico com `build-version` = `8abe084f`
+- HTML publico com `build-version` = `2026-06-22T17:24:30Z-login-cache-hotfix`
+- asset principal atual: `/assets/index-C6kOBatU.js`
+- CSS atual: `/assets/index-c_lzhaBK.css`
+- `/sw.js` publico com `CACHE_VERSION = 'airtrust-v10'`
+- `/sw.js` publico com `AUTH_BYPASS_PATHS = [/^\\/login$/]`
+- `/sw.js` sem `immutable` em cache-control
 - `/dashboard` sem sessao redireciona para `/login`
 - `/mro` sem sessao redireciona para `/login`
 - login carrega no browser real
@@ -82,7 +90,7 @@ Observacao de console:
 
 Base remota auditada:
 
-- `origin/main` em `dfd63efd56509ba448b8732761e8b43dc1a7892e`
+- `origin/main` em `91c094e6eb908f15857f109842f9b1815653cf62`
 
 Mergeados em `origin/main`:
 
@@ -93,12 +101,22 @@ Nao reconciliado em `origin/main` no inicio desta macroetapa:
 
 - hotfix React #310 em `DashboardPrincipal.tsx`
 - teste de regressao de transicao loading -> carregado
+- hotfix login/cache em `public/_headers`
+- hotfix login/cache em `public/sw.js`
+- bypass de login em `src/lib/sw-manager.tsx`
+- teste de regressao em `src/__tests__/service-worker-cache.test.ts`
+- relatorio operacional `docs/AIRTRUST_EMERGENCY_OLD_LOGIN_CACHE_PRODUCTION_20260622.md`
 
 Acao de reconciliacao:
 
 - branch criada a partir de `origin/main`: `codex/reconcile-react310-20260622`
 - hotfix React #310 aplicado de forma isolada
 - teste de regressao aplicado de forma isolada
+- branch atual de reconciliacao login/cache: `codex/reconcile-login-cache-hotfix-20260622`
+- cache longo mantido apenas para assets hashados
+- `sw.js` ajustado para `no-cache` e `CACHE_VERSION = 'airtrust-v10'`
+- `/login` passou a forcar bypass/cleanup de service worker
+- teste e relatorio operacional adicionados
 - este relatorio consolidado adicionado ao branch de reconciliacao
 
 CI/local:
@@ -177,7 +195,35 @@ Evidencias:
 - `src/react-app/pages/DashboardPrincipal.tsx`
 - `src/react-app/pages/__tests__/DashboardPrincipal.test.tsx`
 - teste do dashboard: `pass`
-- Pages producao em `8abe084f` sem erro React `#310` visivel na navegacao auditada
+- Pages producao no build atual sem erro React `#310` visivel na navegacao auditada
+
+### Login/cache/service worker
+
+Causa reconciliada:
+
+- `SERVICE_WORKER_STALE_CACHE`
+- `VERSION_GATE_MISSING`
+- `sw.js` com header contraditorio por regra generica `/*.js`
+- `/login` sem bypass explicito do service worker
+
+Correcao reconciliada:
+
+- `public/_headers` remove cache longo generico de `/*.js` e `/*.css`
+- `public/_headers` adiciona regra dedicada `no-cache` para `/sw.js`
+- `public/sw.js` sobe para `airtrust-v10`
+- `public/sw.js` adiciona `AUTH_BYPASS_PATHS = [/^\\/login$/]`
+- `src/lib/sw-manager.tsx` limpa caches e desregistra SW ao abrir `/login`
+- `src/__tests__/service-worker-cache.test.ts` cobre o bypass de login
+- relatorio operacional dedicado adicionado em `docs/AIRTRUST_EMERGENCY_OLD_LOGIN_CACHE_PRODUCTION_20260622.md`
+
+Evidencias:
+
+- `/login` em producao serve `build-version 2026-06-22T17:24:30Z-login-cache-hotfix`
+- `/sw.js` em producao serve `CACHE_VERSION = 'airtrust-v10'`
+- `/sw.js` em producao serve `AUTH_BYPASS_PATHS = [/^\\/login$/]`
+- `/dashboard` e `/mro` sem sessao redirecionam para `/login`
+- `src/__tests__/service-worker-cache.test.ts`: `pass`
+- build local da reconciliacao: `pass`
 
 ## 5. Seguranca operacional
 
@@ -199,7 +245,7 @@ Rollback conhecido:
 
 ### Operacional urgente
 
-- nenhuma dentro do escopo das quatro emergencias apos esta reconciliacao
+- nenhuma dentro do escopo das cinco emergencias apos esta reconciliacao
 
 ### Produto
 
@@ -221,13 +267,13 @@ Rollback conhecido:
 
 ## 7. Decisao final
 
-`DIVERGENCIA PRODUCAO_REPOSITORIO CORRIGIDA — RETOMAR ROADMAP`
+`PRODUCAO E MAIN RECONCILIADOS — RETOMAR ROADMAP`
 
 Base da decisao:
 
 - producao atual esta saudavel nas superficies auditadas
 - worker e pages conferem com as versoes esperadas
-- hotfix React publicado em producao foi reconciliado com branch derivada de `origin/main`
+- hotfixes React e login/cache publicados em producao foram reconciliados com branches derivadas de `origin/main`
 - testes, lint e build da reconciliacao passaram
 - nao houve alteracao de banco, schema, SIGVOOS ou segredos
 

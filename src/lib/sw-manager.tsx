@@ -25,7 +25,7 @@ interface ServiceWorkerUpdateEvent {
 const FRONTEND_VERSION_STORAGE_KEY = 'airtrust-frontend-version';
 
 function shouldBypassServiceWorkerForPath(pathname: string): boolean {
-  return /^\/lms\/player\//.test(pathname);
+  return /^\/lms\/player\//.test(pathname) || pathname === '/login';
 }
 
 async function unregisterServiceWorkersAndCaches(): Promise<void> {
