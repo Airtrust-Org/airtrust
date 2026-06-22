@@ -14,9 +14,10 @@
  * - Cliente recebe {type: 'AIRTRUST_UPDATE_AVAILABLE'} quando SW atualizou
  */
 
-const CACHE_VERSION = 'airtrust-v10';
+const CACHE_VERSION = 'airtrust-v11';
 const ASSETS_CACHE = `${CACHE_VERSION}-assets`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
+const LOGIN_SW_REFRESH_PARAM = 'airtrust_sw_refresh';
 
 // Assets que devem ser cacheados (com hash = imutáveis)
 const ASSET_PATTERNS = [
@@ -38,27 +39,26 @@ const ASSET_PATTERNS = [
 const MINHA_ESCALA_NAV_PATTERNS = [/\/escalas\/minha-escala/];
 
 const LMS_PLAYER_NAV_PATTERNS = [/^\/lms\/player\//];
-const AUTH_BYPASS_PATHS = [/^\/login$/];
+const AUTH_BYPASS_PATHS = [/^\/$/, /^\/login$/, /^\/dashboard(?:\/|$)/, /^\/mro(?:\/|$)/];
+const AUTH_REFRESH_PATHS = [/^\/$/, /^\/login$/];
 const API_BYPASS_PATHS = [/^\/api\//];
+
+function matchesAnyPath(pathname, patterns) {
+  return patterns.some((pattern) => pattern.test(pathname));
+}
 
 function shouldBypassAirTrustCaching(request) {
   const url = new URL(request.url);
 
-  if (API_BYPASS_PATHS.some((pattern) => pattern.test(url.pathname))) {
+  if (matchesAnyPath(url.pathname, API_BYPASS_PATHS)) {
     return true;
   }
 
-  if (
-    url.origin === self.location.origin &&
-    AUTH_BYPASS_PATHS.some((pattern) => pattern.test(url.pathname))
-  ) {
+  if (url.origin === self.location.origin && matchesAnyPath(url.pathname, AUTH_BYPASS_PATHS)) {
     return true;
   }
 
-  if (
-    url.origin === self.location.origin &&
-    LMS_PLAYER_NAV_PATTERNS.some((pattern) => pattern.test(url.pathname))
-  ) {
+  if (url.origin === self.location.origin && matchesAnyPath(url.pathname, LMS_PLAYER_NAV_PATTERNS)) {
     return true;
   }
 
@@ -111,28 +111,54 @@ function shouldCacheAssetResponse(request, response) {
   return true;
 }
 
+async function purgeLegacyAirTrustCaches() {
+  const cacheNames = await caches.keys();
+  await Promise.all(
+    cacheNames
+      .filter(
+        (cacheName) =>
+          cacheName.startsWith('airtrust-') &&
+          cacheName !== ASSETS_CACHE &&
+          cacheName !== RUNTIME_CACHE,
+      )
+      .map((cacheName) => {
+        console.log(`[SW] Deletando cache antigo: ${cacheName}`);
+        return caches.delete(cacheName);
+      }),
+  );
+}
+
+function shouldForceRefreshClient(clientUrl) {
+  return clientUrl.origin === self.location.origin && matchesAnyPath(clientUrl.pathname, AUTH_REFRESH_PATHS);
+}
+
+async function forceRefreshAuthClients() {
+  const clientList = await clients.matchAll({ type: 'window' });
+
+  await Promise.all(
+    clientList.map(async (client) => {
+      if (typeof client.navigate !== 'function') return;
+
+      try {
+        const clientUrl = new URL(client.url);
+        if (!shouldForceRefreshClient(clientUrl)) return;
+        if (clientUrl.searchParams.get(LOGIN_SW_REFRESH_PARAM) === CACHE_VERSION) return;
+
+        clientUrl.searchParams.set(LOGIN_SW_REFRESH_PARAM, CACHE_VERSION);
+        await client.navigate(clientUrl.toString());
+      } catch (error) {
+        console.warn('[SW] Falha ao forcar refresh do cliente auth:', error);
+      }
+    }),
+  );
+}
+
 /**
  * Instalação: SW novo limpa caches antigos
  */
 self.addEventListener('install', (event) => {
   console.log('[SW] Instalando novo Service Worker...');
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (!cacheName.startsWith('airtrust-')) return;
-          if (
-            cacheName !== CACHE_VERSION &&
-            cacheName !== ASSETS_CACHE &&
-            cacheName !== RUNTIME_CACHE
-          ) {
-            console.log(`[SW] Deletando cache antigo: ${cacheName}`);
-            return caches.delete(cacheName);
-          }
-        }),
-      );
-    }),
-  );
+  event.waitUntil(purgeLegacyAirTrustCaches());
   // Forçar SW ativar imediatamente
   self.skipWaiting();
 });
@@ -143,18 +169,20 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   console.log('[SW] Ativando novo Service Worker');
   event.waitUntil(
-    clients.claim().then(() => {
-      // Notificar TODOS os clientes que uma nova versão está disponível
-      clients.matchAll({ type: 'window' }).then((clientList) => {
-        clientList.forEach((client) => {
-          client.postMessage({
-            type: 'AIRTRUST_UPDATE_AVAILABLE',
-            version: CACHE_VERSION,
-            message: 'Nova versão do AirTrust disponível. Por favor, recarregue.',
-          });
+    (async () => {
+      await purgeLegacyAirTrustCaches();
+      await clients.claim();
+      await forceRefreshAuthClients();
+
+      const clientList = await clients.matchAll({ type: 'window' });
+      clientList.forEach((client) => {
+        client.postMessage({
+          type: 'AIRTRUST_UPDATE_AVAILABLE',
+          version: CACHE_VERSION,
+          message: 'Nova versão do AirTrust disponível. Por favor, recarregue.',
         });
       });
-    }),
+    })(),
   );
 });
 
@@ -327,12 +355,6 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
   if (event.data && event.data.type === 'CLEAR_CACHE') {
-    caches.keys().then((cacheNames) => {
-      Promise.all(
-        cacheNames
-          .filter((name) => name.startsWith('airtrust-'))
-          .map((name) => caches.delete(name)),
-      );
-    });
+    event.waitUntil(purgeLegacyAirTrustCaches());
   }
 });

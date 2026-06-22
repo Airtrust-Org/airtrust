@@ -14,14 +14,38 @@
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   Content-Security-Policy: default-src 'self' blob:; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: https: blob:; font-src 'self' data: https: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; connect-src 'self' https: http: ws: wss: blob:; worker-src 'self' blob:; form-action 'self'; manifest-src 'self'; frame-src 'self' blob: https://api.airtrust.online https://airtrust-api-production.airtrust.workers.dev https://airtrust-api.workers.dev https://*.airtrust.com.br https://view.officeapps.live.com http://localhost:8787
 
-  # Cache default para HTML/rotas SPA: nunca cachear
-  # Regras mais específicas abaixo (ex.: /assets/*.js) vão sobrescrever
+# ===== HTML - NUNCA CACHEAR =====
+# Garante que usuários sempre vejam a versão mais recente do app
+/
   Cache-Control: no-cache, no-store, must-revalidate
   Pragma: no-cache
   Expires: 0
 
-# ===== HTML - NUNCA CACHEAR =====
-# Garante que usuários sempre vejam a versão mais recente do app
+/login
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+/dashboard
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+/dashboard/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+/mro
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+/mro/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
 /*.html
   Cache-Control: no-cache, no-store, must-revalidate
   Pragma: no-cache
