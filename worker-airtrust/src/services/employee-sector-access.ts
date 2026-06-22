@@ -54,41 +54,83 @@ async function resolveOwnFuncionarioScope(
       : null;
 
   if (funcionarioId) {
-    const ownFuncionario = await db
-      .prepare(
-        `SELECT id, setor_id
-           FROM funcionarios
-          WHERE id = ?
-            AND empresa_id = ?
-            AND deleted_at IS NULL
-          LIMIT 1`,
-      )
-      .bind(funcionarioId, empresaId)
-      .first<{ id: number; setor_id: number | null }>();
+    let ownFuncionario: { id: number; setor_id?: number | null } | null = null;
+    let hasFuncionarioSetorId = true;
+    try {
+      ownFuncionario = await db
+        .prepare(
+          `SELECT id, setor_id
+             FROM funcionarios
+            WHERE id = ?
+              AND empresa_id = ?
+              AND deleted_at IS NULL
+            LIMIT 1`,
+        )
+        .bind(funcionarioId, empresaId)
+        .first<{ id: number; setor_id?: number | null }>();
+    } catch (error) {
+      if (!String(error).toLowerCase().includes('setor_id')) throw error;
+      hasFuncionarioSetorId = false;
+      ownFuncionario = await db
+        .prepare(
+          `SELECT id
+             FROM funcionarios
+            WHERE id = ?
+              AND empresa_id = ?
+              AND deleted_at IS NULL
+            LIMIT 1`,
+        )
+        .bind(funcionarioId, empresaId)
+        .first<{ id: number; setor_id?: number | null }>();
+    }
 
     if (ownFuncionario?.id) {
       return {
         mode: 'self',
         funcionarioId: Number(ownFuncionario.id),
-        setorIds: ownFuncionario.setor_id ? [Number(ownFuncionario.setor_id)] : [],
+        setorIds:
+          hasFuncionarioSetorId && ownFuncionario.setor_id
+            ? [Number(ownFuncionario.setor_id)]
+            : [],
       };
     }
   }
 
-  const ownFuncionario = await db
-    .prepare(
-      `SELECT f.id, f.setor_id
-         FROM usuarios u
-         INNER JOIN funcionarios f
-           ON f.id = u.funcionario_id
-          AND f.empresa_id = ?
-          AND f.deleted_at IS NULL
-        WHERE u.id = ?
-          AND u.deleted_at IS NULL
-        LIMIT 1`,
-    )
-    .bind(empresaId, userId)
-    .first<{ id: number; setor_id: number | null }>();
+  let ownFuncionario: { id: number; setor_id?: number | null } | null = null;
+  let hasFuncionarioSetorId = true;
+  try {
+    ownFuncionario = await db
+      .prepare(
+        `SELECT f.id, f.setor_id
+           FROM usuarios u
+           INNER JOIN funcionarios f
+             ON f.id = u.funcionario_id
+            AND f.empresa_id = ?
+            AND f.deleted_at IS NULL
+          WHERE u.id = ?
+            AND u.deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(empresaId, userId)
+      .first<{ id: number; setor_id?: number | null }>();
+  } catch (error) {
+    if (!String(error).toLowerCase().includes('setor_id')) throw error;
+    hasFuncionarioSetorId = false;
+    ownFuncionario = await db
+      .prepare(
+        `SELECT f.id
+           FROM usuarios u
+           INNER JOIN funcionarios f
+             ON f.id = u.funcionario_id
+            AND f.empresa_id = ?
+            AND f.deleted_at IS NULL
+          WHERE u.id = ?
+            AND u.deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(empresaId, userId)
+      .first<{ id: number; setor_id?: number | null }>();
+  }
 
   if (!ownFuncionario?.id) {
     return { mode: 'restricted', funcionarioId: null, setorIds: [] };
@@ -97,7 +139,8 @@ async function resolveOwnFuncionarioScope(
   return {
     mode: 'self',
     funcionarioId: Number(ownFuncionario.id),
-    setorIds: ownFuncionario.setor_id ? [Number(ownFuncionario.setor_id)] : [],
+    setorIds:
+      hasFuncionarioSetorId && ownFuncionario.setor_id ? [Number(ownFuncionario.setor_id)] : [],
   };
 }
 

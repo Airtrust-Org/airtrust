@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ensureModelosAeronaveModeloColumn } from '../../routes/qualificacoes/historico-helpers';
+import {
+  ensureModelosAeronaveModeloColumn,
+  generateETag,
+} from '../../routes/qualificacoes/historico-helpers';
 
 describe('qualificacoes historico helper memoization', () => {
   it('memoiza o PRAGMA de modelos_aeronave e nao executa DML em runtime', async () => {
@@ -25,5 +28,30 @@ describe('qualificacoes historico helper memoization', () => {
 
     expect(pragmaCalls).toHaveLength(1);
     expect(writeCalls).toHaveLength(0);
+  });
+
+  it('gera etags diferentes quando apenas o scope tenant-aware muda no fim da chave', () => {
+    const tenantA = generateETag([
+      'historico-stats',
+      0,
+      0,
+      0,
+      0,
+      0,
+      'live',
+      'scope-tenant-a',
+    ]);
+    const tenantB = generateETag([
+      'historico-stats',
+      384,
+      47,
+      0,
+      4,
+      46,
+      'live',
+      'scope-tenant-b',
+    ]);
+
+    expect(tenantA).not.toBe(tenantB);
   });
 });

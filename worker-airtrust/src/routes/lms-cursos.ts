@@ -12,6 +12,7 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
   employeeSectorSql,
+  filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
@@ -70,28 +71,38 @@ app.use('*', auth());
 function buildCourseSetorScope(
   access: EmployeeSectorAccess,
   courseAlias = 'c',
+  schema: { hasCursoSetores: boolean; hasQualificacaoTipoSetores: boolean } = {
+    hasCursoSetores: true,
+    hasQualificacaoTipoSetores: true,
+  },
 ): { clause: string; bindings: number[] } {
   if (access.mode === 'all') return { clause: '', bindings: [] };
   if (access.setorIds.length === 0) return { clause: ' AND 1 = 0', bindings: [] };
+  if (!schema.hasCursoSetores && !schema.hasQualificacaoTipoSetores) {
+    return { clause: ' AND 1 = 0', bindings: [] };
+  }
 
   const placeholders = access.setorIds.map(() => '?').join(', ');
-  return {
-    clause: ` AND (
-      EXISTS (
+  const directScope = schema.hasCursoSetores
+    ? `EXISTS (
         SELECT 1 FROM lms_cursos_setores lcs_f
         WHERE lcs_f.curso_id = ${courseAlias}.id
           AND lcs_f.empresa_id = ${courseAlias}.empresa_id
           AND lcs_f.setor_id IN (${placeholders})
           AND lcs_f.deleted_at IS NULL
-      )
-      OR (
-        NOT EXISTS (
+      )`
+    : '';
+  const fallbackScope = schema.hasQualificacaoTipoSetores
+    ? `(
+        ${schema.hasCursoSetores
+          ? `NOT EXISTS (
           SELECT 1 FROM lms_cursos_setores lcs_chk
           WHERE lcs_chk.curso_id = ${courseAlias}.id
             AND lcs_chk.empresa_id = ${courseAlias}.empresa_id
             AND lcs_chk.deleted_at IS NULL
         )
-        AND ${courseAlias}.qualificacao_tipo_id IS NOT NULL
+        AND `
+          : ''}${courseAlias}.qualificacao_tipo_id IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM qualificacoes_tipos_setores qts_f
           WHERE qts_f.tipo_id = ${courseAlias}.qualificacao_tipo_id
@@ -99,10 +110,125 @@ function buildCourseSetorScope(
             AND qts_f.setor_id IN (${placeholders})
             AND qts_f.deleted_at IS NULL
         )
-      )
-    )`,
-    bindings: [...access.setorIds, ...access.setorIds],
+      )`
+    : '';
+  const scopeClauses = [directScope, fallbackScope].filter(Boolean);
+
+  if (scopeClauses.length === 0) {
+    return { clause: ' AND 1 = 0', bindings: [] };
+  }
+
+  const bindings =
+    schema.hasCursoSetores && schema.hasQualificacaoTipoSetores
+      ? [...access.setorIds, ...access.setorIds]
+      : access.setorIds;
+
+  return {
+    clause: ` AND (${scopeClauses.join(' OR ')})`,
+    bindings,
   };
+}
+
+async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT 1 AS ok
+           FROM sqlite_master
+          WHERE type = 'table'
+            AND name = ?
+          LIMIT 1`,
+      )
+      .bind(tableName)
+      .first<{ ok: number }>();
+    return row?.ok === 1;
+  } catch {
+    return true;
+  }
+}
+
+async function getCourseSetorSchema(db: D1Database): Promise<{
+  hasCursoSetores: boolean;
+  hasQualificacaoTipoSetores: boolean;
+}> {
+  const [hasCursoSetores, hasQualificacaoTipoSetores] = await Promise.all([
+    tableExists(db, 'lms_cursos_setores'),
+    tableExists(db, 'qualificacoes_tipos_setores'),
+  ]);
+
+  return { hasCursoSetores, hasQualificacaoTipoSetores };
+}
+
+function assertSetorIdsWithinWriteScope(
+  access: EmployeeSectorAccess,
+  setorIds: number[],
+): void {
+  if (access.mode === 'all') return;
+  if (setorIds.length === 0) {
+    throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+  }
+
+  const allowedSetorIds = filterRequestedSetorIdsByAccess(setorIds, access);
+  if (allowedSetorIds.length !== setorIds.length) {
+    throw new ApiError('Acesso negado: setor fora do seu escopo', 403);
+  }
+}
+
+async function listQualificacaoTipoSetorIds(
+  db: D1Database,
+  empresaId: number,
+  qualificacaoTipoId: number | null | undefined,
+  schema: { hasQualificacaoTipoSetores: boolean },
+): Promise<number[]> {
+  if (!schema.hasQualificacaoTipoSetores || !qualificacaoTipoId) return [];
+
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT qts.setor_id
+         FROM qualificacoes_tipos_setores qts
+        WHERE qts.tipo_id = ?
+          AND qts.empresa_id = ?
+          AND qts.deleted_at IS NULL
+        ORDER BY qts.setor_id ASC`,
+    )
+    .bind(qualificacaoTipoId, empresaId)
+    .all<{ setor_id: number }>();
+
+  return (rows.results ?? [])
+    .map((row) => Number(row.setor_id))
+    .filter((setorId) => Number.isInteger(setorId) && setorId > 0);
+}
+
+async function assertCursoWriteScope(params: {
+  db: D1Database;
+  empresaId: number;
+  access: EmployeeSectorAccess;
+  schema: { hasCursoSetores: boolean; hasQualificacaoTipoSetores: boolean };
+  setorIds: number[];
+  qualificacaoTipoId: number | null | undefined;
+}): Promise<void> {
+  const { db, empresaId, access, schema, setorIds, qualificacaoTipoId } = params;
+
+  if (access.mode === 'all') return;
+  if (!schema.hasCursoSetores && !schema.hasQualificacaoTipoSetores) {
+    throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+  }
+
+  if (setorIds.length > 0) {
+    if (!schema.hasCursoSetores) {
+      throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+    }
+    assertSetorIdsWithinWriteScope(access, setorIds);
+    return;
+  }
+
+  const qualificacaoTipoSetorIds = await listQualificacaoTipoSetorIds(
+    db,
+    empresaId,
+    qualificacaoTipoId,
+    schema,
+  );
+  assertSetorIdsWithinWriteScope(access, qualificacaoTipoSetorIds);
 }
 
 function buildMatriculaEmployeeScope(
@@ -846,6 +972,17 @@ async function getCursoSetores(
   return rows.results ?? [];
 }
 
+async function getCursoSetorIds(
+  db: D1Database,
+  empresaId: number,
+  cursoId: number,
+  schema: { hasCursoSetores: boolean },
+): Promise<number[]> {
+  if (!schema.hasCursoSetores) return [];
+  const setores = await getCursoSetores(db, empresaId, cursoId);
+  return setores.map((setor) => Number(setor.id)).filter((setorId) => setorId > 0);
+}
+
 /** Extrai launch file do imsmanifest.xml (SCORM 1.2 e 2004) */
 function parseLaunchFile(manifestXml: string): string | null {
   // SCORM 1.2: <item ... href="..."> dentro de <resources>
@@ -1272,6 +1409,7 @@ app.get('/', async (c) => {
     : [];
 
   const access = await getEmployeeSectorAccess(c, empresaId);
+  const courseSetorSchema = await getCourseSetorSchema(db);
 
   let finalSetorIds: number[] | null = null;
   if (requestedSetorIds.length > 0) {
@@ -1306,33 +1444,54 @@ app.get('/', async (c) => {
     where += ' AND 1 = 0';
   } else if (finalSetorIds !== null) {
     const placeholders = finalSetorIds.map(() => '?').join(', ');
-    // Filtra por lms_cursos_setores (vínculo direto) OU por qualificacoes_tipos_setores (fallback via qualificação)
-    where += ` AND (
-      EXISTS (
-        SELECT 1 FROM lms_cursos_setores lcs_f
-        WHERE lcs_f.curso_id = c.id
-          AND lcs_f.empresa_id = c.empresa_id
-          AND lcs_f.setor_id IN (${placeholders})
-          AND lcs_f.deleted_at IS NULL
-      )
-      OR (
-        NOT EXISTS (
-          SELECT 1 FROM lms_cursos_setores lcs_chk
-          WHERE lcs_chk.curso_id = c.id AND lcs_chk.empresa_id = c.empresa_id AND lcs_chk.deleted_at IS NULL
-        )
-        AND EXISTS (
-          SELECT 1 FROM qualificacoes_tipos_setores qts_f
-          WHERE qts_f.tipo_id = c.qualificacao_tipo_id
-            AND qts_f.empresa_id = c.empresa_id
-            AND qts_f.setor_id IN (${placeholders})
-            AND qts_f.deleted_at IS NULL
-        )
-      )
-    )`;
-    binds.push(...finalSetorIds, ...finalSetorIds);
+    const directScope = courseSetorSchema.hasCursoSetores
+      ? `EXISTS (
+          SELECT 1 FROM lms_cursos_setores lcs_f
+          WHERE lcs_f.curso_id = c.id
+            AND lcs_f.empresa_id = c.empresa_id
+            AND lcs_f.setor_id IN (${placeholders})
+            AND lcs_f.deleted_at IS NULL
+        )`
+      : '';
+    const fallbackScope = courseSetorSchema.hasQualificacaoTipoSetores
+      ? `(
+          ${courseSetorSchema.hasCursoSetores
+            ? `NOT EXISTS (
+            SELECT 1 FROM lms_cursos_setores lcs_chk
+            WHERE lcs_chk.curso_id = c.id AND lcs_chk.empresa_id = c.empresa_id AND lcs_chk.deleted_at IS NULL
+          )
+          AND `
+            : ''}EXISTS (
+            SELECT 1 FROM qualificacoes_tipos_setores qts_f
+            WHERE qts_f.tipo_id = c.qualificacao_tipo_id
+              AND qts_f.empresa_id = c.empresa_id
+              AND qts_f.setor_id IN (${placeholders})
+              AND qts_f.deleted_at IS NULL
+          )
+        )`
+      : '';
+    const scopeClauses = [directScope, fallbackScope].filter(Boolean);
+    if (scopeClauses.length === 0) {
+      where += ' AND 1 = 0';
+    } else {
+      where += ` AND (${scopeClauses.join(' OR ')})`;
+      binds.push(
+        ...finalSetorIds,
+        ...(courseSetorSchema.hasCursoSetores && courseSetorSchema.hasQualificacaoTipoSetores
+          ? finalSetorIds
+          : []),
+      );
+    }
   }
 
   const matriculaScope = buildMatriculaEmployeeScope(access, 'm');
+  const setoresJsonExpr = courseSetorSchema.hasCursoSetores
+    ? `(SELECT json_group_array(json_object('id', s.id, 'nome', s.nome))
+         FROM lms_cursos_setores lcs
+         JOIN setores s ON s.id = lcs.setor_id
+         WHERE lcs.curso_id = c.id AND lcs.empresa_id = c.empresa_id AND lcs.deleted_at IS NULL
+         ORDER BY s.nome ASC)`
+    : 'NULL';
 
   const total = await db
     .prepare(`SELECT COUNT(*) as n FROM lms_cursos c ${where}`)
@@ -1349,11 +1508,7 @@ app.get('/', async (c) => {
          WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL${matriculaScope.clause}) AS total_matriculas,
         (SELECT COUNT(*) FROM lms_matriculas m
          WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.status = 'CONCLUIDO' AND m.deleted_at IS NULL${matriculaScope.clause}) AS total_concluidos,
-        (SELECT json_group_array(json_object('id', s.id, 'nome', s.nome))
-         FROM lms_cursos_setores lcs
-         JOIN setores s ON s.id = lcs.setor_id
-         WHERE lcs.curso_id = c.id AND lcs.empresa_id = c.empresa_id AND lcs.deleted_at IS NULL
-         ORDER BY s.nome ASC) AS setores_json
+        ${setoresJsonExpr} AS setores_json
       FROM lms_cursos c
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
       LEFT JOIN lms_h5p_conteudos h
@@ -1392,7 +1547,8 @@ async function handleLmsStats(
   const empresaId = getEmpresaIdSafe(c);
 
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const courseSectorScope = buildCourseSetorScope(access, 'c');
+  const courseSetorSchema = await getCourseSetorSchema(db);
+  const courseSectorScope = buildCourseSetorScope(access, 'c', courseSetorSchema);
   const employeeScope = employeeSectorSql(access, 'f');
 
   const [totaisCursos, totaisMatriculas, topCursos, atrasadas, recentCompletions, featuredCourses] =
@@ -1652,6 +1808,14 @@ app.get('/:id{[0-9]+}', async (c) => {
   const cursoId = Number(c.req.param('id'));
 
   const access = await getEmployeeSectorAccess(c, empresaId);
+  const courseSetorSchema = await getCourseSetorSchema(db);
+  const setoresJsonExpr = courseSetorSchema.hasCursoSetores
+    ? `(SELECT json_group_array(json_object('id', s.id, 'nome', s.nome))
+         FROM lms_cursos_setores lcs
+         JOIN setores s ON s.id = lcs.setor_id
+         WHERE lcs.curso_id = c.id AND lcs.empresa_id = c.empresa_id AND lcs.deleted_at IS NULL
+         ORDER BY s.nome ASC)`
+    : 'NULL';
 
   const curso = await db
     .prepare(
@@ -1660,11 +1824,7 @@ app.get('/:id{[0-9]+}', async (c) => {
         qt.nome AS qualificacao_tipo_nome,
         qt.codigo AS qualificacao_tipo_codigo,
         h.id AS h5p_conteudo_id,
-        (SELECT json_group_array(json_object('id', s.id, 'nome', s.nome))
-         FROM lms_cursos_setores lcs
-         JOIN setores s ON s.id = lcs.setor_id
-         WHERE lcs.curso_id = c.id AND lcs.empresa_id = c.empresa_id AND lcs.deleted_at IS NULL
-         ORDER BY s.nome ASC) AS setores_json
+        ${setoresJsonExpr} AS setores_json
       FROM lms_cursos c
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
       LEFT JOIN lms_h5p_conteudos h
@@ -1682,7 +1842,7 @@ app.get('/:id{[0-9]+}', async (c) => {
 
   // ── Sector scope check for restricted users ─────────────────────────
   if (access.mode !== 'all') {
-    const courseSectorScope = buildCourseSetorScope(access, 'c');
+    const courseSectorScope = buildCourseSetorScope(access, 'c', courseSetorSchema);
     const inScope = await db
       .prepare(
         `SELECT 1 as ok FROM lms_cursos c
@@ -1711,6 +1871,8 @@ app.get('/:id{[0-9]+}', async (c) => {
 app.post('/', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const courseSetorSchema = await getCourseSetorSchema(db);
 
   const { data: d, uploadFile } = await parseCursoCreateRequest(c);
   ensureQualificacaoBinding(
@@ -1726,6 +1888,14 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   );
 
   const setorIds = Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : [];
+  await assertCursoWriteScope({
+    db,
+    empresaId,
+    access,
+    schema: courseSetorSchema,
+    setorIds,
+    qualificacaoTipoId: resolvedQualificacaoTipoId,
+  });
   if (setorIds.length > 0) {
     await validateSetorIds(db, empresaId, setorIds);
   }
@@ -1763,7 +1933,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
 
   const id = result.meta.last_row_id;
 
-  if (setorIds.length > 0) {
+  if (setorIds.length > 0 && courseSetorSchema.hasCursoSetores) {
     await upsertCursoSetores(db, empresaId, id, setorIds);
   }
 
@@ -1801,7 +1971,9 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     });
   }
 
-  const cursoSetores = await getCursoSetores(db, empresaId, id);
+  const cursoSetores = courseSetorSchema.hasCursoSetores
+    ? await getCursoSetores(db, empresaId, id)
+    : [];
   const curso = {
     ...(await db
       .prepare(`SELECT ${LMS_CURSOS_SELECT_COLUMNS} FROM lms_cursos WHERE id = ?`)
@@ -1858,6 +2030,8 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const courseSetorSchema = await getCourseSetorSchema(db);
 
   const existing = await db
     .prepare(
@@ -1875,6 +2049,16 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
       gerar_qualificacao_ao_concluir: number;
     }>();
   if (!existing) throw new ApiError('Curso não encontrado', 404);
+
+  const currentCursoSetorIds = await getCursoSetorIds(db, empresaId, cursoId, courseSetorSchema);
+  await assertCursoWriteScope({
+    db,
+    empresaId,
+    access,
+    schema: courseSetorSchema,
+    setorIds: currentCursoSetorIds,
+    qualificacaoTipoId: existing.qualificacao_tipo_id,
+  });
 
   const body = await c.req.json<unknown>();
   const parsed = CursoUpdateSchema.safeParse(body);
@@ -1957,6 +2141,15 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
 
   const updateSetorIds =
     Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : null;
+  const nextCursoSetorIds = updateSetorIds ?? currentCursoSetorIds;
+  await assertCursoWriteScope({
+    db,
+    empresaId,
+    access,
+    schema: courseSetorSchema,
+    setorIds: nextCursoSetorIds,
+    qualificacaoTipoId: resolvedQualificacaoTipoId,
+  });
   if (updateSetorIds !== null) {
     await validateSetorIds(db, empresaId, updateSetorIds);
   }
@@ -1971,7 +2164,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
       .run();
   }
 
-  if (updateSetorIds !== null) {
+  if (updateSetorIds !== null && courseSetorSchema.hasCursoSetores) {
     await replaceCursoSetores(db, empresaId, cursoId, updateSetorIds);
   }
 
@@ -2006,7 +2199,9 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     }
   }
 
-  const cursoSetores = await getCursoSetores(db, empresaId, cursoId);
+  const cursoSetores = courseSetorSchema.hasCursoSetores
+    ? await getCursoSetores(db, empresaId, cursoId)
+    : [];
   const curso = {
     ...(await db
       .prepare(

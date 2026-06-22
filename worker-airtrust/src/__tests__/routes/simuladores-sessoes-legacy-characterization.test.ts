@@ -77,6 +77,14 @@ function createDbForLegacyCharacterization() {
           }
 
           if (
+            query.includes('SELECT id') &&
+            query.includes('FROM simuladores') &&
+            query.includes('empresa_id = ?')
+          ) {
+            return { id: 10 };
+          }
+
+          if (
             query.includes(
               'SELECT * FROM simulador_agendamentos WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
             )

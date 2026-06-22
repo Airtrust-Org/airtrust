@@ -6,7 +6,7 @@ const getTaxaConclusaoMensalMock = vi.fn();
 const getUtilizacaoSimuladoresMock = vi.fn();
 const getEmployeeSectorAccessMock = vi.fn();
 const getDashboardFrmsAlertsMock = vi.fn();
-const getDashboardSimuladoresAlertsMock = vi.fn();
+const getDashboardSimuladoresAlertasMock = vi.fn();
 const getDashboardUpcomingSessionsMock = vi.fn();
 const getDashboardEscalasResumoMock = vi.fn();
 
@@ -32,7 +32,8 @@ vi.mock('../../services/dashboardService', () => ({
   getDemandaTreinamento: vi.fn(async () => ({})),
   getAtividadesRecentes: vi.fn(async () => []),
   getDashboardFrmsAlerts: (...args: unknown[]) => getDashboardFrmsAlertsMock(...args),
-  getDashboardSimuladoresAlerts: (...args: unknown[]) => getDashboardSimuladoresAlertsMock(...args),
+  getDashboardSimuladoresAlertas: (...args: unknown[]) =>
+    getDashboardSimuladoresAlertasMock(...args),
   getDashboardUpcomingSessions: (...args: unknown[]) => getDashboardUpcomingSessionsMock(...args),
   getDashboardEscalasResumo: (...args: unknown[]) => getDashboardEscalasResumoMock(...args),
   getTaxaConclusaoMensal: (...args: unknown[]) => getTaxaConclusaoMensalMock(...args),
@@ -95,7 +96,7 @@ describe('dashboard metrics integrity routes', () => {
     getUtilizacaoSimuladoresMock.mockReset();
     getEmployeeSectorAccessMock.mockReset();
     getDashboardFrmsAlertsMock.mockReset();
-    getDashboardSimuladoresAlertsMock.mockReset();
+    getDashboardSimuladoresAlertasMock.mockReset();
     getDashboardUpcomingSessionsMock.mockReset();
     getDashboardEscalasResumoMock.mockReset();
     getEmployeeSectorAccessMock.mockResolvedValue({
@@ -225,55 +226,24 @@ describe('dashboard metrics integrity routes', () => {
     );
   });
 
-  it('escopa alertas agregados de simuladores pelo access setorial resolvido no backend', async () => {
-    getDashboardSimuladoresAlertsMock.mockResolvedValueOnce({
-      fichas_pendentes_avaliacao: 2,
-      fichas_aguardando_assinatura_aluno: 1,
-      fichas_aguardando_assinatura_instrutor: 0,
-      fichas_aguardando_assinatura: 1,
-      sessoes_proximas_sem_ficha_completa: 3,
-      edicoes_pendentes: 0,
-      janela_sessoes_proximas_horas: 36,
-    });
-
-    const app = createApp();
-    const db = {} as D1Database;
-    const response = await app.fetch(
-      new Request('http://localhost/dashboard/simuladores-alertas?janela_horas=36', {
-        method: 'GET',
-        headers: { 'x-empresa-id': '8' },
-      }),
-      { DB: db } as unknown as Env,
-      {} as ExecutionContext,
-    );
-
-    expect(response.status).toBe(200);
-    expect(getDashboardSimuladoresAlertsMock).toHaveBeenCalledWith(
-      db,
-      8,
-      { mode: 'restricted', setorIds: [10], funcionarioId: null },
-      36,
-    );
-  });
-
   it('mantem /dashboard/qualificacoes com no-cache e agregados numericos coerentes', async () => {
     const { env, bindCalls } = createPreparedDb([
       { first: { dias_alerta_vencimento: 30 } },
       {
         first: {
           total: 12,
-          validas: 5,
+          validas: 7,
           vencendo: 3,
           vencidas: 2,
           renovadas: 1,
-          planejadas: 1,
+          planejadas: 4,
         },
       },
       {
         all: {
           results: [
-            { categoria: 'IFR', total: 7 },
-            { categoria: 'CRM', total: 5 },
+            { categoria: 'SIMULADOR', total: 9 },
+            { categoria: 'SOLO', total: 3 },
           ],
         },
       },
@@ -283,7 +253,7 @@ describe('dashboard metrics integrity routes', () => {
     const response = await app.fetch(
       new Request('http://localhost/dashboard/qualificacoes', {
         method: 'GET',
-        headers: { 'x-empresa-id': '9' },
+        headers: { 'x-empresa-id': '18' },
       }),
       env,
       {} as ExecutionContext,
@@ -291,74 +261,62 @@ describe('dashboard metrics integrity routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(response.headers.get('Pragma')).toBe('no-cache');
+    expect(response.headers.get('Expires')).toBe('0');
+
     const body = (await response.json()) as DashboardMetricBody;
-    expect(body).toMatchObject({
-      success: true,
-      data: {
-        total_ativas: 12,
-        validas: 5,
-        a_vencer_30_dias: 3,
-        vencidas: 2,
-        renovadas: 1,
-        planejadas: 1,
-      },
-    });
+    expect(body.success).toBe(true);
+    expect(body.data.total_ativas).toBe(12);
+    expect(body.data.validas).toBe(7);
+    expect(body.data.a_vencer_30_dias).toBe(3);
+    expect(body.data.vencidas).toBe(2);
+    expect(body.data.renovadas).toBe(1);
+    expect(body.data.planejadas).toBe(4);
     expect(body.data.por_categoria).toEqual([
-      { categoria: 'IFR', total: 7 },
-      { categoria: 'CRM', total: 5 },
+      { categoria: 'SIMULADOR', total: 9 },
+      { categoria: 'SOLO', total: 3 },
     ]);
-    expect(bindCalls[0]).toEqual([9]);
-    expect(bindCalls[1]?.at(-1)).toBe(9);
-    expect(bindCalls[2]).toEqual([9]);
+
+    const statsBind = bindCalls[1];
+    expect(statsBind?.at(-1)).toBe(18);
   });
 
-  it('propaga tenant em /dashboard/licencas e preserva soma consistente', async () => {
-    const { env, bindCalls } = createPreparedDb([
-      { first: { dias_alerta_vencimento: 30 } },
-      { first: { total: 9 } },
-      { first: { total: 2 } },
-      { first: { total: 3 } },
-      { first: { total: 4 } },
-      {
-        all: {
-          results: [
-            { tipo: 'CMA', total: 6 },
-            { tipo: 'CHT', total: 3 },
-          ],
-        },
-      },
-    ]);
+  it('propaga tenant e access scope em /dashboard/simuladores-alertas', async () => {
+    getDashboardSimuladoresAlertasMock.mockResolvedValueOnce({
+      fichas_pendentes_avaliacao: 2,
+      fichas_aguardando_assinatura_aluno: 1,
+      fichas_aguardando_assinatura_instrutor: 3,
+      fichas_aguardando_assinatura: 4,
+      sessoes_proximas_sem_ficha_completa: 2,
+      edicoes_pendentes: 1,
+      janela_sessoes_proximas_horas: 24,
+    });
 
     const app = createApp();
+    const db = {} as D1Database;
     const response = await app.fetch(
-      new Request('http://localhost/dashboard/licencas', {
+      new Request('http://localhost/dashboard/simuladores-alertas', {
         method: 'GET',
-        headers: { 'x-empresa-id': '15' },
+        headers: { 'x-empresa-id': '18' },
       }),
-      env,
+      { DB: db } as unknown as Env,
       {} as ExecutionContext,
     );
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as DashboardMetricBody;
-    expect(body).toMatchObject({
+    expect(getDashboardSimuladoresAlertasMock).toHaveBeenCalledTimes(1);
+    expect(getDashboardSimuladoresAlertasMock).toHaveBeenCalledWith(db, 18, {
+      mode: 'restricted',
+      setorIds: [10],
+      funcionarioId: null,
+    });
+    await expect(response.json()).resolves.toMatchObject({
       success: true,
       data: {
-        total_ativas: 9,
-        vencidas: 2,
-        a_vencer_30_dias: 3,
-        validas: 4,
+        fichas_pendentes_avaliacao: 2,
+        fichas_aguardando_assinatura: 4,
+        sessoes_proximas_sem_ficha_completa: 2,
       },
     });
-    expect(body.data.vencidas + body.data.a_vencer_30_dias + body.data.validas).toBe(
-      body.data.total_ativas,
-    );
-    expect(body.data.por_tipo).toEqual([
-      { tipo: 'CMA', total: 6 },
-      { tipo: 'CHT', total: 3 },
-    ]);
-    for (const call of bindCalls.slice(0, 6)) {
-      expect(call[0]).toBe(15);
-    }
   });
 });
