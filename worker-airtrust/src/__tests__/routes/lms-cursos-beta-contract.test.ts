@@ -323,6 +323,51 @@ describe('lms cursos beta contract', () => {
     expect(calls.some((call) => call.query.includes('INSERT INTO lms_cursos'))).toBe(false);
   });
 
+  it('GET /cursos/:id nao expõe curso de outro tenant', async () => {
+    authState.empresaId = 77;
+    const { db, calls } = createMockDb([
+      [
+        'FROM sqlite_master',
+        {
+          first: () => ({ ok: 1 }),
+        },
+      ],
+      [
+        'FROM lms_cursos c',
+        {
+          first: (args) => {
+            const [cursoId, empresaId] = args as [number, number];
+            if (cursoId === 21 && empresaId === 88) {
+              return {
+                id: 21,
+                empresa_id: 88,
+                titulo: 'Curso Tenant B',
+                tipo_conteudo: 'video',
+                publicado: 1,
+                ativo: 1,
+                setores_json: '[]',
+              };
+            }
+            return null;
+          },
+        },
+      ],
+    ]);
+
+    const app = createTestApp();
+
+    const response = await app.request('/cursos/21', { method: 'GET' }, { DB: db } as Env);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Curso não encontrado',
+    });
+
+    const detailCall = calls.find((call) => call.method === 'first' && call.query.includes('FROM lms_cursos c'));
+    expect(detailCall?.args).toEqual([21, 77]);
+  });
+
   it('bloqueia edicao de gestor quando o curso atual inclui setor fora do escopo', async () => {
     authState.role = 'GESTOR';
     const { db, calls } = createMockDb([

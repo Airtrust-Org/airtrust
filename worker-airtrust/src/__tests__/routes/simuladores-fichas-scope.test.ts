@@ -284,6 +284,27 @@ describe('simuladores fichas scope guards', () => {
     });
   });
 
+  it('GET /fichas/:id nao expõe ficha de outro tenant', async () => {
+    getEmployeeSectorAccessMock.mockResolvedValue({
+      mode: 'all',
+      setorIds: [],
+      funcionarioId: null,
+    });
+    const { db } = createFichasDb();
+
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901'),
+      { DB: db, __mockEmpresaId: 7, __mockRole: 'manager' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Ficha não encontrada',
+    });
+  });
+
   it('POST /fichas bloqueia escrita para perfil autoescopado', async () => {
     getEmployeeSectorAccessMock.mockResolvedValue({
       mode: 'self',

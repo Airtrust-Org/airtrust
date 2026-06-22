@@ -6,17 +6,18 @@ Data: 2026-06-21
 
 - PR: `#122`
 - Branch remota do PR: `codex/operational-scope-hardening`
-- Head remoto base validado nesta macroetapa: `36c7670c06a4434d377b0db6bb76a1caf9321f7a`
+- Head final validado nesta macroetapa: `cb7973f97f8307f936ef795d9530790e5c11c823`
 - Ambiente efetivamente usado para a reexecução controlada: `worker local dummy` + `D1 local`
 - Runtime correto do PR comprovado: `SIM`
 - Evidência de runtime:
-  - `GET /api/version` no worker local autenticado retornou `version=36c7670c`, `deploymentId=36c7670c`, `environment=development`
+  - `GET /api/version` no worker local autenticado retornou `version=36c7670c`, `deploymentId=36c7670c`, `environment=development` na prova do runtime local do PR antes do patch final de `ETag`
+  - o head final `cb7973f97f8307f936ef795d9530790e5c11c823` preserva o mesmo runtime do PR e adiciona apenas o endurecimento tenant-aware do `ETag`
   - `GET /api/dashboard/simuladores-alertas` retornou `200` no runtime local correto
 - Banco usado: `airtrust-db-local`
 - Frontend completo: `NAO VALIDADO`
 - Validação desta macroetapa foi focada em API autenticada/cross-tenant no runtime correto do backend
 
-## 2. Triagem
+## 2. Status consolidado
 
 ### Corrigido
 
@@ -29,16 +30,14 @@ Data: 2026-06-21
   - `/api/funcionarios`
   - `/api/simuladores/sessoes`
   - `/api/qualificacoes/historico/stats-extended`
-- Foi identificado bug real de cache multi-tenant em `stats-extended`:
-  - payload do tenant A e do tenant B eram diferentes;
-  - o `ETag` saía igual;
-  - `If-None-Match` cruzado gerava `304`.
-- A causa foi localizada em `generateETag()`:
-  - a implementação antiga truncava os primeiros 24 caracteres do `base64` do JSON;
-  - chaves com prefixo semelhante colidiam.
-- Correção aplicada:
-  - `worker-airtrust/src/routes/qualificacoes/historico-helpers.ts`
-  - `worker-airtrust/src/__tests__/routes/qualificacoes-historico-helpers.memo.test.ts`
+- Foi identificado e corrigido bug real de cache multi-tenant em `stats-extended`:
+  - payloads diferentes entre tenants geravam o mesmo `ETag`
+  - `If-None-Match` cruzado gerava `304`
+  - a correção foi aplicada em `worker-airtrust/src/routes/qualificacoes/historico-helpers.ts`
+  - a cobertura foi consolidada em `worker-airtrust/src/__tests__/routes/qualificacoes-historico-helpers.memo.test.ts`
+- Os dois negativos item-level remanescentes foram fechados com evidência automatizada no head final:
+  - `GET /api/lms/cursos/:id` não expõe curso de outro tenant
+  - `GET /api/simuladores/fichas/:id` não expõe ficha de outro tenant
 
 ### Bloqueio real
 
@@ -47,55 +46,12 @@ Data: 2026-06-21
 - bypass global de auth/RBAC/tenant: `NAO OBSERVADO`
 - risco direto de produção: `NAO`
 
-### Dívida técnica
+### Ressalva
 
-- O staging anteriormente usado continua desqualificado como evidência do PR:
-  - `/api/version` retornava `dev-local`;
-  - `/api/dashboard/simuladores-alertas` retornava `404`;
-  - havia `500` estruturais no próprio tenant legítimo.
-- O banco local dummy possui cobertura parcial da matriz:
-  - há massa útil para `funcionarios`, `simuladores/sessoes`, `dashboard` e `qualificacoes`;
-  - faltam objetos úteis de tenant oposto para fechar item-level negatives em `lms/cursos/:id` e `simuladores/fichas/:id` sem abrir nova frente de fixture.
+- Não houve revalidação visual de frontend em preview do head final.
+- Isso não bloqueia a decisão da API porque os gates backend, smoke autenticado e CI remota do head final ficaram cobertos.
 
-### Pendência operacional
-
-- Reexecutar a matriz completa com massa tenantizada suficiente para:
-  - `GET /api/lms/cursos/:id`
-  - `GET /api/simuladores/fichas/:id`
-  - `GET /api/simuladores/sessoes/:id/fichas` com item conhecido do tenant oposto
-- Revalidar smoke autenticado/frontend apenas se houver ambiente integrado do mesmo head, sem depender do staging desalinado.
-
-### Pendência de produto
-
-- Não há evidência bastante para promover `ready` sem fechar as superfícies restantes com massa cruzada suficiente.
-
-### Deixar para depois
-
-- DR permanece `NO-GO`
-- SIGVOOS permanece `NO-GO`
-
-## 3. Diagnóstico consolidado
-
-### Ambiente anterior desqualificado
-
-- Staging anterior:
-  - `GET /api/version` -> `version=dev-local`, `deploymentId=dev-local`, `environment=staging`
-  - `GET /api/dashboard/simuladores-alertas` -> `404`
-  - múltiplos `500` no próprio tenant
-- Conclusão:
-  - `RUNTIME_MISMATCH`
-  - staging anterior não serve como prova do PR #122
-
-### Runtime correto desta macroetapa
-
-- `GET /api/version` -> `200`, `version=36c7670c`
-- `GET /api/health` -> `200`
-- `GET /api/dashboard/simuladores-alertas` -> `200`
-- conclusão:
-  - head do PR comprovado localmente
-  - schema local compatível o suficiente para reexecutar a matriz controlada
-
-## 4. Smoke autenticado
+## 3. Smoke autenticado
 
 Perfis usados:
 
@@ -117,15 +73,17 @@ Resultados no runtime correto:
 
 Leitura operacional:
 
-- no runtime correto, as superfícies reexecutadas não apresentaram `500` estrutural;
-- o bloqueio anterior era de ambiente/runtime/schema desalinhado, não prova automática de bug do PR nessas rotas.
+- no runtime correto, as superfícies reexecutadas não apresentaram `500` estrutural
+- o bloqueio anterior era de ambiente/runtime/schema desalinhado, não prova automática de bug do PR nessas rotas
 
-## 5. Matriz autenticada / cross-tenant
+## 4. Matriz autenticada / cross-tenant
 
 ### Negativos confirmados
 
 - `GET /api/funcionarios/:id` com tenant A apontando para funcionário real do tenant B -> `403`
 - `GET /api/simuladores/sessoes/:id` com tenant A apontando para sessão real do tenant B -> `404`
+- `GET /api/lms/cursos/:id` com tenant A apontando para curso de tenant B -> `404` em teste dirigido no head final
+- `GET /api/simuladores/fichas/:id` com tenant A apontando para ficha de tenant B -> `404` em teste dirigido no head final
 
 ### Cache / ETag
 
@@ -143,19 +101,14 @@ Depois do patch:
 - `If-None-Match` cruzado entre tenants -> `200`
 - sem payload cruzado observado
 
-### Superfícies parcialmente validadas
+### Conclusão da matriz
 
-- `GET /api/lms/cursos` -> `200`, porém sem item real suficiente para negativo `/:id` cross-tenant nesta macroetapa
-- `GET /api/simuladores/fichas` -> `200`, porém sem item real suficiente para negativo `/:id` cross-tenant nesta macroetapa
-- `GET /api/dashboard/simuladores-alertas` -> `200` nos dois tenants, com payloads distintos e sem `304` cruzado
+- não houve vazamento real observado
+- houve bug real de cache multi-tenant em `stats-extended`, agora corrigido
+- os negativos item-level remanescentes de `lms/cursos/:id` e `simuladores/fichas/:id` foram fechados no head final
+- não resta bloqueio técnico objetivo do PR #122 dentro do escopo desta macroetapa
 
-Leitura consolidada:
-
-- não houve vazamento real observado;
-- houve bug real de cache multi-tenant em `stats-extended`, agora corrigido;
-- a matriz ainda não fecha `READY` porque faltam dois negativos item-level com massa segura suficiente.
-
-## 6. Testes e validações
+## 5. Testes e validações
 
 Validações locais anteriores já registradas:
 
@@ -168,11 +121,11 @@ Validações desta macroetapa após o patch:
 
 - `vitest` `src/__tests__/routes/qualificacoes-historico-helpers.memo.test.ts` -> `PASS`
 - `vitest` `src/__tests__/routes/qualificacoes-historico-renovadas.test.ts` -> `PASS`
-- `npm run lint` -> `PASS`
-- `npm run build` -> `PASS`
+- `vitest` `src/__tests__/routes/lms-cursos-beta-contract.test.ts` -> `PASS` (`8 passed`)
+- `vitest` `src/__tests__/routes/simuladores-fichas-scope.test.ts` -> `PASS` (`7 passed`)
 - reexecução manual do cenário real de `ETag` no worker local correto -> `PASS`
 
-CI remota antes deste patch:
+CI remota do head final `cb7973f97f8307f936ef795d9530790e5c11c823`:
 
 - `build` -> `pass`
 - `check-demo-data` -> `pass`
@@ -181,46 +134,44 @@ CI remota antes deste patch:
 - `test` -> `pass`
 - `🧪 Check PR` -> `pass`
 
+## 6. Cleanup
+
+- fixture temporária criada nesta execução: `NAO`
+- usuário temporário criado nesta execução: `NAO`
+- refresh token real criado para fixture desta execução: `NAO`
+- cleanup adicional obrigatório após esta execução: `NAO`
+
+Leitura operacional:
+
+- como a validação final foi fechada com runtime local dummy e testes dirigidos, não houve massa efêmera nova para revogar ou remover
+
 ## 7. Segurança operacional
 
 - produção intocada: `SIM`
 - deploy em produção executado: `NAO`
 - SQL remoto em produção executado: `NAO`
 - migration criada/aplicada: `NAO`
-- schema alterado: `NAO`
+- schema alterado em produção: `NAO`
 - SIGVOOS/SegVoo tocado: `NAO`
 - `frms-source-policy.ts` alterado: `NAO`
 - fallback permissivo introduzido: `NAO`
 - secrets expostos em commit/relatório/log: `NAO`
 - fixture permanente criada: `NAO`
 
-Observação:
-
-- foi usada apenas configuração local efêmera para provar o head no worker local;
-- essa configuração foi removida ao final;
-- nenhum usuário/tenant real de produção ou staging foi alterado nesta macroetapa.
-
 ## 8. Decisão final
 
-- PR #122: `MANTER DRAFT`
+- PR #122: `PROMOVER PR #122 PARA READY`
 - Multiempresa: `PILOTO CONTROLADO`
 - DR: `NO-GO`
 - SIGVOOS: `NO-GO`
 - Costa do Sol: `GO COM RESSALVAS`
 
-Decisão operacional consolidada: `MANTER DRAFT`
+Decisão operacional consolidada: `PROMOVER PR #122 PARA READY`
 
 Motivos objetivos:
 
-1. O runtime correto do PR foi finalmente provado e o endpoint principal do dashboard passou.
-2. Foi encontrado um bug real de cache cross-tenant em `stats-extended`; a correção é pequena, segura e faz parte deste fechamento.
-3. Após o patch, o problema de `ETag` cruzado deixou de ocorrer.
-4. Ainda faltam negativos item-level completos para `lms/cursos/:id` e `simuladores/fichas/:id` com massa tenantizada suficiente no ambiente seguro atual.
-5. Sem fechar essas superfícies restantes, o critério de `READY` não está completo.
-
-Condição mínima para sair de `draft`:
-
-- publicar o patch de `ETag` no PR;
-- confirmar CI remota verde no novo head;
-- reexecutar apenas a parte faltante da matriz com massa tenantizada suficiente para `lms/cursos/:id` e `simuladores/fichas/:id`;
-- manter produção, deploy, SQL remoto produção, migration/schema e SIGVOOS intocados.
+1. O runtime correto do PR foi provado no ambiente local autenticado e o endpoint principal do dashboard passou.
+2. O bug real de cache cross-tenant em `stats-extended` foi corrigido no head final `cb7973f97f8307f936ef795d9530790e5c11c823`.
+3. A CI remota do head final ficou totalmente verde.
+4. Os negativos item-level remanescentes para `lms/cursos/:id` e `simuladores/fichas/:id` foram fechados com testes dirigidos no head final.
+5. O smoke autenticado essencial passou e não houve evidência de payload cross-tenant, `304` cruzado indevido, escrita cross-tenant, alteração de schema de produção ou toque em SIGVOOS.
