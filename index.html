@@ -54,6 +54,47 @@
           'opsz' 24;
       }
     </style>
+    <script>
+      (() => {
+        const LOGIN_PATHNAME = '/login';
+        const RECOVERY_KEY = 'airtrust-login-cache-recovery-v3';
+        const RECOVERY_PARAM = 'airtrust_login_recovered';
+
+        if (window.location.pathname !== LOGIN_PATHNAME) return;
+
+        const currentUrl = new URL(window.location.href);
+
+        if (currentUrl.searchParams.has(RECOVERY_PARAM)) {
+          currentUrl.searchParams.delete(RECOVERY_PARAM);
+          window.history.replaceState(window.history.state, document.title, currentUrl.toString());
+        }
+
+        if (sessionStorage.getItem(RECOVERY_KEY) === '1') return;
+
+        const recoverLogin = async () => {
+          const cacheNames =
+            'caches' in window && typeof caches.keys === 'function' ? await caches.keys() : [];
+          const airTrustCacheNames = cacheNames.filter((name) => name.startsWith('airtrust-'));
+          const registrations =
+            'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistrations() : [];
+          const hasController =
+            'serviceWorker' in navigator && navigator.serviceWorker.controller !== null;
+
+          await Promise.all(airTrustCacheNames.map((name) => caches.delete(name)));
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+
+          if (!hasController && airTrustCacheNames.length === 0) {
+            return;
+          }
+
+          sessionStorage.setItem(RECOVERY_KEY, '1');
+          currentUrl.searchParams.set(RECOVERY_PARAM, '1');
+          window.location.replace(currentUrl.toString());
+        };
+
+        void recoverLogin().catch(() => {});
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
