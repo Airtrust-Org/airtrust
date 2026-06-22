@@ -83,9 +83,70 @@ Resultado:
 
 - concluído com sucesso
 
+## Fechamento do PR
+
+- PR: `#132`
+- URL: `https://github.com/airtrustsystem-alt/airtrust/pull/132`
+- Merge commit: `34291293c936002d6f2406c66e00cfe3b473ed96`
+- Merge realizado em: `2026-06-22T20:09:54Z`
+
+## CI remota
+
+Checks confirmados como `SUCCESS` no PR #132:
+
+- `build`
+- `check-demo-data`
+- `lint`
+- `lms-smoke`
+- `test`
+- `🧪 Check PR`
+
+## Deploy Pages
+
+- Ambiente: `Cloudflare Pages production`
+- URL principal validada: `https://airtrust.online`
+- Deployment URL retornada pelo Pages: `https://cb803824.airtrust.pages.dev`
+- Horário do deploy validado: `2026-06-22 17:11:37 -03`
+- Build version ativo em produção: `34291293`
+
+## Smoke pós-deploy
+
+### Validado
+
+- `https://airtrust.online` servindo `build-version 34291293`
+- `https://api.airtrust.online/api/health` retornando `200 OK`
+- `https://api.airtrust.online/api/simuladores` sem token retornando `401`
+- `https://airtrust.online/dashboard` redirecionando para `/login` sem sessão autenticada
+- `https://airtrust.online/mro` redirecionando para `/login` sem sessão autenticada
+
+### Limitado pelo contexto
+
+- Não foi possível abrir sessão normal em produção já autenticada para inspeção do rodapé operacional.
+- Não foi possível abrir sessão compartilhada em produção já autenticada para inspeção do rodapé operacional.
+- Não foi possível validar visualmente em produção a etapa de Tripulação/Modelos autenticada porque o navegador disponível redirecionou para `/login` e não havia sessão autenticada reutilizável no contexto.
+- Nenhum login manual, token, cookie ou segredo foi usado para contornar essa restrição.
+
+## Segurança operacional
+
+- Worker não publicado
+- SQL de produção não executado
+- migration/schema não alterado
+- SIGVOOS intocado
+- LMS intocado
+- Funcionários intocado
+- `frms-source-policy.ts` intocado
+- `Excluir` permanece condicionado à permissão existente no frontend (`simuladores.schedule`)
+- Nenhum teste destrutivo com `Excluir` foi executado em produção
+- Nenhum secret, cookie ou token foi exposto
+
+## Rollback
+
+- Rollback de Pages permanece disponível pelo histórico de deployments do projeto
+- A consulta automatizada ao histórico via Wrangler falhou por limitação de permissão do token usado nessa sessão, sem afetar o deploy já concluído
+
 ## Status de liberação
 
-Pronto para deploy Pages via fluxo normal de PR + CI.
+HOTFIX SESSAO COMPARTILHADA ACOES DEPLOYADO COM SUCESSO
 
 ## Restrições confirmadas
 
