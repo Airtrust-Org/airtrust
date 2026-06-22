@@ -87,7 +87,60 @@ function createApp() {
   return app;
 }
 
-function createMockEnv() {
+const defaultFuncionarioColumns = [
+  'id',
+  'empresa_id',
+  'matricula',
+  'nome',
+  'guerra',
+  'cpf',
+  'rg',
+  'nascimento',
+  'sexo',
+  'nacionalidade',
+  'email',
+  'telefone',
+  'telefone_emergencia',
+  'contato_emergencia_nome',
+  'funcao',
+  'cargo',
+  'setor',
+  'setor_id',
+  'base',
+  'modelo_aeronave_id',
+  'admissao',
+  'codigo_anac',
+  'nivel_icao',
+  'data_realizacao_icao',
+  'validade_icao',
+  'cma',
+  'data_realizacao_cma',
+  'validade_cma',
+  'aso',
+  'data_realizacao_aso',
+  'validade_aso',
+  'sispat',
+  'prestserv',
+  'cep',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
+  'cidade',
+  'estado',
+  'observacoes',
+  'foto_url',
+  'status',
+  'ativo',
+  'is_instrutor',
+  'is_checador',
+  'aeronave',
+  'created_at',
+  'updated_at',
+];
+
+function createMockEnv(options?: { funcionarioColumns?: string[] }) {
+  const funcionarioColumns = options?.funcionarioColumns || defaultFuncionarioColumns;
   const funcionarios: FuncionarioRow[] = [
     {
       id: 101,
@@ -183,6 +236,13 @@ function createMockEnv() {
 
       const executeAll = async (args: unknown[]) => {
         calls.push({ query, args, method: 'all' });
+
+        if (query.includes("PRAGMA table_info('funcionarios')")) {
+          return {
+            results: funcionarioColumns.map((name) => ({ name })),
+          };
+        }
+
         return { results: [] };
       };
 
@@ -447,5 +507,110 @@ describe('funcionarios tenant isolation', () => {
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
     expect(body.error).toContain('CPF');
+  });
+
+  it('PUT ignora colunas novas ausentes no schema e nao estoura erro interno', async () => {
+    const { env, runs } = createMockEnv({
+      funcionarioColumns: [
+        'id',
+        'empresa_id',
+        'nome',
+        'cpf',
+        'matricula',
+        'email',
+        'telefone',
+        'funcao',
+        'cargo',
+        'setor',
+        'base',
+        'admissao',
+        'codigo_anac',
+        'status',
+        'ativo',
+        'is_instrutor',
+        'is_checador',
+        'updated_at',
+      ],
+    });
+
+    const response = await request('/api/funcionarios/101', env, 1, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        nome: 'Funcionario Compat',
+        sexo: null,
+        nacionalidade: null,
+        telefone_emergencia: null,
+        contato_emergencia_nome: null,
+        foto_url: null,
+        modelo_aeronave_id: null,
+        quinzena: null,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const update = runs.find((run) => run.query.startsWith('UPDATE funcionarios'));
+    expect(update?.query).toContain('nome = ?');
+    expect(update?.query).not.toContain('sexo = ?');
+    expect(update?.query).not.toContain('nacionalidade = ?');
+    expect(update?.query).not.toContain('telefone_emergencia = ?');
+    expect(update?.query).not.toContain('contato_emergencia_nome = ?');
+    expect(update?.query).not.toContain('foto_url = ?');
+    expect(update?.query).not.toContain('modelo_aeronave_id = ?');
+    expect(update?.query).not.toContain('quinzena = ?');
+  });
+
+  it('POST ignora colunas novas ausentes no schema e continua criando funcionario', async () => {
+    const { env, runs } = createMockEnv({
+      funcionarioColumns: [
+        'id',
+        'empresa_id',
+        'matricula',
+        'nome',
+        'cpf',
+        'email',
+        'telefone',
+        'funcao',
+        'cargo',
+        'setor',
+        'base',
+        'admissao',
+        'codigo_anac',
+        'status',
+        'ativo',
+        'is_instrutor',
+        'is_checador',
+        'created_at',
+        'updated_at',
+      ],
+    });
+
+    const response = await request('/api/funcionarios', env, 1, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        nome: 'Novo Compat',
+        cpf: '08328622742',
+        email: 'compat@example.com',
+        matricula: 'A-777',
+        sexo: null,
+        nacionalidade: null,
+        telefone_emergencia: null,
+        contato_emergencia_nome: null,
+        foto_url: null,
+        modelo_aeronave_id: null,
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const insert = runs.find((run) => run.query.includes('INSERT INTO funcionarios'));
+    expect(insert?.query).toContain('matricula');
+    expect(insert?.query).toContain('nome');
+    expect(insert?.query).not.toContain('sexo');
+    expect(insert?.query).not.toContain('nacionalidade');
+    expect(insert?.query).not.toContain('telefone_emergencia');
+    expect(insert?.query).not.toContain('contato_emergencia_nome');
+    expect(insert?.query).not.toContain('foto_url');
+    expect(insert?.query).not.toContain('modelo_aeronave_id');
   });
 });

@@ -18,6 +18,8 @@ import {
   type ManagerAlertSeverity,
 } from './managerAlertCenter.utils';
 
+const MANAGER_ALERT_CENTER_ENABLED = false;
+
 function getTodayIsoSaoPaulo() {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
@@ -141,6 +143,10 @@ function ErrorState({ partialSources }: { partialSources: string[] }) {
 }
 
 export default function ManagerAlertCenter() {
+  if (!MANAGER_ALERT_CENTER_ENABLED) {
+    return null;
+  }
+
   const { empresas, empresaAtualId } = useAuth();
   const { isAdmin, isGestor, can } = usePermissions();
 
