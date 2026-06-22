@@ -32,19 +32,17 @@
   Pragma: no-cache
   Expires: 0
 
-# ===== JAVASCRIPT - CACHE LONGO (com hash) =====
-# Vite gera hash nos filenames (ex: index-abc123.js)
-# Podem ser cacheados indefinidamente pois mudam o nome quando atualizados
-/*.js
-  Cache-Control: public, max-age=31536000, immutable
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
 
+# ===== JAVASCRIPT - CACHE LONGO (com hash) =====
+# Apenas assets versionados por hash devem receber cache imutavel.
 /assets/*.js
   Cache-Control: public, max-age=31536000, immutable
 
 # ===== CSS - CACHE LONGO (com hash) =====
-/*.css
-  Cache-Control: public, max-age=31536000, immutable
-
 /assets/*.css
   Cache-Control: public, max-age=31536000, immutable
 
