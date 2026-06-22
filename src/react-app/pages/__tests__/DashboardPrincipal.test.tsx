@@ -338,4 +338,30 @@ describe('DashboardPrincipal', () => {
     expect(screen.getByText('funcionarios-page')).toBeInTheDocument();
     expect(useMetricsQueryMock).not.toHaveBeenCalled();
   });
+
+  it('nao quebra ao sair de loading para carregado', () => {
+    useMetricsQueryMock
+      .mockReturnValueOnce(
+        buildQueryState(undefined, {
+          isLoading: true,
+          dataUpdatedAt: 0,
+        }),
+      )
+      .mockReturnValue(buildQueryState(buildMetricsData()));
+
+    const view = renderDashboard();
+
+    expect(view.container.textContent).toBe('');
+
+    view.rerender(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <Routes>
+          <Route path="/dashboard" element={<DashboardPrincipal />} />
+          <Route path="/funcionarios" element={<div>funcionarios-page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/Painel executivo/i)).toBeInTheDocument();
+  });
 });
