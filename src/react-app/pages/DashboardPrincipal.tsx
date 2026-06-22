@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -350,36 +350,23 @@ export default function DashboardPrincipal() {
     qualificacoesAlertas.filter((item) => Number(item.diasRestantes) > 0).length;
   const escalasRascunho = escalas.filter((e) => e.status === 'rascunho');
   const totalPendenciasSimuladores = sumSimuladoresPendencias(simuladoresAlertas);
-  const bannerAlerts = useMemo(() => {
-    const items: string[] = [];
+  const bannerAlerts: string[] = [];
 
-    if (showQualificacoes && qualificacoesVencidas > 0) {
-      items.push(`${qualificacoesVencidas} qualificações vencidas`);
-    }
-    if (showFrms && hasFrmsError) {
-      items.push('Erro ao carregar FRMS');
-    }
-    if (showSimuladores && totalPendenciasSimuladores > 0) {
-      items.push(`${totalPendenciasSimuladores} pendências de simuladores exigem ação`);
-    }
-    if (showEscalas && escalasRascunho.length > 0) {
-      const escala = escalasRascunho[0];
-      items.push(
-        `Escala ${String(escala.mes).padStart(2, '0')}/${String(escala.ano).slice(2)} em rascunho`,
-      );
-    }
-
-    return items;
-  }, [
-    escalasRascunho,
-    hasFrmsError,
-    qualificacoesVencidas,
-    showEscalas,
-    showFrms,
-    showQualificacoes,
-    showSimuladores,
-    totalPendenciasSimuladores,
-  ]);
+  if (showQualificacoes && qualificacoesVencidas > 0) {
+    bannerAlerts.push(`${qualificacoesVencidas} qualificações vencidas`);
+  }
+  if (showFrms && hasFrmsError) {
+    bannerAlerts.push('Erro ao carregar FRMS');
+  }
+  if (showSimuladores && totalPendenciasSimuladores > 0) {
+    bannerAlerts.push(`${totalPendenciasSimuladores} pendências de simuladores exigem ação`);
+  }
+  if (showEscalas && escalasRascunho.length > 0) {
+    const escala = escalasRascunho[0];
+    bannerAlerts.push(
+      `Escala ${String(escala.mes).padStart(2, '0')}/${String(escala.ano).slice(2)} em rascunho`,
+    );
+  }
   const bannerSignature = buildBannerScopeSignature(bannerAlerts);
   const dismissedBannerScopeKey = `${empresaAtualId ?? 'sem-empresa'}:${bannerSignature}`;
   const bannerDismissed =
