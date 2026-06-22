@@ -90,7 +90,7 @@ Observacao de console:
 
 Base remota auditada:
 
-- `origin/main` em `91c094e6eb908f15857f109842f9b1815653cf62`
+- `origin/main` em `5fdc8d1eac3f1d0a07f9bff12a1bde9a60a72e7e`
 
 Mergeados em `origin/main`:
 
@@ -113,6 +113,10 @@ Acao de reconciliacao:
 - hotfix React #310 aplicado de forma isolada
 - teste de regressao aplicado de forma isolada
 - branch atual de reconciliacao login/cache: `codex/reconcile-login-cache-hotfix-20260622`
+- PR de reconciliacao login/cache: `#128`
+- URL da PR de reconciliacao login/cache: `https://github.com/airtrustsystem-alt/airtrust/pull/128`
+- merge commit da reconciliacao login/cache: `5fdc8d1eac3f1d0a07f9bff12a1bde9a60a72e7e`
+- merge realizado em: `2026-06-22T17:48:23Z`
 - cache longo mantido apenas para assets hashados
 - `sw.js` ajustado para `no-cache` e `CACHE_VERSION = 'airtrust-v10'`
 - `/login` passou a forcar bypass/cleanup de service worker
@@ -124,6 +128,14 @@ CI/local:
 - testes direcionados: `pass`
 - lint na worktree limpa: `pass`
 - build na worktree limpa: `pass`
+- CI remota PR #128: `SUCCESS`
+- Checks remotos concluidos com sucesso:
+  - `build`
+  - `check-demo-data`
+  - `lint`
+  - `test`
+  - `PR Check`
+  - `lms-smoke`
 
 Nota:
 
