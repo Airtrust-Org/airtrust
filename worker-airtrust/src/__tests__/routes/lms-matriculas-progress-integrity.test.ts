@@ -331,6 +331,104 @@ describe('lms matriculas progress integrity', () => {
     expect(matriculaUpdate?.args[2]).toBe(103);
   });
 
+  it('preserva location numerica do AW e ultimo_slide quando o pacote reabre no inicio', async () => {
+    const currentCmi = JSON.stringify({
+      'cmi.location': '238',
+      'cmi.core.lesson_location': '238',
+      'cmi.core.lesson_status': 'incomplete',
+    });
+    const staleCmi = JSON.stringify({
+      'cmi.location': '1/380',
+      'cmi.core.lesson_location': '1/380',
+      'cmi.core.lesson_status': 'incomplete',
+    });
+
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 326,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 1,
+            tentativas: 0,
+            qualificacao_historico_id: null,
+            scorm_mastery_score: 70,
+            gerar_qualificacao_ao_concluir: 0,
+            qualificacao_tipo_id: null,
+            curso_titulo: 'AW139 - Manutenção',
+            qualificacao_codigo: null,
+            qualificacao_nome: null,
+            qualificacao_categoria: null,
+            qualificacao_validade: null,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => ({
+            lesson_status: 'incomplete',
+            completion_status: null,
+            success_status: null,
+            score_raw: 100,
+            score_max: null,
+            score_min: 0,
+            score_scaled: null,
+            session_time: '00:00:00',
+            total_time: null,
+            suspend_data: null,
+            launch_data: null,
+            cmi_json: currentCmi,
+          }),
+        },
+      ],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 0 } }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/commit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 326,
+          lesson_status: 'incomplete',
+          score_raw: 100,
+          cmi_json: staleCmi,
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const scormUpsert = calls.find(
+      (call) => call.method === 'run' && call.query.includes('INSERT INTO lms_progresso_scorm'),
+    );
+    expect(scormUpsert?.args[13]).toBe(currentCmi);
+
+    const matriculaUpdate = calls.find(
+      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
+    );
+    expect(matriculaUpdate?.args[2]).toBe(238);
+  });
+
   it('conclui commit SCORM 1.2 quando lesson_status=completed e score atende mastery', async () => {
     const { db, calls } = createMockDb([
       [
