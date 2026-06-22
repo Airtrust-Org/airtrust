@@ -102,8 +102,12 @@ export const histCache: {
 export function generateETag(parts: unknown[]): string {
   try {
     const base = JSON.stringify(parts);
-    const b64 = btoa(base).substring(0, 24);
-    return `"qh-${b64}"`;
+    let hash = 2166136261;
+    for (let index = 0; index < base.length; index += 1) {
+      hash ^= base.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `"qh-${(hash >>> 0).toString(36)}"`;
   } catch {
     return '"qh-etag-fallback"';
   }

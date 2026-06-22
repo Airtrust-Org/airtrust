@@ -14,6 +14,10 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
 }));
 
+vi.mock('../../services/employee-sector-access', () => ({
+  getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
+}));
+
 vi.mock('../../utils/ficha-role-scope', () => ({
   resolveFichaScope: () => 'FULL_ACCESS',
 }));

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  getDashboardSimuladoresAlerts,
+  getDashboardSimuladoresAlertas,
   getTaxaConclusaoMensal,
   getUtilizacaoSimuladores,
 } from '../../services/dashboardService';
@@ -114,34 +114,47 @@ describe('dashboard metrics integrity service', () => {
     expect(calls[0]?.query).toContain('1 = 0');
   });
 
-  it('resume alertas operacionais de simuladores sem PII e com fallback de edicoes', async () => {
-    const calls: QueryCall[] = [];
-    const firstQueue = [
-      { name: 'fichas_sessao_edicoes' },
-      {
-        fichas_pendentes_avaliacao: 2,
-        fichas_aguardando_assinatura_aluno: 1,
-        fichas_aguardando_assinatura_instrutor: 3,
-      },
-      { total: 4 },
-      { total: 5 },
-    ];
+  it('aggregates simuladores alertas with tenant scope, started-session gating and pending edits', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-21T15:30:00.000Z'));
 
+    const calls: QueryCall[] = [];
     const db = {
       prepare: vi.fn((query: string) => ({
         bind: (...args: unknown[]) => {
           calls.push({ query, args });
-          const row = firstQueue.shift() ?? null;
           return {
-            first: async () => row,
+            first: async () => {
+              if (query.includes('sqlite_master')) {
+                return { name: 'fichas_sessao_edicoes' };
+              }
+
+              if (query.includes('fichas_pendentes_avaliacao')) {
+                return {
+                  fichas_pendentes_avaliacao: 2,
+                  fichas_aguardando_assinatura_aluno: 1,
+                  fichas_aguardando_assinatura_instrutor: 3,
+                };
+              }
+
+              if (query.includes('NOT EXISTS')) {
+                return { total: 4 };
+              }
+
+              if (query.includes('FROM fichas_sessao_edicoes fe')) {
+                return { total: 1 };
+              }
+
+              return null;
+            },
           };
         },
       })),
     } as unknown as D1Database;
 
-    const result = await getDashboardSimuladoresAlerts(db, 12, {
+    const result = await getDashboardSimuladoresAlertas(db, 55, {
       mode: 'restricted',
-      setorIds: [3],
+      setorIds: [12],
       funcionarioId: null,
     });
 
@@ -151,12 +164,83 @@ describe('dashboard metrics integrity service', () => {
       fichas_aguardando_assinatura_instrutor: 3,
       fichas_aguardando_assinatura: 4,
       sessoes_proximas_sem_ficha_completa: 4,
-      edicoes_pendentes: 5,
+      edicoes_pendentes: 1,
       janela_sessoes_proximas_horas: 24,
     });
-    expect(calls[0]?.args).toEqual(['fichas_sessao_edicoes']);
-    expect(calls[1]?.query).toContain('AVALIACAO_PENDENTE');
-    expect(calls[2]?.query).toContain('COUNT(*) AS total');
-    expect(calls[3]?.query).toContain("fe.status = 'PENDENTE'");
+    expect(calls).toHaveLength(4);
+
+    const fichaResumoCall = calls.find((call) => call.query.includes('fichas_pendentes_avaliacao'));
+    expect(fichaResumoCall?.args).toEqual(['2026-06-21 12:30', 55, 12]);
+    expect(fichaResumoCall?.query).toContain("= 'AVALIACAO_PENDENTE'");
+    expect(fichaResumoCall?.query).toContain("= 'AGUARDANDO_ASSINATURA_ALUNO'");
+    expect(fichaResumoCall?.query).toContain("= 'AGUARDANDO_ASSINATURA_INSTRUTOR'");
+    expect(fichaResumoCall?.query).toContain("status, '')) IN ('CONCLUIDA', 'CONCLUIDO')");
+    expect(fichaResumoCall?.query).toContain('aluno.setor_id IN (?)');
+
+    const sessoesCall = calls.find((call) => call.query.includes('NOT EXISTS'));
+    expect(sessoesCall?.args).toEqual([55, 12, '2026-06-21 12:30', '2026-06-22 12:30']);
+    expect(sessoesCall?.query).toContain(
+      "IN ('AGENDADO', 'AGENDADA', 'PENDENTE', 'PENDING', 'CONFIRMADO', 'CONFIRMADA')",
+    );
+    expect(sessoesCall?.query).toContain("IN ('APROVADO', 'NAO_APROVADO')");
+    expect(sessoesCall?.query).toContain('FROM sessoes_participantes sp_scope');
+    expect(sessoesCall?.query).toContain('f_scope.setor_id IN (?)');
+
+    const edicoesCall = calls.find((call) => call.query.includes('FROM fichas_sessao_edicoes fe'));
+    expect(edicoesCall?.args).toEqual([55, 12]);
+    expect(edicoesCall?.query).toContain("fe.status = 'PENDENTE'");
+    expect(edicoesCall?.query).toContain('aluno.setor_id IN (?)');
+
+    vi.useRealTimers();
+  });
+
+  it('returns zero pending edits when fichas_sessao_edicoes is unavailable', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-21T15:30:00.000Z'));
+
+    const calls: QueryCall[] = [];
+    const db = {
+      prepare: vi.fn((query: string) => ({
+        bind: (...args: unknown[]) => {
+          calls.push({ query, args });
+          return {
+            first: async () => {
+              if (query.includes('sqlite_master')) {
+                return null;
+              }
+
+              if (query.includes('fichas_pendentes_avaliacao')) {
+                return {
+                  fichas_pendentes_avaliacao: 0,
+                  fichas_aguardando_assinatura_aluno: 0,
+                  fichas_aguardando_assinatura_instrutor: 0,
+                };
+              }
+
+              if (query.includes('NOT EXISTS')) {
+                return { total: 0 };
+              }
+
+              return null;
+            },
+          };
+        },
+      })),
+    } as unknown as D1Database;
+
+    const result = await getDashboardSimuladoresAlertas(db, 77, {
+      mode: 'restricted',
+      setorIds: [],
+      funcionarioId: null,
+    });
+
+    expect(result.edicoes_pendentes).toBe(0);
+    expect(calls.some((call) => call.query.includes('FROM fichas_sessao_edicoes fe'))).toBe(false);
+    expect(
+      calls.find((call) => call.query.includes('fichas_pendentes_avaliacao'))?.query,
+    ).toContain('1 = 0');
+    expect(calls.find((call) => call.query.includes('NOT EXISTS'))?.query).toContain('1 = 0');
+
+    vi.useRealTimers();
   });
 });

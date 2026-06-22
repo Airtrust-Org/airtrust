@@ -65,6 +65,45 @@ async function tableExists(db: D1Database, tableName: string): Promise<boolean> 
   return Boolean(row?.name);
 }
 
+export interface DashboardSimuladoresAlertasResumo {
+  fichas_pendentes_avaliacao: number;
+  fichas_aguardando_assinatura_aluno: number;
+  fichas_aguardando_assinatura_instrutor: number;
+  fichas_aguardando_assinatura: number;
+  sessoes_proximas_sem_ficha_completa: number;
+  edicoes_pendentes: number;
+  janela_sessoes_proximas_horas: number;
+}
+
+const DASHBOARD_FICHA_STATUS_SQL = `CASE
+  WHEN f.assinatura_instrutor_timestamp IS NOT NULL THEN
+    CASE
+      WHEN f.resultado_final = 'REPROVADO' THEN 'NAO_APROVADO'
+      WHEN f.resultado_final = 'APROVADO' THEN 'APROVADO'
+      WHEN f.aprovado = 0 AND f.resultado_final != 'PENDENTE' THEN 'NAO_APROVADO'
+      WHEN f.aprovado = 1 THEN 'APROVADO'
+      ELSE 'APROVADO'
+    END
+  WHEN f.assinatura_aluno_timestamp IS NOT NULL THEN 'AGUARDANDO_ASSINATURA_INSTRUTOR'
+  WHEN f.status IN ('AGUARDANDO_ASSINATURA_ALUNO', 'AGUARDANDO_ASSINATURA_INSTRUTOR', 'AVALIACAO_PENDENTE', 'APROVADO', 'NAO_APROVADO') THEN f.status
+  WHEN f.status IN ('AGUARDANDO_ASSINATURAS', 'AVALIADA') THEN 'AGUARDANDO_ASSINATURA_ALUNO'
+  WHEN f.status IN ('ASSINADA_ALUNO') THEN 'AGUARDANDO_ASSINATURA_INSTRUTOR'
+  WHEN f.status IN ('ASSINADA_TOTAL', 'APROVADA', 'CONCLUIDA') THEN
+    CASE
+      WHEN f.resultado_final = 'REPROVADO' THEN 'NAO_APROVADO'
+      WHEN f.resultado_final = 'APROVADO' THEN 'APROVADO'
+      WHEN f.aprovado = 0 AND f.resultado_final != 'PENDENTE' THEN 'NAO_APROVADO'
+      WHEN f.aprovado = 1 THEN 'APROVADO'
+      ELSE 'APROVADO'
+    END
+  ELSE 'AVALIACAO_PENDENTE'
+END`;
+
+const DASHBOARD_UPCOMING_SESSION_STATUSES_SQL =
+  "('AGENDADO', 'AGENDADA', 'PENDENTE', 'PENDING', 'CONFIRMADO', 'CONFIRMADA')";
+const DASHBOARD_FINALIZED_FICHA_STATUSES_SQL = "('APROVADO', 'NAO_APROVADO')";
+const DASHBOARD_SIMULADORES_ALERT_WINDOW_HOURS = 24;
+
 function getFullDashboardAccess(): EmployeeSectorAccess {
   return { mode: 'all', setorIds: [], funcionarioId: null };
 }
@@ -1028,6 +1067,115 @@ export async function getUtilizacaoSimuladores(
     console.error('[DASHBOARD] Erro ao buscar utilização de simuladores:', error);
     return { simuladores: [] };
   }
+}
+
+export async function getDashboardSimuladoresAlertas(
+  db: D1Database,
+  empresaId: number,
+  access?: EmployeeSectorAccess,
+): Promise<DashboardSimuladoresAlertasResumo> {
+  const employeeScope = buildEmployeeScopeSql(access, 'aluno');
+  const sessionScope = buildSessionScopeSql(access, 'sa');
+  const nowSpKey = getSaoPauloDateTimeKey();
+  const endWindowKey = getSaoPauloDateTimeKey(
+    new Date(Date.now() + DASHBOARD_SIMULADORES_ALERT_WINDOW_HOURS * 60 * 60 * 1000),
+  );
+
+  const [fichasResumo, sessoesSemFichaCompleta, hasEdicoesTable] = await Promise.all([
+    db
+      .prepare(
+        `SELECT
+           SUM(CASE
+             WHEN ${DASHBOARD_FICHA_STATUS_SQL} = 'AVALIACAO_PENDENTE'
+              AND (
+                UPPER(COALESCE(sa.status, '')) IN ${COMPLETED_STATUS_SQL}
+                OR (
+                  COALESCE(sa.data, f.data_sessao) IS NOT NULL
+                  AND datetime(COALESCE(sa.data, f.data_sessao) || ' ' || COALESCE(sa.hora_inicio, '00:00')) <= datetime(?)
+                )
+              )
+             THEN 1 ELSE 0
+           END) as fichas_pendentes_avaliacao,
+           SUM(CASE WHEN ${DASHBOARD_FICHA_STATUS_SQL} = 'AGUARDANDO_ASSINATURA_ALUNO' THEN 1 ELSE 0 END) as fichas_aguardando_assinatura_aluno,
+           SUM(CASE WHEN ${DASHBOARD_FICHA_STATUS_SQL} = 'AGUARDANDO_ASSINATURA_INSTRUTOR' THEN 1 ELSE 0 END) as fichas_aguardando_assinatura_instrutor
+         FROM fichas_sessao f
+         INNER JOIN funcionarios aluno
+           ON aluno.id = f.colaborador_id_aluno
+          AND aluno.deleted_at IS NULL
+         LEFT JOIN simulador_agendamentos sa
+           ON sa.id = f.agendamento_slot_id
+          AND sa.deleted_at IS NULL
+         WHERE f.deleted_at IS NULL
+           AND COALESCE(f.empresa_id, aluno.empresa_id, sa.empresa_id) = ?
+           AND ${employeeScope.clause}`,
+      )
+      .bind(nowSpKey, empresaId, ...employeeScope.bindings)
+      .first<{
+        fichas_pendentes_avaliacao?: number | null;
+        fichas_aguardando_assinatura_aluno?: number | null;
+        fichas_aguardando_assinatura_instrutor?: number | null;
+      }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) as total
+         FROM simulador_agendamentos sa
+         WHERE sa.deleted_at IS NULL
+           AND sa.empresa_id = ?
+           AND ${sessionScope.clause}
+           AND UPPER(COALESCE(sa.status, '')) IN ${DASHBOARD_UPCOMING_SESSION_STATUSES_SQL}
+           AND sa.data IS NOT NULL
+           AND datetime(sa.data || ' ' || COALESCE(sa.hora_inicio, '00:00')) >= datetime(?)
+           AND datetime(sa.data || ' ' || COALESCE(sa.hora_inicio, '00:00')) <= datetime(?)
+           AND NOT EXISTS (
+             SELECT 1
+             FROM fichas_sessao f
+             WHERE f.agendamento_slot_id = sa.id
+               AND f.deleted_at IS NULL
+               AND ${DASHBOARD_FICHA_STATUS_SQL} IN ${DASHBOARD_FINALIZED_FICHA_STATUSES_SQL}
+           )`,
+      )
+      .bind(empresaId, ...sessionScope.bindings, nowSpKey, endWindowKey)
+      .first<{ total?: number | null }>(),
+    tableExists(db, 'fichas_sessao_edicoes'),
+  ]);
+
+  const edicoesPendentes = hasEdicoesTable
+    ? await db
+        .prepare(
+          `SELECT COUNT(*) as total
+           FROM fichas_sessao_edicoes fe
+           INNER JOIN fichas_sessao f
+             ON f.id = fe.ficha_id
+            AND f.deleted_at IS NULL
+           INNER JOIN funcionarios aluno
+             ON aluno.id = f.colaborador_id_aluno
+            AND aluno.deleted_at IS NULL
+           WHERE fe.deleted_at IS NULL
+             AND fe.status = 'PENDENTE'
+             AND COALESCE(fe.empresa_id, f.empresa_id, aluno.empresa_id) = ?
+             AND ${employeeScope.clause}`,
+        )
+        .bind(empresaId, ...employeeScope.bindings)
+        .first<{ total?: number | null }>()
+    : null;
+
+  const fichasAguardandoAssinaturaAluno = Number(
+    fichasResumo?.fichas_aguardando_assinatura_aluno || 0,
+  );
+  const fichasAguardandoAssinaturaInstrutor = Number(
+    fichasResumo?.fichas_aguardando_assinatura_instrutor || 0,
+  );
+
+  return {
+    fichas_pendentes_avaliacao: Number(fichasResumo?.fichas_pendentes_avaliacao || 0),
+    fichas_aguardando_assinatura_aluno: fichasAguardandoAssinaturaAluno,
+    fichas_aguardando_assinatura_instrutor: fichasAguardandoAssinaturaInstrutor,
+    fichas_aguardando_assinatura:
+      fichasAguardandoAssinaturaAluno + fichasAguardandoAssinaturaInstrutor,
+    sessoes_proximas_sem_ficha_completa: Number(sessoesSemFichaCompleta?.total || 0),
+    edicoes_pendentes: Number(edicoesPendentes?.total || 0),
+    janela_sessoes_proximas_horas: DASHBOARD_SIMULADORES_ALERT_WINDOW_HOURS,
+  };
 }
 
 export async function getDashboardFrmsAlerts(

@@ -133,7 +133,7 @@ export interface SimuladoresAlertasData {
   fichas_aguardando_assinatura: number;
   sessoes_proximas_sem_ficha_completa: number;
   edicoes_pendentes: number;
-  janela_sessoes_proximas_horas?: number;
+  janela_sessoes_proximas_horas: number;
 }
 
 export interface SectionErrors {
