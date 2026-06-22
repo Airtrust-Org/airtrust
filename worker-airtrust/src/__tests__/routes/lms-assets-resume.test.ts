@@ -37,4 +37,15 @@ describe('SCORM resume restore helpers', () => {
     expect(source).toContain('var shouldCommitLocation = previousLocation !== location;');
     expect(source).toContain('scheduleCommit(800);');
   });
+
+  it('agenda commit quando o pacote marca conclusão por status SCORM', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
+
+    expect(source).toMatch(
+      /if \(element === 'cmi\.core\.lesson_status'\) \{\s*checkCompletion\(\);\s*scheduleCommit\(800\);\s*\}/,
+    );
+    expect(source).toMatch(
+      /if \(element === 'cmi\.completion_status' \|\| element === 'cmi\.success_status'\) \{\s*checkCompletion\(\);\s*scheduleCommit\(800\);\s*\}/,
+    );
+  });
 });

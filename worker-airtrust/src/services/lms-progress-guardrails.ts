@@ -20,8 +20,10 @@ export function mergeMonotonicMatriculaStatus(current: Nullable<string>, desired
 }
 
 export function mergeMonotonicNumber(current: Nullable<number>, incoming: Nullable<number>) {
-  const currentNumber = Number(current);
-  const incomingNumber = Number(incoming);
+  const currentNumber =
+    current == null || current === '' ? null : Number(current);
+  const incomingNumber =
+    incoming == null || incoming === '' ? null : Number(incoming);
 
   if (!Number.isFinite(incomingNumber)) {
     return Number.isFinite(currentNumber) ? currentNumber : null;

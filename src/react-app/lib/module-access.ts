@@ -111,6 +111,10 @@ const MODULE_ID_ALIASES: Record<string, string> = {
 const RESTRICTED_DEVELOPMENT_NAV_MODULES = new Set(['mro', 'controle_voos']);
 const RESTRICTED_ADMIN_DASHBOARD_NAV_MODULES = new Set(['dashboard']);
 
+export function requiresRestrictedDevelopmentModuleAccess(moduleKey: string): boolean {
+  return RESTRICTED_DEVELOPMENT_NAV_MODULES.has(resolveModuleKey(moduleKey));
+}
+
 export const MODULE_ROUTE_MATCHES: ModuleRouteMatch[] = [
   { pathPrefix: '/configuracoes/integracoes/sigvoos', moduleKey: 'sigvoos' },
   { pathPrefix: '/configuracoes/integracoes/edapp', moduleKey: 'sigvoos' },

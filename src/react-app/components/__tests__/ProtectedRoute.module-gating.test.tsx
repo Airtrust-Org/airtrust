@@ -72,8 +72,6 @@ describe('ProtectedRoute module gating', () => {
     ['/sgso', ['dashboard', 'funcionarios', 'sgso']],
     ['/lms/cursos', ['dashboard', 'funcionarios', 'lms']],
     ['/treinamentos/planejados', ['dashboard', 'funcionarios', 'treinamentos_planejados']],
-    ['/mro', ['dashboard', 'funcionarios', 'mro']],
-    ['/controle-voos', ['dashboard', 'funcionarios', 'controle_voos']],
   ])('permite %s quando o modulo esta ativo', (pathname, modulosAtivos) => {
     authMock.mockReturnValue({
       isAuthenticated: true,
@@ -86,6 +84,46 @@ describe('ProtectedRoute module gating', () => {
     renderAt(pathname as string);
 
     expect(screen.queryByText('Modulo indisponivel')).toBeNull();
+    expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['/mro', ['dashboard', 'funcionarios', 'mro']],
+    ['/controle-voos', ['dashboard', 'funcionarios', 'controle_voos']],
+  ])('bloqueia %s para gestor mesmo com modulo ativo', (pathname, modulosAtivos) => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Gestor', email: 'gestor@empresa.com', role: 'GESTOR' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: modulosAtivos }],
+      empresaAtualId: 1,
+    });
+
+    renderAt(pathname as string);
+
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
+  });
+
+  it.each([
+    ['/mro', ['dashboard', 'funcionarios', 'mro']],
+    ['/controle-voos', ['dashboard', 'funcionarios', 'controle_voos']],
+  ])('permite %s para admin principal allowlisted', (pathname, modulosAtivos) => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        name: 'Admin Principal',
+        email: 'filipe.daumas@icloud.com',
+        role: 'ADMINISTRADOR',
+      },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: modulosAtivos }],
+      empresaAtualId: 1,
+    });
+
+    renderAt(pathname as string);
+
+    expect(screen.queryByText('protected.denied.title')).toBeNull();
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
   });
 

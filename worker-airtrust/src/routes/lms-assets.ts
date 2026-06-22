@@ -1760,7 +1760,10 @@ ${resolveScormResumeTargetSlide.toString()}
     },
     LMSSetValue: function(element, value) {
       cmi[element] = value;
-      if (element === 'cmi.core.lesson_status') checkCompletion();
+      if (element === 'cmi.core.lesson_status') {
+        checkCompletion();
+        scheduleCommit(800);
+      }
       if (element === 'cmi.core.lesson_location' || element === 'cmi.suspend_data') {
         if (element === 'cmi.core.lesson_location') {
           cmi['cmi.location'] = String(value || '');
@@ -1797,7 +1800,10 @@ ${resolveScormResumeTargetSlide.toString()}
     },
     SetValue: function(element, value) {
       cmi[element] = value;
-      if (element === 'cmi.completion_status' || element === 'cmi.success_status') checkCompletion();
+      if (element === 'cmi.completion_status' || element === 'cmi.success_status') {
+        checkCompletion();
+        scheduleCommit(800);
+      }
       if (element === 'cmi.location' || element === 'cmi.suspend_data') {
         if (element === 'cmi.location') {
           cmi['cmi.core.lesson_location'] = String(value || '');

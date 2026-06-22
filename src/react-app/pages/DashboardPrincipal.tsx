@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import {
   AlertTriangle,
   CalendarClock,
@@ -18,7 +18,10 @@ import {
 import AppLayout from '../components/AppLayout';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
-import { canSeeDevelopmentModules } from '../lib/development-module-nav';
+import {
+  canSeeAdministrativeDashboard,
+  canSeeDevelopmentModules,
+} from '../lib/development-module-nav';
 import { canAccessModule } from '../lib/module-access';
 import { formatDisplayDate, formatRelativeTime, getOperationStatus, safePct } from './dashboard/helpers';
 import { DashboardSkeleton } from './dashboard/DashboardSkeleton';
@@ -208,6 +211,11 @@ export default function DashboardPrincipal() {
 
   const { user, empresas, empresaAtualId } = useAuth();
   const { can, isAluno, isInstrutor } = usePermissions();
+
+  if (!canSeeAdministrativeDashboard(user)) {
+    return <Navigate to="/funcionarios" replace />;
+  }
+
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
   const modulosAtivos = empresaAtual?.modulos_ativos;
   const canSeeRestrictedDevelopmentNav = canSeeDevelopmentModules(user);
