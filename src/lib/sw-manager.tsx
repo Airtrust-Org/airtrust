@@ -23,9 +23,15 @@ interface ServiceWorkerUpdateEvent {
 }
 
 const FRONTEND_VERSION_STORAGE_KEY = 'airtrust-frontend-version';
+const LOGIN_CACHE_RECOVERY_SESSION_KEY = 'airtrust-login-cache-recovery-v3';
+const LOGIN_CACHE_RECOVERY_QUERY_PARAM = 'airtrust_login_recovered';
 
 function shouldBypassServiceWorkerForPath(pathname: string): boolean {
   return /^\/lms\/player\//.test(pathname) || pathname === '/login';
+}
+
+function isLoginPath(pathname: string): boolean {
+  return pathname === '/login';
 }
 
 async function unregisterServiceWorkersAndCaches(): Promise<void> {
@@ -35,11 +41,64 @@ async function unregisterServiceWorkersAndCaches(): Promise<void> {
   await Promise.all(registrations.map((reg) => reg.unregister()));
 }
 
+function cleanupLoginRecoveryQueryParam(): boolean {
+  if (!isLoginPath(window.location.pathname)) return false;
+
+  const currentUrl = new URL(window.location.href);
+  if (!currentUrl.searchParams.has(LOGIN_CACHE_RECOVERY_QUERY_PARAM)) return false;
+
+  currentUrl.searchParams.delete(LOGIN_CACHE_RECOVERY_QUERY_PARAM);
+  window.history.replaceState(window.history.state, document.title, currentUrl.toString());
+  return true;
+}
+
+async function recoverLoginPageFromLegacyCaches(): Promise<void> {
+  if (!isLoginPath(window.location.pathname)) return;
+
+  const recoveredFromQueryParam = cleanupLoginRecoveryQueryParam();
+
+  const cacheNames = await caches.keys();
+  const airTrustCacheNames = cacheNames.filter((name) => name.startsWith('airtrust-'));
+  const registrations =
+    'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistrations() : [];
+  const hasController = 'serviceWorker' in navigator && navigator.serviceWorker.controller !== null;
+  const shouldReloadOnce = hasController || airTrustCacheNames.length > 0;
+
+  await unregisterServiceWorkersAndCaches();
+
+  if (recoveredFromQueryParam) {
+    sessionStorage.removeItem(LOGIN_CACHE_RECOVERY_SESSION_KEY);
+    return;
+  }
+
+  if (!shouldReloadOnce) {
+    sessionStorage.removeItem(LOGIN_CACHE_RECOVERY_SESSION_KEY);
+    return;
+  }
+
+  if (sessionStorage.getItem(LOGIN_CACHE_RECOVERY_SESSION_KEY) === '1') {
+    return;
+  }
+
+  sessionStorage.setItem(LOGIN_CACHE_RECOVERY_SESSION_KEY, '1');
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set(LOGIN_CACHE_RECOVERY_QUERY_PARAM, '1');
+
+  if (registrations.length > 0 || hasController || airTrustCacheNames.length > 0) {
+    window.location.replace(nextUrl.toString());
+  }
+}
+
 /**
  * Hook: registra SW e monitora atualizações
  */
 export function useServiceWorkerUpdates(): void {
   useEffect(() => {
+    if (isLoginPath(window.location.pathname)) {
+      void recoverLoginPageFromLegacyCaches();
+      return;
+    }
+
     if (shouldBypassServiceWorkerForPath(window.location.pathname)) {
       void unregisterServiceWorkersAndCaches();
       return;
@@ -169,7 +228,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   }
 
   if (shouldBypassServiceWorkerForPath(window.location.pathname)) {
-    console.log('[SW] Desabilitado para rota LMS player');
+    console.log('[SW] Desabilitado para rota que exige bypass de cache');
     await unregisterServiceWorkersAndCaches();
     return null;
   }
