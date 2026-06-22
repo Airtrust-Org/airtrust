@@ -385,15 +385,57 @@ function extractProgressPctFromCmiJson(cmiJson: string | null | undefined): numb
   }
 }
 
+function resolveScormScorePct(params: {
+  scoreRaw?: number | null;
+  scoreMax?: number | null;
+  scoreScaled?: number | null;
+}): number | null {
+  const scaled =
+    params.scoreScaled == null || params.scoreScaled === ''
+      ? null
+      : Number(params.scoreScaled);
+  if (scaled != null && Number.isFinite(scaled) && scaled >= 0 && scaled <= 1) {
+    return clampPct(scaled * 100);
+  }
+
+  const raw =
+    params.scoreRaw == null || params.scoreRaw === '' ? null : Number(params.scoreRaw);
+  const max =
+    params.scoreMax == null || params.scoreMax === '' ? null : Number(params.scoreMax);
+  if (raw != null && max != null && Number.isFinite(raw) && Number.isFinite(max) && max > 0) {
+    return clampPct((raw / max) * 100);
+  }
+
+  if (raw != null && Number.isFinite(raw) && raw >= 0) {
+    return clampPct(raw);
+  }
+
+  return null;
+}
+
 /** Verifica se o status SCORM indica conclusão com sucesso */
-function isScormSuccess(data: z.infer<typeof ScormCommitSchema>): boolean {
+function isScormSuccess(
+  data: z.infer<typeof ScormCommitSchema>,
+  options?: {
+    masteryScore?: number | null;
+    effectiveScorePct?: number | null;
+  },
+): boolean {
   const ls = (data.lesson_status ?? '').toLowerCase();
   const cs = (data.completion_status ?? '').toLowerCase();
   const ss = (data.success_status ?? '').toLowerCase();
+  const masteryScore = Number(options?.masteryScore);
+  const hasMasteryScore = Number.isFinite(masteryScore) && masteryScore > 0;
+  const effectiveScorePct = Number(options?.effectiveScorePct);
+  const meetsMasteryScore =
+    !hasMasteryScore ||
+    (Number.isFinite(effectiveScorePct) && effectiveScorePct >= masteryScore);
   // SCORM 1.2
-  if (ls === 'passed' || ls === 'completed') return true;
+  if (ls === 'passed') return true;
+  if (ls === 'completed') return meetsMasteryScore;
   // SCORM 2004
-  if (cs === 'completed' && (ss === 'passed' || ss === 'unknown')) return true;
+  if (ss === 'passed') return cs !== 'incomplete';
+  if (cs === 'completed' && (ss === 'unknown' || !ss)) return meetsMasteryScore;
   return false;
 }
 
@@ -1210,9 +1252,6 @@ app.post('/scorm/commit', async (c) => {
     }
   }
 
-  const sucesso = isScormSuccess(d);
-  const falha = isScormFailed(d);
-
   // Calcular progresso (estimativa com score e/ou posição SCORM)
   const progressoAnterior = Number(matricula.progresso_pct ?? 0);
   const inferredFromLocation = extractProgressPctFromCmiJson(d.cmi_json);
@@ -1220,6 +1259,22 @@ app.post('/scorm/commit', async (c) => {
     d.score_raw != null && d.score_max != null && d.score_max > 0
       ? clampPct((d.score_raw / d.score_max) * 100)
       : null;
+  const effectiveScoreRaw = mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null);
+  const effectiveScoreMax = mergeMonotonicNumber(scormAtual?.score_max ?? null, d.score_max ?? null);
+  const effectiveScoreScaled = mergeMonotonicNumber(
+    scormAtual?.score_scaled ?? null,
+    d.score_scaled ?? null,
+  );
+  const effectiveScorePct = resolveScormScorePct({
+    scoreRaw: effectiveScoreRaw,
+    scoreMax: effectiveScoreMax,
+    scoreScaled: effectiveScoreScaled,
+  });
+  const sucesso = isScormSuccess(d, {
+    masteryScore: matricula.scorm_mastery_score,
+    effectiveScorePct,
+  });
+  const falha = isScormFailed(d);
 
   let progressoPct = progressoAnterior;
   if (sucesso) {
@@ -1302,10 +1357,10 @@ app.post('/scorm/commit', async (c) => {
         preferIncomingScormState,
       ),
       preferScormValue(scormAtual?.success_status ?? null, d.success_status ?? null, preferIncomingScormState),
-      mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null),
-      mergeMonotonicNumber(scormAtual?.score_max ?? null, d.score_max ?? null),
+      effectiveScoreRaw,
+      effectiveScoreMax,
       mergeMonotonicNumber(scormAtual?.score_min ?? null, d.score_min ?? null),
-      mergeMonotonicNumber(scormAtual?.score_scaled ?? null, d.score_scaled ?? null),
+      effectiveScoreScaled,
       preferScormValue(scormAtual?.session_time ?? null, d.session_time ?? null, preferIncomingScormState),
       preferScormValue(scormAtual?.total_time ?? null, d.total_time ?? null, preferIncomingScormState),
       preferScormValue(scormAtual?.suspend_data ?? null, d.suspend_data ?? null, preferIncomingScormState),
@@ -1354,9 +1409,9 @@ app.post('/scorm/commit', async (c) => {
       mergedLocation?.current ?? null,
       dataConclusao,
       sucesso || falha ? 1 : 0,
-      mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null),
-      mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null),
-      mergeMonotonicNumber(scormAtual?.score_raw ?? null, d.score_raw ?? null),
+      effectiveScoreRaw,
+      effectiveScoreRaw,
+      effectiveScoreRaw,
       d.matricula_id,
       empresaId,
     )

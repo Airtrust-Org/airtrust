@@ -372,6 +372,14 @@ export default function App() {
                         }
                       />
                       <Route
+                        path="/dashboard"
+                        element={
+                          <ProtectedRoute>
+                            <HomeRouter />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
                         path="/perfil/trocar-senha"
                         element={
                           <ProtectedRoute>

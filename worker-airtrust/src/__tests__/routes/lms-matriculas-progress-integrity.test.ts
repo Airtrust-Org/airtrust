@@ -330,4 +330,261 @@ describe('lms matriculas progress integrity', () => {
     expect(matriculaUpdate?.args[1]).toBe(80);
     expect(matriculaUpdate?.args[2]).toBe(103);
   });
+
+  it('conclui commit SCORM 1.2 quando lesson_status=completed e score atende mastery', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 163,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 0,
+            tentativas: 0,
+            qualificacao_historico_id: null,
+            scorm_mastery_score: 70,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 125,
+            curso_titulo: 'MGM - Manual Geral de Manutenção',
+            qualificacao_codigo: 'MNT_MGM',
+            qualificacao_nome: 'MGM - Manual Geral de Manutenção',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 12,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => null,
+        },
+      ],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 0 } }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    createLmsQualificationOnCompletionMock.mockResolvedValue(9001);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/commit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 163,
+          lesson_status: 'completed',
+          score_raw: 85,
+          score_max: 100,
+          cmi_json: JSON.stringify({
+            'cmi.core.lesson_status': 'completed',
+            'cmi.core.score.raw': '85',
+          }),
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        matricula_id: 163,
+        novo_status: 'CONCLUIDO',
+        progresso_pct: 100,
+        qualificacao_gerada: {
+          qualificacao_historico_id: 9001,
+        },
+      },
+    });
+
+    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matriculaId: 163,
+        qualificacaoTipoId: 125,
+      }),
+    );
+    const matriculaUpdate = calls.find(
+      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
+    );
+    expect(matriculaUpdate?.args[0]).toBe('CONCLUIDO');
+    expect(matriculaUpdate?.args[1]).toBe(100);
+  });
+
+  it('conclui commit SCORM 2004 quando completion_status=completed e success_status=passed', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 164,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 40,
+            tentativas: 0,
+            qualificacao_historico_id: null,
+            scorm_mastery_score: 70,
+            gerar_qualificacao_ao_concluir: 0,
+            qualificacao_tipo_id: null,
+            curso_titulo: 'SCORM 2004 Teste',
+            qualificacao_codigo: null,
+            qualificacao_nome: null,
+            qualificacao_categoria: null,
+            qualificacao_validade: null,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => null,
+        },
+      ],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 0 } }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/commit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 164,
+          completion_status: 'completed',
+          success_status: 'passed',
+          score_raw: 92,
+          score_max: 100,
+          score_scaled: 0.92,
+          cmi_json: JSON.stringify({
+            'cmi.completion_status': 'completed',
+            'cmi.success_status': 'passed',
+            'cmi.score.raw': '92',
+          }),
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        matricula_id: 164,
+        novo_status: 'CONCLUIDO',
+        progresso_pct: 100,
+      },
+    });
+  });
+
+  it('nao conclui commit SCORM completed quando o score fica abaixo do mastery score', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 165,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 55,
+            tentativas: 0,
+            qualificacao_historico_id: null,
+            scorm_mastery_score: 70,
+            gerar_qualificacao_ao_concluir: 0,
+            qualificacao_tipo_id: null,
+            curso_titulo: 'MGM - Manual Geral de Manutenção',
+            qualificacao_codigo: null,
+            qualificacao_nome: null,
+            qualificacao_categoria: null,
+            qualificacao_validade: null,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => null,
+        },
+      ],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 0 } }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/commit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 165,
+          lesson_status: 'completed',
+          score_raw: 45,
+          score_max: 100,
+          cmi_json: JSON.stringify({
+            'cmi.core.lesson_status': 'completed',
+            'cmi.core.score.raw': '45',
+          }),
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        matricula_id: 165,
+        novo_status: 'EM_ANDAMENTO',
+      },
+    });
+
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    const matriculaUpdate = calls.find(
+      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
+    );
+    expect(matriculaUpdate?.args[0]).toBe('EM_ANDAMENTO');
+    expect(matriculaUpdate?.args[1]).toBe(55);
+  });
 });

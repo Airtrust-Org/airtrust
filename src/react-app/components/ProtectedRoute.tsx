@@ -3,7 +3,12 @@ import { Ban } from 'lucide-react';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
-import { canAccessModule, getModuleKeyForPath } from '@/react-app/lib/module-access';
+import { canSeeDevelopmentModules } from '@/react-app/lib/development-module-nav';
+import {
+  canAccessModule,
+  getModuleKeyForPath,
+  requiresRestrictedDevelopmentModuleAccess,
+} from '@/react-app/lib/module-access';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -128,6 +133,30 @@ export default function ProtectedRoute({
             className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             Voltar ao dashboard
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (
+    moduleKey &&
+    requiresRestrictedDevelopmentModuleAccess(moduleKey) &&
+    !canSeeDevelopmentModules(user)
+  ) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm max-w-md w-full text-center">
+          <Ban className="w-14 h-14 text-red-500 mb-4 mx-auto" />
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">
+            {t('protected.denied.title')}
+          </h2>
+          <p className="text-sm text-slate-600 mb-6">{t('protected.denied.description')}</p>
+          <a
+            href="/funcionarios"
+            className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            {t('protected.denied.backHome')}
           </a>
         </div>
       </div>

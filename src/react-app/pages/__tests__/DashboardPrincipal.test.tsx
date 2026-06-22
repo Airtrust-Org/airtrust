@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DashboardPrincipal from '../DashboardPrincipal';
@@ -78,9 +78,9 @@ function buildAuthContext(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     user: {
       id: 1,
-      nome: 'Gestor Teste',
-      email: 'gestor@empresa.com',
-      role: 'GESTOR',
+      nome: 'Admin Principal',
+      email: 'filipe.daumas@icloud.com',
+      role: 'ADMINISTRADOR',
       permissions: [],
       funcionario_id: null,
     },
@@ -89,7 +89,7 @@ function buildAuthContext(overrides: Partial<Record<string, unknown>> = {}) {
         id: 1,
         nome: 'AirTrust',
         codigo: 'AIR',
-        role: 'GESTOR',
+        role: 'ADMINISTRADOR',
         is_primary: 1,
         is_current: 1,
         modulos_ativos: ['funcionarios', 'qualificacoes', 'simuladores', 'escalas', 'frms', 'sgso'],
@@ -102,8 +102,11 @@ function buildAuthContext(overrides: Partial<Record<string, unknown>> = {}) {
 
 function renderDashboard() {
   return render(
-    <MemoryRouter>
-      <DashboardPrincipal />
+    <MemoryRouter initialEntries={['/dashboard']}>
+      <Routes>
+        <Route path="/dashboard" element={<DashboardPrincipal />} />
+        <Route path="/funcionarios" element={<div>funcionarios-page</div>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -124,8 +127,8 @@ describe('DashboardPrincipal', () => {
           'frms.view',
           'sgso.view',
         ].includes(permission),
-      isAdmin: false,
-      isGestor: true,
+      isAdmin: true,
+      isGestor: false,
       isInstrutor: false,
       isAluno: false,
     });
@@ -296,5 +299,43 @@ describe('DashboardPrincipal', () => {
     expect(screen.queryByText('SGSO')).toBeNull();
     expect(screen.queryByText('Manutenção')).toBeNull();
     expect(screen.queryByText('Controle de Voos')).toBeNull();
+  });
+
+  it('redireciona gestor para /funcionarios sem renderizar o painel principal', () => {
+    useAuthMock.mockReturnValue(
+      buildAuthContext({
+        user: {
+          id: 1,
+          nome: 'Gestor Teste',
+          email: 'gestor@empresa.com',
+          role: 'GESTOR',
+          permissions: [],
+          funcionario_id: null,
+        },
+        empresas: [
+          {
+            id: 1,
+            nome: 'AirTrust',
+            codigo: 'AIR',
+            role: 'GESTOR',
+            is_primary: 1,
+            is_current: 1,
+            modulos_ativos: ['funcionarios', 'qualificacoes', 'simuladores', 'escalas', 'frms', 'sgso'],
+          },
+        ],
+      }),
+    );
+    usePermissionsMock.mockReturnValue({
+      can: () => true,
+      isAdmin: false,
+      isGestor: true,
+      isInstrutor: false,
+      isAluno: false,
+    });
+
+    renderDashboard();
+
+    expect(screen.getByText('funcionarios-page')).toBeInTheDocument();
+    expect(useMetricsQueryMock).not.toHaveBeenCalled();
   });
 });
