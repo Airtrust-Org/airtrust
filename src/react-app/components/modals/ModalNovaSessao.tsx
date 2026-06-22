@@ -23,6 +23,7 @@ import AlertModal from '@/react-app/components/modals/AlertModal';
 import ConfirmDeleteModal from '@/react-app/components/modals/ConfirmDeleteModal';
 import { emitirEventoModulo, escutarEventosModulo } from '@/react-app/lib/moduloBus';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import {
   filterCompatibleCheckIds,
@@ -36,7 +37,11 @@ import {
 } from './modalNovaSessaoRules';
 import { enviarNotificacaoSessao, montarResumoCanal } from '@/react-app/utils/sessaoNotificacoes';
 import { isSharedSessionsEnabled } from '@/react-app/config/sharedSessions';
-import SharedSessionForm, { type SharedSessionStep } from './SharedSessionForm';
+import SharedSessionForm, {
+  type SharedSessionFormHandle,
+  type SharedSessionFormState,
+  type SharedSessionStep,
+} from './SharedSessionForm';
 
 interface ModeloAeronave {
   id: number;
@@ -154,6 +159,7 @@ export default function ModalNovaSessao({
   const getFuncaoParticipante = (index: number): 'PIC' | 'SIC' => (index === 0 ? 'PIC' : 'SIC');
 
   const isEditMode = !!sessao?.id;
+  const { can } = usePermissions();
   // ========== STATES ==========
   const [loading, setLoading] = useState(false);
   const [sendingChannel, setSendingChannel] = useState<'email' | 'whatsapp' | null>(null);
@@ -213,6 +219,11 @@ export default function ModalNovaSessao({
   const [modoCompartilhado, setModoCompartilhado] = useState(false);
   const [sharedSessionsEnabled, setSharedSessionsEnabled] = useState(false);
   const [sharedSessionStep, setSharedSessionStep] = useState<SharedSessionStep>('tripulacao');
+  const [sharedFormState, setSharedFormState] = useState<SharedSessionFormState>({
+    activeStep: 'tripulacao',
+    loading: false,
+  });
+  const sharedFormRef = useRef<SharedSessionFormHandle | null>(null);
 
   const {
     hasFap07Selecionada,
@@ -1626,6 +1637,7 @@ export default function ModalNovaSessao({
     setParticipantes(participantesIniciais());
     setModoCompartilhado(false);
     setSharedSessionStep('tripulacao');
+    setSharedFormState({ activeStep: 'tripulacao', loading: false });
   }
 
   // ========== AÇÕES EXTRAS (EMAIL, WHATSAPP, DELETE, FICHAS) ==========
@@ -1694,6 +1706,28 @@ export default function ModalNovaSessao({
   if (!isOpen) return null;
 
   const showSharedReservationFields = true; // Always show — reservation data always visible
+  const canDeleteSession = can('simuladores.schedule');
+  const showEditActions = isEditMode;
+  const showDeleteAction = showEditActions && canDeleteSession;
+  const actionButtonsDisabled = loading || sendingChannel !== null || sharedFormState.loading;
+  const footerBusy = loading || sharedFormState.loading;
+  const footerPrimaryLabel = modoCompartilhado
+    ? sharedFormState.loading
+      ? sharedSessionStep === 'segmentos'
+        ? 'Salvando...'
+        : 'Continuando...'
+      : sharedSessionStep === 'tripulacao'
+        ? 'Continuar para Segmentos'
+        : isEditMode
+          ? 'Salvar Alterações'
+          : 'Criar Sessão'
+    : loading
+      ? isEditMode
+        ? 'Atualizando...'
+        : 'Criando sessão...'
+      : isEditMode
+        ? 'Salvar Alterações'
+        : 'Criar Sessão';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
@@ -2296,6 +2330,7 @@ export default function ModalNovaSessao({
 
           {modoCompartilhado && (
             <SharedSessionForm
+              ref={sharedFormRef}
               onClose={onClose}
               onSuccess={onSuccess}
               simuladorId={simuladorId}
@@ -2312,18 +2347,18 @@ export default function ModalNovaSessao({
               editSessionId={isEditMode ? sessao?.id : null}
               activeStep={sharedSessionStep}
               onActiveStepChange={setSharedSessionStep}
+              hideFooter
+              onStateChange={setSharedFormState}
             />
           )}
         </div>
 
-          {/* ========== FOOTER ========== */}
-          {!modoCompartilhado && (
         <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center gap-2">
-          {isEditMode && (
+          {showEditActions && (
             <>
               <button
                 onClick={handleEnviarEmail}
-                disabled={loading || sendingChannel !== null}
+                disabled={actionButtonsDisabled}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-emerald-700 bg-white border border-slate-200 hover:bg-emerald-50 rounded-lg transition disabled:opacity-50"
               >
                 <Mail size={14} />
@@ -2331,7 +2366,7 @@ export default function ModalNovaSessao({
               </button>
               <button
                 onClick={handleEnviarWhatsApp}
-                disabled={loading || sendingChannel !== null}
+                disabled={actionButtonsDisabled}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-green-700 bg-white border border-slate-200 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
               >
                 <MessageCircle size={14} />
@@ -2339,46 +2374,47 @@ export default function ModalNovaSessao({
               </button>
               <button
                 onClick={handleVerFichas}
-                disabled={loading}
+                disabled={footerBusy}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-700 bg-white border border-slate-200 hover:bg-blue-50 rounded-lg transition disabled:opacity-50"
               >
                 <FileText size={14} />
                 Fichas
                 {sessao?.fichas && sessao.fichas.length > 0 ? ` (${sessao.fichas.length})` : ''}
               </button>
-              <button
-                onClick={handleDelete}
-                disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-700 bg-white border border-red-200 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
-              >
-                <Trash2 size={14} />
-                Excluir
-              </button>
+              {showDeleteAction && (
+                <button
+                  onClick={handleDelete}
+                  disabled={footerBusy}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-700 bg-white border border-red-200 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  Excluir
+                </button>
+              )}
             </>
           )}
           <div className="flex-1" />
           <button
             onClick={onClose}
-            disabled={loading}
+            disabled={footerBusy}
             className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
-            onClick={handleSubmit}
-            disabled={loading}
+            onClick={() => {
+              if (modoCompartilhado) {
+                sharedFormRef.current?.triggerPrimaryAction();
+                return;
+              }
+              void handleSubmit();
+            }}
+            disabled={footerBusy}
             className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition disabled:opacity-50"
           >
-            {loading
-              ? isEditMode
-                ? 'Atualizando...'
-                : 'Criando sessão...'
-              : isEditMode
-                ? 'Salvar Alterações'
-                : 'Criar Sessão'}
+            {footerPrimaryLabel}
           </button>
         </div>
-          )}
       </div>
 
       {/* Modal de confirmação de exclusão */}

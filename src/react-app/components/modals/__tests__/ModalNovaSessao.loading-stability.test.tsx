@@ -10,6 +10,20 @@ vi.mock('@/react-app/config/api', () => ({
   getAccessToken: () => 'token-teste',
 }));
 
+vi.mock('@/react-app/hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    can: () => true,
+    canAll: () => true,
+    role: 'ADMINISTRADOR',
+    isAdmin: true,
+    isGestor: false,
+    isInstrutor: false,
+    isAluno: false,
+    isAuthenticated: true,
+    user: { id: 1, role: 'ADMINISTRADOR' },
+  }),
+}));
+
 vi.mock('@/react-app/lib/moduloBus', () => ({
   emitirEventoModulo: vi.fn(),
   escutarEventosModulo: vi.fn(() => () => {}),

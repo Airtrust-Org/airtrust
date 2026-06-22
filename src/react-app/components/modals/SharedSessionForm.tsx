@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useState,
+} from 'react';
 import { AlertTriangle, CheckCircle2, Clock, FileText, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { FuncionarioCombobox } from '@/react-app/components/simuladores/FuncionarioCombobox';
@@ -11,6 +18,15 @@ import {
 } from '@/react-app/config/sharedSessions';
 
 export type SharedSessionStep = 'tripulacao' | 'segmentos';
+
+export interface SharedSessionFormHandle {
+  triggerPrimaryAction: () => void;
+}
+
+export interface SharedSessionFormState {
+  activeStep: SharedSessionStep;
+  loading: boolean;
+}
 
 interface Funcionario {
   id: number;
@@ -69,6 +85,8 @@ interface SharedSessionFormProps {
   editSessionId?: number | null;
   activeStep?: SharedSessionStep;
   onActiveStepChange?: (step: SharedSessionStep) => void;
+  hideFooter?: boolean;
+  onStateChange?: (state: SharedSessionFormState) => void;
 }
 
 interface SharedDetailAssignment {
@@ -151,7 +169,7 @@ function formatModelOption(model: ModeloSessao): string {
   return details.length > 0 ? `${title} (${details.join(' · ')})` : title;
 }
 
-export default function SharedSessionForm({
+const SharedSessionForm = forwardRef<SharedSessionFormHandle, SharedSessionFormProps>(function SharedSessionForm({
   onClose,
   onSuccess,
   simuladorId,
@@ -168,7 +186,9 @@ export default function SharedSessionForm({
   editSessionId,
   activeStep: controlledActiveStep,
   onActiveStepChange,
-}: SharedSessionFormProps) {
+  hideFooter = false,
+  onStateChange,
+}, ref) {
   const [internalActiveStep, setInternalActiveStep] = useState<SharedSessionStep>('tripulacao');
   const activeStep = controlledActiveStep || internalActiveStep;
   const setActiveStep = useCallback(
@@ -670,6 +690,24 @@ export default function SharedSessionForm({
     }
   };
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      triggerPrimaryAction: () => {
+        if (activeStep === 'tripulacao') {
+          requestStep('segmentos');
+          return;
+        }
+        void handleSubmit();
+      },
+    }),
+    [activeStep, handleSubmit, requestStep],
+  );
+
+  useEffect(() => {
+    onStateChange?.({ activeStep, loading });
+  }, [activeStep, loading, onStateChange]);
+
   if (hydrating) {
     return <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500">Carregando dados da sessão compartilhada...</div>;
   }
@@ -831,14 +869,16 @@ export default function SharedSessionForm({
           {participantErrors.map((error) => <p key={error}>{error}</p>)}
         </div>
       )}
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
-        <button type="button" onClick={onClose} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-          Cancelar
-        </button>
-        <button type="button" onClick={() => requestStep('segmentos')} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-          Continuar para Segmentos
-        </button>
-      </div>
+      {!hideFooter && (
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
+          <button type="button" onClick={onClose} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+            Cancelar
+          </button>
+          <button type="button" onClick={() => requestStep('segmentos')} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            Continuar para Segmentos
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -997,17 +1037,28 @@ export default function SharedSessionForm({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
-        {submitted && allErrors.length > 0 && (
-          <p className="mr-auto text-xs text-red-700">{allErrors.length} pendência(s) precisam ser corrigidas antes de salvar.</p>
-        )}
-        <button type="button" onClick={() => requestStep('tripulacao')} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-          Voltar para Tripulação
-        </button>
-        <button type="button" onClick={handleSubmit} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-          {loading ? 'Salvando...' : editSessionId ? 'Salvar sessão compartilhada' : 'Criar sessão compartilhada'}
-        </button>
-      </div>
+      {hideFooter ? (
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4">
+          {submitted && allErrors.length > 0 && (
+            <p className="mr-auto text-xs text-red-700">{allErrors.length} pendência(s) precisam ser corrigidas antes de salvar.</p>
+          )}
+          <button type="button" onClick={() => requestStep('tripulacao')} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+            Voltar para Tripulação
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
+          {submitted && allErrors.length > 0 && (
+            <p className="mr-auto text-xs text-red-700">{allErrors.length} pendência(s) precisam ser corrigidas antes de salvar.</p>
+          )}
+          <button type="button" onClick={() => requestStep('tripulacao')} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+            Voltar para Tripulação
+          </button>
+          <button type="button" onClick={handleSubmit} disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {loading ? 'Salvando...' : editSessionId ? 'Salvar sessão compartilhada' : 'Criar sessão compartilhada'}
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -1071,4 +1122,6 @@ export default function SharedSessionForm({
       {activeStep === 'segmentos' && renderSegmentsStep()}
     </section>
   );
-}
+});
+
+export default SharedSessionForm;
