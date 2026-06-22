@@ -6,12 +6,12 @@ Data: 2026-06-21
 
 - PR: `#122`
 - Branch remota do PR: `codex/operational-scope-hardening`
-- Head final validado nesta macroetapa: `cb7973f97f8307f936ef795d9530790e5c11c823`
+- Head final validado nesta macroetapa: `7c83973d844d32a57e60af48d92520db8b1efd52`
 - Ambiente efetivamente usado para a reexecução controlada: `worker local dummy` + `D1 local`
 - Runtime correto do PR comprovado: `SIM`
 - Evidência de runtime:
   - `GET /api/version` no worker local autenticado retornou `version=36c7670c`, `deploymentId=36c7670c`, `environment=development` na prova do runtime local do PR antes do patch final de `ETag`
-  - o head final `cb7973f97f8307f936ef795d9530790e5c11c823` preserva o mesmo runtime do PR e adiciona apenas o endurecimento tenant-aware do `ETag`
+  - o head final `7c83973d844d32a57e60af48d92520db8b1efd52` preserva o mesmo runtime do PR e adiciona apenas o endurecimento tenant-aware do `ETag`
   - `GET /api/dashboard/simuladores-alertas` retornou `200` no runtime local correto
 - Banco usado: `airtrust-db-local`
 - Frontend completo: `NAO VALIDADO`
@@ -125,7 +125,7 @@ Validações desta macroetapa após o patch:
 - `vitest` `src/__tests__/routes/simuladores-fichas-scope.test.ts` -> `PASS` (`7 passed`)
 - reexecução manual do cenário real de `ETag` no worker local correto -> `PASS`
 
-CI remota do head final `cb7973f97f8307f936ef795d9530790e5c11c823`:
+CI remota do head final `7c83973d844d32a57e60af48d92520db8b1efd52`:
 
 - `build` -> `pass`
 - `check-demo-data` -> `pass`
@@ -171,7 +171,7 @@ Decisão operacional consolidada: `PROMOVER PR #122 PARA READY`
 Motivos objetivos:
 
 1. O runtime correto do PR foi provado no ambiente local autenticado e o endpoint principal do dashboard passou.
-2. O bug real de cache cross-tenant em `stats-extended` foi corrigido no head final `cb7973f97f8307f936ef795d9530790e5c11c823`.
+2. O bug real de cache cross-tenant em `stats-extended` foi corrigido no head final `7c83973d844d32a57e60af48d92520db8b1efd52`.
 3. A CI remota do head final ficou totalmente verde.
 4. Os negativos item-level remanescentes para `lms/cursos/:id` e `simuladores/fichas/:id` foram fechados com testes dirigidos no head final.
 5. O smoke autenticado essencial passou e não houve evidência de payload cross-tenant, `304` cruzado indevido, escrita cross-tenant, alteração de schema de produção ou toque em SIGVOOS.
