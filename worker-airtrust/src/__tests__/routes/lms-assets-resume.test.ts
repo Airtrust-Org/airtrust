@@ -1,9 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseScormLocationPair, resolveScormResumeTargetSlide } from '../../routes/lms-assets';
+import {
+  parseScormLocationMarker,
+  parseScormLocationPair,
+  resolveScormResumeTargetSlide,
+} from '../../routes/lms-assets';
 
 describe('SCORM resume restore helpers', () => {
+  it('parseia marcadores numericos simples usados por alguns pacotes AW', () => {
+    expect(parseScormLocationMarker('238')).toEqual({ current: 238, total: null });
+    expect(parseScormLocationPair('238')).toBeNull();
+  });
+
   it('parseia localizações SCORM numéricas nos formatos suportados', () => {
     expect(parseScormLocationPair('22/103')).toEqual({ current: 22, total: 103 });
     expect(parseScormLocationPair(' 22 / 103 ')).toEqual({ current: 22, total: 103 });
@@ -15,6 +24,9 @@ describe('SCORM resume restore helpers', () => {
   });
 
   it('só restaura quando o slide observado está atrás do slide salvo', () => {
+    expect(resolveScormResumeTargetSlide('238', null)).toBe(238);
+    expect(resolveScormResumeTargetSlide('238', '1/380')).toBe(238);
+    expect(resolveScormResumeTargetSlide('238', '238/380')).toBeNull();
     expect(resolveScormResumeTargetSlide('22/103', null)).toBe(22);
     expect(resolveScormResumeTargetSlide('22/103', '1/103')).toBe(22);
     expect(resolveScormResumeTargetSlide('22 of 103', ' 1 / 103 ')).toBe(22);

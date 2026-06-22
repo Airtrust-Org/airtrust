@@ -56,9 +56,9 @@ function isPrivilegedRole(rawRole: unknown): boolean {
   return ['admin', 'administrador', 'manager', 'gestor', 'instrutor', 'instructor'].includes(role);
 }
 
-export function parseScormLocationPair(
+export function parseScormLocationMarker(
   location: unknown,
-): { current: number; total: number } | null {
+): { current: number; total: number | null } | null {
   if (typeof location !== 'string' || !location.trim()) return null;
 
   const trimmed = location.trim();
@@ -66,28 +66,43 @@ export function parseScormLocationPair(
   if (!match) {
     match = trimmed.match(/(\d+)\s*of\s*(\d+)/i);
   }
-  if (!match) return null;
+  if (match) {
+    const current = Number(match[1]);
+    const total = Number(match[2]);
+    if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0 || current < 0) {
+      return null;
+    }
 
-  const current = Number(match[1]);
-  const total = Number(match[2]);
-  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0 || current < 0) {
-    return null;
+    return { current, total };
   }
 
-  return { current, total };
+  const single = Number(trimmed);
+  if (Number.isFinite(single) && single > 0) {
+    return { current: single, total: null };
+  }
+
+  return null;
+}
+
+export function parseScormLocationPair(
+  location: unknown,
+): { current: number; total: number } | null {
+  const marker = parseScormLocationMarker(location);
+  if (!marker || marker.total == null) return null;
+  return { current: marker.current, total: marker.total };
 }
 
 export function resolveScormResumeTargetSlide(
   savedLocation: unknown,
   observedLocation: unknown,
 ): number | null {
-  const saved = parseScormLocationPair(savedLocation);
+  const saved = parseScormLocationMarker(savedLocation);
   if (!saved || saved.current <= 1) return null;
 
-  const observed = parseScormLocationPair(observedLocation);
+  const observed = parseScormLocationMarker(observedLocation);
   if (observed) {
     if (observed.current >= saved.current) return null;
-    if (observed.total > 0 && saved.current > observed.total) return null;
+    if (observed.total != null && saved.current > observed.total) return null;
   }
 
   return saved.current;
@@ -1044,6 +1059,7 @@ function buildLaunchPage(cfg: LaunchPageConfig): string {
 </div>
 
 <script>
+${parseScormLocationMarker.toString()}
 ${parseScormLocationPair.toString()}
 ${resolveScormResumeTargetSlide.toString()}
 
@@ -1157,6 +1173,10 @@ ${resolveScormResumeTargetSlide.toString()}
 
   function parseLocationPair(location) {
     return parseScormLocationPair(location);
+  }
+
+  function parseLocationMarker(location) {
+    return parseScormLocationMarker(location);
   }
 
   function updateMaxVisitedFromLocation(location) {
@@ -1386,20 +1406,22 @@ ${resolveScormResumeTargetSlide.toString()}
 
       var existingLocation = getScormLocation();
       var previousLocation = existingLocation;
-      var existingParsed = parseLocationPair(existingLocation);
+      var existingParsed = parseLocationMarker(existingLocation);
       var effectiveCurrent = parsed.current;
       var effectiveTotal = parsed.total;
 
       // Nunca deixe a leitura inicial do DOM regredir um marcador já salvo.
       if (
         existingParsed &&
-        existingParsed.total > 0 &&
         parsed.total > 0 &&
-        existingParsed.total === parsed.total &&
-        existingParsed.current > parsed.current
+        existingParsed.current > parsed.current &&
+        (
+          existingParsed.total === parsed.total ||
+          (existingParsed.total == null && existingParsed.current <= parsed.total)
+        )
       ) {
         effectiveCurrent = existingParsed.current;
-        effectiveTotal = existingParsed.total;
+        effectiveTotal = parsed.total;
       }
 
       var location = String(effectiveCurrent) + '/' + String(effectiveTotal);

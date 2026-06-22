@@ -60,7 +60,9 @@ export function scormStatusIndicatesFailure(params: {
   return lessonStatus === 'failed' || successStatus === 'failed';
 }
 
-export function parseScormLocationPair(location: unknown): { current: number; total: number } | null {
+export function parseScormLocationMarker(
+  location: unknown,
+): { current: number; total: number | null } | null {
   if (typeof location !== 'string' || !location.trim()) return null;
 
   const trimmed = location.trim();
@@ -68,15 +70,28 @@ export function parseScormLocationPair(location: unknown): { current: number; to
   if (!match) {
     match = trimmed.match(/(\d+)\s*of\s*(\d+)/i);
   }
-  if (!match) return null;
+  if (match) {
+    const current = Number(match[1]);
+    const total = Number(match[2]);
+    if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0 || current < 0) {
+      return null;
+    }
 
-  const current = Number(match[1]);
-  const total = Number(match[2]);
-  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0 || current < 0) {
-    return null;
+    return { current, total };
   }
 
-  return { current, total };
+  const single = Number(trimmed);
+  if (Number.isFinite(single) && single > 0) {
+    return { current: single, total: null };
+  }
+
+  return null;
+}
+
+export function parseScormLocationPair(location: unknown): { current: number; total: number } | null {
+  const marker = parseScormLocationMarker(location);
+  if (!marker || marker.total == null) return null;
+  return { current: marker.current, total: marker.total };
 }
 
 export function extractScormLocationFromCmiJson(cmiJson: Nullable<string>) {
@@ -84,7 +99,7 @@ export function extractScormLocationFromCmiJson(cmiJson: Nullable<string>) {
 
   try {
     const parsed = JSON.parse(cmiJson) as Record<string, unknown>;
-    return parseScormLocationPair(parsed['cmi.location'] ?? parsed['cmi.core.lesson_location']);
+    return parseScormLocationMarker(parsed['cmi.location'] ?? parsed['cmi.core.lesson_location']);
   } catch {
     return null;
   }
