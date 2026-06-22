@@ -35,6 +35,11 @@ function flagToInt(value: unknown): number {
   return 0;
 }
 
+async function getFuncionariosColumns(db: D1Database): Promise<Set<string>> {
+  const cols = (await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>())
+    .results as Array<{ name: string }>;
+  return new Set(cols.map((col) => col.name));
+}
 
 function normalizeFuncionarioStatus(value?: string | null): string {
   const normalized = (value || '').trim().toUpperCase();
@@ -111,6 +116,7 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   const body = await c.req.json();
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
+  const funcionarioColumns = await getFuncionariosColumns(db);
   const setorPayload = await resolveSetorPayload(db, empresaId, body as Record<string, unknown>);
 
   // Validações obrigatórias (matrícula OPCIONAL agora)
@@ -154,92 +160,84 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     badRequest('CPF já cadastrado');
   }
 
-  // Inserir com TODOS os campos (novos são opcionais)
+  const insertColumns: string[] = [];
+  const insertValues: string[] = [];
+  const insertBindings: unknown[] = [];
+  const addInsertValue = (column: string, value: unknown) => {
+    if (!funcionarioColumns.has(column)) return;
+    insertColumns.push(column);
+    insertValues.push('?');
+    insertBindings.push(value);
+  };
+  const addInsertSql = (column: string, expression: string) => {
+    if (!funcionarioColumns.has(column)) return;
+    insertColumns.push(column);
+    insertValues.push(expression);
+  };
+
+  addInsertValue('matricula', body.matricula ? sanitizeString(body.matricula) : null);
+  addInsertValue('nome', body.nome ? sanitizeString(body.nome) : null);
+  addInsertValue('guerra', body.guerra || null);
+  addInsertValue('cpf', body.cpf ? body.cpf.replace(/\D/g, '') : null);
+  addInsertValue('rg', body.rg || null);
+  addInsertValue('nascimento', body.nascimento || null);
+  addInsertValue('sexo', body.sexo || null);
+  addInsertValue('nacionalidade', body.nacionalidade || 'Brasileira');
+  addInsertValue('email', body.email ? body.email.toLowerCase() : null);
+  addInsertValue('telefone', body.telefone || null);
+  addInsertValue('telefone_emergencia', body.telefone_emergencia || null);
+  addInsertValue('contato_emergencia_nome', body.contato_emergencia_nome || null);
+  addInsertValue('funcao', body.funcao || null);
+  addInsertValue('cargo', body.cargo || null);
+  addInsertValue('setor', setorPayload.setorNome);
+  addInsertValue('setor_id', setorPayload.setorId);
+  addInsertValue('base', body.base || null);
+  addInsertValue('modelo_aeronave_id', body.modelo_aeronave_id || null);
+  addInsertValue('admissao', body.admissao || null);
+  addInsertValue('codigo_anac', body.codigo_anac || null);
+  addInsertValue('nivel_icao', body.nivel_icao || null);
+  addInsertValue('data_realizacao_icao', body.data_realizacao_icao || null);
+  addInsertValue('validade_icao', body.validade_icao || null);
+  addInsertValue('cma', body.cma || null);
+  addInsertValue('data_realizacao_cma', body.data_realizacao_cma || null);
+  addInsertValue('validade_cma', body.validade_cma || null);
+  addInsertValue('aso', body.aso || null);
+  addInsertValue('data_realizacao_aso', body.data_realizacao_aso || null);
+  addInsertValue('validade_aso', body.validade_aso || null);
+  addInsertValue('sispat', body.sispat || null);
+  addInsertValue('prestserv', body.prestserv || null);
+  addInsertValue('cep', body.cep || null);
+  addInsertValue('logradouro', body.logradouro || null);
+  addInsertValue('numero', body.numero || null);
+  addInsertValue('complemento', body.complemento || null);
+  addInsertValue('bairro', body.bairro || null);
+  addInsertValue('cidade', body.cidade || null);
+  addInsertValue('estado', body.estado || null);
+  addInsertValue('observacoes', body.observacoes || null);
+  addInsertValue('foto_url', body.foto_url || null);
+  addInsertValue('status', normalizeFuncionarioStatus(body.status));
+  addInsertValue(
+    'ativo',
+    body.ativo !== undefined
+      ? body.ativo
+        ? 1
+        : 0
+      : normalizeFuncionarioStatus(body.status) === 'ATIVO'
+        ? 1
+        : 0,
+  );
+  addInsertValue('is_instrutor', flagToInt(body.is_instrutor));
+  addInsertValue('is_checador', flagToInt(body.is_checador));
+  addInsertValue('empresa_id', empresaId);
+  addInsertSql('created_at', "datetime('now')");
+  addInsertSql('updated_at', "datetime('now')");
+
   const query = `
-    INSERT INTO funcionarios (
-      matricula, nome, guerra, cpf, rg, nascimento, sexo, nacionalidade,
-      email, telefone, telefone_emergencia, contato_emergencia_nome,
-      funcao, cargo, setor, setor_id, base, modelo_aeronave_id, admissao, codigo_anac,
-      nivel_icao, data_realizacao_icao, validade_icao,
-      cma, data_realizacao_cma, validade_cma,
-      aso, data_realizacao_aso, validade_aso,
-      sispat, prestserv,
-      cep, logradouro, numero, complemento, bairro, cidade, estado,
-      observacoes, foto_url, status, ativo, is_instrutor, is_checador, empresa_id,
-      created_at, updated_at
-    )
-    VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?,
-      datetime('now'), datetime('now')
-    )
+    INSERT INTO funcionarios (${insertColumns.join(', ')})
+    VALUES (${insertValues.join(', ')})
   `;
 
-  const result = await db
-    .prepare(query)
-    .bind(
-      // Dados Pessoais
-      body.matricula ? sanitizeString(body.matricula) : null,
-      body.nome ? sanitizeString(body.nome) : null,
-      body.guerra || null,
-      body.cpf ? body.cpf.replace(/\D/g, '') : null,
-      body.rg || null,
-      body.nascimento || null,
-      body.sexo || null,
-      body.nacionalidade || 'Brasileira',
-      body.email ? body.email.toLowerCase() : null,
-      body.telefone || null,
-      body.telefone_emergencia || null,
-      body.contato_emergencia_nome || null,
-      // Dados Profissionais
-      body.funcao || null,
-      body.cargo || null,
-      setorPayload.setorNome,
-      setorPayload.setorId,
-      body.base || null,
-      body.modelo_aeronave_id || null,
-      body.admissao || null,
-      body.codigo_anac || null,
-      // Qualificações/Documentação
-      body.nivel_icao || null,
-      body.data_realizacao_icao || null,
-      body.validade_icao || null,
-      body.cma || null,
-      body.data_realizacao_cma || null,
-      body.validade_cma || null,
-      body.aso || null,
-      body.data_realizacao_aso || null,
-      body.validade_aso || null,
-      body.sispat || null,
-      body.prestserv || null,
-      // Endereço
-      body.cep || null,
-      body.logradouro || null,
-      body.numero || null,
-      body.complemento || null,
-      body.bairro || null,
-      body.cidade || null,
-      body.estado || null,
-      // Outros
-      body.observacoes || null,
-      body.foto_url || null,
-      normalizeFuncionarioStatus(body.status),
-      body.ativo !== undefined
-        ? body.ativo
-          ? 1
-          : 0
-        : normalizeFuncionarioStatus(body.status) === 'ATIVO'
-          ? 1
-          : 0,
-      flagToInt(body.is_instrutor),
-      flagToInt(body.is_checador),
-      empresaId,
-    )
-    .run();
+  const result = await db.prepare(query).bind(...insertBindings).run();
 
   const novoId = result.meta.last_row_id;
 
@@ -305,6 +303,7 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
+  const funcionarioColumns = await getFuncionariosColumns(db);
 
   // Verificar se existe
   const existing = await db
@@ -353,35 +352,34 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   // Construir UPDATE dinâmico (apenas campos fornecidos)
   const updates: string[] = [];
   const bindings: unknown[] = [];
+  const addUpdate = (column: string, value: unknown) => {
+    if (!funcionarioColumns.has(column)) return;
+    updates.push(`${column} = ?`);
+    bindings.push(value);
+  };
 
   if (body.matricula !== undefined) {
-    updates.push('matricula = ?');
-    bindings.push(body.matricula ? sanitizeString(body.matricula) : null);
+    addUpdate('matricula', body.matricula ? sanitizeString(body.matricula) : null);
   }
 
   if (body.nome !== undefined) {
-    updates.push('nome = ?');
-    bindings.push(body.nome ? sanitizeString(body.nome) : null);
+    addUpdate('nome', body.nome ? sanitizeString(body.nome) : null);
   }
 
   if (body.cpf !== undefined) {
-    updates.push('cpf = ?');
-    bindings.push(body.cpf ? body.cpf.replace(/\D/g, '') : null);
+    addUpdate('cpf', body.cpf ? body.cpf.replace(/\D/g, '') : null);
   }
 
   if (body.email !== undefined) {
-    updates.push('email = ?');
-    bindings.push(body.email ? body.email.toLowerCase() : null);
+    addUpdate('email', body.email ? body.email.toLowerCase() : null);
   }
 
   if (body.telefone !== undefined) {
-    updates.push('telefone = ?');
-    bindings.push(body.telefone || null);
+    addUpdate('telefone', body.telefone || null);
   }
 
   if (body.cargo !== undefined) {
-    updates.push('cargo = ?');
-    bindings.push(body.cargo);
+    addUpdate('cargo', body.cargo);
   }
 
   if (body.setor !== undefined || body.setor_id !== undefined) {
@@ -392,110 +390,89 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
         'SETOR_FORA_DO_ESCOPO',
       );
     }
-    updates.push('setor = ?');
-    bindings.push(setorPayload.setorNome);
-    updates.push('setor_id = ?');
-    bindings.push(setorPayload.setorId);
+    addUpdate('setor', setorPayload.setorNome);
+    addUpdate('setor_id', setorPayload.setorId);
   }
 
   if (body.funcao !== undefined) {
-    updates.push('funcao = ?');
-    bindings.push(body.funcao);
+    addUpdate('funcao', body.funcao);
   }
 
   if (body.quinzena !== undefined) {
-    updates.push('quinzena = ?');
-    bindings.push(normalizeFuncionarioQuinzena(body.quinzena));
+    addUpdate('quinzena', normalizeFuncionarioQuinzena(body.quinzena));
   }
 
   if (body.codigo_anac !== undefined) {
-    updates.push('codigo_anac = ?');
-    bindings.push(body.codigo_anac);
+    addUpdate('codigo_anac', body.codigo_anac);
   }
 
   if (body.ativo !== undefined) {
-    updates.push('ativo = ?');
-    bindings.push(body.ativo ? 1 : 0);
+    addUpdate('ativo', body.ativo ? 1 : 0);
   }
 
   if (body.is_instrutor !== undefined) {
-    updates.push('is_instrutor = ?');
-    bindings.push(flagToInt(body.is_instrutor));
+    addUpdate('is_instrutor', flagToInt(body.is_instrutor));
   }
 
   if (body.is_checador !== undefined) {
-    updates.push('is_checador = ?');
-    bindings.push(flagToInt(body.is_checador));
+    addUpdate('is_checador', flagToInt(body.is_checador));
   }
 
   if (body.admissao !== undefined) {
-    updates.push('admissao = ?');
-    bindings.push(body.admissao);
+    addUpdate('admissao', body.admissao);
   }
 
   if (body.status !== undefined) {
     const normalizedStatus = normalizeFuncionarioStatus(body.status);
-    updates.push('status = ?');
-    bindings.push(normalizedStatus);
+    addUpdate('status', normalizedStatus);
     // Sync ativo column: ATIVO → 1, any other status → 0
     const isAtivo = normalizedStatus === 'ATIVO';
-    updates.push('ativo = ?');
-    bindings.push(isAtivo ? 1 : 0);
+    addUpdate('ativo', isAtivo ? 1 : 0);
   }
 
   // ===== NOVOS CAMPOS ADICIONADOS =====
 
   // Dados Pessoais
   if (body.rg !== undefined) {
-    updates.push('rg = ?');
-    bindings.push(body.rg);
+    addUpdate('rg', body.rg);
   }
 
   if (body.guerra !== undefined) {
-    updates.push('guerra = ?');
-    bindings.push(body.guerra);
+    addUpdate('guerra', body.guerra);
   }
 
   if (body.nascimento !== undefined) {
-    updates.push('nascimento = ?');
-    bindings.push(body.nascimento);
+    addUpdate('nascimento', body.nascimento);
   }
 
   // NOVOS CAMPOS FASE 1
   if (body.sexo !== undefined) {
-    updates.push('sexo = ?');
-    bindings.push(body.sexo);
+    addUpdate('sexo', body.sexo);
   }
 
   if (body.nacionalidade !== undefined) {
-    updates.push('nacionalidade = ?');
-    bindings.push(body.nacionalidade);
+    addUpdate('nacionalidade', body.nacionalidade);
   }
 
   if (body.telefone_emergencia !== undefined) {
-    updates.push('telefone_emergencia = ?');
-    bindings.push(body.telefone_emergencia);
+    addUpdate('telefone_emergencia', body.telefone_emergencia);
   }
 
   if (body.contato_emergencia_nome !== undefined) {
-    updates.push('contato_emergencia_nome = ?');
-    bindings.push(body.contato_emergencia_nome);
+    addUpdate('contato_emergencia_nome', body.contato_emergencia_nome);
   }
 
   if (body.foto_url !== undefined) {
-    updates.push('foto_url = ?');
-    bindings.push(body.foto_url);
+    addUpdate('foto_url', body.foto_url);
   }
 
   // Dados Profissionais
   if (body.base !== undefined) {
-    updates.push('base = ?');
-    bindings.push(body.base);
+    addUpdate('base', body.base);
   }
 
   if (body.modelo_aeronave_id !== undefined) {
-    updates.push('modelo_aeronave_id = ?');
-    bindings.push(body.modelo_aeronave_id);
+    addUpdate('modelo_aeronave_id', body.modelo_aeronave_id);
 
     // Atualizar coluna legada 'aeronave' quando modelo_aeronave_id mudar
     const modeloAeronave = await db
@@ -506,107 +483,87 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
       .first<{ aeronave: string }>();
 
     if (modeloAeronave?.aeronave) {
-      updates.push('aeronave = ?');
-      bindings.push(modeloAeronave.aeronave);
+      addUpdate('aeronave', modeloAeronave.aeronave);
     }
   }
 
   // Qualificações/Documentação
   if (body.nivel_icao !== undefined) {
-    updates.push('nivel_icao = ?');
-    bindings.push(body.nivel_icao);
+    addUpdate('nivel_icao', body.nivel_icao);
   }
 
   if (body.data_realizacao_icao !== undefined) {
-    updates.push('data_realizacao_icao = ?');
-    bindings.push(body.data_realizacao_icao);
+    addUpdate('data_realizacao_icao', body.data_realizacao_icao);
   }
 
   if (body.validade_icao !== undefined) {
-    updates.push('validade_icao = ?');
-    bindings.push(body.validade_icao);
+    addUpdate('validade_icao', body.validade_icao);
   }
 
   if (body.cma !== undefined) {
-    updates.push('cma = ?');
-    bindings.push(body.cma);
+    addUpdate('cma', body.cma);
   }
 
   if (body.data_realizacao_cma !== undefined) {
-    updates.push('data_realizacao_cma = ?');
-    bindings.push(body.data_realizacao_cma);
+    addUpdate('data_realizacao_cma', body.data_realizacao_cma);
   }
 
   if (body.validade_cma !== undefined) {
-    updates.push('validade_cma = ?');
-    bindings.push(body.validade_cma);
+    addUpdate('validade_cma', body.validade_cma);
   }
 
   if (body.aso !== undefined) {
-    updates.push('aso = ?');
-    bindings.push(body.aso);
+    addUpdate('aso', body.aso);
   }
 
   if (body.data_realizacao_aso !== undefined) {
-    updates.push('data_realizacao_aso = ?');
-    bindings.push(body.data_realizacao_aso);
+    addUpdate('data_realizacao_aso', body.data_realizacao_aso);
   }
 
   if (body.validade_aso !== undefined) {
-    updates.push('validade_aso = ?');
-    bindings.push(body.validade_aso);
+    addUpdate('validade_aso', body.validade_aso);
   }
 
   if (body.sispat !== undefined) {
-    updates.push('sispat = ?');
-    bindings.push(body.sispat);
+    addUpdate('sispat', body.sispat);
   }
 
   if (body.prestserv !== undefined) {
-    updates.push('prestserv = ?');
-    bindings.push(body.prestserv);
+    addUpdate('prestserv', body.prestserv);
   }
 
   // Endereço Completo
   if (body.cep !== undefined) {
-    updates.push('cep = ?');
-    bindings.push(body.cep);
+    addUpdate('cep', body.cep);
   }
 
   if (body.logradouro !== undefined) {
-    updates.push('logradouro = ?');
-    bindings.push(body.logradouro);
+    addUpdate('logradouro', body.logradouro);
   }
 
   if (body.numero !== undefined) {
-    updates.push('numero = ?');
-    bindings.push(body.numero);
+    addUpdate('numero', body.numero);
   }
 
   if (body.complemento !== undefined) {
-    updates.push('complemento = ?');
-    bindings.push(body.complemento);
+    addUpdate('complemento', body.complemento);
   }
 
   if (body.bairro !== undefined) {
-    updates.push('bairro = ?');
-    bindings.push(body.bairro);
+    addUpdate('bairro', body.bairro);
   }
 
   if (body.cidade !== undefined) {
-    updates.push('cidade = ?');
-    bindings.push(body.cidade);
+    addUpdate('cidade', body.cidade);
   }
 
   if (body.estado !== undefined) {
-    updates.push('estado = ?');
-    bindings.push(body.estado);
+    addUpdate('estado', body.estado);
   }
 
   // Observações
   if (body.observacoes !== undefined) {
-    updates.push('observacoes = ?');
-    bindings.push(body.observacoes);
+    addUpdate('observacoes', body.observacoes);
   }
 
   // ===== FIM DOS NOVOS CAMPOS =====
@@ -615,7 +572,9 @@ app.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     badRequest('Nenhum campo para atualizar');
   }
 
-  updates.push("updated_at = datetime('now')");
+  if (funcionarioColumns.has('updated_at')) {
+    updates.push("updated_at = datetime('now')");
+  }
 
   const query = `UPDATE funcionarios SET ${updates.join(', ')} WHERE id = ? AND empresa_id = ?`;
 
