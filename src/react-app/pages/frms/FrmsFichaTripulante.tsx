@@ -252,14 +252,14 @@ export default function FrmsFichaTripulante() {
   const requestedFuncionarioId = Number(id);
   const {
     data: frmsSnapshotItems,
-    loading: loadingFrmsSnapshot,
+    loading: loadingFrmsSnapshotToday,
     meta: frmsSnapshotMeta,
   } = useFrmsOperationalSnapshot({
     data_inicio: hojeIso,
     data_fim: hojeIso,
     funcionario_id: id,
   });
-  const fortnightSnapshotItem = frmsSnapshotItems.find(
+  const todayFortnightSnapshotItem = frmsSnapshotItems.find(
     (item) => item.funcionario_id === requestedFuncionarioId,
   );
   const shouldExposeFortnightIndicator =
@@ -267,8 +267,39 @@ export default function FrmsFichaTripulante() {
     requestedFuncionarioId > 0 &&
     (!frmsSnapshotMeta?.forced_funcionario_id ||
       frmsSnapshotMeta.forced_funcionario_id === requestedFuncionarioId);
+  const todayFortnightIndicator = shouldExposeFortnightIndicator
+    ? todayFortnightSnapshotItem?.fortnight_indicator ?? null
+    : null;
+  const fortnightPeriodStart = todayFortnightIndicator?.periodo_inicio || '';
+  const fortnightPeriodEnd = todayFortnightIndicator?.periodo_fim || '';
+  const shouldLoadFortnightPeriod =
+    shouldExposeFortnightIndicator && Boolean(fortnightPeriodStart) && Boolean(fortnightPeriodEnd);
+  const {
+    data: fortnightPeriodSnapshotItems,
+    loading: loadingFortnightPeriodSnapshot,
+  } = useFrmsOperationalSnapshot(
+    {
+      data_inicio: fortnightPeriodStart,
+      data_fim: fortnightPeriodEnd,
+      funcionario_id: id,
+      include_inconsistencies: true,
+    },
+    { enabled: shouldLoadFortnightPeriod },
+  );
+  const fullPeriodFortnightSnapshotItem =
+    fortnightPeriodSnapshotItems.find(
+      (item) =>
+        item.funcionario_id === requestedFuncionarioId && item.data_operacional === hojeIso,
+    ) ||
+    [...fortnightPeriodSnapshotItems]
+      .reverse()
+      .find((item) => item.funcionario_id === requestedFuncionarioId) ||
+    null;
   const fortnightIndicator =
-    shouldExposeFortnightIndicator ? fortnightSnapshotItem?.fortnight_indicator ?? null : null;
+    shouldExposeFortnightIndicator
+      ? fullPeriodFortnightSnapshotItem?.fortnight_indicator ?? todayFortnightIndicator
+      : null;
+  const loadingFrmsSnapshot = loadingFrmsSnapshotToday || (shouldLoadFortnightPeriod && loadingFortnightPeriodSnapshot);
 
   const { data: recentJornadasRaw } = useFrmsJornadasEffectiveness(id, 7);
   const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: hojeIso });
@@ -473,6 +504,8 @@ export default function FrmsFichaTripulante() {
         <FortnightConsolidatedPanel
           indicator={fortnightIndicator}
           loading={loadingFrmsSnapshot}
+          funcionarioId={requestedFuncionarioId}
+          focusDate={hojeIso}
         />
 
         {/* Effectiveness Panel (Painel A) + Compliance Cards (Painel B) */}

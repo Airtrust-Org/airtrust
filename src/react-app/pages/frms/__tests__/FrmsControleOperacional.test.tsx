@@ -564,6 +564,15 @@ describe('FrmsControleOperacional', () => {
   });
 
   describe('Quinzena — texto amigavel sem duty tecnico', () => {
+    it('distingue score de triagem subjetiva de efetividade estimada', () => {
+      mockSnapshotData([buildSnapshotItem({ fadiga_score: 18, effectiveness_pct: 95.3 })]);
+      renderControle();
+      expect(screen.getByText(/Score de triagem subjetiva 18/)).toBeInTheDocument();
+      expect(screen.getByText(/Efetividade estimada 95\.3%/)).toBeInTheDocument();
+      expect(screen.getByText(/Quanto maior, pior\./)).toBeInTheDocument();
+      expect(screen.getByText(/Quanto maior, melhor\./)).toBeInTheDocument();
+    });
+
     it('nao exibe "duty -" quando duty_time_periodo_min e null', () => {
       mockSnapshotData([
         buildSnapshotItem({
@@ -613,7 +622,7 @@ describe('FrmsControleOperacional', () => {
       expect(
         screen.getByText('Período de embarque não localizado nesta data. Verifique se a escala quinzenal foi cadastrada.'),
       ).toBeInTheDocument();
-      expect(screen.getByText(/Indicador operacional estimado/)).toBeInTheDocument();
+      expect(screen.getByText(/Indicador operacional da quinzena/)).toBeInTheDocument();
     });
 
     it('renderiza mensagem de periodo parcial quando a janela cobre apenas parte da quinzena', () => {
@@ -633,7 +642,7 @@ describe('FrmsControleOperacional', () => {
 
       expect(
         screen.getByText(
-          'Período identificado, mas a janela de consulta cobre apenas parte dele. Os acumulados refletem somente os dias visíveis.',
+          'Período incompleto. A leitura considera apenas os dias disponíveis. Não usar isoladamente como decisão final.',
         ),
       ).toBeInTheDocument();
     });
@@ -708,8 +717,10 @@ describe('FrmsControleOperacional', () => {
       fireEvent.click(screen.getByText('Detalhes da quinzena'));
 
       expect(screen.queryByText(/homologado|aprovado|ANAC/i)).not.toBeInTheDocument();
-      expect(screen.getByText(/Indicador operacional estimado/)).toBeInTheDocument();
-      expect(screen.getByText(/Não substitui avaliação operacional do gestor/)).toBeInTheDocument();
+      expect(screen.getByText(/Indicador operacional da quinzena/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Apoia a decisão do gestor, mas não substitui a avaliação operacional final/),
+      ).toBeInTheDocument();
     });
   });
 
