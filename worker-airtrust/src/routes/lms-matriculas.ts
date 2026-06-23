@@ -21,6 +21,7 @@ import {
 } from '../services/lms-matricula-cycle';
 import {
   extractScormLocationFromCmiJson,
+  mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
   preferScormValue,
@@ -342,6 +343,72 @@ function isMatriculaUniqueConstraintError(error: unknown) {
 
 function clampPct(value: number) {
   return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function formatScormLocationTelemetry(
+  marker: { current: number; total: number | null } | null,
+) {
+  if (!marker) return null;
+  return marker.total != null ? `${marker.current}/${marker.total}` : String(marker.current);
+}
+
+function summarizeScormTextPayload(value: string | null | undefined) {
+  if (typeof value !== 'string') return { present: false, bytes: 0 };
+  return {
+    present: value.trim().length > 0,
+    bytes: value.length,
+  };
+}
+
+function emitScormCommitTelemetry(params: {
+  matriculaId: number;
+  cursoTitulo: string;
+  preferIncomingState: boolean;
+  previousLocation: { current: number; total: number | null } | null;
+  incomingLocation: { current: number; total: number | null } | null;
+  finalLocation: { current: number; total: number | null } | null;
+  previousSuspendData: string | null | undefined;
+  incomingSuspendData: string | null | undefined;
+  finalSuspendData: string | null | undefined;
+  decisions: {
+    blockedLocationRegression: boolean;
+    blockedEmptySuspendData: boolean;
+    blockedShorterSuspendData: boolean;
+    preservedLocationFromCurrent: boolean;
+  };
+}) {
+  const blocked =
+    params.decisions.blockedLocationRegression ||
+    params.decisions.blockedEmptySuspendData ||
+    params.decisions.blockedShorterSuspendData;
+
+  const event = blocked ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_COMMIT';
+  const reason = [
+    params.decisions.blockedLocationRegression ? 'location-regression' : null,
+    params.decisions.blockedEmptySuspendData ? 'empty-suspend-data' : null,
+    params.decisions.blockedShorterSuspendData ? 'shorter-suspend-data' : null,
+    !blocked && params.decisions.preservedLocationFromCurrent ? 'preserved-current-location' : null,
+  ]
+    .filter(Boolean)
+    .join(',');
+
+  console.info(
+    '[LMS SCORM TELEMETRY]',
+    JSON.stringify({
+      matricula_id: params.matriculaId,
+      curso_titulo: params.cursoTitulo,
+      event,
+      decision: blocked ? 'blocked' : 'accepted',
+      reason: reason || 'normal-merge',
+      prefer_incoming_state: params.preferIncomingState,
+      previous_location: formatScormLocationTelemetry(params.previousLocation),
+      incoming_location: formatScormLocationTelemetry(params.incomingLocation),
+      final_location: formatScormLocationTelemetry(params.finalLocation),
+      previous_suspend_data: summarizeScormTextPayload(params.previousSuspendData),
+      incoming_suspend_data: summarizeScormTextPayload(params.incomingSuspendData),
+      final_suspend_data: summarizeScormTextPayload(params.finalSuspendData),
+    }),
+  );
 }
 
 function extractProgressPctFromCmiJson(cmiJson: string | null | undefined): number | null {
@@ -1312,12 +1379,16 @@ app.post('/scorm/commit', async (c) => {
     },
   });
 
-  const mergedCmiJson = preferScormValue(
-    scormAtual?.cmi_json ?? null,
-    d.cmi_json ?? null,
-    preferIncomingScormState,
-  );
-  const mergedLocation = extractScormLocationFromCmiJson(mergedCmiJson);
+  const currentLocation = extractScormLocationFromCmiJson(scormAtual?.cmi_json ?? null);
+  const incomingLocation = extractScormLocationFromCmiJson(d.cmi_json ?? null);
+  const runtimeMerge = mergeScormRuntimeState({
+    currentCmiJson: scormAtual?.cmi_json ?? null,
+    incomingCmiJson: d.cmi_json ?? null,
+    currentSuspendData: scormAtual?.suspend_data ?? null,
+    incomingSuspendData: d.suspend_data ?? null,
+  });
+  const mergedCmiJson = runtimeMerge.cmiJson;
+  const mergedLocation = runtimeMerge.location;
 
   // Upsert progresso SCORM
   await db
@@ -1363,11 +1434,24 @@ app.post('/scorm/commit', async (c) => {
       effectiveScoreScaled,
       preferScormValue(scormAtual?.session_time ?? null, d.session_time ?? null, preferIncomingScormState),
       preferScormValue(scormAtual?.total_time ?? null, d.total_time ?? null, preferIncomingScormState),
-      preferScormValue(scormAtual?.suspend_data ?? null, d.suspend_data ?? null, preferIncomingScormState),
+      runtimeMerge.suspendData,
       preferScormValue(scormAtual?.launch_data ?? null, d.launch_data ?? null, preferIncomingScormState),
       mergedCmiJson,
     )
     .run();
+
+  emitScormCommitTelemetry({
+    matriculaId: d.matricula_id,
+    cursoTitulo: matricula.curso_titulo,
+    preferIncomingState: preferIncomingScormState,
+    previousLocation: currentLocation,
+    incomingLocation,
+    finalLocation: mergedLocation,
+    previousSuspendData: scormAtual?.suspend_data ?? null,
+    incomingSuspendData: d.suspend_data ?? null,
+    finalSuspendData: runtimeMerge.suspendData,
+    decisions: runtimeMerge.decisions,
+  });
 
   // Atualizar status da matrícula
   let novoStatus = matricula.status;
