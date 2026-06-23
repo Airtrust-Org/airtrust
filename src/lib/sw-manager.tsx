@@ -27,7 +27,7 @@ const LOGIN_CACHE_RECOVERY_SESSION_KEY = 'airtrust-login-cache-recovery-v3';
 const LOGIN_CACHE_RECOVERY_QUERY_PARAM = 'airtrust_login_recovered';
 
 function shouldBypassServiceWorkerForPath(pathname: string): boolean {
-  return /^\/lms\/player\//.test(pathname) || pathname === '/login';
+  return /^\/lms\/player\//.test(pathname);
 }
 
 function isLoginPath(pathname: string): boolean {
@@ -39,6 +39,30 @@ async function unregisterServiceWorkersAndCaches(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   const registrations = await navigator.serviceWorker.getRegistrations();
   await Promise.all(registrations.map((reg) => reg.unregister()));
+}
+
+async function updateServiceWorkerRegistrations(): Promise<ServiceWorkerRegistration[]> {
+  if (!('serviceWorker' in navigator)) return [];
+
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((reg) => reg.update().catch(() => undefined)));
+  return registrations;
+}
+
+async function ensureKillSwitchRegistration(): Promise<ServiceWorkerRegistration | null> {
+  if (!('serviceWorker' in navigator)) return null;
+
+  try {
+    const registration = await navigator.serviceWorker.register('/sw.js', {
+      scope: '/',
+      updateViaCache: 'none',
+    });
+    await registration.update().catch(() => undefined);
+    return registration;
+  } catch (error) {
+    console.warn('[SW] Falha ao registrar kill switch:', error);
+    return null;
+  }
 }
 
 function cleanupLoginRecoveryQueryParam(): boolean {
@@ -59,14 +83,15 @@ async function recoverLoginPageFromLegacyCaches(): Promise<void> {
 
   const cacheNames = await caches.keys();
   const airTrustCacheNames = cacheNames.filter((name) => name.startsWith('airtrust-'));
-  const registrations =
-    'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistrations() : [];
+  const registrations = await updateServiceWorkerRegistrations();
   const hasController = 'serviceWorker' in navigator && navigator.serviceWorker.controller !== null;
-  const shouldReloadOnce = hasController || airTrustCacheNames.length > 0;
+  const shouldReloadOnce = hasController || airTrustCacheNames.length > 0 || registrations.length > 0;
 
-  await unregisterServiceWorkersAndCaches();
+  await ensureKillSwitchRegistration();
+  await clearAllCaches();
 
   if (recoveredFromQueryParam) {
+    await unregisterServiceWorkersAndCaches();
     sessionStorage.removeItem(LOGIN_CACHE_RECOVERY_SESSION_KEY);
     return;
   }
@@ -228,16 +253,20 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   }
 
   if (shouldBypassServiceWorkerForPath(window.location.pathname)) {
-    console.log('[SW] Desabilitado para rota que exige bypass de cache');
+    console.log('[SW] Desabilitado para rota LMS player');
     await unregisterServiceWorkersAndCaches();
     return null;
   }
 
   try {
-    const registration = await navigator.serviceWorker.register('/sw.js', {
-      scope: '/',
-      updateViaCache: 'none',
-    });
+    await updateServiceWorkerRegistrations();
+    const registration = await ensureKillSwitchRegistration();
+    if (!registration) return null;
+
+    if (isLoginPath(window.location.pathname)) {
+      await clearAllCaches();
+    }
+
     console.log('[SW] Registrado com sucesso:', registration);
     return registration;
   } catch (error) {
