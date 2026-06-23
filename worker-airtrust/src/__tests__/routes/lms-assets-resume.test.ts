@@ -40,14 +40,17 @@ describe('SCORM resume restore helpers', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
 
     expect(source).toContain('function restoreResumeLocation(remainingAttempts)');
+    expect(source).toContain('function applyLocalResumeBackup()');
     expect(source).toContain('function scheduleInteractionProbe(delayMs, remainingAttempts)');
     expect(source).toContain('function bindFrameProgressTracking()');
     expect(source).toContain('function navigateFrameToSlide(frameWindow, target)');
     expect(source).toContain('restoreResumeLocation(12);');
+    expect(source).toContain('applyLocalResumeBackup();');
     expect(source).toContain('bindFrameProgressTracking();');
     expect(source).toContain('resolveScormResumeTargetSlide(savedLocation, observedLocation)');
     expect(source).toContain('var shouldCommitLocation = previousLocation !== location;');
     expect(source).toContain('scheduleCommit(800);');
+    expect(source).toContain("localStorage.getItem(LOCAL_RESUME_KEY)");
   });
 
   it('agenda commit quando o pacote marca conclusão por status SCORM', () => {
@@ -59,5 +62,16 @@ describe('SCORM resume restore helpers', () => {
     expect(source).toMatch(
       /if \(element === 'cmi\.completion_status' \|\| element === 'cmi\.success_status'\) \{\s*checkCompletion\(\);\s*scheduleCommit\(800\);\s*\}/,
     );
+  });
+
+  it('protege location e suspend_data regressivos com telemetria sanitizada', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
+
+    expect(source).toContain("function protectLocationValue(currentValue, nextValue)");
+    expect(source).toContain("function protectSuspendDataValue(currentValue, nextValue)");
+    expect(source).toContain('SCORM_REGRESSION_BLOCKED');
+    expect(source).toContain('SCORM_BEFORE_UNLOAD_COMMIT');
+    expect(source).toContain('SCORM_VISIBILITY_COMMIT');
+    expect(source).toContain("console.info('[SCORM_TELEMETRY]'");
   });
 });
