@@ -100,6 +100,30 @@ function resolveScopedSetorIds(
   return access.setorIds;
 }
 
+function getTodayUtcYmd(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function validateConcludedTrainingState(params: {
+  status?: string | null;
+  dataFim?: string | null;
+  participantesCount: number;
+}): string | null {
+  const normalizedStatus = String(params.status || '').trim().toUpperCase();
+  if (normalizedStatus !== 'CONCLUIDO') {
+    return null;
+  }
+  if (params.participantesCount === 0) {
+    return 'Não é permitido concluir turma sem participantes vinculados';
+  }
+
+  const dataFim = String(params.dataFim || '').slice(0, 10);
+  if (dataFim && dataFim > getTodayUtcYmd()) {
+    return 'Não é permitido concluir turma com período futuro';
+  }
+  return null;
+}
+
 // Module-level cache for schema capabilities — avoids 10+ PRAGMA calls per request.
 // Worker isolates restart regularly so this never holds stale data for long.
 let _capabilitiesCache: TreinamentoSchemaCapabilities | null = null;
@@ -2018,6 +2042,14 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
   }
   const dataInicio = input.data_inicio || dias[0].data;
   const dataFim = input.data_fim || dias[dias.length - 1].data;
+  const conclusaoStateError = validateConcludedTrainingState({
+    status: input.status,
+    dataFim,
+    participantesCount: participanteIds.length,
+  });
+  if (conclusaoStateError) {
+    return c.json({ success: false, error: conclusaoStateError }, 400);
+  }
   if (dias.some((dia) => dia.data < dataInicio || dia.data > dataFim)) {
     return c.json({ success: false, error: 'Dia efetivo fora do período da turma' }, 400);
   }
@@ -2474,10 +2506,19 @@ treinamentosPlanejadosRoutes.patch(
 
     const existing = await db
       .prepare(
-        'SELECT id, qualificacao_tipo_id FROM treinamentos_planejados WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        `SELECT id, qualificacao_tipo_id, data_prevista, data_inicio, data_fim, status
+           FROM treinamentos_planejados
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
       .bind(treinamentoId, empresaId)
-      .first<{ id: number; qualificacao_tipo_id: number }>();
+      .first<{
+        id: number;
+        qualificacao_tipo_id: number;
+        data_prevista: string;
+        data_inicio: string | null;
+        data_fim: string | null;
+        status: string | null;
+      }>();
 
     if (!existing) {
       return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
@@ -2528,6 +2569,38 @@ treinamentosPlanejadosRoutes.patch(
       normalizePositiveIds(input.participante_ids).length > input.limite_participantes
     ) {
       return c.json({ success: false, error: 'Quantidade de participantes excede o limite da turma' }, 400);
+    }
+    const participantesCount =
+      input.participante_ids !== undefined
+        ? normalizePositiveIds(input.participante_ids).length
+        : Number(
+            (
+              await db
+                .prepare(
+                  `SELECT COUNT(*) AS total
+                     FROM treinamentos_participantes
+                    WHERE treinamento_id = ?`,
+                )
+                .bind(treinamentoId)
+                .first<{ total: number | string | null }>()
+            )?.total || 0,
+          );
+    const effectiveDataInicio = input.data_inicio ?? existing.data_inicio ?? input.data_prevista ?? existing.data_prevista;
+    const effectiveDataFim = input.data_fim ?? existing.data_fim ?? input.data_prevista ?? existing.data_prevista;
+    const effectiveStatus = input.status ?? existing.status;
+    const conclusaoStateError = validateConcludedTrainingState({
+      status: effectiveStatus,
+      dataFim: effectiveDataFim,
+      participantesCount,
+    });
+    if (conclusaoStateError) {
+      return c.json({ success: false, error: conclusaoStateError }, 400);
+    }
+    if (effectiveDataInicio && effectiveDataFim && effectiveDataFim < effectiveDataInicio) {
+      return c.json(
+        { success: false, error: 'A data final deve ser igual ou posterior à inicial' },
+        400,
+      );
     }
     const previousParticipants =
       input.participante_ids !== undefined ||

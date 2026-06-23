@@ -557,6 +557,100 @@ describe('treinamentos planejados router', () => {
     );
   });
 
+  it('bloqueia concluir turma sem participantes pelo endpoint de edicao', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'SELECT id, qualificacao_tipo_id, data_prevista, data_inicio, data_fim, status',
+        {
+          first: () => ({
+            id: 31,
+            qualificacao_tipo_id: 9,
+            data_prevista: '2026-06-20',
+            data_inicio: '2026-06-20',
+            data_fim: '2026-06-23',
+            status: 'PLANEJADO',
+          }),
+        },
+      ],
+      [
+        'SELECT COUNT(*) AS total',
+        {
+          first: () => ({ total: 0 }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/planejados/31', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          status: 'CONCLUIDO',
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Não é permitido concluir turma sem participantes vinculados',
+    });
+    expect(calls.some((call) => call.query.includes('UPDATE treinamentos_planejados'))).toBe(false);
+    expect(syncTreinamentoPlanejadoIntegrationMock).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia concluir turma com periodo futuro pelo endpoint de edicao', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'SELECT id, qualificacao_tipo_id, data_prevista, data_inicio, data_fim, status',
+        {
+          first: () => ({
+            id: 31,
+            qualificacao_tipo_id: 9,
+            data_prevista: '2999-01-02',
+            data_inicio: '2999-01-02',
+            data_fim: '2999-01-03',
+            status: 'PLANEJADO',
+          }),
+        },
+      ],
+      [
+        'SELECT COUNT(*) AS total',
+        {
+          first: () => ({ total: 2 }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/planejados/31', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          status: 'CONCLUIDO',
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Não é permitido concluir turma com período futuro',
+    });
+    expect(calls.some((call) => call.query.includes('UPDATE treinamentos_planejados'))).toBe(false);
+    expect(syncTreinamentoPlanejadoIntegrationMock).not.toHaveBeenCalled();
+  });
+
   it('consolida qualificacao planejada avulsa na lista de planejados', async () => {
     const { db } = createMockDb([
       [
