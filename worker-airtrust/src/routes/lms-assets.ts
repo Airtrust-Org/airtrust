@@ -1092,6 +1092,7 @@ ${resolveScormResumeTargetSlide.toString()}
   var autosaveTimer = null;
   var interactionProbeTimer = null;
   var lastCommittedFingerprint = '';
+  var LOCAL_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID);
 
   if (${hasResumeState ? 'true' : 'false'}) {
     if (IS_2004) {
@@ -1177,6 +1178,179 @@ ${resolveScormResumeTargetSlide.toString()}
 
   function parseLocationMarker(location) {
     return parseScormLocationMarker(location);
+  }
+
+  function setScormLocation(location) {
+    if (!location || typeof location !== 'string') return;
+    cmi['cmi.location'] = location;
+    cmi['cmi.core.lesson_location'] = location;
+  }
+
+  function sanitizeTelemetryValue(field, value) {
+    if (field === 'cmi.suspend_data') {
+      var suspendText = typeof value === 'string' ? value : '';
+      return {
+        present: suspendText.trim().length > 0,
+        bytes: suspendText.length,
+      };
+    }
+
+    if (field === 'cmi.location' || field === 'cmi.core.lesson_location') {
+      var marker = parseLocationMarker(value);
+      if (!marker) return null;
+      return marker.total == null ? String(marker.current) : String(marker.current) + '/' + String(marker.total);
+    }
+
+    if (
+      field === 'cmi.core.lesson_status' ||
+      field === 'cmi.completion_status' ||
+      field === 'cmi.success_status'
+    ) {
+      return value == null ? null : String(value);
+    }
+
+    return value == null ? null : String(value);
+  }
+
+  function emitTelemetry(eventType, details) {
+    var payload = Object.assign({
+      matricula_id: MATRICULA_ID,
+      event: eventType,
+      location: sanitizeTelemetryValue('cmi.location', getScormLocation()),
+      suspend_data: sanitizeTelemetryValue('cmi.suspend_data', cmi['cmi.suspend_data']),
+      timestamp: new Date().toISOString(),
+    }, details || {});
+
+    try {
+      console.info('[SCORM_TELEMETRY]', JSON.stringify(payload));
+    } catch (_error) {
+      console.info('[SCORM_TELEMETRY]', payload);
+    }
+
+    postToParent({
+      type: 'lms:scorm-telemetry',
+      matriculaId: MATRICULA_ID,
+      telemetry: payload,
+    });
+  }
+
+  function readLocalResumeBackup() {
+    if (!LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return null;
+
+    try {
+      var raw = localStorage.getItem(LOCAL_RESUME_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (typeof parsed.location !== 'string' || !parsed.location.trim()) return null;
+      return parsed;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function clearLocalResumeBackup() {
+    if (!LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return;
+
+    try {
+      localStorage.removeItem(LOCAL_RESUME_KEY);
+    } catch (_error) {
+      // Ignorar indisponibilidade de storage local.
+    }
+  }
+
+  function writeLocalResumeBackup(reason) {
+    if (!LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return;
+    var location = getScormLocation();
+    var marker = parseLocationMarker(location);
+    if (!marker || marker.current <= 1) return;
+
+    var previous = readLocalResumeBackup();
+    var previousMarker = parseLocationMarker(previous && previous.location);
+    if (previousMarker && previousMarker.current > marker.current) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(LOCAL_RESUME_KEY, JSON.stringify({
+        location: location,
+        progress_pct: marker.total ? Math.round((marker.current / marker.total) * 100) : null,
+        updated_at: new Date().toISOString(),
+        reason: reason || 'checkpoint',
+      }));
+    } catch (_error) {
+      // Ignorar indisponibilidade de storage local.
+    }
+  }
+
+  function applyLocalResumeBackup() {
+    var backup = readLocalResumeBackup();
+    if (!backup) return;
+
+    var currentLocation = getScormLocation();
+    var backupMarker = parseLocationMarker(backup.location);
+    var currentMarker = parseLocationMarker(currentLocation);
+    if (!backupMarker) return;
+    if (currentMarker && currentMarker.current >= backupMarker.current) return;
+
+    setScormLocation(String(backup.location));
+    if (IS_2004) {
+      cmi['cmi.entry'] = 'resume';
+    } else {
+      cmi['cmi.core.entry'] = 'resume';
+    }
+    emitTelemetry('SCORM_RESUME_APPLIED', {
+      field: 'cmi.location',
+      previous_value: sanitizeTelemetryValue('cmi.location', currentLocation),
+      next_value: sanitizeTelemetryValue('cmi.location', backup.location),
+      decision: 'preserved',
+      reason: 'local-backup-stronger-than-server',
+    });
+  }
+
+  function protectLocationValue(currentValue, nextValue) {
+    var currentText = typeof currentValue === 'string' ? currentValue.trim() : '';
+    var nextText = typeof nextValue === 'string' ? nextValue.trim() : '';
+    var currentMarker = parseLocationMarker(currentText);
+    var nextMarker = parseLocationMarker(nextText);
+
+    if (!currentMarker || currentMarker.current <= 1) {
+      return { value: nextText || currentText || '', blocked: false, reason: 'no-strong-location' };
+    }
+
+    if (!nextText) {
+      return { value: currentText, blocked: true, reason: 'empty-location' };
+    }
+
+    if (
+      nextMarker &&
+      nextMarker.current < currentMarker.current &&
+      (
+        nextMarker.total == null ||
+        currentMarker.total == null ||
+        nextMarker.total === currentMarker.total ||
+        currentMarker.current <= nextMarker.total
+      )
+    ) {
+      return { value: currentText, blocked: true, reason: 'regressive-location' };
+    }
+
+    return { value: nextText, blocked: false, reason: 'accepted-location' };
+  }
+
+  function protectSuspendDataValue(currentValue, nextValue) {
+    var currentText = typeof currentValue === 'string' ? currentValue : '';
+    var nextText = typeof nextValue === 'string' ? nextValue : '';
+
+    if (currentText && !nextText.trim()) {
+      return { value: currentText, blocked: true, reason: 'empty-suspend-data' };
+    }
+
+    if (currentText && nextText && nextText.length < currentText.length) {
+      return { value: currentText, blocked: true, reason: 'shorter-suspend-data' };
+    }
+
+    return { value: nextText || currentText || '', blocked: false, reason: 'accepted-suspend-data' };
   }
 
   function updateMaxVisitedFromLocation(location) {
@@ -1435,6 +1609,7 @@ ${resolveScormResumeTargetSlide.toString()}
 
       var shouldCommitLocation = previousLocation !== location;
       updateMaxVisitedFromLocation(location);
+      writeLocalResumeBackup('frame-probe');
       emitProgress({
         progresso_pct: Math.max(parsed.pct, Math.round((effectiveCurrent / effectiveTotal) * 100)),
         location: location,
@@ -1450,9 +1625,14 @@ ${resolveScormResumeTargetSlide.toString()}
     }
   }
 
-  function commit(data, attempt) {
+  function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) return Promise.resolve();
     var payloadFingerprint = fingerprintPayload(data);
+    emitTelemetry(eventType || 'SCORM_COMMIT', {
+      decision: 'accepted',
+      reason: 'commit-dispatched',
+      field: null,
+    });
     return getFreshToken('commit').then(function(freshToken) {
       if (!freshToken) return null;
       return fetch(COMMIT_URL, {
@@ -1468,7 +1648,7 @@ ${resolveScormResumeTargetSlide.toString()}
       if (response && response.status === 401 && (attempt || 0) < 1) {
         TOKEN = '';
         requestFreshToken('retry-after-401');
-        return commit(data, (attempt || 0) + 1);
+        return commit(data, (attempt || 0) + 1, eventType);
       }
 
       if (response && response.ok) {
@@ -1482,6 +1662,7 @@ ${resolveScormResumeTargetSlide.toString()}
           });
           if (json.data.novo_status === 'CONCLUIDO') {
             completed = true;
+            clearLocalResumeBackup();
             var _ov2 = document.getElementById('completion-overlay');
             if (_ov2) _ov2.classList.add('show');
             postToParent({ type: 'lms:completed', matriculaId: MATRICULA_ID });
@@ -1491,7 +1672,7 @@ ${resolveScormResumeTargetSlide.toString()}
         setStatus('Falha ao salvar progresso. Tentando novamente...', true);
         if ((attempt || 0) < 2) {
           window.setTimeout(function() {
-            commit(data, (attempt || 0) + 1);
+            commit(data, (attempt || 0) + 1, eventType);
           }, 1200);
         }
       }
@@ -1502,7 +1683,7 @@ ${resolveScormResumeTargetSlide.toString()}
       setStatus('Falha ao salvar progresso. Tentando novamente...', true);
       if ((attempt || 0) < 2) {
         window.setTimeout(function() {
-          commit(data, (attempt || 0) + 1);
+          commit(data, (attempt || 0) + 1, eventType);
         }, 1200);
       }
       return null;
@@ -1520,11 +1701,12 @@ ${resolveScormResumeTargetSlide.toString()}
       var payload = buildPayload();
       var payloadFingerprint = fingerprintPayload(payload);
       if (!payloadFingerprint || payloadFingerprint === lastCommittedFingerprint) return;
-      commit(payload);
+      commit(payload, 0, 'SCORM_COMMIT');
     }, typeof delayMs === 'number' ? delayMs : 1500);
   }
 
   function buildPayload() {
+    writeLocalResumeBackup('build-payload');
     if (IS_2004) {
       return {
         completion_status: cmi['cmi.completion_status'] || null,
@@ -1770,10 +1952,14 @@ ${resolveScormResumeTargetSlide.toString()}
   var SCORM12 = {
     LMSInitialize: function() {
       setStatus('SCORM inicializado', true);
+      emitTelemetry('SCORM_INIT', {
+        decision: 'accepted',
+        reason: ${hasResumeState ? "'server-resume-state'" : "'fresh-launch'"},
+      });
       return 'true';
     },
     LMSFinish: function() {
-      commit(buildPayload());
+      commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },
@@ -1781,24 +1967,49 @@ ${resolveScormResumeTargetSlide.toString()}
       return cmi[element] !== undefined ? String(cmi[element]) : '';
     },
     LMSSetValue: function(element, value) {
-      cmi[element] = value;
+      var previousValue = cmi[element];
+      var nextValue = value;
+      var decision = 'accepted';
+      var reason = 'passthrough';
+
+      if (element === 'cmi.core.lesson_location') {
+        var locationDecision = protectLocationValue(getScormLocation(), String(value || ''));
+        nextValue = locationDecision.value;
+        decision = locationDecision.blocked ? 'blocked' : 'accepted';
+        reason = locationDecision.reason;
+      } else if (element === 'cmi.suspend_data') {
+        var suspendDecision = protectSuspendDataValue(cmi['cmi.suspend_data'], String(value || ''));
+        nextValue = suspendDecision.value;
+        decision = suspendDecision.blocked ? 'blocked' : 'accepted';
+        reason = suspendDecision.reason;
+      }
+
+      cmi[element] = nextValue;
       if (element === 'cmi.core.lesson_status') {
         checkCompletion();
         scheduleCommit(800);
       }
       if (element === 'cmi.core.lesson_location' || element === 'cmi.suspend_data') {
         if (element === 'cmi.core.lesson_location') {
-          cmi['cmi.location'] = String(value || '');
+          setScormLocation(String(nextValue || ''));
           updateMaxVisitedFromLocation(cmi['cmi.location']);
         }
+        writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
         scheduleCommit(800);
       }
+      emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
+        field: element,
+        previous_value: sanitizeTelemetryValue(element, previousValue),
+        next_value: sanitizeTelemetryValue(element, nextValue),
+        decision: decision,
+        reason: reason,
+      });
       setStatus('Atualizando: ' + element, true);
       return 'true';
     },
     LMSCommit: function() {
-      commit(buildPayload());
+      commit(buildPayload(), 0, 'SCORM_COMMIT');
       return 'true';
     },
     LMSGetLastError: function() { return '0'; },
@@ -1810,10 +2021,14 @@ ${resolveScormResumeTargetSlide.toString()}
   var SCORM2004 = {
     Initialize: function() {
       setStatus('SCORM 2004 inicializado', true);
+      emitTelemetry('SCORM_INIT', {
+        decision: 'accepted',
+        reason: ${hasResumeState ? "'server-resume-state'" : "'fresh-launch'"},
+      });
       return 'true';
     },
     Terminate: function() {
-      commit(buildPayload());
+      commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },
@@ -1821,24 +2036,49 @@ ${resolveScormResumeTargetSlide.toString()}
       return cmi[element] !== undefined ? String(cmi[element]) : '';
     },
     SetValue: function(element, value) {
-      cmi[element] = value;
+      var previousValue = cmi[element];
+      var nextValue = value;
+      var decision = 'accepted';
+      var reason = 'passthrough';
+
+      if (element === 'cmi.location') {
+        var locationDecision = protectLocationValue(getScormLocation(), String(value || ''));
+        nextValue = locationDecision.value;
+        decision = locationDecision.blocked ? 'blocked' : 'accepted';
+        reason = locationDecision.reason;
+      } else if (element === 'cmi.suspend_data') {
+        var suspendDecision = protectSuspendDataValue(cmi['cmi.suspend_data'], String(value || ''));
+        nextValue = suspendDecision.value;
+        decision = suspendDecision.blocked ? 'blocked' : 'accepted';
+        reason = suspendDecision.reason;
+      }
+
+      cmi[element] = nextValue;
       if (element === 'cmi.completion_status' || element === 'cmi.success_status') {
         checkCompletion();
         scheduleCommit(800);
       }
       if (element === 'cmi.location' || element === 'cmi.suspend_data') {
         if (element === 'cmi.location') {
-          cmi['cmi.core.lesson_location'] = String(value || '');
+          setScormLocation(String(nextValue || ''));
           updateMaxVisitedFromLocation(cmi['cmi.location']);
         }
+        writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
         scheduleCommit(800);
       }
+      emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
+        field: element,
+        previous_value: sanitizeTelemetryValue(element, previousValue),
+        next_value: sanitizeTelemetryValue(element, nextValue),
+        decision: decision,
+        reason: reason,
+      });
       setStatus('Atualizando: ' + element, true);
       return 'true';
     },
     Commit: function() {
-      commit(buildPayload());
+      commit(buildPayload(), 0, 'SCORM_COMMIT');
       return 'true';
     },
     GetLastError: function() { return '0'; },
@@ -1853,21 +2093,22 @@ ${resolveScormResumeTargetSlide.toString()}
     Object.assign(window.API, SCORM12);
   }
 
+  applyLocalResumeBackup();
   updateMaxVisitedFromLocation(getScormLocation());
   lastCommittedFingerprint = fingerprintPayload(buildPayload());
 
   // Commit ao fechar a aba/janela
   window.addEventListener('beforeunload', function() {
-    commit(buildPayload());
+    commit(buildPayload(), 0, 'SCORM_BEFORE_UNLOAD_COMMIT');
   });
 
   window.addEventListener('pagehide', function() {
-    commit(buildPayload());
+    commit(buildPayload(), 0, 'SCORM_BEFORE_UNLOAD_COMMIT');
   });
 
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'hidden') {
-      commit(buildPayload());
+      commit(buildPayload(), 0, 'SCORM_VISIBILITY_COMMIT');
     }
   });
 
