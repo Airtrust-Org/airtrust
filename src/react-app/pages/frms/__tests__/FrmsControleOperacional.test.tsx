@@ -250,6 +250,12 @@ describe('FrmsControleOperacional', () => {
     renderControle();
 
     expect(screen.getByText('Controle operacional de fadiga')).toBeInTheDocument();
+    expect(screen.getByText('Acúmulo operacional da quinzena')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /O filtro mostra o recorte selecionado, mas o acúmulo considera a quinzena operacional disponível quando localizada/i,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText('Tripulantes monitorados')).toBeInTheDocument();
     expect(screen.getByText('Check-ins pendentes')).toBeInTheDocument();
     expect(screen.getAllByText('Alertas').length).toBeGreaterThan(0);
@@ -276,6 +282,8 @@ describe('FrmsControleOperacional', () => {
     expect(screen.getAllByText('Estimado').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Ausente').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Inconsistente').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ver evolução diária').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Indicador operacional da quinzena/).length).toBeGreaterThan(0);
     expect(screen.getByText('Requer avaliacao da coordenacao')).toBeInTheDocument();
   });
 
@@ -617,12 +625,12 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
 
       expect(
         screen.getByText('Período de embarque não localizado nesta data. Verifique se a escala quinzenal foi cadastrada.'),
       ).toBeInTheDocument();
-      expect(screen.getByText(/Indicador operacional da quinzena/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Indicador operacional da quinzena/).length).toBeGreaterThan(0);
     });
 
     it('renderiza mensagem de periodo parcial quando a janela cobre apenas parte da quinzena', () => {
@@ -638,7 +646,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
 
       expect(
         screen.getByText(
@@ -661,7 +669,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
 
       expect(
         screen.getByText('Quinzena base identificada. Não há jornada FRMS vinculada neste dia.'),
@@ -676,7 +684,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
 
       expect(screen.getByText('Sem jornada FRMS registrada nesta data.')).toBeInTheDocument();
     });
@@ -694,7 +702,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
 
       expect(screen.getByText('Quinzena com atenção')).toBeInTheDocument();
       expect(screen.getByText('Fonte do período:')).toBeInTheDocument();
@@ -714,10 +722,10 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getByText('Detalhes da quinzena'));
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
 
       expect(screen.queryByText(/homologado|aprovado|ANAC/i)).not.toBeInTheDocument();
-      expect(screen.getByText(/Indicador operacional da quinzena/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Indicador operacional da quinzena/).length).toBeGreaterThan(0);
       expect(
         screen.getByText(/Apoia a decisão do gestor, mas não substitui a avaliação operacional final/),
       ).toBeInTheDocument();

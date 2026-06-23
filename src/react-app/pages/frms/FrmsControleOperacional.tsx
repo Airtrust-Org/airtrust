@@ -27,8 +27,10 @@ import {
 import { FortnightDetailPanel } from './components/FortnightOperationalIndicator';
 import {
   formatFortnightLabel,
+  formatFortnightMinutes,
   hasLocatedFortnight,
 } from './fortnightOperationalLabels';
+import { buildFortnightOperationalSummary } from './fortnightOperationalSummary';
 
 type ControlFilters = FrmsOperationalSnapshotFilters & {
   tripulante_query?: string;
@@ -351,6 +353,12 @@ function KpiTile({
   );
 }
 
+function toneByAggregatePeriodStatus(status: 'COMPLETA' | 'INCOMPLETA' | 'NAO_CONFIRMADA'): string {
+  if (status === 'COMPLETA') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (status === 'INCOMPLETA') return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-slate-200 bg-slate-100 text-slate-700';
+}
+
 function formatReadAckEventLabel(event: FrmsReadAckEvent): string {
   return READ_ACK_EVENT_LABELS[event.event_type] || event.event_type;
 }
@@ -444,6 +452,10 @@ export default function FrmsControleOperacional() {
   const operationalSummary = useMemo(
     () => buildOperationalSummary(visibleItems, visibleReadAckEvents),
     [visibleItems, visibleReadAckEvents],
+  );
+  const fortnightSummary = useMemo(
+    () => buildFortnightOperationalSummary(visibleItems, snapshotFilters.data_fim),
+    [snapshotFilters.data_fim, visibleItems],
   );
 
   const groupedRows = useMemo(
@@ -680,7 +692,72 @@ export default function FrmsControleOperacional() {
           <KpiTile label="Ciencia pendente" value={operationalSummary.pendingAck} tone="info" />
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white">
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <h2 className="text-base font-semibold text-slate-950">Acúmulo operacional da quinzena</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                O filtro mostra o recorte selecionado, mas o acúmulo considera a quinzena operacional
+                disponível quando localizada.
+              </p>
+            </div>
+            <a
+              href="#frms-controle-operacional-tabela"
+              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+            >
+              Ver evolução diária
+            </a>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Período da quinzena</p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">
+                {fortnightSummary.periodStart && fortnightSummary.periodEnd
+                  ? `${formatDisplayDate(fortnightSummary.periodStart)} → ${formatDisplayDate(fortnightSummary.periodEnd)}`
+                  : 'Nao confirmado'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Status</p>
+              <span
+                className={`mt-1 inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneByAggregatePeriodStatus(
+                  fortnightSummary.periodStatus,
+                )}`}
+              >
+                {fortnightSummary.periodStatusLabel}
+              </span>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Tripulantes em atencao</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-950">{fortnightSummary.attentionCount}</p>
+              <p className="mt-1 text-xs text-slate-500">Criticos {fortnightSummary.criticalCount}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Jornada acumulada visivel</p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">
+                {formatFortnightMinutes(fortnightSummary.totalDutyTimeMin)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">HV acumulada visivel</p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">
+                {formatFortnightMinutes(fortnightSummary.totalFlightTimeMin)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Dados incompletos/estimados</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-950">
+                {fortnightSummary.estimatedOrIncompleteCount}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {fortnightSummary.locatedCount} com quinzena localizada
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="frms-controle-operacional-tabela" className="rounded-lg border border-slate-200 bg-white">
           <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-base font-semibold text-slate-950">Escala, fadiga e fontes</h2>
@@ -769,9 +846,18 @@ export default function FrmsControleOperacional() {
                           Efetividade estimada {formatPercentage(item.effectiveness_pct)}
                         </div>
                         <div className="text-[11px] text-slate-400">Quanto maior, melhor.</div>
+                        <div className="mt-2 text-xs font-medium text-slate-700">
+                          Indicador operacional da quinzena
+                        </div>
                         <div className="text-xs text-slate-500">
                           {formatFortnightLabel(item.fortnight_indicator)}
                         </div>
+                        {item.fortnight_indicator && (
+                          <div className="mt-1 text-xs text-slate-500">
+                            Jornada acumulada {formatFortnightMinutes(item.fortnight_indicator.duty_time_periodo_min)} · HV acumulada{' '}
+                            {formatFortnightMinutes(item.fortnight_indicator.horas_voo_periodo_min)}
+                          </div>
+                        )}
                         {FRMS_FORTNIGHT_DETAIL_ENABLED && (
                           <FortnightDetailPanel indicator={item.fortnight_indicator} item={item} />
                         )}
