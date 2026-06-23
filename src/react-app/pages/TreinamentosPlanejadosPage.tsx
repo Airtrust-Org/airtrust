@@ -33,7 +33,6 @@ import { useApi } from '@/react-app/hooks/useApi';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
 import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQualificacao';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import {
   useAtualizarPresencaDiaTreinamento,
   useAtualizarPresencaTreinamento,
@@ -57,12 +56,6 @@ import {
   type TreinamentoPlanejadoStatus,
 } from '@/react-app/hooks/useTreinamentosPlanejados';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
-import {
-  getTreinamentoConclusaoEligibility,
-  validateTreinamentoConclusaoState,
-  validateTreinamentoDateRange,
-  validateTreinamentoDiasEfetivos,
-} from '@/react-app/pages/treinamentos-planejados-rules';
 
 type AbaAtiva = 'calendario' | 'quadro' | 'auditoria';
 
@@ -614,7 +607,6 @@ export default function TreinamentosPlanejadosPage({
   const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
   const navigate = useNavigate();
   const canManage = !isAluno && (isAdmin || isGestor || isInstrutor || can('qualificacoes.view'));
-  const canConcludeTurma = isAdmin || isGestor;
 
   const planejadosActionButtonClass =
     'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors';
@@ -922,26 +914,6 @@ export default function TreinamentosPlanejadosPage({
     setModalDetalheAberto(true);
   }
 
-  async function abrirFluxoConclusaoTurma(treinamento: TreinamentoPlanejado) {
-    const eligibility = getTreinamentoConclusaoEligibility(treinamento, today);
-    if (!eligibility.eligible) {
-      toast.error(eligibility.reason || 'Turma ainda não está apta para conclusão.');
-      return;
-    }
-
-    const confirmado = await confirmDialog(
-      'Abrir o fluxo seguro de conclusão desta turma? Os participantes aprovados terão as qualificações emitidas conforme a conclusão individual.',
-      {
-        title: 'Concluir turma',
-        confirmText: 'Abrir conclusão',
-        cancelText: 'Cancelar',
-      },
-    );
-    if (!confirmado) return;
-
-    abrirDetalhes(treinamento);
-  }
-
   function fecharModalSessaoSimulador() {
     setModalSessaoSimuladorAberto(false);
     setSessaoSimuladorEditando(null);
@@ -1055,9 +1027,20 @@ export default function TreinamentosPlanejadosPage({
       return;
     }
 
-    const intervaloError = validateTreinamentoDateRange(formState.data_prevista, formState.data_fim);
-    if (intervaloError) {
-      toast.error(intervaloError);
+    if (!formState.data_prevista) {
+      toast.error('Informe a data prevista do treinamento.');
+      return;
+    }
+    if (!formState.data_fim || formState.data_fim < formState.data_prevista) {
+      toast.error('Data inicial não pode ser posterior à data final.');
+      return;
+    }
+    if (formState.status === 'CONCLUIDO' && formState.data_fim > today) {
+      toast.error('Turma concluída não pode ter período futuro.');
+      return;
+    }
+    if (formState.status === 'CONCLUIDO' && formState.participante_ids.length === 0) {
+      toast.error('Não é permitido concluir turma sem participantes vinculados.');
       return;
     }
 
@@ -1090,15 +1073,6 @@ export default function TreinamentosPlanejadosPage({
       toast.error('A turma precisa possuir ao menos um dia efetivo.');
       return;
     }
-    const diasNoPeriodoError = validateTreinamentoDiasEfetivos(
-      formState.data_prevista,
-      formState.data_fim,
-      dias,
-    );
-    if (diasNoPeriodoError) {
-      toast.error(diasNoPeriodoError);
-      return;
-    }
     if (new Set(dias.map((dia) => dia.data)).size !== dias.length) {
       toast.error('Não é permitido repetir um dia efetivo.');
       return;
@@ -1107,14 +1081,8 @@ export default function TreinamentosPlanejadosPage({
       toast.error('Cada dia deve terminar depois do horário inicial.');
       return;
     }
-    const conclusaoError = validateTreinamentoConclusaoState({
-      status: formState.status,
-      dataFinal: formState.data_fim,
-      participantesCount: formState.participante_ids.length,
-      today,
-    });
-    if (conclusaoError) {
-      toast.error(conclusaoError);
+    if (dias.some((dia) => dia.data < formState.data_prevista || dia.data > formState.data_fim)) {
+      toast.error('Dias efetivos devem estar dentro do período da turma.');
       return;
     }
 
@@ -1789,7 +1757,6 @@ export default function TreinamentosPlanejadosPage({
                         const simulatorSessionId = getSimulatorSessionId(item);
                         const participantSummary =
                           getEventoParticipantSummary(item) || `${item.convocados_total} convocados`;
-                        const conclusaoEligibility = getTreinamentoConclusaoEligibility(item, today);
                         return (
                           <tr
                             key={item.id}
@@ -1835,18 +1802,6 @@ export default function TreinamentosPlanejadosPage({
                                     className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-indigo-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
                                   >
                                     <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
-                                  </button>
-                                ) : null}
-                                {canConcludeTurma && conclusaoEligibility.eligible ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => void abrirFluxoConclusaoTurma(item)}
-                                    aria-label="Concluir turma"
-                                    title="Concluir turma"
-                                    className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-emerald-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
-                                    data-testid={`treinamento-concluir-${item.id}`}
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                                   </button>
                                 ) : null}
                               </div>
@@ -2267,7 +2222,7 @@ export default function TreinamentosPlanejadosPage({
                 <input
                   type="date"
                   value={formState.data_prevista}
-                  max={formState.data_fim || undefined}
+                  min={treinamentoEditando ? undefined : today}
                   onChange={(event) => {
                     const nextStart = event.target.value;
                     const nextEnd =
@@ -2283,7 +2238,7 @@ export default function TreinamentosPlanejadosPage({
                 <input
                   type="date"
                   value={formState.data_fim}
-                  min={formState.data_prevista || undefined}
+                  min={formState.data_prevista || today}
                   onChange={(event) =>
                     atualizarIntervalo(formState.data_prevista, event.target.value)
                   }
