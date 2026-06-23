@@ -2,7 +2,7 @@
 
 Data: 2026-06-23
 
-Status: `PR ISOLADO PRONTO PARA CI REMOTA`
+Status: `FRMS QUINZENAL MERGEADO — DEPLOY BLOQUEADO POR CLOUDFLARE PAGES`
 
 ## 1. O que foi implementado
 
@@ -83,6 +83,65 @@ Status: `PR ISOLADO PRONTO PARA CI REMOTA`
 - `npm run lint`
 - `npm run build`
 
-## 8. Decisão final
+## 8. PR #136, merge e CI
 
-`FRMS QUINZENAL OPERACIONAL EM PR ISOLADO — AGUARDANDO CI REMOTA`
+- PR: `#136`
+- URL: `https://github.com/airtrustsystem-alt/airtrust/pull/136`
+- Merge commit: `4c0b3300bb5065b279afb346ba8df5802d2385e7`
+- Mergeado em `main`: `SIM`
+- CI remota do PR antes do merge:
+  - `build`: `SUCCESS`
+  - `check-demo-data`: `SUCCESS`
+  - `lint`: `SUCCESS`
+  - `test`: `SUCCESS`
+  - `lms-smoke`: `SUCCESS`
+  - `🧪 Check PR`: `SUCCESS`
+
+## 9. Preflight público de produção antes do deploy
+
+- `GET https://api.airtrust.online/api/version`: `200`
+- `GET https://api.airtrust.online/api/health`: `200`
+- `GET rota protegida sem token`: `401`
+- `https://airtrust.online/login`: UI atual carregando
+- `build-version` observado no login: `2026-06-23T01:13:45Z-sw-decommission`
+- `/sw.js`: kill-switch/descomissionamento publicado
+- `/dashboard` sem sessão: redireciona para `/login`
+- `/mro` sem sessão: redireciona para `/login`
+- browser real sem sessão:
+  - service worker registrado: `0`
+  - controller ativo: `NAO`
+
+## 10. Deploy Pages
+
+- alvo pretendido: `main` contendo `4c0b3300bb5065b279afb346ba8df5802d2385e7`
+- deploy Pages produção executado: `NAO`
+- Worker publicado: `NAO`
+- SQL produção executado: `NAO`
+- migration/schema aplicado: `NAO`
+
+Bloqueios observados:
+
+- o workflow `🚀 Deploy AirTrust` falhou no job `🌐 Deploy Pages` porque `CLOUDFLARE_API_TOKEN` não chegou ao processo do Wrangler;
+- o repositório não expôs secrets nomeados para Pages nesta sessão (`CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` não apareceram na listagem do repositório nem do environment `production`);
+- a credencial local atual é ativa para `wrangler whoami`, mas falha em:
+  - `wrangler pages deployment list --project-name=airtrust` com erro em `/memberships`;
+  - `GET /accounts/{account}/pages/projects/airtrust` com `403 Authentication error`.
+
+Leitura operacional:
+
+- falta ao menos `User -> Memberships -> Read` para o fluxo que lista deployments via Wrangler;
+- para operar Cloudflare Pages por API, a credencial precisa de `Account -> Cloudflare Pages -> Read` e `Edit`;
+- se o token continuar apontando para conta errada ou escopo errado, o bloqueio também persiste.
+
+## 11. Smoke pós-deploy
+
+- smoke pós-deploy autenticado FRMS: `NAO EXECUTADO`
+- motivo: não houve deploy novo e não havia sessão autenticada segura nesta sessão
+- evidência honesta disponível:
+  - rotas públicas e protegidas básicas seguem saudáveis;
+  - login atual e descomissionamento de service worker seguem corretos;
+  - não há evidência inventada para `/frms` logado
+
+## 12. Decisão final
+
+`FRMS QUINZENAL MERGEADO — DEPLOY BLOQUEADO POR CLOUDFLARE PAGES`
