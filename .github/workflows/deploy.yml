@@ -158,14 +158,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: 🚀 Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: worker-airtrust
-          command: deploy --env production
-          vars: |
-            APP_VERSION=${{ github.sha }}
+        run: npm run deploy:worker:safe
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AIRTRUST_ALLOW_APP_VERSION_OVERRIDE: '1'
+          APP_VERSION: ${{ github.sha }}
 
       - name: ✅ Worker deployed
         run: echo "✅ Worker deployed — commit ${{ github.sha }}"
