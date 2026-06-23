@@ -92,21 +92,8 @@
           const shouldReloadOnce =
             hasController || airTrustCacheNames.length > 0 || existingRegistrations.length > 0;
 
-          await Promise.all(existingRegistrations.map((registration) => registration.update?.()));
-
-          if ('serviceWorker' in navigator) {
-            try {
-              const registration = await navigator.serviceWorker.register('/sw.js', {
-                scope: '/',
-                updateViaCache: 'none',
-              });
-              await registration.update();
-            } catch {
-              // Seguimos com a limpeza local mesmo se o kill-switch nao registrar.
-            }
-          }
-
           await Promise.all(airTrustCacheNames.map((name) => caches.delete(name)));
+          await Promise.all(existingRegistrations.map((registration) => registration.unregister?.()));
 
           if (recoveredByQuery) {
             sessionStorage.removeItem(RECOVERY_KEY);
