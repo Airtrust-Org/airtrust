@@ -135,6 +135,9 @@ jobs:
       - name: 📚 Install dependencies
         run: npm ci
 
+      - name: 📚 Install worker dependencies
+        run: cd worker-airtrust && npm ci
+
       - name: 🧯 Validate production approval gate
         run: |
           expected="I understand this touches AirTrust production"
