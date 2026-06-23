@@ -2,7 +2,7 @@
 
 Data: 2026-06-23
 
-Status atual: `IMPLEMENTADO LOCALMENTE — PR E DEPLOY PENDENTES`
+Status atual: `PR #143 ABERTO — CI EM ANDAMENTO, DEPLOY PENDENTE`
 
 ## 1. Objetivo
 
@@ -107,13 +107,25 @@ Melhorar a visibilidade do acumulo de fadiga da quinzena no FRMS, expondo:
   - `npm run build`
   - `PASS`
 
-## 7. Limitações honestas
+## 7. PR e publicacao
+
+- Branch: `codex/frms-quinzena-ux-acumulo-20260623`
+- Commit: `01c417eb`
+- PR: `#143`
+- URL: `https://github.com/airtrustsystem-alt/airtrust/pull/143`
+- Estado no momento deste relatorio:
+  - PR aberto;
+  - CI remota em andamento;
+  - merge ainda nao executado;
+  - deploy Pages ainda nao executado.
+
+## 8. Limitações honestas
 
 - O resumo executivo da home depende do snapshot operacional do dia corrente e do recorte visivel de tripulantes.
 - Nao houve deploy Pages nesta etapa.
 - Nao houve smoke autenticado em ambiente publicado nesta etapa.
 - Nao ha evidencia inventada de producao para esta entrega enquanto PR/CI/merge/deploy nao forem concluidos.
 
-## 8. Decisao atual
+## 9. Decisao atual
 
-`IMPLEMENTADO LOCALMENTE — PR E DEPLOY PENDENTES`
+`PR #143 ABERTO — CI EM ANDAMENTO, DEPLOY PENDENTE`
