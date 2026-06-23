@@ -99,9 +99,13 @@ export default function FrmsEffectivenessPanel({
 
   return (
     <div className="rounded-xl border border-slate-200/50 bg-white/80 backdrop-blur-sm p-4 shadow-md">
-      <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-        Índice estimado de prontidão operacional
+      <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+        Efetividade estimada
       </h4>
+      <p className="mb-3 text-[11px] text-slate-500">
+        Proxy operacional/fisiológico derivado de jornada, repouso, sono, circadiano e ciclo.
+        Quanto maior, melhor.
+      </p>
 
       {/* Score circle + label */}
       <div className="flex items-center gap-4 mb-4">
