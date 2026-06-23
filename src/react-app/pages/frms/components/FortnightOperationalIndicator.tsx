@@ -381,7 +381,7 @@ export function FortnightDetailPanel({
       onToggle={(event) => setIsOpen((event.currentTarget as HTMLDetailsElement).open)}
     >
       <summary className="cursor-pointer text-[11px] font-medium text-slate-600">
-        Detalhes da quinzena
+        Ver evolução diária
       </summary>
       <div className="mt-2 space-y-2">
         <FortnightOperationalDisclaimer compact />

@@ -124,7 +124,7 @@ describe('FortnightOperationalIndicator components', () => {
       refetch: vi.fn(),
     });
     render(<FortnightDetailPanel indicator={buildIndicator()} item={{ teve_jornada: true }} />);
-    expect(screen.getByText('Detalhes da quinzena')).toBeInTheDocument();
+    expect(screen.getByText('Ver evolução diária')).toBeInTheDocument();
     expect(screen.getByText(/Indicador operacional da quinzena/)).toBeInTheDocument();
     expect(screen.getByText('Projeção')).toBeInTheDocument();
     expect(screen.getByText(/Score acumulado:/)).toBeInTheDocument();
@@ -142,7 +142,7 @@ describe('FortnightOperationalIndicator components', () => {
       refetch: vi.fn(),
     });
     render(<FortnightDetailPanel indicator={buildIndicator()} item={{ teve_jornada: true }} />);
-    fireEvent.click(screen.getByText('Detalhes da quinzena'));
+    fireEvent.click(screen.getByText('Ver evolução diária'));
     expect(screen.getByText(/Contexto embarcado:/)).toBeInTheDocument();
     expect(screen.getAllByText('Não confirmado').length).toBeGreaterThanOrEqual(2);
   });
@@ -158,7 +158,7 @@ describe('FortnightOperationalIndicator components', () => {
       refetch: vi.fn(),
     });
     render(<FortnightDetailPanel indicator={null} item={{ teve_jornada: false }} />);
-    expect(screen.getByText('Detalhes da quinzena')).toBeInTheDocument();
+    expect(screen.getByText('Ver evolução diária')).toBeInTheDocument();
     expect(
       screen.getByText('Sem jornada FRMS registrada nesta data.'),
     ).toBeInTheDocument();
