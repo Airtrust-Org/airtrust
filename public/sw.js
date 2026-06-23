@@ -1,14 +1,12 @@
 /**
- * AirTrust Service Worker temporary kill switch.
+ * AirTrust Service Worker kill switch.
  *
- * Objetivo operacional:
- * - expulsar clientes presos em runtimes legados;
- * - limpar todos os caches AirTrust conhecidos;
- * - evitar qualquer novo cache de HTML/app shell;
- * - desregistrar o service worker assim que a limpeza terminar.
+ * O app nao registra mais service worker.
+ * Este arquivo permanece publicado apenas para limpar runtimes legados
+ * que ainda consigam atualizar para uma versao mais nova do /sw.js.
  */
 
-const CACHE_VERSION = 'airtrust-v12';
+const CACHE_VERSION = 'airtrust-v13';
 const CACHE_PREFIX = 'airtrust-';
 const LOGIN_SW_RESET_PARAM = 'airtrust_sw_reset';
 const CRITICAL_PATH_PATTERNS = [/^\/$/, /^\/login$/, /^\/dashboard(?:\/|$)/, /^\/mro(?:\/|$)/];
@@ -22,10 +20,7 @@ async function purgeLegacyAirTrustCaches() {
   await Promise.all(
     cacheNames
       .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX))
-      .map((cacheName) => {
-        console.log(`[SW] Deletando cache legado: ${cacheName}`);
-        return caches.delete(cacheName);
-      }),
+      .map((cacheName) => caches.delete(cacheName)),
   );
 }
 
@@ -52,27 +47,15 @@ async function forceRefreshCriticalClients() {
 }
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Instalando kill switch temporario');
   event.waitUntil(Promise.resolve(self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Ativando kill switch temporario');
   event.waitUntil(
     (async () => {
       await purgeLegacyAirTrustCaches();
       await clients.claim();
       await forceRefreshCriticalClients();
-
-      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-      clientList.forEach((client) => {
-        client.postMessage({
-          type: 'AIRTRUST_SW_RESET',
-          version: CACHE_VERSION,
-          message: 'Service worker legado removido. Recarregando o AirTrust.',
-        });
-      });
-
       await self.registration.unregister();
     })(),
   );
@@ -101,11 +84,6 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('message', (event) => {
   if (!event.data) return;
-
-  if (event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-    return;
-  }
 
   if (event.data.type === 'CLEAR_CACHE') {
     event.waitUntil(
