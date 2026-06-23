@@ -100,30 +100,6 @@ function resolveScopedSetorIds(
   return access.setorIds;
 }
 
-function getTodayUtcYmd(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function validateConcludedTrainingState(params: {
-  status?: string | null;
-  dataFim?: string | null;
-  participantesCount: number;
-}): string | null {
-  const normalizedStatus = String(params.status || '').trim().toUpperCase();
-  if (normalizedStatus !== 'CONCLUIDO') {
-    return null;
-  }
-  if (params.participantesCount === 0) {
-    return 'Não é permitido concluir turma sem participantes vinculados';
-  }
-
-  const dataFim = String(params.dataFim || '').slice(0, 10);
-  if (dataFim && dataFim > getTodayUtcYmd()) {
-    return 'Não é permitido concluir turma com período futuro';
-  }
-  return null;
-}
-
 // Module-level cache for schema capabilities — avoids 10+ PRAGMA calls per request.
 // Worker isolates restart regularly so this never holds stale data for long.
 let _capabilitiesCache: TreinamentoSchemaCapabilities | null = null;
@@ -259,6 +235,20 @@ const conclusaoParticipanteSchema = z.object({
   observacoes: z.string().trim().max(4000).nullable().optional(),
 });
 
+const conclusaoLoteParticipanteSchema = z.object({
+  funcionario_id: z.number().int().positive(),
+  presente: z.boolean().nullable().optional(),
+  resultado: z.enum(RESULTADO_VALUES).nullable().optional(),
+  data_conclusao_efetiva: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  nota: z.number().min(0).max(100).nullable().optional(),
+  conceito: z.string().trim().max(100).nullable().optional(),
+  observacoes: z.string().trim().max(4000).nullable().optional(),
+});
+
+const conclusaoLoteSchema = z.object({
+  participantes: z.array(conclusaoLoteParticipanteSchema).min(1),
+});
+
 const presencaDiaSchema = z.object({
   funcionario_id: z.number().int().positive(),
   status: z.enum(['PENDENTE', 'PRESENTE', 'AUSENTE', 'PARCIAL', 'DISPENSADO']),
@@ -316,6 +306,7 @@ type ParticipanteRow = {
   nota: number | null;
   observacoes: string | null;
   qualificacao_historico_id: number | null;
+  qualificacao_historico_status: string | null;
   status_participacao: string | null;
   resultado: string | null;
   conceito: string | null;
@@ -817,6 +808,7 @@ async function loadParticipantesByTreinamento(
                         tp.nota,
                         tp.observacoes,
                         tp.qualificacao_historico_id,
+                        qh.status AS qualificacao_historico_status,
                         tp.status_participacao,
                         tp.resultado,
                         tp.conceito,
@@ -825,6 +817,10 @@ async function loadParticipantesByTreinamento(
                    FROM treinamentos_participantes tp
                    INNER JOIN treinamentos_planejados t ON t.id = tp.treinamento_id AND t.deleted_at IS NULL
                    LEFT JOIN funcionarios f ON f.id = tp.funcionario_id AND f.deleted_at IS NULL
+                   LEFT JOIN qualificacoes_historico qh
+                     ON qh.id = tp.qualificacao_historico_id
+                    AND qh.empresa_id = t.empresa_id
+                    AND qh.deleted_at IS NULL
                   WHERE t.empresa_id = ?
                     AND tp.treinamento_id IN (${placeholders})
                     ${
@@ -1032,6 +1028,7 @@ function serializeParticipante(row: ParticipanteRow) {
     nota: row.nota === null || row.nota === undefined ? null : Number(row.nota),
     observacoes: row.observacoes,
     qualificacao_historico_id: row.qualificacao_historico_id,
+    qualificacao_historico_status: row.qualificacao_historico_status,
     status_participacao: row.status_participacao || 'MATRICULADO',
     resultado: row.resultado,
     conceito: row.conceito,
@@ -1105,6 +1102,25 @@ const VIRTUAL_ID_OFFSETS = {
 
 function toVirtualId(source: 'QUALIFICACAO_PLANEJADA' | 'SIMULADOR', sourceId: number): number {
   return -1 * (VIRTUAL_ID_OFFSETS[source] + sourceId);
+}
+
+function isFinalResultado(resultado: string | null | undefined): boolean {
+  return ['APROVADO', 'REPROVADO', 'CANCELADO'].includes(
+    String(resultado || '')
+      .trim()
+      .toUpperCase(),
+  );
+}
+
+function isHistoricoGerado(status: string | null | undefined): boolean {
+  const normalized = String(status || '')
+    .trim()
+    .toUpperCase();
+  return Boolean(normalized) && !['PLANEJADA', 'PLANEJADO'].includes(normalized);
+}
+
+function getTodayYmdUtc(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function normalizeSourceFilter(raw: string | null | undefined): ConsolidatedSource | null {
@@ -2042,14 +2058,6 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
   }
   const dataInicio = input.data_inicio || dias[0].data;
   const dataFim = input.data_fim || dias[dias.length - 1].data;
-  const conclusaoStateError = validateConcludedTrainingState({
-    status: input.status,
-    dataFim,
-    participantesCount: participanteIds.length,
-  });
-  if (conclusaoStateError) {
-    return c.json({ success: false, error: conclusaoStateError }, 400);
-  }
   if (dias.some((dia) => dia.data < dataInicio || dia.data > dataFim)) {
     return c.json({ success: false, error: 'Dia efetivo fora do período da turma' }, 400);
   }
@@ -2506,19 +2514,10 @@ treinamentosPlanejadosRoutes.patch(
 
     const existing = await db
       .prepare(
-        `SELECT id, qualificacao_tipo_id, data_prevista, data_inicio, data_fim, status
-           FROM treinamentos_planejados
-          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        'SELECT id, qualificacao_tipo_id FROM treinamentos_planejados WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
       .bind(treinamentoId, empresaId)
-      .first<{
-        id: number;
-        qualificacao_tipo_id: number;
-        data_prevista: string;
-        data_inicio: string | null;
-        data_fim: string | null;
-        status: string | null;
-      }>();
+      .first<{ id: number; qualificacao_tipo_id: number }>();
 
     if (!existing) {
       return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
@@ -2570,37 +2569,45 @@ treinamentosPlanejadosRoutes.patch(
     ) {
       return c.json({ success: false, error: 'Quantidade de participantes excede o limite da turma' }, 400);
     }
-    const participantesCount =
-      input.participante_ids !== undefined
-        ? normalizePositiveIds(input.participante_ids).length
-        : Number(
-            (
-              await db
-                .prepare(
-                  `SELECT COUNT(*) AS total
-                     FROM treinamentos_participantes
-                    WHERE treinamento_id = ?`,
-                )
-                .bind(treinamentoId)
-                .first<{ total: number | string | null }>()
-            )?.total || 0,
-          );
-    const effectiveDataInicio = input.data_inicio ?? existing.data_inicio ?? input.data_prevista ?? existing.data_prevista;
-    const effectiveDataFim = input.data_fim ?? existing.data_fim ?? input.data_prevista ?? existing.data_prevista;
-    const effectiveStatus = input.status ?? existing.status;
-    const conclusaoStateError = validateConcludedTrainingState({
-      status: effectiveStatus,
-      dataFim: effectiveDataFim,
-      participantesCount,
-    });
-    if (conclusaoStateError) {
-      return c.json({ success: false, error: conclusaoStateError }, 400);
-    }
-    if (effectiveDataInicio && effectiveDataFim && effectiveDataFim < effectiveDataInicio) {
-      return c.json(
-        { success: false, error: 'A data final deve ser igual ou posterior à inicial' },
-        400,
+    if (input.status === 'CONCLUIDO') {
+      const { items } = await listEventos(db, empresaId, { treinamentoId });
+      const treinamentoAtual = items[0];
+      if (!treinamentoAtual) {
+        return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
+      }
+
+      const dataFimEfetiva =
+        input.data_fim ||
+        input.data_inicio ||
+        treinamentoAtual.data_fim ||
+        treinamentoAtual.data_prevista;
+      if (dataFimEfetiva > getTodayYmdUtc()) {
+        return c.json(
+          { success: false, error: 'Turma concluída não pode ter período futuro.' },
+          400,
+        );
+      }
+
+      if (treinamentoAtual.participantes.length === 0) {
+        return c.json(
+          { success: false, error: 'Não é permitido concluir turma sem participantes vinculados.' },
+          400,
+        );
+      }
+
+      const todosComResultadoFinal = treinamentoAtual.participantes.every((participante) =>
+        isFinalResultado(participante.resultado),
       );
+      if (!todosComResultadoFinal) {
+        return c.json(
+          {
+            success: false,
+            error:
+              'A turma só pode ser marcada como Concluída quando todos os participantes tiverem resultado final. Use "Concluir turma e salvar".',
+          },
+          409,
+        );
+      }
     }
     const previousParticipants =
       input.participante_ids !== undefined ||
@@ -2990,6 +2997,273 @@ treinamentosPlanejadosRoutes.get('/planejados/:id/conclusao/preview', async (c) 
     },
   });
 });
+
+treinamentosPlanejadosRoutes.patch(
+  '/planejados/:id/conclusao-lote',
+  requireRole('admin', 'manager'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaId(c);
+    const treinamentoId = Number(c.req.param('id'));
+    if (!Number.isInteger(treinamentoId) || treinamentoId <= 0) {
+      return c.json({ success: false, error: 'ID inválido' }, 400);
+    }
+
+    const parsed = conclusaoLoteSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: 'Dados inválidos', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    const { items } = await listEventos(db, empresaId, { treinamentoId });
+    const treinamento = items[0];
+    if (!treinamento) {
+      return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
+    }
+    if (treinamento.participantes.length === 0) {
+      return c.json({ success: false, error: 'Turma sem participantes para concluir' }, 400);
+    }
+
+    const dataFimTurma = treinamento.data_fim || treinamento.data_prevista;
+    if (dataFimTurma > getTodayYmdUtc()) {
+      return c.json({ success: false, error: 'Turma futura não pode ser concluída' }, 400);
+    }
+
+    const payloadByFuncionario = new Map<
+      number,
+      z.infer<typeof conclusaoLoteParticipanteSchema>
+    >();
+    for (const participante of parsed.data.participantes) {
+      payloadByFuncionario.set(participante.funcionario_id, participante);
+    }
+
+    const participantesAtuais = new Map(
+      treinamento.participantes.map((participante) => [participante.funcionario_id, participante] as const),
+    );
+    const participantesForaDaTurma = [...payloadByFuncionario.keys()].filter(
+      (funcionarioId) => !participantesAtuais.has(funcionarioId),
+    );
+    if (participantesForaDaTurma.length > 0) {
+      return c.json(
+        {
+          success: false,
+          error: `Participante(s) não encontrado(s) nesta turma: ${participantesForaDaTurma.join(', ')}`,
+        },
+        400,
+      );
+    }
+
+    const ua = extrairUsuarioAuditoria(c);
+    const erros: string[] = [];
+    const participantesAtualizados = new Set<number>();
+    let atualizados = 0;
+
+    for (const [funcionarioId, participanteInput] of payloadByFuncionario.entries()) {
+      const participanteAtual = participantesAtuais.get(funcionarioId);
+      if (!participanteAtual) continue;
+
+      const updates: string[] = [];
+      const params: unknown[] = [];
+      const resultadoNormalizado = participanteInput.resultado || null;
+      const dataConclusaoEfetiva =
+        resultadoNormalizado === 'APROVADO'
+          ? participanteInput.data_conclusao_efetiva ||
+            participanteAtual.data_conclusao_efetiva ||
+            dataFimTurma
+          : participanteInput.resultado !== undefined
+            ? null
+            : participanteAtual.data_conclusao_efetiva;
+
+      if (resultadoNormalizado === 'APROVADO' && !dataConclusaoEfetiva) {
+        erros.push(`Participante ${funcionarioId} sem data efetiva para aprovação`);
+        continue;
+      }
+
+      if (
+        participanteInput.presente !== undefined &&
+        participanteInput.presente !== participanteAtual.presente
+      ) {
+        updates.push('presente = ?');
+        params.push(toSqlBoolean(participanteInput.presente));
+      }
+
+      if (resultadoNormalizado !== null) {
+        if (resultadoNormalizado !== participanteAtual.resultado) {
+          updates.push('resultado = ?');
+          params.push(resultadoNormalizado);
+        }
+
+        const aprovado = resultadoNormalizado === 'APROVADO' ? 1 : 0;
+        if (
+          (participanteAtual.aprovado === null ? null : Number(participanteAtual.aprovado) === 1) !==
+          (resultadoNormalizado === 'APROVADO')
+        ) {
+          updates.push('aprovado = ?');
+          params.push(aprovado);
+        }
+
+        updates.push('data_conclusao_efetiva = ?');
+        params.push(dataConclusaoEfetiva);
+        updates.push('concluido_em = datetime(\'now\')');
+        updates.push('concluido_por = ?');
+        params.push(ua.usuario_id ?? null);
+      }
+
+      if (participanteInput.nota !== undefined) {
+        updates.push('nota = ?');
+        params.push(participanteInput.nota ?? null);
+      }
+      if (participanteInput.conceito !== undefined) {
+        updates.push('conceito = ?');
+        params.push(toNullableText(participanteInput.conceito));
+      }
+      if (participanteInput.observacoes !== undefined) {
+        updates.push('observacoes = COALESCE(?, observacoes)');
+        params.push(toNullableText(participanteInput.observacoes));
+      }
+
+      if (updates.length === 0) {
+        continue;
+      }
+
+      params.push(participanteAtual.id);
+      await db
+        .prepare(
+          `UPDATE treinamentos_participantes
+              SET ${updates.join(', ')},
+                  updated_at = datetime('now')
+            WHERE id = ?`,
+        )
+        .bind(...params)
+        .run();
+
+      participantesAtualizados.add(funcionarioId);
+      atualizados += 1;
+    }
+
+    if (atualizados === 0 && erros.length === 0) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Nenhuma alteração foi aplicada. Ajuste as marcações da turma antes de salvar a conclusão.',
+        },
+        409,
+      );
+    }
+
+    if (atualizados > 0) {
+      await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+      await registrarAuditoria({
+        db,
+        tabela: 'treinamentos_planejados',
+        acao: 'UPDATE',
+        registro_id: treinamentoId,
+        dados_novos: {
+          conclusao_lote: [...payloadByFuncionario.values()].map((participante) => ({
+            funcionario_id: participante.funcionario_id,
+            presente: participante.presente,
+            resultado: participante.resultado,
+            data_conclusao_efetiva: participante.data_conclusao_efetiva,
+          })),
+        },
+        ...ua,
+      });
+    }
+
+    const { items: itemsAtualizados } = await listEventos(db, empresaId, { treinamentoId });
+    const treinamentoAtualizado = itemsAtualizados[0];
+    if (!treinamentoAtualizado) {
+      return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
+    }
+
+    const beforeByFuncionario = participantesAtuais;
+    const afterByFuncionario = new Map(
+      treinamentoAtualizado.participantes.map((participante) => [
+        participante.funcionario_id,
+        participante,
+      ] as const),
+    );
+
+    let criados = 0;
+    let jaExistentes = 0;
+    let ignorados = 0;
+
+    for (const participanteInput of payloadByFuncionario.values()) {
+      const before = beforeByFuncionario.get(participanteInput.funcionario_id);
+      const after = afterByFuncionario.get(participanteInput.funcionario_id);
+      if (!before || !after) continue;
+
+      if (participanteInput.resultado !== 'APROVADO') {
+        ignorados += 1;
+        continue;
+      }
+
+      const beforeGerado =
+        isHistoricoGerado(before.qualificacao_historico_status) &&
+        String(before.resultado || '').toUpperCase() === 'APROVADO';
+      const afterGerado =
+        isHistoricoGerado(after.qualificacao_historico_status) &&
+        String(after.resultado || '').toUpperCase() === 'APROVADO';
+
+      if (!afterGerado) {
+        ignorados += 1;
+        continue;
+      }
+
+      if (
+        beforeGerado &&
+        before.qualificacao_historico_id === after.qualificacao_historico_id &&
+        before.data_conclusao_efetiva === after.data_conclusao_efetiva
+      ) {
+        jaExistentes += 1;
+      } else {
+        criados += 1;
+      }
+    }
+
+    const negativos = treinamentoAtualizado.participantes.filter((participante) =>
+      ['REPROVADO', 'CANCELADO'].includes(String(participante.resultado || '').toUpperCase()),
+    ).length;
+    const incompletos = treinamentoAtualizado.participantes.filter(
+      (participante) => String(participante.resultado || '').toUpperCase() === 'INCOMPLETO',
+    ).length;
+    const aprovados = treinamentoAtualizado.participantes.filter(
+      (participante) => String(participante.resultado || '').toUpperCase() === 'APROVADO',
+    ).length;
+
+    return c.json({
+      success: true,
+      data: {
+        treinamento_id: treinamentoId,
+        status_turma: treinamentoAtualizado.status,
+        resumo: {
+          total_participantes: treinamentoAtualizado.participantes.length,
+          presentes: treinamentoAtualizado.participantes.filter((participante) => participante.presente)
+            .length,
+          aprovados,
+          reprovados: negativos,
+          incompletos,
+          pendentes:
+            treinamentoAtualizado.participantes.length - aprovados - negativos - incompletos,
+          ja_concluidos: treinamento.participantes.filter((participante) =>
+            isFinalResultado(participante.resultado),
+          ).length,
+          historicos_gerados: treinamentoAtualizado.participantes.filter((participante) =>
+            isHistoricoGerado(participante.qualificacao_historico_status),
+          ).length,
+          criados,
+          ja_existentes: jaExistentes,
+          ignorados,
+          atualizados,
+          erros,
+        },
+      },
+    });
+  },
+);
 
 treinamentosPlanejadosRoutes.patch(
   '/planejados/:id/participantes/conclusao',
