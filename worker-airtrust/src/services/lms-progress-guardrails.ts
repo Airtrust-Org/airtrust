@@ -172,3 +172,115 @@ export function preferScormValue<T>(current: Nullable<T>, incoming: Nullable<T>,
   if (preferIncoming) return incoming ?? current ?? null;
   return current ?? incoming ?? null;
 }
+
+function normalizeScormText(value: Nullable<string>) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function parseScormCmiJson(cmiJson: Nullable<string>) {
+  if (!cmiJson) return null;
+
+  try {
+    const parsed = JSON.parse(cmiJson) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function readScormLocationValue(cmi: Record<string, unknown> | null) {
+  if (!cmi) return null;
+
+  const direct = typeof cmi['cmi.location'] === 'string' ? cmi['cmi.location'] : null;
+  if (direct?.trim()) return direct.trim();
+
+  const legacy =
+    typeof cmi['cmi.core.lesson_location'] === 'string' ? cmi['cmi.core.lesson_location'] : null;
+  return legacy?.trim() ? legacy.trim() : null;
+}
+
+function writeScormLocationValue(
+  cmi: Record<string, unknown>,
+  location: string,
+  options?: { syncLegacy?: boolean },
+) {
+  cmi['cmi.location'] = location;
+  if (options?.syncLegacy !== false) {
+    cmi['cmi.core.lesson_location'] = location;
+  }
+}
+
+function isRegressiveScormLocation(
+  current: { current: number; total: number | null } | null,
+  incoming: { current: number; total: number | null } | null,
+) {
+  if (!current || current.current <= 1 || !incoming) return false;
+  if (incoming.current >= current.current) return false;
+
+  if (current.total != null && incoming.total != null) {
+    return incoming.total === current.total;
+  }
+
+  if (incoming.total != null) {
+    return current.current <= incoming.total;
+  }
+
+  return true;
+}
+
+export function mergeScormRuntimeState(params: {
+  currentCmiJson?: Nullable<string>;
+  incomingCmiJson?: Nullable<string>;
+  currentSuspendData?: Nullable<string>;
+  incomingSuspendData?: Nullable<string>;
+}) {
+  const currentCmi = parseScormCmiJson(params.currentCmiJson);
+  const incomingCmi = parseScormCmiJson(params.incomingCmiJson);
+  const mergedCmi = incomingCmi ? { ...incomingCmi } : currentCmi ? { ...currentCmi } : null;
+
+  const currentLocationValue = readScormLocationValue(currentCmi);
+  const incomingLocationValue = readScormLocationValue(incomingCmi);
+  const currentLocation = parseScormLocationMarker(currentLocationValue);
+  const incomingLocation = parseScormLocationMarker(incomingLocationValue);
+
+  const blockedLocationRegression = isRegressiveScormLocation(currentLocation, incomingLocation);
+  const preservedLocationFromCurrent =
+    Boolean(currentLocationValue) && (!incomingLocationValue || blockedLocationRegression);
+  const mergedLocationValue = preservedLocationFromCurrent
+    ? currentLocationValue
+    : incomingLocationValue ?? currentLocationValue;
+
+  const currentSuspendData = normalizeScormText(params.currentSuspendData);
+  const incomingSuspendData = normalizeScormText(params.incomingSuspendData);
+  const blockedEmptySuspendData = Boolean(currentSuspendData) && !incomingSuspendData;
+  const blockedShorterSuspendData =
+    Boolean(currentSuspendData) &&
+    Boolean(incomingSuspendData) &&
+    incomingSuspendData.length < currentSuspendData.length;
+  const mergedSuspendData =
+    blockedEmptySuspendData || blockedShorterSuspendData
+      ? currentSuspendData
+      : incomingSuspendData ?? currentSuspendData;
+
+  if (mergedCmi && mergedLocationValue) {
+    writeScormLocationValue(mergedCmi, mergedLocationValue);
+  }
+  if (mergedCmi && mergedSuspendData) {
+    mergedCmi['cmi.suspend_data'] = mergedSuspendData;
+  }
+
+  return {
+    cmiJson: mergedCmi ? JSON.stringify(mergedCmi) : params.incomingCmiJson ?? params.currentCmiJson ?? null,
+    suspendData: mergedSuspendData ?? null,
+    location: parseScormLocationMarker(mergedLocationValue),
+    decisions: {
+      blockedLocationRegression,
+      blockedEmptySuspendData,
+      blockedShorterSuspendData,
+      preservedLocationFromCurrent,
+    },
+  };
+}
