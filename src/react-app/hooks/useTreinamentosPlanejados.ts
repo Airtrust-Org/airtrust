@@ -25,6 +25,7 @@ export interface TreinamentoPlanejadoParticipante {
   nota: number | null;
   observacoes?: string | null;
   qualificacao_historico_id?: number | null;
+  qualificacao_historico_status?: string | null;
   status_participacao?: string | null;
   resultado?: 'APROVADO' | 'REPROVADO' | 'INCOMPLETO' | 'CANCELADO' | null;
   conceito?: string | null;
@@ -312,6 +313,36 @@ export interface TreinamentoPlanejadoPresencaDiaInput {
   observacoes?: string | null;
 }
 
+export interface TreinamentoPlanejadoConclusaoLoteParticipanteInput {
+  funcionario_id: number;
+  presente?: boolean | null;
+  resultado?: 'APROVADO' | 'REPROVADO' | 'INCOMPLETO' | 'CANCELADO' | null;
+  data_conclusao_efetiva?: string | null;
+  nota?: number | null;
+  conceito?: string | null;
+  observacoes?: string | null;
+}
+
+export interface TreinamentoPlanejadoConclusaoLoteResultado {
+  treinamento_id: number;
+  status_turma: TreinamentoPlanejadoStatus;
+  resumo: {
+    total_participantes: number;
+    presentes: number;
+    aprovados: number;
+    reprovados: number;
+    incompletos: number;
+    pendentes: number;
+    ja_concluidos: number;
+    historicos_gerados: number;
+    criados: number;
+    ja_existentes: number;
+    ignorados: number;
+    atualizados: number;
+    erros: string[];
+  };
+}
+
 type ApiEnvelope<T> = {
   success: boolean;
   data?: T;
@@ -542,6 +573,30 @@ export function useConcluirParticipanteTreinamento() {
       }>(`/planejados/${id}/participantes/conclusao`, {
         method: 'PATCH',
         body: JSON.stringify(input),
+      }),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateTreinamentosPlanejados(queryClient),
+        queryClient.invalidateQueries({ queryKey: KEYS.detail(variables.id) }),
+      ]);
+    },
+  });
+}
+
+export function useConcluirTurmaTreinamento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      participantes,
+    }: {
+      id: number;
+      participantes: TreinamentoPlanejadoConclusaoLoteParticipanteInput[];
+    }) =>
+      request<TreinamentoPlanejadoConclusaoLoteResultado>(`/planejados/${id}/conclusao-lote`, {
+        method: 'PATCH',
+        body: JSON.stringify({ participantes }),
       }),
     onSuccess: async (_, variables) => {
       await Promise.all([

@@ -35,9 +35,8 @@ import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncio
 import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQualificacao';
 import {
   useAtualizarPresencaDiaTreinamento,
-  useAtualizarPresencaTreinamento,
   useAtualizarTreinamentoPlanejado,
-  useConcluirParticipanteTreinamento,
+  useConcluirTurmaTreinamento,
   useCriarTreinamentoPlanejado,
   useEnviarConvocacaoTreinamento,
   useExcluirTreinamentoPlanejado,
@@ -47,6 +46,7 @@ import {
   useTreinamentosPlanejados,
   useTreinamentosPlanejadosAuditoria,
   useTreinamentosPlanejadosCalendario,
+  type TreinamentoPlanejadoConclusaoLoteParticipanteInput,
   type TreinamentoPlanejado,
   type TreinamentoPlanejadoConvocacaoPreview,
   type TreinamentoPlanejadoConvocacaoResultado,
@@ -138,6 +138,16 @@ interface SessaoSimuladorParaEditar {
     funcao?: 'PIC' | 'SIC';
   }>;
   fichas?: Array<{ id: number }>;
+}
+
+interface ConclusaoParticipanteDraft {
+  funcionario_id: number;
+  presente: boolean | null;
+  resultado: 'APROVADO' | 'REPROVADO' | 'INCOMPLETO' | 'CANCELADO' | null;
+  nota: number | null;
+  conceito: string | null;
+  observacoes: string | null;
+  data_conclusao_efetiva: string | null;
 }
 
 const STATUS_META: Record<TreinamentoPlanejadoStatus, { label: string; className: string }> = {
@@ -258,6 +268,39 @@ function formatHourRange(inicio?: string | null, fim?: string | null): string {
   if (inicio) return `Inicio ${inicio}`;
   if (fim) return `Fim ${fim}`;
   return 'Horario a definir';
+}
+
+function isResultadoFinal(resultado?: string | null): boolean {
+  return ['APROVADO', 'REPROVADO', 'CANCELADO'].includes(
+    String(resultado || '')
+      .trim()
+      .toUpperCase(),
+  );
+}
+
+function isHistoricoGerado(status?: string | null): boolean {
+  const normalized = String(status || '')
+    .trim()
+    .toUpperCase();
+  return Boolean(normalized) && !['PLANEJADA', 'PLANEJADO'].includes(normalized);
+}
+
+function buildConclusaoDraft(
+  participante: TreinamentoPlanejadoParticipante,
+  defaultDate: string,
+): ConclusaoParticipanteDraft {
+  return {
+    funcionario_id: participante.funcionario_id,
+    presente: participante.presente ?? null,
+    resultado: participante.resultado ?? null,
+    nota: participante.nota ?? null,
+    conceito: participante.conceito ?? null,
+    observacoes: participante.observacoes ?? null,
+    data_conclusao_efetiva:
+      participante.resultado === 'APROVADO'
+        ? participante.data_conclusao_efetiva || defaultDate
+        : participante.data_conclusao_efetiva ?? null,
+  };
 }
 
 function calcularMinutosPrevistos(inicio?: string | null, fim?: string | null): number | null {
@@ -607,6 +650,8 @@ export default function TreinamentosPlanejadosPage({
   const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
   const navigate = useNavigate();
   const canManage = !isAluno && (isAdmin || isGestor || isInstrutor || can('qualificacoes.view'));
+  const canWriteTraining = !isAluno && (isAdmin || isGestor || can('qualificacoes.edit'));
+  const canConcluirTurma = canWriteTraining;
 
   const planejadosActionButtonClass =
     'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 motion-safe:transition-colors';
@@ -622,6 +667,7 @@ export default function TreinamentosPlanejadosPage({
   const [modalDetalheAberto, setModalDetalheAberto] = useState(false);
   const [modalSessaoSimuladorAberto, setModalSessaoSimuladorAberto] = useState(false);
   const [modalConfirmacaoConvocacaoAberto, setModalConfirmacaoConvocacaoAberto] = useState(false);
+  const [modalConfirmacaoConclusaoAberto, setModalConfirmacaoConclusaoAberto] = useState(false);
   const [modalResultadoConvocacaoAberto, setModalResultadoConvocacaoAberto] = useState(false);
   const [treinamentoEditando, setTreinamentoEditando] = useState<TreinamentoPlanejado | null>(null);
   const [treinamentoSelecionadoId, setTreinamentoSelecionadoId] = useState<number | null>(null);
@@ -629,6 +675,9 @@ export default function TreinamentosPlanejadosPage({
     useState<SessaoSimuladorParaEditar | null>(null);
   const [diaPresencaSelecionadoId, setDiaPresencaSelecionadoId] = useState<number | null>(null);
   const [formState, setFormState] = useState<TreinamentoFormState>(() => createEmptyForm(today));
+  const [conclusaoDraft, setConclusaoDraft] = useState<Record<number, ConclusaoParticipanteDraft>>(
+    {},
+  );
   const [convocacaoPreview, setConvocacaoPreview] =
     useState<TreinamentoPlanejadoConvocacaoPreview | null>(null);
   const [convocacaoResultado, setConvocacaoResultado] =
@@ -699,9 +748,8 @@ export default function TreinamentosPlanejadosPage({
 
   const criarTreinamento = useCriarTreinamentoPlanejado();
   const atualizarTreinamento = useAtualizarTreinamentoPlanejado();
-  const atualizarPresenca = useAtualizarPresencaTreinamento();
   const atualizarPresencaDia = useAtualizarPresencaDiaTreinamento();
-  const concluirParticipante = useConcluirParticipanteTreinamento();
+  const concluirTurma = useConcluirTurmaTreinamento();
   const excluirTreinamento = useExcluirTreinamentoPlanejado();
   const previewConvocacao = usePreviewConvocacaoTreinamento();
   const enviarConvocacao = useEnviarConvocacaoTreinamento();
@@ -720,6 +768,8 @@ export default function TreinamentosPlanejadosPage({
     [auditoriaQuery.data?.items],
   );
   const detalheTreinamento = detalheQuery.data || treinamentoEditando;
+  const defaultConclusaoDate =
+    detalheTreinamento?.data_fim || detalheTreinamento?.data_prevista || today;
   const diasPresenca = useMemo(
     () =>
       (detalheTreinamento?.dias || []).filter(
@@ -751,6 +801,56 @@ export default function TreinamentosPlanejadosPage({
       pendentes: Math.max(0, (detalheTreinamento?.participantes.length || 0) - presencas.length) + count('PENDENTE'),
     };
   }, [detalheTreinamento?.participantes.length, diaPresencaSelecionado?.presencas]);
+
+  useEffect(() => {
+    if (!modalDetalheAberto || !detalheTreinamento) {
+      setConclusaoDraft({});
+      return;
+    }
+
+    const nextDraft = Object.fromEntries(
+      detalheTreinamento.participantes.map((participante) => [
+        participante.funcionario_id,
+        buildConclusaoDraft(participante, defaultConclusaoDate),
+      ]),
+    );
+    setConclusaoDraft(nextDraft);
+  }, [defaultConclusaoDate, detalheTreinamento, modalDetalheAberto]);
+
+  const resumoConclusao = useMemo(() => {
+    const participantes = detalheTreinamento?.participantes || [];
+    return participantes.reduce(
+      (acc, participante) => {
+        const draft =
+          conclusaoDraft[participante.funcionario_id] ||
+          buildConclusaoDraft(participante, defaultConclusaoDate);
+        const resultado = draft.resultado;
+        acc.total += 1;
+        if (draft.presente === true) acc.presentes += 1;
+        if (resultado === 'APROVADO') acc.aprovados += 1;
+        if (resultado === 'REPROVADO' || resultado === 'CANCELADO') acc.reprovados += 1;
+        if (resultado === 'INCOMPLETO') acc.incompletos += 1;
+        if (!resultado) acc.pendentes += 1;
+        if (isResultadoFinal(participante.resultado) || Boolean(participante.concluido_em)) {
+          acc.jaConcluidos += 1;
+        }
+        if (isHistoricoGerado(participante.qualificacao_historico_status)) {
+          acc.historicosGerados += 1;
+        }
+        return acc;
+      },
+      {
+        total: 0,
+        presentes: 0,
+        aprovados: 0,
+        reprovados: 0,
+        incompletos: 0,
+        pendentes: 0,
+        jaConcluidos: 0,
+        historicosGerados: 0,
+      },
+    );
+  }, [conclusaoDraft, defaultConclusaoDate, detalheTreinamento?.participantes]);
 
   useEffect(() => {
     if (!modalDetalheAberto || diasPresenca.length === 0) {
@@ -1043,6 +1143,20 @@ export default function TreinamentosPlanejadosPage({
       toast.error('Não é permitido concluir turma sem participantes vinculados.');
       return;
     }
+    if (
+      formState.status === 'CONCLUIDO' &&
+      !(
+        treinamentoEditando?.participantes.length &&
+        treinamentoEditando.participantes.every((participante) =>
+          isResultadoFinal(participante.resultado),
+        )
+      )
+    ) {
+      toast.error(
+        'A turma só pode ser marcada como concluída quando todos os participantes tiverem resultado final. Use "Concluir turma e salvar".',
+      );
+      return;
+    }
 
     const horaInicioNormalizada = formState.hora_inicio
       ? normalizeTimeInput(formState.hora_inicio)
@@ -1167,32 +1281,6 @@ export default function TreinamentosPlanejadosPage({
     }
   }
 
-  async function atualizarParticipante(
-    participante: TreinamentoPlanejadoParticipante,
-    patch: {
-      confirmado?: boolean;
-      presente?: boolean | null;
-      aprovado?: boolean | null;
-    },
-  ) {
-    if (!treinamentoSelecionadoId) return;
-
-    try {
-      await atualizarPresenca.mutateAsync({
-        id: treinamentoSelecionadoId,
-        input: {
-          funcionario_id: participante.funcionario_id,
-          ...patch,
-        },
-      });
-      toast.success('Convocacao atualizada.');
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Nao foi possivel atualizar a presenca.',
-      );
-    }
-  }
-
   async function atualizarPresencaDiaParticipante(
     participante: TreinamentoPlanejadoParticipante,
     status: TreinamentoPlanejadoPresencaDiaStatus,
@@ -1262,36 +1350,128 @@ export default function TreinamentosPlanejadosPage({
     }
   }
 
-  async function concluirParticipanteIndividual(
+  function resetConclusaoDraft() {
+    if (!detalheTreinamento) return;
+    setConclusaoDraft(
+      Object.fromEntries(
+        detalheTreinamento.participantes.map((participante) => [
+          participante.funcionario_id,
+          buildConclusaoDraft(participante, defaultConclusaoDate),
+        ]),
+      ),
+    );
+  }
+
+  function atualizarConclusaoParticipante(
     participante: TreinamentoPlanejadoParticipante,
-    resultado: 'APROVADO' | 'REPROVADO' | 'INCOMPLETO' | 'CANCELADO',
+    patch: Partial<ConclusaoParticipanteDraft>,
   ) {
-    if (!treinamentoSelecionadoId) return;
-    const dataConclusao =
-      resultado === 'APROVADO'
-        ? participante.data_conclusao_efetiva ||
-          detalheTreinamento?.data_fim ||
-          detalheTreinamento?.data_prevista ||
-          today
-        : null;
-    try {
-      const response = await concluirParticipante.mutateAsync({
-        id: treinamentoSelecionadoId,
-        input: {
-          funcionario_id: participante.funcionario_id,
-          resultado,
-          data_conclusao_efetiva: dataConclusao,
-          nota: participante.nota,
-          conceito: participante.conceito,
-        },
+    setConclusaoDraft((current) => {
+      const base =
+        current[participante.funcionario_id] ||
+        buildConclusaoDraft(participante, defaultConclusaoDate);
+      const next = { ...base, ...patch };
+      if (patch.resultado === 'APROVADO' && !next.data_conclusao_efetiva) {
+        next.data_conclusao_efetiva = defaultConclusaoDate;
+      }
+      if (patch.resultado && patch.resultado !== 'APROVADO') {
+        next.data_conclusao_efetiva = null;
+      }
+      return {
+        ...current,
+        [participante.funcionario_id]: next,
+      };
+    });
+  }
+
+  function aplicarConclusaoEmLote(
+    modo: 'presentes' | 'aprovados' | 'presentes-aprovados' | 'limpar',
+  ) {
+    if (!detalheTreinamento) return;
+    if (modo === 'limpar') {
+      resetConclusaoDraft();
+      return;
+    }
+
+    setConclusaoDraft((current) => {
+      const next = { ...current };
+      detalheTreinamento.participantes.forEach((participante) => {
+        const base =
+          next[participante.funcionario_id] ||
+          buildConclusaoDraft(participante, defaultConclusaoDate);
+        if (modo === 'presentes') {
+          next[participante.funcionario_id] = { ...base, presente: true };
+          return;
+        }
+        if (modo === 'aprovados') {
+          next[participante.funcionario_id] = {
+            ...base,
+            resultado: 'APROVADO',
+            data_conclusao_efetiva: base.data_conclusao_efetiva || defaultConclusaoDate,
+          };
+          return;
+        }
+        next[participante.funcionario_id] = {
+          ...base,
+          presente: true,
+          resultado: 'APROVADO',
+          data_conclusao_efetiva: base.data_conclusao_efetiva || defaultConclusaoDate,
+        };
       });
+      return next;
+    });
+  }
+
+  function buildConclusaoPayload(): TreinamentoPlanejadoConclusaoLoteParticipanteInput[] {
+    if (!detalheTreinamento) return [];
+    return detalheTreinamento.participantes.map((participante) => {
+      const draft =
+        conclusaoDraft[participante.funcionario_id] ||
+        buildConclusaoDraft(participante, defaultConclusaoDate);
+      return {
+        funcionario_id: participante.funcionario_id,
+        presente: draft.presente,
+        resultado: draft.resultado,
+        data_conclusao_efetiva:
+          draft.resultado === 'APROVADO' ? draft.data_conclusao_efetiva || defaultConclusaoDate : null,
+        nota: draft.nota,
+        conceito: draft.conceito,
+        observacoes: draft.observacoes,
+      };
+    });
+  }
+
+  function abrirConfirmacaoConclusao() {
+    if (!canConcluirTurma || !detalheTreinamento) return;
+    if (detalheTreinamento.participantes.length === 0) {
+      toast.error('Turma sem participantes para concluir.');
+      return;
+    }
+    if ((detalheTreinamento.data_fim || detalheTreinamento.data_prevista) > today) {
+      toast.error('Turma futura não pode ser concluída.');
+      return;
+    }
+    setModalConfirmacaoConclusaoAberto(true);
+  }
+
+  async function confirmarConclusaoTurmaSalvar() {
+    if (!treinamentoSelecionadoId || !detalheTreinamento) return;
+
+    try {
+      const resultado = await concluirTurma.mutateAsync({
+        id: treinamentoSelecionadoId,
+        participantes: buildConclusaoPayload(),
+      });
+      setModalConfirmacaoConclusaoAberto(false);
       toast.success(
-        response.qualificacao_historico_id
-          ? 'Resultado salvo e qualificação oficial atualizada.'
-          : 'Resultado individual salvo.',
+        resultado.resumo.criados > 0
+          ? 'Turma concluída e resumo salvo.'
+          : 'Resumo da turma salvo sem gerar novos históricos.',
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível concluir o participante.');
+      toast.error(
+        error instanceof Error ? error.message : 'Não foi possível concluir a turma em lote.',
+      );
     }
   }
 
@@ -1393,7 +1573,6 @@ export default function TreinamentosPlanejadosPage({
     null;
 
   const salvandoFormulario = criarTreinamento.isPending || atualizarTreinamento.isPending;
-  const atualizandoParticipante = atualizarPresenca.isPending;
   const excluindo = excluirTreinamento.isPending;
   const enviandoConvocacao = previewConvocacao.isPending || enviarConvocacao.isPending;
 
@@ -1415,9 +1594,11 @@ export default function TreinamentosPlanejadosPage({
       <Button variant="secondary" icon="refresh" onClick={() => treinamentosQuery.refetch()}>
         Atualizar
       </Button>
-      <Button icon="add" onClick={abrirNovoTreinamento}>
-        {primaryActionLabel}
-      </Button>
+      {canWriteTraining ? (
+        <Button icon="add" onClick={abrirNovoTreinamento}>
+          {primaryActionLabel}
+        </Button>
+      ) : null}
     </div>
   );
 
@@ -1484,13 +1665,15 @@ export default function TreinamentosPlanejadosPage({
               >
                 <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> Atualizar
               </button>
-              <button
-                type="button"
-                onClick={abrirNovoTreinamento}
-                className="inline-flex min-h-[36px] items-center gap-1 rounded-md bg-primary-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" /> {primaryActionLabel}
-              </button>
+              {canWriteTraining ? (
+                <button
+                  type="button"
+                  onClick={abrirNovoTreinamento}
+                  className="inline-flex min-h-[36px] items-center gap-1 rounded-md bg-primary-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" /> {primaryActionLabel}
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -1793,7 +1976,7 @@ export default function TreinamentosPlanejadosPage({
                                 >
                                   <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                                 </button>
-                                {!item.read_only ? (
+                                {!item.read_only && canWriteTraining ? (
                                   <button
                                     type="button"
                                     onClick={() => abrirEditor(item)}
@@ -2057,6 +2240,10 @@ export default function TreinamentosPlanejadosPage({
                     </option>
                   ))}
                 </select>
+                <span className="block text-xs text-slate-500">
+                  `Concluído` só é aceito quando todos os participantes já tiverem resultado final.
+                  Caso contrário, use o fluxo `Concluir turma e salvar` no detalhe da turma.
+                </span>
               </label>
             </div>
 
@@ -2522,32 +2709,38 @@ export default function TreinamentosPlanejadosPage({
               >
                 Fechar
               </Button>
-              <Button
-                variant="danger"
-                onClick={excluirTreinamentoSelecionado}
-                disabled={excluindo || !detalheTreinamento}
-              >
-                {excluindo ? 'Excluindo...' : 'Excluir'}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={abrirConvocacaoTurma}
-                disabled={Boolean(convocacaoDisabledReason) || enviandoConvocacao}
-                title={
-                  convocacaoDisabledReason ||
-                  'Enviar convocação por e-mail para todos os matriculados'
-                }
-              >
-                <Mail className="h-4 w-4" />
-                {enviandoConvocacao ? 'Preparando...' : 'Convocar Turma'}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => abrirEditor(detalheQuery.data || treinamentoEditando)}
-                disabled={!detalheTreinamento}
-              >
-                Editar
-              </Button>
+              {canWriteTraining ? (
+                <Button
+                  variant="danger"
+                  onClick={excluirTreinamentoSelecionado}
+                  disabled={excluindo || !detalheTreinamento}
+                >
+                  {excluindo ? 'Excluindo...' : 'Excluir'}
+                </Button>
+              ) : null}
+              {canWriteTraining ? (
+                <Button
+                  variant="secondary"
+                  onClick={abrirConvocacaoTurma}
+                  disabled={Boolean(convocacaoDisabledReason) || enviandoConvocacao}
+                  title={
+                    convocacaoDisabledReason ||
+                    'Enviar convocação por e-mail para todos os matriculados'
+                  }
+                >
+                  <Mail className="h-4 w-4" />
+                  {enviandoConvocacao ? 'Preparando...' : 'Convocar Turma'}
+                </Button>
+              ) : null}
+              {canWriteTraining ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => abrirEditor(detalheQuery.data || treinamentoEditando)}
+                  disabled={!detalheTreinamento}
+                >
+                  Editar
+                </Button>
+              ) : null}
             </>
           }
         >
@@ -2773,29 +2966,31 @@ export default function TreinamentosPlanejadosPage({
                       ))}
                     </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        disabled={atualizarPresencaDia.isPending}
-                        onClick={() => atualizarPresencaDiaEmLote('PRESENTE')}
-                      >
-                        Marcar todos presentes
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={atualizarPresencaDia.isPending}
-                        onClick={() => atualizarPresencaDiaEmLote('AUSENTE')}
-                      >
-                        Marcar todos ausentes
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={atualizarPresencaDia.isPending}
-                        onClick={() => atualizarPresencaDiaEmLote('PENDENTE')}
-                      >
-                        Limpar dia
-                      </Button>
-                    </div>
+                    {canWriteTraining ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          disabled={atualizarPresencaDia.isPending}
+                          onClick={() => atualizarPresencaDiaEmLote('PRESENTE')}
+                        >
+                          Marcar todos presentes
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={atualizarPresencaDia.isPending}
+                          onClick={() => atualizarPresencaDiaEmLote('AUSENTE')}
+                        >
+                          Marcar todos ausentes
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={atualizarPresencaDia.isPending}
+                          onClick={() => atualizarPresencaDiaEmLote('PENDENTE')}
+                        >
+                          Limpar dia
+                        </Button>
+                      </div>
+                    ) : null}
 
                     <div className="mt-4 overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -2835,7 +3030,7 @@ export default function TreinamentosPlanejadosPage({
                                       <button
                                         key={option.value}
                                         type="button"
-                                        disabled={atualizarPresencaDia.isPending}
+                                        disabled={!canWriteTraining || atualizarPresencaDia.isPending}
                                         onClick={() => atualizarPresencaDiaParticipante(participante, option.value)}
                                         className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                                           status === option.value
@@ -2884,26 +3079,88 @@ export default function TreinamentosPlanejadosPage({
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h3 className="text-base font-semibold text-slate-900">
-                      Convocados e presenca
+                      Conclusão da turma
                     </h3>
                     <p className="text-sm text-slate-500">
-                      Controle operacional de confirmacao, presenca e aprovacao por participante.
+                      O status da turma é recalculado pelo backend. Ela só fecha como concluída quando
+                      todos os participantes tiverem resultado final.
                     </p>
                   </div>
-                  {atualizandoParticipante && (
-                    <p className="text-sm text-slate-500">Salvando atualizacao...</p>
+                  {concluirTurma.isPending && (
+                    <p className="text-sm text-slate-500">Salvando conclusão...</p>
                   )}
                 </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                  {[
+                    ['Total', resumoConclusao.total],
+                    ['Presentes', resumoConclusao.presentes],
+                    ['Aprovados', resumoConclusao.aprovados],
+                    ['Pendentes', resumoConclusao.pendentes],
+                    ['Já concluídos', resumoConclusao.jaConcluidos],
+                    ['Históricos gerados', resumoConclusao.historicosGerados],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        {label}
+                      </p>
+                      <p className="mt-1 text-xl font-semibold text-slate-900">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {canConcluirTurma ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      disabled={concluirTurma.isPending}
+                      onClick={() => aplicarConclusaoEmLote('presentes')}
+                    >
+                      Marcar todos como presentes
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={concluirTurma.isPending}
+                      onClick={() => aplicarConclusaoEmLote('aprovados')}
+                    >
+                      Marcar todos como aprovados
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={concluirTurma.isPending}
+                      onClick={() => aplicarConclusaoEmLote('presentes-aprovados')}
+                    >
+                      Marcar todos presentes e aprovados
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={concluirTurma.isPending}
+                      onClick={() => aplicarConclusaoEmLote('limpar')}
+                    >
+                      Limpar marcações
+                    </Button>
+                    <Button
+                      disabled={concluirTurma.isPending}
+                      onClick={abrirConfirmacaoConclusao}
+                    >
+                      {concluirTurma.isPending ? 'Salvando...' : 'Concluir turma e salvar'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Apenas admin/gestor autorizado pode concluir a turma.
+                  </div>
+                )}
 
                 <div className="mt-4 overflow-x-auto">
                   <table className="min-w-full divide-y divide-slate-200 text-sm">
                     <thead>
                       <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                         <th className="px-3 py-3">Participante</th>
-                        <th className="px-3 py-3">Setor</th>
-                        <th className="px-3 py-3">Confirmacao</th>
+                        <th className="px-3 py-3">Situação atual</th>
                         <th className="px-3 py-3">Presenca</th>
-                        <th className="px-3 py-3">Aprovacao</th>
+                        <th className="px-3 py-3">Resultado</th>
+                        <th className="px-3 py-3">Histórico</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -2914,130 +3171,141 @@ export default function TreinamentosPlanejadosPage({
                           </td>
                         </tr>
                       ) : (
-                        detalheTreinamento.participantes.map((participante) => (
-                          <tr key={participante.id} className="align-top">
-                            <td className="px-3 py-4">
-                              <p className="font-semibold text-slate-900">
-                                {participante.funcionario_guerra ||
-                                  participante.funcionario_nome ||
-                                  'Sem nome'}
-                              </p>
-                              <p className="text-slate-500">
-                                {[participante.funcionario_nome, participante.funcionario_matricula]
-                                  .filter(Boolean)
-                                  .join(' · ')}
-                              </p>
-                            </td>
-                            <td className="px-3 py-4 text-slate-600">
-                              {[participante.funcionario_setor, participante.funcionario_funcao]
-                                .filter(Boolean)
-                                .join(' · ') || 'Nao informado'}
-                            </td>
-                            <td className="px-3 py-4">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  atualizarParticipante(participante, {
-                                    confirmado: !participante.confirmado,
-                                  })
-                                }
-                                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                  participante.confirmado
-                                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
-                              >
-                                {participante.confirmado ? 'Confirmado' : 'Pendente'}
-                              </button>
-                            </td>
-                            <td className="px-3 py-4">
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    atualizarParticipante(participante, { presente: true })
-                                  }
-                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                    participante.presente === true
-                                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                  }`}
-                                >
-                                  Presente
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    atualizarParticipante(participante, { presente: false })
-                                  }
-                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                    participante.presente === false
-                                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                  }`}
-                                >
-                                  Faltou
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    atualizarParticipante(participante, { presente: null })
-                                  }
-                                  className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
-                                >
-                                  Limpar
-                                </button>
-                              </div>
-                            </td>
-                            <td className="px-3 py-4">
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    concluirParticipanteIndividual(participante, 'APROVADO')
-                                  }
-                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                    participante.resultado === 'APROVADO'
-                                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                  }`}
-                                >
-                                  Aprovado
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    concluirParticipanteIndividual(participante, 'REPROVADO')
-                                  }
-                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                    participante.resultado === 'REPROVADO'
-                                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                  }`}
-                                >
-                                  Reprovado
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    concluirParticipanteIndividual(participante, 'INCOMPLETO')
-                                  }
-                                  className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
-                                >
-                                  Incompleto
-                                </button>
-                              </div>
-                              {participante.resultado === 'APROVADO' && (
-                                <p className="mt-2 text-xs text-slate-500">
-                                  Conclusão: {formatDateLabel(participante.data_conclusao_efetiva)}
-                                  {participante.qualificacao_historico_id
-                                    ? ` · Histórico #${participante.qualificacao_historico_id}`
-                                    : ''}
+                        detalheTreinamento.participantes.map((participante) => {
+                          const draft =
+                            conclusaoDraft[participante.funcionario_id] ||
+                            buildConclusaoDraft(participante, defaultConclusaoDate);
+                          return (
+                            <tr key={participante.id} className="align-top">
+                              <td className="px-3 py-4">
+                                <p className="font-semibold text-slate-900">
+                                  {participante.funcionario_guerra ||
+                                    participante.funcionario_nome ||
+                                    'Sem nome'}
                                 </p>
-                              )}
-                            </td>
-                          </tr>
-                        ))
+                                <p className="text-slate-500">
+                                  {[participante.funcionario_nome, participante.funcionario_matricula]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </p>
+                              </td>
+                              <td className="px-3 py-4 text-slate-600">
+                                <p>
+                                  {[participante.funcionario_setor, participante.funcionario_funcao]
+                                    .filter(Boolean)
+                                    .join(' · ') || 'Nao informado'}
+                                </p>
+                                <p className="mt-2 text-xs text-slate-500">
+                                  {participante.confirmado ? 'Confirmado' : 'Ainda não confirmado'}
+                                  {participante.resultado
+                                    ? ` · Resultado atual: ${participante.resultado}`
+                                    : ' · Sem conclusão final'}
+                                </p>
+                              </td>
+                              <td className="px-3 py-4">
+                                <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={draft.presente === true}
+                                    disabled={!canConcluirTurma || concluirTurma.isPending}
+                                    onChange={(event) =>
+                                      atualizarConclusaoParticipante(participante, {
+                                        presente: event.target.checked ? true : null,
+                                      })
+                                    }
+                                  />
+                                  Presente
+                                </label>
+                              </td>
+                              <td className="px-3 py-4">
+                                <div className="flex flex-wrap gap-2">
+                                  {[
+                                    ['APROVADO', 'Aprovado'],
+                                    ['REPROVADO', 'Reprovado'],
+                                    ['INCOMPLETO', 'Incompleto'],
+                                  ].map(([value, label]) => (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      disabled={!canConcluirTurma || concluirTurma.isPending}
+                                      onClick={() =>
+                                        atualizarConclusaoParticipante(participante, {
+                                          resultado: value as ConclusaoParticipanteDraft['resultado'],
+                                          presente:
+                                            value === 'APROVADO' && draft.presente == null
+                                              ? true
+                                              : draft.presente,
+                                          data_conclusao_efetiva:
+                                            value === 'APROVADO'
+                                              ? draft.data_conclusao_efetiva || defaultConclusaoDate
+                                              : null,
+                                        })
+                                      }
+                                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                        draft.resultado === value
+                                          ? value === 'APROVADO'
+                                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                            : value === 'REPROVADO'
+                                              ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                                              : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    disabled={!canConcluirTurma || concluirTurma.isPending}
+                                    onClick={() =>
+                                      atualizarConclusaoParticipante(participante, {
+                                        resultado: null,
+                                        data_conclusao_efetiva: null,
+                                      })
+                                    }
+                                    className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
+                                  >
+                                    Limpar
+                                  </button>
+                                </div>
+                                {draft.resultado === 'APROVADO' ? (
+                                  <div className="mt-3 max-w-[180px]">
+                                    <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                      Data de conclusão
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={draft.data_conclusao_efetiva || ''}
+                                      max={today}
+                                      disabled={!canConcluirTurma || concluirTurma.isPending}
+                                      onChange={(event) =>
+                                        atualizarConclusaoParticipante(participante, {
+                                          data_conclusao_efetiva: event.target.value || null,
+                                        })
+                                      }
+                                      className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                                    />
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-4 text-slate-600">
+                                <p className="font-medium text-slate-900">
+                                  {participante.qualificacao_historico_id
+                                    ? `Histórico #${participante.qualificacao_historico_id}`
+                                    : 'Sem histórico gerado'}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {participante.qualificacao_historico_status || 'Sem status histórico'}
+                                </p>
+                                {participante.resultado === 'APROVADO' && participante.data_conclusao_efetiva ? (
+                                  <p className="mt-2 text-xs text-slate-500">
+                                    Última conclusão: {formatDateLabel(participante.data_conclusao_efetiva)}
+                                  </p>
+                                ) : null}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -3097,6 +3365,61 @@ export default function TreinamentosPlanejadosPage({
               </section>
             </div>
           )}
+        </Modal>
+
+        <Modal
+          isOpen={modalConfirmacaoConclusaoAberto}
+          onClose={() => setModalConfirmacaoConclusaoAberto(false)}
+          title="Confirmar conclusão da turma"
+          size="xl"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setModalConfirmacaoConclusaoAberto(false)}
+              >
+                Revisar
+              </Button>
+              <Button
+                onClick={confirmarConclusaoTurmaSalvar}
+                disabled={concluirTurma.isPending}
+              >
+                {concluirTurma.isPending ? 'Salvando...' : 'Confirmar conclusão'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+              Você está prestes a concluir a turma e registrar presença/aprovação dos participantes
+              selecionados. Esta ação pode gerar histórico e qualificações para participantes
+              elegíveis.
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                ['Presentes', resumoConclusao.presentes],
+                ['Aprovados', resumoConclusao.aprovados],
+                ['Reprovados/Incompletos', resumoConclusao.reprovados + resumoConclusao.incompletos],
+                ['Pendentes sem conclusão', resumoConclusao.pendentes],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    {label}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
+              <p className="font-semibold text-slate-900">Regra operacional</p>
+              <p className="mt-2">
+                A tabela principal só exibirá <strong>Concluído</strong> quando todos os participantes
+                tiverem resultado final. Participantes pendentes mantêm a turma em andamento.
+              </p>
+            </div>
+          </div>
         </Modal>
 
         <Modal
