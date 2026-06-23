@@ -713,9 +713,9 @@ export default function FrmsControleOperacional() {
                     <th className="px-3 py-3 text-left">Funcao</th>
                     <th className="px-3 py-3 text-left">Aeronave/base</th>
                     <th className="px-3 py-3 text-left">Escala/jornada</th>
-                    <th className="px-3 py-3 text-left">Check-in</th>
+                    <th className="px-3 py-3 text-left">Check-in / triagem</th>
                     <th className="px-3 py-3 text-left">Sono/KSS</th>
-                    <th className="px-3 py-3 text-left">Efetividade/quinzena</th>
+                    <th className="px-3 py-3 text-left">Efetividade estimada / quinzena</th>
                     <th className="px-3 py-3 text-left">Status</th>
                     <th className="px-3 py-3 text-left">Alertas</th>
                     <th className="px-3 py-3 text-left">Fonte</th>
@@ -754,6 +754,10 @@ export default function FrmsControleOperacional() {
                         {item.checkin_horario && (
                           <div className="mt-1 text-xs text-slate-500">Horario {item.checkin_horario}</div>
                         )}
+                        <div className="mt-1 text-xs text-slate-500">
+                          Score de triagem subjetiva {formatNumber(item.fadiga_score)}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Quanto maior, pior.</div>
                       </td>
                       <td className="px-3 py-3">
                         <div className="font-medium text-slate-800">Sono {formatSleep(item.horas_sono)}</div>
@@ -761,7 +765,10 @@ export default function FrmsControleOperacional() {
                         <div className="text-xs text-slate-500">Qualidade {formatNumber(item.qualidade_sono)}</div>
                       </td>
                       <td className="px-3 py-3">
-                        <div className="font-medium text-slate-800">Efetividade {formatPercentage(item.effectiveness_pct)}</div>
+                        <div className="font-medium text-slate-800">
+                          Efetividade estimada {formatPercentage(item.effectiveness_pct)}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Quanto maior, melhor.</div>
                         <div className="text-xs text-slate-500">
                           {formatFortnightLabel(item.fortnight_indicator)}
                         </div>

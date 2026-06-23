@@ -1,7 +1,8 @@
 import type { FrmsFortnightIndicator } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 
-export const FORTNIGHT_OPERATIONAL_DISCLAIMER = 'Indicador operacional estimado';
-export const FORTNIGHT_MANAGER_DISCLAIMER = 'Não substitui avaliação operacional do gestor';
+export const FORTNIGHT_OPERATIONAL_DISCLAIMER = 'Indicador operacional da quinzena';
+export const FORTNIGHT_MANAGER_DISCLAIMER =
+  'Apoia a decisão do gestor, mas não substitui a avaliação operacional final';
 export const FORTNIGHT_NO_DATA_MESSAGE =
   'Sem indicador quinzenal disponível para o período.';
 
@@ -264,8 +265,8 @@ export function resolveFortnightNotice(
     return {
       message:
         item?.teve_jornada === false
-          ? 'Quinzena base identificada. Não há jornada FRMS vinculada neste dia. Os acumulados refletem apenas os dias visíveis na consulta.'
-          : 'Período identificado, mas a janela de consulta cobre apenas parte dele. Os acumulados refletem somente os dias visíveis.',
+          ? 'Período incompleto. Não há jornada FRMS vinculada neste dia. A leitura considera apenas os dias disponíveis. Não usar isoladamente como decisão final.'
+          : 'Período incompleto. A leitura considera apenas os dias disponíveis. Não usar isoladamente como decisão final.',
       toneClassName: 'border-amber-200 bg-amber-50 text-amber-700',
     };
   }
