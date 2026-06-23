@@ -23,34 +23,34 @@ describe('service worker cache guard', () => {
     const versionMatch = serviceWorkerSource.match(/const CACHE_VERSION = 'airtrust-v(\d+)'/);
 
     expect(versionMatch).not.toBeNull();
-    expect(Number(versionMatch?.[1] || 0)).toBeGreaterThanOrEqual(12);
+    expect(Number(versionMatch?.[1] || 0)).toBeGreaterThanOrEqual(13);
     expect(serviceWorkerSource).toContain('await self.registration.unregister();');
     expect(serviceWorkerSource).toContain('Promise.resolve(self.skipWaiting())');
   });
 
-  it('limpa caches legados, recarrega clientes criticos e envia sinal de reset', () => {
+  it('limpa caches legados e recarrega clientes criticos sem cachear runtime novo', () => {
     expect(serviceWorkerSource).toContain('async function purgeLegacyAirTrustCaches()');
     expect(serviceWorkerSource).toContain('cacheName.startsWith(CACHE_PREFIX)');
     expect(serviceWorkerSource).toContain('async function forceRefreshCriticalClients()');
     expect(serviceWorkerSource).toContain("clientUrl.searchParams.set(LOGIN_SW_RESET_PARAM, CACHE_VERSION);");
     expect(serviceWorkerSource).toContain('await client.navigate(clientUrl.toString());');
-    expect(serviceWorkerSource).toContain("type: 'AIRTRUST_SW_RESET'");
+    expect(serviceWorkerSource).not.toContain('caches.open(');
   });
 
-  it('executa bootstrap de recuperacao nas rotas de entrada antes do bundle principal', () => {
+  it('executa bootstrap de recuperacao nas rotas de entrada sem registrar novo service worker', () => {
     expect(indexHtmlSource).toContain('const ENTRY_ROUTE_PATTERNS = [/^\\/$/, /^\\/login$/];');
     expect(indexHtmlSource).toContain("const RECOVERY_KEY = 'airtrust-login-cache-recovery-v3';");
     expect(indexHtmlSource).toContain("const SW_RESET_PARAM = 'airtrust_sw_reset';");
     expect(indexHtmlSource).toContain('navigator.serviceWorker.getRegistrations()');
-    expect(indexHtmlSource).toContain("navigator.serviceWorker.register('/sw.js', {");
-    expect(indexHtmlSource).toContain("updateViaCache: 'none'");
+    expect(indexHtmlSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
+    expect(indexHtmlSource).toContain('registration.unregister?.()');
     expect(indexHtmlSource).toContain("currentUrl.searchParams.set(RECOVERY_PARAM, '1');");
     expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());');
   });
 
-  it('mantem recuperacao defensiva e nao ignora mais a rota /login no sw-manager', () => {
+  it('desregistra service workers existentes e limpa caches no sw-manager sem registrar outro', () => {
     const bypassFunctionMatch = serviceWorkerManagerSource.match(
-      /function shouldBypassServiceWorkerForPath\(pathname: string\): boolean \{([\s\S]*?)\n\}/,
+      /function shouldBypassCleanupForPath\(pathname: string\): boolean \{([\s\S]*?)\n\}/,
     );
 
     expect(serviceWorkerManagerSource).toContain(
@@ -59,9 +59,10 @@ describe('service worker cache guard', () => {
     expect(serviceWorkerManagerSource).toContain(
       "const LOGIN_CACHE_RECOVERY_QUERY_PARAM = 'airtrust_login_recovered';",
     );
-    expect(serviceWorkerManagerSource).toContain('async function ensureKillSwitchRegistration()');
-    expect(serviceWorkerManagerSource).toContain("navigator.serviceWorker.register('/sw.js', {");
-    expect(serviceWorkerManagerSource).toContain("updateViaCache: 'none'");
+    expect(serviceWorkerManagerSource).toContain('async function unregisterExistingServiceWorkers()');
+    expect(serviceWorkerManagerSource).toContain('await cleanupLegacyServiceWorkers();');
+    expect(serviceWorkerManagerSource).toContain('registration.unregister().catch(() => false)');
+    expect(serviceWorkerManagerSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
     expect(serviceWorkerManagerSource).toContain('async function recoverLoginPageFromLegacyCaches()');
     expect(bypassFunctionMatch?.[1] || '').toContain("return /^\\/lms\\/player\\//.test(pathname);");
     expect(bypassFunctionMatch?.[1] || '').not.toContain("pathname === '/login'");

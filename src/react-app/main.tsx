@@ -5,7 +5,7 @@ import { ErrorBoundary } from '@/react-app/components/common/ErrorBoundary';
 import '@/react-app/index.css';
 // Material Symbols font — local bundle (removes CDN dependency)
 import 'material-symbols/outlined.css';
-// Service Worker para cache inteligente e notificação de updates
+// Service Worker descomissionado: mantemos apenas limpeza de runtime legado
 import { registerServiceWorker } from '@/lib/sw-manager';
 import { installGlobalApiFetch } from '@/react-app/lib/apiFetch';
 import { installTableWheelScrollLock } from '@/react-app/lib/tableWheelScrollLock';
@@ -46,12 +46,11 @@ function safeSessionRemove(key: string): void {
 installChunkErrorListeners();
 installGlobalApiFetch();
 
-// ✅ Registrar Service Worker APENAS em PRODUÇÃO
-// Em desenvolvimento, SW pode causar cache indesejado
+// ✅ Em produção, o app apenas remove service workers antigos e caches legados.
 if (import.meta.env.PROD) {
-  console.log('[SW] Registrando Service Worker (PRODUÇÃO)');
+  console.log('[SW] Executando limpeza de service worker legado (PRODUÇÃO)');
   registerServiceWorker().catch((error) => {
-    console.warn('[SW] Falha ao registrar:', error);
+    console.warn('[SW] Falha na limpeza de runtime legado:', error);
   });
 } else {
   console.log('[DEV] Service Worker DESABILITADO em desenvolvimento');
