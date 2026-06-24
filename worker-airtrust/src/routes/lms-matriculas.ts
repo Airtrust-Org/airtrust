@@ -20,6 +20,7 @@ import {
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
+  buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
@@ -327,6 +328,10 @@ const ScormCommitSchema = z.object({
   launch_data: z.string().optional().nullable(),
   // CMI completo (JSON stringified)
   cmi_json: z.string().optional().nullable(),
+  // Metadados do wrapper AirTrust
+  commit_event: z.string().optional().nullable(),
+  completion_candidate: z.boolean().optional().nullable(),
+  completion_observed_at: z.string().optional().nullable(),
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -357,6 +362,51 @@ function summarizeScormTextPayload(value: string | null | undefined) {
   return {
     present: value.trim().length > 0,
     bytes: value.length,
+  };
+}
+
+function buildMatriculaCompletionDiagnostic(params: {
+  matriculaStatus?: string | null;
+  progressoPct?: number | null;
+  masteryScore?: number | null;
+  scorm:
+    | {
+        lesson_status?: string | null;
+        completion_status?: string | null;
+        success_status?: string | null;
+        score_raw?: number | null;
+        score_max?: number | null;
+        score_scaled?: number | null;
+        suspend_data?: string | null;
+        session_time?: string | null;
+        total_time?: string | null;
+        cmi_json?: string | null;
+      }
+    | null
+    | undefined;
+  commitEvent?: string | null;
+}) {
+  const base = buildScormCompletionDiagnostic({
+    lessonStatus: params.scorm?.lesson_status ?? null,
+    completionStatus: params.scorm?.completion_status ?? null,
+    successStatus: params.scorm?.success_status ?? null,
+    scoreRaw: params.scorm?.score_raw ?? null,
+    scoreMax: params.scorm?.score_max ?? null,
+    scoreScaled: params.scorm?.score_scaled ?? null,
+    masteryScore: params.masteryScore ?? null,
+    progressoPct: params.progressoPct ?? null,
+    cmiJson: params.scorm?.cmi_json ?? null,
+    suspendData: params.scorm?.suspend_data ?? null,
+    sessionTime: params.scorm?.session_time ?? null,
+    totalTime: params.scorm?.total_time ?? null,
+    commitEvent: params.commitEvent ?? null,
+  });
+
+  return {
+    ...base,
+    matricula_status: params.matriculaStatus ?? null,
+    pending_server_confirmation:
+      base.status === 'candidate' && String(params.matriculaStatus ?? '').toUpperCase() !== 'CONCLUIDO',
   };
 }
 
@@ -803,9 +853,51 @@ app.get('/:id', async (c) => {
     xapiSummary = xapiRows ?? { total_statements: 0 };
   }
 
+  const completionDiagnostic =
+    tipoConteudo === 'scorm'
+      ? buildMatriculaCompletionDiagnostic({
+          matriculaStatus: String(matricula.status ?? ''),
+          progressoPct: Number(matricula.progresso_pct ?? 0),
+          masteryScore: Number(matricula.scorm_mastery_score ?? 0),
+          scorm:
+            progressoScorm == null
+              ? null
+              : {
+                  lesson_status: String(progressoScorm.lesson_status ?? '') || null,
+                  completion_status: String(progressoScorm.completion_status ?? '') || null,
+                  success_status: String(progressoScorm.success_status ?? '') || null,
+                  score_raw:
+                    progressoScorm.score_raw == null ? null : Number(progressoScorm.score_raw),
+                  score_max:
+                    progressoScorm.score_max == null ? null : Number(progressoScorm.score_max),
+                  score_scaled:
+                    progressoScorm.score_scaled == null
+                      ? null
+                      : Number(progressoScorm.score_scaled),
+                  suspend_data:
+                    typeof progressoScorm.suspend_data === 'string'
+                      ? progressoScorm.suspend_data
+                      : null,
+                  session_time:
+                    typeof progressoScorm.session_time === 'string'
+                      ? progressoScorm.session_time
+                      : null,
+                  total_time:
+                    typeof progressoScorm.total_time === 'string' ? progressoScorm.total_time : null,
+                  cmi_json:
+                    typeof progressoScorm.cmi_json === 'string' ? progressoScorm.cmi_json : null,
+                },
+        })
+      : null;
+
   return c.json({
     success: true,
-    data: { ...matricula, scorm_progresso: progressoScorm, xapi_summary: xapiSummary },
+    data: {
+      ...matricula,
+      scorm_progresso: progressoScorm,
+      xapi_summary: xapiSummary,
+      completion_diagnostic: completionDiagnostic,
+    },
   });
 });
 
@@ -1389,6 +1481,44 @@ app.post('/scorm/commit', async (c) => {
   });
   const mergedCmiJson = runtimeMerge.cmiJson;
   const mergedLocation = runtimeMerge.location;
+  const completionDiagnostic = buildMatriculaCompletionDiagnostic({
+    matriculaStatus: matricula.status,
+    progressoPct,
+    masteryScore: matricula.scorm_mastery_score,
+    commitEvent: d.commit_event ?? null,
+    scorm: {
+      lesson_status: preferScormValue(
+        scormAtual?.lesson_status ?? null,
+        d.lesson_status ?? null,
+        preferIncomingScormState,
+      ),
+      completion_status: preferScormValue(
+        scormAtual?.completion_status ?? null,
+        d.completion_status ?? null,
+        preferIncomingScormState,
+      ),
+      success_status: preferScormValue(
+        scormAtual?.success_status ?? null,
+        d.success_status ?? null,
+        preferIncomingScormState,
+      ),
+      score_raw: effectiveScoreRaw,
+      score_max: effectiveScoreMax,
+      score_scaled: effectiveScoreScaled,
+      suspend_data: runtimeMerge.suspendData,
+      session_time: preferScormValue(
+        scormAtual?.session_time ?? null,
+        d.session_time ?? null,
+        preferIncomingScormState,
+      ),
+      total_time: preferScormValue(
+        scormAtual?.total_time ?? null,
+        d.total_time ?? null,
+        preferIncomingScormState,
+      ),
+      cmi_json: mergedCmiJson,
+    },
+  });
 
   // Upsert progresso SCORM
   await db
@@ -1556,6 +1686,51 @@ app.post('/scorm/commit', async (c) => {
     });
   }
 
+  if (sucesso) {
+    await logLmsMatriculaAudit(db, c, {
+      action: 'SCORM_COMPLETION_ACCEPTED',
+      matriculaId: d.matricula_id,
+      newValues: {
+        commit_event: d.commit_event ?? null,
+        completion_diagnostic: completionDiagnostic,
+      },
+    });
+
+    await logLmsMatriculaAudit(db, c, {
+      action: qualificacaoGerada ? 'SCORM_QUALIFICATION_TRIGGERED' : 'SCORM_QUALIFICATION_SKIPPED',
+      matriculaId: d.matricula_id,
+      newValues: {
+        novo_status: novoStatus,
+        commit_event: d.commit_event ?? null,
+        qualificacao_gerada: qualificacaoGerada,
+      },
+    });
+  } else if (completionDiagnostic.status === 'candidate') {
+    await logLmsMatriculaAudit(db, c, {
+      action: 'SCORM_COMPLETION_CANDIDATE',
+      matriculaId: d.matricula_id,
+      newValues: {
+        commit_event: d.commit_event ?? null,
+        completion_candidate: d.completion_candidate ?? null,
+        completion_observed_at: d.completion_observed_at ?? null,
+        completion_diagnostic: completionDiagnostic,
+      },
+    });
+  } else if (
+    completionDiagnostic.code === 'SCORM_FINAL_COMMIT_MISSING' ||
+    completionDiagnostic.code === 'SCORM_STATUS_INCONSISTENT'
+  ) {
+    await logLmsMatriculaAudit(db, c, {
+      action: completionDiagnostic.code,
+      matriculaId: d.matricula_id,
+      newValues: {
+        commit_event: d.commit_event ?? null,
+        completion_candidate: d.completion_candidate ?? null,
+        completion_diagnostic: completionDiagnostic,
+      },
+    });
+  }
+
   return c.json({
     success: true,
     data: {
@@ -1563,6 +1738,7 @@ app.post('/scorm/commit', async (c) => {
       novo_status: novoStatus,
       progresso_pct: progressoPct,
       qualificacao_gerada: qualificacaoGerada,
+      completion_diagnostic: completionDiagnostic,
     },
   });
 });
@@ -1580,7 +1756,7 @@ app.post('/:id/finalizar', async (c) => {
     .prepare(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
-              c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+              c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score,
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
@@ -1597,8 +1773,10 @@ app.post('/:id/finalizar', async (c) => {
       status: string;
       progresso_pct: number;
       qualificacao_historico_id: number | null;
+      tipo_conteudo: string | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
+      scorm_mastery_score: number | null;
       curso_titulo: string;
       qualificacao_codigo: string | null;
       qualificacao_nome: string | null;
@@ -1606,11 +1784,87 @@ app.post('/:id/finalizar', async (c) => {
       qualificacao_validade: number | null;
     }>();
 
+  const scormAtual = await db
+    .prepare(
+      `SELECT lesson_status, completion_status, success_status,
+              score_raw, score_max, score_scaled,
+              session_time, total_time, suspend_data, cmi_json
+         FROM lms_progresso_scorm
+        WHERE matricula_id = ?
+          AND empresa_id = ?`,
+    )
+    .bind(matriculaId, empresaId)
+    .first<{
+      lesson_status: string | null;
+      completion_status: string | null;
+      success_status: string | null;
+      score_raw: number | null;
+      score_max: number | null;
+      score_scaled: number | null;
+      session_time: string | null;
+      total_time: string | null;
+      suspend_data: string | null;
+      cmi_json: string | null;
+    }>();
+
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
   if (!canManage) {
     if (!callerFuncionarioId || callerFuncionarioId !== matricula.funcionario_id) {
       throw new ApiError('Acesso negado', 403);
     }
+  }
+
+  const completionDiagnostic = buildMatriculaCompletionDiagnostic({
+    matriculaStatus: matricula.status,
+    progressoPct: matricula.progresso_pct,
+    masteryScore: matricula.scorm_mastery_score,
+    scorm: scormAtual,
+  });
+  const requiresScormCompletionEvidence =
+    String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm';
+
+  if (matricula.status === 'CONCLUIDO') {
+    return c.json({
+      success: true,
+      data: {
+        matricula_id: matriculaId,
+        novo_status: 'CONCLUIDO',
+        progresso_pct: 100,
+        qualificacao_gerada: null,
+        completion_diagnostic: completionDiagnostic,
+      },
+    });
+  }
+
+  if (
+    requiresScormCompletionEvidence &&
+    !completionDiagnostic.explicit_completion &&
+    !completionDiagnostic.can_finalize
+  ) {
+    await logLmsMatriculaAudit(db, c, {
+      action: 'SCORM_COMPLETION_REJECTED',
+      matriculaId,
+      newValues: {
+        origem: 'manual-finalize-endpoint',
+        completion_diagnostic: completionDiagnostic,
+      },
+    });
+
+    return c.json(
+      {
+        success: false,
+        error: 'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis.',
+        code: 'SCORM_COMPLETION_REJECTED',
+        data: {
+          matricula_id: matriculaId,
+          novo_status: matricula.status,
+          progresso_pct: matricula.progresso_pct,
+          qualificacao_gerada: null,
+          completion_diagnostic: completionDiagnostic,
+        },
+      },
+      409,
+    );
   }
 
   const dataConclusao = new Date().toISOString().slice(0, 10);
@@ -1655,6 +1909,15 @@ app.post('/:id/finalizar', async (c) => {
   }
 
   await logLmsMatriculaAudit(db, c, {
+    action: 'SCORM_COMPLETION_ACCEPTED',
+    matriculaId,
+    newValues: {
+      origem: 'manual-finalize-endpoint',
+      completion_diagnostic: completionDiagnostic,
+    },
+  });
+
+  await logLmsMatriculaAudit(db, c, {
     action: 'LMS_MATRICULA_FINALIZADA_MANUAL',
     matriculaId,
     oldValues: {
@@ -1668,6 +1931,16 @@ app.post('/:id/finalizar', async (c) => {
       qualificacao_historico_id:
         (qualificacaoGerada?.qualificacao_historico_id as number | undefined) ??
         matricula.qualificacao_historico_id,
+      completion_diagnostic: completionDiagnostic,
+    },
+  });
+
+  await logLmsMatriculaAudit(db, c, {
+    action: qualificacaoGerada ? 'SCORM_QUALIFICATION_TRIGGERED' : 'SCORM_QUALIFICATION_SKIPPED',
+    matriculaId,
+    newValues: {
+      origem: 'manual-finalize-endpoint',
+      qualificacao_gerada: qualificacaoGerada,
     },
   });
 
@@ -1678,6 +1951,7 @@ app.post('/:id/finalizar', async (c) => {
       novo_status: 'CONCLUIDO',
       progresso_pct: 100,
       qualificacao_gerada: qualificacaoGerada,
+      completion_diagnostic: completionDiagnostic,
     },
   });
 });

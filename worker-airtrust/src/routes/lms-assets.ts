@@ -1052,7 +1052,7 @@ function buildLaunchPage(cfg: LaunchPageConfig): string {
 </div>
 <div id="completion-overlay">
   <h2>${previewMode ? 'Pré-visualização finalizada' : '✓ Concluído!'}</h2>
-  <p>${previewMode ? 'O conteúdo foi carregado e executado em modo de teste.' : 'Seu progresso foi salvo com sucesso.'}</p>
+  <p>${previewMode ? 'O conteúdo foi carregado e executado em modo de teste.' : 'Curso concluído e registrado com sucesso.'}</p>
   <button id="btn-close" onclick="${previewMode ? '' : `window.parent.postMessage({type:'lms:completed',matriculaId:${matriculaId ?? 0}}, '*'); `}window.history.back()">
     Fechar
   </button>
@@ -1093,6 +1093,8 @@ ${resolveScormResumeTargetSlide.toString()}
   var interactionProbeTimer = null;
   var lastCommittedFingerprint = '';
   var LOCAL_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID);
+  var completionPending = false;
+  var completionObservedAt = null;
 
   if (${hasResumeState ? 'true' : 'false'}) {
     if (IS_2004) {
@@ -1231,6 +1233,38 @@ ${resolveScormResumeTargetSlide.toString()}
       type: 'lms:scorm-telemetry',
       matriculaId: MATRICULA_ID,
       telemetry: payload,
+    });
+  }
+
+  function notifyCompletionPending(stage, reason) {
+    if (!completionObservedAt) {
+      completionObservedAt = new Date().toISOString();
+    }
+    completionPending = true;
+    var message =
+      stage === 'saving'
+        ? 'Conclusão recebida. Salvando progresso...'
+        : 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
+    setStatus(message, true);
+    postToParent({
+      type: 'lms:completion-pending',
+      matriculaId: MATRICULA_ID,
+      stage: stage || 'pending',
+      message: message,
+      reason: reason || null,
+    });
+  }
+
+  function notifyCompletionError(code, reason) {
+    if (!completionPending) return;
+    var message = 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
+    setStatus(message, true);
+    postToParent({
+      type: 'lms:completion-error',
+      matriculaId: MATRICULA_ID,
+      code: code || 'SCORM_COMPLETION_REJECTED',
+      message: message,
+      reason: reason || null,
     });
   }
 
@@ -1635,13 +1669,19 @@ ${resolveScormResumeTargetSlide.toString()}
     });
     return getFreshToken('commit').then(function(freshToken) {
       if (!freshToken) return null;
+      var requestBody = Object.assign({
+        matricula_id: MATRICULA_ID,
+        commit_event: eventType || 'SCORM_COMMIT',
+        completion_candidate: completionPending ? true : null,
+        completion_observed_at: completionObservedAt,
+      }, data);
       return fetch(COMMIT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + freshToken,
         },
-        body: JSON.stringify(Object.assign({ matricula_id: MATRICULA_ID }, data)),
+        body: JSON.stringify(requestBody),
         keepalive: true,
       });
     }).then(function(response) {
@@ -1662,14 +1702,32 @@ ${resolveScormResumeTargetSlide.toString()}
           });
           if (json.data.novo_status === 'CONCLUIDO') {
             completed = true;
+            completionPending = false;
             clearLocalResumeBackup();
+            setStatus('Curso concluído e registrado com sucesso.', true);
             var _ov2 = document.getElementById('completion-overlay');
             if (_ov2) _ov2.classList.add('show');
             postToParent({ type: 'lms:completed', matriculaId: MATRICULA_ID });
+            return;
+          }
+
+          if (json.data.completion_diagnostic && json.data.completion_diagnostic.status === 'candidate') {
+            notifyCompletionPending('pending', json.data.completion_diagnostic.code || null);
+            return;
+          }
+
+          if (completionPending) {
+            notifyCompletionError(
+              json.data.completion_diagnostic && json.data.completion_diagnostic.code,
+              'server-did-not-confirm-completion',
+            );
           }
         }).catch(function() { return null; });
       } else if (response) {
         setStatus('Falha ao salvar progresso. Tentando novamente...', true);
+        if ((attempt || 0) >= 2 && completionPending) {
+          notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'http-' + String(response.status));
+        }
         if ((attempt || 0) < 2) {
           window.setTimeout(function() {
             commit(data, (attempt || 0) + 1, eventType);
@@ -1681,6 +1739,9 @@ ${resolveScormResumeTargetSlide.toString()}
     }).catch(function(e) {
       console.warn('[SCORM] commit error', e);
       setStatus('Falha ao salvar progresso. Tentando novamente...', true);
+      if ((attempt || 0) >= 2 && completionPending) {
+        notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'network-error');
+      }
       if ((attempt || 0) < 2) {
         window.setTimeout(function() {
           commit(data, (attempt || 0) + 1, eventType);
@@ -1746,12 +1807,12 @@ ${resolveScormResumeTargetSlide.toString()}
       cs === 'completed' ||
       (ss === 'passed' && cs !== 'incomplete')
     ) {
-      completed = true;
-      var _ov = document.getElementById('completion-overlay');
-      if (_ov) _ov.classList.add('show');
-      if (MATRICULA_ID != null) {
-        window.parent.postMessage({ type: 'lms:completed', matriculaId: MATRICULA_ID }, '*');
-      }
+      notifyCompletionPending('saving', 'status-signaled-completion');
+      emitTelemetry('SCORM_COMPLETION_CANDIDATE', {
+        decision: 'pending-server-confirmation',
+        reason: 'status-signaled-completion',
+      });
+      commit(buildPayload(), 0, 'SCORM_COMPLETION_CANDIDATE');
     }
   }
 
