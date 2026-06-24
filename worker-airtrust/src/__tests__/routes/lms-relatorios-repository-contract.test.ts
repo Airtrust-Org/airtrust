@@ -8,10 +8,12 @@ const {
   getConformidadeRowsMock,
   getCursosConformidadeRowsMock,
   getExpiracaoRowsMock,
+  getScormConclusaoInconsistenteRowsMock,
 } = vi.hoisted(() => ({
   getConformidadeRowsMock: vi.fn(),
   getCursosConformidadeRowsMock: vi.fn(),
   getExpiracaoRowsMock: vi.fn(),
+  getScormConclusaoInconsistenteRowsMock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
@@ -43,6 +45,7 @@ vi.mock('../../repositories/lmsRelatoriosRepository', () => ({
   getConformidadeRows: getConformidadeRowsMock,
   getCursosConformidadeRows: getCursosConformidadeRowsMock,
   getExpiracaoRows: getExpiracaoRowsMock,
+  getScormConclusaoInconsistenteRows: getScormConclusaoInconsistenteRowsMock,
 }));
 
 import lmsRelatoriosRoutes from '../../routes/lms-relatorios';
@@ -122,6 +125,25 @@ describe('lms relatorios repository contract', () => {
         data_expiracao: '2026-07-01',
         progresso_pct: 40,
         dias_restantes: 28,
+      },
+    ]);
+    getScormConclusaoInconsistenteRowsMock.mockResolvedValue([
+      {
+        matricula_id: 326,
+        funcionario_id: 80,
+        funcionario_nome: 'Wagner Domas da Silva',
+        funcao: 'Manutencao',
+        curso_id: 32,
+        curso_titulo: 'AW139 - Manutencao',
+        status: 'EM_ANDAMENTO',
+        progresso_pct: 100,
+        score_pct: 100,
+        mastery_score: 70,
+        location: '380/380',
+        diagnostic_status: 'candidate',
+        diagnostic_code: 'SCORM_COMPLETION_CANDIDATE',
+        can_finalize: true,
+        last_commit_at: '2026-06-24 09:30:00',
       },
     ]);
   });
@@ -213,6 +235,42 @@ describe('lms relatorios repository contract', () => {
       },
     ]);
     expect(getExpiracaoRowsMock).toHaveBeenCalledWith(env.DB, 77, 45, []);
+  });
+
+  it('GET /relatorios/conclusoes-inconsistentes delega o diagnostico SCORM ao repository', async () => {
+    const app = createApp();
+    const env = createEnv();
+
+    const response = await app.fetch(
+      authenticatedRequest('/api/lms/relatorios/conclusoes-inconsistentes', 77),
+      env,
+    );
+    const body = (await response.json()) as LmsRelatorioResponse;
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      success: true,
+      data: [
+        {
+          matricula_id: 326,
+          funcionario_id: 80,
+          funcionario_nome: 'Wagner Domas da Silva',
+          funcao: 'Manutencao',
+          curso_id: 32,
+          curso_titulo: 'AW139 - Manutencao',
+          status: 'EM_ANDAMENTO',
+          progresso_pct: 100,
+          score_pct: 100,
+          mastery_score: 70,
+          location: '380/380',
+          diagnostic_status: 'candidate',
+          diagnostic_code: 'SCORM_COMPLETION_CANDIDATE',
+          can_finalize: true,
+          last_commit_at: '2026-06-24 09:30:00',
+        },
+      ],
+    });
+    expect(getScormConclusaoInconsistenteRowsMock).toHaveBeenCalledWith(env.DB, 77, []);
   });
 
   it('limita dias em 180 antes de chamar repository, preservando comportamento da rota', async () => {

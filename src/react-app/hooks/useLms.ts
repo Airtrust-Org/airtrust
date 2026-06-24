@@ -110,6 +110,7 @@ export interface LmsMatricula {
   scorm_mastery_score?: number | null;
   gerar_qualificacao_ao_concluir?: 0 | 1;
   publicado?: 0 | 1;
+  completion_diagnostic?: LmsCompletionDiagnostic | null;
 }
 
 export interface LmsProgresso {
@@ -123,11 +124,40 @@ export interface LmsProgresso {
   session_count: number;
   last_commit_at: string | null;
   suspend_data: string | null;
+  cmi_json?: string | null;
+  session_time?: string | null;
+  total_time?: string | null;
 }
 
 export interface LmsCursoDetalhe extends LmsMatricula {
   h5p_conteudo_id?: number | null;
   scorm_progresso: LmsProgresso | null;
+}
+
+export interface LmsCompletionDiagnostic {
+  status: 'none' | 'accepted' | 'candidate' | 'rejected';
+  code:
+    | 'SCORM_COMPLETION_ACCEPTED'
+    | 'SCORM_COMPLETION_CANDIDATE'
+    | 'SCORM_COMPLETION_REJECTED'
+    | 'SCORM_FINAL_COMMIT_MISSING'
+    | 'SCORM_STATUS_INCONSISTENT'
+    | 'SCORM_NONE';
+  reasons: string[];
+  can_finalize: boolean;
+  explicit_completion: boolean;
+  explicit_failure: boolean;
+  mastery_score: number | null;
+  score_pct: number | null;
+  progresso_pct: number;
+  inferred_progress_pct: number | null;
+  location: string | null;
+  reached_final_location: boolean;
+  final_commit_observed: boolean;
+  has_runtime_evidence: boolean;
+  commit_event: string | null;
+  pending_server_confirmation?: boolean;
+  matricula_status?: string | null;
 }
 
 export interface LmsAdminStats {
@@ -1061,6 +1091,7 @@ export interface PostScormCommitResult {
   novo_status: MatriculaStatus;
   progresso_pct: number;
   qualificacao_gerada: Record<string, unknown> | null;
+  completion_diagnostic?: LmsCompletionDiagnostic | null;
 }
 
 export function usePostXapiStatement() {
@@ -1145,6 +1176,7 @@ export interface FinalizarMatriculaResult {
     qualificacao_id?: number;
     qualificacao_historico_id?: number;
   } | null;
+  completion_diagnostic?: LmsCompletionDiagnostic | null;
 }
 
 export function useFinalizarMatricula() {
@@ -1229,6 +1261,30 @@ export interface ExpiracaoMatricula {
   dias_restantes: number;
 }
 
+export interface LmsScormConclusaoInconsistente {
+  matricula_id: number;
+  funcionario_id: number;
+  funcionario_nome: string;
+  funcao: string | null;
+  curso_id: number;
+  curso_titulo: string;
+  status: string;
+  progresso_pct: number;
+  score_pct: number | null;
+  mastery_score: number | null;
+  location: string | null;
+  diagnostic_status: 'none' | 'accepted' | 'candidate' | 'rejected';
+  diagnostic_code:
+    | 'SCORM_COMPLETION_ACCEPTED'
+    | 'SCORM_COMPLETION_CANDIDATE'
+    | 'SCORM_COMPLETION_REJECTED'
+    | 'SCORM_FINAL_COMMIT_MISSING'
+    | 'SCORM_STATUS_INCONSISTENT'
+    | 'SCORM_NONE';
+  can_finalize: boolean;
+  last_commit_at: string | null;
+}
+
 export function useLmsConformidade(setorIds?: number[]) {
   const params = new URLSearchParams();
   if (setorIds && setorIds.length > 0) params.set('setor_ids', setorIds.join(','));
@@ -1245,6 +1301,17 @@ export function useLmsExpiracoes(dias = 30, setorIds?: number[]) {
   return useQuery({
     queryKey: ['lms', 'relatorios', 'expiracoes', dias, setorIds ?? []],
     queryFn: () => lmsRequest<ExpiracaoMatricula[]>(`/relatorios/expiracoes?${params.toString()}`),
+  });
+}
+
+export function useLmsScormConclusoesInconsistentes(setorIds?: number[]) {
+  const params = new URLSearchParams();
+  if (setorIds && setorIds.length > 0) params.set('setor_ids', setorIds.join(','));
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return useQuery({
+    queryKey: ['lms', 'relatorios', 'conclusoes-inconsistentes', setorIds ?? []],
+    queryFn: () =>
+      lmsRequest<LmsScormConclusaoInconsistente[]>(`/relatorios/conclusoes-inconsistentes${qs}`),
   });
 }
 

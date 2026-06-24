@@ -887,4 +887,344 @@ describe('lms matriculas progress integrity', () => {
     expect(matriculaUpdate?.args[0]).toBe('EM_ANDAMENTO');
     expect(matriculaUpdate?.args[1]).toBe(55);
   });
+
+  it('marca inconsistencia auditavel quando score atinge mastery no slide final sem status conclusivo', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 326,
+            empresa_id: 1,
+            funcionario_id: 80,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 63,
+            tentativas: 0,
+            qualificacao_historico_id: null,
+            scorm_mastery_score: 70,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 130,
+            curso_titulo: 'AW139 - Manutencao',
+            qualificacao_codigo: 'MNT_AW139',
+            qualificacao_nome: 'AW139 - Manutencao',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 36,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => ({
+            lesson_status: 'incomplete',
+            completion_status: null,
+            success_status: null,
+            score_raw: 95,
+            score_max: 100,
+            score_min: 0,
+            score_scaled: 0.95,
+            session_time: '0000:10:00.00',
+            total_time: '0001:00:00.00',
+            suspend_data: 'checkpoint-final',
+            launch_data: null,
+            cmi_json: JSON.stringify({
+              'cmi.location': '379/380',
+              'cmi.core.lesson_location': '379/380',
+            }),
+          }),
+        },
+      ],
+      [
+        'INSERT INTO lms_progresso_scorm',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 0 } }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/commit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 326,
+          lesson_status: 'incomplete',
+          score_raw: 100,
+          score_max: 100,
+          score_scaled: 1,
+          suspend_data: 'checkpoint-final-quiz',
+          commit_event: 'SCORM_FINISH',
+          completion_candidate: true,
+          completion_observed_at: '2026-06-24T12:00:00.000Z',
+          cmi_json: JSON.stringify({
+            'cmi.location': '380/380',
+            'cmi.core.lesson_location': '380/380',
+            'cmi.core.lesson_status': 'incomplete',
+            'cmi.core.score.raw': '100',
+          }),
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        matricula_id: 326,
+        novo_status: 'EM_ANDAMENTO',
+        qualificacao_gerada: null,
+        completion_diagnostic: {
+          status: 'candidate',
+          code: 'SCORM_COMPLETION_CANDIDATE',
+          can_finalize: true,
+          reached_final_location: true,
+        },
+      },
+    });
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(logAuditMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: 'SCORM_COMPLETION_CANDIDATE',
+        entityId: 326,
+      }),
+    );
+  });
+
+  it('bloqueia finalizacao manual sem evidencia SCORM suficiente', async () => {
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 400,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 40,
+            qualificacao_historico_id: null,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 127,
+            scorm_mastery_score: 70,
+            curso_titulo: 'Inspecao IIO & APRS',
+            qualificacao_codigo: 'MNT_IIO_APRS',
+            qualificacao_nome: 'Inspecao IIO & APRS',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 36,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => ({
+            lesson_status: 'incomplete',
+            completion_status: null,
+            success_status: null,
+            score_raw: 40,
+            score_max: 100,
+            score_scaled: 0.4,
+            session_time: '0000:02:00.00',
+            total_time: '0000:15:00.00',
+            suspend_data: 'checkpoint-modulo-2',
+            cmi_json: JSON.stringify({
+              'cmi.location': '12/80',
+              'cmi.core.lesson_location': '12/80',
+              'cmi.core.score.raw': '40',
+            }),
+          }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/400/finalizar', {
+        method: 'POST',
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      code: 'SCORM_COMPLETION_REJECTED',
+      data: {
+        matricula_id: 400,
+        novo_status: 'EM_ANDAMENTO',
+        completion_diagnostic: {
+          can_finalize: false,
+        },
+      },
+    });
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+  });
+
+  it('aceita finalizacao manual controlada quando ha candidate auditavel e gera qualificacao uma unica vez', async () => {
+    createLmsQualificationOnCompletionMock.mockResolvedValue(9001);
+
+    const { db, calls } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 401,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 99,
+            qualificacao_historico_id: null,
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 130,
+            scorm_mastery_score: 70,
+            curso_titulo: 'AW139 - Manutencao',
+            qualificacao_codigo: 'MNT_AW139',
+            qualificacao_nome: 'AW139 - Manutencao',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 36,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => ({
+            lesson_status: 'incomplete',
+            completion_status: null,
+            success_status: null,
+            score_raw: 100,
+            score_max: 100,
+            score_scaled: 1,
+            session_time: '0000:10:00.00',
+            total_time: '0001:20:00.00',
+            suspend_data: 'checkpoint-final-quiz',
+            cmi_json: JSON.stringify({
+              'cmi.location': '380/380',
+              'cmi.core.lesson_location': '380/380',
+              'cmi.core.score.raw': '100',
+            }),
+          }),
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/401/finalizar', {
+        method: 'POST',
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        matricula_id: 401,
+        novo_status: 'CONCLUIDO',
+        progresso_pct: 100,
+        qualificacao_gerada: {
+          qualificacao_historico_id: 9001,
+        },
+        completion_diagnostic: {
+          can_finalize: true,
+          status: 'candidate',
+        },
+      },
+    });
+    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
+    const matriculaUpdate = calls.find(
+      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
+    );
+    expect(String(matriculaUpdate?.args[0] ?? '')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('preserva a finalizacao manual de conteudo nao-scorm usada pelos players PDF e PPTX', async () => {
+    createLmsQualificationOnCompletionMock.mockResolvedValue(9100);
+
+    const { db } = createMockDb([
+      [
+        'FROM lms_matriculas m',
+        {
+          first: () => ({
+            id: 402,
+            empresa_id: 1,
+            funcionario_id: 77,
+            status: 'EM_ANDAMENTO',
+            progresso_pct: 100,
+            qualificacao_historico_id: null,
+            tipo_conteudo: 'pdf',
+            gerar_qualificacao_ao_concluir: 1,
+            qualificacao_tipo_id: 131,
+            scorm_mastery_score: null,
+            curso_titulo: 'Manual PDF',
+            qualificacao_codigo: 'PDF_MANUAL',
+            qualificacao_nome: 'Manual PDF',
+            qualificacao_categoria: 'EAD',
+            qualificacao_validade: 24,
+          }),
+        },
+      ],
+      [
+        'FROM lms_progresso_scorm',
+        {
+          first: () => null,
+        },
+      ],
+      [
+        'UPDATE lms_matriculas',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/402/finalizar', {
+        method: 'POST',
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        matricula_id: 402,
+        novo_status: 'CONCLUIDO',
+        progresso_pct: 100,
+        qualificacao_gerada: {
+          qualificacao_historico_id: 9100,
+        },
+      },
+    });
+    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
+  });
 });

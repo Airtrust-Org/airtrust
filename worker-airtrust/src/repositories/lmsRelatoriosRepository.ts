@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { buildScormCompletionDiagnostic } from '../services/lms-progress-guardrails';
 
 /**
  * lmsRelatoriosRepository.ts
@@ -46,6 +47,24 @@ export type ExpiracaoRow = {
   data_expiracao: string;
   progresso_pct: number;
   dias_restantes: number;
+};
+
+export type ScormConclusaoInconsistenteRow = {
+  matricula_id: number;
+  funcionario_id: number;
+  funcionario_nome: string;
+  funcao: string | null;
+  curso_id: number;
+  curso_titulo: string;
+  status: string;
+  progresso_pct: number;
+  score_pct: number | null;
+  mastery_score: number | null;
+  location: string | null;
+  diagnostic_status: string;
+  diagnostic_code: string;
+  can_finalize: boolean;
+  last_commit_at: string | null;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -284,4 +303,126 @@ export async function getExpiracaoRows(
     .all<ExpiracaoRow>();
 
   return results.results || [];
+}
+
+export async function getScormConclusaoInconsistenteRows(
+  db: D1Database,
+  empresaId: number,
+  setorIds: number[] = [],
+): Promise<ScormConclusaoInconsistenteRow[]> {
+  assertEmpresaId(empresaId);
+  const setorFilter = buildCourseSetorFilter('c', setorIds);
+
+  const results = await db
+    .prepare(
+      `
+      SELECT
+        m.id AS matricula_id,
+        m.funcionario_id,
+        f.nome AS funcionario_nome,
+        f.funcao,
+        c.id AS curso_id,
+        c.titulo AS curso_titulo,
+        m.status,
+        COALESCE(m.progresso_pct, 0) AS progresso_pct,
+        c.scorm_mastery_score,
+        p.lesson_status,
+        p.completion_status,
+        p.success_status,
+        p.score_raw,
+        p.score_max,
+        p.score_scaled,
+        p.session_time,
+        p.total_time,
+        p.suspend_data,
+        p.cmi_json,
+        p.last_commit_at
+      FROM lms_matriculas m
+      JOIN lms_cursos c
+        ON c.id = m.curso_id
+       AND c.empresa_id = m.empresa_id
+       AND c.deleted_at IS NULL
+      JOIN funcionarios f
+        ON f.id = m.funcionario_id
+       AND f.empresa_id = m.empresa_id
+       AND f.deleted_at IS NULL
+       AND COALESCE(f.ativo, 1) = 1
+       AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+      JOIN lms_progresso_scorm p
+        ON p.matricula_id = m.id
+       AND p.empresa_id = m.empresa_id
+      WHERE m.empresa_id = ?
+        AND m.deleted_at IS NULL
+        AND c.tipo_conteudo = 'scorm'
+        AND m.status <> 'CONCLUIDO'
+        ${setorFilter.clause}
+      ORDER BY p.last_commit_at DESC, m.updated_at DESC
+      `,
+    )
+    .bind(empresaId, ...setorFilter.bindings)
+    .all<{
+      matricula_id: number;
+      funcionario_id: number;
+      funcionario_nome: string;
+      funcao: string | null;
+      curso_id: number;
+      curso_titulo: string;
+      status: string;
+      progresso_pct: number;
+      scorm_mastery_score: number | null;
+      lesson_status: string | null;
+      completion_status: string | null;
+      success_status: string | null;
+      score_raw: number | null;
+      score_max: number | null;
+      score_scaled: number | null;
+      session_time: string | null;
+      total_time: string | null;
+      suspend_data: string | null;
+      cmi_json: string | null;
+      last_commit_at: string | null;
+    }>();
+
+  return (results.results || [])
+    .map((row) => {
+      const diagnostic = buildScormCompletionDiagnostic({
+        lessonStatus: row.lesson_status,
+        completionStatus: row.completion_status,
+        successStatus: row.success_status,
+        scoreRaw: row.score_raw,
+        scoreMax: row.score_max,
+        scoreScaled: row.score_scaled,
+        masteryScore: row.scorm_mastery_score,
+        progressoPct: row.progresso_pct,
+        cmiJson: row.cmi_json,
+        suspendData: row.suspend_data,
+        sessionTime: row.session_time,
+        totalTime: row.total_time,
+      });
+
+      return {
+        matricula_id: row.matricula_id,
+        funcionario_id: row.funcionario_id,
+        funcionario_nome: row.funcionario_nome,
+        funcao: row.funcao,
+        curso_id: row.curso_id,
+        curso_titulo: row.curso_titulo,
+        status: row.status,
+        progresso_pct: row.progresso_pct,
+        score_pct: diagnostic.score_pct,
+        mastery_score: diagnostic.mastery_score,
+        location: diagnostic.location,
+        diagnostic_status: diagnostic.status,
+        diagnostic_code: diagnostic.code,
+        can_finalize: diagnostic.can_finalize,
+        last_commit_at: row.last_commit_at,
+      };
+    })
+    .filter(
+      (row) =>
+        row.diagnostic_code !== 'SCORM_NONE' &&
+        (row.diagnostic_status === 'candidate' ||
+          row.diagnostic_code === 'SCORM_STATUS_INCONSISTENT' ||
+          row.diagnostic_code === 'SCORM_FINAL_COMMIT_MISSING'),
+    );
 }

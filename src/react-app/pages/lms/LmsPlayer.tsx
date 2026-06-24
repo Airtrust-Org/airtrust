@@ -83,12 +83,6 @@ function parseSlideLocation(
   return null;
 }
 
-function normalizeScormStatus(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase();
-}
-
 export default function LmsPlayer() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
@@ -100,13 +94,16 @@ export default function LmsPlayer() {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [liveProgress, setLiveProgress] = useState<number | null>(null);
   const [liveLocation, setLiveLocation] = useState<string | null>(null);
-  const [liveSlideCurrent, setLiveSlideCurrent] = useState<number | null>(null);
-  const [liveSlideTotal, setLiveSlideTotal] = useState<number | null>(null);
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
+  const [completionState, setCompletionState] = useState<'idle' | 'saving' | 'pending' | 'error'>(
+    'idle',
+  );
+  const [completionMessage, setCompletionMessage] = useState<string | null>(null);
 
   const id = Number(matriculaId);
+  const completionToastIdRef = useRef(`lms-scorm-completion-${id}`);
   const {
     data: matricula,
     isLoading: matriculaLoading,
@@ -127,37 +124,12 @@ export default function LmsPlayer() {
     inferredLocationProgress ?? 0,
     inferredPersistedLocationProgress ?? 0,
   );
-  const scormProgress = matricula?.scorm_progresso ?? null;
-  const scormLessonStatus = normalizeScormStatus(scormProgress?.lesson_status);
-  const scormCompletionStatus = normalizeScormStatus(scormProgress?.completion_status);
-  const scormSuccessStatus = normalizeScormStatus(scormProgress?.success_status);
-  const scormExplicitlyCompleted =
-    scormLessonStatus === 'completed' ||
-    scormLessonStatus === 'passed' ||
-    scormCompletionStatus === 'completed' ||
-    scormSuccessStatus === 'passed';
+  const completionDiagnostic = matricula?.completion_diagnostic ?? null;
   const hasCompletionDate = Boolean(matricula?.data_conclusao);
-  const isCompletedState =
-    completed || matricula?.status === 'CONCLUIDO' || scormExplicitlyCompleted || hasCompletionDate;
+  const isCompletedState = completed || matricula?.status === 'CONCLUIDO' || hasCompletionDate;
   const displayProgress = completed || matricula?.status === 'CONCLUIDO' ? 100 : mergedProgress;
-  const reachedLastSlideFromWorker =
-    liveSlideCurrent != null && liveSlideTotal != null && liveSlideTotal > 0
-      ? liveSlideCurrent >= liveSlideTotal
-      : false;
-  const reachedLastSlideFromLocation =
-    parsedCurrentLocation != null && parsedCurrentLocation.total > 0
-      ? parsedCurrentLocation.current >= parsedCurrentLocation.total
-      : false;
-  const reachedLastSlide =
-    reachedLastSlideFromWorker ||
-    reachedLastSlideFromLocation ||
-    (inferredLocationProgress ?? 0) >= 99 ||
-    (inferredPersistedLocationProgress ?? 0) >= 99;
   const canFinalize =
-    !isCompletedState &&
-    matricula?.status !== 'CONCLUIDO' &&
-    (displayProgress >= 99 || reachedLastSlide || scormExplicitlyCompleted) &&
-    !isFinalizing;
+    !isCompletedState && matricula?.status !== 'CONCLUIDO' && completionDiagnostic?.can_finalize === true && !isFinalizing;
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
@@ -167,6 +139,34 @@ export default function LmsPlayer() {
       ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(playerToken)}`
       : null;
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
+
+  function showCompletionToast(
+    phase: 'saving' | 'pending' | 'error' | 'success',
+    message: string,
+    options?: { qualificationGenerated?: boolean },
+  ) {
+    const toastId = completionToastIdRef.current;
+    if (phase === 'success') {
+      const detail = options?.qualificationGenerated
+        ? `${message} A qualificacao foi gerada automaticamente.`
+        : message;
+      toast.success(detail, { id: toastId });
+      setCompletionState('idle');
+      setCompletionMessage(null);
+      return;
+    }
+
+    if (phase === 'error') {
+      toast.error(message, { id: toastId });
+      setCompletionState('error');
+      setCompletionMessage(message);
+      return;
+    }
+
+    toast.loading(message, { id: toastId, duration: Infinity });
+    setCompletionState(phase);
+    setCompletionMessage(message);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -201,6 +201,7 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
       window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged as EventListener);
+      toast.dismiss(completionToastIdRef.current);
     };
   }, [token]);
 
@@ -214,6 +215,44 @@ export default function LmsPlayer() {
       setMaxVisitedSlide((prev) => Math.max(prev, persisted.current));
     }
   }, [persistedLocation]);
+
+  useEffect(() => {
+    if (matricula?.status === 'CONCLUIDO') {
+      showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
+        qualificationGenerated: Boolean(matricula.qualificacao_historico_id || qualificacaoGerada),
+      });
+      return;
+    }
+
+    if (completionDiagnostic?.status === 'candidate') {
+      showCompletionToast(
+        completionDiagnostic.final_commit_observed ? 'pending' : 'saving',
+        completionDiagnostic.final_commit_observed
+          ? 'Conclusão recebida, mas ainda não confirmada pelo servidor.'
+          : 'Conclusão recebida. Salvando progresso...',
+      );
+      return;
+    }
+
+    if (
+      completionState !== 'idle' &&
+      completionDiagnostic &&
+      completionDiagnostic.code !== 'SCORM_NONE' &&
+      completionDiagnostic.status !== 'accepted' &&
+      completionDiagnostic.status !== 'candidate'
+    ) {
+      showCompletionToast(
+        'error',
+        'Conclusão recebida, mas ainda não confirmada pelo servidor.',
+      );
+    }
+  }, [
+    completionDiagnostic,
+    completionState,
+    matricula?.qualificacao_historico_id,
+    matricula?.status,
+    qualificacaoGerada,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -262,6 +301,41 @@ export default function LmsPlayer() {
       ) {
         setCompleted(true);
         if (event.data.qualificacao_gerada) setQualificacaoGerada(true);
+        showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
+          qualificationGenerated: Boolean(event.data.qualificacao_gerada),
+        });
+        void refetchMatricula();
+        return;
+      }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:completion-pending' &&
+        event.data.matriculaId === id
+      ) {
+        showCompletionToast(
+          event.data.stage === 'saving' ? 'saving' : 'pending',
+          typeof event.data.message === 'string' && event.data.message.trim()
+            ? event.data.message
+            : 'Conclusão recebida, mas ainda não confirmada pelo servidor.',
+        );
+        void refetchMatricula();
+        return;
+      }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:completion-error' &&
+        event.data.matriculaId === id
+      ) {
+        showCompletionToast(
+          'error',
+          typeof event.data.message === 'string' && event.data.message.trim()
+            ? event.data.message
+            : 'Conclusão recebida, mas ainda não confirmada pelo servidor.',
+        );
         void refetchMatricula();
         return;
       }
@@ -282,18 +356,12 @@ export default function LmsPlayer() {
             setMaxVisitedSlide((prev) => Math.max(prev, parsed.current));
           }
         }
-        if (
-          typeof event.data.slide_current === 'number' &&
-          Number.isFinite(event.data.slide_current)
-        ) {
-          setLiveSlideCurrent(event.data.slide_current);
+        if (typeof event.data.slide_current === 'number' && Number.isFinite(event.data.slide_current)) {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
-        }
-        if (typeof event.data.slide_total === 'number' && Number.isFinite(event.data.slide_total)) {
-          setLiveSlideTotal(event.data.slide_total);
         }
         if (event.data.novo_status === 'CONCLUIDO') {
           setCompleted(true);
+          showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
         }
         void refetchMatricula();
         return;
@@ -430,13 +498,15 @@ export default function LmsPlayer() {
     if (!matricula) return;
     setIsFinalizing(true);
     try {
+      showCompletionToast('saving', 'Conclusão recebida. Salvando progresso...');
       const res = await fetchWithAuth(`/api/lms/matriculas/${id}/finalizar`, {
         method: 'POST',
       });
       const json = (await res.json()) as {
         success: boolean;
-        data?: { qualificacao_gerada?: unknown };
+        data?: { qualificacao_gerada?: unknown; completion_diagnostic?: { can_finalize?: boolean } };
         error?: string;
+        code?: string;
       };
       if (!res.ok || !json.success) {
         throw new Error(json.error ?? `HTTP ${res.status}`);
@@ -446,9 +516,16 @@ export default function LmsPlayer() {
       setLiveProgress(100);
       setQualificacaoGerada(Boolean(json.data?.qualificacao_gerada));
       void refetchMatricula();
-      toast.success('Treinamento finalizado com sucesso.');
+      showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
+        qualificationGenerated: Boolean(json.data?.qualificacao_gerada),
+      });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Erro ao finalizar treinamento');
+      showCompletionToast(
+        'error',
+        error instanceof Error
+          ? error.message
+          : 'Conclusão recebida, mas ainda não confirmada pelo servidor.',
+      );
     } finally {
       setIsFinalizing(false);
     }
@@ -609,6 +686,9 @@ export default function LmsPlayer() {
                   {formatMinutes(curso?.carga_horaria_minutos ?? matricula.carga_horaria_minutos)}
                 </p>
                 {matricula.score_final != null ? <p>Nota: {matricula.score_final}%</p> : null}
+                {completionDiagnostic?.code && completionDiagnostic.code !== 'SCORM_NONE' ? (
+                  <p>Diagnóstico: {completionDiagnostic.code}</p>
+                ) : null}
               </div>
             </section>
 
@@ -651,32 +731,37 @@ export default function LmsPlayer() {
                 className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isFinalizing
-                  ? 'Finalizando...'
+                  ? 'Confirmando...'
                   : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Finalizar e gerar qualificação'
-                    : 'Finalizar curso'}
+                    ? 'Confirmar conclusao e gerar qualificacao'
+                    : 'Confirmar conclusao'}
               </button>
             ) : null}
           </aside>
         </div>
       </main>
-      {canFinalize && (
+      {(canFinalize || completionState === 'saving' || completionState === 'pending' || completionState === 'error') && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4">
           <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-emerald-300/30 bg-slate-900/90 p-3 shadow-2xl backdrop-blur">
             <div className="mb-2 text-xs text-emerald-200/90">
-              Todos os slides concluídos. Você já pode finalizar o treinamento.
+              {completionMessage ||
+                (canFinalize
+                  ? 'Conclusão recebida, mas ainda não confirmada pelo servidor.'
+                  : 'Conclusão recebida, mas ainda não confirmada pelo servidor.')}
             </div>
-            <button
-              onClick={handleFinalizeAndGenerateQualification}
-              disabled={isFinalizing}
-              className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isFinalizing
-                ? 'Finalizando...'
-                : matricula?.gerar_qualificacao_ao_concluir === 1
-                  ? 'Finalizar curso e gerar qualificação'
-                  : 'Finalizar curso'}
-            </button>
+            {canFinalize ? (
+              <button
+                onClick={handleFinalizeAndGenerateQualification}
+                disabled={isFinalizing}
+                className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isFinalizing
+                  ? 'Confirmando...'
+                  : matricula?.gerar_qualificacao_ao_concluir === 1
+                    ? 'Confirmar conclusao e gerar qualificacao'
+                    : 'Confirmar conclusao'}
+              </button>
+            ) : null}
           </div>
         </div>
       )}
@@ -690,8 +775,8 @@ export default function LmsPlayer() {
             </div>
             <h2 className="text-2xl font-bold">Curso concluído</h2>
             <p className="text-white/70 text-sm">
-              Seu progresso foi salvo com sucesso.
-              {qualificacaoGerada ? ' A qualificação foi gerada automaticamente.' : ''}
+              Curso concluído e registrado com sucesso.
+              {qualificacaoGerada ? ' A qualificacao foi gerada automaticamente.' : ''}
             </p>
             <div className="flex flex-col gap-2">
               <button

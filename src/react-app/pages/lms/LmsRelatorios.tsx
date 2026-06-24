@@ -14,7 +14,11 @@ import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
-import { useLmsConformidade, useLmsExpiracoes } from '@/react-app/hooks/useLms';
+import {
+  useLmsConformidade,
+  useLmsExpiracoes,
+  useLmsScormConclusoesInconsistentes,
+} from '@/react-app/hooks/useLms';
 import { useApi } from '@/react-app/hooks/useApi';
 import { LmsModuleTabs, LmsPageShell, LmsSummaryTag } from './lmsUi';
 
@@ -46,7 +50,7 @@ export default function LmsRelatorios() {
   const navigate = useNavigate();
   const { isAdmin, isGestor } = usePermissions();
   const canManage = isAdmin || isGestor;
-  const [tab, setTab] = useState<'conformidade' | 'expiracoes'>('conformidade');
+  const [tab, setTab] = useState<'conformidade' | 'expiracoes' | 'conclusoes'>('conformidade');
   const [dias, setDias] = useState(30);
   const [sectorFilter, setSectorFilter] = useState('all');
 
@@ -56,12 +60,15 @@ export default function LmsRelatorios() {
 
   const { data: conformidade, isLoading: loadingConformidade } = useLmsConformidade(setorIds);
   const { data: expiracoes, isLoading: loadingExpiracoes } = useLmsExpiracoes(dias, setorIds);
+  const { data: conclusoesInconsistentes, isLoading: loadingConclusoes } =
+    useLmsScormConclusoesInconsistentes(setorIds);
 
   const totalFuncionarios = conformidade?.reduce((sum, r) => sum + r.total_funcionarios, 0) ?? 0;
   const totalMatriculados = conformidade?.reduce((sum, r) => sum + r.matriculados, 0) ?? 0;
   const totalConcluidos = conformidade?.reduce((sum, r) => sum + r.concluidos, 0) ?? 0;
   const taxaGeral =
     totalMatriculados > 0 ? Math.round((totalConcluidos / totalMatriculados) * 100) : 0;
+  const totalConclusoesInconsistentes = conclusoesInconsistentes?.length ?? 0;
 
   function exportConformidadeCsv() {
     if (!conformidade) return;
@@ -95,6 +102,22 @@ export default function LmsRelatorios() {
     a.click();
   }
 
+  function exportConclusoesCsv() {
+    if (!conclusoesInconsistentes) return;
+    const lines = [
+      'Funcionario,Funcao,Curso,Status,Progresso %,Score %,Mastery,Location,Diagnostico,Ultimo Commit',
+      ...conclusoesInconsistentes.map(
+        (r) =>
+          `"${r.funcionario_nome}","${r.funcao ?? ''}","${r.curso_titulo}",${r.status},${r.progresso_pct},${r.score_pct ?? ''},${r.mastery_score ?? ''},"${r.location ?? ''}",${r.diagnostic_code},${r.last_commit_at ?? ''}`,
+      ),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `lms-conclusoes-inconsistentes-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  }
+
   return (
     <AppLayout>
       <LmsPageShell>
@@ -106,7 +129,11 @@ export default function LmsRelatorios() {
             <>
               <button
                 onClick={() =>
-                  tab === 'conformidade' ? exportConformidadeCsv() : exportExpiracoesCsv()
+                  tab === 'conformidade'
+                    ? exportConformidadeCsv()
+                    : tab === 'expiracoes'
+                      ? exportExpiracoesCsv()
+                      : exportConclusoesCsv()
                 }
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
@@ -145,6 +172,12 @@ export default function LmsRelatorios() {
                 icon={<BarChart3 className="h-4 w-4" />}
                 tone={taxaGeral >= 80 ? 'emerald' : taxaGeral >= 50 ? 'amber' : 'rose'}
               />
+              <LmsSummaryTag
+                label="Inconsistências SCORM"
+                value={totalConclusoesInconsistentes}
+                icon={<AlertTriangle className="h-4 w-4" />}
+                tone={totalConclusoesInconsistentes > 0 ? 'amber' : 'emerald'}
+              />
             </div>
 
             {/* Sector filter */}
@@ -178,10 +211,20 @@ export default function LmsRelatorios() {
               >
                 Conformidade por Função
               </button>
-              <button
-                onClick={() => setTab('expiracoes')}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                  tab === 'expiracoes'
+	              <button
+	                onClick={() => setTab('conclusoes')}
+	                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+	                  tab === 'conclusoes'
+	                    ? 'bg-primary/10 text-primary'
+	                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+	                }`}
+	              >
+	                Inconsistências SCORM
+	              </button>
+	              <button
+	                onClick={() => setTab('expiracoes')}
+	                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+	                  tab === 'expiracoes'
                     ? 'bg-primary/10 text-primary'
                     : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
                 }`}
@@ -293,7 +336,7 @@ export default function LmsRelatorios() {
             )}
 
             {/* Expirações table */}
-            {tab === 'expiracoes' && (
+	            {tab === 'expiracoes' && (
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900">
                 <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4 dark:border-slate-800">
                   <div className="flex items-center gap-3">
@@ -412,6 +455,95 @@ export default function LmsRelatorios() {
                                   Abrir curso
                                 </button>
                               </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+	                )}
+	              </div>
+	            )}
+
+            {tab === 'conclusoes' && (
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      Conclusões SCORM inconsistentes
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Lista matrículas com score alto ou sinal forte de término sem conclusão LMS confirmada.
+                    </p>
+                  </div>
+                  <button
+                    onClick={exportConclusoesCsv}
+                    disabled={!conclusoesInconsistentes || conclusoesInconsistentes.length === 0}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Exportar CSV
+                  </button>
+                </div>
+
+                {loadingConclusoes ? (
+                  <div className="flex justify-center p-10">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-300 dark:text-slate-600" />
+                  </div>
+                ) : !conclusoesInconsistentes || conclusoesInconsistentes.length === 0 ? (
+                  <div className="flex flex-col items-center gap-3 p-10 text-center">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-300 dark:text-emerald-600" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Nenhuma inconsistência SCORM encontrada.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
+                        <tr>
+                          <th className="px-6 py-3 text-left">Funcionário</th>
+                          <th className="px-4 py-3 text-left">Curso</th>
+                          <th className="px-4 py-3 text-left">Status</th>
+                          <th className="px-4 py-3 text-right">Progresso</th>
+                          <th className="px-4 py-3 text-right">Score</th>
+                          <th className="px-4 py-3 text-left">Posição</th>
+                          <th className="px-4 py-3 text-left">Diagnóstico</th>
+                          <th className="px-6 py-3 text-left">Último commit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {conclusoesInconsistentes.map((row) => (
+                          <tr
+                            key={row.matricula_id}
+                            className="hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/50"
+                          >
+                            <td className="px-6 py-4">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
+                                <FuncionarioLink id={row.funcionario_id} nome={row.funcionario_nome} />
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                {row.funcao ?? 'Sem função'}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-slate-700 dark:text-slate-300">{row.curso_titulo}</td>
+                            <td className="px-4 py-4 text-slate-600 dark:text-slate-400">{row.status}</td>
+                            <td className="px-4 py-4 text-right text-slate-600 dark:text-slate-400">
+                              {row.progresso_pct}%
+                            </td>
+                            <td className="px-4 py-4 text-right text-slate-600 dark:text-slate-400">
+                              {row.score_pct != null ? `${row.score_pct}%` : '—'}
+                            </td>
+                            <td className="px-4 py-4 text-slate-600 dark:text-slate-400">
+                              {row.location ?? 'sem marcador'}
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                                {row.diagnostic_code}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
+                              {row.last_commit_at ? formatDate(row.last_commit_at) : '—'}
                             </td>
                           </tr>
                         ))}

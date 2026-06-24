@@ -11,6 +11,7 @@ import {
   getConformidadeRows,
   getCursosConformidadeRows,
   getExpiracaoRows,
+  getScormConclusaoInconsistenteRows,
 } from '../repositories/lmsRelatoriosRepository';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 
@@ -68,5 +69,21 @@ app.get('/relatorios/expiracoes', auth(), requireRole('admin', 'manager'), async
 
   return c.json({ success: true, data: rows });
 });
+
+app.get(
+  '/relatorios/conclusoes-inconsistentes',
+  auth(),
+  requireRole('admin', 'manager'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const setorIds = resolveRelatorioSetorIds(access, c.req.query('setor_ids'));
+
+    const rows = await getScormConclusaoInconsistenteRows(db, empresaId, setorIds);
+
+    return c.json({ success: true, data: rows });
+  },
+);
 
 export default app;

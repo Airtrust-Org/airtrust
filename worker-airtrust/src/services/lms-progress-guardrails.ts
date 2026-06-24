@@ -1,5 +1,33 @@
 type Nullable<T> = T | null | undefined;
 
+export type ScormCompletionDiagnosticCode =
+  | 'SCORM_COMPLETION_ACCEPTED'
+  | 'SCORM_COMPLETION_CANDIDATE'
+  | 'SCORM_COMPLETION_REJECTED'
+  | 'SCORM_FINAL_COMMIT_MISSING'
+  | 'SCORM_STATUS_INCONSISTENT'
+  | 'SCORM_NONE';
+
+export type ScormCompletionDiagnosticStatus = 'none' | 'accepted' | 'candidate' | 'rejected';
+
+export interface ScormCompletionDiagnostic {
+  status: ScormCompletionDiagnosticStatus;
+  code: ScormCompletionDiagnosticCode;
+  reasons: string[];
+  can_finalize: boolean;
+  explicit_completion: boolean;
+  explicit_failure: boolean;
+  mastery_score: number | null;
+  score_pct: number | null;
+  progresso_pct: number;
+  inferred_progress_pct: number | null;
+  location: string | null;
+  reached_final_location: boolean;
+  final_commit_observed: boolean;
+  has_runtime_evidence: boolean;
+  commit_event: string | null;
+}
+
 export function normalizeMatriculaStatus(status: Nullable<string>) {
   return String(status ?? '')
     .trim()
@@ -92,6 +120,33 @@ export function parseScormLocationPair(location: unknown): { current: number; to
   const marker = parseScormLocationMarker(location);
   if (!marker || marker.total == null) return null;
   return { current: marker.current, total: marker.total };
+}
+
+function clampPct(value: number) {
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+export function inferScormProgressPct(cmiJson: Nullable<string>): number | null {
+  if (!cmiJson) return null;
+
+  try {
+    const parsed = JSON.parse(cmiJson) as Record<string, unknown>;
+    const progressMeasure = Number(parsed['cmi.progress_measure']);
+    if (Number.isFinite(progressMeasure) && progressMeasure >= 0) {
+      return clampPct(progressMeasure * 100);
+    }
+
+    const location = parseScormLocationPair(
+      parsed['cmi.location'] ?? parsed['cmi.core.lesson_location'],
+    );
+    if (location && location.total > 0) {
+      return clampPct((location.current / location.total) * 100);
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export function extractScormLocationFromCmiJson(cmiJson: Nullable<string>) {
@@ -282,5 +337,219 @@ export function mergeScormRuntimeState(params: {
       blockedShorterSuspendData,
       preservedLocationFromCurrent,
     },
+  };
+}
+
+export function resolveScormScorePct(params: {
+  scoreRaw?: Nullable<number>;
+  scoreMax?: Nullable<number>;
+  scoreScaled?: Nullable<number>;
+}) {
+  const scaled =
+    params.scoreScaled == null || params.scoreScaled === '' ? null : Number(params.scoreScaled);
+  if (scaled != null && Number.isFinite(scaled) && scaled >= 0) {
+    return clampPct(scaled * 100);
+  }
+
+  const raw = params.scoreRaw == null || params.scoreRaw === '' ? null : Number(params.scoreRaw);
+  const max = params.scoreMax == null || params.scoreMax === '' ? null : Number(params.scoreMax);
+  if (raw != null && max != null && Number.isFinite(raw) && Number.isFinite(max) && max > 0) {
+    return clampPct((raw / max) * 100);
+  }
+
+  if (raw != null && Number.isFinite(raw) && raw >= 0) {
+    return clampPct(raw);
+  }
+
+  return null;
+}
+
+function normalizeCommitEvent(commitEvent: Nullable<string>) {
+  const normalized = String(commitEvent ?? '')
+    .trim()
+    .toUpperCase();
+  return normalized || null;
+}
+
+export function buildScormCompletionDiagnostic(params: {
+  lessonStatus?: Nullable<string>;
+  completionStatus?: Nullable<string>;
+  successStatus?: Nullable<string>;
+  scoreRaw?: Nullable<number>;
+  scoreMax?: Nullable<number>;
+  scoreScaled?: Nullable<number>;
+  masteryScore?: Nullable<number>;
+  progressoPct?: Nullable<number>;
+  cmiJson?: Nullable<string>;
+  suspendData?: Nullable<string>;
+  sessionTime?: Nullable<string>;
+  totalTime?: Nullable<string>;
+  commitEvent?: Nullable<string>;
+}): ScormCompletionDiagnostic {
+  const locationMarker = extractScormLocationFromCmiJson(params.cmiJson);
+  const inferredProgressPct = inferScormProgressPct(params.cmiJson);
+  const progressoPct = Number(params.progressoPct);
+  const scorePct = resolveScormScorePct({
+    scoreRaw: params.scoreRaw,
+    scoreMax: params.scoreMax,
+    scoreScaled: params.scoreScaled,
+  });
+  const masteryScore =
+    params.masteryScore == null || params.masteryScore === '' ? null : Number(params.masteryScore);
+  const hasMasteryScore = Number.isFinite(masteryScore) && Number(masteryScore) > 0;
+  const masteryMet =
+    !hasMasteryScore ||
+    (scorePct != null && Number.isFinite(scorePct) && scorePct >= Number(masteryScore));
+  const explicitCompletion = scormStatusIndicatesCompletion({
+    lessonStatus: params.lessonStatus,
+    completionStatus: params.completionStatus,
+    successStatus: params.successStatus,
+  });
+  const explicitFailure = scormStatusIndicatesFailure({
+    lessonStatus: params.lessonStatus,
+    successStatus: params.successStatus,
+  });
+  const reachedFinalLocation =
+    locationMarker != null && locationMarker.total != null && locationMarker.total > 0
+      ? locationMarker.current >= locationMarker.total
+      : false;
+  const finalCommitObserved = [
+    'SCORM_FINISH',
+    'SCORM_COMPLETION_CANDIDATE',
+    'SCORM_BEFORE_UNLOAD_COMMIT',
+    'SCORM_VISIBILITY_COMMIT',
+  ].includes(normalizeCommitEvent(params.commitEvent) ?? '');
+  const progressSignal = Math.max(Number.isFinite(progressoPct) ? progressoPct : 0, inferredProgressPct ?? 0);
+  const nearFinalProgress = progressSignal >= 99;
+  const hasRuntimeEvidence =
+    Boolean(locationMarker) ||
+    Boolean(String(params.suspendData ?? '').trim()) ||
+    Boolean(String(params.sessionTime ?? '').trim()) ||
+    Boolean(String(params.totalTime ?? '').trim()) ||
+    scorePct != null;
+  const candidate =
+    !explicitCompletion &&
+    !explicitFailure &&
+    masteryMet &&
+    hasRuntimeEvidence &&
+    (reachedFinalLocation || nearFinalProgress);
+  const highScoreWithoutCompletion =
+    !explicitCompletion &&
+    !explicitFailure &&
+    scorePct != null &&
+    scorePct >= Math.max(hasMasteryScore ? Number(masteryScore) : 0, 95);
+  const location =
+    locationMarker == null
+      ? null
+      : locationMarker.total == null
+        ? String(locationMarker.current)
+        : `${locationMarker.current}/${locationMarker.total}`;
+
+  const reasons: string[] = [];
+  if (explicitCompletion) reasons.push('explicit-scorm-status');
+  if (explicitFailure) reasons.push('explicit-scorm-failure');
+  if (hasMasteryScore) reasons.push(masteryMet ? 'mastery-met' : 'mastery-missing');
+  if (reachedFinalLocation) reasons.push('final-location-reached');
+  if (nearFinalProgress) reasons.push('progress-near-100');
+  if (highScoreWithoutCompletion) reasons.push('high-score-without-completion-status');
+  if (finalCommitObserved) reasons.push('final-commit-observed');
+  if (hasRuntimeEvidence) reasons.push('runtime-evidence-present');
+
+  if (explicitCompletion) {
+    return {
+      status: 'accepted',
+      code: 'SCORM_COMPLETION_ACCEPTED',
+      reasons,
+      can_finalize: false,
+      explicit_completion: true,
+      explicit_failure: false,
+      mastery_score: hasMasteryScore ? Number(masteryScore) : null,
+      score_pct: scorePct,
+      progresso_pct: progressSignal,
+      inferred_progress_pct: inferredProgressPct,
+      location,
+      reached_final_location: reachedFinalLocation,
+      final_commit_observed: finalCommitObserved,
+      has_runtime_evidence: hasRuntimeEvidence,
+      commit_event: normalizeCommitEvent(params.commitEvent),
+    };
+  }
+
+  if (explicitFailure) {
+    return {
+      status: 'rejected',
+      code: 'SCORM_COMPLETION_REJECTED',
+      reasons,
+      can_finalize: false,
+      explicit_completion: false,
+      explicit_failure: true,
+      mastery_score: hasMasteryScore ? Number(masteryScore) : null,
+      score_pct: scorePct,
+      progresso_pct: progressSignal,
+      inferred_progress_pct: inferredProgressPct,
+      location,
+      reached_final_location: reachedFinalLocation,
+      final_commit_observed: finalCommitObserved,
+      has_runtime_evidence: hasRuntimeEvidence,
+      commit_event: normalizeCommitEvent(params.commitEvent),
+    };
+  }
+
+  if (candidate) {
+    return {
+      status: 'candidate',
+      code: finalCommitObserved ? 'SCORM_COMPLETION_CANDIDATE' : 'SCORM_STATUS_INCONSISTENT',
+      reasons,
+      can_finalize: true,
+      explicit_completion: false,
+      explicit_failure: false,
+      mastery_score: hasMasteryScore ? Number(masteryScore) : null,
+      score_pct: scorePct,
+      progresso_pct: progressSignal,
+      inferred_progress_pct: inferredProgressPct,
+      location,
+      reached_final_location: reachedFinalLocation,
+      final_commit_observed: finalCommitObserved,
+      has_runtime_evidence: hasRuntimeEvidence,
+      commit_event: normalizeCommitEvent(params.commitEvent),
+    };
+  }
+
+  if (finalCommitObserved || highScoreWithoutCompletion) {
+    return {
+      status: 'none',
+      code: finalCommitObserved ? 'SCORM_FINAL_COMMIT_MISSING' : 'SCORM_STATUS_INCONSISTENT',
+      reasons,
+      can_finalize: false,
+      explicit_completion: false,
+      explicit_failure: false,
+      mastery_score: hasMasteryScore ? Number(masteryScore) : null,
+      score_pct: scorePct,
+      progresso_pct: progressSignal,
+      inferred_progress_pct: inferredProgressPct,
+      location,
+      reached_final_location: reachedFinalLocation,
+      final_commit_observed: finalCommitObserved,
+      has_runtime_evidence: hasRuntimeEvidence,
+      commit_event: normalizeCommitEvent(params.commitEvent),
+    };
+  }
+
+  return {
+    status: 'none',
+    code: 'SCORM_NONE',
+    reasons,
+    can_finalize: false,
+    explicit_completion: false,
+    explicit_failure: false,
+    mastery_score: hasMasteryScore ? Number(masteryScore) : null,
+    score_pct: scorePct,
+    progresso_pct: progressSignal,
+    inferred_progress_pct: inferredProgressPct,
+    location,
+    reached_final_location: reachedFinalLocation,
+    final_commit_observed: finalCommitObserved,
+    has_runtime_evidence: hasRuntimeEvidence,
+    commit_event: normalizeCommitEvent(params.commitEvent),
   };
 }
