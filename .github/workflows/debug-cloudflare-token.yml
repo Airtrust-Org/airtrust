@@ -1,5 +1,15 @@
 name: Debug Cloudflare Token
 
+# Manual, read-only diagnostic for the split Cloudflare deploy tokens.
+# It NEVER prints a token value and NEVER deploys anything.
+# It validates the Worker token and the Pages token separately and prints
+# a single objective verdict per job:
+#   - WORKER_TOKEN_OK  / WORKER_TOKEN_BLOCKED
+#   - PAGES_TOKEN_OK   / PAGES_TOKEN_BLOCKED
+#
+# Both jobs run under `environment: production` so they read the
+# production-scoped secrets that the real deploy jobs use.
+
 on:
   workflow_dispatch:
 
@@ -7,118 +17,110 @@ permissions:
   contents: read
 
 jobs:
-  diagnose-repo-secrets:
-    name: Debug Repo Secrets
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Diagnose Cloudflare access
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          import subprocess
-          import urllib.request
-
-          token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
-          account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
-
-          def call(path: str):
-              if not token:
-                  return {"http": "000", "success": False, "errors": ["missing_token"]}
-              req = urllib.request.Request(
-                  "https://api.cloudflare.com/client/v4" + path,
-                  headers={"Authorization": f"Bearer {token}"},
-              )
-              try:
-                  with urllib.request.urlopen(req, timeout=30) as resp:
-                      body = resp.read().decode("utf-8", "replace")
-                      data = json.loads(body)
-                      return {
-                          "http": str(resp.getcode()),
-                          "success": bool(data.get("success")),
-                          "errors": [str(err.get("code")) for err in data.get("errors", [])],
-                      }
-              except Exception as exc:
-                  code = getattr(exc, "code", None)
-                  body = getattr(exc, "read", lambda: b"")().decode("utf-8", "replace")
-                  errors = []
-                  try:
-                      data = json.loads(body) if body else {}
-                      errors = [str(err.get("code")) for err in data.get("errors", [])]
-                  except Exception:
-                      pass
-                  return {
-                      "http": str(code or "000"),
-                      "success": False,
-                      "errors": errors or [exc.__class__.__name__],
-                  }
-
-          whoami = subprocess.run(
-              ["npx", "--yes", "wrangler", "whoami"],
-              capture_output=True,
-              text=True,
-              env=os.environ.copy(),
-          )
-
-          token_fingerprint = hashlib.sha256(token.encode()).hexdigest()[:12] if token else "missing"
-          account_fingerprint = hashlib.sha256(account_id.encode()).hexdigest()[:12] if account_id else "missing"
-
-          memberships = call("/memberships")
-          worker = call(f"/accounts/{account_id}/workers/services/airtrust-api-production") if account_id else {"http": "000", "success": False, "errors": ["missing_account_id"]}
-          pages = call(f"/accounts/{account_id}/pages/projects/airtrust") if account_id else {"http": "000", "success": False, "errors": ["missing_account_id"]}
-          deployments = call(f"/accounts/{account_id}/pages/projects/airtrust/deployments") if account_id else {"http": "000", "success": False, "errors": ["missing_account_id"]}
-
-          print(f"SECRET_SCOPE=repo")
-          print(f"TOKEN_FINGERPRINT={token_fingerprint}")
-          print(f"ACCOUNT_ID_PRESENT={'yes' if bool(account_id) else 'no'}")
-          print(f"ACCOUNT_ID_FINGERPRINT={account_fingerprint}")
-          print(f"WHOAMI={'pass' if whoami.returncode == 0 else 'fail'}")
-          print(f"MEMBERSHIPS_HTTP={memberships['http']}")
-          print(f"MEMBERSHIPS_SUCCESS={str(memberships['success']).lower()}")
-          print(f"MEMBERSHIPS_ERRORS={','.join(memberships['errors']) if memberships['errors'] else 'none'}")
-          print(f"WORKER_SERVICE_HTTP={worker['http']}")
-          print(f"WORKER_SERVICE_SUCCESS={str(worker['success']).lower()}")
-          print(f"WORKER_SERVICE_ERRORS={','.join(worker['errors']) if worker['errors'] else 'none'}")
-          print(f"PAGES_PROJECT_HTTP={pages['http']}")
-          print(f"PAGES_PROJECT_SUCCESS={str(pages['success']).lower()}")
-          print(f"PAGES_PROJECT_ERRORS={','.join(pages['errors']) if pages['errors'] else 'none'}")
-          print(f"PAGES_DEPLOYMENTS_HTTP={deployments['http']}")
-          print(f"PAGES_DEPLOYMENTS_SUCCESS={str(deployments['success']).lower()}")
-          print(f"PAGES_DEPLOYMENTS_ERRORS={','.join(deployments['errors']) if deployments['errors'] else 'none'}")
-          PY
-
-  diagnose-production-environment:
-    name: Debug Production Environment Secrets
+  diagnose-worker-token:
+    name: Debug Worker Token
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Diagnose Cloudflare access
+      - name: Diagnose Worker token
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import urllib.request
+
+          token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+          account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+
+          def call(path: str):
+              if not token:
+                  return {"http": "000", "success": False, "errors": ["missing_token"]}
+              req = urllib.request.Request(
+                  "https://api.cloudflare.com/client/v4" + path,
+                  headers={"Authorization": f"Bearer {token}"},
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      body = resp.read().decode("utf-8", "replace")
+                      data = json.loads(body)
+                      return {
+                          "http": str(resp.getcode()),
+                          "success": bool(data.get("success")),
+                          "errors": [str(err.get("code")) for err in data.get("errors", [])],
+                      }
+              except Exception as exc:
+                  code = getattr(exc, "code", None)
+                  body = getattr(exc, "read", lambda: b"")().decode("utf-8", "replace")
+                  errors = []
+                  try:
+                      data = json.loads(body) if body else {}
+                      errors = [str(err.get("code")) for err in data.get("errors", [])]
+                  except Exception:
+                      pass
+                  return {
+                      "http": str(code or "000"),
+                      "success": False,
+                      "errors": errors or [exc.__class__.__name__],
+                  }
+
+          whoami = subprocess.run(
+              ["npx", "--yes", "wrangler", "whoami"],
+              capture_output=True,
+              text=True,
+              env=os.environ.copy(),
+          )
+
+          token_fingerprint = hashlib.sha256(token.encode()).hexdigest()[:12] if token else "missing"
+          account_fingerprint = hashlib.sha256(account_id.encode()).hexdigest()[:12] if account_id else "missing"
+
+          worker = call(f"/accounts/{account_id}/workers/services/airtrust-api-production") if account_id else {"http": "000", "success": False, "errors": ["missing_account_id"]}
+
+          whoami_ok = whoami.returncode == 0
+          worker_ok = bool(worker["success"])
+          verdict = "WORKER_TOKEN_OK" if (whoami_ok and worker_ok) else "WORKER_TOKEN_BLOCKED"
+
+          print("SECRET_NAME=CLOUDFLARE_WORKER_API_TOKEN")
+          print("SECRET_SCOPE=production")
+          print(f"TOKEN_PRESENT={'yes' if bool(token) else 'no'}")
+          print(f"TOKEN_FINGERPRINT={token_fingerprint}")
+          print(f"ACCOUNT_ID_PRESENT={'yes' if bool(account_id) else 'no'}")
+          print(f"ACCOUNT_ID_FINGERPRINT={account_fingerprint}")
+          print(f"WHOAMI={'pass' if whoami_ok else 'fail'}")
+          print(f"WORKER_SERVICE_HTTP={worker['http']}")
+          print(f"WORKER_SERVICE_SUCCESS={str(worker['success']).lower()}")
+          print(f"WORKER_SERVICE_ERRORS={','.join(worker['errors']) if worker['errors'] else 'none'}")
+          print(verdict)
+
+          raise SystemExit(0 if verdict == "WORKER_TOKEN_OK" else 1)
+          PY
+
+  diagnose-pages-token:
+    name: Debug Pages Token
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Diagnose Pages token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -175,25 +177,30 @@ jobs:
           account_fingerprint = hashlib.sha256(account_id.encode()).hexdigest()[:12] if account_id else "missing"
 
           memberships = call("/memberships")
-          worker = call(f"/accounts/{account_id}/workers/services/airtrust-api-production") if account_id else {"http": "000", "success": False, "errors": ["missing_account_id"]}
           pages = call(f"/accounts/{account_id}/pages/projects/airtrust") if account_id else {"http": "000", "success": False, "errors": ["missing_account_id"]}
           deployments = call(f"/accounts/{account_id}/pages/projects/airtrust/deployments") if account_id else {"http": "000", "success": False, "errors": ["missing_account_id"]}
 
-          print(f"SECRET_SCOPE=production")
+          whoami_ok = whoami.returncode == 0
+          pages_ok = bool(memberships["success"]) and bool(pages["success"]) and bool(deployments["success"])
+          verdict = "PAGES_TOKEN_OK" if (whoami_ok and pages_ok) else "PAGES_TOKEN_BLOCKED"
+
+          print("SECRET_NAME=CLOUDFLARE_PAGES_API_TOKEN")
+          print("SECRET_SCOPE=production")
+          print(f"TOKEN_PRESENT={'yes' if bool(token) else 'no'}")
           print(f"TOKEN_FINGERPRINT={token_fingerprint}")
           print(f"ACCOUNT_ID_PRESENT={'yes' if bool(account_id) else 'no'}")
           print(f"ACCOUNT_ID_FINGERPRINT={account_fingerprint}")
-          print(f"WHOAMI={'pass' if whoami.returncode == 0 else 'fail'}")
+          print(f"WHOAMI={'pass' if whoami_ok else 'fail'}")
           print(f"MEMBERSHIPS_HTTP={memberships['http']}")
           print(f"MEMBERSHIPS_SUCCESS={str(memberships['success']).lower()}")
           print(f"MEMBERSHIPS_ERRORS={','.join(memberships['errors']) if memberships['errors'] else 'none'}")
-          print(f"WORKER_SERVICE_HTTP={worker['http']}")
-          print(f"WORKER_SERVICE_SUCCESS={str(worker['success']).lower()}")
-          print(f"WORKER_SERVICE_ERRORS={','.join(worker['errors']) if worker['errors'] else 'none'}")
           print(f"PAGES_PROJECT_HTTP={pages['http']}")
           print(f"PAGES_PROJECT_SUCCESS={str(pages['success']).lower()}")
           print(f"PAGES_PROJECT_ERRORS={','.join(pages['errors']) if pages['errors'] else 'none'}")
           print(f"PAGES_DEPLOYMENTS_HTTP={deployments['http']}")
           print(f"PAGES_DEPLOYMENTS_SUCCESS={str(deployments['success']).lower()}")
           print(f"PAGES_DEPLOYMENTS_ERRORS={','.join(deployments['errors']) if deployments['errors'] else 'none'}")
+          print(verdict)
+
+          raise SystemExit(0 if verdict == "PAGES_TOKEN_OK" else 1)
           PY
