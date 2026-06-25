@@ -1411,9 +1411,18 @@ app.post('/scorm/commit', async (c) => {
     }
   }
 
-  // Calcular progresso (estimativa com score e/ou posição SCORM)
+  const runtimeMerge = mergeScormRuntimeState({
+    currentCmiJson: scormAtual?.cmi_json ?? null,
+    incomingCmiJson: d.cmi_json ?? null,
+    currentSuspendData: scormAtual?.suspend_data ?? null,
+    incomingSuspendData: d.suspend_data ?? null,
+  });
+  const mergedCmiJson = runtimeMerge.cmiJson;
+  const mergedLocation = runtimeMerge.location;
+
+  // Calcular progresso usando o estado runtime reconciliado, não apenas o payload cru.
   const progressoAnterior = Number(matricula.progresso_pct ?? 0);
-  const inferredFromLocation = extractProgressPctFromCmiJson(d.cmi_json);
+  const inferredFromLocation = extractProgressPctFromCmiJson(mergedCmiJson);
   const inferredFromScore =
     d.score_raw != null && d.score_max != null && d.score_max > 0
       ? clampPct((d.score_raw / d.score_max) * 100)
@@ -1473,14 +1482,6 @@ app.post('/scorm/commit', async (c) => {
 
   const currentLocation = extractScormLocationFromCmiJson(scormAtual?.cmi_json ?? null);
   const incomingLocation = extractScormLocationFromCmiJson(d.cmi_json ?? null);
-  const runtimeMerge = mergeScormRuntimeState({
-    currentCmiJson: scormAtual?.cmi_json ?? null,
-    incomingCmiJson: d.cmi_json ?? null,
-    currentSuspendData: scormAtual?.suspend_data ?? null,
-    incomingSuspendData: d.suspend_data ?? null,
-  });
-  const mergedCmiJson = runtimeMerge.cmiJson;
-  const mergedLocation = runtimeMerge.location;
   const completionDiagnostic = buildMatriculaCompletionDiagnostic({
     matriculaStatus: matricula.status,
     progressoPct,
