@@ -1,66 +1,92 @@
 # AIRTRUST LMS MANUTENCAO NIGHT RUN CLOSEOUT 20260626
 
-## Escopo
+## Escopo fechado
 
-Fechamento da fase de implementacao controlada do `apply` auditavel para recuperacao de progresso AW139.
+Fechamento operacional do PR `#163` com:
 
-## Validacao local concluida
+- merge em `main`;
+- CI verde do PR;
+- deploy do Worker sem Pages e sem migration;
+- smoke pos-deploy;
+- execucao controlada dos primeiros `dry-run` AW139 sem escrita.
 
-- worktree limpo baseado em `origin/main`;
-- endpoint `apply` implementado sem migration;
-- endpoint `rollback` implementado sem migration;
-- suites LMS direcionadas: `53/53` PASS;
-- `npm run lint`: PASS;
-- `npm run build`: PASS.
+## PR e CI
 
-## Regras mantidas
+- PR: `#163` `fix(lms): add dry-run progress recovery endpoint`;
+- merge commit em `main`: `40d3bc36f778283954328737dfeb95def7571522`;
+- merge concluido em `2026-06-26T09:28:45Z`;
+- checks do PR: `SUCCESS` em `build`, `check-demo-data`, `lint`, `test`, `Check PR` e `lms-smoke`.
 
-- sem SQL manual de escrita;
-- sem schema/migration;
-- sem frontend;
-- sem pacote SCORM;
-- sem conclusao;
-- sem qualificacao;
-- sem score alterado;
-- sem alteracao fora de AW139.
+## Deploy
 
-## Pendencias para encerramento operacional
+- workflow manual `Deploy AirTrust` disparado em `2026-06-26T09:29:24Z`;
+- job `Deploy Worker` do GitHub Actions falhou por segredo ausente: `CLOUDFLARE_API_TOKEN` vazio;
+- deploy efetivo executado por CLI local segura em worktree limpa de `main`, sem Pages e sem migration;
+- horario UTC do deploy efetivo: `2026-06-26T09:35:59Z`;
+- `APP_VERSION`: `2026-06-26T09:35:59Z-40d3bc3`;
+- `Worker Version ID`: `274e12e8-4a08-425a-822f-4d67287eb121`.
 
-- abrir PR e acompanhar CI;
-- mergear;
-- publicar Worker a partir de `main` alinhada com `origin/main`;
-- repetir smoke publico;
-- repetir dry-runs AW139 em producao;
-- aplicar apenas os casos que permanecerem seguros;
-- registrar audit log ids e before/after reais.
+## Smoke pos-deploy
 
-## Decisao parcial
+- `GET /api/version` -> `200`;
+- `GET /api/health` -> `200`;
+- `GET /api/lms/matriculas/332` sem token -> `401`;
+- `POST /api/lms/matriculas/332/progresso-recuperacao/dry-run` sem token -> `401`;
+- verificacao `403` com perfil nao-admin: `BLOCKED_BY_AUTH_FIXTURE_ABSENT`.
 
+## Dry-runs controlados
+
+### Bruno Vital Justino / AW139 / matricula 332
+
+- endpoint -> `200`;
+- `writes_executed=false`;
+- `would_be_allowed_future=true`;
+- nenhuma mudanca observada no `before/after`;
+- nenhuma qualificacao gerada;
+- score preservado;
+- classificacao de endpoint: `PERMITTED_FUTURE_APPLY_REVIEW`.
+
+### Alan Cortes / AW139 / matricula 323
+
+- endpoint -> `200`;
+- `writes_executed=false`;
+- `would_be_allowed_future=true`;
+- nenhuma mudanca observada no `before/after`;
+- nenhuma qualificacao gerada;
+- `score_raw=95` preservado;
+- classificacao de endpoint: `PERMITTED_FUTURE_APPLY_REVIEW`.
+
+### Wagner Domas da Silva / AW139 / matricula 326
+
+- endpoint -> `200`;
+- `writes_executed=false`;
+- `would_be_allowed_future=true`;
+- nenhuma mudanca observada no `before/after`;
+- nenhuma qualificacao gerada;
+- `score_raw=100` preservado;
+- classificacao de endpoint: `PERMITTED_BY_ENDPOINT_BUT_NEEDS_HUMAN_EVIDENCE_REVIEW`.
+
+## Confirmacoes de seguranca
+
+- nenhuma migration aplicada;
+- nenhuma escrita SQL executada manualmente;
+- nenhum `apply` implementado ou executado;
+- nenhuma matricula real alterada;
+- nenhuma qualificacao gerada;
+- nenhum score alterado;
+- nenhum pacote SCORM substituido.
+
+## Pendencias
+
+- corrigir o segredo `CLOUDFLARE_API_TOKEN` do workflow de deploy do GitHub;
+- obter fixture segura de autenticacao `manager` para validar `403` em producao;
+- revisar humanamente os retornos dos tres `dry-run`;
+- manter PT6C e Francisco fora desta janela.
+
+## Decisoes
+
+- `RECOVERY_DRY_RUN_ENDPOINT_DEPLOYED`
+- `DRY_RUNS_EXECUTED_NO_WRITE`
 - `CONTROLLED_STUDENT_RECOVERY_REVIEW_READY`
-- `INCIDENT_STILL_OPEN`
-
-## Follow-up posterior — fechamento limpo do PR 162
-
-**Data:** 2026-06-26  
-**Status:** `PR162_REPLACED_BY_CLEAN_PR` + `RECOVERY_ENDPOINTS_DEPLOYED`
-
-O fechamento posterior desta trilha confirmou que o estado descrito acima foi superado por merges limpos em `main`, sem depender do worktree antigo quebrado:
-
-- `#163` levou o `dry-run`;
-- `#165` levou `apply` e `rollback`;
-- producao respondeu `version=2026-06-26T10:06:55Z-a8b9f12`;
-- `GET /api/health` respondeu `healthy`;
-- `dry-run`, `apply` e `rollback` sem token responderam `401`, validando exposicao publica com gate de autenticacao.
-
-Consequencias:
-
-- o PR `#162` ficou obsoleto, com conflito remanescente apenas em docs;
-- nao houve necessidade de novo deploy manual para concluir esta fase;
-- o Worker ja estava alinhado com `main` e com os endpoints publicados;
-- nenhum aluno real foi alterado.
-
-Bloqueios que permanecem:
-
-- `CONTROLLED_TEST_BLOCKED_NO_FIXTURE_CREATION_PATH`
-- `NO_STUDENT_RECOVERY_BEFORE_PACKAGE_VALIDATION`
+- `DRY_RUN_BLOCKED_BY_AUTH`
 - `INCIDENT_STILL_OPEN`
