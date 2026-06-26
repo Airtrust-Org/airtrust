@@ -1976,8 +1976,9 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
 
   const existing = await db
     .prepare(
-      `SELECT m.id, m.status, m.funcionario_id, m.qualificacao_historico_id,
+      `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
+              c.tipo_conteudo, c.scorm_mastery_score,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
          FROM lms_matriculas m
@@ -1989,11 +1990,14 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
     .first<{
       id: number;
       status: string;
+      progresso_pct: number | null;
       funcionario_id: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
       curso_titulo: string;
       qualificacao_tipo_id: number | null;
+      tipo_conteudo: string | null;
+      scorm_mastery_score: number | null;
       qualificacao_nome: string | null;
       qualificacao_codigo: string | null;
       qualificacao_categoria: string | null;
@@ -2003,6 +2007,75 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
 
   const { status, observacoes } = parsed.data;
   const now = new Date().toISOString().slice(0, 10);
+
+  // ── Gate obrigatório para CONCLUIDO ─────────────────────────────────────────
+  if (status === 'CONCLUIDO') {
+    // Qualificação aeronáutica gerada por este endpoint exige papel admin.
+    // Manager pode alterar outros status, mas não pode mintar qualificações
+    // administrativamente sem evidência de conclusão.
+    if (existing.qualificacao_tipo_id && !hasRole(c, 'admin')) {
+      throw new ApiError(
+        'Somente administradores podem concluir matrículas vinculadas a qualificações',
+        403,
+      );
+    }
+
+    // Cursos SCORM exigem evidência real de conclusão — mesmo gate do /finalizar.
+    const isScorm = String(existing.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm';
+    if (isScorm) {
+      const scormAtual = await db
+        .prepare(
+          `SELECT lesson_status, completion_status, success_status,
+                  score_raw, score_max, score_scaled,
+                  session_time, total_time, suspend_data, cmi_json
+             FROM lms_progresso_scorm
+            WHERE matricula_id = ? AND empresa_id = ?`,
+        )
+        .bind(matriculaId, empresaId)
+        .first<{
+          lesson_status: string | null;
+          completion_status: string | null;
+          success_status: string | null;
+          score_raw: number | null;
+          score_max: number | null;
+          score_scaled: number | null;
+          session_time: string | null;
+          total_time: string | null;
+          suspend_data: string | null;
+          cmi_json: string | null;
+        }>();
+
+      const completionDiagnostic = buildMatriculaCompletionDiagnostic({
+        matriculaStatus: existing.status,
+        progressoPct: existing.progresso_pct,
+        masteryScore: existing.scorm_mastery_score,
+        scorm: scormAtual,
+      });
+
+      if (!completionDiagnostic.explicit_completion && !completionDiagnostic.can_finalize) {
+        await logLmsMatriculaAudit(db, c, {
+          action: 'SCORM_COMPLETION_REJECTED',
+          matriculaId,
+          newValues: {
+            origem: 'admin-patch-status-endpoint',
+            completion_diagnostic: completionDiagnostic,
+          },
+        });
+        return c.json(
+          {
+            success: false,
+            error:
+              'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Use o endpoint /finalizar ou aguarde evidencia SCORM.',
+            code: 'SCORM_COMPLETION_REJECTED',
+            data: { completion_diagnostic: completionDiagnostic },
+          },
+          409,
+        );
+      }
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   const dataConclusao = status === 'CONCLUIDO' || status === 'REPROVADO' ? now : null;
 
   await db
