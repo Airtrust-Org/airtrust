@@ -253,6 +253,8 @@ describe('lms matriculas progress recovery dry-run endpoint', () => {
         mode: 'dry-run',
         writes_executed: false,
         would_be_allowed_future: true,
+        apply_allowed: true,
+        dry_run_reference: expect.any(String),
         blocked_reason: null,
         current_state: {
           matricula: {

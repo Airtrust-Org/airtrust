@@ -1,47 +1,40 @@
-# AIRTRUST LMS PROGRESS RECOVERY DRY RUN ENDPOINT 20260626
+# AIRTRUST LMS PROGRESS RECOVERY ENDPOINTS 20260626
 
 ## Objetivo
 
-Implementar o primeiro passo seguro da recuperacao de progresso em LMS Manutencao: um endpoint administrativo de simulacao que nao escreve no banco e nao permite `apply`.
-
-## Regras de seguranca
-
-O endpoint:
-
-- aceita apenas `admin`;
-- nao aceita `manager`;
-- nao executa `INSERT`, `UPDATE` ou `DELETE`;
-- nao gera qualificacao;
-- nao altera score;
-- nao conclui matricula;
-- nao implementa `apply` nesta fase.
-
-## Endpoint criado
+Consolidar o contrato administrativo de recuperacao de progresso no LMS Manutencao com tres rotas separadas:
 
 - `POST /api/lms/matriculas/:id/progresso-recuperacao/dry-run`
+- `POST /api/lms/matriculas/:id/progresso-recuperacao/apply`
+- `POST /api/lms/matriculas/:id/progresso-recuperacao/rollback`
 
-## Payload aceito
+Escopo funcional desta fase:
 
-Campos obrigatorios:
+- recuperar apenas progresso/posicao SCORM;
+- exigir `admin`;
+- bloquear `manager`;
+- nao concluir matricula;
+- nao gerar qualificacao;
+- nao alterar score;
+- nao aplicar migration;
+- nao executar SQL manual fora do Worker.
+
+## Dry-run
+
+O endpoint `dry-run` continua sem escrita em banco.
+
+Payload obrigatorio:
 
 - `target_lesson_location`
 - `target_progress_pct`
 - `reason`
 - `evidence_source`
 
-Campo opcional:
+Payload opcional:
 
 - `operator_note`
 
-Campos aceitos apenas para bloqueio explicito em `dry-run`:
-
-- `target_lesson_status`
-- `target_score_raw`
-- `target_matricula_status`
-
-## Resposta
-
-O endpoint retorna:
+Resposta principal:
 
 - `current_state`
 - `simulated_state`
@@ -49,77 +42,127 @@ O endpoint retorna:
 - `differences`
 - `risks`
 - `would_be_allowed_future`
+- `apply_allowed`
+- `dry_run_reference`
 - `blocked_reason`
 - `blockers`
 
-## Validacoes implementadas
+## Apply
 
-- matricula existe;
-- curso precisa ser `scorm`;
-- `reason` obrigatorio;
-- `evidence_source` obrigatorio;
-- target nao pode reduzir progresso forte;
-- target nao pode reduzir `lesson_location` forte;
-- target nao pode marcar conclusao;
-- target nao pode alterar score;
-- target nao pode concluir matricula;
-- target nao pode operar sobre matricula terminal;
-- target nao pode operar sobre matricula com qualificacao ja vinculada.
+O endpoint `apply` so pode executar se o estado atual ainda corresponder ao `dry_run_reference` revisado.
 
-## Testes executados
+Payload obrigatorio:
 
-Arquivos:
+- `target_lesson_location`
+- `target_progress_pct`
+- `reason`
+- `evidence_source`
+- `operator_note`
+- `dry_run_reference`
 
-- `worker-airtrust/src/__tests__/routes/lms-matriculas-progress-integrity.test.ts`
+Regras de bloqueio:
+
+- matricula inexistente;
+- curso nao-SCORM;
+- usuario nao-admin;
+- target regressivo de progresso;
+- target regressivo de `lesson_location`;
+- tentativa de concluir matricula;
+- tentativa de alterar score;
+- tentativa de alterar `data_conclusao`;
+- matricula terminal;
+- qualificacao ja vinculada;
+- `suspend_data` forte sendo apagado;
+- divergencia entre estado atual e `dry_run_reference`.
+
+Garantias de escrita:
+
+- grava audit log antes do update;
+- atualiza apenas `lms_matriculas` e `lms_progresso_scorm`;
+- preserva score existente;
+- preserva `suspend_data` forte;
+- nao escreve qualificacao;
+- nao marca `CONCLUIDO`.
+
+Resposta principal:
+
+- `writes_executed`
+- `audit_log_id`
+- `rollback_available`
+- `dry_run_reference`
+- `before`
+- `after`
+
+## Rollback
+
+O endpoint `rollback` exige:
+
+- `admin`;
+- `audit_log_id`;
+- `reason`.
+
+Regras:
+
+- so aceita rollback de `LMS_PROGRESS_RECOVERY_APPLY`;
+- compara estado atual com o snapshot aplicado;
+- bloqueia se houve divergencia posterior;
+- registra novo audit log;
+- restaura apenas o estado anterior auditado.
+
+## Validacao local executada
+
+Arquivos de teste:
+
 - `worker-airtrust/src/__tests__/routes/lms-matriculas-progress-recovery-dry-run.test.ts`
+- `worker-airtrust/src/__tests__/routes/lms-matriculas-progress-recovery-apply.test.ts`
+- `worker-airtrust/src/__tests__/routes/lms-matriculas-progress-integrity.test.ts`
 
-Casos cobertos no teste novo:
+Cobertura exercitada:
 
-1. admin executa dry-run valido;
-2. manager recebe `403`;
-3. sem token recebe `401`;
-4. matricula inexistente retorna `404`;
-5. target regressivo fica bloqueado;
-6. target com conclusao fica bloqueado;
-7. target com score fica bloqueado;
-8. curso nao-SCORM fica bloqueado;
-9. dry-run nao cria qualificacao;
-10. dry-run nao altera matricula;
-11. dry-run nao altera `lms_progresso_scorm`;
-12. payload sem motivo/evidencia retorna `400`.
+1. dry-run valido e sem escrita;
+2. apply valido altera apenas progresso/location/cmi;
+3. apply nao conclui matricula;
+4. apply nao gera qualificacao;
+5. apply nao altera score;
+6. apply nao altera `data_conclusao`;
+7. apply exige admin;
+8. manager recebe `403`;
+9. target regressivo bloqueia;
+10. `suspend_data` forte nao e apagado;
+11. divergencia do dry-run bloqueia;
+12. audit log e criado;
+13. rollback restaura estado anterior;
+14. rollback bloqueia se o estado atual divergir;
+15. matricula inexistente retorna `404`;
+16. curso nao-SCORM bloqueia;
+17. payload sem motivo/evidencia bloqueia.
 
-Resultado local desta fase:
+Resultado local:
 
-- `36/36` testes passando nas suites LMS executadas;
-- `npm run lint` executado com sucesso em `2026-06-26`;
-- `npm run build` executado com sucesso em `2026-06-26`.
+- `53/53` testes LMS direcionados passaram em `2026-06-26`;
+- `npm run lint` passou em `2026-06-26`;
+- `npm run build` passou em `2026-06-26`.
 
-## Limitacoes
+## Escopo do diff
 
-- o endpoint nao aplica alteracao real;
-- o endpoint nao grava `audit_logs`, por desenho, para garantir zero escrita;
-- o endpoint nao tenta inferir `suspend_data` novo;
-- o endpoint nao resolve crosswalk de cursos ainda bloqueados como PT6C;
-- o endpoint nao substitui fixture segura para validacao operacional.
+Permitido nesta fase:
 
-## Por que `apply` nao foi implementado
+- Worker LMS;
+- testes LMS;
+- docs LMS.
 
-`apply` ficou fora por desenho porque:
+Explicitamente fora:
 
-- exigiria escrita em matricula real;
-- exigiria politica de rollback e auditoria persistente;
-- exigiria revisao manual dos payloads e evidencia por aluno;
-- a fase atual precisa provar primeiro o contrato seguro de simulacao.
+- frontend;
+- pacote SCORM;
+- SQL manual;
+- migration/schema;
+- SIGVOOS;
+- FRMS;
+- qualificacoes fora do fluxo de bloqueio do LMS.
 
-## Proximos passos
+## Status desta evidencia
 
-1. publicar o Worker com o endpoint `dry-run`;
-2. executar smoke do Worker;
-3. validar em fixture segura;
-4. revisar respostas dos payloads preparados;
-5. pedir autorizacao explicita antes de discutir ou implementar `apply`.
-
-## Decisao final desta fase
-
-- `RECOVERY_DRY_RUN_ENDPOINT_READY_FOR_DEPLOY`
-- `APPLY_NOT_IMPLEMENTED_BY_DESIGN`
+- `RECOVERY_DRY_RUN_ENDPOINT_DEPLOYED`: pendente de registrar no ciclo pos-merge
+- `AW139_PROGRESS_RECOVERY_APPLY_DEPLOYED`: pendente de registrar no ciclo pos-merge
+- `NO_COMPLETION_OR_QUALIFICATION_WRITES`: provado localmente

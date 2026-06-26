@@ -37,6 +37,7 @@ import {
   employeeSectorSql,
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
+import { buildAuditMetadata } from '../lib/audit/context';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -2166,6 +2167,103 @@ const ProgressRecoveryDryRunSchema = z.object({
   target_matricula_status: z.string().trim().max(50).optional(),
 });
 
+const ProgressRecoveryApplySchema = z.object({
+  target_lesson_location: z
+    .string()
+    .trim()
+    .regex(/^\d+\/\d+$/, 'target_lesson_location deve estar no formato n/total (ex: "113/405")'),
+  target_progress_pct: z.number().int().min(0).max(100),
+  reason: z.string().trim().min(5).max(1000),
+  evidence_source: z.string().trim().min(3).max(2000),
+  operator_note: z.string().trim().min(3).max(2000),
+  dry_run_reference: z.string().trim().min(8),
+  target_lesson_status: z.string().trim().max(50).optional(),
+  target_score_raw: z.number().optional(),
+  target_matricula_status: z.string().trim().max(50).optional(),
+});
+
+const ProgressRecoveryRollbackSchema = z.object({
+  audit_log_id: z.number().int().positive(),
+  reason: z.string().trim().min(5).max(1000),
+});
+
+type ProgressRecoveryEnrollment = {
+  id: number;
+  curso_id: number;
+  funcionario_id: number;
+  status: string;
+  progresso_pct: number | null;
+  ultimo_slide: number | null;
+  data_inicio: string | null;
+  data_conclusao: string | null;
+  qualificacao_historico_id: number | null;
+  curso_titulo: string;
+  tipo_conteudo: string | null;
+  scorm_id: number | null;
+  lesson_status: string | null;
+  completion_status: string | null;
+  success_status: string | null;
+  score_raw: number | null;
+  score_max: number | null;
+  score_min: number | null;
+  score_scaled: number | null;
+  session_time: string | null;
+  total_time: string | null;
+  session_count: number | null;
+  suspend_data: string | null;
+  launch_data: string | null;
+  cmi_json: string | null;
+};
+
+type ProgressRecoveryStateSnapshot = {
+  matricula: {
+    id: number;
+    curso_id: number;
+    funcionario_id: number;
+    status: string;
+    progresso_pct: number;
+    ultimo_slide: number;
+    data_inicio: string | null;
+    data_conclusao: string | null;
+    qualificacao_historico_id: number | null;
+  };
+  scorm: {
+    row_present: boolean;
+    id: number | null;
+    lesson_location: string | null;
+    lesson_status: string | null;
+    completion_status: string | null;
+    success_status: string | null;
+    score_raw: number | null;
+    score_max: number | null;
+    score_min: number | null;
+    score_scaled: number | null;
+    session_time: string | null;
+    total_time: string | null;
+    session_count: number | null;
+    suspend_data: string | null;
+    launch_data: string | null;
+    cmi_json: string | null;
+  };
+};
+
+type ProgressRecoveryEvaluation = {
+  enrollment: ProgressRecoveryEnrollment;
+  currentEffectiveProgress: number;
+  currentStrongSlide: number;
+  currentLessonLocation: string | null;
+  blockers: string[];
+  risks: string[];
+  simulatedProgress: number;
+  simulatedSlide: number;
+  simulatedMatriculaStatus: string;
+  simulatedLessonLocation: string | null;
+  differences: Array<{ field: string; current: unknown; simulated: unknown }>;
+  currentSnapshot: ProgressRecoveryStateSnapshot;
+  simulatedSnapshot: ProgressRecoveryStateSnapshot;
+  dryRunReference: string;
+};
+
 function extractLessonLocationValue(cmiJson: string | null | undefined): string | null {
   if (!cmiJson) return null;
   try {
@@ -2181,6 +2279,366 @@ function normalizeStatusToken(value: string | null | undefined) {
   return String(value ?? '')
     .trim()
     .toUpperCase();
+}
+
+function hashProgressRecoveryReference(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `prr-v1-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function buildProgressRecoveryReference(snapshot: ProgressRecoveryStateSnapshot) {
+  return hashProgressRecoveryReference(
+    JSON.stringify({
+      matricula: {
+        id: snapshot.matricula.id,
+        curso_id: snapshot.matricula.curso_id,
+        funcionario_id: snapshot.matricula.funcionario_id,
+        status: snapshot.matricula.status,
+        progresso_pct: snapshot.matricula.progresso_pct,
+        ultimo_slide: snapshot.matricula.ultimo_slide,
+        data_inicio: snapshot.matricula.data_inicio,
+        data_conclusao: snapshot.matricula.data_conclusao,
+        qualificacao_historico_id: snapshot.matricula.qualificacao_historico_id,
+      },
+      scorm: {
+        row_present: snapshot.scorm.row_present,
+        lesson_location: snapshot.scorm.lesson_location,
+        lesson_status: snapshot.scorm.lesson_status,
+        completion_status: snapshot.scorm.completion_status,
+        success_status: snapshot.scorm.success_status,
+        score_raw: snapshot.scorm.score_raw,
+        score_max: snapshot.scorm.score_max,
+        score_min: snapshot.scorm.score_min,
+        score_scaled: snapshot.scorm.score_scaled,
+        session_time: snapshot.scorm.session_time,
+        total_time: snapshot.scorm.total_time,
+        session_count: snapshot.scorm.session_count,
+        suspend_data: snapshot.scorm.suspend_data,
+        launch_data: snapshot.scorm.launch_data,
+        cmi_json: snapshot.scorm.cmi_json,
+      },
+    }),
+  );
+}
+
+function buildProgressRecoverySnapshot(params: {
+  enrollment: ProgressRecoveryEnrollment;
+  progressPct: number;
+  slide: number;
+  lessonLocation: string | null;
+  matriculaStatus: string;
+  cmiJson: string | null;
+  suspendData: string | null;
+}) {
+  return {
+    matricula: {
+      id: params.enrollment.id,
+      curso_id: params.enrollment.curso_id,
+      funcionario_id: params.enrollment.funcionario_id,
+      status: params.matriculaStatus,
+      progresso_pct: params.progressPct,
+      ultimo_slide: params.slide,
+      data_inicio: params.enrollment.data_inicio,
+      data_conclusao: params.enrollment.data_conclusao,
+      qualificacao_historico_id: params.enrollment.qualificacao_historico_id,
+    },
+    scorm: {
+      row_present: params.enrollment.scorm_id != null,
+      id: params.enrollment.scorm_id,
+      lesson_location: params.lessonLocation,
+      lesson_status: params.enrollment.lesson_status,
+      completion_status: params.enrollment.completion_status,
+      success_status: params.enrollment.success_status,
+      score_raw: params.enrollment.score_raw,
+      score_max: params.enrollment.score_max,
+      score_min: params.enrollment.score_min,
+      score_scaled: params.enrollment.score_scaled,
+      session_time: params.enrollment.session_time,
+      total_time: params.enrollment.total_time,
+      session_count: params.enrollment.session_count,
+      suspend_data: params.suspendData,
+      launch_data: params.enrollment.launch_data,
+      cmi_json: params.cmiJson,
+    },
+  } satisfies ProgressRecoveryStateSnapshot;
+}
+
+function summarizeProgressRecoverySnapshot(snapshot: ProgressRecoveryStateSnapshot) {
+  return {
+    matricula: {
+      id: snapshot.matricula.id,
+      status: snapshot.matricula.status,
+      progresso_pct: snapshot.matricula.progresso_pct,
+      ultimo_slide: snapshot.matricula.ultimo_slide,
+      qualificacao_historico_id: snapshot.matricula.qualificacao_historico_id,
+    },
+    scorm: {
+      lesson_location: snapshot.scorm.lesson_location,
+      lesson_status: snapshot.scorm.lesson_status,
+      completion_status: snapshot.scorm.completion_status,
+      success_status: snapshot.scorm.success_status,
+      score_raw: snapshot.scorm.score_raw,
+      score_max: snapshot.scorm.score_max,
+      score_scaled: snapshot.scorm.score_scaled,
+      suspend_data_present: Boolean(snapshot.scorm.suspend_data?.trim()),
+    },
+  };
+}
+
+async function loadProgressRecoveryEnrollment(
+  db: D1Database,
+  matriculaId: number,
+  empresaId: number,
+) {
+  return db
+    .prepare(
+      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, m.progresso_pct, m.ultimo_slide,
+              m.data_inicio, m.data_conclusao, m.qualificacao_historico_id,
+              c.titulo AS curso_titulo, c.tipo_conteudo,
+              ps.id AS scorm_id, ps.lesson_status, ps.completion_status, ps.success_status,
+              ps.score_raw, ps.score_max, ps.score_min, ps.score_scaled,
+              ps.session_time, ps.total_time, ps.session_count,
+              ps.suspend_data, ps.launch_data, ps.cmi_json
+         FROM lms_matriculas m
+         JOIN lms_cursos c
+           ON c.id = m.curso_id
+          AND c.empresa_id = m.empresa_id
+          AND c.deleted_at IS NULL
+         LEFT JOIN lms_progresso_scorm ps
+           ON ps.matricula_id = m.id
+          AND ps.empresa_id = m.empresa_id
+        WHERE m.id = ?
+          AND m.empresa_id = ?
+          AND m.deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(matriculaId, empresaId)
+    .first<ProgressRecoveryEnrollment>();
+}
+
+function evaluateProgressRecovery(params: {
+  enrollment: ProgressRecoveryEnrollment;
+  targetLessonLocation: string;
+  targetProgressPct: number;
+  targetLessonStatus?: string | null;
+  targetScoreRaw?: number;
+  targetMatriculaStatus?: string | null;
+}) {
+  const { enrollment, targetLessonLocation, targetProgressPct, targetLessonStatus, targetScoreRaw, targetMatriculaStatus } =
+    params;
+  const targetLocation = parseScormLocationPair(targetLessonLocation);
+  if (!targetLocation) {
+    throw new ApiError('target_lesson_location deve estar no formato n/total', 400);
+  }
+
+  const currentProgress = Number(enrollment.progresso_pct ?? 0);
+  const currentSlide = Number(enrollment.ultimo_slide ?? 0);
+  const currentLessonLocation = extractLessonLocationValue(enrollment.cmi_json);
+  const currentLocationMarker = extractScormLocationFromCmiJson(enrollment.cmi_json);
+  const currentEffectiveProgress = Math.max(
+    currentProgress,
+    extractProgressPctFromCmiJson(enrollment.cmi_json) ?? 0,
+  );
+  const currentStrongSlide = Math.max(currentSlide, currentLocationMarker?.current ?? 0);
+
+  const blockers: string[] = [];
+  const risks: string[] = [];
+  const normalizedMatriculaStatus = normalizeStatusToken(enrollment.status);
+  const normalizedTargetLessonStatus = normalizeStatusToken(targetLessonStatus);
+  const normalizedTargetMatriculaStatus = normalizeStatusToken(targetMatriculaStatus);
+
+  if ((enrollment.tipo_conteudo ?? '').toLowerCase() !== 'scorm') {
+    blockers.push('NON_SCORM_COURSE');
+  }
+  if (['CONCLUIDO', 'REPROVADO', 'CANCELADO'].includes(normalizedMatriculaStatus)) {
+    blockers.push('TERMINAL_STATUS');
+  }
+  if (enrollment.qualificacao_historico_id) {
+    blockers.push('QUALIFICATION_ALREADY_LINKED');
+  }
+  if (targetProgressPct >= 100) {
+    blockers.push('TARGET_PROGRESS_COMPLETION_NOT_ALLOWED');
+  }
+  if (targetProgressPct < currentEffectiveProgress) {
+    blockers.push('TARGET_PROGRESS_REGRESSION');
+  }
+  if (targetLocation.current < currentStrongSlide) {
+    blockers.push('TARGET_LOCATION_REGRESSION');
+  }
+  if (normalizedTargetLessonStatus === 'PASSED' || normalizedTargetLessonStatus === 'COMPLETED') {
+    blockers.push('TARGET_LESSON_STATUS_COMPLETION_FORBIDDEN');
+  }
+  if (targetScoreRaw !== undefined) {
+    blockers.push('TARGET_SCORE_CHANGE_FORBIDDEN');
+  }
+  if (normalizedTargetMatriculaStatus === 'CONCLUIDO') {
+    blockers.push('TARGET_MATRICULA_STATUS_COMPLETION_FORBIDDEN');
+  }
+  if (enrollment.data_conclusao) {
+    blockers.push('DATA_CONCLUSAO_ALREADY_PRESENT');
+  }
+
+  if (currentLocationMarker?.total == null && currentLocationMarker?.current) {
+    risks.push('CURRENT_RUNTIME_USES_LEGACY_NUMERIC_LOCATION');
+  }
+  if (currentLocationMarker?.total != null && currentLocationMarker.total !== targetLocation.total) {
+    risks.push('TARGET_TOTAL_DIFFERS_FROM_CURRENT_RUNTIME');
+  }
+  if (!enrollment.suspend_data?.trim()) {
+    risks.push('CURRENT_RUNTIME_HAS_NO_SUSPEND_DATA');
+  }
+  if (enrollment.score_raw != null || enrollment.score_scaled != null) {
+    risks.push('CURRENT_SCORE_WILL_BE_PRESERVED');
+  }
+  if (
+    normalizeStatusToken(enrollment.lesson_status) === 'PASSED' ||
+    normalizeStatusToken(enrollment.lesson_status) === 'COMPLETED' ||
+    normalizeStatusToken(enrollment.completion_status) === 'COMPLETED' ||
+    normalizeStatusToken(enrollment.success_status) === 'PASSED'
+  ) {
+    risks.push('CURRENT_SCORM_COMPLETION_EVIDENCE_PRESENT');
+  }
+
+  const simulatedProgress = Math.max(currentEffectiveProgress, targetProgressPct);
+  const simulatedSlide = Math.max(currentStrongSlide, targetLocation.current);
+  const simulatedMatriculaStatus =
+    normalizedMatriculaStatus === 'NAO_INICIADO' && (simulatedProgress > 0 || simulatedSlide > 0)
+      ? 'EM_ANDAMENTO'
+      : enrollment.status;
+  const simulatedLessonLocation =
+    targetLocation.current < currentStrongSlide
+      ? currentLessonLocation ?? String(currentStrongSlide)
+      : targetLessonLocation;
+
+  const currentSnapshot = buildProgressRecoverySnapshot({
+    enrollment,
+    progressPct: currentEffectiveProgress,
+    slide: currentStrongSlide,
+    lessonLocation: currentLessonLocation,
+    matriculaStatus: enrollment.status,
+    cmiJson: enrollment.cmi_json,
+    suspendData: enrollment.suspend_data,
+  });
+  const simulatedSnapshot = buildProgressRecoverySnapshot({
+    enrollment,
+    progressPct: simulatedProgress,
+    slide: simulatedSlide,
+    lessonLocation: simulatedLessonLocation,
+    matriculaStatus: simulatedMatriculaStatus,
+    cmiJson: enrollment.cmi_json,
+    suspendData: enrollment.suspend_data,
+  });
+  const dryRunReference = buildProgressRecoveryReference(currentSnapshot);
+
+  return {
+    enrollment,
+    currentEffectiveProgress,
+    currentStrongSlide,
+    currentLessonLocation,
+    blockers,
+    risks,
+    simulatedProgress,
+    simulatedSlide,
+    simulatedMatriculaStatus,
+    simulatedLessonLocation,
+    differences: buildRecoveryDryRunDifferences({
+      currentStatus: enrollment.status,
+      currentProgress: currentEffectiveProgress,
+      currentSlide: currentStrongSlide,
+      currentLessonLocation,
+      simulatedStatus: simulatedMatriculaStatus,
+      simulatedProgress,
+      simulatedSlide,
+      simulatedLessonLocation,
+    }),
+    currentSnapshot,
+    simulatedSnapshot,
+    dryRunReference,
+  } satisfies ProgressRecoveryEvaluation;
+}
+
+function buildAppliedScormState(params: {
+  enrollment: ProgressRecoveryEnrollment;
+  targetLessonLocation: string;
+}) {
+  const currentSuspendData = params.enrollment.suspend_data?.trim() ? params.enrollment.suspend_data : null;
+  const incomingCmi = {
+    'cmi.location': params.targetLessonLocation,
+    'cmi.core.lesson_location': params.targetLessonLocation,
+    ...(currentSuspendData ? { 'cmi.suspend_data': currentSuspendData } : {}),
+  };
+  const runtimeMerge = mergeScormRuntimeState({
+    currentCmiJson: params.enrollment.cmi_json,
+    incomingCmiJson: JSON.stringify(incomingCmi),
+    currentSuspendData,
+    incomingSuspendData: currentSuspendData,
+  });
+
+  return {
+    cmiJson: runtimeMerge.cmiJson,
+    suspendData: runtimeMerge.suspendData,
+    lessonLocation: extractLessonLocationValue(runtimeMerge.cmiJson),
+  };
+}
+
+function safeJsonParseObject(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function insertProgressRecoveryAuditLog(
+  db: D1Database,
+  c: Context,
+  params: {
+    action: 'LMS_PROGRESS_RECOVERY_APPLY' | 'LMS_PROGRESS_RECOVERY_ROLLBACK';
+    matriculaId: number;
+    empresaId: number;
+    before: ProgressRecoveryStateSnapshot;
+    after: ProgressRecoveryStateSnapshot;
+    details: Record<string, unknown>;
+  },
+) {
+  const metadata = buildAuditMetadata(c, {
+    empresa_id: params.empresaId,
+    mode: 'RESTORE_PROGRESS_ONLY',
+    ...params.details,
+  });
+
+  const result = await db
+    .prepare(
+      `INSERT INTO audit_logs (
+        user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent,
+        empresa_id, usuario_id, acao, tabela, registro_id, detalhes, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    )
+    .bind(
+      getCallerUserId(c) ?? null,
+      params.action,
+      'lms_matriculas',
+      params.matriculaId,
+      JSON.stringify(params.before),
+      JSON.stringify(params.after),
+      c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      c.req.header('user-agent') ?? null,
+      params.empresaId,
+      getCallerUserId(c) ?? null,
+      params.action,
+      'lms_matriculas',
+      params.matriculaId,
+      JSON.stringify(metadata),
+    )
+    .run();
+
+  return Number(result.meta.last_row_id ?? 0);
 }
 
 function buildRecoveryDryRunDifferences(params: {
@@ -2254,137 +2712,16 @@ app.post('/:id/progresso-recuperacao/dry-run', requireRole('admin'), async (c) =
     target_matricula_status,
   } = parsed.data;
 
-  const targetLocation = parseScormLocationPair(target_lesson_location);
-  if (!targetLocation) {
-    throw new ApiError('target_lesson_location deve estar no formato n/total', 400);
-  }
-
-  const enrollment = await db
-    .prepare(
-      `SELECT m.id, m.status, m.progresso_pct, m.ultimo_slide, m.qualificacao_historico_id,
-              c.titulo AS curso_titulo, c.tipo_conteudo,
-              ps.lesson_status, ps.completion_status, ps.success_status,
-              ps.score_raw, ps.score_max, ps.score_scaled,
-              ps.suspend_data, ps.cmi_json
-         FROM lms_matriculas m
-         JOIN lms_cursos c
-           ON c.id = m.curso_id
-          AND c.empresa_id = m.empresa_id
-          AND c.deleted_at IS NULL
-         LEFT JOIN lms_progresso_scorm ps
-           ON ps.matricula_id = m.id
-          AND ps.empresa_id = m.empresa_id
-        WHERE m.id = ?
-          AND m.empresa_id = ?
-          AND m.deleted_at IS NULL
-        LIMIT 1`,
-    )
-    .bind(matriculaId, empresaId)
-    .first<{
-      id: number;
-      status: string;
-      progresso_pct: number | null;
-      ultimo_slide: number | null;
-      qualificacao_historico_id: number | null;
-      curso_titulo: string;
-      tipo_conteudo: string | null;
-      lesson_status: string | null;
-      completion_status: string | null;
-      success_status: string | null;
-      score_raw: number | null;
-      score_max: number | null;
-      score_scaled: number | null;
-      suspend_data: string | null;
-      cmi_json: string | null;
-    }>();
+  const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
 
   if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
-
-  const currentProgress = Number(enrollment.progresso_pct ?? 0);
-  const currentSlide = Number(enrollment.ultimo_slide ?? 0);
-  const currentLessonLocation = extractLessonLocationValue(enrollment.cmi_json);
-  const currentLocationMarker = extractScormLocationFromCmiJson(enrollment.cmi_json);
-  const currentEffectiveProgress = Math.max(
-    currentProgress,
-    extractProgressPctFromCmiJson(enrollment.cmi_json) ?? 0,
-  );
-  const currentStrongSlide = Math.max(currentSlide, currentLocationMarker?.current ?? 0);
-
-  const blockers: string[] = [];
-  const risks: string[] = [];
-  const normalizedMatriculaStatus = normalizeStatusToken(enrollment.status);
-  const normalizedTargetLessonStatus = normalizeStatusToken(target_lesson_status);
-  const normalizedTargetMatriculaStatus = normalizeStatusToken(target_matricula_status);
-
-  if ((enrollment.tipo_conteudo ?? '').toLowerCase() !== 'scorm') {
-    blockers.push('NON_SCORM_COURSE');
-  }
-  if (['CONCLUIDO', 'REPROVADO', 'CANCELADO'].includes(normalizedMatriculaStatus)) {
-    blockers.push('TERMINAL_STATUS');
-  }
-  if (enrollment.qualificacao_historico_id) {
-    blockers.push('QUALIFICATION_ALREADY_LINKED');
-  }
-  if (target_progress_pct >= 100) {
-    blockers.push('TARGET_PROGRESS_COMPLETION_NOT_ALLOWED');
-  }
-  if (target_progress_pct < currentEffectiveProgress) {
-    blockers.push('TARGET_PROGRESS_REGRESSION');
-  }
-  if (targetLocation.current < currentStrongSlide) {
-    blockers.push('TARGET_LOCATION_REGRESSION');
-  }
-  if (normalizedTargetLessonStatus === 'PASSED' || normalizedTargetLessonStatus === 'COMPLETED') {
-    blockers.push('TARGET_LESSON_STATUS_COMPLETION_FORBIDDEN');
-  }
-  if (target_score_raw !== undefined) {
-    blockers.push('TARGET_SCORE_CHANGE_FORBIDDEN');
-  }
-  if (normalizedTargetMatriculaStatus === 'CONCLUIDO') {
-    blockers.push('TARGET_MATRICULA_STATUS_COMPLETION_FORBIDDEN');
-  }
-
-  if (currentLocationMarker?.total == null && currentLocationMarker?.current) {
-    risks.push('CURRENT_RUNTIME_USES_LEGACY_NUMERIC_LOCATION');
-  }
-  if (currentLocationMarker?.total != null && currentLocationMarker.total !== targetLocation.total) {
-    risks.push('TARGET_TOTAL_DIFFERS_FROM_CURRENT_RUNTIME');
-  }
-  if (!enrollment.suspend_data?.trim()) {
-    risks.push('CURRENT_RUNTIME_HAS_NO_SUSPEND_DATA');
-  }
-  if (enrollment.score_raw != null || enrollment.score_scaled != null) {
-    risks.push('CURRENT_SCORE_WILL_BE_PRESERVED');
-  }
-  if (
-    normalizeStatusToken(enrollment.lesson_status) === 'PASSED' ||
-    normalizeStatusToken(enrollment.lesson_status) === 'COMPLETED' ||
-    normalizeStatusToken(enrollment.completion_status) === 'COMPLETED' ||
-    normalizeStatusToken(enrollment.success_status) === 'PASSED'
-  ) {
-    risks.push('CURRENT_SCORM_COMPLETION_EVIDENCE_PRESENT');
-  }
-
-  const simulatedProgress = Math.max(currentEffectiveProgress, target_progress_pct);
-  const simulatedSlide = Math.max(currentStrongSlide, targetLocation.current);
-  const simulatedMatriculaStatus =
-    normalizedMatriculaStatus === 'NAO_INICIADO' && (simulatedProgress > 0 || simulatedSlide > 0)
-      ? 'EM_ANDAMENTO'
-      : enrollment.status;
-  const simulatedLessonLocation =
-    targetLocation.current < currentStrongSlide
-      ? currentLessonLocation ?? String(currentStrongSlide)
-      : target_lesson_location;
-
-  const differences = buildRecoveryDryRunDifferences({
-    currentStatus: enrollment.status,
-    currentProgress: currentEffectiveProgress,
-    currentSlide: currentStrongSlide,
-    currentLessonLocation,
-    simulatedStatus: simulatedMatriculaStatus,
-    simulatedProgress,
-    simulatedSlide,
-    simulatedLessonLocation,
+  const evaluation = evaluateProgressRecovery({
+    enrollment,
+    targetLessonLocation: target_lesson_location,
+    targetProgressPct: target_progress_pct,
+    targetLessonStatus: target_lesson_status,
+    targetScoreRaw: target_score_raw,
+    targetMatriculaStatus: target_matricula_status,
   });
 
   return c.json({
@@ -2395,43 +2732,17 @@ app.post('/:id/progresso-recuperacao/dry-run', requireRole('admin'), async (c) =
       evidence_source,
       operator_note: operator_note ?? null,
       writes_executed: false,
+      dry_run_reference: evaluation.dryRunReference,
       current_state: {
+        ...summarizeProgressRecoverySnapshot(evaluation.currentSnapshot),
         matricula: {
-          id: enrollment.id,
-          status: enrollment.status,
-          progresso_pct: currentEffectiveProgress,
-          ultimo_slide: currentStrongSlide,
+          ...summarizeProgressRecoverySnapshot(evaluation.currentSnapshot).matricula,
           curso_titulo: enrollment.curso_titulo,
           tipo_conteudo: enrollment.tipo_conteudo,
-          qualificacao_historico_id: enrollment.qualificacao_historico_id,
-        },
-        scorm: {
-          lesson_location: currentLessonLocation,
-          lesson_status: enrollment.lesson_status,
-          completion_status: enrollment.completion_status,
-          success_status: enrollment.success_status,
-          score_raw: enrollment.score_raw,
-          score_max: enrollment.score_max,
-          score_scaled: enrollment.score_scaled,
-          suspend_data_present: Boolean(enrollment.suspend_data?.trim()),
         },
       },
       simulated_state: {
-        matricula: {
-          status: simulatedMatriculaStatus,
-          progresso_pct: simulatedProgress,
-          ultimo_slide: simulatedSlide,
-        },
-        scorm: {
-          lesson_location: simulatedLessonLocation,
-          lesson_status: enrollment.lesson_status,
-          completion_status: enrollment.completion_status,
-          success_status: enrollment.success_status,
-          score_raw: enrollment.score_raw,
-          score_max: enrollment.score_max,
-          score_scaled: enrollment.score_scaled,
-          suspend_data_present: Boolean(enrollment.suspend_data?.trim()),
-        },
+        ...summarizeProgressRecoverySnapshot(evaluation.simulatedSnapshot),
       },
       requested_target: {
         lesson_location: target_lesson_location,
@@ -2440,17 +2751,342 @@ app.post('/:id/progresso-recuperacao/dry-run', requireRole('admin'), async (c) =
         score_raw: target_score_raw ?? null,
         matricula_status: target_matricula_status ?? null,
       },
-      differences,
-      risks,
-      would_be_allowed_future: blockers.length === 0,
-      blocked_reason: blockers[0] ?? null,
-      blockers,
+      differences: evaluation.differences,
+      risks: evaluation.risks,
+      would_be_allowed_future: evaluation.blockers.length === 0,
+      apply_allowed: evaluation.blockers.length === 0,
+      blocked_reason: evaluation.blockers[0] ?? null,
+      blockers: evaluation.blockers,
       safety_guards: {
-        apply_implemented: false,
+        apply_implemented: true,
         qualification_generation_allowed: false,
         score_changes_allowed: false,
         matricula_completion_allowed: false,
       },
+    },
+  });
+});
+
+app.post('/:id/progresso-recuperacao/apply', requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaIdSafe(c);
+  const matriculaId = Number(c.req.param('id'));
+  if (!matriculaId || Number.isNaN(matriculaId)) throw new ApiError('ID inválido', 400);
+
+  const body = await c.req.json<unknown>();
+  const parsed = ProgressRecoveryApplySchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+  }
+
+  const {
+    target_lesson_location,
+    target_progress_pct,
+    reason,
+    evidence_source,
+    operator_note,
+    dry_run_reference,
+    target_lesson_status,
+    target_score_raw,
+    target_matricula_status,
+  } = parsed.data;
+
+  const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
+  if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+
+  const evaluation = evaluateProgressRecovery({
+    enrollment,
+    targetLessonLocation: target_lesson_location,
+    targetProgressPct: target_progress_pct,
+    targetLessonStatus: target_lesson_status,
+    targetScoreRaw: target_score_raw,
+    targetMatriculaStatus: target_matricula_status,
+  });
+
+  if (evaluation.dryRunReference !== dry_run_reference) {
+    throw new ApiError('Estado atual divergiu do dry-run revisado; execute novo dry-run antes do apply', 409);
+  }
+  if (evaluation.blockers.length > 0) {
+    throw new ApiError(`Apply bloqueado: ${evaluation.blockers[0]}`, 409);
+  }
+
+  const appliedScormState = buildAppliedScormState({
+    enrollment,
+    targetLessonLocation: target_lesson_location,
+  });
+  if (enrollment.suspend_data?.trim() && !appliedScormState.suspendData?.trim()) {
+    throw new ApiError('Apply bloqueado: suspend_data forte não pode ser apagado', 409);
+  }
+
+  const afterSnapshot = buildProgressRecoverySnapshot({
+    enrollment,
+    progressPct: evaluation.simulatedProgress,
+    slide: evaluation.simulatedSlide,
+    lessonLocation: appliedScormState.lessonLocation,
+    matriculaStatus: evaluation.simulatedMatriculaStatus,
+    cmiJson: appliedScormState.cmiJson,
+    suspendData: appliedScormState.suspendData,
+  });
+
+  const rollbackPayload = {
+    audit_log_action: 'LMS_PROGRESS_RECOVERY_ROLLBACK',
+    restore_reference: buildProgressRecoveryReference(evaluation.currentSnapshot),
+  };
+  const auditLogId = await insertProgressRecoveryAuditLog(db, c, {
+    action: 'LMS_PROGRESS_RECOVERY_APPLY',
+    matriculaId,
+    empresaId,
+    before: evaluation.currentSnapshot,
+    after: afterSnapshot,
+    details: {
+      reason,
+      evidence_source,
+      operator_note,
+      dry_run_reference,
+      rollback_payload: rollbackPayload,
+      course_id: enrollment.curso_id,
+      funcionario_id: enrollment.funcionario_id,
+      target_lesson_location,
+      target_progress_pct,
+    },
+  });
+
+  await db
+    .prepare(
+      `UPDATE lms_matriculas
+          SET status = ?,
+              progresso_pct = ?,
+              ultimo_slide = ?,
+              data_inicio = COALESCE(data_inicio, datetime('now')),
+              updated_at = datetime('now')
+        WHERE id = ? AND empresa_id = ?`,
+    )
+    .bind(
+      evaluation.simulatedMatriculaStatus,
+      evaluation.simulatedProgress,
+      evaluation.simulatedSlide,
+      matriculaId,
+      empresaId,
+    )
+    .run();
+
+  await db
+    .prepare(
+      `INSERT INTO lms_progresso_scorm
+        (matricula_id, empresa_id, lesson_status, completion_status, success_status,
+         score_raw, score_max, score_min, score_scaled,
+         session_time, total_time, suspend_data, launch_data, cmi_json, session_count, last_commit_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(matricula_id) DO UPDATE SET
+        lesson_status = excluded.lesson_status,
+        completion_status = excluded.completion_status,
+        success_status = excluded.success_status,
+        score_raw = COALESCE(excluded.score_raw, lms_progresso_scorm.score_raw),
+        score_max = COALESCE(excluded.score_max, lms_progresso_scorm.score_max),
+        score_min = COALESCE(excluded.score_min, lms_progresso_scorm.score_min),
+        score_scaled = COALESCE(excluded.score_scaled, lms_progresso_scorm.score_scaled),
+        session_time = COALESCE(excluded.session_time, lms_progresso_scorm.session_time),
+        total_time = COALESCE(excluded.total_time, lms_progresso_scorm.total_time),
+        suspend_data = COALESCE(excluded.suspend_data, lms_progresso_scorm.suspend_data),
+        launch_data = COALESCE(excluded.launch_data, lms_progresso_scorm.launch_data),
+        cmi_json = COALESCE(excluded.cmi_json, lms_progresso_scorm.cmi_json),
+        session_count = COALESCE(lms_progresso_scorm.session_count, 1),
+        last_commit_at = datetime('now'),
+        updated_at = datetime('now')`,
+    )
+    .bind(
+      matriculaId,
+      empresaId,
+      enrollment.lesson_status ?? 'incomplete',
+      enrollment.completion_status,
+      enrollment.success_status,
+      enrollment.score_raw,
+      enrollment.score_max,
+      enrollment.score_min,
+      enrollment.score_scaled,
+      enrollment.session_time,
+      enrollment.total_time,
+      appliedScormState.suspendData,
+      enrollment.launch_data,
+      appliedScormState.cmiJson,
+      enrollment.session_count ?? 1,
+      )
+    .run();
+
+  return c.json({
+    success: true,
+    data: {
+      mode: 'apply',
+      writes_executed: true,
+      audit_log_id: auditLogId,
+      rollback_available: true,
+      dry_run_reference,
+      before: summarizeProgressRecoverySnapshot(evaluation.currentSnapshot),
+      after: summarizeProgressRecoverySnapshot(afterSnapshot),
+    },
+  });
+});
+
+app.post('/:id/progresso-recuperacao/rollback', requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaIdSafe(c);
+  const matriculaId = Number(c.req.param('id'));
+  if (!matriculaId || Number.isNaN(matriculaId)) throw new ApiError('ID inválido', 400);
+
+  const body = await c.req.json<unknown>();
+  const parsed = ProgressRecoveryRollbackSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+  }
+
+  const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
+  if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+
+  const auditLog = await db
+    .prepare(
+      `SELECT id, action, entity_type, entity_id, old_values, new_values, detalhes
+         FROM audit_logs
+        WHERE id = ? AND entity_id = ? AND entity_type = 'lms_matriculas'
+        LIMIT 1`,
+    )
+    .bind(parsed.data.audit_log_id, matriculaId)
+    .first<{
+      id: number;
+      action: string | null;
+      entity_type: string | null;
+      entity_id: number | null;
+      old_values: string | null;
+      new_values: string | null;
+      detalhes: string | null;
+    }>();
+
+  if (!auditLog || auditLog.action !== 'LMS_PROGRESS_RECOVERY_APPLY') {
+    throw new ApiError('Audit log de apply não encontrado para esta matrícula', 404);
+  }
+
+  const beforeSnapshot = safeJsonParseObject(auditLog.old_values) as ProgressRecoveryStateSnapshot | null;
+  const appliedSnapshot = safeJsonParseObject(auditLog.new_values) as ProgressRecoveryStateSnapshot | null;
+  if (!beforeSnapshot || !appliedSnapshot) {
+    throw new ApiError('Audit log de recovery inválido; rollback bloqueado', 409);
+  }
+
+  const currentProgress = Math.max(
+    Number(enrollment.progresso_pct ?? 0),
+    extractProgressPctFromCmiJson(enrollment.cmi_json) ?? 0,
+  );
+  const currentSlide = Math.max(
+    Number(enrollment.ultimo_slide ?? 0),
+    extractScormLocationFromCmiJson(enrollment.cmi_json)?.current ?? 0,
+  );
+  const currentSnapshot = buildProgressRecoverySnapshot({
+    enrollment,
+    progressPct: currentProgress,
+    slide: currentSlide,
+    lessonLocation: extractLessonLocationValue(enrollment.cmi_json),
+    matriculaStatus: enrollment.status,
+    cmiJson: enrollment.cmi_json,
+    suspendData: enrollment.suspend_data,
+  });
+
+  if (buildProgressRecoveryReference(currentSnapshot) !== buildProgressRecoveryReference(appliedSnapshot)) {
+    throw new ApiError('Estado atual divergiu do estado aplicado; rollback bloqueado', 409);
+  }
+
+  await db
+    .prepare(
+      `UPDATE lms_matriculas
+          SET status = ?,
+              progresso_pct = ?,
+              ultimo_slide = ?,
+              data_inicio = ?,
+              data_conclusao = ?,
+              updated_at = datetime('now')
+        WHERE id = ? AND empresa_id = ?`,
+    )
+    .bind(
+      beforeSnapshot.matricula.status,
+      beforeSnapshot.matricula.progresso_pct,
+      beforeSnapshot.matricula.ultimo_slide,
+      beforeSnapshot.matricula.data_inicio,
+      beforeSnapshot.matricula.data_conclusao,
+      matriculaId,
+      empresaId,
+    )
+    .run();
+
+  if (!beforeSnapshot.scorm.row_present) {
+    await db
+      .prepare('DELETE FROM lms_progresso_scorm WHERE matricula_id = ? AND empresa_id = ?')
+      .bind(matriculaId, empresaId)
+      .run();
+  } else {
+    await db
+      .prepare(
+        `INSERT INTO lms_progresso_scorm
+          (id, matricula_id, empresa_id, lesson_status, completion_status, success_status,
+           score_raw, score_max, score_min, score_scaled, session_time, total_time,
+           session_count, suspend_data, launch_data, cmi_json, last_commit_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(matricula_id) DO UPDATE SET
+          lesson_status = excluded.lesson_status,
+          completion_status = excluded.completion_status,
+          success_status = excluded.success_status,
+          score_raw = excluded.score_raw,
+          score_max = excluded.score_max,
+          score_min = excluded.score_min,
+          score_scaled = excluded.score_scaled,
+          session_time = excluded.session_time,
+          total_time = excluded.total_time,
+          session_count = excluded.session_count,
+          suspend_data = excluded.suspend_data,
+          launch_data = excluded.launch_data,
+          cmi_json = excluded.cmi_json,
+          last_commit_at = datetime('now'),
+          updated_at = datetime('now')`,
+      )
+      .bind(
+        beforeSnapshot.scorm.id,
+        matriculaId,
+        empresaId,
+        beforeSnapshot.scorm.lesson_status,
+        beforeSnapshot.scorm.completion_status,
+        beforeSnapshot.scorm.success_status,
+        beforeSnapshot.scorm.score_raw,
+        beforeSnapshot.scorm.score_max,
+        beforeSnapshot.scorm.score_min,
+        beforeSnapshot.scorm.score_scaled,
+        beforeSnapshot.scorm.session_time,
+        beforeSnapshot.scorm.total_time,
+        beforeSnapshot.scorm.session_count ?? 1,
+        beforeSnapshot.scorm.suspend_data,
+        beforeSnapshot.scorm.launch_data,
+        beforeSnapshot.scorm.cmi_json,
+      )
+      .run();
+  }
+
+  const rollbackAuditLogId = await insertProgressRecoveryAuditLog(db, c, {
+    action: 'LMS_PROGRESS_RECOVERY_ROLLBACK',
+    matriculaId,
+    empresaId,
+    before: appliedSnapshot,
+    after: beforeSnapshot,
+    details: {
+      reason: parsed.data.reason,
+      rollback_of_audit_log_id: parsed.data.audit_log_id,
+      mode: 'RESTORE_PROGRESS_ONLY',
+    },
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      mode: 'rollback',
+      writes_executed: true,
+      audit_log_id: rollbackAuditLogId,
+      rolled_back_audit_log_id: parsed.data.audit_log_id,
+      before: summarizeProgressRecoverySnapshot(appliedSnapshot),
+      after: summarizeProgressRecoverySnapshot(beforeSnapshot),
     },
   });
 });
