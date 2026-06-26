@@ -25,6 +25,7 @@ import {
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
+  parseScormLocationPair,
   preferScormValue,
   shouldPreferIncomingScormState,
 } from '../services/lms-progress-guardrails';
@@ -2149,6 +2150,309 @@ const PatchProgressoSchema = z.object({
   progresso_pct: z.number().int().min(0).max(100).optional(),
   ultimo_slide: z.number().int().min(0).optional(),
   ultima_pagina: z.number().int().min(0).optional(),
+});
+
+const ProgressRecoveryDryRunSchema = z.object({
+  target_lesson_location: z
+    .string()
+    .trim()
+    .regex(/^\d+\/\d+$/, 'target_lesson_location deve estar no formato n/total (ex: "113/405")'),
+  target_progress_pct: z.number().int().min(0).max(100),
+  reason: z.string().trim().min(5).max(1000),
+  evidence_source: z.string().trim().min(3).max(2000),
+  operator_note: z.string().trim().max(2000).optional().nullable(),
+  target_lesson_status: z.string().trim().max(50).optional(),
+  target_score_raw: z.number().optional(),
+  target_matricula_status: z.string().trim().max(50).optional(),
+});
+
+function extractLessonLocationValue(cmiJson: string | null | undefined): string | null {
+  if (!cmiJson) return null;
+  try {
+    const parsed = JSON.parse(cmiJson) as Record<string, unknown>;
+    const location = parsed['cmi.location'] ?? parsed['cmi.core.lesson_location'];
+    return typeof location === 'string' && location.trim() ? location.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeStatusToken(value: string | null | undefined) {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase();
+}
+
+function buildRecoveryDryRunDifferences(params: {
+  currentStatus: string;
+  currentProgress: number;
+  currentSlide: number;
+  currentLessonLocation: string | null;
+  simulatedStatus: string;
+  simulatedProgress: number;
+  simulatedSlide: number;
+  simulatedLessonLocation: string | null;
+}) {
+  const differences: Array<{ field: string; current: unknown; simulated: unknown }> = [];
+
+  if (params.currentStatus !== params.simulatedStatus) {
+    differences.push({
+      field: 'matricula.status',
+      current: params.currentStatus,
+      simulated: params.simulatedStatus,
+    });
+  }
+  if (params.currentProgress !== params.simulatedProgress) {
+    differences.push({
+      field: 'matricula.progresso_pct',
+      current: params.currentProgress,
+      simulated: params.simulatedProgress,
+    });
+  }
+  if (params.currentSlide !== params.simulatedSlide) {
+    differences.push({
+      field: 'matricula.ultimo_slide',
+      current: params.currentSlide,
+      simulated: params.simulatedSlide,
+    });
+  }
+  if ((params.currentLessonLocation ?? null) !== (params.simulatedLessonLocation ?? null)) {
+    differences.push({
+      field: 'scorm.lesson_location',
+      current: params.currentLessonLocation,
+      simulated: params.simulatedLessonLocation,
+    });
+  }
+
+  return differences;
+}
+
+// ── Recuperação administrativa de progresso SCORM (dry-run only) ────────────
+// POST /matriculas/:id/progresso-recuperacao/dry-run
+// Admin-only. Does not write to any table. Does not generate qualification.
+
+app.post('/:id/progresso-recuperacao/dry-run', requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaIdSafe(c);
+  const matriculaId = Number(c.req.param('id'));
+  if (!matriculaId || Number.isNaN(matriculaId)) throw new ApiError('ID inválido', 400);
+
+  const body = await c.req.json<unknown>();
+  const parsed = ProgressRecoveryDryRunSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+  }
+
+  const {
+    target_lesson_location,
+    target_progress_pct,
+    reason,
+    evidence_source,
+    operator_note,
+    target_lesson_status,
+    target_score_raw,
+    target_matricula_status,
+  } = parsed.data;
+
+  const targetLocation = parseScormLocationPair(target_lesson_location);
+  if (!targetLocation) {
+    throw new ApiError('target_lesson_location deve estar no formato n/total', 400);
+  }
+
+  const enrollment = await db
+    .prepare(
+      `SELECT m.id, m.status, m.progresso_pct, m.ultimo_slide, m.qualificacao_historico_id,
+              c.titulo AS curso_titulo, c.tipo_conteudo,
+              ps.lesson_status, ps.completion_status, ps.success_status,
+              ps.score_raw, ps.score_max, ps.score_scaled,
+              ps.suspend_data, ps.cmi_json
+         FROM lms_matriculas m
+         JOIN lms_cursos c
+           ON c.id = m.curso_id
+          AND c.empresa_id = m.empresa_id
+          AND c.deleted_at IS NULL
+         LEFT JOIN lms_progresso_scorm ps
+           ON ps.matricula_id = m.id
+          AND ps.empresa_id = m.empresa_id
+        WHERE m.id = ?
+          AND m.empresa_id = ?
+          AND m.deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(matriculaId, empresaId)
+    .first<{
+      id: number;
+      status: string;
+      progresso_pct: number | null;
+      ultimo_slide: number | null;
+      qualificacao_historico_id: number | null;
+      curso_titulo: string;
+      tipo_conteudo: string | null;
+      lesson_status: string | null;
+      completion_status: string | null;
+      success_status: string | null;
+      score_raw: number | null;
+      score_max: number | null;
+      score_scaled: number | null;
+      suspend_data: string | null;
+      cmi_json: string | null;
+    }>();
+
+  if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+
+  const currentProgress = Number(enrollment.progresso_pct ?? 0);
+  const currentSlide = Number(enrollment.ultimo_slide ?? 0);
+  const currentLessonLocation = extractLessonLocationValue(enrollment.cmi_json);
+  const currentLocationMarker = extractScormLocationFromCmiJson(enrollment.cmi_json);
+  const currentEffectiveProgress = Math.max(
+    currentProgress,
+    extractProgressPctFromCmiJson(enrollment.cmi_json) ?? 0,
+  );
+  const currentStrongSlide = Math.max(currentSlide, currentLocationMarker?.current ?? 0);
+
+  const blockers: string[] = [];
+  const risks: string[] = [];
+  const normalizedMatriculaStatus = normalizeStatusToken(enrollment.status);
+  const normalizedTargetLessonStatus = normalizeStatusToken(target_lesson_status);
+  const normalizedTargetMatriculaStatus = normalizeStatusToken(target_matricula_status);
+
+  if ((enrollment.tipo_conteudo ?? '').toLowerCase() !== 'scorm') {
+    blockers.push('NON_SCORM_COURSE');
+  }
+  if (['CONCLUIDO', 'REPROVADO', 'CANCELADO'].includes(normalizedMatriculaStatus)) {
+    blockers.push('TERMINAL_STATUS');
+  }
+  if (enrollment.qualificacao_historico_id) {
+    blockers.push('QUALIFICATION_ALREADY_LINKED');
+  }
+  if (target_progress_pct >= 100) {
+    blockers.push('TARGET_PROGRESS_COMPLETION_NOT_ALLOWED');
+  }
+  if (target_progress_pct < currentEffectiveProgress) {
+    blockers.push('TARGET_PROGRESS_REGRESSION');
+  }
+  if (targetLocation.current < currentStrongSlide) {
+    blockers.push('TARGET_LOCATION_REGRESSION');
+  }
+  if (normalizedTargetLessonStatus === 'PASSED' || normalizedTargetLessonStatus === 'COMPLETED') {
+    blockers.push('TARGET_LESSON_STATUS_COMPLETION_FORBIDDEN');
+  }
+  if (target_score_raw !== undefined) {
+    blockers.push('TARGET_SCORE_CHANGE_FORBIDDEN');
+  }
+  if (normalizedTargetMatriculaStatus === 'CONCLUIDO') {
+    blockers.push('TARGET_MATRICULA_STATUS_COMPLETION_FORBIDDEN');
+  }
+
+  if (currentLocationMarker?.total == null && currentLocationMarker?.current) {
+    risks.push('CURRENT_RUNTIME_USES_LEGACY_NUMERIC_LOCATION');
+  }
+  if (currentLocationMarker?.total != null && currentLocationMarker.total !== targetLocation.total) {
+    risks.push('TARGET_TOTAL_DIFFERS_FROM_CURRENT_RUNTIME');
+  }
+  if (!enrollment.suspend_data?.trim()) {
+    risks.push('CURRENT_RUNTIME_HAS_NO_SUSPEND_DATA');
+  }
+  if (enrollment.score_raw != null || enrollment.score_scaled != null) {
+    risks.push('CURRENT_SCORE_WILL_BE_PRESERVED');
+  }
+  if (
+    normalizeStatusToken(enrollment.lesson_status) === 'PASSED' ||
+    normalizeStatusToken(enrollment.lesson_status) === 'COMPLETED' ||
+    normalizeStatusToken(enrollment.completion_status) === 'COMPLETED' ||
+    normalizeStatusToken(enrollment.success_status) === 'PASSED'
+  ) {
+    risks.push('CURRENT_SCORM_COMPLETION_EVIDENCE_PRESENT');
+  }
+
+  const simulatedProgress = Math.max(currentEffectiveProgress, target_progress_pct);
+  const simulatedSlide = Math.max(currentStrongSlide, targetLocation.current);
+  const simulatedMatriculaStatus =
+    normalizedMatriculaStatus === 'NAO_INICIADO' && (simulatedProgress > 0 || simulatedSlide > 0)
+      ? 'EM_ANDAMENTO'
+      : enrollment.status;
+  const simulatedLessonLocation =
+    targetLocation.current < currentStrongSlide
+      ? currentLessonLocation ?? String(currentStrongSlide)
+      : target_lesson_location;
+
+  const differences = buildRecoveryDryRunDifferences({
+    currentStatus: enrollment.status,
+    currentProgress: currentEffectiveProgress,
+    currentSlide: currentStrongSlide,
+    currentLessonLocation,
+    simulatedStatus: simulatedMatriculaStatus,
+    simulatedProgress,
+    simulatedSlide,
+    simulatedLessonLocation,
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      mode: 'dry-run',
+      reason,
+      evidence_source,
+      operator_note: operator_note ?? null,
+      writes_executed: false,
+      current_state: {
+        matricula: {
+          id: enrollment.id,
+          status: enrollment.status,
+          progresso_pct: currentEffectiveProgress,
+          ultimo_slide: currentStrongSlide,
+          curso_titulo: enrollment.curso_titulo,
+          tipo_conteudo: enrollment.tipo_conteudo,
+          qualificacao_historico_id: enrollment.qualificacao_historico_id,
+        },
+        scorm: {
+          lesson_location: currentLessonLocation,
+          lesson_status: enrollment.lesson_status,
+          completion_status: enrollment.completion_status,
+          success_status: enrollment.success_status,
+          score_raw: enrollment.score_raw,
+          score_max: enrollment.score_max,
+          score_scaled: enrollment.score_scaled,
+          suspend_data_present: Boolean(enrollment.suspend_data?.trim()),
+        },
+      },
+      simulated_state: {
+        matricula: {
+          status: simulatedMatriculaStatus,
+          progresso_pct: simulatedProgress,
+          ultimo_slide: simulatedSlide,
+        },
+        scorm: {
+          lesson_location: simulatedLessonLocation,
+          lesson_status: enrollment.lesson_status,
+          completion_status: enrollment.completion_status,
+          success_status: enrollment.success_status,
+          score_raw: enrollment.score_raw,
+          score_max: enrollment.score_max,
+          score_scaled: enrollment.score_scaled,
+          suspend_data_present: Boolean(enrollment.suspend_data?.trim()),
+        },
+      },
+      requested_target: {
+        lesson_location: target_lesson_location,
+        progress_pct: target_progress_pct,
+        lesson_status: target_lesson_status ?? null,
+        score_raw: target_score_raw ?? null,
+        matricula_status: target_matricula_status ?? null,
+      },
+      differences,
+      risks,
+      would_be_allowed_future: blockers.length === 0,
+      blocked_reason: blockers[0] ?? null,
+      blockers,
+      safety_guards: {
+        apply_implemented: false,
+        qualification_generation_allowed: false,
+        score_changes_allowed: false,
+        matricula_completion_allowed: false,
+      },
+    },
+  });
 });
 
 app.patch('/:id/progresso', async (c) => {
