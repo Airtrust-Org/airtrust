@@ -2,19 +2,19 @@
 
 ## Objetivo desta fase
 
-Consolidar apenas os payloads de `dry-run` para a recuperacao futura de progresso, sem executar `apply`, sem concluir matricula e sem gerar qualificacao.
+Consolidar os candidatos AW139 autorizados para reposicionamento controlado com `dry-run` obrigatorio antes de qualquer `apply`.
 
 ## Classificacao operacional atual
 
-| aluno | curso | matricula_id | alvo dry-run | classificacao |
+| aluno | curso | matricula_id | alvo | classificacao atual |
 | --- | --- | --- | --- | --- |
-| Bruno Vital Justino | AW139 - Manutencao | `332` | `113/405` | `RESTORE_PROGRESS_ONLY_CANDIDATE` |
-| Alan Cortes | AW139 - Manutencao | `323` | `156/405` | `RESTORE_PROGRESS_ONLY_CANDIDATE` |
-| Wagner Domas da Silva | AW139 - Manutencao | `326` | `238/405` | `NEEDS_MORE_EVIDENCE` |
+| Bruno Vital Justino | AW139 - Manutencao | `332` | `113/405` | `AUTHORIZED_APPLY_CANDIDATE` |
+| Alan Cortes | AW139 - Manutencao | `323` | `156/405` | `AUTHORIZED_APPLY_CANDIDATE` |
+| Wagner Domas da Silva | AW139 - Manutencao | `326` | `238/405` | `AUTHORIZED_APPLY_IF_REVALIDATED` |
 | Bruno Vital Justino | PT6C-67C - Manutencao | `384` | bloqueado | `CROSSWALK_PENDING` |
 | Francisco Altemir da Silva Conceicao | Inspecao IIO & APRS | `93` | bloqueado | `NEEDS_MORE_EVIDENCE` |
 
-## Payloads preparados
+## Payloads autorizados para revalidacao
 
 ### Bruno Vital Justino / AW139 / matricula 332
 
@@ -22,9 +22,9 @@ Consolidar apenas os payloads de `dry-run` para a recuperacao futura de progress
 {
   "target_lesson_location": "113/405",
   "target_progress_pct": 28,
-  "reason": "Restaurar checkpoint reportado no modulo 4 apos reset de progresso AW139",
-  "evidence_source": "incident-aw139-2026-06-26; payload-bruno-aw139-m04",
-  "operator_note": "Dry-run only. Nao executar apply nesta fase."
+  "reason": "Reposicionamento autorizado pelo gestor apos perda de progresso SCORM no AW139 Manutencao. Restore progress only; sem conclusao, sem score, sem qualificacao.",
+  "evidence_source": "Relato do aluno + dry-run tecnico AirTrust + autorizacao explicita do gestor em 2026-06-26.",
+  "operator_note": "Executar apply somente se o novo dry-run continuar monotonicamente seguro."
 }
 ```
 
@@ -34,9 +34,9 @@ Consolidar apenas os payloads de `dry-run` para a recuperacao futura de progress
 {
   "target_lesson_location": "156/405",
   "target_progress_pct": 39,
-  "reason": "Restaurar checkpoint reportado apos avancar alem do modulo 6 no AW139",
-  "evidence_source": "incident-aw139-2026-06-26; payload-alan-aw139-m06",
-  "operator_note": "Dry-run only. Alvo reflete checkpoint operacional consolidado."
+  "reason": "Reposicionamento autorizado pelo gestor apos perda de progresso SCORM no AW139 Manutencao. Restore progress only; sem conclusao, sem score, sem qualificacao.",
+  "evidence_source": "Relato do aluno + dry-run tecnico AirTrust + autorizacao explicita do gestor em 2026-06-26.",
+  "operator_note": "Executar apply somente se o novo dry-run continuar monotonicamente seguro."
 }
 ```
 
@@ -46,35 +46,35 @@ Consolidar apenas os payloads de `dry-run` para a recuperacao futura de progress
 {
   "target_lesson_location": "238/405",
   "target_progress_pct": 59,
-  "reason": "Avaliar consolidacao do checkpoint numerico forte existente no AW139",
-  "evidence_source": "incident-aw139-2026-06-26; leitura-read-only-producao",
-  "operator_note": "Dry-run only. Caso ainda classificado como NEEDS_MORE_EVIDENCE."
+  "reason": "Reposicionamento autorizado pelo gestor apos perda de progresso SCORM no AW139 Manutencao. Restore progress only; sem conclusao, sem score, sem qualificacao.",
+  "evidence_source": "Relato do aluno + dry-run tecnico AirTrust + autorizacao explicita do gestor em 2026-06-26.",
+  "operator_note": "Executar apply somente se o novo dry-run continuar monotonicamente seguro."
 }
 ```
 
-## Casos bloqueados nesta fase
+## Casos bloqueados nesta rodada
 
 ### Bruno Vital Justino / PT6C-67C / matricula 384
 
 Motivo:
 
-- crosswalk seguro do curso ainda pendente;
-- alvo final de lesson location ainda nao foi provado.
+- crosswalk PT6C ainda pendente;
+- nao autorizado para `apply` nesta rodada.
 
 ### Francisco Altemir da Silva Conceicao / IIO & APRS / matricula 93
 
 Motivo:
 
-- nao ha evidencia tecnica suficiente de checkpoint ou conclusao anterior;
-- o caso nao pode migrar para `apply` nem para conclusao manual.
+- evidencia tecnica insuficiente;
+- nao autorizado para `apply` nesta rodada;
+- sem conclusao manual.
 
 ## Regra operacional
 
-Nenhum desses payloads deve ser executado em aluno real nesta fase.
+Antes de qualquer escrita real:
 
-Passos seguintes antes de qualquer `apply`:
-
-1. publicar o endpoint `dry-run` no Worker;
-2. validar o endpoint em fixture segura;
-3. revisar os retornos simulados;
-4. pedir autorizacao explicita para qualquer recuperacao real.
+1. deployar o Worker com `apply`;
+2. reexecutar `dry-run` em producao;
+3. bloquear qualquer caso divergente;
+4. aplicar apenas os casos ainda monotonicamente seguros;
+5. confirmar `EM_ANDAMENTO`, `data_conclusao = null`, score inalterado e sem `qualificacao_historico_id`.
