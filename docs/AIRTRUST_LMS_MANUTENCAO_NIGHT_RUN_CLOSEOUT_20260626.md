@@ -38,3 +38,29 @@ Fechamento da fase de implementacao controlada do `apply` auditavel para recuper
 
 - `CONTROLLED_STUDENT_RECOVERY_REVIEW_READY`
 - `INCIDENT_STILL_OPEN`
+
+## Follow-up posterior — fechamento limpo do PR 162
+
+**Data:** 2026-06-26  
+**Status:** `PR162_REPLACED_BY_CLEAN_PR` + `RECOVERY_ENDPOINTS_DEPLOYED`
+
+O fechamento posterior desta trilha confirmou que o estado descrito acima foi superado por merges limpos em `main`, sem depender do worktree antigo quebrado:
+
+- `#163` levou o `dry-run`;
+- `#165` levou `apply` e `rollback`;
+- producao respondeu `version=2026-06-26T10:06:55Z-a8b9f12`;
+- `GET /api/health` respondeu `healthy`;
+- `dry-run`, `apply` e `rollback` sem token responderam `401`, validando exposicao publica com gate de autenticacao.
+
+Consequencias:
+
+- o PR `#162` ficou obsoleto, com conflito remanescente apenas em docs;
+- nao houve necessidade de novo deploy manual para concluir esta fase;
+- o Worker ja estava alinhado com `main` e com os endpoints publicados;
+- nenhum aluno real foi alterado.
+
+Bloqueios que permanecem:
+
+- `CONTROLLED_TEST_BLOCKED_NO_FIXTURE_CREATION_PATH`
+- `NO_STUDENT_RECOVERY_BEFORE_PACKAGE_VALIDATION`
+- `INCIDENT_STILL_OPEN`
