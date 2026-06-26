@@ -78,3 +78,31 @@ Antes de qualquer escrita real:
 3. bloquear qualquer caso divergente;
 4. aplicar apenas os casos ainda monotonicamente seguros;
 5. confirmar `EM_ANDAMENTO`, `data_conclusao = null`, score inalterado e sem `qualificacao_historico_id`.
+
+## Follow-up de fechamento limpo do PR 162
+
+**Data:** 2026-06-26  
+**Status:** `RECOVERY_ENDPOINTS_MERGED` + `RECOVERY_ENDPOINTS_DEPLOYED` + `NO_STUDENT_RECOVERY_BEFORE_PACKAGE_VALIDATION`
+
+Validacoes de producao confirmadas apos a recuperacao limpa:
+
+- `GET https://api.airtrust.online/api/version` -> `200` com `version=2026-06-26T10:06:55Z-a8b9f12`;
+- `GET https://api.airtrust.online/api/health` -> `200 healthy`;
+- `POST /api/lms/matriculas/332/progresso-recuperacao/dry-run` sem token -> `401`;
+- `POST /api/lms/matriculas/332/progresso-recuperacao/apply` sem token -> `401`;
+- `POST /api/lms/matriculas/332/progresso-recuperacao/rollback` sem token -> `401`.
+
+Conclusoes operacionais desta fase:
+
+- os endpoints `dry-run`, `apply` e `rollback` ja estao mergeados em `main` pelos PRs limpos `#163` e `#165`;
+- o PR `#162` permaneceu `CONFLICTING` apenas por conflito documental add/add e deixou de ser a trilha correta de publicacao;
+- nenhum aluno real foi alterado nesta etapa;
+- os casos AW139 acima continuam apenas como candidatos autorizados para revalidacao posterior;
+- PT6C continua bloqueado por `CROSSWALK_PENDING`;
+- IIO/APRS continua bloqueado por `NEEDS_MORE_EVIDENCE`.
+
+Gate mantido:
+
+- `NO_MANUAL_COMPLETION_ALLOWED`
+- `NO_STUDENT_RECOVERY_BEFORE_PACKAGE_VALIDATION`
+- `INCIDENT_STILL_OPEN`
