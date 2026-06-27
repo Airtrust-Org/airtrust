@@ -1,0 +1,395 @@
+{
+  "meta": {
+    "generated_on": "2026-06-27",
+    "mode": "read-only",
+    "scope": "maintenance-post-recovery",
+    "target_matricula_ids": [323, 326, 328, 331, 344, 394, 396, 398],
+    "target_qualificacao_ids": [4596, 4599, 4888, 4889, 4890, 4891, 4892, 4893, 4894, 4895],
+    "notes": [
+      "snapshot sanitizado para futura revisão de rollback",
+      "sem CPF, email, token ou dados sensíveis",
+      "audit_logs do evento 2026-06-27 07:58:53 não foram encontrados"
+    ]
+  },
+  "lms_matriculas": [
+    {
+      "id": 323,
+      "curso": "AW139 - Manutenção",
+      "funcionario_id": 77,
+      "status": "CONCLUIDO",
+      "progresso_pct": 100,
+      "score_final": 95,
+      "tentativas": 0,
+      "data_inicio": "2026-06-23 12:52:42",
+      "data_conclusao": "2026-06-27",
+      "qualificacao_historico_id": 4888,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 326,
+      "curso": "AW139 - Manutenção",
+      "funcionario_id": 80,
+      "status": "CONCLUIDO",
+      "progresso_pct": 100,
+      "score_final": 100,
+      "tentativas": 0,
+      "data_inicio": "2026-06-22 13:11:29",
+      "data_conclusao": "2026-06-27",
+      "qualificacao_historico_id": 4889,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 328,
+      "curso": "AW139 - Manutenção",
+      "funcionario_id": 82,
+      "status": "CONCLUIDO",
+      "progresso_pct": 100,
+      "score_final": 100,
+      "tentativas": 0,
+      "data_inicio": "2026-06-19 21:14:11",
+      "data_conclusao": "2026-06-27",
+      "qualificacao_historico_id": 4890,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 331,
+      "curso": "AW139 - Manutenção",
+      "funcionario_id": 85,
+      "status": "CONCLUIDO",
+      "progresso_pct": 100,
+      "score_final": 100,
+      "tentativas": 0,
+      "data_inicio": "2026-06-22 23:59:02",
+      "data_conclusao": "2026-06-27",
+      "qualificacao_historico_id": 4891,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 344,
+      "curso": "AW139 - Manutenção",
+      "funcionario_id": 98,
+      "status": "CONCLUIDO",
+      "progresso_pct": 100,
+      "score_final": 100,
+      "tentativas": 0,
+      "data_inicio": "2026-06-23 10:03:14",
+      "data_conclusao": "2026-06-27",
+      "qualificacao_historico_id": 4892,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 394,
+      "curso": "PT6C-67C - Manutenção",
+      "funcionario_id": 97,
+      "status": "CONCLUIDO",
+      "progresso_pct": 100,
+      "score_final": 100,
+      "tentativas": 0,
+      "data_inicio": "2026-06-22 18:11:25",
+      "data_conclusao": "2026-06-27",
+      "qualificacao_historico_id": 4893,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 396,
+      "curso": "PT6C-67C - Manutenção",
+      "funcionario_id": 87,
+      "status": "CONCLUIDO",
+      "progresso_pct": 100,
+      "score_final": 100,
+      "tentativas": 0,
+      "data_inicio": "2026-06-22 16:59:16",
+      "data_conclusao": "2026-06-27",
+      "qualificacao_historico_id": 4894,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 398,
+      "curso": "PT6C-67C - Manutenção",
+      "funcionario_id": 82,
+      "status": "CONCLUIDO",
+      "progresso_pct": 100,
+      "score_final": 100,
+      "tentativas": 0,
+      "data_inicio": "2026-06-22 18:51:27",
+      "data_conclusao": "2026-06-27",
+      "qualificacao_historico_id": 4895,
+      "updated_at": "2026-06-27 07:58:53"
+    }
+  ],
+  "lms_progresso_scorm": [
+    {
+      "matricula_id": 323,
+      "lesson_status": "passed",
+      "score_raw": 95,
+      "session_count": 603,
+      "suspend_data_len": 0,
+      "last_commit_at": "2026-06-23 17:14:42",
+      "cmi_lesson_status": "incomplete",
+      "cmi_lesson_location": "73",
+      "cmi_score_raw": 95,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "matricula_id": 326,
+      "lesson_status": "passed",
+      "score_raw": 100,
+      "session_count": 788,
+      "suspend_data_len": 0,
+      "last_commit_at": "2026-06-23 14:28:08",
+      "cmi_lesson_status": "incomplete",
+      "cmi_lesson_location": "238",
+      "cmi_score_raw": 100,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "matricula_id": 328,
+      "lesson_status": "passed",
+      "score_raw": 100,
+      "session_count": 1405,
+      "suspend_data_len": 0,
+      "last_commit_at": "2026-06-19 22:58:37",
+      "cmi_lesson_status": "incomplete",
+      "cmi_lesson_location": "44/380",
+      "cmi_score_raw": 100,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "matricula_id": 331,
+      "lesson_status": "passed",
+      "score_raw": 100,
+      "session_count": 1561,
+      "suspend_data_len": 0,
+      "last_commit_at": "2026-06-23 13:41:44",
+      "cmi_lesson_status": "incomplete",
+      "cmi_lesson_location": "380",
+      "cmi_score_raw": 84,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "matricula_id": 344,
+      "lesson_status": "passed",
+      "score_raw": 100,
+      "session_count": 415,
+      "suspend_data_len": 0,
+      "last_commit_at": "2026-06-23 19:53:15",
+      "cmi_lesson_status": "incomplete",
+      "cmi_lesson_location": "115",
+      "cmi_score_raw": 95,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "matricula_id": 394,
+      "lesson_status": "passed",
+      "score_raw": 100,
+      "session_count": 588,
+      "suspend_data_len": 0,
+      "last_commit_at": "2026-06-23 00:35:25",
+      "cmi_lesson_status": "incomplete",
+      "cmi_lesson_location": "108",
+      "cmi_score_raw": 97,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "matricula_id": 396,
+      "lesson_status": "passed",
+      "score_raw": 100,
+      "session_count": 83,
+      "suspend_data_len": 0,
+      "last_commit_at": "2026-06-22 17:37:03",
+      "cmi_lesson_status": "incomplete",
+      "cmi_lesson_location": "11",
+      "cmi_score_raw": 100,
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "matricula_id": 398,
+      "lesson_status": "passed",
+      "score_raw": 100,
+      "session_count": 70,
+      "suspend_data_len": 0,
+      "last_commit_at": "2026-06-22 18:58:24",
+      "cmi_lesson_status": "incomplete",
+      "cmi_lesson_location": "18",
+      "cmi_score_raw": 100,
+      "updated_at": "2026-06-27 07:58:53"
+    }
+  ],
+  "qualificacoes_historico": [
+    {
+      "id": 4596,
+      "funcionario_id": 98,
+      "qualificacao_codigo": "MNT_AW139",
+      "status": "RENOVADA",
+      "data_emissao": "2022-01-22",
+      "data_vencimento": "2025-01-22",
+      "renovada": 1,
+      "renovacao_de": null,
+      "lms_matricula_id": null,
+      "origem_tipo": "MANUAL",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4599,
+      "funcionario_id": 82,
+      "qualificacao_codigo": "MNT_AW139",
+      "status": "RENOVADA",
+      "data_emissao": "2022-10-13",
+      "data_vencimento": "2025-10-13",
+      "renovada": 1,
+      "renovacao_de": null,
+      "lms_matricula_id": null,
+      "origem_tipo": "MANUAL",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4888,
+      "funcionario_id": 77,
+      "qualificacao_codigo": "MNT_AW139",
+      "status": "CONCLUIDA",
+      "data_emissao": "2026-06-27",
+      "data_vencimento": "2029-06-30",
+      "renovada": 0,
+      "renovacao_de": null,
+      "lms_matricula_id": 323,
+      "origem_tipo": "LMS",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4889,
+      "funcionario_id": 80,
+      "qualificacao_codigo": "MNT_AW139",
+      "status": "CONCLUIDA",
+      "data_emissao": "2026-06-27",
+      "data_vencimento": "2029-06-30",
+      "renovada": 0,
+      "renovacao_de": null,
+      "lms_matricula_id": 326,
+      "origem_tipo": "LMS",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4890,
+      "funcionario_id": 82,
+      "qualificacao_codigo": "MNT_AW139",
+      "status": "CONCLUIDA",
+      "data_emissao": "2026-06-27",
+      "data_vencimento": "2029-06-30",
+      "renovada": 0,
+      "renovacao_de": 4599,
+      "lms_matricula_id": 328,
+      "origem_tipo": "LMS",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4891,
+      "funcionario_id": 85,
+      "qualificacao_codigo": "MNT_AW139",
+      "status": "CONCLUIDA",
+      "data_emissao": "2026-06-27",
+      "data_vencimento": "2029-06-30",
+      "renovada": 0,
+      "renovacao_de": null,
+      "lms_matricula_id": 331,
+      "origem_tipo": "LMS",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4892,
+      "funcionario_id": 98,
+      "qualificacao_codigo": "MNT_AW139",
+      "status": "CONCLUIDA",
+      "data_emissao": "2026-06-27",
+      "data_vencimento": "2029-06-30",
+      "renovada": 0,
+      "renovacao_de": 4596,
+      "lms_matricula_id": 344,
+      "origem_tipo": "LMS",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4893,
+      "funcionario_id": 97,
+      "qualificacao_codigo": "PT6C-67C",
+      "status": "CONCLUIDA",
+      "data_emissao": "2026-06-27",
+      "data_vencimento": "2027-06-30",
+      "renovada": 0,
+      "renovacao_de": null,
+      "lms_matricula_id": 394,
+      "origem_tipo": "LMS",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4894,
+      "funcionario_id": 87,
+      "qualificacao_codigo": "PT6C-67C",
+      "status": "CONCLUIDA",
+      "data_emissao": "2026-06-27",
+      "data_vencimento": "2027-06-30",
+      "renovada": 0,
+      "renovacao_de": null,
+      "lms_matricula_id": 396,
+      "origem_tipo": "LMS",
+      "updated_at": "2026-06-27 07:58:53"
+    },
+    {
+      "id": 4895,
+      "funcionario_id": 82,
+      "qualificacao_codigo": "PT6C-67C",
+      "status": "CONCLUIDA",
+      "data_emissao": "2026-06-27",
+      "data_vencimento": "2027-06-30",
+      "renovada": 0,
+      "renovacao_de": null,
+      "lms_matricula_id": 398,
+      "origem_tipo": "LMS",
+      "updated_at": "2026-06-27 07:58:53"
+    }
+  ],
+  "audit_logs": {
+    "recovery_timestamp_2026_06_27_07_58_53": [],
+    "historical_logs_found_for_target_matriculas": [
+      {
+        "action_name": "LMS_MATRICULA_STATUS_ATUALIZADO",
+        "target_id": 328,
+        "created_at": "2026-06-19 21:14:11"
+      },
+      {
+        "action_name": "LMS_MATRICULA_STATUS_ATUALIZADO",
+        "target_id": 326,
+        "created_at": "2026-06-22 13:11:30"
+      },
+      {
+        "action_name": "LMS_MATRICULA_STATUS_ATUALIZADO",
+        "target_id": 396,
+        "created_at": "2026-06-22 16:59:16"
+      },
+      {
+        "action_name": "LMS_MATRICULA_STATUS_ATUALIZADO",
+        "target_id": 394,
+        "created_at": "2026-06-22 18:11:25"
+      },
+      {
+        "action_name": "LMS_MATRICULA_STATUS_ATUALIZADO",
+        "target_id": 398,
+        "created_at": "2026-06-22 18:51:28"
+      },
+      {
+        "action_name": "LMS_MATRICULA_STATUS_ATUALIZADO",
+        "target_id": 331,
+        "created_at": "2026-06-22 23:59:02"
+      },
+      {
+        "action_name": "LMS_MATRICULA_STATUS_ATUALIZADO",
+        "target_id": 344,
+        "created_at": "2026-06-23 10:03:14"
+      },
+      {
+        "action_name": "LMS_MATRICULA_STATUS_ATUALIZADO",
+        "target_id": 323,
+        "created_at": "2026-06-23 12:52:43"
+      }
+    ]
+  }
+}
