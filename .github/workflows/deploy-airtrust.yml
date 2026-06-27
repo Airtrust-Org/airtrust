@@ -1,0 +1,366 @@
+name: Deploy AirTrust
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_worker:
+        description: 'Deploy production Worker'
+        required: true
+        type: boolean
+        default: false
+      deploy_pages:
+        description: 'Deploy production Pages'
+        required: true
+        type: boolean
+        default: false
+      run_migrations:
+        description: 'Apply production D1 migrations before Worker deploy'
+        required: true
+        type: boolean
+        default: false
+      expected_sha:
+        description: 'Optional commit SHA expected for this release'
+        required: false
+        type: string
+      reason:
+        description: 'Why this production deploy is needed'
+        required: true
+        type: string
+      confirm_production:
+        description: 'Type AIRTRUST_PRODUCTION to continue'
+        required: true
+        type: string
+      migration_confirmation:
+        description: 'Type AIRTRUST_MIGRATIONS_APPROVED when run_migrations=true'
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-airtrust-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '20'
+  PRODUCTION_CONFIRMATION: AIRTRUST_PRODUCTION
+  MIGRATION_CONFIRMATION: AIRTRUST_MIGRATIONS_APPROVED
+  PAGES_PROJECT_NAME: airtrust
+  PAGES_BRANCH: production
+  WORKER_VERSION_ENDPOINT: https://api.airtrust.online/api/version
+  WORKER_HEALTH_ENDPOINT: https://api.airtrust.online/api/health
+  LMS_PROTECTED_ENDPOINT: https://api.airtrust.online/api/lms/cursos
+  PAGES_LOGIN_URL: https://airtrust.online/login
+  PAGES_SW_URL: https://airtrust.online/sw.js
+
+jobs:
+  guard:
+    name: Release Guard
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
+      build_time: ${{ steps.version.outputs.build_time }}
+      release_utc: ${{ steps.version.outputs.build_time }}
+    steps:
+      - name: Validate production dispatch inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          reason="${{ inputs.reason }}"
+
+          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+            echo "Deploy AirTrust only runs from refs/heads/main. Current ref: ${{ github.ref }}" >&2
+            exit 1
+          fi
+
+          if [[ "${{ inputs.deploy_worker }}" != "true" && "${{ inputs.deploy_pages }}" != "true" ]]; then
+            echo "Select at least one target: deploy_worker=true or deploy_pages=true." >&2
+            exit 1
+          fi
+
+          if [[ "${{ inputs.confirm_production }}" != "${PRODUCTION_CONFIRMATION}" ]]; then
+            echo "confirm_production must be ${PRODUCTION_CONFIRMATION}." >&2
+            exit 1
+          fi
+
+          if [[ -z "${{ inputs.reason }}" ]]; then
+            echo "reason is required." >&2
+            exit 1
+          fi
+
+          if [[ -n "${{ inputs.expected_sha }}" && "${{ inputs.expected_sha }}" != "${{ github.sha }}" ]]; then
+            echo "expected_sha does not match github.sha." >&2
+            echo "expected_sha: ${{ inputs.expected_sha }}" >&2
+            echo "github.sha:   ${{ github.sha }}" >&2
+            exit 1
+          fi
+
+          if [[ "${{ inputs.run_migrations }}" == "true" && "${{ inputs.deploy_worker }}" != "true" ]]; then
+            echo "run_migrations=true requires deploy_worker=true." >&2
+            exit 1
+          fi
+
+          if [[ "${{ inputs.run_migrations }}" == "true" ]]; then
+            if [[ "${{ inputs.migration_confirmation }}" != "${MIGRATION_CONFIRMATION}" ]]; then
+              echo "migration_confirmation must be ${MIGRATION_CONFIRMATION} when run_migrations=true." >&2
+              exit 1
+            fi
+            if [[ ${#reason} -lt 20 ]]; then
+              echo "reason must document the migration plan in practical detail." >&2
+              exit 1
+            fi
+          fi
+
+      - name: Compute release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          app_version="${build_time}-${GITHUB_SHA::7}"
+          echo "app_version=$app_version" >> "$GITHUB_OUTPUT"
+          echo "build_time=$build_time" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    name: Prepare Release Artifacts
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_APP_VERSION: ${{ needs.guard.outputs.app_version }}
+          APP_VERSION: ${{ needs.guard.outputs.app_version }}
+          APP_BUILD_TIME: ${{ needs.guard.outputs.build_time }}
+
+      - name: Stamp build version
+        run: bash scripts/stamp-build-version.sh dist/client/index.html
+        env:
+          APP_VERSION: ${{ needs.guard.outputs.app_version }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: airtrust-release-dist
+          path: dist/client
+          retention-days: 1
+
+  deploy-worker:
+    name: Deploy Worker
+    needs: [guard, prepare]
+    if: ${{ inputs.deploy_worker }}
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      worker_version_id: ${{ steps.capture.outputs.worker_version_id }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Apply D1 migrations
+        if: ${{ inputs.run_migrations }}
+        working-directory: worker-airtrust
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 migrations apply airtrust-db --env production --remote
+
+      - name: Prepare worker config
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - "$PWD/worker-airtrust/wrangler.toml" "$RUNNER_TEMP/wrangler.production.toml" "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" <<'NODE'
+          const fs = require('fs');
+
+          const [sourcePath, outputPath, version, buildTime] = process.argv.slice(2);
+          const source = fs.readFileSync(sourcePath, 'utf8');
+          let patched = source.replace(/^APP_VERSION = ".*"$/m, `APP_VERSION = "${version}"`);
+
+          if (patched === source) {
+            console.error('APP_VERSION entry not found in worker-airtrust/wrangler.toml');
+            process.exit(1);
+          }
+
+          if (/^APP_BUILD_TIME = ".*"$/m.test(patched)) {
+            patched = patched.replace(/^APP_BUILD_TIME = ".*"$/m, `APP_BUILD_TIME = "${buildTime}"`);
+          } else {
+            patched = patched.replace(
+              /^APP_VERSION = ".*"$/m,
+              `APP_VERSION = "${version}"\nAPP_BUILD_TIME = "${buildTime}"`,
+            );
+          }
+
+          fs.writeFileSync(outputPath, patched);
+          NODE
+
+      - name: Deploy Worker
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --env production --config "$RUNNER_TEMP/wrangler.production.toml" 2>&1 | tee "$RUNNER_TEMP/worker-deploy.log"
+
+      - name: Capture worker release metadata
+        id: capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_id="$(grep -Eo 'Worker Version ID: .*' "$RUNNER_TEMP/worker-deploy.log" | tail -n1 | sed 's/.*Worker Version ID: //')"
+          echo "worker_version_id=${version_id:-unavailable}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_body="$(mktemp)"
+          health_body="$(mktemp)"
+          protected_body="$(mktemp)"
+
+          curl -fsS -o "$version_body" "$WORKER_VERSION_ENDPOINT"
+          curl -fsS -o "$health_body" "$WORKER_HEALTH_ENDPOINT"
+          status="$(curl -sS -o "$protected_body" -w '%{http_code}' "$LMS_PROTECTED_ENDPOINT")"
+          if [[ "$status" != "401" ]]; then
+            echo "Protected LMS endpoint returned $status instead of 401." >&2
+            cat "$protected_body" >&2
+            exit 1
+          fi
+          if ! grep -q "${{ needs.guard.outputs.app_version }}" "$version_body"; then
+            echo "APP_VERSION ${{ needs.guard.outputs.app_version }} not found in /api/version response." >&2
+            cat "$version_body" >&2
+            exit 1
+          fi
+          cat "$version_body"
+          cat "$health_body"
+
+      - name: Write worker summary
+        shell: bash
+        run: |
+          {
+            echo "## Worker deploy"
+            echo ""
+            echo "- commit: \`${{ github.sha }}\`"
+            echo "- APP_VERSION: \`${{ needs.guard.outputs.app_version }}\`"
+            echo "- Worker Version ID: \`${{ steps.capture.outputs.worker_version_id || 'unavailable' }}\`"
+            echo "- UTC: \`${{ needs.guard.outputs.release_utc }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-pages:
+    name: Deploy Pages
+    needs: [guard, prepare]
+    if: ${{ inputs.deploy_pages }}
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      pages_url: ${{ steps.capture.outputs.pages_url }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: airtrust-release-dist
+          path: dist/client
+
+      - name: Deploy Pages
+        id: pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy dist/client
+            --project-name=${{ env.PAGES_PROJECT_NAME }}
+            --branch=${{ env.PAGES_BRANCH }}
+            --commit-hash=${{ github.sha }}
+
+      - name: Capture pages release metadata
+        id: capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          pages_url="$(printf '%s\n' "${{ steps.pages.outputs.command-output }}" | grep -Eo 'https://[^ ]+' | tail -n1 || true)"
+          echo "pages_url=${pages_url:-https://airtrust.online/login}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          login_body="$(mktemp)"
+          sw_body="$(mktemp)"
+
+          login_status="$(curl -sS -L -o "$login_body" -w '%{http_code}' "$PAGES_LOGIN_URL")"
+          if [[ "$login_status" != "200" ]]; then
+            echo "Pages login returned $login_status." >&2
+            cat "$login_body" >&2
+            exit 1
+          fi
+
+          if grep -q 'build-version' "$login_body"; then
+            grep -Eo 'build-version[^>]*content="[^"]+"' "$login_body" | head -n1
+          else
+            echo "build-version meta tag not found in $PAGES_LOGIN_URL." >&2
+            exit 1
+          fi
+
+          sw_status="$(curl -sS -o "$sw_body" -w '%{http_code}' "$PAGES_SW_URL" || true)"
+          if [[ "$sw_status" == "200" ]]; then
+            grep -q "url.pathname === '/sw.js'" "$sw_body"
+          else
+            echo "sw.js not served from custom domain; skipping kill-switch content check."
+          fi
+
+      - name: Write pages summary
+        shell: bash
+        run: |
+          {
+            echo "## Pages deploy"
+            echo ""
+            echo "- commit: \`${{ github.sha }}\`"
+            echo "- APP_VERSION: \`${{ needs.guard.outputs.app_version }}\`"
+            echo "- Pages URL: \`${{ steps.capture.outputs.pages_url }}\`"
+            echo "- UTC: \`${{ needs.guard.outputs.release_utc }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
