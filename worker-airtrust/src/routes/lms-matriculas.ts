@@ -412,6 +412,16 @@ function buildMatriculaCompletionDiagnostic(params: {
   };
 }
 
+function requiresExplicitScormCompletion(
+  tipoConteudo: string | null | undefined,
+  completionDiagnostic: {
+    explicit_completion?: boolean;
+  },
+): boolean {
+  const isScorm = String(tipoConteudo ?? 'scorm').toLowerCase() === 'scorm';
+  return isScorm && completionDiagnostic.explicit_completion !== true;
+}
+
 function emitScormCommitTelemetry(params: {
   matriculaId: number;
   cursoTitulo: string;
@@ -1823,9 +1833,6 @@ app.post('/:id/finalizar', async (c) => {
     masteryScore: matricula.scorm_mastery_score,
     scorm: scormAtual,
   });
-  const requiresScormCompletionEvidence =
-    String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm';
-
   if (matricula.status === 'CONCLUIDO') {
     return c.json({
       success: true,
@@ -1839,11 +1846,7 @@ app.post('/:id/finalizar', async (c) => {
     });
   }
 
-  if (
-    requiresScormCompletionEvidence &&
-    !completionDiagnostic.explicit_completion &&
-    !completionDiagnostic.can_finalize
-  ) {
+  if (requiresExplicitScormCompletion(matricula.tipo_conteudo, completionDiagnostic)) {
     await logLmsMatriculaAudit(db, c, {
       action: 'SCORM_COMPLETION_REJECTED',
       matriculaId,
@@ -1856,7 +1859,8 @@ app.post('/:id/finalizar', async (c) => {
     return c.json(
       {
         success: false,
-        error: 'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis.',
+        error:
+          'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Cursos SCORM exigem status final explicito passed/completed.',
         code: 'SCORM_COMPLETION_REJECTED',
         data: {
           matricula_id: matriculaId,
@@ -2054,7 +2058,7 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
         scorm: scormAtual,
       });
 
-      if (!completionDiagnostic.explicit_completion && !completionDiagnostic.can_finalize) {
+      if (requiresExplicitScormCompletion(existing.tipo_conteudo, completionDiagnostic)) {
         await logLmsMatriculaAudit(db, c, {
           action: 'SCORM_COMPLETION_REJECTED',
           matriculaId,
@@ -2067,7 +2071,7 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
           {
             success: false,
             error:
-              'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Use o endpoint /finalizar ou aguarde evidencia SCORM.',
+              'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Cursos SCORM exigem status final explicito passed/completed.',
             code: 'SCORM_COMPLETION_REJECTED',
             data: { completion_diagnostic: completionDiagnostic },
           },
