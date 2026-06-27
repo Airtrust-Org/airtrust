@@ -63,75 +63,6 @@ vi.mock('../../lib/email', () => ({
 
 import lmsMatriculasRoutes from '../../routes/lms-matriculas';
 
-const maintenanceCourseFixtures = [
-  {
-    cursoTitulo: 'MGM - Manual Geral de Manutenção',
-    qualificacaoCodigo: 'MNT_MGM',
-    qualificacaoNome: 'MGM - Manual Geral de Manutenção',
-    location: '98/98',
-  },
-  {
-    cursoTitulo: 'MCQ - Manual de Controle de Qualidade',
-    qualificacaoCodigo: 'MNT_MCQ',
-    qualificacaoNome: 'MCQ - Manual de Controle de Qualidade',
-    location: '84/84',
-  },
-  {
-    cursoTitulo: 'MOM - Manual da Organização de Manutenção',
-    qualificacaoCodigo: 'MNT_MOM',
-    qualificacaoNome: 'MOM - Manual da Organização de Manutenção',
-    location: '76/76',
-  },
-  {
-    cursoTitulo: 'SGSO para Manutenção',
-    qualificacaoCodigo: 'MNT_SGSO',
-    qualificacaoNome: 'SGSO para Manutenção',
-    location: '64/64',
-  },
-  {
-    cursoTitulo: 'Treinamento técnico Integração Manutenção',
-    qualificacaoCodigo: 'MNT_INTEGRACAO',
-    qualificacaoNome: 'Treinamento técnico Integração Manutenção',
-    location: '52/52',
-  },
-  {
-    cursoTitulo: 'HUMS',
-    qualificacaoCodigo: 'MNT_HUMS',
-    qualificacaoNome: 'HUMS',
-    location: '88/88',
-  },
-  {
-    cursoTitulo: 'HUMS-VXP',
-    qualificacaoCodigo: 'MNT_HUMS_VXP',
-    qualificacaoNome: 'HUMS-VXP',
-    location: '92/92',
-  },
-  {
-    cursoTitulo: 'Inspecao IIO & APRS',
-    qualificacaoCodigo: 'MNT_IIO_APRS',
-    qualificacaoNome: 'Inspecao IIO & APRS',
-    location: '80/80',
-  },
-  {
-    cursoTitulo: 'AW139 - Manutencao',
-    qualificacaoCodigo: 'MNT_AW139',
-    qualificacaoNome: 'AW139 - Manutencao',
-    location: '380/380',
-  },
-  {
-    cursoTitulo: 'PT6C-67C - Manutencao',
-    qualificacaoCodigo: 'MNT_PRODUTO_PT6C_67C',
-    qualificacaoNome: 'PT6C-67C - Manutencao',
-    location: '108/108',
-  },
-  {
-    cursoTitulo: 'Heliwise - Manutencao',
-    qualificacaoCodigo: 'MNT_HELIWISE',
-    qualificacaoNome: 'Heliwise - Manutencao',
-    location: '45/45',
-  },
-] as const;
-
 type QueryHandler = {
   first?: (args: unknown[]) => Promise<unknown> | unknown;
   run?: (args: unknown[]) => Promise<unknown> | unknown;
@@ -1155,7 +1086,7 @@ describe('lms matriculas progress integrity', () => {
     expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
 
-  it('aceita finalizacao manual controlada quando ha candidate auditavel e gera qualificacao uma unica vez', async () => {
+  it('rejeita finalizacao manual quando ha apenas candidate auditavel sem passed/completed explicito', async () => {
     createLmsQualificationOnCompletionMock.mockResolvedValue(9001);
 
     const { db, calls } = createMockDb([
@@ -1220,115 +1151,24 @@ describe('lms matriculas progress integrity', () => {
       {} as ExecutionContext,
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({
-      success: true,
+      success: false,
+      code: 'SCORM_COMPLETION_REJECTED',
       data: {
         matricula_id: 401,
-        novo_status: 'CONCLUIDO',
-        progresso_pct: 100,
-        qualificacao_gerada: {
-          qualificacao_historico_id: 9001,
-        },
+        novo_status: 'EM_ANDAMENTO',
         completion_diagnostic: {
-          can_finalize: true,
           status: 'candidate',
+          explicit_completion: false,
         },
       },
     });
-    expect(createLmsQualificationOnCompletionMock).toHaveBeenCalledTimes(1);
-    const matriculaUpdate = calls.find(
-      (call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'),
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+    expect(calls.some((call) => call.method === 'run' && call.query.includes('UPDATE lms_matriculas'))).toBe(
+      false,
     );
-    expect(String(matriculaUpdate?.args[0] ?? '')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
-
-  it.each(maintenanceCourseFixtures)(
-    'aceita finalizacao manual controlada por curso fixture: $cursoTitulo',
-    async (fixture) => {
-      createLmsQualificationOnCompletionMock.mockResolvedValueOnce(9500);
-
-      const { db } = createMockDb([
-        [
-          'FROM lms_matriculas m',
-          {
-            first: () => ({
-              id: 700,
-              empresa_id: 1,
-              funcionario_id: 77,
-              status: 'EM_ANDAMENTO',
-              progresso_pct: 99,
-              qualificacao_historico_id: null,
-              gerar_qualificacao_ao_concluir: 1,
-              qualificacao_tipo_id: 300,
-              scorm_mastery_score: 70,
-              curso_titulo: fixture.cursoTitulo,
-              qualificacao_codigo: fixture.qualificacaoCodigo,
-              qualificacao_nome: fixture.qualificacaoNome,
-              qualificacao_categoria: 'EAD',
-              qualificacao_validade: 36,
-            }),
-          },
-        ],
-        [
-          'FROM lms_progresso_scorm',
-          {
-            first: () => ({
-              lesson_status: 'incomplete',
-              completion_status: null,
-              success_status: null,
-              score_raw: 100,
-              score_max: 100,
-              score_scaled: 1,
-              session_time: '0000:10:00.00',
-              total_time: '0001:20:00.00',
-              suspend_data: 'checkpoint-final-quiz',
-              cmi_json: JSON.stringify({
-                'cmi.location': fixture.location,
-                'cmi.core.lesson_location': fixture.location,
-                'cmi.core.score.raw': '100',
-              }),
-            }),
-          },
-        ],
-        [
-          'UPDATE lms_matriculas',
-          {
-            run: () => ({ meta: { changes: 1 } }),
-          },
-        ],
-      ]);
-
-      const app = new Hono<{ Bindings: Env }>();
-      app.route('/', lmsMatriculasRoutes);
-
-      const response = await app.fetch(
-        new Request('http://localhost/700/finalizar', {
-          method: 'POST',
-        }),
-        { DB: db } as Env,
-        {} as ExecutionContext,
-      );
-
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toMatchObject({
-        success: true,
-        data: {
-          matricula_id: 700,
-          novo_status: 'CONCLUIDO',
-          progresso_pct: 100,
-          qualificacao_gerada: {
-            qualificacao_historico_id: 9500,
-          },
-          completion_diagnostic: {
-            can_finalize: true,
-            status: 'candidate',
-            location: fixture.location,
-          },
-        },
-      });
-    },
-  );
 
   it('preserva a finalizacao manual de conteudo nao-scorm usada pelos players PDF e PPTX', async () => {
     createLmsQualificationOnCompletionMock.mockResolvedValue(9100);

@@ -233,6 +233,48 @@ describe('PATCH /:id/status — qualification gate', () => {
     expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
   });
 
+  it('rejeita 409 quando ha candidate auditavel sem passed/completed explicito', async () => {
+    hasRoleMock.mockReturnValue(true);
+
+    const scormCandidate = {
+      lesson_status: 'incomplete',
+      completion_status: null,
+      success_status: null,
+      score_raw: 100,
+      score_max: 100,
+      score_scaled: 1,
+      session_time: '01:00:00',
+      total_time: '02:00:00',
+      suspend_data: 'checkpoint-final',
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_location': '380/380',
+        'cmi.core.score.raw': '100',
+      }),
+    };
+
+    const { db, writes } = createMockDb([
+      ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => scormMatriculaWithQual }],
+      ['FROM lms_progresso_scorm', { first: () => scormCandidate }],
+    ]);
+
+    const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO', observacoes: 'checkpoint final' });
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as {
+      success: boolean;
+      code?: string;
+      data?: { completion_diagnostic?: { status?: string; explicit_completion?: boolean } };
+    };
+    expect(body.success).toBe(false);
+    expect(body.code).toBe('SCORM_COMPLETION_REJECTED');
+    expect(body.data?.completion_diagnostic).toMatchObject({
+      status: 'candidate',
+      explicit_completion: false,
+    });
+    expect(writes).toHaveLength(0);
+    expect(createLmsQualificationOnCompletionMock).not.toHaveBeenCalled();
+  });
+
   // ── 4. Admin CONCLUIDO + SCORM + evidência robusta → 200 + qualificação ───
 
   it('aceita CONCLUIDO e gera qualificacao quando ha evidencia SCORM robusta', async () => {
