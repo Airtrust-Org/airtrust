@@ -573,6 +573,8 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
     new URL(c.req.url).pathname,
     `/api/lms/scorm/assets/${empresaId}/${cursoId}`,
   );
+  const rangeHeader = c.req.header('range');
+
   const { object, resolvedKey } = await resolveScormObject(
     c.env.BUCKET,
     empresaId,
@@ -599,6 +601,24 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
     return new Response(rewritten, { status: 200, headers });
   }
 
+  if (rangeHeader && mime.startsWith('video/')) {
+    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+    if (match) {
+      const offset = Number(match[1]);
+      const endByte = match[2] ? Number(match[2]) : undefined;
+      const length = endByte !== undefined ? endByte - offset + 1 : undefined;
+      const rangedObject = await c.env.BUCKET.get(resolvedKey, { range: { offset, length } });
+      if (rangedObject) {
+        const total = rangedObject.size;
+        const end = endByte ?? total - 1;
+        headers.set('Content-Range', `bytes ${offset}-${end}/${total}`);
+        headers.set('Accept-Ranges', 'bytes');
+        return new Response(rangedObject.body, { status: 206, headers });
+      }
+    }
+  }
+
+  headers.set('Accept-Ranges', 'bytes');
   return new Response(object.body, { status: 200, headers });
 });
 
