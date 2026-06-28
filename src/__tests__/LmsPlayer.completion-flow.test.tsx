@@ -82,7 +82,7 @@ vi.mock('sonner', () => ({
 
 function renderPlayer() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={['/lms/player/scorm/42']}>
         <Routes>
@@ -91,6 +91,7 @@ function renderPlayer() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...view, qc };
 }
 
 async function dispatchPlayerMessage(data: Record<string, unknown>) {
@@ -193,5 +194,19 @@ describe('LmsPlayer completion flow', () => {
       );
     });
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('invalida caches LMS ao desmontar o player', () => {
+    const invalidateQueriesSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+
+    const { unmount } = renderPlayer();
+    unmount();
+
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: ['lms', 'minhas-matriculas'],
+    });
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: ['lms', 'minhas-ead'],
+    });
   });
 });
