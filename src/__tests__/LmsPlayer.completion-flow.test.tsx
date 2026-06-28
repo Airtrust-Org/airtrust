@@ -2,6 +2,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { act, render, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
 
@@ -56,6 +57,10 @@ vi.mock('@/react-app/hooks/useLms', () => ({
       carga_horaria_minutos: 90,
     },
   }),
+  lmsKeys: {
+    minhasMatriculas: () => ['lms', 'minhas-matriculas'],
+    minhasEAD: () => ['lms', 'minhas-ead'],
+  },
 }));
 
 vi.mock('@/react-app/config/api', () => ({
@@ -76,12 +81,15 @@ vi.mock('sonner', () => ({
 }));
 
 function renderPlayer() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={['/lms/player/scorm/42']}>
-      <Routes>
-        <Route path="/lms/player/scorm/:matriculaId" element={<LmsPlayer />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={['/lms/player/scorm/42']}>
+        <Routes>
+          <Route path="/lms/player/scorm/:matriculaId" element={<LmsPlayer />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

@@ -20,8 +20,9 @@ import {
   getAccessToken,
 } from '@/react-app/config/api';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/react-app/hooks/useAuth';
-import { useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
+import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
 import { formatMinutes } from './lmsUi';
 
 function inferProgressFromLocation(location: string | null | undefined): number | null {
@@ -102,6 +103,7 @@ export default function LmsPlayer() {
   );
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
 
+  const qc = useQueryClient();
   const id = Number(matriculaId);
   const completionToastIdRef = useRef(`lms-scorm-completion-${id}`);
   const {
@@ -491,6 +493,8 @@ export default function LmsPlayer() {
       );
       if (!confirmed) return;
     }
+    void qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
+    void qc.invalidateQueries({ queryKey: lmsKeys.minhasEAD() });
     navigate('/lms/cursos');
   }
 
@@ -695,28 +699,12 @@ export default function LmsPlayer() {
             <section className="rounded-xl border border-white/10 bg-white/5 p-3">
               <h3 className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-white/90">
                 <Clock3 className="h-4 w-4 text-amber-300" />
-                Ações rápidas
+                Ações
               </h3>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => navigateSlide('prev')}
-                  disabled={!canGoPrev}
-                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                  Anterior
-                </button>
-                <button
-                  onClick={() => navigateSlide('next')}
-                  disabled={!canGoNextViewedOnly}
-                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                  Próximo
-                </button>
+              <div className="flex flex-col gap-2">
                 <button
                   onClick={handleFullscreen}
-                  className="col-span-2 inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs hover:bg-white/10"
+                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs hover:bg-white/10"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                   Tela cheia
