@@ -2,6 +2,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { act, render, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
 
@@ -56,6 +57,10 @@ vi.mock('@/react-app/hooks/useLms', () => ({
       carga_horaria_minutos: 90,
     },
   }),
+  lmsKeys: {
+    minhasMatriculas: () => ['lms', 'minhas-matriculas'],
+    minhasEAD: () => ['lms', 'minhas-ead'],
+  },
 }));
 
 vi.mock('@/react-app/config/api', () => ({
@@ -76,13 +81,17 @@ vi.mock('sonner', () => ({
 }));
 
 function renderPlayer() {
-  return render(
-    <MemoryRouter initialEntries={['/lms/player/scorm/42']}>
-      <Routes>
-        <Route path="/lms/player/scorm/:matriculaId" element={<LmsPlayer />} />
-      </Routes>
-    </MemoryRouter>,
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={['/lms/player/scorm/42']}>
+        <Routes>
+          <Route path="/lms/player/scorm/:matriculaId" element={<LmsPlayer />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
+  return { ...view, qc };
 }
 
 async function dispatchPlayerMessage(data: Record<string, unknown>) {
@@ -185,5 +194,19 @@ describe('LmsPlayer completion flow', () => {
       );
     });
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('invalida caches LMS ao desmontar o player', () => {
+    const invalidateQueriesSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+
+    const { unmount } = renderPlayer();
+    unmount();
+
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: ['lms', 'minhas-matriculas'],
+    });
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: ['lms', 'minhas-ead'],
+    });
   });
 });
