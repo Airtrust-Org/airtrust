@@ -232,10 +232,11 @@ export async function uploadStructuredLmsPackage(params: {
   cursoId: number;
   tipoConteudo: UploadTipoConteudo;
   file: File;
+  skipPurge?: boolean;
   onProgress?: (pct: number) => void;
   onStatus?: (status: string) => void;
 }) {
-  const { cursoId, tipoConteudo, file, onProgress, onStatus } = params;
+  const { cursoId, tipoConteudo, file, skipPurge = false, onProgress, onStatus } = params;
 
   onStatus?.('Extraindo pacote no navegador...');
   onProgress?.(10);
@@ -245,7 +246,7 @@ export async function uploadStructuredLmsPackage(params: {
   const initResponse = await fetchWithAuth(`/api/lms/cursos/${cursoId}/content-upload/init`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tipo_conteudo: tipoConteudo }),
+    body: JSON.stringify({ tipo_conteudo: tipoConteudo, skip_purge: skipPurge || undefined }),
   });
   await parseApiResponse(initResponse);
 
@@ -296,6 +297,7 @@ export async function uploadStructuredLmsPackage(params: {
         tipo_h5p: prepared.tipoH5p,
         arquivo_nome: file.name.trim() || null,
         files_uploaded: prepared.files.length,
+        uploaded_paths: prepared.files.map((entry) => entry.path),
       }),
     },
   );
