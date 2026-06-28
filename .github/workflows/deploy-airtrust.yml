@@ -201,7 +201,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node - "$PWD/worker-airtrust/wrangler.toml" "$RUNNER_TEMP/wrangler.production.toml" "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" <<'NODE'
+          node - "$PWD/worker-airtrust/wrangler.toml" "$PWD/worker-airtrust/wrangler.production.toml" "${{ needs.guard.outputs.app_version }}" "${{ needs.guard.outputs.build_time }}" <<'NODE'
           const fs = require('fs');
 
           const [sourcePath, outputPath, version, buildTime] = process.argv.slice(2);
@@ -233,7 +233,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          npx wrangler deploy --env production --config "$RUNNER_TEMP/wrangler.production.toml" 2>&1 | tee "$RUNNER_TEMP/worker-deploy.log"
+          npx wrangler deploy --env production --config wrangler.production.toml 2>&1 | tee "$RUNNER_TEMP/worker-deploy.log"
 
       - name: Capture worker release metadata
         id: capture
