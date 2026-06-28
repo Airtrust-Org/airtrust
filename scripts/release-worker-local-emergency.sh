@@ -32,14 +32,14 @@ HEAD_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 ORIGIN_MAIN_SHA="$(git -C "$ROOT_DIR" rev-parse origin/main)"
 STATUS_OUTPUT="$(git -C "$ROOT_DIR" status --porcelain)"
 
-if [[ "$CURRENT_BRANCH" != "main" ]]; then
-  echo "❌ Local emergency deploy requires branch main." >&2
-  echo "   Current branch: ${CURRENT_BRANCH:-'(detached HEAD)'}" >&2
+if [[ -n "$CURRENT_BRANCH" && "$CURRENT_BRANCH" != "main" ]]; then
+  echo "❌ Local emergency deploy requires branch main or detached HEAD at origin/main." >&2
+  echo "   Current branch: $CURRENT_BRANCH" >&2
   exit 1
 fi
 
 if [[ "$HEAD_SHA" != "$ORIGIN_MAIN_SHA" ]]; then
-  echo "❌ Local emergency deploy requires HEAD == origin/main." >&2
+  echo "❌ Local emergency deploy requires HEAD == origin/main on clean main or detached HEAD." >&2
   echo "   HEAD:        $HEAD_SHA" >&2
   echo "   origin/main: $ORIGIN_MAIN_SHA" >&2
   exit 1
@@ -59,6 +59,12 @@ fi
 if [[ ! -d "$ROOT_DIR/worker-airtrust/node_modules" ]]; then
   echo "❌ worker-airtrust dependencies missing. Run npm --prefix worker-airtrust ci first." >&2
   exit 1
+fi
+
+if [[ -z "$CURRENT_BRANCH" ]]; then
+  echo "Detached HEAD accepted because SHA matches origin/main."
+else
+  echo "Branch state: $CURRENT_BRANCH"
 fi
 
 eval "$(bash "$ROOT_DIR/scripts/generate-version.sh")"
