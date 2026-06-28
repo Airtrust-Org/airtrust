@@ -499,7 +499,6 @@ export default function LmsPlayer() {
       );
       if (!confirmed) return;
     }
-    invalidateLmsDashboardCaches();
     navigate('/lms/cursos');
   }
 
@@ -773,19 +772,13 @@ export default function LmsPlayer() {
             </p>
             <div className="flex flex-col gap-2">
               <button
-                onClick={() => {
-                  invalidateLmsDashboardCaches();
-                  navigate(`/lms/cursos/${matricula.curso_id}`);
-                }}
+                onClick={() => navigate(`/lms/cursos/${matricula.curso_id}`)}
                 className="w-full rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 hover:bg-slate-100"
               >
                 Ver detalhes do curso
               </button>
               <button
-                onClick={() => {
-                  invalidateLmsDashboardCaches();
-                  navigate('/lms/cursos');
-                }}
+                onClick={() => navigate('/lms/cursos')}
                 className="w-full rounded-xl bg-white/10 px-4 py-2.5 text-sm text-white hover:bg-white/20"
               >
                 Voltar ao catálogo
