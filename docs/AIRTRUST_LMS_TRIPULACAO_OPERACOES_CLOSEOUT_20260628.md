@@ -153,15 +153,130 @@ Decisao operacional neste ponto:
 
 - `NO-GO` para declarar a frente encerrada sem publicar o codigo e sem reupload do Offshore no painel.
 
-## Próximo passo recomendado
+---
 
-1. Publicar as correcoes do pipeline LMS com rastreabilidade Git completa.
-2. Fazer deploy seguro de Worker e Pages sem migrations.
-3. Reupload do ZIP `Operacoes_Offshore_SCORM12_Rev01.zip` no curso `ID=7` pelo painel admin.
-4. Revalidar R2 do Offshore apos upload:
-   - `app.js` corrigido;
-   - `alert()` ausente;
-   - `suspend_data` presente;
-   - `lesson_location=n/total`;
-   - total de arquivos esperado confirmado.
-5. Só entao promover a decisao final para `GO COM RESSALVAS` ou `GO`.
+## Validacao pos-upload Offshore (2026-06-28T19:19:40Z)
+
+Upload manual executado pelo usuario via painel admin em `2026-06-28T19:19:40.054Z`.
+
+### Estado do repositorio na retomada
+
+- Branch: `main`
+- HEAD: `00136aa2f80632065c172534426208f5ef299817` (sincronizado com `origin/main`)
+- `git status --short`: limpo
+
+### Runtime Worker
+
+- `/api/version`: `2026-06-28T19:20:53Z-00136aa` ✓
+- `/api/health`: `healthy` (database=ok, storage=ok) ✓
+- `/api/lms/cursos` sem token: `401` ✓
+
+### DB — Curso Offshore (empresa=6, id=7)
+
+| Campo | Valor |
+|---|---|
+| `titulo` | "Operações Offshore" |
+| `scorm_package_r2_prefix` | `lms/scorm/6/7/` |
+| `scorm_launch_file` | `Operacoes_Offshore_SCORM12_Rev01/index.html` |
+| `scorm_versao` | `1.2` |
+| `version_tag` | `2026-06-28T19:19:40.054Z` |
+| `updated_at` | `2026-06-28 19:19:40` |
+
+### R2 — Presenca dos arquivos
+
+Wrangler r2 object get bloqueado por permissao de token (confirmado: curso PBN/id=8 tambem falha da mesma forma; nao e ausencia de arquivo).
+
+Prova via analise de codigo (`worker-airtrust/src/routes/lms-cursos.ts` linhas 1288-1305):
+
+- `processScormUpload` executa `bucket.list()` ap os todos os `bucket.put()`;
+- compara `confirmedCount >= expectedKeys.size`;
+- lanca erro `Upload incompleto: X/Y arquivos confirmados` se faltarem arquivos;
+- somente retorna com sucesso se todos os arquivos estao no R2;
+- o DB so e atualizado apos o retorno de `processScormUpload`;
+- DB foi atualizado em `19:19:40` → verificacao R2 passou → arquivos confirmados em R2.
+
+### ZIP fonte — Inventario confirmado
+
+- Total de arquivos: `35` ✓
+- Arquivos `.mp4`: `12` ✓
+- Arquivos nao-`.mp4`: `23` ✓
+- `imsmanifest.xml`: presente (2684 bytes) ✓
+- `app.js`: presente (16290 bytes) ✓
+- `scorm_api.js`: presente (1068 bytes) ✓
+- `styles.css`: presente (12786 bytes) ✓
+- `course_data.js`: presente (SLIDES + QUIZ + REFERENCES + COURSE) ✓
+- `index.html`: presente (1731 bytes) ✓
+- Imagens: 11 JPGs ✓
+- MP4s: 12 videos ✓
+
+### app.js — Verificacao de conteudo
+
+| Criterio | Resultado |
+|---|---|
+| `alert(` nativo | AUSENTE ✓ |
+| `cmi.suspend_data` (leitura x2 + escrita x1) | PRESENTE ✓ |
+| `lesson_status` com `'passed'` | PRESENTE ✓ |
+| `lesson_status` com `'completed'` | PRESENTE ✓ |
+| `lesson_status` com `'failed'` | PRESENTE ✓ |
+| `lesson_location` formato `n/total` | `Scorm.progress((current+1)+'/'+SLIDES.length)` ✓ |
+| `confirm(` | 1 ocorrencia no botao "Reiniciar" (aceitavel, iniciado pelo usuario) ✓ |
+
+### scorm_api.js — Verificacao de conteudo
+
+| Criterio | Resultado |
+|---|---|
+| `LMSInitialize` | PRESENTE ✓ |
+| `LMSCommit` | PRESENTE ✓ |
+| `LMSFinish` | PRESENTE ✓ |
+| `lesson_location` via `cmi.core.lesson_location` | PRESENTE ✓ |
+| `beforeunload` com `commit` | PRESENTE ✓ |
+
+### Video — Slide 7
+
+- Arquivo: `media/original/Comunicacao_com_a_UM_1_sw57rd.mp4` (8.8MB)
+- Presente no ZIP fonte ✓
+- Presente no R2 (garantido pela verificacao de `processScormUpload`) ✓
+- Serving com Range 206: implementado em `worker-airtrust/src/routes/lms-assets.ts` linhas 604-616 ✓
+  - `Content-Range: bytes X-Y/Z`
+  - `Accept-Ranges: bytes`
+  - Status 206 para requisicoes Range em video/mp4
+
+### Ressalvas desta validacao
+
+1. R2 verificado por prova de codigo, nao por leitura direta (token wrangler local sem permissao de objeto R2).
+2. HTTP Range 206 nao testado diretamente — exigiria token JWT de sesao autenticada.
+3. Pages build-version nao confirmada (0 bytes retornado pela pagina raiz via curl — possivel WAF/Cloudflare bloqueando headless). Nao afeta funcionalidade LMS.
+4. `qual_4449` (EFB M12 / matricula falsa) permanece em aberto — escopo separado, nao parte da frente Tripulacao/Operacoes.
+
+## Nota de rastreabilidade posterior ao PR #177
+
+Verificacao externa posterior, ainda em `2026-06-28`, mostrou:
+
+- Worker/API em `233877e`: confirmado por `/api/version = 2026-06-28T21:42:42Z-233877e`;
+- Pages ainda desatualizado: `https://airtrust.online/login` respondeu `build-version=22031113`;
+- workflow `28336947162` falhou no job `Deploy Pages` com `Authentication error [code: 10000]`.
+
+Implicação:
+
+- este closeout continua valido para ZIPs fonte, reupload Offshore e trilha LMS;
+- ele nao deve ser usado para afirmar que correções visuais do player já estão publicadas no frontend, porque o Pages do projeto `airtrust` continua bloqueado por permissão externa.
+
+## Decisao Final — Frente Tripulacao/Operacoes
+
+### Offshore
+- Decisao: **GO COM RESSALVAS**
+- Evidencias objetivas: DB atualizado, ZIP fonte correto, codigo garante presenca R2, app.js e scorm_api.js conformes.
+- Ressalvas: R2 verificado por prova de codigo; HTTP Range nao testado com auth real.
+
+### Tripulacao/Operacoes (frente completa)
+- Decisao: **GO COM RESSALVAS**
+- 12/12 ZIPs fonte corrigidos e auditados.
+- Pipeline LMS corrigido e deployado (PRs #173, #174, #175, #176).
+- Offshore validado pos-reupload.
+- Ressalvas: Pages do projeto `airtrust` segue bloqueado por permissão (`Authentication error [code: 10000]`), entao as correções visuais do player nao podem ser declaradas em produção; `qual_4449` aberta (escopo diferente).
+
+### Proxima frente
+- Manutenção/LMS SCORM: journal de sessao, progresso nao registrado, tela branca, perda de avanco.
+- Nao ha SQL de escrita pendente nesta frente.
+- Nenhuma matricula foi concluida manualmente nesta sessao.
+- Nenhuma qualificacao foi gerada manualmente nesta sessao.
