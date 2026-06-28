@@ -240,7 +240,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version_id="$(grep -Eo 'Worker Version ID: .*' "$RUNNER_TEMP/worker-deploy.log" | tail -n1 | sed 's/.*Worker Version ID: //')"
+          version_id="$(sed -n 's/.*Worker Version ID: //p' "$RUNNER_TEMP/worker-deploy.log" | tail -n1)"
           echo "worker_version_id=${version_id:-unavailable}" >> "$GITHUB_OUTPUT"
 
       - name: Smoke Worker
