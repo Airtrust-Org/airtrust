@@ -7,16 +7,24 @@ WORKER_DIR="$ROOT_DIR/worker-airtrust"
 CURRENT_BRANCH="$(git -C "$ROOT_DIR" branch --show-current)"
 HEAD_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 ORIGIN_MAIN_SHA="$(git -C "$ROOT_DIR" rev-parse origin/main)"
+STATUS_OUTPUT="$(git -C "$ROOT_DIR" status --porcelain)"
 
-if [[ "$CURRENT_BRANCH" != "main" ]]; then
-  echo "❌ Safe deploy requires branch 'main'. Current: $CURRENT_BRANCH" >&2
+if [[ -n "$CURRENT_BRANCH" && "$CURRENT_BRANCH" != "main" ]]; then
+  echo "❌ Safe deploy requires branch 'main' or detached HEAD at origin/main." >&2
+  echo "   Current branch: $CURRENT_BRANCH" >&2
   exit 1
 fi
 
 if [[ "$HEAD_SHA" != "$ORIGIN_MAIN_SHA" ]]; then
-  echo "❌ Safe deploy requires HEAD == origin/main." >&2
+  echo "❌ Safe deploy requires HEAD == origin/main on clean main or detached HEAD." >&2
   echo "   HEAD:        $HEAD_SHA" >&2
   echo "   origin/main: $ORIGIN_MAIN_SHA" >&2
+  exit 1
+fi
+
+if [[ -n "$STATUS_OUTPUT" ]]; then
+  echo "❌ Safe deploy requires a clean worktree." >&2
+  printf '%s\n' "$STATUS_OUTPUT" >&2
   exit 1
 fi
 
@@ -50,6 +58,11 @@ trap cleanup EXIT
 echo "🚀 Worker safe deploy (no migrations)"
 echo "   Version: $DEPLOY_VERSION"
 echo "   Build time: $BUILD_TIME"
+if [[ -z "$CURRENT_BRANCH" ]]; then
+  echo "   Ref state: detached HEAD accepted because SHA matches origin/main"
+else
+  echo "   Ref state: branch $CURRENT_BRANCH"
+fi
 
 node - "$WORKER_DIR/wrangler.toml" "$TMP_WRANGLER" "$DEPLOY_VERSION" "$BUILD_TIME" <<'NODE'
 const fs = require('fs');
