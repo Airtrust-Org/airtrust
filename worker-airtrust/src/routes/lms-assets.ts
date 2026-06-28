@@ -1382,6 +1382,7 @@ ${resolveScormResumeTargetSlide.toString()}
       decision: 'preserved',
       reason: 'local-backup-stronger-than-server',
     });
+    return true;
   }
 
   function protectLocationValue(currentValue, nextValue) {
@@ -2208,9 +2209,14 @@ ${resolveScormResumeTargetSlide.toString()}
     Object.assign(window.API, SCORM12);
   }
 
-  applyLocalResumeBackup();
+  var appliedBackup = applyLocalResumeBackup();
   updateMaxVisitedFromLocation(getScormLocation());
-  lastCommittedFingerprint = fingerprintPayload(buildPayload());
+  if (appliedBackup) {
+    lastCommittedFingerprint = '';
+    scheduleCommit(3000);
+  } else {
+    lastCommittedFingerprint = fingerprintPayload(buildPayload());
+  }
 
   // Commit ao fechar a aba/janela
   window.addEventListener('beforeunload', function() {
