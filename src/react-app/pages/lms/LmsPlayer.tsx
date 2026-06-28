@@ -142,6 +142,11 @@ export default function LmsPlayer() {
       : null;
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
+  function invalidateLmsDashboardCaches() {
+    void qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
+    void qc.invalidateQueries({ queryKey: lmsKeys.minhasEAD() });
+  }
+
   function showCompletionToast(
     phase: 'saving' | 'pending' | 'error' | 'success',
     message: string,
@@ -204,8 +209,9 @@ export default function LmsPlayer() {
       window.clearInterval(intervalId);
       window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged as EventListener);
       toast.dismiss(completionToastIdRef.current);
+      invalidateLmsDashboardCaches();
     };
-  }, [token]);
+  }, [qc, token]);
 
   useEffect(() => {
     setIframeLoaded(false);
@@ -493,8 +499,7 @@ export default function LmsPlayer() {
       );
       if (!confirmed) return;
     }
-    void qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
-    void qc.invalidateQueries({ queryKey: lmsKeys.minhasEAD() });
+    invalidateLmsDashboardCaches();
     navigate('/lms/cursos');
   }
 
@@ -768,13 +773,19 @@ export default function LmsPlayer() {
             </p>
             <div className="flex flex-col gap-2">
               <button
-                onClick={() => navigate(`/lms/cursos/${matricula.curso_id}`)}
+                onClick={() => {
+                  invalidateLmsDashboardCaches();
+                  navigate(`/lms/cursos/${matricula.curso_id}`);
+                }}
                 className="w-full rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 hover:bg-slate-100"
               >
                 Ver detalhes do curso
               </button>
               <button
-                onClick={() => navigate('/lms/cursos')}
+                onClick={() => {
+                  invalidateLmsDashboardCaches();
+                  navigate('/lms/cursos');
+                }}
                 className="w-full rounded-xl bg-white/10 px-4 py-2.5 text-sm text-white hover:bg-white/20"
               >
                 Voltar ao catálogo
