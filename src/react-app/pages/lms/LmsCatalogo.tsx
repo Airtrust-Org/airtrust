@@ -603,7 +603,7 @@ function CourseDrawer({
   onPreview?: () => void;
   onSave: (
     form: CreateCursoDTO,
-    assets: { contentFile: File | null; thumbnailFile: File | null },
+    assets: { contentFile: File | null; thumbnailFile: File | null; skipPurge: boolean },
   ) => Promise<void>;
   isSaving: boolean;
   uploadProgress: number;
@@ -616,6 +616,7 @@ function CourseDrawer({
   const storedThumbPreview = useLmsCourseThumbnailUrl(courseSnapshot);
   const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial));
   const [contentFile, setContentFile] = useState<File | null>(null);
+  const [skipPurge, setSkipPurge] = useState(false);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
   const [thumbPreview, setThumbPreview] = useState<string | null>(storedThumbPreview);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -670,7 +671,7 @@ function CourseDrawer({
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    await onSave(form, { contentFile, thumbnailFile: thumbFile });
+    await onSave(form, { contentFile, thumbnailFile: thumbFile, skipPurge });
   }
 
   useEffect(() => {
@@ -1062,6 +1063,19 @@ function CourseDrawer({
                             Atual: {storedContentLabel ?? 'conteúdo já publicado'}
                           </p>
                           <p className="mt-1 text-amber-800">Novo envio: {contentFile?.name}</p>
+                          {(form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p') ? (
+                            <label className="mt-3 flex cursor-pointer items-center gap-2 text-amber-900">
+                              <input
+                                type="checkbox"
+                                checked={skipPurge}
+                                onChange={(e) => setSkipPurge(e.target.checked)}
+                                className="rounded"
+                              />
+                              <span className="text-xs">
+                                Preservar arquivos existentes no storage (modo merge — use para upload incremental de arquivos grandes)
+                              </span>
+                            </label>
+                          ) : null}
                         </div>
                       ) : null}
                       {courseSnapshot ? (
@@ -1788,6 +1802,7 @@ export default function LmsCatalogo() {
             cursoId,
             tipoConteudo: form.tipo_conteudo as 'scorm' | 'h5p',
             file: assets.contentFile,
+            skipPurge: assets.skipPurge,
             onProgress: setUploadProgress,
             onStatus: setUploadStatus,
           });

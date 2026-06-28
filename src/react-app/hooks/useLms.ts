@@ -909,15 +909,14 @@ export function useImportLmsEdappLegacy() {
 
 // ── Upload de pacote SCORM ────────────────────────────────────────────────────
 
-export function useUploadScorm(cursoId: number) {
+export function useUploadScorm(cursoId: number, skipPurge = false) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      return unwrapUploadResult(
-        await uploadLmsContent(`/api/lms/cursos/${cursoId}/scorm-upload`, formData),
-      );
+      const url = `/api/lms/cursos/${cursoId}/scorm-upload${skipPurge ? '?skip_purge=true' : ''}`;
+      return unwrapUploadResult(await uploadLmsContent(url, formData));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });

@@ -659,6 +659,7 @@ const CursoUpdateSchema = z.object({
 
 const StructuredContentInitSchema = z.object({
   tipo_conteudo: z.enum(['scorm', 'h5p']),
+  skip_purge: z.boolean().optional(),
 });
 
 const StructuredContentCompleteSchema = z.object({
@@ -668,6 +669,7 @@ const StructuredContentCompleteSchema = z.object({
   tipo_h5p: trimNullableText,
   arquivo_nome: trimNullableText,
   files_uploaded: z.number().int().min(1).optional(),
+  uploaded_paths: z.array(z.string().trim().min(1)).min(1).optional(),
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1058,6 +1060,59 @@ async function getCursoUploadContext(db: D1Database, empresaId: number, cursoId:
   return curso;
 }
 
+async function verifyStructuredUploadPresence(params: {
+  bucket: R2Bucket;
+  prefix: string;
+  expectedCount?: number;
+  uploadedPaths?: string[];
+}) {
+  const expectedKeys = params.uploadedPaths?.length
+    ? new Set(
+        params.uploadedPaths.map((path) => {
+          const normalizedPath = sanitizeArchivePath(path);
+          if (!normalizedPath) {
+            throw new ApiError('Caminho de arquivo inválido', 400);
+          }
+          return params.prefix + normalizedPath;
+        }),
+      )
+    : null;
+
+  let listedCount = 0;
+  let confirmedExpected = 0;
+  let cursor: string | undefined;
+
+  do {
+    const listed = await params.bucket.list({ prefix: params.prefix, cursor, limit: 1000 });
+    listedCount += listed.objects.length;
+
+    if (expectedKeys) {
+      for (const obj of listed.objects) {
+        if (expectedKeys.has(obj.key)) confirmedExpected++;
+      }
+    }
+
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+
+  if (expectedKeys) {
+    if (confirmedExpected < expectedKeys.size) {
+      throw new ApiError(
+        `Upload incompleto: ${confirmedExpected}/${expectedKeys.size} arquivos confirmados no storage`,
+        500,
+      );
+    }
+    return;
+  }
+
+  if (params.expectedCount && listedCount < params.expectedCount) {
+    throw new ApiError(
+      `Upload incompleto: ${listedCount}/${params.expectedCount} arquivos confirmados no storage`,
+      500,
+    );
+  }
+}
+
 async function finalizeStructuredContentUpload(
   bucket: R2Bucket,
   db: D1Database,
@@ -1179,6 +1234,7 @@ async function processScormUpload(
   empresaId: number,
   cursoId: number,
   zipBytes: Uint8Array,
+  skipPurge = false,
 ) {
   if (zipBytes.length === 0) throw new ApiError('Arquivo vazio', 400);
 
@@ -1210,18 +1266,43 @@ async function processScormUpload(
     ? manifestKey.slice(0, manifestKey.lastIndexOf('/') + 1)
     : '';
 
-  await purgeStructuredUploadPrefix(bucket, prefix);
+  if (!skipPurge) {
+    await purgeStructuredUploadPrefix(bucket, prefix);
+  }
 
-  await Promise.all(
-    sanitizedEntries.map(([path, data]) =>
-      bucket.put(prefix + path, data, {
-        httpMetadata: {
-          contentType: guessMime(path),
-          cacheControl: 'public, max-age=86400',
-        },
-      }),
-    ),
-  );
+  // Upload in batches of 10 to avoid R2 subrequest concurrency limits
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < sanitizedEntries.length; i += BATCH_SIZE) {
+    await Promise.all(
+      sanitizedEntries.slice(i, i + BATCH_SIZE).map(([path, data]) =>
+        bucket.put(prefix + path, data, {
+          httpMetadata: {
+            contentType: guessMime(path),
+            cacheControl: 'public, max-age=86400',
+          },
+        }),
+      ),
+    );
+  }
+
+  // Verify all uploaded files are confirmed in R2 (catches silent partial failures)
+  const expectedKeys = new Set(sanitizedEntries.map(([path]) => prefix + path));
+  let confirmedCount = 0;
+  let cursor: string | undefined;
+  do {
+    const listed = await bucket.list({ prefix, cursor, limit: 1000 });
+    for (const obj of listed.objects) {
+      if (expectedKeys.has(obj.key)) confirmedCount++;
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+
+  if (confirmedCount < expectedKeys.size) {
+    throw new ApiError(
+      `Upload incompleto: ${confirmedCount}/${expectedKeys.size} arquivos confirmados no storage`,
+      500,
+    );
+  }
 
   return {
     prefix,
@@ -2311,7 +2392,9 @@ app.post('/:id/content-upload/init', requireRole('admin', 'manager'), async (c) 
   await getCursoUploadContext(db, empresaId, cursoId);
 
   const prefix = getStructuredUploadPrefix(parsed.data.tipo_conteudo, empresaId, cursoId);
-  await purgeStructuredUploadPrefix(c.env.BUCKET, prefix);
+  if (!parsed.data.skip_purge) {
+    await purgeStructuredUploadPrefix(c.env.BUCKET, prefix);
+  }
 
   return c.json({
     success: true,
@@ -2370,6 +2453,17 @@ app.post('/:id/content-upload/complete', requireRole('admin', 'manager'), async 
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
   }
 
+  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+
+  // Verify expected file count is present in R2 before committing DB changes
+  const prefix = getStructuredUploadPrefix(parsed.data.tipo_conteudo, empresaId, cursoId);
+  await verifyStructuredUploadPresence({
+    bucket: c.env.BUCKET,
+    prefix,
+    expectedCount: parsed.data.files_uploaded,
+    uploadedPaths: parsed.data.uploaded_paths,
+  });
+
   const curso = await getCursoUploadContext(db, empresaId, cursoId);
   const result = await finalizeStructuredContentUpload(
     c.env.BUCKET,
@@ -2426,7 +2520,8 @@ app.post('/:id/scorm-upload', requireRole('admin', 'manager'), async (c) => {
 
   validatePackageBytes(zipBytes);
 
-  const upload = await processScormUpload(c.env.BUCKET, empresaId, cursoId, zipBytes);
+  const skipPurge = c.req.query('skip_purge') === 'true';
+  const upload = await processScormUpload(c.env.BUCKET, empresaId, cursoId, zipBytes, skipPurge);
 
   await db
     .prepare(
