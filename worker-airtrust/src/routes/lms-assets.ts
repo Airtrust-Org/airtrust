@@ -1024,6 +1024,8 @@ function buildLaunchPage(cfg: LaunchPageConfig): string {
   #status-bar.visible { opacity: 1; }
   #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex-shrink: 0; }
   #status-dot.active { background: #22c55e; }
+  #status-dot.error { background: #ef4444; }
+  #status-bar.error { background: rgba(127,29,29,0.92); }
   #completion-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
     z-index: 99999; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
@@ -1172,16 +1174,22 @@ ${resolveScormResumeTargetSlide.toString()}
   }
 
   var statusHideTimer = null;
-  function setStatus(text, active) {
+  function setStatus(text, active, persistent) {
     var bar = document.getElementById('status-bar');
     var dot = document.getElementById('status-dot');
     var txt = document.getElementById('status-text');
-    if (dot) dot.className = active ? 'active' : '';
+    var isError = persistent === true;
+    if (dot) {
+      dot.className = isError ? 'error' : (active ? 'active' : '');
+    }
     if (txt) txt.textContent = text;
     if (bar) {
-      bar.classList.add('visible');
+      bar.className = isError ? 'error visible' : 'visible';
       if (statusHideTimer) window.clearTimeout(statusHideTimer);
-      statusHideTimer = window.setTimeout(function() { bar.classList.remove('visible'); }, 2500);
+      statusHideTimer = null;
+      if (!isError) {
+        statusHideTimer = window.setTimeout(function() { bar.classList.remove('visible'); }, 2500);
+      }
     }
   }
 
@@ -1273,9 +1281,9 @@ ${resolveScormResumeTargetSlide.toString()}
       stage === 'saving'
         ? 'Conclusão recebida. Salvando progresso...'
         : 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
-    setStatus(message, true);
+    setStatus(message, true, stage !== 'saving');
     postToParent({
-      type: 'lms:completion-pending',
+      type: stage === 'saving' ? 'lms:completion-pending' : 'lms:save-warning',
       matriculaId: MATRICULA_ID,
       stage: stage || 'pending',
       message: message,
@@ -1286,7 +1294,13 @@ ${resolveScormResumeTargetSlide.toString()}
   function notifyCompletionError(code, reason) {
     if (!completionPending) return;
     var message = 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
-    setStatus(message, true);
+    setStatus(message, true, true);
+    postToParent({
+      type: 'lms:save-error',
+      matriculaId: MATRICULA_ID,
+      reason: reason || 'completion-unconfirmed',
+      code: code || null,
+    });
     postToParent({
       type: 'lms:completion-error',
       matriculaId: MATRICULA_ID,
@@ -1752,7 +1766,13 @@ ${resolveScormResumeTargetSlide.toString()}
           }
         }).catch(function() { return null; });
       } else if (response) {
-        setStatus('Falha ao salvar progresso. Tentando novamente...', true);
+        setStatus('Falha ao salvar progresso. Tentando novamente...', true, true);
+        postToParent({
+          type: 'lms:save-error',
+          matriculaId: MATRICULA_ID,
+          reason: 'http-' + String(response.status),
+          attempt: (attempt || 0),
+        });
         if ((attempt || 0) >= 2 && completionPending) {
           notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'http-' + String(response.status));
         }
@@ -1766,7 +1786,13 @@ ${resolveScormResumeTargetSlide.toString()}
       return response;
     }).catch(function(e) {
       console.warn('[SCORM] commit error', e);
-      setStatus('Falha ao salvar progresso. Tentando novamente...', true);
+      setStatus('Falha ao salvar progresso. Tentando novamente...', true, true);
+      postToParent({
+        type: 'lms:save-error',
+        matriculaId: MATRICULA_ID,
+        reason: 'network-error',
+        attempt: (attempt || 0),
+      });
       if ((attempt || 0) >= 2 && completionPending) {
         notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'network-error');
       }
