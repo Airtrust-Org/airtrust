@@ -40,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
   PRODUCTION_CONFIRMATION: AIRTRUST_PRODUCTION
   MIGRATION_CONFIRMATION: AIRTRUST_MIGRATIONS_APPROVED
   PAGES_PROJECT_NAME: airtrust
@@ -191,7 +191,7 @@ jobs:
         working-directory: worker-airtrust
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -229,7 +229,7 @@ jobs:
         shell: bash
         working-directory: worker-airtrust
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -308,8 +308,10 @@ jobs:
       - name: Deploy Pages
         id: pages
         uses: cloudflare/wrangler-action@v3
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: >-
             pages deploy dist/client
