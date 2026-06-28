@@ -1014,13 +1014,14 @@ function buildLaunchPage(cfg: LaunchPageConfig): string {
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; background: #0a0a0a; overflow: hidden; }
-  #scorm-frame { width: 100%; height: 100%; border: none; display: block; }
+  #scorm-frame { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; border: none; display: block; }
   #status-bar {
-    position: fixed; bottom: 0; left: 0; right: 0; height: 32px;
-    background: rgba(0,0,0,0.8); color: #a3a3a3; font: 12px/32px system-ui;
-    padding: 0 16px; display: flex; align-items: center; gap: 12px;
-    z-index: 9999; pointer-events: none;
+    position: fixed; top: 0; left: 0; right: 0; height: 28px;
+    background: rgba(0,0,0,0.75); color: #9ca3af; font: 11px/28px system-ui;
+    padding: 0 12px; display: flex; align-items: center; gap: 10px;
+    z-index: 9999; pointer-events: none; opacity: 0; transition: opacity 0.3s;
   }
+  #status-bar.visible { opacity: 1; }
   #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex-shrink: 0; }
   #status-dot.active { background: #22c55e; }
   #completion-overlay {
@@ -1170,11 +1171,18 @@ ${resolveScormResumeTargetSlide.toString()}
     });
   }
 
+  var statusHideTimer = null;
   function setStatus(text, active) {
+    var bar = document.getElementById('status-bar');
     var dot = document.getElementById('status-dot');
     var txt = document.getElementById('status-text');
     if (dot) dot.className = active ? 'active' : '';
     if (txt) txt.textContent = text;
+    if (bar) {
+      bar.classList.add('visible');
+      if (statusHideTimer) window.clearTimeout(statusHideTimer);
+      statusHideTimer = window.setTimeout(function() { bar.classList.remove('visible'); }, 2500);
+    }
   }
 
   function isoToTimespan(iso) {
