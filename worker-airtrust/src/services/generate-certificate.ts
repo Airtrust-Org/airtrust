@@ -581,7 +581,7 @@ export async function generateCertificateForHistorico(
     console.error('[generate-certificate] Falha ao registrar auditoria:', auditErr);
   }
 
-  console.log(`✅ [generate-certificate] Certificado gerado: historicoId=${historicoId} r2Key=${r2Key}`);
+  console.log(`✅ [generate-certificate] Certificado gerado: historicoId=${historicoId} documentoId=${documentoId}`);
 
   return { documentoId, uuid, r2Key, tamanho: pdfBytes.length, numeroCertificado };
 }
