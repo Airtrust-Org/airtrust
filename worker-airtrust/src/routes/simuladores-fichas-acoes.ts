@@ -240,9 +240,9 @@ app.post('/fichas/:id/assinar', async (c) => {
     const gerarQualificacao = b.gerar_qualificacao === true;
 
     const f = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
@@ -303,9 +303,9 @@ app.post('/fichas/:id/assinar', async (c) => {
 
     if (b.tipo === 'ALUNO') {
       await c.env.DB.prepare(
-        "UPDATE fichas_sessao SET assinatura_aluno_ip=?,assinatura_aluno_timestamp=?,assinatura_aluno_imagem=?,assinatura_tripulante=1,status='AGUARDANDO_ASSINATURA_INSTRUTOR' WHERE id=?",
+        "UPDATE fichas_sessao SET assinatura_aluno_ip=?,assinatura_aluno_timestamp=?,assinatura_aluno_imagem=?,assinatura_tripulante=1,status='AGUARDANDO_ASSINATURA_INSTRUTOR' WHERE id=? AND empresa_id = ?",
       )
-        .bind(ip, ts, b.assinatura_imagem || null, id)
+        .bind(ip, ts, b.assinatura_imagem || null, id, empresaId)
         .run();
       ns = 'AGUARDANDO_ASSINATURA_INSTRUTOR';
       console.log(`✍️ [FICHA ${id}] Aluno assinou → AGUARDANDO_ASSINATURA_INSTRUTOR`);
@@ -380,9 +380,9 @@ app.post('/fichas/:id/assinar', async (c) => {
       }
 
       await c.env.DB.prepare(
-        "UPDATE fichas_sessao SET assinatura_instrutor_ip=?,assinatura_instrutor_timestamp=?,assinatura_instrutor_imagem=?,assinatura_instrutor=1,status=?,resultado_final=?,aprovado=?,updated_at=datetime('now') WHERE id=?",
+        "UPDATE fichas_sessao SET assinatura_instrutor_ip=?,assinatura_instrutor_timestamp=?,assinatura_instrutor_imagem=?,assinatura_instrutor=1,status=?,resultado_final=?,aprovado=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?",
       )
-        .bind(ip, ts, b.assinatura_imagem || null, ns, resultadoFinal, aprovado, id)
+        .bind(ip, ts, b.assinatura_imagem || null, ns, resultadoFinal, aprovado, id, empresaId)
         .run();
 
       console.log(`✍️ [FICHA ${id}] Instrutor assinou → ${ns} (${resultadoFinal})`);
@@ -445,9 +445,9 @@ app.post('/fichas/:id/assinar', async (c) => {
     }
 
     const fa = await c.env.DB.prepare(
-      'SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL',
+      'SELECT * FROM fichas_sessao WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
     )
-      .bind(id)
+      .bind(id, empresaId)
       .first();
     await audit(c.env.DB, {
       tabela: 'fichas_sessao',
@@ -480,6 +480,8 @@ app.post('/fichas/:id/assinar', async (c) => {
 // POST /fichas/:id/arquivar - Archive ficha to Pasta Virtual
 app.post('/fichas/:id/arquivar', async (c) => {
   try {
+    const ctx = c as unknown as { get: (k: string) => unknown };
+    const empresaId = String(ctx.get('empresaId') || '');
     const fichaId = c.req.param('id');
 
     const ficha = await c.env.DB.prepare(
@@ -505,9 +507,10 @@ app.post('/fichas/:id/arquivar', async (c) => {
        LEFT JOIN aeronaves ae ON sa.aeronave_id = ae.id AND ae.deleted_at IS NULL
        LEFT JOIN sessoes_template tpl ON fs.template_id = tpl.id
        WHERE fs.id = ?
+         AND fs.empresa_id = ?
          AND fs.deleted_at IS NULL`,
     )
-      .bind(fichaId)
+      .bind(fichaId, empresaId)
       .first();
 
     if (!ficha) {
@@ -590,9 +593,9 @@ app.post('/fichas/:id/arquivar', async (c) => {
            caminho_arquivo = ?,
            data_arquivamento = datetime('now'),
            updated_at = datetime('now')
-       WHERE id = ?`,
+       WHERE id = ? AND empresa_id = ?`,
     )
-      .bind(caminhoR2, fichaId)
+      .bind(caminhoR2, fichaId, empresaId)
       .run();
 
     await audit(c.env.DB, {

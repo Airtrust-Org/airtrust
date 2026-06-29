@@ -11,6 +11,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
+import { getTenantContext } from '../middleware/tenant';
 import { audit } from './simuladores-shared';
 import { createLogger, toError } from '../utils/logger';
 
@@ -33,6 +34,7 @@ function parseHistoricoLimit(raw: string | undefined): number {
 // POST /historico-notas - Registrar nota no histórico
 app.post('/historico-notas', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const body = await c.req.json();
     const {
       funcionario_id,
@@ -65,20 +67,40 @@ app.post('/historico-notas', async (c) => {
       );
     }
 
+    // Tenant guard: verify funcionario belongs to user's empresa
+    const funcionarioCheck = await c.env.DB.prepare(
+      `SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(funcionario_id, empresaId)
+      .first();
+    if (!funcionarioCheck) {
+      return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+    }
+
+    // Tenant guard: verify ficha belongs to user's empresa
+    const fichaCheck = await c.env.DB.prepare(
+      `SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(ficha_id, empresaId)
+      .first();
+    if (!fichaCheck) {
+      return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+    }
+
     const existente = await c.env.DB.prepare(
       `SELECT id FROM historico_notas_manobras
-       WHERE ficha_id = ? AND codigo_manobra = ? AND deleted_at IS NULL`,
+       WHERE ficha_id = ? AND codigo_manobra = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
-      .bind(ficha_id, codigo_manobra)
+      .bind(ficha_id, codigo_manobra, empresaId)
       .first();
 
     if (existente) {
       await c.env.DB.prepare(
         `UPDATE historico_notas_manobras
          SET nota = ?, observacoes = ?, updated_at = datetime('now')
-         WHERE id = ?`,
+         WHERE id = ? AND empresa_id = ?`,
       )
-        .bind(nota, observacoes || '', existente.id)
+        .bind(nota, observacoes || '', existente.id, empresaId)
         .run();
 
       return c.json({
@@ -90,8 +112,8 @@ app.post('/historico-notas', async (c) => {
     const result = await c.env.DB.prepare(
       `INSERT INTO historico_notas_manobras (
         funcionario_id, ficha_id, codigo_manobra, descricao_manobra, categoria_manobra,
-        nota, observacoes, data_sessao, tipo_sessao, tipo_aeronave, instrutor_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        nota, observacoes, data_sessao, tipo_sessao, tipo_aeronave, instrutor_id, empresa_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         funcionario_id,
@@ -105,6 +127,7 @@ app.post('/historico-notas', async (c) => {
         tipo_sessao || '',
         tipo_aeronave || '',
         instrutor_id || null,
+        empresaId,
       )
       .run();
 
@@ -119,11 +142,12 @@ app.post('/historico-notas', async (c) => {
          WHERE funcionario_id = ?
            AND codigo_manobra = ?
            AND id != ?
+           AND empresa_id = ?
            AND deleted_at IS NULL
          ORDER BY data_sessao DESC, id DESC
          LIMIT 1`,
       )
-        .bind(funcionario_id, codigo_manobra, historico_id)
+        .bind(funcionario_id, codigo_manobra, historico_id, empresaId)
         .first();
 
       if (
@@ -136,10 +160,11 @@ app.post('/historico-notas', async (c) => {
            WHERE funcionario_id = ?
              AND codigo_manobra = ?
              AND status = 'ATIVO'
+             AND empresa_id = ?
              AND deleted_at IS NULL
            LIMIT 1`,
         )
-          .bind(funcionario_id, codigo_manobra)
+          .bind(funcionario_id, codigo_manobra, empresaId)
           .first();
 
         if (!alertaExistente) {
@@ -148,8 +173,8 @@ app.post('/historico-notas', async (c) => {
               funcionario_id, codigo_manobra, descricao_manobra,
               nota_sessao1, data_sessao1, ficha_id_sessao1,
               nota_sessao2, data_sessao2, ficha_id_sessao2,
-              instrutor_id_notificado, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ATIVO')`,
+              instrutor_id_notificado, status, empresa_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ATIVO', ?)`,
           )
             .bind(
               funcionario_id,
@@ -162,6 +187,7 @@ app.post('/historico-notas', async (c) => {
               data_sessao || new Date().toISOString().split('T')[0],
               ficha_id,
               instrutor_id || null,
+              empresaId,
             )
             .run();
 
@@ -196,8 +222,19 @@ app.post('/historico-notas', async (c) => {
 // GET /historico-notas/ultima/:funcionarioId/:codigoManobra — MUST be before /historico-notas/:funcionarioId
 app.get('/historico-notas/ultima/:funcionarioId/:codigoManobra', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const funcionarioId = c.req.param('funcionarioId');
     const codigoManobra = c.req.param('codigoManobra');
+
+    // Tenant guard: verify funcionario belongs to user's empresa
+    const funcionarioCheck = await c.env.DB.prepare(
+      `SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(parseInt(funcionarioId), empresaId)
+      .first();
+    if (!funcionarioCheck) {
+      return c.json({ success: true, data: null, message: 'Nenhum histórico encontrado' });
+    }
 
     const ultimaNota = await c.env.DB.prepare(
       `SELECT
@@ -209,11 +246,12 @@ app.get('/historico-notas/ultima/:funcionarioId/:codigoManobra', async (c) => {
        LEFT JOIN funcionarios i ON hnm.instrutor_id = i.id
        WHERE hnm.funcionario_id = ?
          AND hnm.codigo_manobra = ?
+         AND hnm.empresa_id = ?
          AND hnm.deleted_at IS NULL
        ORDER BY hnm.data_sessao DESC, hnm.id DESC
        LIMIT 1`,
     )
-      .bind(parseInt(funcionarioId), codigoManobra)
+      .bind(parseInt(funcionarioId), codigoManobra, empresaId)
       .first();
 
     if (!ultimaNota) {
@@ -230,8 +268,19 @@ app.get('/historico-notas/ultima/:funcionarioId/:codigoManobra', async (c) => {
 // GET /historico-notas/:funcionarioId — must come AFTER /ultima/...
 app.get('/historico-notas/:funcionarioId', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const funcionarioId = c.req.param('funcionarioId');
     const limit = parseHistoricoLimit(c.req.query('limit'));
+
+    // Tenant guard: verify funcionario belongs to user's empresa
+    const funcionarioCheck = await c.env.DB.prepare(
+      `SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(parseInt(funcionarioId), empresaId)
+      .first();
+    if (!funcionarioCheck) {
+      return c.json({ success: true, data: [] });
+    }
 
     const historico = await c.env.DB.prepare(
       `SELECT
@@ -240,11 +289,12 @@ app.get('/historico-notas/:funcionarioId', async (c) => {
        FROM historico_notas_manobras hnm
        LEFT JOIN funcionarios i ON hnm.instrutor_id = i.id
        WHERE hnm.funcionario_id = ?
+         AND hnm.empresa_id = ?
          AND hnm.deleted_at IS NULL
        ORDER BY hnm.data_sessao DESC, hnm.id DESC
        LIMIT ?`,
     )
-      .bind(parseInt(funcionarioId), limit)
+      .bind(parseInt(funcionarioId), empresaId, limit)
       .all();
 
     return c.json({ success: true, data: historico.results });
@@ -260,7 +310,18 @@ app.get('/historico-notas/:funcionarioId', async (c) => {
 
 app.get('/dashboard/:funcionarioId', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const funcionarioId = c.req.param('funcionarioId');
+
+    // Tenant guard: verify funcionario belongs to user's empresa
+    const funcionarioCheck = await c.env.DB.prepare(
+      `SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(parseInt(funcionarioId), empresaId)
+      .first();
+    if (!funcionarioCheck) {
+      return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+    }
 
     const top5Dificuldade = await c.env.DB.prepare(
       `SELECT
@@ -273,6 +334,7 @@ app.get('/dashboard/:funcionarioId', async (c) => {
        FROM fichas_sessao_manobras fsm
        INNER JOIN fichas_sessao fs ON fsm.ficha_id = fs.id
        WHERE fs.colaborador_id_aluno = ?
+         AND fs.empresa_id = ?
          AND fsm.deleted_at IS NULL
          AND fs.deleted_at IS NULL
          AND fsm.resultado IS NOT NULL
@@ -282,7 +344,7 @@ app.get('/dashboard/:funcionarioId', async (c) => {
        ORDER BY AVG(CAST(fsm.resultado AS REAL)) ASC
        LIMIT 5`,
     )
-      .bind(parseInt(funcionarioId))
+      .bind(parseInt(funcionarioId), empresaId)
       .all();
 
     const alertasAtivos = await c.env.DB.prepare(
@@ -295,11 +357,12 @@ app.get('/dashboard/:funcionarioId', async (c) => {
        LEFT JOIN funcionarios i ON ar.instrutor_id_notificado = i.id
        LEFT JOIN funcionarios f ON ar.funcionario_id = f.id
        WHERE ar.funcionario_id = ?
+         AND ar.empresa_id = ?
          AND ar.status = 'ATIVO'
          AND ar.deleted_at IS NULL
        ORDER BY ar.created_at DESC`,
     )
-      .bind(parseInt(funcionarioId))
+      .bind(parseInt(funcionarioId), empresaId)
       .all();
 
     const estatisticas = await c.env.DB.prepare(
@@ -312,11 +375,12 @@ app.get('/dashboard/:funcionarioId', async (c) => {
        FROM fichas_sessao fs
        LEFT JOIN fichas_sessao_manobras fsm ON fs.id = fsm.ficha_id AND fsm.deleted_at IS NULL
        WHERE fs.colaborador_id_aluno = ?
+         AND fs.empresa_id = ?
          AND fs.deleted_at IS NULL
          AND fsm.resultado IS NOT NULL
          AND fsm.resultado != ''`,
     )
-      .bind(parseInt(funcionarioId))
+      .bind(parseInt(funcionarioId), empresaId)
       .first();
 
     const evolucao = await c.env.DB.prepare(
@@ -327,6 +391,7 @@ app.get('/dashboard/:funcionarioId', async (c) => {
        FROM fichas_sessao fs
        INNER JOIN fichas_sessao_manobras fsm ON fs.id = fsm.ficha_id
        WHERE fs.colaborador_id_aluno = ?
+         AND fs.empresa_id = ?
          AND fs.deleted_at IS NULL
          AND fsm.deleted_at IS NULL
          AND fsm.resultado IS NOT NULL
@@ -335,13 +400,13 @@ app.get('/dashboard/:funcionarioId', async (c) => {
        ORDER BY fs.data_sessao DESC
        LIMIT 10`,
     )
-      .bind(parseInt(funcionarioId))
+      .bind(parseInt(funcionarioId), empresaId)
       .all();
 
     const funcionario = await c.env.DB.prepare(
-      `SELECT id, nome, matricula, codigo_anac FROM funcionarios WHERE id = ? AND deleted_at IS NULL`,
+      `SELECT id, nome, matricula, codigo_anac FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
-      .bind(parseInt(funcionarioId))
+      .bind(parseInt(funcionarioId), empresaId)
       .first();
 
     return c.json({
@@ -367,6 +432,7 @@ app.get('/dashboard/:funcionarioId', async (c) => {
 // POST /sessoes/:id/checks/resultados - Save only explicit check results
 app.post('/sessoes/:id/checks/resultados', async (c) => {
   try {
+    const { empresaId } = getTenantContext(c);
     const sessao_id = c.req.param('id');
     const body = await c.req.json();
     const { resultados } = body;
@@ -378,9 +444,9 @@ app.post('/sessoes/:id/checks/resultados', async (c) => {
     const sessao = await c.env.DB.prepare(
       `SELECT sa.id, sa.funcionario_id, sa.instrutor_id, sa.data, sa.is_check
        FROM simulador_agendamentos sa
-       WHERE sa.id = ? AND sa.deleted_at IS NULL`,
+       WHERE sa.id = ? AND sa.empresa_id = ? AND sa.deleted_at IS NULL`,
     )
-      .bind(sessao_id)
+      .bind(sessao_id, empresaId)
       .first();
 
     if (!sessao) {
