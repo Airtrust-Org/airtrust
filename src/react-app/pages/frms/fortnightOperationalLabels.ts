@@ -95,6 +95,87 @@ export function formatFortnightPeriod(
   return `${formatDisplayDate(start)} → ${formatDisplayDate(end)}`;
 }
 
+/** Formato compacto para coordenador: `16/06 a 30/06` */
+export function formatFortnightPeriodShort(
+  start: string | null | undefined,
+  end: string | null | undefined,
+): string {
+  if (!start || !end) return 'Não confirmada';
+  const startMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(start);
+  const endMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(end);
+  if (!startMatch || !endMatch) return formatFortnightPeriod(start, end);
+  return `${startMatch[3]}/${startMatch[2]} a ${endMatch[3]}/${endMatch[2]}`;
+}
+
+/** Acumulado legível: `94h54` */
+export function formatFortnightMinutesCompact(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '--';
+  const totalMinutes = Math.max(0, Math.trunc(value));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h${String(minutes).padStart(2, '0')}`;
+}
+
+export type OperationalSourceChip = 'confirmado' | 'estimado' | 'incompleto' | 'nao_classificado';
+
+const OPERATIONAL_SOURCE_CHIP_LABELS: Record<OperationalSourceChip, string> = {
+  confirmado: 'Confirmado',
+  estimado: 'Estimado',
+  incompleto: 'Incompleto',
+  nao_classificado: 'Não classificado',
+};
+
+export function operationalSourceChipLabel(chip: OperationalSourceChip): string {
+  return OPERATIONAL_SOURCE_CHIP_LABELS[chip];
+}
+
+export function toneByOperationalSourceChip(chip: OperationalSourceChip): string {
+  if (chip === 'confirmado') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (chip === 'estimado') return 'border-amber-200 bg-amber-50 text-amber-800';
+  if (chip === 'incompleto') return 'border-slate-300 bg-slate-100 text-slate-700';
+  return 'border-slate-200 bg-white text-slate-500';
+}
+
+export function resolveOperationalSourceChip(input: {
+  jornada_data_source?: string | null;
+  sleep_data_source?: string | null;
+  wake_data_source?: string | null;
+  fonte_periodo?: string | null;
+}): OperationalSourceChip {
+  const sources = [
+    input.jornada_data_source,
+    input.sleep_data_source,
+    input.wake_data_source,
+    input.fonte_periodo,
+  ].filter(Boolean) as string[];
+
+  if (sources.some((value) => value === 'INCONSISTENTE' || value === 'INCOMPLETO')) {
+    return 'incompleto';
+  }
+  if (sources.some((value) => value === 'AUSENTE' || value === 'PARCIAL')) {
+    return 'incompleto';
+  }
+  if (sources.some((value) => value === 'ESTIMADO')) {
+    return 'estimado';
+  }
+  if (
+    input.jornada_data_source === 'REAL' &&
+    (input.sleep_data_source === 'REAL' || input.sleep_data_source == null) &&
+    (input.wake_data_source === 'REAL' || input.wake_data_source == null)
+  ) {
+    return 'confirmado';
+  }
+  if (sources.length === 0) return 'nao_classificado';
+  return 'nao_classificado';
+}
+
+export function formatTrendArrow(trend: string | null | undefined): string {
+  if (trend === 'CRESCENTE') return 'Subindo';
+  if (trend === 'REDUZINDO') return 'Reduzindo';
+  if (trend === 'ESTAVEL') return 'Estável';
+  return 'Indeterminada';
+}
+
 export function formatFortnightScore(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '--';
   return String(Math.round(value));

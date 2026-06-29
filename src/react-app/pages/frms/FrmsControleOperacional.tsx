@@ -33,6 +33,7 @@ import FrmsSourcePolicyBanner from './components/FrmsSourcePolicyBanner';
 import {
   formatFortnightLabel,
   formatFortnightMinutes,
+  formatFortnightPeriodShort,
   hasLocatedFortnight,
 } from './fortnightOperationalLabels';
 import { buildFortnightOperationalSummary } from './fortnightOperationalSummary';
@@ -614,6 +615,69 @@ export default function FrmsControleOperacional() {
 
         <FrmsSourcePolicyBanner />
 
+        <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Quinzena operacional
+          </p>
+          <p className="mt-1 text-lg font-semibold text-slate-950">
+            Quinzena:{' '}
+            {formatFortnightPeriodShort(fortnightSummary.periodStart, fortnightSummary.periodEnd)}
+          </p>
+          <p className="mt-1 text-xs text-slate-600">
+            Recorte diário {formatDisplayDate(appliedFilters.data_inicio)} →{' '}
+            {formatDisplayDate(appliedFilters.data_fim)} · {fortnightSummary.periodStatusLabel}
+          </p>
+        </section>
+
+        {/* ── Bloco 1: Lista de ação (prioridade) ───────────── */}
+        <FrmsOperationalActionList
+          summary={fortnightSummary}
+          loading={loading}
+          onSelectCrew={handleSelectCrew}
+          maxItemsPerGroup={10}
+        />
+
+        {/* ── Resumo compacto ───────────────────────────────── */}
+        <section className="grid gap-3 sm:grid-cols-3">
+          <KpiTile
+            label="Exigem ação agora"
+            value={
+              fortnightSummary.attentionItems.filter(
+                (item) => item.actionGroup === 'critical' || item.actionGroup === 'attention',
+              ).length
+            }
+            tone={
+              fortnightSummary.attentionItems.some(
+                (item) => item.actionGroup === 'critical' || item.actionGroup === 'attention',
+              )
+                ? 'danger'
+                : 'neutral'
+            }
+          />
+          <KpiTile
+            label="Check-ins pendentes"
+            value={
+              fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'checkin').length
+            }
+            tone={
+              fortnightSummary.attentionItems.some((item) => item.actionGroup === 'checkin')
+                ? 'warning'
+                : 'neutral'
+            }
+          />
+          <KpiTile
+            label="Fonte incompleta/estimada"
+            value={
+              fortnightSummary.attentionItems.filter((item) => item.actionGroup === 'source').length
+            }
+            tone={
+              fortnightSummary.attentionItems.some((item) => item.actionGroup === 'source')
+                ? 'warning'
+                : 'neutral'
+            }
+          />
+        </section>
+
         {/* ── Barra de período + filtros avançados ──────────── */}
         <section className="rounded-lg border border-slate-200 bg-white p-3">
           {hasTechnicalFilter && (
@@ -812,32 +876,6 @@ export default function FrmsControleOperacional() {
           </div>
         )}
 
-        {/* ── Resumo compacto ───────────────────────────────── */}
-        <section className="grid gap-3 sm:grid-cols-3">
-          <KpiTile
-            label="Exigem ação agora"
-            value={fortnightSummary.attentionItems.length}
-            tone={fortnightSummary.attentionItems.length > 0 ? 'danger' : 'neutral'}
-          />
-          <KpiTile
-            label="Check-ins pendentes"
-            value={operationalSummary.pendingCheckins}
-            tone={operationalSummary.pendingCheckins > 0 ? 'warning' : 'neutral'}
-          />
-          <KpiTile
-            label="Fonte incompleta/estimada"
-            value={fortnightSummary.estimatedOrIncompleteCount}
-            tone={fortnightSummary.estimatedOrIncompleteCount > 0 ? 'warning' : 'neutral'}
-          />
-        </section>
-
-        {/* ── Bloco 1: Lista de ação (prioridade) ───────────── */}
-        <FrmsOperationalActionList
-          summary={fortnightSummary}
-          loading={loading}
-          onSelectCrew={handleSelectCrew}
-        />
-
         {/* ── Bloco 2: Jornada do tripulante selecionado ───── */}
         {selectedCrewInfo && (
           <FrmsCrewCumulativeChart
@@ -852,9 +890,9 @@ export default function FrmsControleOperacional() {
         {/* ── Bloco 3: Mapa operacional (recolhido) ─────────── */}
         <details className="rounded-lg border border-slate-200 bg-white">
           <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-            <span>Mapa operacional detalhado</span>
+            <span>Ver mapa técnico da quinzena</span>
             <span className="text-xs font-normal text-slate-500">
-              Até 20 tripulantes com sinal · recolhido por padrão
+              Não é lista de ação · até 20 tripulantes · recolhido por padrão
             </span>
           </summary>
           <div className="border-t border-slate-200 p-2">

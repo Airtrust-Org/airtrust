@@ -264,15 +264,16 @@ describe('FrmsDashboard', () => {
     vi.useRealTimers();
   });
 
-  it('renderiza o resumo executivo da quinzena e direciona ao controle operacional', () => {
+  it('renderiza a quinzena e a lista de acao no topo e direciona ao controle operacional', () => {
     renderDashboard();
 
-    expect(screen.getByText('Resumo executivo FRMS')).toBeInTheDocument();
-    expect(screen.getByText('Quem exige atenção agora')).toBeInTheDocument();
+    expect(screen.getByText(/Quinzena:/)).toBeInTheDocument();
+    expect(screen.getByText(/16\/06 a 30\/06/)).toBeInTheDocument();
+    expect(screen.getByText('Check-ins pendentes')).toBeInTheDocument();
     expect(screen.getByText('Ana')).toBeInTheDocument();
     expect(screen.queryByText(/Central de Alertas/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Controle operacional completo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Controle operacional' }));
     expect(navigateMock).toHaveBeenCalledWith('/frms/controle-operacional?data=2026-06-23');
   });
 });
