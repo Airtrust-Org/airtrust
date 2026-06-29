@@ -38,6 +38,7 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { buildAuditMetadata } from '../lib/audit/context';
+import { ensureCertificateForQualification } from '../services/ensure-certificate';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1672,6 +1673,16 @@ app.post('/scorm/commit', async (c) => {
         qualificacao_id: historicoId,
         qualificacao_historico_id: historicoId,
       };
+
+      // Auto-gerar certificado (erros não derrubam a request principal)
+      try {
+        const certResult = await ensureCertificateForQualification(c.env, historicoId, empresaId, {
+          actorUserId: getCallerUserId(c),
+        });
+        console.log(`[auto-cert/scorm] historicoId=${historicoId} state=${certResult.state}`);
+      } catch (certErr) {
+        console.error(`[auto-cert/scorm] ERROR historicoId=${historicoId}:`, certErr);
+      }
     } catch (e) {
       console.error('[LMS] Erro ao gerar qualificação automática:', e);
     }
@@ -2115,6 +2126,19 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
       dataConclusao,
       existingHistoricoId: existing.qualificacao_historico_id,
     });
+
+    // Auto-gerar certificado (erros não derrubam a request principal)
+    try {
+      const certResult = await ensureCertificateForQualification(
+        c.env,
+        qualificacaoHistoricoId,
+        empresaId,
+        { actorUserId: getCallerUserId(c) ?? undefined },
+      );
+      console.log(`[auto-cert/status] historicoId=${qualificacaoHistoricoId} state=${certResult.state}`);
+    } catch (certErr) {
+      console.error(`[auto-cert/status] ERROR historicoId=${qualificacaoHistoricoId}:`, certErr);
+    }
   }
 
   const updated = await db

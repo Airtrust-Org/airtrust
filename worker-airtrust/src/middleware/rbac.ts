@@ -15,16 +15,18 @@ function isDevAuthBypassEnabled(env: Env): boolean {
 export type UserRole = 'admin' | 'manager' | 'instructor' | 'student' | 'viewer' | 'editor';
 
 /**
- * Normaliza role do banco (PT-BR) para o padrão RBAC:
- *   ADMIN/admin → admin
- *   GESTOR/gestor/manager → manager
- *   USUARIO/usuario/user  → user
+ * Normaliza role do banco (PT-BR) para o padrão RBAC.
+ * Delega para normalizeTenantRole (fonte canônica do mapeamento):
+ *   ADMIN/admin/administrador            → admin
+ *   GESTOR/gestor/manager/compliance     → manager
+ *   INSTRUTOR/instructor                 → instructor
+ *   EDITOR/editor                        → editor
+ *   USUARIO/usuario/aluno/student/member → student
+ *   VIEWER/viewer (e desconhecidos)      → viewer
  */
 function normalizeRole(raw: string | undefined): UserRole | undefined {
   if (!raw) return undefined;
-  const normalized = normalizeTenantRole(raw);
-  if (normalized === 'student') return 'student';
-  return normalized;
+  return normalizeTenantRole(raw);
 }
 
 /**

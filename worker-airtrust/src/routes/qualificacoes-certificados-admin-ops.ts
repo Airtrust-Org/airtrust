@@ -16,6 +16,7 @@ import {
   buildLegacyAuditPayload,
 } from '../lib/audit/context';
 import { recordLegacyAndCanonicalAudit } from '../lib/audit/record-legacy-and-canonical-audit';
+import { ensureCertificateForQualification } from '../services/ensure-certificate';
 
 const opsRouter = new Hono<{ Bindings: Env }>();
 
@@ -610,5 +611,233 @@ opsRouter.post(
   },
 );
 
+/**
+ * GET /admin/dry-run-inventory
+ * Inventário read-only de qualificações com e sem certificado, por empresa e origem.
+ * Não gera nenhum certificado.
+ */
+opsRouter.get(
+  '/admin/dry-run-inventory',
+  auth(),
+  requireControlledAdminOrSupportAccess({
+    action: 'CERTIFICADOS_DRY_RUN_INVENTORY',
+    access: 'query',
+    entityType: 'certificados_admin_ops',
+    module: 'qualificacoes_certificados',
+  }),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaId(c);
+
+    try {
+      const hasOrigemTipo = await db
+        .prepare(`SELECT COUNT(*) as n FROM pragma_table_info('qualificacoes_historico') WHERE name='origem_tipo'`)
+        .first<{ n: number }>();
+      const origemCol = hasOrigemTipo?.n ? 'COALESCE(qh.origem_tipo, \'MANUAL\')' : "'MANUAL'";
+
+      const { results: rows } = await db
+        .prepare(
+          `SELECT
+             ${origemCol} AS origem_tipo,
+             COUNT(*) AS total,
+             SUM(CASE WHEN qh.certificado_arquivo_id IS NOT NULL THEN 1 ELSE 0 END) AS com_certificado,
+             SUM(CASE WHEN qh.certificado_arquivo_id IS NULL THEN 1 ELSE 0 END) AS sem_certificado
+           FROM qualificacoes_historico qh
+           INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+           WHERE qh.deleted_at IS NULL
+             AND f.empresa_id = ?
+             AND qh.status NOT IN ('PLANEJADA', 'CANCELADA', 'RENOVADA')
+           GROUP BY ${origemCol}
+           ORDER BY total DESC`,
+        )
+        .bind(empresaId)
+        .all<{ origem_tipo: string; total: number; com_certificado: number; sem_certificado: number }>();
+
+      const totals = (rows || []).reduce(
+        (acc, r) => ({
+          total: acc.total + r.total,
+          com_certificado: acc.com_certificado + r.com_certificado,
+          sem_certificado: acc.sem_certificado + r.sem_certificado,
+        }),
+        { total: 0, com_certificado: 0, sem_certificado: 0 },
+      );
+
+      return c.json({
+        success: true,
+        data: {
+          empresa_id: empresaId,
+          totals,
+          por_origem: rows || [],
+          note: 'Dry-run: nenhum certificado foi gerado. Use /admin/backfill-dry-run para ver IDs específicos.',
+        },
+      });
+    } catch (err) {
+      console.error('[DRY-RUN INVENTORY] Error:', err);
+      return c.json({ success: false, error: 'Erro ao executar inventário' }, 500);
+    }
+  },
+);
+
+/**
+ * POST /admin/backfill-dry-run
+ * Lista (sem gerar) os primeiros N registros sem certificado para a empresa.
+ * Parâmetro: ?limit=50 (padrão 50, máximo 500)
+ */
+opsRouter.post(
+  '/admin/backfill-dry-run',
+  auth(),
+  requireControlledAdminOrSupportAccess({
+    action: 'CERTIFICADOS_BACKFILL_DRY_RUN',
+    access: 'query',
+    entityType: 'certificados_admin_ops',
+    module: 'qualificacoes_certificados',
+  }),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaId(c);
+    const rawLimit = Number(new URL(c.req.url).searchParams.get('limit') || '50');
+    const limit = Math.min(Math.max(1, rawLimit), 500);
+
+    try {
+      const { results: rows } = await db
+        .prepare(
+          `SELECT
+             qh.id AS historico_id,
+             qh.data_conclusao,
+             qh.status,
+             f.id AS funcionario_id,
+             f.nome AS funcionario_nome,
+             qt.codigo AS qualificacao_codigo,
+             qt.nome AS qualificacao_nome
+           FROM qualificacoes_historico qh
+           INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+           LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+           WHERE qh.deleted_at IS NULL
+             AND f.empresa_id = ?
+             AND qh.certificado_arquivo_id IS NULL
+             AND qh.data_conclusao IS NOT NULL
+             AND qh.status NOT IN ('PLANEJADA', 'CANCELADA', 'RENOVADA')
+           ORDER BY qh.id DESC
+           LIMIT ?`,
+        )
+        .bind(empresaId, limit)
+        .all<{
+          historico_id: number;
+          data_conclusao: string;
+          status: string;
+          funcionario_id: number;
+          funcionario_nome: string;
+          qualificacao_codigo: string;
+          qualificacao_nome: string;
+        }>();
+
+      return c.json({
+        success: true,
+        data: {
+          empresa_id: empresaId,
+          count: rows?.length || 0,
+          limit,
+          registros: rows || [],
+          note: 'Dry-run: nenhum certificado foi gerado. Para executar o backfill, use POST /admin/backfill-apply com autorização explícita.',
+        },
+      });
+    } catch (err) {
+      console.error('[BACKFILL DRY-RUN] Error:', err);
+      return c.json({ success: false, error: 'Erro ao listar registros para backfill' }, 500);
+    }
+  },
+);
+
+/**
+ * POST /admin/backfill-apply
+ * Gera certificados em lote para qualificações sem certificado.
+ * Requer header X-Backfill-Authorization: CONFIRM_BACKFILL_<empresaId>
+ * Processa em lotes de batch_size (padrão 10, máximo 50).
+ */
+opsRouter.post(
+  '/admin/backfill-apply',
+  auth(),
+  requireControlledAdminOrSupportAccess({
+    action: 'CERTIFICADOS_BACKFILL_APPLY',
+    access: 'mutation',
+    entityType: 'certificados_admin_ops',
+    module: 'qualificacoes_certificados',
+  }),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaId(c);
+
+    // Autorização explícita obrigatória
+    const authHeader = c.req.header('X-Backfill-Authorization') || '';
+    const expectedToken = `CONFIRM_BACKFILL_${empresaId}`;
+    if (authHeader !== expectedToken) {
+      return c.json(
+        {
+          success: false,
+          error: `Backfill requer header X-Backfill-Authorization: ${expectedToken}`,
+          code: 'EXPLICIT_AUTHORIZATION_REQUIRED',
+        },
+        403,
+      );
+    }
+
+    const rawBatch = Number(new URL(c.req.url).searchParams.get('batch_size') || '10');
+    const batchSize = Math.min(Math.max(1, rawBatch), 50);
+    const rawLimit = Number(new URL(c.req.url).searchParams.get('limit') || '100');
+    const limit = Math.min(Math.max(1, rawLimit), 1000);
+
+    try {
+      const { results: candidatos } = await db
+        .prepare(
+          `SELECT qh.id AS historico_id
+           FROM qualificacoes_historico qh
+           INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+           WHERE qh.deleted_at IS NULL
+             AND f.empresa_id = ?
+             AND qh.certificado_arquivo_id IS NULL
+             AND qh.data_conclusao IS NOT NULL
+             AND qh.status NOT IN ('PLANEJADA', 'CANCELADA', 'RENOVADA')
+           ORDER BY qh.id ASC
+           LIMIT ?`,
+        )
+        .bind(empresaId, limit)
+        .all<{ historico_id: number }>();
+
+      const ids = (candidatos || []).map((r) => r.historico_id);
+      const results: Array<{ historico_id: number; state: string; error?: string }> = [];
+
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(async (hid) => {
+            const result = await ensureCertificateForQualification(c.env, hid, empresaId);
+            results.push({ historico_id: hid, state: result.state, error: result.error });
+          }),
+        );
+      }
+
+      const summary = results.reduce(
+        (acc, r) => {
+          acc[r.state] = (acc[r.state] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      await recordCertificadosAdminOperationAudit(c, {
+        action: 'BACKFILL_APPLY',
+        metadata: { empresa_id: empresaId, processed: ids.length, summary },
+      });
+
+      return c.json({
+        success: true,
+        data: { empresa_id: empresaId, processed: ids.length, summary, results },
+      });
+    } catch (err) {
+      console.error('[BACKFILL APPLY] Error:', err);
+      return c.json({ success: false, error: 'Erro ao executar backfill' }, 500);
+    }
+  },
+);
 
 export default opsRouter;
