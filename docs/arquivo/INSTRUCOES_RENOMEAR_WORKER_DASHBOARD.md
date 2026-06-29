@@ -36,8 +36,9 @@ https://dash.cloudflare.com/4dca4e5fddc6a351651dd224f456586f/workers-and-pages
 Se quiser automatizar, posso criar um script que usa a API do Cloudflare:
 
 ```bash
+# NUNCA commitar tokens reais — use variável de ambiente ou GitHub Secret
 curl -X PATCH "https://api.cloudflare.com/client/v4/accounts/4dca4e5fddc6a351651dd224f456586f/workers/scripts/airtrust-worker" \
-  -H "Authorization: Bearer bERb0J_4JS8D2z-N-8gSryh63inKaQw06znV7GpH" \
+  -H "Authorization: Bearer <CLOUDFLARE_API_TOKEN>" \
   -H "Content-Type: application/json" \
   --data '{"name":"airtrust-worker-old"}'
 ```
