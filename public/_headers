@@ -46,6 +46,16 @@
   Pragma: no-cache
   Expires: 0
 
+/frms
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+/frms/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
 /*.html
   Cache-Control: no-cache, no-store, must-revalidate
   Pragma: no-cache

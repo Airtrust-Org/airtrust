@@ -42,14 +42,7 @@ function isRecoverableAssetError(error: Error): boolean {
   );
 }
 
-async function hardRecoverOnce(error: Error): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
-  if (!isRecoverableAssetError(error)) return false;
-
-  const key = `airtrust-hard-recover:${window.location.pathname}`;
-  if (sessionStorage.getItem(key) === '1') return false;
-  sessionStorage.setItem(key, '1');
-
+async function clearLegacyAirtrustCaches(): Promise<void> {
   try {
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
@@ -66,10 +59,27 @@ async function hardRecoverOnce(error: Error): Promise<boolean> {
   } catch {
     // Segue para reload mesmo se limpeza falhar.
   }
+}
+
+async function forceHardRecover(): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  await clearLegacyAirtrustCaches();
 
   const nextUrl = new URL(window.location.href);
   nextUrl.searchParams.set('hard_refresh', Date.now().toString());
   window.location.replace(nextUrl.toString());
+}
+
+async function hardRecoverOnce(error: Error): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  if (!isRecoverableAssetError(error)) return false;
+
+  const key = `airtrust-hard-recover:${window.location.pathname}`;
+  if (sessionStorage.getItem(key) === '1') return false;
+  sessionStorage.setItem(key, '1');
+
+  await forceHardRecover();
   return true;
 }
 
@@ -123,6 +133,15 @@ export class ErrorBoundary extends Component<Props, State> {
       error: null,
       errorInfo: null,
     });
+  };
+
+  handleRetry = (): void => {
+    const error = this.state.error;
+    if (error && isRecoverableAssetError(error)) {
+      void forceHardRecover();
+      return;
+    }
+    this.handleReset();
   };
 
   handleGoHome = (): void => {
@@ -205,7 +224,7 @@ export class ErrorBoundary extends Component<Props, State> {
               {/* Actions */}
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button
-                  onClick={this.handleReset}
+                  onClick={this.handleRetry}
                   variant="primary"
                   className="flex-1"
                   leftIcon={<RefreshCw size={16} />}

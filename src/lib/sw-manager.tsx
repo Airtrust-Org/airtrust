@@ -18,7 +18,7 @@ import {
 } from '@/react-app/config/deployment';
 
 const FRONTEND_VERSION_STORAGE_KEY = 'airtrust-frontend-version';
-const LOGIN_CACHE_RECOVERY_SESSION_KEY = 'airtrust-login-cache-recovery-v3';
+const LOGIN_CACHE_RECOVERY_SESSION_KEY = 'airtrust-login-cache-recovery-v4';
 const LOGIN_CACHE_RECOVERY_QUERY_PARAM = 'airtrust_login_recovered';
 
 function shouldBypassCleanupForPath(pathname: string): boolean {

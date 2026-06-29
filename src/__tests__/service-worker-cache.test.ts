@@ -38,8 +38,8 @@ describe('service worker cache guard', () => {
   });
 
   it('executa bootstrap de recuperacao nas rotas de entrada sem registrar novo service worker', () => {
-    expect(indexHtmlSource).toContain('const ENTRY_ROUTE_PATTERNS = [/^\\/$/, /^\\/login$/];');
-    expect(indexHtmlSource).toContain("const RECOVERY_KEY = 'airtrust-login-cache-recovery-v3';");
+    expect(indexHtmlSource).toContain('const ENTRY_ROUTE_PATTERNS = [/^\\/$/, /^\\/login$/, /^\\/frms(?:\\/|$)/];');
+    expect(indexHtmlSource).toContain("const RECOVERY_KEY = 'airtrust-login-cache-recovery-v4';");
     expect(indexHtmlSource).toContain("const SW_RESET_PARAM = 'airtrust_sw_reset';");
     expect(indexHtmlSource).toContain('navigator.serviceWorker.getRegistrations()');
     expect(indexHtmlSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
@@ -54,7 +54,7 @@ describe('service worker cache guard', () => {
     );
 
     expect(serviceWorkerManagerSource).toContain(
-      "const LOGIN_CACHE_RECOVERY_SESSION_KEY = 'airtrust-login-cache-recovery-v3';",
+      "const LOGIN_CACHE_RECOVERY_SESSION_KEY = 'airtrust-login-cache-recovery-v4';",
     );
     expect(serviceWorkerManagerSource).toContain(
       "const LOGIN_CACHE_RECOVERY_QUERY_PARAM = 'airtrust_login_recovered';",
@@ -78,6 +78,8 @@ describe('service worker cache guard', () => {
     expect(headersSource).toContain('\n/login\n');
     expect(headersSource).toContain('\n/dashboard/*\n');
     expect(headersSource).toContain('\n/mro/*\n');
+    expect(headersSource).toContain('\n/frms\n');
+    expect(headersSource).toContain('\n/frms/*\n');
     expect(headersSource).toContain('\n/sw.js\n');
     expect(headersSource).toContain('\n/assets/*.js\n');
     expect(headersSource).toContain('\n/assets/*.css\n');
