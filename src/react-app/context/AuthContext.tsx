@@ -1,9 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
+  AuthRefreshError,
   setTokens,
   clearTokens,
   getPersistLogin,
   ensureValidAccessToken,
+  getTokenExpiryTimeMs,
+  isTerminalAuthRefreshError,
+  logout as revokeSessionOnServer,
+  readAuthStorageValue,
+  removeAuthStorageValue,
+  writeAuthStorageValue,
 } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { queryClient } from '@/react-app/lib/query-client';
@@ -17,20 +24,28 @@ const AUTH_REQUEST_TIMEOUT_MS = 10000;
 const AUTH_EMPRESAS_TIMEOUT_MS = 5000;
 
 function readAuthStorage(key: string): string | null {
-  const sessionValue = sessionStorage.getItem(key);
-  if (sessionValue) return sessionValue;
-  // Persistent login: token stored in localStorage — read without migrating
-  return localStorage.getItem(key);
+  return readAuthStorageValue(key);
 }
 
-function writeAuthStorage(key: string, value: string): void {
-  sessionStorage.setItem(key, value);
-  localStorage.removeItem(key);
+function shouldPersistAuth(): boolean {
+  try {
+    return (
+      getPersistLogin() ||
+      localStorage.getItem(TOKEN_KEY) !== null ||
+      localStorage.getItem(REFRESH_TOKEN_KEY) !== null ||
+      localStorage.getItem(USER_KEY) !== null
+    );
+  } catch {
+    return getPersistLogin();
+  }
+}
+
+function writeAuthStorage(key: string, value: string, persist = shouldPersistAuth()): void {
+  writeAuthStorageValue(key, value, persist);
 }
 
 function removeAuthStorage(key: string): void {
-  sessionStorage.removeItem(key);
-  localStorage.removeItem(key);
+  removeAuthStorageValue(key);
 }
 
 function normalizeRole(role?: string | null): string {
@@ -100,12 +115,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [empresas, setEmpresas] = useState<UsuarioEmpresa[]>([]);
   const [empresaAtualId, setEmpresaAtualId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const refreshTimeoutRef = useRef<number | null>(null);
 
   const clearPersistedAuth = useCallback(() => {
     clearTokens();
     removeAuthStorage(TOKEN_KEY);
     removeAuthStorage(USER_KEY);
     removeAuthStorage(REFRESH_TOKEN_KEY);
+  }, []);
+
+  const clearRefreshSchedule = useCallback(() => {
+    if (refreshTimeoutRef.current !== null) {
+      window.clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
   }, []);
 
   const loadEmpresas = useCallback(async (accessToken: string) => {
@@ -207,41 +230,110 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
-        throw new Error('Falha ao renovar token');
+        const errorData = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string;
+        };
+        const terminal =
+          response.status === 400 ||
+          response.status === 401 ||
+          response.status === 403 ||
+          errorData.code === 'INVALID_REFRESH_TOKEN' ||
+          errorData.code === 'REFRESH_TOKEN_REVOKED' ||
+          errorData.code === 'REFRESH_TOKEN_EXPIRED' ||
+          errorData.code === 'USER_INACTIVE';
+
+        throw new AuthRefreshError(errorData.error || 'Falha ao renovar token', {
+          terminal,
+          status: response.status,
+          code: errorData.code,
+        });
       }
 
       const data = await response.json();
 
       if (!data.success || !data.data?.accessToken) {
-        throw new Error('Resposta inválida do servidor');
+        throw new AuthRefreshError('Resposta inválida do servidor');
       }
 
       const accessToken = String(data.data.accessToken);
       const newRefreshToken =
         typeof data.data.refreshToken === 'string' ? data.data.refreshToken : storedRefreshToken;
-
-      // Preserve storage type: if original was in localStorage (persist mode), keep it there
-      const isPersistent = localStorage.getItem(TOKEN_KEY) !== null;
+      const isPersistent =
+        localStorage.getItem(TOKEN_KEY) !== null ||
+        localStorage.getItem(REFRESH_TOKEN_KEY) !== null ||
+        getPersistLogin();
 
       setToken(accessToken);
       if (nextUser) {
         setUser(nextUser);
-        writeAuthStorage(USER_KEY, JSON.stringify(nextUser));
+        writeAuthStorage(USER_KEY, JSON.stringify(nextUser), isPersistent);
       }
 
       setTokens(accessToken, newRefreshToken);
-      if (isPersistent) {
-        localStorage.setItem(TOKEN_KEY, accessToken);
-        localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
-        sessionStorage.removeItem(TOKEN_KEY);
-        sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-      } else {
-        writeAuthStorage(TOKEN_KEY, accessToken);
-        writeAuthStorage(REFRESH_TOKEN_KEY, newRefreshToken);
-      }
+      writeAuthStorage(TOKEN_KEY, accessToken, isPersistent);
+      writeAuthStorage(REFRESH_TOKEN_KEY, newRefreshToken, isPersistent);
       await loadEmpresas(accessToken);
     },
     [loadEmpresas],
+  );
+
+  const logout = useCallback(() => {
+    queryClient.clear();
+    clearRefreshSchedule();
+    setToken(null);
+    setUser(null);
+    setEmpresas([]);
+    setEmpresaAtualId(null);
+
+    void revokeSessionOnServer()
+      .catch((error) => {
+        console.warn('[Auth] Falha ao revogar sessão no servidor durante logout:', error);
+      })
+      .finally(() => {
+        clearPersistedAuth();
+      });
+  }, [clearPersistedAuth, clearRefreshSchedule]);
+
+  const refreshToken = useCallback(async () => {
+    const storedRefreshToken = readAuthStorage(REFRESH_TOKEN_KEY);
+
+    if (!storedRefreshToken) {
+      logout();
+      throw new Error('Refresh token não encontrado');
+    }
+
+    try {
+      await renewSession(storedRefreshToken, user);
+    } catch (error) {
+      console.error('[Auth] Erro ao renovar token:', error);
+      if (isTerminalAuthRefreshError(error)) {
+        logout();
+      }
+      throw error;
+    }
+  }, [logout, renewSession, user]);
+
+  const scheduleRefresh = useCallback(
+    (accessToken: string | null) => {
+      clearRefreshSchedule();
+
+      const expiresAtMs = getTokenExpiryTimeMs(accessToken);
+      if (!expiresAtMs) return;
+
+      const leadTimeMs = 5 * 60 * 1000;
+      const minDelayMs = 30 * 1000;
+      const delayMs = Math.max(expiresAtMs - Date.now() - leadTimeMs, minDelayMs);
+
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        refreshToken().catch((error) => {
+          if (!isTerminalAuthRefreshError(error)) {
+            scheduleRefresh(token);
+          }
+        });
+      }, delayMs);
+    },
+    [clearRefreshSchedule, refreshToken, token],
   );
 
   // Carregar dados persistidos ao montar
@@ -276,8 +368,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (storedRefreshToken) {
                 try {
                   await renewSession(storedRefreshToken, parsedUser);
-                } catch {
-                  clearPersistedAuth();
+                } catch (error) {
+                  if (isTerminalAuthRefreshError(error)) {
+                    clearPersistedAuth();
+                  } else {
+                    setToken(storedToken);
+                    setUser(parsedUser);
+                    setTokens(storedToken, storedRefreshToken || undefined);
+                  }
                 }
               } else {
                 clearPersistedAuth();
@@ -288,11 +386,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (storedRefreshToken) {
                 try {
                   await renewSession(storedRefreshToken, parsedUser);
-                } catch {
+                } catch (error) {
                   // Renovação falhou mas pode ser instabilidade do servidor — manter sessão
                   console.warn(
                     '[Auth] Renovação falhou em 5xx — mantendo sessão local como fallback',
                   );
+                  if (isTerminalAuthRefreshError(error)) {
+                    clearPersistedAuth();
+                    return;
+                  }
                   setToken(storedToken);
                   setUser(parsedUser);
                   setTokens(storedToken, storedRefreshToken || undefined);
@@ -303,12 +405,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setTokens(storedToken, undefined);
               }
             }
-          } catch {
-            // Sem rede/timeout — confiar no localStorage como fallback
-            setToken(storedToken);
-            setUser(parsedUser);
-            setTokens(storedToken, storedRefreshToken || undefined);
-            await loadEmpresas(storedToken);
+          } catch (error) {
+            if (isTerminalAuthRefreshError(error)) {
+              clearPersistedAuth();
+            } else {
+              // Sem rede/timeout — confiar no armazenamento local como fallback
+              setToken(storedToken);
+              setUser(parsedUser);
+              setTokens(storedToken, storedRefreshToken || undefined);
+              await loadEmpresas(storedToken);
+            }
           } finally {
             if (timeoutId) {
               window.clearTimeout(timeoutId);
@@ -328,6 +434,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     loadStoredAuth();
   }, [clearPersistedAuth, loadEmpresas, maybeRunDevAutoLogin, renewSession]);
+
+  useEffect(() => {
+    if (!token) {
+      clearRefreshSchedule();
+      return;
+    }
+
+    scheduleRefresh(token);
+    return clearRefreshSchedule;
+  }, [clearRefreshSchedule, scheduleRefresh, token]);
+
+  useEffect(() => {
+    const resumeSession = async () => {
+      const storedToken = readAuthStorage(TOKEN_KEY);
+      const storedRefreshToken = readAuthStorage(REFRESH_TOKEN_KEY);
+
+      if (!storedToken || !storedRefreshToken) {
+        return;
+      }
+
+      try {
+        const validToken = await ensureValidAccessToken();
+        if (validToken) {
+          setToken(validToken);
+          setTokens(validToken, storedRefreshToken);
+        }
+      } catch (error) {
+        if (isTerminalAuthRefreshError(error)) {
+          logout();
+        }
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void resumeSession();
+      }
+    };
+    const handleFocus = () => {
+      void resumeSession();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [logout]);
 
   const login = useCallback(
     async (credentials: { email: string; password: string }) => {
@@ -367,16 +523,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Persistir: localStorage se "lembrar de mim", sessionStorage caso contrário
         const persist = getPersistLogin();
-        const writeStorage = persist
-          ? (k: string, v: string) => {
-              localStorage.setItem(k, v);
-              sessionStorage.removeItem(k);
-            }
-          : writeAuthStorage;
-        writeStorage(TOKEN_KEY, accessToken);
-        writeStorage(USER_KEY, JSON.stringify(userData));
+        writeAuthStorage(TOKEN_KEY, accessToken, persist);
+        writeAuthStorage(USER_KEY, JSON.stringify(userData), persist);
         if (newRefreshToken) {
-          writeStorage(REFRESH_TOKEN_KEY, newRefreshToken);
+          writeAuthStorage(REFRESH_TOKEN_KEY, newRefreshToken, persist);
         }
       } catch (error) {
         console.error('[Auth] Erro no login:', error);
@@ -396,33 +546,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [clearPersistedAuth, loadEmpresas],
   );
-
-  const logout = useCallback(() => {
-    queryClient.clear();
-    setToken(null);
-    setUser(null);
-    setEmpresas([]);
-    setEmpresaAtualId(null);
-
-    clearPersistedAuth();
-  }, [clearPersistedAuth]);
-
-  const refreshToken = useCallback(async () => {
-    try {
-      const storedRefreshToken = readAuthStorage(REFRESH_TOKEN_KEY);
-
-      if (!storedRefreshToken) {
-        throw new Error('Refresh token não encontrado');
-      }
-
-      await renewSession(storedRefreshToken, user);
-    } catch (error) {
-      console.error('[Auth] Erro ao renovar token:', error);
-      // Em caso de falha, fazer logout
-      logout();
-      throw error;
-    }
-  }, [logout, renewSession, user]);
 
   const selectEmpresa = useCallback(
     async (novaEmpresaId: number) => {
