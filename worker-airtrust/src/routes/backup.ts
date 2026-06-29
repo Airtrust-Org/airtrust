@@ -28,6 +28,7 @@ import { BackupOrchestrator } from '../services/backup/orchestrator';
 import { RestoreService } from '../services/backup/restore';
 import { TODOS_MODULOS, type ModuloBackup } from '../config/backup-modules';
 import { z } from 'zod';
+import { auth } from '../middleware/auth';
 import { createLogger, toError } from '../utils/logger';
 
 const backup = new Hono<{ Bindings: Env }>();
@@ -67,7 +68,11 @@ function backupErrorResponse(
 // ══════════════════════════════════════════════════════════════════════════════
 // TEMPORARY DISABLE GUARD — bloqueia todos os endpoints de backup
 // até que o isolamento de tenant seja implementado.
+//
+// auth() primeiro para manter 401 em requests sem token.
+// 503 aplicado após autenticação para qualquer role.
 // ══════════════════════════════════════════════════════════════════════════════
+backup.use('*', auth());
 backup.use('*', async (c) => {
   applyNoStoreHeaders(c);
   return c.json(
