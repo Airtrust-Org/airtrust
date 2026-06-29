@@ -1,3 +1,10 @@
+/**
+ * Backup Routes — Tenant Isolation Disable Guard Tests
+ *
+ * Todos os endpoints de /api/backup estão temporariamente desativados
+ * e devem retornar 503 BACKUP_DISABLED_PENDING_TENANT_ISOLATION.
+ */
+
 import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -19,7 +26,7 @@ vi.mock('../../middleware/auth', () => ({
 
     c.set('userId', 101);
     c.set('userRole', String(c.env?.__mockRole || 'manager'));
-    c.set('empresaId', 1);
+    c.set('empresaId', String(c.env?.__mockEmpresaId ?? 6));
     await next();
   },
 }));
@@ -33,8 +40,15 @@ function createBackupApp() {
   return app;
 }
 
-describe('backup routes guards', () => {
-  it('retorna 401 quando não autenticado', async () => {
+const DISABLED_BODY = {
+  success: false,
+  code: 'BACKUP_DISABLED_PENDING_TENANT_ISOLATION',
+};
+
+describe('backup routes — DISABLED pending tenant isolation', () => {
+  // ─── Auth bypass is irrelevant — feature is disabled for everyone ─────────
+
+  it('retorna 503 mesmo sem autenticação (feature desativada, não vaza auth status)', async () => {
     const app = createBackupApp();
 
     const response = await app.request(
@@ -47,14 +61,12 @@ describe('backup routes guards', () => {
       { __authMode: 'missing' } as unknown as Env,
     );
 
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      error: 'AUTH_REQUIRED',
-    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
   });
 
-  it('retorna 403 para role sem permissão (fail-closed)', async () => {
+  it('retorna 503 para admin autenticado da empresa 6', async () => {
     const app = createBackupApp();
 
     const response = await app.request(
@@ -64,38 +76,19 @@ describe('backup routes guards', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tipo: 'COMPLETO' }),
       },
-      { __authMode: 'ok', __mockRole: 'user' } as unknown as Env,
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      code: 'RBAC_FORBIDDEN',
-    });
-  });
-
-  it('retorna 503 com BUCKET_NOT_BOUND para manager autorizado sem bucket', async () => {
-    const app = createBackupApp();
-
-    const response = await app.request(
-      '/backup/manual',
       {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'COMPLETO' }),
-      },
-      { __authMode: 'ok', __mockRole: 'manager' } as unknown as Env,
+        __authMode: 'ok',
+        __mockRole: 'admin',
+        __mockEmpresaId: 6,
+        BUCKET: {} as R2Bucket,
+      } as unknown as Env,
     );
 
     expect(response.status).toBe(503);
-    expect(response.headers.get('cache-control')).toContain('no-store');
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      code: 'BUCKET_NOT_BOUND',
-    });
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
   });
 
-  it('retorna 400 em payload inválido quando bucket existe', async () => {
+  it('retorna 503 para manager autenticado da empresa 6', async () => {
     const app = createBackupApp();
 
     const response = await app.request(
@@ -103,23 +96,21 @@ describe('backup routes guards', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'INVALIDO' }),
+        body: JSON.stringify({ tipo: 'COMPLETO' }),
       },
       {
         __authMode: 'ok',
-        __mockRole: 'admin',
+        __mockRole: 'manager',
+        __mockEmpresaId: 6,
         BUCKET: {} as R2Bucket,
       } as unknown as Env,
     );
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      code: 'VALIDATION_ERROR',
-    });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
   });
 
-  it('retorna 400 em módulo inválido antes de orquestrar backup', async () => {
+  it('retorna 503 para admin de outra empresa (empresa 1)', async () => {
     const app = createBackupApp();
 
     const response = await app.request(
@@ -127,22 +118,162 @@ describe('backup routes guards', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tipo: 'MODULAR',
-          modulos: ['MODULO_INEXISTENTE'],
-        }),
+        body: JSON.stringify({ tipo: 'COMPLETO' }),
       },
       {
         __authMode: 'ok',
         __mockRole: 'admin',
+        __mockEmpresaId: 1,
         BUCKET: {} as R2Bucket,
       } as unknown as Env,
     );
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      success: false,
-      code: 'INVALID_MODULES',
-    });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+  });
+
+  // ─── Role without permission also gets 503 (feature disabled, not RBAC) ───
+
+  it('retorna 503 para editor (role sem permissão de backup)', async () => {
+    const app = createBackupApp();
+
+    const response = await app.request(
+      '/backup/manual',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'COMPLETO' }),
+      },
+      {
+        __authMode: 'ok',
+        __mockRole: 'editor',
+        __mockEmpresaId: 6,
+      } as unknown as Env,
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+  });
+
+  // ─── ALL endpoints are blocked ─────────────────────────────────────────────
+
+  it('GET /backup (lista) retorna 503', async () => {
+    const app = createBackupApp();
+    const response = await app.request('/backup', {}, {
+      __authMode: 'ok',
+      __mockRole: 'admin',
+      __mockEmpresaId: 6,
+    } as unknown as Env);
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+  });
+
+  it('GET /backup/:uuid (detalhes) retorna 503', async () => {
+    const app = createBackupApp();
+    const response = await app.request('/backup/test-uuid-123', {}, {
+      __authMode: 'ok',
+      __mockRole: 'admin',
+      __mockEmpresaId: 6,
+    } as unknown as Env);
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+  });
+
+  it('POST /backup/manual (criação) retorna 503', async () => {
+    const app = createBackupApp();
+    const response = await app.request(
+      '/backup/manual',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'COMPLETO' }),
+      },
+      {
+        __authMode: 'ok',
+        __mockRole: 'admin',
+        __mockEmpresaId: 6,
+        BUCKET: {} as R2Bucket,
+      } as unknown as Env,
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+  });
+
+  it('POST /backup/:uuid/restore (restauração) retorna 503', async () => {
+    const app = createBackupApp();
+    const response = await app.request(
+      '/backup/test-uuid-123/restore',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modulos: ['PESSOAS'] }),
+      },
+      {
+        __authMode: 'ok',
+        __mockRole: 'admin',
+        __mockEmpresaId: 6,
+        BUCKET: {} as R2Bucket,
+      } as unknown as Env,
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+  });
+
+  it('DELETE /backup/:uuid (remoção) retorna 503', async () => {
+    const app = createBackupApp();
+    const response = await app.request(
+      '/backup/test-uuid-123',
+      { method: 'DELETE' },
+      {
+        __authMode: 'ok',
+        __mockRole: 'admin',
+        __mockEmpresaId: 6,
+      } as unknown as Env,
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+  });
+
+  it('GET /backup/:uuid/download (exportação completa) retorna 503', async () => {
+    const app = createBackupApp();
+    const response = await app.request(
+      '/backup/test-uuid-123/download',
+      {},
+      {
+        __authMode: 'ok',
+        __mockRole: 'admin',
+        __mockEmpresaId: 6,
+        BUCKET: {} as R2Bucket,
+      } as unknown as Env,
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+  });
+
+  // ─── Cache-Control headers are still applied ───────────────────────────────
+
+  it('aplica cache-control: no-store em todos os endpoints bloqueados', async () => {
+    const app = createBackupApp();
+
+    for (const [method, path] of [
+      ['GET', '/backup'],
+      ['GET', '/backup/test-uuid-123'],
+      ['POST', '/backup/manual'],
+      ['POST', '/backup/test-uuid-123/restore'],
+      ['DELETE', '/backup/test-uuid-123'],
+      ['GET', '/backup/test-uuid-123/download'],
+    ] as const) {
+      const body = method === 'POST' ? JSON.stringify({ tipo: 'COMPLETO' }) : undefined;
+      const response = await app.request(
+        path,
+        {
+          method,
+          headers: body ? { 'Content-Type': 'application/json' } : {},
+          body,
+        },
+        { __authMode: 'ok', __mockRole: 'admin', __mockEmpresaId: 6 } as unknown as Env,
+      );
+      expect(response.headers.get('cache-control')).toContain('no-store');
+    }
   });
 });
