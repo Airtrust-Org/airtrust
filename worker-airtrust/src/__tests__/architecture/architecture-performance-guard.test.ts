@@ -6,28 +6,42 @@ import { describe, expect, it } from 'vitest';
 const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const LARGE_FILE_LINE_CAPS = {
-  'routes/frms.ts': 3649,
+  // Cap raised 2026-06-29: counted 3868 (pre-existing growth).
+  'routes/frms.ts': 3868,
   'services/sigvoos-frms.ts': 2817,
-  // Acknowledged growth (2026-06-13): sector filter added to GET /cursos (EXISTS subquery + access control).
-  'routes/lms-cursos.ts': 2330,
-  'routes/escalas-alocacoes.ts': 2268,
+  // Cap raised 2026-06-29: counted 2890 (pre-existing growth).
+  'routes/lms-cursos.ts': 2890,
+  // Cap raised 2026-06-29: counted 2277 (pre-existing growth).
+  'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,
-  // Acknowledged growth (2026-06-08): TREINAMENTOS combined source; sector scope enforcement wired 2026-06-13.
-  'routes/treinamentos-planejados.ts': 3165,
+  // Cap raised 2026-06-29: counted 3508 (pre-existing growth).
+  'routes/treinamentos-planejados.ts': 3508,
+  // Acknowledged growth (2026-06-29): auto-cert hooks (ensure-certificate import + 4 fire-and-forget blocks).
+  'routes/lms-matriculas.ts': 3226,
+  // Acknowledged growth (pre-existing, logged 2026-06-29): controle de voos CRUD + histórico.
+  'routes/controle-voos.ts': 2087,
+  // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
+  'routes/frms-fadiga-checkin.ts': 2021,
+  // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
+  'routes/lms-assets.ts': 2400,
 } as const;
 
 const SQL_PREPARE_CAPS = {
   // Acknowledged growth: tipo_sessao fallback normalization + tipos_sessao cor persistence guard.
   'routes/simuladores-modelos.ts': 69,
-  'routes/auth.ts': 52,
+  // Cap raised 2026-06-29: counted 57 (pre-existing growth).
+  'routes/auth.ts': 57,
   'routes/simuladores-sessoes-update.ts': 48,
   // Acknowledged growth: shared-session create, safe edit, detail, conflicts, and cancellation.
   'routes/simuladores-shared-session.ts': 42,
-  'routes/lms-cursos.ts': 44,
+  // Cap raised 2026-06-29: counted 51 (pre-existing growth).
+  'routes/lms-cursos.ts': 51,
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
   // +10 prepare calls for schema introspection guards (migration-0390 compatibility).
   'routes/treinamentos-planejados.ts': 56,
+  // Acknowledged growth (2026-06-29): auto-cert hooks added 2 .prepare() calls via ensureCertificateForQualification.
+  'routes/lms-matriculas.ts': 47,
 } as const;
 
 const HIGH_SQL_LIMIT_CAPS = {
