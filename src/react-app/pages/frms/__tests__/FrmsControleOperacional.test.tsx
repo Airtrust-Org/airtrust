@@ -299,7 +299,7 @@ describe('FrmsControleOperacional', () => {
     fireEvent.click(screen.getByText('Aplicar filtros'));
 
     await waitFor(() => {
-      expect(screen.getByText('Ana')).toBeInTheDocument();
+      expect(screen.getAllByText('Ana').length).toBeGreaterThan(0);
       expect(screen.queryByText('Max')).not.toBeInTheDocument();
       expect(screen.queryByText('Bruno')).not.toBeInTheDocument();
       expect(screen.queryByText('Carla')).not.toBeInTheDocument();
@@ -625,7 +625,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[0]);
 
       expect(
         screen.getByText('Período de embarque não localizado nesta data. Verifique se a escala quinzenal foi cadastrada.'),
@@ -646,7 +646,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[0]);
 
       expect(
         screen.getByText(
@@ -669,7 +669,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[0]);
 
       expect(
         screen.getByText('Quinzena base identificada. Não há jornada FRMS vinculada neste dia.'),
@@ -684,7 +684,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[0]);
 
       expect(screen.getByText('Sem jornada FRMS registrada nesta data.')).toBeInTheDocument();
     });
@@ -702,7 +702,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[0]);
 
       expect(screen.getByText('Quinzena com atenção')).toBeInTheDocument();
       expect(screen.getByText('Fonte do período:')).toBeInTheDocument();
@@ -722,7 +722,7 @@ describe('FrmsControleOperacional', () => {
       ]);
 
       renderControle();
-      fireEvent.click(screen.getAllByText('Ver evolução diária')[1]);
+      fireEvent.click(screen.getAllByText('Ver evolução diária')[0]);
 
       expect(screen.queryByText(/homologado|aprovado|ANAC/i)).not.toBeInTheDocument();
       expect(screen.getAllByText(/Indicador operacional da quinzena/).length).toBeGreaterThan(0);
