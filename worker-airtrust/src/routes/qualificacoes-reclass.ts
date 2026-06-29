@@ -11,6 +11,7 @@
 import { Hono } from 'hono';
 import type { Env, ApiResponse, QualificacaoReclassQueueItem } from '../types';
 import { auth } from '../middleware/auth';
+import { getTenantContext } from '../middleware/tenant';
 import { requireRole } from '../middleware/rbac';
 // Simple CSV escape
 function csvEscape(v: unknown): string {
@@ -24,12 +25,13 @@ const app = new Hono<{ Bindings: Env }>();
 
 // GET /queue - lista pendentes
 app.get('/queue', auth(), requireRole('admin', 'manager'), async (c) => {
+  const { empresaId } = getTenantContext(c);
   const db = c.env.DB;
   const limit = Math.min(parseInt(c.req.query('limit') || '200'), 500);
   const offset = Math.max(parseInt(c.req.query('offset') || '0'), 0);
   const search = (c.req.query('search') || '').trim().toLowerCase();
 
-  const baseSql = `SELECT 
+  const baseSql = `SELECT
       q.id,
       q.historico_id,
       q.current_codigo,
@@ -47,16 +49,17 @@ app.get('/queue', auth(), requireRole('admin', 'manager'), async (c) => {
     JOIN qualificacoes_historico h ON h.id = q.historico_id
     LEFT JOIN funcionarios f ON f.id = h.funcionario_id
     WHERE q.status = 'PENDING'
+      AND f.empresa_id = ?
       AND h.deleted_at IS NULL
       AND (f.deleted_at IS NULL OR f.deleted_at IS NULL)`; // redundância defensiva
 
   let finalSql = baseSql + ' ORDER BY h.data_conclusao DESC LIMIT ? OFFSET ?';
-  let bindings: unknown[] = [limit, offset];
+  let bindings: unknown[] = [empresaId, limit, offset];
   if (search) {
     finalSql =
       baseSql +
       ' AND (LOWER(f.nome) LIKE ? OR CAST(h.funcionario_id AS TEXT) LIKE ?) ORDER BY h.data_conclusao DESC LIMIT ? OFFSET ?';
-    bindings = [`%${search}%`, `%${search}%`, limit, offset];
+    bindings = [empresaId, `%${search}%`, `%${search}%`, limit, offset];
   }
 
   const { results } = await db
@@ -65,8 +68,12 @@ app.get('/queue', auth(), requireRole('admin', 'manager'), async (c) => {
     .all<QualificacaoReclassQueueItem>();
   const countRow = await db
     .prepare(
-      "SELECT COUNT(*) as total FROM qualificacoes_historico_reclass_queue WHERE status='PENDING'",
+      `SELECT COUNT(*) as total FROM qualificacoes_historico_reclass_queue q
+       JOIN qualificacoes_historico h ON h.id = q.historico_id
+       LEFT JOIN funcionarios f ON f.id = h.funcionario_id
+       WHERE q.status='PENDING' AND f.empresa_id = ?`,
     )
+    .bind(empresaId)
     .first<{ total: number }>();
 
   const response: ApiResponse<{ items: QualificacaoReclassQueueItem[]; total: number }> = {
@@ -78,16 +85,21 @@ app.get('/queue', auth(), requireRole('admin', 'manager'), async (c) => {
 
 // GET /progresso - métricas
 app.get('/progresso', auth(), requireRole('admin', 'manager'), async (c) => {
+  const { empresaId } = getTenantContext(c);
   const db = c.env.DB;
   const stats = await db
     .prepare(
-      `SELECT 
+      `SELECT
         COUNT(*) AS total,
-        SUM(CASE WHEN status='PENDING' THEN 1 END) AS pendentes,
-        SUM(CASE WHEN status='APPLIED' THEN 1 END) AS aplicadas,
-        SUM(CASE WHEN status='SKIPPED' THEN 1 END) AS ignoradas
-      FROM qualificacoes_historico_reclass_queue`,
+        SUM(CASE WHEN q.status='PENDING' THEN 1 END) AS pendentes,
+        SUM(CASE WHEN q.status='APPLIED' THEN 1 END) AS aplicadas,
+        SUM(CASE WHEN q.status='SKIPPED' THEN 1 END) AS ignoradas
+      FROM qualificacoes_historico_reclass_queue q
+      JOIN qualificacoes_historico h ON h.id = q.historico_id
+      LEFT JOIN funcionarios f ON f.id = h.funcionario_id
+      WHERE f.empresa_id = ?`,
     )
+    .bind(empresaId)
     .first<{
       total: number;
       pendentes: number;
@@ -99,6 +111,7 @@ app.get('/progresso', auth(), requireRole('admin', 'manager'), async (c) => {
 
 // PATCH /:historicoId - aplicar reclassificação
 app.patch('/:historicoId', auth(), requireRole('admin', 'manager'), async (c) => {
+  const { empresaId } = getTenantContext(c);
   const db = c.env.DB;
   const historicoIdRaw = c.req.param('historicoId');
   const historicoId = parseInt(historicoIdRaw, 10);
@@ -114,6 +127,20 @@ app.patch('/:historicoId', auth(), requireRole('admin', 'manager'), async (c) =>
   if (!body.target_tipo_id) {
     return c.json({ success: false, error: 'target_tipo_id é obrigatório' }, 400);
   }
+
+  // Tenant guard: verify historico belongs to user's empresa
+  const tenantCheck = await db
+    .prepare(
+      `SELECT h.id FROM qualificacoes_historico h
+       JOIN funcionarios f ON f.id = h.funcionario_id
+       WHERE h.id = ? AND f.empresa_id = ? AND h.deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(historicoId, empresaId)
+    .first();
+  if (!tenantCheck) {
+    return c.json({ success: false, error: 'Histórico não encontrado' }, 404);
+  }
+
   // Validar existência do tipo
   const tipoExists = await db
     .prepare('SELECT id FROM qualificacoes_tipos WHERE id = ? AND deleted_at IS NULL LIMIT 1')
@@ -162,17 +189,20 @@ app.patch('/:historicoId', auth(), requireRole('admin', 'manager'), async (c) =>
 // Estratégia: pegar categoria (sempre TREINAMENTO no colapso atual), listar tipos da mesma categoria
 // e ranquear por validade_meses DESC + ocorrência do código no campo observações (se houver)
 app.get('/sugestoes/:historicoId', auth(), requireRole('admin', 'manager'), async (c) => {
+  const { empresaId } = getTenantContext(c);
   const db = c.env.DB;
   const historicoIdRaw = c.req.param('historicoId');
   const historicoId = parseInt(historicoIdRaw, 10);
   if (isNaN(historicoId)) return c.json({ success: false, error: 'historicoId inválido' }, 400);
-  // Obter linha base
+  // Obter linha base — with tenant guard
   const base = await db
     .prepare(
       `SELECT h.id, h.observacoes, h.numero_certificado, h.categoria, h.data_conclusao, h.data_vencimento
-       FROM qualificacoes_historico h WHERE h.id = ? LIMIT 1`,
+       FROM qualificacoes_historico h
+       JOIN funcionarios f ON f.id = h.funcionario_id
+       WHERE h.id = ? AND f.empresa_id = ? LIMIT 1`,
     )
-    .bind(historicoId)
+    .bind(historicoId, empresaId)
     .first<{
       id: number;
       observacoes: string | null;
@@ -222,6 +252,7 @@ app.get('/sugestoes/:historicoId', auth(), requireRole('admin', 'manager'), asyn
 
 // GET /queue/export - exportar pendentes
 app.get('/queue/export', auth(), requireRole('admin', 'manager'), async (c) => {
+  const { empresaId } = getTenantContext(c);
   const db = c.env.DB;
   const format = (c.req.query('format') || 'csv').toLowerCase();
   const { results } = await db
@@ -231,9 +262,10 @@ app.get('/queue/export', auth(), requireRole('admin', 'manager'), async (c) => {
        FROM qualificacoes_historico_reclass_queue q
        JOIN qualificacoes_historico h ON h.id = q.historico_id
        LEFT JOIN funcionarios f ON f.id = h.funcionario_id
-       WHERE q.status='PENDING'
+       WHERE q.status='PENDING' AND f.empresa_id = ?
        ORDER BY h.data_conclusao DESC`,
     )
+    .bind(empresaId)
     .all();
   if (format === 'json') {
     return c.json({ success: true, data: results || [] });
