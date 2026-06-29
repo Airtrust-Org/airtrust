@@ -1,274 +1,217 @@
-import { useMemo, useRef, useState, useCallback } from 'react';
-import type { FrmsOperationalSnapshotItem, FrmsOperationalSnapshotStatus } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { useMemo } from 'react';
+import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 
-interface CrewRow {
-  funcionarioId: number;
-  displayName: string;
-  funcao: string | null;
-  days: Map<string, FrmsOperationalSnapshotItem>;
-  worstSeverity: number;
+// ── Estado de célula ──────────────────────────────────────────────────────────
+//
+// O backend não distingue "folga regulatória" de "ausência de dado" — ambos
+// aparecem como linhas sem snapshot ou com has_snapshot_data=false.
+// Os 7 estados abaixo usam somente o que o snapshot realmente informa.
+
+type CellState =
+  | 'CRITICO'       // snapshot_status = CRITICO
+  | 'ATENCAO'       // snapshot_status = ATENCAO
+  | 'CHECKIN_PEND'  // checkin_status = PENDENTE ou AUSENTE (exige ação imediata)
+  | 'INCOMPLETO'    // snapshot_status = INCOMPLETO
+  | 'OK_JORNADA'    // OK + teve_jornada=true
+  | 'SEM_JORNADA'   // has_snapshot (check-in ou fonte), mas sem jornada FRMS
+  | 'SEM_REGISTRO'; // nenhum dado para este dia
+
+interface CellStyle {
+  bg: string;
+  border: string;
+  text: string;
+  label: string;
+  icon: string;
 }
 
-interface TooltipInfo {
-  x: number;
-  y: number;
-  nome: string;
-  date: string;
-  item: FrmsOperationalSnapshotItem | null;
+const CELL_STYLES: Record<CellState, CellStyle> = {
+  CRITICO:      { bg: 'bg-red-400',     border: 'border-red-500',              text: 'text-white',       label: 'Crítico',          icon: '!' },
+  ATENCAO:      { bg: 'bg-amber-300',   border: 'border-amber-400',            text: 'text-amber-900',   label: 'Atenção',          icon: '▲' },
+  CHECKIN_PEND: { bg: 'bg-yellow-100',  border: 'border-yellow-400',           text: 'text-yellow-800',  label: 'Check-in pendente',icon: '⋯' },
+  INCOMPLETO:   { bg: 'bg-slate-300',   border: 'border-slate-400',            text: 'text-slate-700',   label: 'Incompleto',       icon: '?' },
+  OK_JORNADA:   { bg: 'bg-emerald-200', border: 'border-emerald-300',          text: 'text-emerald-800', label: 'OK — jornada',     icon: '✓' },
+  SEM_JORNADA:  { bg: 'bg-slate-50',    border: 'border-slate-200',            text: 'text-slate-400',   label: 'Sem jornada FRMS', icon: '·' },
+  SEM_REGISTRO: { bg: 'bg-white',       border: 'border-slate-100',            text: 'text-slate-200',   label: 'Sem registro',     icon: '' },
+};
+
+const SEVERITY_ORDER: CellState[] = [
+  'CRITICO', 'ATENCAO', 'CHECKIN_PEND', 'INCOMPLETO', 'OK_JORNADA', 'SEM_JORNADA', 'SEM_REGISTRO',
+];
+
+function resolveCellState(item: FrmsOperationalSnapshotItem | undefined): CellState {
+  if (!item) return 'SEM_REGISTRO';
+  if (item.checkin_status === 'PENDENTE' || item.checkin_status === 'AUSENTE') return 'CHECKIN_PEND';
+  if (item.snapshot_status === 'CRITICO') return 'CRITICO';
+  if (item.snapshot_status === 'ATENCAO') return 'ATENCAO';
+  if (item.snapshot_status === 'INCOMPLETO') return 'INCOMPLETO';
+  if (item.teve_jornada) return 'OK_JORNADA';
+  return 'SEM_JORNADA';
 }
 
-function statusSeverity(status: FrmsOperationalSnapshotStatus | undefined): number {
-  if (status === 'CRITICO') return 3;
-  if (status === 'ATENCAO') return 2;
-  if (status === 'INCOMPLETO') return 1;
-  if (status === 'OK') return 0;
-  return -1;
+function worstSeverityScore(states: CellState[]): number {
+  for (let i = 0; i < SEVERITY_ORDER.length; i++) {
+    if (states.includes(SEVERITY_ORDER[i]!)) return SEVERITY_ORDER.length - i;
+  }
+  return 0;
 }
 
-function cellBg(status: FrmsOperationalSnapshotStatus | null): string {
-  if (status === 'CRITICO') return 'bg-red-400 hover:bg-red-500';
-  if (status === 'ATENCAO') return 'bg-amber-300 hover:bg-amber-400';
-  if (status === 'INCOMPLETO') return 'bg-slate-300 hover:bg-slate-400';
-  if (status === 'OK') return 'bg-emerald-300 hover:bg-emerald-400';
-  return 'bg-slate-100 hover:bg-slate-200';
-}
-
-function checkinIcon(status: string | undefined): string {
-  if (status === 'RECEBIDO') return '✓';
-  if (status === 'PENDENTE') return '!';
-  if (status === 'AUSENTE') return '✗';
-  return '';
-}
-
-function formatDateShort(date: string): string {
-  const [, m, d] = date.split('-');
-  return `${d}/${m}`;
-}
-
-function formatMinAsHours(min: number | null): string {
-  if (min == null || !Number.isFinite(min)) return '--';
-  return `${(min / 60).toFixed(1)}h`;
-}
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   items: FrmsOperationalSnapshotItem[];
-  dates: string[];
-  loading: boolean;
+  dates: string[]; // ISO YYYY-MM-DD em ordem
   selectedCrewId: number | null;
   onSelectCrew: (id: number) => void;
+  loading?: boolean;
 }
 
-export default function FrmsOperationalHeatmap({ items, dates, loading, selectedCrewId, onSelectCrew }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [tooltip, setTooltip] = useState<TooltipInfo | null>(null);
-  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+// ── Componente ────────────────────────────────────────────────────────────────
 
-  const crewRows = useMemo<CrewRow[]>(() => {
-    const crewMap = new Map<number, CrewRow>();
+export default function FrmsOperationalHeatmap({ items, dates, selectedCrewId, onSelectCrew, loading }: Props) {
+  const byCrewId = useMemo(() => {
+    const map = new Map<number, Map<string, FrmsOperationalSnapshotItem>>();
     for (const item of items) {
-      const existing = crewMap.get(item.funcionario_id);
-      const sev = statusSeverity(item.snapshot_status);
-      if (existing) {
-        existing.days.set(item.data_operacional, item);
-        if (sev > existing.worstSeverity) existing.worstSeverity = sev;
-      } else {
-        crewMap.set(item.funcionario_id, {
-          funcionarioId: item.funcionario_id,
-          displayName: item.nome_guerra || item.nome || `ID ${item.funcionario_id}`,
+      let dayMap = map.get(item.funcionario_id);
+      if (!dayMap) { dayMap = new Map(); map.set(item.funcionario_id, dayMap); }
+      dayMap.set(item.data_operacional, item);
+    }
+    return map;
+  }, [items]);
+
+  const crewMeta = useMemo(() => {
+    const seen = new Map<number, {
+      nome: string; funcao: string | null; aeronave: string | null; worstScore: number;
+    }>();
+    for (const item of items) {
+      if (!seen.has(item.funcionario_id)) {
+        seen.set(item.funcionario_id, {
+          nome: item.nome_guerra || item.nome || `ID ${item.funcionario_id}`,
           funcao: item.funcao,
-          days: new Map([[item.data_operacional, item]]),
-          worstSeverity: sev,
+          aeronave: item.aeronave,
+          worstScore: 0,
         });
       }
     }
-    return [...crewMap.values()].sort((a, b) => {
-      const diff = b.worstSeverity - a.worstSeverity;
-      if (diff !== 0) return diff;
-      return a.displayName.localeCompare(b.displayName, 'pt-BR');
-    });
-  }, [items]);
+    for (const [id, meta] of seen) {
+      const dayMap = byCrewId.get(id);
+      const states = dates.map((iso) => resolveCellState(dayMap?.get(iso)));
+      meta.worstScore = worstSeverityScore(states);
+    }
+    return seen;
+  }, [items, byCrewId, dates]);
 
-  const cellW = dates.length <= 14 ? 28 : dates.length <= 21 ? 22 : dates.length <= 31 ? 18 : 14;
-  const rowH = crewRows.length <= 25 ? 32 : 26;
-  const labelEvery = dates.length <= 14 ? 1 : dates.length <= 21 ? 2 : 3;
+  const sortedCrewIds = useMemo(
+    () => [...crewMeta.entries()].sort((a, b) => b[1].worstScore - a[1].worstScore).map(([id]) => id),
+    [crewMeta],
+  );
 
-  const showTooltip = useCallback((e: React.MouseEvent, crew: CrewRow, date: string) => {
-    if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
-    const item = crew.days.get(date) ?? null;
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    setTooltip({
-      x: rect.left - (containerRect?.left ?? 0) + rect.width / 2,
-      y: rect.top - (containerRect?.top ?? 0) - 8,
-      nome: crew.displayName,
-      date,
-      item,
-    });
-  }, []);
+  const cellW =
+    dates.length <= 14 ? 'w-7 min-w-[28px]' :
+    dates.length <= 21 ? 'w-6 min-w-[24px]' :
+    dates.length <= 31 ? 'w-5 min-w-[20px]' :
+    'w-4 min-w-[16px]';
 
-  const hideTooltip = useCallback(() => {
-    tooltipTimerRef.current = setTimeout(() => setTooltip(null), 120);
-  }, []);
-
-  if (!loading && crewRows.length === 0) {
+  if (loading) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+      <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">
+        Carregando heatmap operacional...
+      </div>
+    );
+  }
+
+  if (sortedCrewIds.length === 0) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">
         Nenhum dado operacional para o período. Ajuste o intervalo de datas.
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="relative rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">Quinzena por tripulante</h2>
-          <p className="text-xs text-slate-500">
-            {crewRows.length} tripulantes · {dates.length} dias · ordenados por severidade. Clique para ver o acumulado.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-          {[
-            { label: 'OK', cls: 'bg-emerald-300' },
-            { label: 'Atenção', cls: 'bg-amber-300' },
-            { label: 'Crítico', cls: 'bg-red-400' },
-            { label: 'Incompleto', cls: 'bg-slate-300' },
-            { label: 'Sem dado', cls: 'bg-slate-100 border border-slate-200' },
-          ].map((s) => (
-            <span key={s.label} className="inline-flex items-center gap-1.5">
-              <span className={`inline-block h-3 w-3 rounded-sm ${s.cls}`} />
-              {s.label}
-            </span>
-          ))}
-          <span className="text-slate-400">· ✓ check-in recebido · ! pendente · ✗ ausente</span>
-        </div>
+    <div className="rounded-lg border border-slate-200 bg-white">
+      <div className="border-b border-slate-200 px-4 py-3">
+        <h2 className="text-sm font-semibold text-slate-900">Heatmap operacional</h2>
+        <p className="text-xs text-slate-500">
+          Clique no nome para ver o acumulado individual. Ordenado por severidade.
+        </p>
       </div>
 
-      {loading ? (
-        <div className="flex h-32 items-center justify-center text-sm text-slate-400">Carregando heatmap operacional...</div>
-      ) : (
-        <div className={`overflow-x-auto ${crewRows.length > 30 ? 'max-h-[560px] overflow-y-auto' : ''}`}>
-          <div className="sticky top-0 z-10 flex border-b border-slate-200 bg-white/95 pb-1 backdrop-blur">
-            <div className="w-36 flex-shrink-0" />
-            <div className="flex flex-1">
-              {dates.map((d, i) => (
-                <div key={d} style={{ width: cellW, flexShrink: 0 }} className="text-center">
-                  {i % labelEvery === 0 && (
-                    <span className="whitespace-nowrap text-[9px] font-medium text-slate-400">
-                      {formatDateShort(d)}
-                    </span>
-                  )}
+      <div className="overflow-x-auto">
+        <div className="min-w-max">
+          {/* Cabeçalho de datas */}
+          <div className="flex border-b border-slate-100 bg-slate-50 px-4 py-1">
+            <div className="w-36 shrink-0" />
+            {dates.map((iso) => {
+              const parts = iso.split('-');
+              return (
+                <div key={iso} className={`${cellW} text-center text-[10px] font-medium text-slate-400`}>
+                  {parts[2]}/{parts[1]}
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
 
-          {crewRows.map((crew) => {
-            const isSelected = crew.funcionarioId === selectedCrewId;
+          {sortedCrewIds.map((crewId) => {
+            const meta = crewMeta.get(crewId)!;
+            const dayMap = byCrewId.get(crewId);
+            const isSelected = crewId === selectedCrewId;
+
             return (
               <div
-                key={crew.funcionarioId}
-                className={`flex items-center border-b border-slate-100 transition-colors ${
-                  isSelected ? 'bg-sky-50' : 'hover:bg-slate-50/60'
-                }`}
-                style={{ height: rowH }}
+                key={crewId}
+                className={`flex items-center border-b border-slate-50 last:border-0 transition-colors hover:bg-slate-50/60 ${isSelected ? 'bg-sky-50' : ''}`}
               >
                 <button
-                  className="w-36 flex-shrink-0 truncate px-2 text-left text-xs font-medium text-slate-700 hover:text-blue-600 hover:underline"
-                  onClick={() => onSelectCrew(crew.funcionarioId)}
-                  title={`Ver acumulado: ${crew.displayName}${crew.funcao ? ` (${crew.funcao})` : ''}`}
+                  className="flex w-36 shrink-0 flex-col items-start gap-0.5 px-4 py-2 text-left"
+                  onClick={() => onSelectCrew(crewId)}
+                  title="Ver acumulado"
                 >
-                  {crew.displayName}
+                  <span className={`truncate text-xs font-semibold ${isSelected ? 'text-sky-700' : 'text-slate-800'}`}>
+                    {meta.nome}
+                  </span>
+                  {(meta.funcao || meta.aeronave) && (
+                    <span className="truncate text-[10px] text-slate-400">
+                      {[meta.funcao, meta.aeronave].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
                 </button>
-                <div className="flex flex-1 gap-px">
-                  {dates.map((d) => {
-                    const item = crew.days.get(d);
-                    const status = item?.snapshot_status ?? null;
-                    const icon = checkinIcon(item?.checkin_status);
-                    const isEstimated =
-                      item &&
-                      (item.sleep_data_source === 'ESTIMADO' ||
-                        item.jornada_data_source === 'ESTIMADO' ||
-                        item.jornada_data_source === 'INCONSISTENTE');
-                    return (
-                      <div
-                        key={d}
-                        style={{ width: cellW, flexShrink: 0, height: rowH - 6 }}
-                        className={`relative cursor-pointer rounded-[3px] transition-transform hover:z-10 hover:scale-110 ${cellBg(status)}`}
-                        onMouseEnter={(e) => showTooltip(e, crew, d)}
-                        onMouseLeave={hideTooltip}
-                        onClick={() => onSelectCrew(crew.funcionarioId)}
-                      >
-                        {icon && (
-                          <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white/80 select-none">
-                            {icon}
-                          </span>
-                        )}
-                        {isEstimated && (
-                          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-amber-600 opacity-80" />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+
+                {dates.map((iso) => {
+                  const item = dayMap?.get(iso);
+                  const state = resolveCellState(item);
+                  const s = CELL_STYLES[state];
+                  return (
+                    <div
+                      key={iso}
+                      className={`${cellW} mx-px flex h-7 shrink-0 items-center justify-center rounded border text-[9px] font-bold ${s.bg} ${s.border} ${s.text}`}
+                      title={`${meta.nome} — ${iso}\n${s.label}${item?.alertas?.length ? '\nAlertas: ' + item.alertas.join(', ') : ''}`}
+                    >
+                      {s.icon}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
         </div>
-      )}
+      </div>
 
-      {tooltip && (
-        <div
-          className="pointer-events-none absolute z-50 min-w-[190px] rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-lg"
-          style={{
-            left: Math.min(tooltip.x, (containerRef.current?.clientWidth ?? 600) - 210),
-            top: Math.max(4, tooltip.y - 160),
-          }}
-        >
-          <p className="font-semibold text-slate-800">{tooltip.nome}</p>
-          <p className="mb-1 text-slate-400">{formatDateShort(tooltip.date)}</p>
-          {!tooltip.item ? (
-            <p className="text-slate-500">Sem dado operacional neste dia</p>
-          ) : (
-            <div className="space-y-0.5 text-slate-600">
-              <p>
-                Status:{' '}
-                <span className="font-medium text-slate-800">{tooltip.item.snapshot_status}</span>
-              </p>
-              <p>
-                Check-in: <span className="font-medium">{tooltip.item.checkin_status}</span>
-              </p>
-              <p>
-                Sono:{' '}
-                <span className="font-medium">
-                  {tooltip.item.horas_sono != null ? `${tooltip.item.horas_sono.toFixed(1)}h` : '--'}
-                </span>{' '}
-                · KSS: <span className="font-medium">{tooltip.item.kss_score ?? '--'}</span>
-              </p>
-              <p>
-                Efetividade estimada:{' '}
-                <span className="font-medium">
-                  {tooltip.item.effectiveness_pct != null
-                    ? `${tooltip.item.effectiveness_pct.toFixed(1)}%`
-                    : '--'}
-                </span>
-              </p>
-              <p>
-                Jornada:{' '}
-                <span className="font-medium">
-                  {formatMinAsHours(tooltip.item.duracao_jornada_minutos)}
-                </span>
-              </p>
-              {tooltip.item.alertas.length > 0 && (
-                <p className="text-rose-600">⚠ {tooltip.item.alertas.slice(0, 2).join(' · ')}</p>
-              )}
-              <p className="text-[10px] text-slate-400">
-                Sono {tooltip.item.sleep_data_source} · Jornada {tooltip.item.jornada_data_source}
-              </p>
-            </div>
-          )}
+      {/* Legenda sempre visível */}
+      <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5">
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {(Object.entries(CELL_STYLES) as [CellState, CellStyle][]).map(([state, s]) => (
+            <span key={state} className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
+              <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[8px] font-bold ${s.bg} ${s.border} ${s.text}`}>
+                {s.icon || ' '}
+              </span>
+              {s.label}
+            </span>
+          ))}
         </div>
-      )}
+        <p className="mt-1.5 text-[10px] italic text-slate-400">
+          "Sem registro" inclui descanso, folga e dado não recebido — o sistema não distingue sem jornada lançada.
+        </p>
+      </div>
     </div>
   );
 }
