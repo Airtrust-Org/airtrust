@@ -47,6 +47,8 @@ import FrmsHeatmap from './components/FrmsHeatmap';
 import FrmsTripulantesTable from './components/FrmsTripulantesTable';
 import FrmsJornadaEffectivenessCard from './components/FrmsJornadaEffectivenessCard';
 import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
+import FrmsSourcePolicyBanner from './components/FrmsSourcePolicyBanner';
+import FrmsOperationalActionList from './components/FrmsOperationalActionList';
 import {
   getMonthRange,
   getMonthDays,
@@ -236,6 +238,7 @@ function DashboardContent() {
     null,
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mapLens, setMapLens] = useState<'compliance' | 'fatigue' | 'effectiveness'>('compliance');
   const timelineRef = useRef<HTMLDivElement>(null);
 
   // Scroll to timeline when tripulante is selected
@@ -698,26 +701,18 @@ function DashboardContent() {
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-4 sm:p-6">
             <FrmsFilterChips />
+            <FrmsSourcePolicyBanner />
             <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-              Ferramenta de triagem operacional: os índices são estimativas para apoiar revisão humana.
-              Não são diagnóstico médico, não são validação SAFTE-FAST e não determinam automaticamente
-              aptidão ou restrição operacional.
+              Triagem operacional — índices estimados para apoio humano. Não substituem avaliação
+              regulatória, check-in médico ou decisão de aptidão.
             </div>
 
-            <section className="rounded-3xl border border-slate-200 bg-white/95 p-5 shadow-sm">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="max-w-3xl">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-slate-950">
-                      Acúmulo de fadiga da quinzena
-                    </h2>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                      Snapshot do dia {operationalSnapshotDate.slice(8, 10)}/{operationalSnapshotDate.slice(5, 7)}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Visão operacional do acúmulo quinzenal para apoiar a coordenação. Não substitui
-                    avaliação operacional do gestor.
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">Resumo executivo FRMS</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Atenção agora · pendências de fonte/check-in · tendência · evidência para auditoria.
                   </p>
                 </div>
                 <Button
@@ -725,262 +720,106 @@ function DashboardContent() {
                   onClick={() => navigate(`/frms/controle-operacional?data=${operationalSnapshotDate}`)}
                 >
                   <Activity className="mr-2 h-4 w-4" />
-                  Abrir controle operacional
+                  Controle operacional completo
                 </Button>
               </div>
 
-              {loadingOperationalSnapshot ? (
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                  Carregando acúmulo operacional da quinzena...
-                </div>
-              ) : operationalSnapshotError ? (
-                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
-                  Não foi possível consolidar a quinzena operacional agora. O painel principal do FRMS
-                  continua disponível, sem inventar dados ausentes.
-                </div>
-              ) : (
-                <div className="mt-4 space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                        Quinzena atual
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-950">
-                        {fortnightSummary.periodStart && fortnightSummary.periodEnd
-                          ? formatFortnightPeriod(
-                              fortnightSummary.periodStart,
-                              fortnightSummary.periodEnd,
-                            )
-                          : 'Nao confirmada'}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Status {fortnightSummary.periodStatusLabel.toLowerCase()}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                        Tripulantes monitorados
-                      </p>
-                      <p className="mt-1 text-2xl font-semibold text-slate-950">
-                        {fortnightSummary.monitoredCount}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {fortnightSummary.locatedCount} com quinzena localizada
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700">
-                        Em atencao
-                      </p>
-                      <p className="mt-1 text-2xl font-semibold text-amber-900">
-                        {fortnightSummary.attentionCount}
-                      </p>
-                      <p className="mt-1 text-xs text-amber-800">
-                        Check-ins criticos {fortnightSummary.criticalCheckinsCount}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-red-700">
-                        Criticos
-                      </p>
-                      <p className="mt-1 text-2xl font-semibold text-red-900">
-                        {fortnightSummary.criticalCount}
-                      </p>
-                      <p className="mt-1 text-xs text-red-800">
-                        Requerem leitura operacional prioritaria
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-sky-700">
-                        Tendencia geral
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-sky-950">
-                        {fortnightSummary.generalTrendLabel}
-                      </p>
-                      <p className="mt-1 text-xs text-sky-800">
-                        Leitura inferida pelos indicadores visiveis
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                        Maior acumulo de jornada
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-950">
-                        {fortnightSummary.topDutyCrew
-                          ? `${fortnightSummary.topDutyCrew.displayName} · ${formatFortnightMinutes(
-                              fortnightSummary.topDutyCrew.dutyTimeMin,
-                            )}`
-                          : 'Nao confirmado'}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Total visivel {formatFortnightMinutes(fortnightSummary.totalDutyTimeMin)}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                        Maior acumulo de HV
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-950">
-                        {fortnightSummary.topFlightCrew
-                          ? `${fortnightSummary.topFlightCrew.displayName} · ${formatFortnightMinutes(
-                              fortnightSummary.topFlightCrew.flightTimeMin,
-                            )}`
-                          : 'Nao confirmado'}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Total visivel {formatFortnightMinutes(fortnightSummary.totalFlightTimeMin)}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                        Dados incompletos/estimados
-                      </p>
-                      <p className="mt-1 text-2xl font-semibold text-slate-950">
-                        {fortnightSummary.estimatedOrIncompleteCount}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {fortnightSummary.incompleteCount} com leitura parcial da quinzena
-                      </p>
-                    </div>
+              {!loadingOperationalSnapshot && !operationalSnapshotError && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+                    <p className="text-[11px] font-medium uppercase text-red-700">Críticos</p>
+                    <p className="text-2xl font-semibold text-red-900">{fortnightSummary.criticalCount}</p>
                   </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-950">
-                          Tripulantes que exigem atenção na quinzena
-                        </h3>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Resumo executivo. A confirmação detalhada continua no Controle Operacional e
-                          na Ficha do Tripulante.
-                        </p>
-                      </div>
-                    </div>
-
-                    {fortnightSummary.attentionItems.length === 0 ? (
-                      <p className="mt-3 text-sm text-slate-500">
-                        Nenhum tripulante em atenção no recorte atual do dashboard.
-                      </p>
-                    ) : (
-                      <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                        {fortnightSummary.attentionItems.slice(0, 6).map((item) => (
-                          <div
-                            key={item.funcionarioId}
-                            className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                          >
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-sm font-semibold text-slate-950">
-                                    {item.displayName}
-                                  </p>
-                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                                    {item.statusLabel}
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-xs text-slate-500">{item.secondaryLabel}</p>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => navigate(item.controlPath)}
-                                >
-                                  Controle operacional
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => navigate(item.tripulantePath)}
-                                >
-                                  Ficha
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2 xl:grid-cols-4">
-                              <div>
-                                <span className="font-medium text-slate-700">
-                                  Score de triagem subjetiva:
-                                </span>{' '}
-                                {item.subjectiveScore ?? 'Nao confirmado'}
-                              </div>
-                              <div>
-                                <span className="font-medium text-slate-700">
-                                  Efetividade estimada:
-                                </span>{' '}
-                                {formatPercent(item.effectivenessPct)}
-                              </div>
-                              <div>
-                                <span className="font-medium text-slate-700">
-                                  Acumulado de jornada:
-                                </span>{' '}
-                                {formatFortnightMinutes(item.dutyTimeMin)}
-                              </div>
-                              <div>
-                                <span className="font-medium text-slate-700">
-                                  Acumulado de HV:
-                                </span>{' '}
-                                {formatFortnightMinutes(item.flightTimeMin)}
-                              </div>
-                            </div>
-                            <div className="mt-2 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
-                              <div>
-                                <span className="font-medium text-slate-700">Motivo principal:</span>{' '}
-                                {item.primaryReason}
-                              </div>
-                              <div>
-                                <span className="font-medium text-slate-700">Acao recomendada:</span>{' '}
-                                {item.recommendedAction}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-[11px] font-medium uppercase text-amber-700">Check-in / fonte</p>
+                    <p className="text-2xl font-semibold text-amber-900">
+                      {fortnightSummary.criticalCheckinsCount + fortnightSummary.estimatedOrIncompleteCount}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
+                    <p className="text-[11px] font-medium uppercase text-sky-700">Tendência</p>
+                    <p className="text-sm font-semibold text-sky-950">{fortnightSummary.generalTrendLabel}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-[11px] font-medium uppercase text-slate-600">Quinzena</p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {fortnightSummary.periodStart && fortnightSummary.periodEnd
+                        ? formatFortnightPeriod(fortnightSummary.periodStart, fortnightSummary.periodEnd)
+                        : 'Não confirmada'}
+                    </p>
                   </div>
                 </div>
               )}
+
+              <div className="mt-4">
+                <FrmsOperationalActionList
+                  summary={fortnightSummary}
+                  loading={loadingOperationalSnapshot}
+                  maxItems={8}
+                />
+              </div>
             </section>
 
+            <section className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
+                {(
+                  [
+                    ['compliance', 'Compliance regulatório'],
+                    ['fatigue', 'Fadiga / check-in'],
+                    ['effectiveness', 'Efetividade estimada'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setMapLens(key);
+                      setComplianceDayFilter(null);
+                      setEffectivenessDayFilter(null);
+                    }}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                      mapLens === key
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                {mapLens === 'compliance' &&
+                  'Mapa de compliance legal (HV/jornada regulatória). Fonte: registros FRMS consolidados.'}
+                {mapLens === 'fatigue' &&
+                  'Indicadores de fadiga/check-in subjetivo. Não confundir com compliance ou efetividade.'}
+                {mapLens === 'effectiveness' &&
+                  'Prontidão estimada — modelo de apoio, não diagnóstico. Separado de compliance.'}
+              </p>
+            </section>
+
+            {(mapLens === 'compliance' || mapLens === 'effectiveness') && (
             <FrmsMetricCards
-              complianceCards={[
-                {
-                  key: 'OK',
-                  total: stats.compliance.ok,
-                },
-                {
-                  key: 'ATENCAO',
-                  total: stats.compliance.atencao,
-                },
-                {
-                  key: 'CRITICO',
-                  total: stats.compliance.critico,
-                },
-                {
-                  key: 'VIOLACAO',
-                  total: stats.compliance.violacao,
-                },
-              ]}
-              effectivenessCards={[
-                {
-                  key: 'PLENA',
-                  total: stats.effectiveness.plena,
-                },
-                {
-                  key: 'ATENCAO',
-                  total: stats.effectiveness.atencao,
-                },
-                {
-                  key: 'DEGRADADA',
-                  total: stats.effectiveness.degradada,
-                },
-                {
-                  key: 'SEVERA',
-                  total: stats.effectiveness.severa,
-                },
-              ]}
-              effectivenessSemDados={stats.effectiveness.semDados}
+              complianceCards={
+                mapLens === 'compliance'
+                  ? [
+                      { key: 'OK', total: stats.compliance.ok },
+                      { key: 'ATENCAO', total: stats.compliance.atencao },
+                      { key: 'CRITICO', total: stats.compliance.critico },
+                      { key: 'VIOLACAO', total: stats.compliance.violacao },
+                    ]
+                  : []
+              }
+              effectivenessCards={
+                mapLens === 'effectiveness'
+                  ? [
+                      { key: 'PLENA', total: stats.effectiveness.plena },
+                      { key: 'ATENCAO', total: stats.effectiveness.atencao },
+                      { key: 'DEGRADADA', total: stats.effectiveness.degradada },
+                      { key: 'SEVERA', total: stats.effectiveness.severa },
+                    ]
+                  : []
+              }
+              effectivenessSemDados={mapLens === 'effectiveness' ? stats.effectiveness.semDados : 0}
               activeComplianceKey={complianceDayFilter}
               onComplianceToggle={(key) => {
                 setComplianceDayFilter((prev) => (prev === key ? null : key));
@@ -992,8 +831,13 @@ function DashboardContent() {
                 setComplianceDayFilter(null);
               }}
             />
+            )}
 
-            {/* Row 1: Heatmap (largura total) */}
+            <details className="rounded-2xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+                Mapa colorido detalhado (recolhido por padrão)
+              </summary>
+              <div className="border-t border-slate-100 p-2">
             <FrmsHeatmap
               onSelectTripulante={(id) => {
                 setSelectedTripulanteId(id);
@@ -1012,6 +856,8 @@ function DashboardContent() {
               complianceDayFilter={complianceDayFilter}
               effectivenessDayFilter={effectivenessDayFilter}
             />
+              </div>
+            </details>
 
             {/* Row 2: Curva de Efetividade — visível só quando tripulante selecionado */}
             {selectedTripulanteId && (

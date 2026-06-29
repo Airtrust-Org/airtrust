@@ -267,17 +267,12 @@ describe('FrmsDashboard', () => {
   it('renderiza o resumo executivo da quinzena e direciona ao controle operacional', () => {
     renderDashboard();
 
-    expect(screen.getByText('Acúmulo de fadiga da quinzena')).toBeInTheDocument();
-    expect(
-      screen.getByText(/Visão operacional do acúmulo quinzenal para apoiar a coordenação/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Quinzena atual')).toBeInTheDocument();
-    expect(screen.getByText('Tripulantes monitorados')).toBeInTheDocument();
-    expect(screen.getByText('Tripulantes que exigem atenção na quinzena')).toBeInTheDocument();
+    expect(screen.getByText('Resumo executivo FRMS')).toBeInTheDocument();
+    expect(screen.getByText('Quem exige atenção agora')).toBeInTheDocument();
     expect(screen.getByText('Ana')).toBeInTheDocument();
     expect(screen.queryByText(/Central de Alertas/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Abrir controle operacional' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Controle operacional completo' }));
     expect(navigateMock).toHaveBeenCalledWith('/frms/controle-operacional?data=2026-06-23');
   });
 });
