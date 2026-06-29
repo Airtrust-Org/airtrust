@@ -1086,8 +1086,8 @@ function buildLaunchPage(cfg: LaunchPageConfig): string {
 function parseScormLocationMarker(location) {
   if (typeof location !== 'string' || !location.trim()) return null;
   var trimmed = location.trim();
-  var match = trimmed.match(/(\d+)\s*\/\s*(\d+)/);
-  if (!match) { match = trimmed.match(/(\d+)\s*of\s*(\d+)/i); }
+  var match = trimmed.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+  if (!match) { match = trimmed.match(/(\\d+)\\s*of\\s*(\\d+)/i); }
   if (match) {
     var current = Number(match[1]);
     var total = Number(match[2]);
