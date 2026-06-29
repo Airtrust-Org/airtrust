@@ -5,6 +5,9 @@ import type {
 import {
   formatFortnightMitigacao,
   formatFortnightTendencia,
+  formatTrendArrow,
+  resolveOperationalSourceChip,
+  type OperationalSourceChip,
 } from './fortnightOperationalLabels';
 
 const ALERT_REASON_LABELS: Record<string, string> = {
@@ -35,6 +38,9 @@ type CrewSummary = {
   primaryReason: string;
   recommendedAction: string;
   dataSourceLabel: string;
+  jornadaDataSource: string;
+  sleepDataSource: string;
+  wakeDataSource: string;
   actionGroup: FrmsActionGroup;
   estimatedOrIncomplete: boolean;
   checkinCritical: boolean;
@@ -104,6 +110,8 @@ export interface FortnightAttentionItem {
   statusLabel: string;
   actionGroup: FrmsActionGroup;
   dataSourceLabel: string;
+  sourceChip: OperationalSourceChip;
+  trendLabel: string;
   subjectiveScore: number | null;
   effectivenessPct: number | null;
   dutyTimeMin: number | null;
@@ -202,21 +210,31 @@ function resolvePrimaryReason(
   estimatedOrIncomplete: boolean,
   checkinCritical: boolean,
 ): string {
-  if (checkinCritical) return 'Check-in critico';
+  if (checkinCritical) return 'Check-in pendente — solicitar confirmação';
   if (item.checkin_status === 'PENDENTE' || item.alertas.includes('CHECKIN_PENDENTE')) {
-    return 'Check-in pendente';
+    return 'Check-in pendente — solicitar confirmação';
   }
-  if (item.fortnight_indicator?.status_quinzena === 'CRITICO') return 'Indicador operacional critico';
-  if (item.fortnight_indicator?.status_quinzena === 'ATENCAO') return 'Indicador operacional em atencao';
-  if (item.snapshot_status === 'CRITICO') return 'Status operacional critico';
-  if (item.snapshot_status === 'ATENCAO') return 'Status operacional em atencao';
-  if (estimatedOrIncomplete) return 'Dados estimados ou incompletos';
+  if (
+    item.fortnight_indicator?.status_quinzena === 'CRITICO' ||
+    item.snapshot_status === 'CRITICO'
+  ) {
+    return 'Acúmulo elevado — revisar escala';
+  }
+  if (
+    item.fortnight_indicator?.status_quinzena === 'ATENCAO' ||
+    item.snapshot_status === 'ATENCAO'
+  ) {
+    return 'Acúmulo elevado — revisar escala';
+  }
+  if (estimatedOrIncomplete) return 'Fonte insuficiente — validar jornada antes de decidir';
 
   const firstAlert = item.alertas.find((alerta) => ALERT_REASON_LABELS[alerta]);
   if (firstAlert) return ALERT_REASON_LABELS[firstAlert];
 
-  if (item.fortnight_indicator?.tendencia === 'CRESCENTE') return 'Tendencia de alta';
-  return 'Acompanhar acúmulo da quinzena';
+  if (item.fortnight_indicator?.tendencia === 'CRESCENTE') {
+    return 'Acúmulo em alta — acompanhar quinzena';
+  }
+  return 'Em observação — acompanhar quinzena';
 }
 
 function resolveRecommendedAction(
@@ -226,12 +244,17 @@ function resolveRecommendedAction(
 ): string {
   const mitigation = formatFortnightMitigacao(item.fortnight_indicator?.mitigacao_recomendada);
   if (mitigation !== '--' && mitigation !== 'Sem ação imediata') return mitigation;
-  if (checkinCritical || item.checkin_status === 'PENDENTE') return 'Revisar check-in';
-  if (snapshotSeverity(item.snapshot_status) >= 2 || fortnightSeverity(item.fortnight_indicator?.status_quinzena) >= 2) {
-    return 'Avaliar com a coordenacao';
+  if (checkinCritical || item.checkin_status === 'PENDENTE') {
+    return 'Solicitar confirmação de check-in';
   }
-  if (estimatedOrIncomplete) return 'Validar dado operacional';
-  return 'Acompanhar no controle operacional';
+  if (
+    snapshotSeverity(item.snapshot_status) >= 2 ||
+    fortnightSeverity(item.fortnight_indicator?.status_quinzena) >= 2
+  ) {
+    return 'Revisar escala com a coordenação';
+  }
+  if (estimatedOrIncomplete) return 'Validar jornada antes de decidir';
+  return 'Manter em observação';
 }
 
 function isCheckinPending(item: FrmsOperationalSnapshotItem): boolean {
@@ -288,6 +311,9 @@ function buildCrewSummary(items: FrmsOperationalSnapshotItem[]): CrewSummary {
     primaryReason: resolvePrimaryReason(primary, estimatedOrIncomplete, checkinCritical),
     recommendedAction: resolveRecommendedAction(primary, estimatedOrIncomplete, checkinCritical),
     dataSourceLabel,
+    jornadaDataSource: primary.jornada_data_source,
+    sleepDataSource: primary.sleep_data_source,
+    wakeDataSource: primary.wake_data_source,
     actionGroup,
     estimatedOrIncomplete,
     checkinCritical,
@@ -310,6 +336,13 @@ function buildAttentionItem(summary: CrewSummary, snapshotDate: string): Fortnig
             ? 'Fonte insuficiente'
             : 'Observacao';
 
+  const sourceChip = resolveOperationalSourceChip({
+    jornada_data_source: summary.jornadaDataSource,
+    sleep_data_source: summary.sleepDataSource,
+    wake_data_source: summary.wakeDataSource,
+    fonte_periodo: summary.indicator?.fonte_periodo,
+  });
+
   return {
     funcionarioId: summary.funcionarioId,
     displayName: summary.displayName,
@@ -317,6 +350,8 @@ function buildAttentionItem(summary: CrewSummary, snapshotDate: string): Fortnig
     statusLabel,
     actionGroup: summary.actionGroup,
     dataSourceLabel: summary.dataSourceLabel,
+    sourceChip,
+    trendLabel: formatTrendArrow(summary.trend),
     subjectiveScore: summary.subjectiveScore,
     effectivenessPct: summary.effectivenessPct,
     dutyTimeMin: summary.dutyTimeMin,
