@@ -1,7 +1,20 @@
 /**
  * Rotas de Backup & Restore
  *
- * Endpoints para gerenciar backups do sistema:
+ * ⚠️ TEMPORARIAMENTE DESATIVADO — 2026-06-29
+ *
+ * Motivo: exportação SELECT * sem filtro de empresa_id exporta dados de
+ * TODOS os tenants para qualquer admin/manager. Correção necessária antes
+ * de reabilitar:
+ *   1. Adicionar empresa_id a backups_controle (schema migration)
+ *   2. Passar tenantContext para BackupOrchestrator/RestoreService
+ *   3. Adicionar WHERE empresa_id = ? em todas as exportarTabelas()
+ *   4. Validar INSERT/UPDATE do restore com tenant scope
+ *   5. Tratar tabelas sem empresa_id (credenciais, usuarios, etc.)
+ *
+ * Enquanto desativado, todos os endpoints retornam 503.
+ *
+ * Endpoints (todos bloqueados):
  * - GET /api/backup - Lista backups disponíveis
  * - GET /api/backup/:uuid - Detalhes de um backup
  * - POST /api/backup/manual - Cria backup manual
@@ -15,8 +28,6 @@ import { BackupOrchestrator } from '../services/backup/orchestrator';
 import { RestoreService } from '../services/backup/restore';
 import { TODOS_MODULOS, type ModuloBackup } from '../config/backup-modules';
 import { z } from 'zod';
-import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
 import { createLogger, toError } from '../utils/logger';
 
 const backup = new Hono<{ Bindings: Env }>();
@@ -53,10 +64,23 @@ function backupErrorResponse(
   );
 }
 
-backup.use('*', auth(), requireRole('admin', 'manager'));
-backup.use('*', async (c, next) => {
-  await next();
+// ══════════════════════════════════════════════════════════════════════════════
+// TEMPORARY DISABLE GUARD — bloqueia todos os endpoints de backup
+// até que o isolamento de tenant seja implementado.
+// ══════════════════════════════════════════════════════════════════════════════
+backup.use('*', async (c) => {
   applyNoStoreHeaders(c);
+  return c.json(
+    {
+      success: false,
+      error:
+        'Backup temporariamente desativado para implementação de isolamento de tenant. Nenhum dado foi exportado.',
+      code: 'BACKUP_DISABLED_PENDING_TENANT_ISOLATION',
+      details:
+        'Esta funcionalidade será reabilitada após adicionar escopo de tenant (empresa_id) à exportação e restauração.',
+    },
+    503,
+  );
 });
 
 // Schema de validação
