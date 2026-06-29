@@ -19,6 +19,104 @@ import { recordLegacyAndCanonicalAudit } from '../lib/audit/record-legacy-and-ca
 import { ensureCertificateForQualification } from '../services/ensure-certificate';
 
 const opsRouter = new Hono<{ Bindings: Env }>();
+const BACKFILL_DEFAULT_LIMIT = 10;
+const BACKFILL_MAX_LIMIT = 10;
+const BACKFILL_EXCLUDED_HISTORICO_IDS = new Set([4449]);
+
+type BackfillApplyCandidateRow = { historico_id: number };
+
+function parsePositiveInt(value: string | null | undefined, fallback: number): number {
+  const parsed = Number(value || fallback);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.trunc(parsed);
+}
+
+function parseHistoricoIds(rawValue: string | null): number[] | null {
+  if (!rawValue) return null;
+
+  const source = rawValue.trim();
+  if (!source) return null;
+
+  const values = source.startsWith('[')
+    ? (JSON.parse(source) as unknown[])
+    : source.split(',').map((item) => item.trim());
+
+  const ids = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0)
+    .filter((value, index, list) => list.indexOf(value) === index)
+    .filter((value) => !BACKFILL_EXCLUDED_HISTORICO_IDS.has(value));
+
+  return ids.length > 0 ? ids : [];
+}
+
+async function listBackfillCandidates(
+  db: D1Database,
+  empresaId: number,
+  params: { limit: number; cursor: number; historicoIds: number[] | null },
+): Promise<number[]> {
+  if (params.historicoIds) {
+    return params.historicoIds.slice(0, params.limit);
+  }
+
+  const excludedIds = [...BACKFILL_EXCLUDED_HISTORICO_IDS];
+  const placeholders = excludedIds.map(() => '?').join(', ');
+  const sql = `
+    SELECT qh.id AS historico_id
+    FROM qualificacoes_historico qh
+    INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+    WHERE qh.deleted_at IS NULL
+      AND f.empresa_id = ?
+      AND qh.id > ?
+      AND qh.certificado_arquivo_id IS NULL
+      AND qh.data_conclusao IS NOT NULL
+      AND qh.status NOT IN ('PLANEJADA', 'CANCELADA', 'RENOVADA')
+      AND qh.id NOT IN (${placeholders})
+    ORDER BY qh.id ASC
+    LIMIT ?
+  `;
+
+  const queryParams = [empresaId, params.cursor, ...excludedIds, params.limit];
+  const { results } = await db
+    .prepare(sql)
+    .bind(...queryParams)
+    .all<BackfillApplyCandidateRow>();
+
+  return (results || []).map((row) => row.historico_id);
+}
+
+async function countRemainingBackfillCandidates(
+  db: D1Database,
+  empresaId: number,
+  params: { cursor: number; historicoIds: number[] | null },
+): Promise<number> {
+  if (params.historicoIds) {
+    return params.historicoIds.length;
+  }
+
+  const excludedIds = [...BACKFILL_EXCLUDED_HISTORICO_IDS];
+  const placeholders = excludedIds.map(() => '?').join(', ');
+  const sql = `
+    SELECT COUNT(*) AS total
+    FROM qualificacoes_historico qh
+    INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+    WHERE qh.deleted_at IS NULL
+      AND f.empresa_id = ?
+      AND qh.id > ?
+      AND qh.certificado_arquivo_id IS NULL
+      AND qh.data_conclusao IS NOT NULL
+      AND qh.status NOT IN ('PLANEJADA', 'CANCELADA', 'RENOVADA')
+      AND qh.id NOT IN (${placeholders})
+  `;
+
+  const queryParams = [empresaId, params.cursor, ...excludedIds];
+  const row = await db
+    .prepare(sql)
+    .bind(...queryParams)
+    .first<{ total: number | string | null }>();
+
+  return Number(row?.total || 0);
+}
 
 async function recordCertificadosAdminOperationAudit(
   c: {
@@ -752,7 +850,7 @@ opsRouter.post(
  * POST /admin/backfill-apply
  * Gera certificados em lote para qualificações sem certificado.
  * Requer header X-Backfill-Authorization: CONFIRM_BACKFILL_<empresaId>
- * Processa em lotes de batch_size (padrão 10, máximo 50).
+ * Processa de forma sequencial, limitada e retomável.
  */
 opsRouter.post(
   '/admin/backfill-apply',
@@ -781,57 +879,72 @@ opsRouter.post(
       );
     }
 
-    const rawBatch = Number(new URL(c.req.url).searchParams.get('batch_size') || '10');
-    const batchSize = Math.min(Math.max(1, rawBatch), 50);
-    const rawLimit = Number(new URL(c.req.url).searchParams.get('limit') || '100');
-    const limit = Math.min(Math.max(1, rawLimit), 1000);
+    const url = new URL(c.req.url);
+    const limit = Math.min(
+      BACKFILL_MAX_LIMIT,
+      parsePositiveInt(url.searchParams.get('limit'), BACKFILL_DEFAULT_LIMIT),
+    );
+    const cursor = Math.max(0, parsePositiveInt(url.searchParams.get('cursor'), 0));
+    const historicoIds = parseHistoricoIds(url.searchParams.get('historicoIds'));
 
     try {
-      const { results: candidatos } = await db
-        .prepare(
-          `SELECT qh.id AS historico_id
-           FROM qualificacoes_historico qh
-           INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
-           WHERE qh.deleted_at IS NULL
-             AND f.empresa_id = ?
-             AND qh.certificado_arquivo_id IS NULL
-             AND qh.data_conclusao IS NOT NULL
-             AND qh.status NOT IN ('PLANEJADA', 'CANCELADA', 'RENOVADA')
-           ORDER BY qh.id ASC
-           LIMIT ?`,
-        )
-        .bind(empresaId, limit)
-        .all<{ historico_id: number }>();
-
-      const ids = (candidatos || []).map((r) => r.historico_id);
+      const ids = await listBackfillCandidates(db, empresaId, { limit, cursor, historicoIds });
       const results: Array<{ historico_id: number; state: string; error?: string }> = [];
+      const summary = {
+        processed: 0,
+        created: 0,
+        skipped: 0,
+        errors: 0,
+      };
 
-      for (let i = 0; i < ids.length; i += batchSize) {
-        const batch = ids.slice(i, i + batchSize);
-        await Promise.all(
-          batch.map(async (hid) => {
-            const result = await ensureCertificateForQualification(c.env, hid, empresaId);
-            results.push({ historico_id: hid, state: result.state, error: result.error });
-          }),
-        );
+      for (const historicoId of ids) {
+        const result = await ensureCertificateForQualification(c.env, historicoId, empresaId);
+        results.push({ historico_id: historicoId, state: result.state, error: result.error });
+
+        summary.processed += 1;
+        if (result.state === 'CREATED') {
+          summary.created += 1;
+        } else if (result.state === 'ERROR') {
+          summary.errors += 1;
+        } else {
+          summary.skipped += 1;
+        }
       }
 
-      const summary = results.reduce(
-        (acc, r) => {
-          acc[r.state] = (acc[r.state] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
+      const nextCursor = ids.length > 0 ? ids[ids.length - 1] : cursor;
+      const remaining = await countRemainingBackfillCandidates(db, empresaId, {
+        cursor: historicoIds ? 0 : nextCursor,
+        historicoIds: historicoIds ? historicoIds.slice(summary.processed) : null,
+      });
 
       await recordCertificadosAdminOperationAudit(c, {
         action: 'BACKFILL_APPLY',
-        metadata: { empresa_id: empresaId, processed: ids.length, summary },
+        metadata: {
+          empresa_id: empresaId,
+          processed: summary.processed,
+          created: summary.created,
+          skipped: summary.skipped,
+          errors: summary.errors,
+          remaining,
+          cursor,
+          next_cursor: nextCursor,
+        },
       });
 
       return c.json({
         success: true,
-        data: { empresa_id: empresaId, processed: ids.length, summary, results },
+        data: {
+          empresa_id: empresaId,
+          cursor,
+          next_cursor: nextCursor,
+          limit,
+          processed: summary.processed,
+          created: summary.created,
+          skipped: summary.skipped,
+          errors: summary.errors,
+          remaining,
+          results,
+        },
       });
     } catch (err) {
       console.error('[BACKFILL APPLY] Error:', err);

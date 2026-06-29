@@ -11,6 +11,8 @@ import {
   hashPassword,
   generateRefreshToken,
   getRefreshTokenExpiry,
+  extractBearerToken,
+  verifyJWT,
 } from '../utils/security';
 import { badRequest, internalError, unauthorized } from '../middleware/error-handler';
 import { auth } from '../middleware/auth';
@@ -34,6 +36,9 @@ type AuthVars = {
 };
 
 const authRoutes = new Hono<{ Bindings: Env; Variables: AuthVars }>();
+const ACCESS_TOKEN_TTL_SECONDS = 30 * 60;
+const REFRESH_TOKEN_TTL_DAYS = 90;
+const MAX_ACTIVE_REFRESH_TOKENS_PER_USER = 8;
 
 // Tabela convites_usuarios criada via migration 0290 — não mais DDL em runtime.
 
@@ -357,8 +362,85 @@ async function issueAccessTokenForEmpresa(
       nome: payload.nome,
     },
     jwtSecret,
-    3600,
+    ACCESS_TOKEN_TTL_SECONDS,
   );
+}
+
+async function cleanupExpiredRefreshTokens(db: D1Database): Promise<void> {
+  await db
+    .prepare(
+      `DELETE FROM refresh_tokens
+       WHERE expires_at <= datetime('now')`,
+    )
+    .run()
+    .catch(() => null);
+}
+
+async function enforceRefreshTokenLimit(db: D1Database, userId: number): Promise<void> {
+  const activeTokens = await db
+    .prepare(
+      `SELECT id
+       FROM refresh_tokens
+       WHERE user_id = ?
+         AND revoked_at IS NULL
+         AND expires_at > datetime('now')
+       ORDER BY datetime(created_at) DESC, id DESC`,
+    )
+    .bind(userId)
+    .all<{ id: number }>()
+    .catch(() => ({ results: [] as Array<{ id: number }> }));
+
+  const staleTokens = (activeTokens.results || []).slice(MAX_ACTIVE_REFRESH_TOKENS_PER_USER);
+
+  for (const token of staleTokens) {
+    await db
+      .prepare(
+        `UPDATE refresh_tokens
+         SET revoked_at = COALESCE(revoked_at, datetime('now'))
+         WHERE id = ?`,
+      )
+      .bind(token.id)
+      .run()
+      .catch(() => null);
+  }
+}
+
+async function persistRefreshToken(
+  db: D1Database,
+  payload: { userId: number; refreshToken: string; expiresAt: string; accessTokenJti: string },
+): Promise<void> {
+  await cleanupExpiredRefreshTokens(db);
+
+  await db
+    .prepare(
+      'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
+    )
+    .bind(payload.userId, payload.refreshToken, payload.expiresAt, payload.accessTokenJti)
+    .run()
+    .catch(() =>
+      db
+        .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
+        .bind(payload.userId, payload.refreshToken, payload.expiresAt)
+        .run(),
+    );
+
+  await enforceRefreshTokenLimit(db, payload.userId);
+}
+
+async function blocklistAccessTokenJti(
+  db: D1Database,
+  accessTokenJti: string | null | undefined,
+): Promise<void> {
+  if (!accessTokenJti) return;
+
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO token_blocklist (jti, expires_at)
+       VALUES (?, datetime('now', '+30 minutes'))`,
+    )
+    .bind(accessTokenJti)
+    .run()
+    .catch(() => null);
 }
 
 // Handler OPTIONS para todas as rotas de auth (preflight CORS)
@@ -929,7 +1011,7 @@ authRoutes.post(
       const authenticatedUser = user as NonNullable<DbUser>;
       logStep('password_ok', { userId: authenticatedUser.id });
 
-      // Gerar JWT access token (1 hora)
+      // Gerar JWT access token curto para reduzir janela de exposição.
       const jwtSecret = c.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET não configurado no ambiente');
 
@@ -985,29 +1067,21 @@ authRoutes.post(
           funcionario_id: userFull?.funcionario_id ?? null,
         },
         jwtSecret,
-        3600,
+        ACCESS_TOKEN_TTL_SECONDS,
       );
       logStep('jwt_generated', { userId: authenticatedUser.id });
 
-      // Gerar refresh token (7 dias)
+      // Gerar refresh token longo com rotação.
       const refreshToken = generateRefreshToken();
-      const expiresAt = getRefreshTokenExpiry(7);
+      const expiresAt = getRefreshTokenExpiry(REFRESH_TOKEN_TTL_DAYS);
 
-      // Salvar refresh token com jti associado para blocklist no logout
       try {
-        await db
-          .prepare(
-            'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
-          )
-          .bind(authenticatedUser.id, refreshToken, expiresAt, jti)
-          .run()
-          .catch(() =>
-            // fallback: tabela pode não ter a coluna jti ainda (migration pendente)
-            db
-              .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-              .bind(authenticatedUser.id, refreshToken, expiresAt)
-              .run(),
-          );
+        await persistRefreshToken(db, {
+          userId: authenticatedUser.id,
+          refreshToken,
+          expiresAt,
+          accessTokenJti: jti,
+        });
         logStep('refresh_token_saved', { userId: authenticatedUser.id });
       } catch (refreshErr) {
         logStep('refresh_token_failed', { error: toError(refreshErr).message });
@@ -1091,10 +1165,43 @@ authRoutes.post(
         throw badRequest('Refresh token é obrigatório', 'MISSING_REFRESH_TOKEN');
       }
 
-      // Buscar refresh token no D1
       const db = c.env.DB;
-      const { activeWhere: activeWhereU } = await getUsuariosSchema(db);
-      const activeWhere = activeWhereU.replace('AND ', 'AND u.'); // prefix coluna com alias
+
+      type RefreshTokenRecord = {
+        user_id: number;
+        revoked_at: string | null;
+        expires_at: string;
+      } | null;
+      const refreshTokenRecord = await db
+        .prepare(
+          `
+        SELECT rt.user_id, rt.revoked_at, rt.expires_at
+        FROM refresh_tokens rt
+        WHERE rt.token = ?
+        LIMIT 1
+      `,
+        )
+        .bind(refreshToken)
+        .first<RefreshTokenRecord>();
+
+      if (!refreshTokenRecord) {
+        throw unauthorized('Refresh token inválido', 'INVALID_REFRESH_TOKEN');
+      }
+
+      if (refreshTokenRecord.revoked_at) {
+        throw unauthorized('Refresh token revogado', 'REFRESH_TOKEN_REVOKED');
+      }
+
+      const expiredRow = await db
+        .prepare(`SELECT CASE WHEN datetime(?) <= datetime('now') THEN 1 ELSE 0 END AS expired`)
+        .bind(refreshTokenRecord.expires_at)
+        .first<{ expired: number }>();
+
+      if (expiredRow?.expired) {
+        throw unauthorized('Refresh token expirado', 'REFRESH_TOKEN_EXPIRED');
+      }
+
+      const { activeWhere } = await getUsuariosSchema(db);
 
       type TokenRecord = {
         user_id: number;
@@ -1110,20 +1217,23 @@ authRoutes.post(
         FROM refresh_tokens rt
         INNER JOIN usuarios u ON rt.user_id = u.id
         WHERE rt.token = ?
-          AND rt.revoked_at IS NULL
-          AND rt.expires_at > datetime('now')
           AND u.deleted_at IS NULL
           ${activeWhere}
+        LIMIT 1
       `,
         )
         .bind(refreshToken)
         .first<TokenRecord>();
 
       if (!tokenRecord) {
-        throw unauthorized('Refresh token inválido ou expirado', 'INVALID_REFRESH_TOKEN');
+        await db
+          .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
+          .bind(refreshToken)
+          .run()
+          .catch(() => null);
+        throw unauthorized('Usuário inativo ou removido', 'USER_INACTIVE');
       }
 
-      // Gerar novo access token
       const jwtSecret = c.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET não configurado no ambiente');
       const userId = (tokenRecord as NonNullable<TokenRecord>).user_id;
@@ -1161,35 +1271,24 @@ authRoutes.post(
           funcionario_id: (tokenRecord as NonNullable<TokenRecord>).funcionario_id ?? null,
         },
         jwtSecret,
-        3600,
+        ACCESS_TOKEN_TTL_SECONDS,
       );
 
       // Rotação de refresh token
       const newRefreshToken = generateRefreshToken();
-      const newExpiresAt = getRefreshTokenExpiry(7);
+      const newExpiresAt = getRefreshTokenExpiry(REFRESH_TOKEN_TTL_DAYS);
 
       await db
         .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
         .bind(refreshToken)
         .run();
 
-      await db
-        .prepare(
-          'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
-        )
-        .bind(
-          (tokenRecord as NonNullable<TokenRecord>).user_id,
-          newRefreshToken,
-          newExpiresAt,
-          newJti,
-        )
-        .run()
-        .catch(() =>
-          db
-            .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-            .bind((tokenRecord as NonNullable<TokenRecord>).user_id, newRefreshToken, newExpiresAt)
-            .run(),
-        );
+      await persistRefreshToken(db, {
+        userId: (tokenRecord as NonNullable<TokenRecord>).user_id,
+        refreshToken: newRefreshToken,
+        expiresAt: newExpiresAt,
+        accessTokenJti: newJti,
+      });
 
       return c.json({
         success: true,
@@ -1226,39 +1325,49 @@ authRoutes.post(
 authRoutes.post('/logout', async (c) => {
   const logger = createLogger(c, 'AuthRoutes.logout');
   try {
-    const body = await c.req.json();
-    const { refreshToken } = body;
+    const body = await c.req.json<{ refreshToken?: string }>().catch(() => ({}));
+    const refreshToken = typeof body.refreshToken === 'string' ? body.refreshToken : null;
 
-    if (!refreshToken) {
+    const db = c.env.DB;
+    await cleanupExpiredRefreshTokens(db);
+
+    const accessToken = extractBearerToken(c.req.header('Authorization'));
+    const accessPayload =
+      accessToken && c.env.JWT_SECRET ? await verifyJWT(accessToken, c.env.JWT_SECRET) : null;
+    const currentAccessJti = accessPayload?.jti ?? null;
+    const currentUserId = Number(accessPayload?.sub || 0);
+
+    if (!refreshToken && currentUserId <= 0) {
       throw badRequest('Refresh token é obrigatório', 'MISSING_REFRESH_TOKEN');
     }
 
-    const db = c.env.DB;
+    if (refreshToken) {
+      const tokenRow = await db
+        .prepare('SELECT access_token_jti FROM refresh_tokens WHERE token = ? AND revoked_at IS NULL')
+        .bind(refreshToken)
+        .first<{ access_token_jti: string | null }>()
+        .catch(() => null);
 
-    // Buscar jti associado ao refresh token para invalidar o access token
-    const tokenRow = await db
-      .prepare('SELECT access_token_jti FROM refresh_tokens WHERE token = ? AND revoked_at IS NULL')
-      .bind(refreshToken)
-      .first<{ access_token_jti: string | null }>()
-      .catch(() => null);
+      await db
+        .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
+        .bind(refreshToken)
+        .run();
 
-    // Revogar refresh token
-    await db
-      .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
-      .bind(refreshToken)
-      .run();
-
-    // Adicionar jti à blocklist (access token passa a ser rejeitado até expirar)
-    if (tokenRow?.access_token_jti) {
+      await blocklistAccessTokenJti(db, tokenRow?.access_token_jti);
+    } else {
       await db
         .prepare(
-          `INSERT OR IGNORE INTO token_blocklist (jti, expires_at)
-           VALUES (?, datetime('now', '+1 hour'))`,
+          `UPDATE refresh_tokens
+           SET revoked_at = datetime('now')
+           WHERE user_id = ?
+             AND revoked_at IS NULL`,
         )
-        .bind(tokenRow.access_token_jti)
+        .bind(currentUserId)
         .run()
-        .catch(() => {}); // best-effort — não falhar logout por causa disso
+        .catch(() => null);
     }
+
+    await blocklistAccessTokenJti(db, currentAccessJti);
 
     return c.json({
       success: true,
@@ -1403,6 +1512,23 @@ authRoutes.post('/change-password', auth(), async (c) => {
     .prepare(`UPDATE usuarios SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`)
     .bind(passwordHash, userId)
     .run();
+
+  await db
+    .prepare(
+      `UPDATE refresh_tokens
+       SET revoked_at = datetime('now')
+       WHERE user_id = ?
+         AND revoked_at IS NULL`,
+    )
+    .bind(userId)
+    .run()
+    .catch(() => null);
+
+  const currentAccessToken = extractBearerToken(c.req.header('Authorization'));
+  if (currentAccessToken && c.env.JWT_SECRET) {
+    const payload = await verifyJWT(currentAccessToken, c.env.JWT_SECRET).catch(() => null);
+    await blocklistAccessTokenJti(db, payload?.jti ?? null);
+  }
 
   return c.json({
     success: true,
