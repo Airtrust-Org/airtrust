@@ -1147,7 +1147,9 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var completionPending = false;
   var completionObservedAt = null;
 
-  console.info('[SCORM_DIAG] WRAPPER_START mid=' + MATRICULA_ID + ' preview=' + PREVIEW_MODE + ' token_present=' + (TOKEN && TOKEN.length > 10 ? '1' : '0') + ' url=' + (COMMIT_URL || 'null'));
+  var SCORM_DIAG = (function(){ try { return /[?&]scorm_diag=1(&|$)/.test(window.location.search); } catch(e) { return false; } })();
+  function diag(msg) { if (SCORM_DIAG) console.info('[SCORM_DIAG]' + msg); }
+  diag(' WRAPPER_START mid=' + MATRICULA_ID + ' preview=' + PREVIEW_MODE + ' token_present=' + (TOKEN && TOKEN.length > 10 ? '1' : '0') + ' url=' + (COMMIT_URL || 'null'));
 
   if (${hasResumeState ? 'true' : 'false'}) {
     if (IS_2004) {
@@ -1681,13 +1683,13 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
     try {
       var frame = document.getElementById('scorm-frame');
       if (!frame || !frame.contentWindow || !frame.contentWindow.document) {
-        console.info('[SCORM_DIAG] PROBE_SKIPPED no_frame_or_dom');
+        diag(' PROBE_SKIPPED no_frame_or_dom');
         return;
       }
       var doc = frame.contentWindow.document;
       var parsed = parseProgressFromDocument(doc);
       if (!parsed) {
-        console.info('[SCORM_DIAG] PROBE_NO_PROGRESS_PARSED');
+        diag(' PROBE_NO_PROGRESS_PARSED');
         return;
       }
 
@@ -1740,7 +1742,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
 
   function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
-      console.info('[SCORM_DIAG] COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
+      diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
       return Promise.resolve();
     }
     var payloadFingerprint = fingerprintPayload(data);
@@ -1749,9 +1751,9 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       reason: 'commit-dispatched',
       field: null,
     });
-    console.info('[SCORM_DIAG] COMMIT_FETCH_START event=' + (eventType || '?') + ' attempt=' + (attempt || 0) + ' has_loc=' + (!!getScormLocation() ? '1' : '0'));
+    diag(' COMMIT_FETCH_START event=' + (eventType || '?') + ' attempt=' + (attempt || 0) + ' has_loc=' + (!!getScormLocation() ? '1' : '0'));
     return getFreshToken('commit').then(function(freshToken) {
-      if (!freshToken) { console.info('[SCORM_DIAG] COMMIT_NO_TOKEN'); return null; }
+      if (!freshToken) { diag(' COMMIT_NO_TOKEN'); return null; }
       var requestBody = Object.assign({
         matricula_id: MATRICULA_ID,
         commit_event: eventType || 'SCORM_COMMIT',
@@ -1769,14 +1771,14 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       });
     }).then(function(response) {
       if (response && response.status === 401 && (attempt || 0) < 1) {
-        console.info('[SCORM_DIAG] COMMIT_FETCH_STATUS=401 retrying');
+        diag(' COMMIT_FETCH_STATUS=401 retrying');
         TOKEN = '';
         requestFreshToken('retry-after-401');
         return commit(data, (attempt || 0) + 1, eventType);
       }
 
       if (response && response.ok) {
-        console.info('[SCORM_DIAG] COMMIT_FETCH_STATUS=' + String(response.status) + ' OK');
+        diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' OK');
         setStatus('Progresso salvo', true);
         if (payloadFingerprint) lastCommittedFingerprint = payloadFingerprint;
         response.clone().json().then(function(json) {
@@ -1809,7 +1811,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
           }
         }).catch(function() { return null; });
       } else if (response) {
-        console.info('[SCORM_DIAG] COMMIT_FETCH_STATUS=' + String(response.status) + ' ERROR');
+        diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' ERROR');
         setStatus('Falha ao salvar progresso. Tentando novamente...', true, true);
         postToParent({
           type: 'lms:save-error',
@@ -1859,7 +1861,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       autosaveTimer = null;
       var payload = buildPayload();
       var payloadFingerprint = fingerprintPayload(payload);
-      console.info('[SCORM_DIAG] SCHEDULE_COMMIT loc=' + (getScormLocation() || 'null') + ' fp_match=' + (payloadFingerprint === lastCommittedFingerprint ? '1' : '0') + ' has_cmi=' + (payload.cmi_json && payload.cmi_json !== '{}' ? '1' : '0'));
+      diag(' SCHEDULE_COMMIT loc=' + (getScormLocation() || 'null') + ' fp_match=' + (payloadFingerprint === lastCommittedFingerprint ? '1' : '0') + ' has_cmi=' + (payload.cmi_json && payload.cmi_json !== '{}' ? '1' : '0'));
       if (!payloadFingerprint || payloadFingerprint === lastCommittedFingerprint) return;
       commit(payload, 0, 'SCORM_COMMIT');
     }, typeof delayMs === 'number' ? delayMs : 1500);
@@ -2111,7 +2113,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   // ── SCORM 1.2 API ───────────────────────────────────────────────────────────
   var SCORM12 = {
     LMSInitialize: function() {
-      console.info('[SCORM_DIAG] LMSInitialize_CALLED loc=' + (getScormLocation() || 'null'));
+      diag(' LMSInitialize_CALLED loc=' + (getScormLocation() || 'null'));
       setStatus('SCORM inicializado', true);
       emitTelemetry('SCORM_INIT', {
         decision: 'accepted',
@@ -2120,7 +2122,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       return 'true';
     },
     LMSFinish: function() {
-      console.info('[SCORM_DIAG] LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
+      diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
       commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
@@ -2158,7 +2160,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
         }
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
-        console.info('[SCORM_DIAG] LMSSetValue field=' + element + ' loc=' + (getScormLocation() || 'null') + ' blocked=' + (decision === 'blocked' ? '1' : '0'));
+        diag(' LMSSetValue field=' + element + ' loc=' + (getScormLocation() || 'null') + ' blocked=' + (decision === 'blocked' ? '1' : '0'));
         scheduleCommit(800);
       }
       emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
@@ -2172,7 +2174,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       return 'true';
     },
     LMSCommit: function() {
-      console.info('[SCORM_DIAG] LMSCommit_CALLED loc=' + (getScormLocation() || 'null'));
+      diag(' LMSCommit_CALLED loc=' + (getScormLocation() || 'null'));
       commit(buildPayload(), 0, 'SCORM_COMMIT');
       return 'true';
     },
@@ -2184,7 +2186,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   // ── SCORM 2004 API ──────────────────────────────────────────────────────────
   var SCORM2004 = {
     Initialize: function() {
-      console.info('[SCORM_DIAG] LMSInitialize_CALLED_2004 loc=' + (getScormLocation() || 'null'));
+      diag(' LMSInitialize_CALLED_2004 loc=' + (getScormLocation() || 'null'));
       setStatus('SCORM 2004 inicializado', true);
       emitTelemetry('SCORM_INIT', {
         decision: 'accepted',
@@ -2193,7 +2195,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       return 'true';
     },
     Terminate: function() {
-      console.info('[SCORM_DIAG] LMSFinish_CALLED_2004 loc=' + (getScormLocation() || 'null'));
+      diag(' LMSFinish_CALLED_2004 loc=' + (getScormLocation() || 'null'));
       commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
@@ -2244,7 +2246,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
       return 'true';
     },
     Commit: function() {
-      console.info('[SCORM_DIAG] LMSCommit_CALLED_2004 loc=' + (getScormLocation() || 'null'));
+      diag(' LMSCommit_CALLED_2004 loc=' + (getScormLocation() || 'null'));
       commit(buildPayload(), 0, 'SCORM_COMMIT');
       return 'true';
     },
@@ -2256,15 +2258,15 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   // Atualizar os stubs pre-definidos (mesma referencia cacheada pelo adaptador SCORM)
   if (IS_2004) {
     Object.assign(window.API_1484_11, SCORM2004);
-    console.info('[SCORM_DIAG] API_READY version=2004 mid=' + MATRICULA_ID);
+    diag(' API_READY version=2004 mid=' + MATRICULA_ID);
   } else {
     Object.assign(window.API, SCORM12);
-    console.info('[SCORM_DIAG] API_READY version=1.2 mid=' + MATRICULA_ID + ' has_token=' + (TOKEN ? '1' : '0'));
+    diag(' API_READY version=1.2 mid=' + MATRICULA_ID + ' has_token=' + (TOKEN ? '1' : '0'));
   }
 
   var appliedBackup = applyLocalResumeBackup();
   if (appliedBackup) {
-    console.info('[SCORM_DIAG] RESUME_APPLIED loc=' + (getScormLocation() || 'null') + ' scheduling_commit_3s');
+    diag(' RESUME_APPLIED loc=' + (getScormLocation() || 'null') + ' scheduling_commit_3s');
   }
   updateMaxVisitedFromLocation(getScormLocation());
   if (appliedBackup) {
@@ -2308,7 +2310,7 @@ function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
   var heartbeatCount = 0;
   window.setInterval(function() {
     heartbeatCount += 1;
-    console.info('[SCORM_DIAG] HEARTBEAT #' + heartbeatCount + ' loc=' + (getScormLocation() || 'null'));
+    diag(' HEARTBEAT #' + heartbeatCount + ' loc=' + (getScormLocation() || 'null'));
     scheduleCommit(0);
   }, 15000);
 })();
