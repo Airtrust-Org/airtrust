@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { useSystemSettings } from '../hooks/useSystemSettings';
 import { useLanguage } from '../i18n/useLanguage';
 import { logger } from '../utils/logger';
-import { setPersistLogin } from '../config/api';
+import { getPersistLogin, setPersistLogin } from '../config/api';
 import { getDevLoginCredentials } from '../utils/devCredentials';
 
 const IS_DEV = import.meta.env.DEV === true || import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true';
@@ -65,7 +65,7 @@ const DEV_PROFILES = [
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [lembrar, setLembrar] = useState(false);
+  const [lembrar, setLembrar] = useState(getPersistLogin());
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
