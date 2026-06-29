@@ -56,8 +56,8 @@
     </style>
     <script>
       (() => {
-        const ENTRY_ROUTE_PATTERNS = [/^\/$/, /^\/login$/];
-        const RECOVERY_KEY = 'airtrust-login-cache-recovery-v3';
+        const ENTRY_ROUTE_PATTERNS = [/^\/$/, /^\/login$/, /^\/frms(?:\/|$)/];
+        const RECOVERY_KEY = 'airtrust-login-cache-recovery-v4';
         const RECOVERY_PARAM = 'airtrust_login_recovered';
         const SW_RESET_PARAM = 'airtrust_sw_reset';
 
