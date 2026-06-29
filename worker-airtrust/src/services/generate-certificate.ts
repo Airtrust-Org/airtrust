@@ -123,6 +123,21 @@ function ensureInstrutorSectionInTemplate(templateHtml: string): string {
   return result.replace(/<\/body>/i, '{{instrutor_section}}</body>');
 }
 
+// ── Helpers públicos ───────────────────────────────────────────────────────────
+
+/**
+ * Constrói a R2 key tenant-scoped para um certificado.
+ * Não contém PII (sem CPF, sem nome) no path.
+ */
+export function buildCertificadoR2Key(
+  empresaId: number,
+  funcionarioId: number,
+  historicoId: number,
+  uuid: string,
+): string {
+  return `certificados/empresa-${empresaId}/funcionario-${funcionarioId}/historico-${historicoId}/${uuid}.pdf`;
+}
+
 // ── Tipos públicos ─────────────────────────────────────────────────────────────
 
 export interface GenerateCertificateOptions {
@@ -450,31 +465,7 @@ export async function generateCertificateForHistorico(
     throw new Error('PDF gerado com magic bytes inválidos.');
   }
 
-  // ── Upload R2 ────────────────────────────────────────────────────────────────
-  const r2Key = `certificados/${nomeArquivo}`;
-  await bucket.put(r2Key, pdfBytes, {
-    httpMetadata: { contentType: 'application/pdf' },
-    customMetadata: {
-      tipo: 'CERTIFICADO_QUALIFICACAO',
-      cpf: cpfLimpo,
-      codigo: qualificacao.qualificacao_codigo || qualificacao.codigo,
-      historico_id: String(historicoId),
-      data_referencia: dataBase.toISOString(),
-      origem: 'auto-gerado',
-      gerado_em: new Date().toISOString(),
-    },
-  });
-
-  // ── Persistir no D1 ──────────────────────────────────────────────────────────
-  const storageColumns = await getCertificadosStorageColumns(db);
-  await backfillCertificadoAtualNaPastaVirtual(db, storageColumns, {
-    historicoId,
-    funcionarioId: qualificacao.funcionario_id,
-    certificadoArquivoId: qualificacao.certificado_arquivo_id ?? null,
-    empresaId: qualificacaoEmpresaId,
-  });
-
-  // Resolver funcionario de destino (instrutor ou aluno)
+  // ── Resolver funcionario de destino antes do upload (necessário para a R2 key) ──
   let targetFuncionarioId: number = qualificacao.funcionario_id;
   if (paraInstrutor) {
     try {
@@ -495,6 +486,30 @@ export async function generateCertificateForHistorico(
       console.warn('[generate-certificate] Falha ao resolver funcionario do instrutor:', e);
     }
   }
+
+  // ── Upload R2 ────────────────────────────────────────────────────────────────
+  // Key é tenant-scoped e não contém PII (sem CPF/nome no path).
+  const r2Key = buildCertificadoR2Key(qualificacaoEmpresaId, targetFuncionarioId, historicoId, uuid);
+  await bucket.put(r2Key, pdfBytes, {
+    httpMetadata: { contentType: 'application/pdf' },
+    customMetadata: {
+      tipo: 'CERTIFICADO_QUALIFICACAO',
+      codigo: qualificacao.qualificacao_codigo || qualificacao.codigo,
+      historico_id: String(historicoId),
+      data_referencia: dataBase.toISOString(),
+      origem: 'auto-gerado',
+      gerado_em: new Date().toISOString(),
+    },
+  });
+
+  // ── Persistir no D1 ──────────────────────────────────────────────────────────
+  const storageColumns = await getCertificadosStorageColumns(db);
+  await backfillCertificadoAtualNaPastaVirtual(db, storageColumns, {
+    historicoId,
+    funcionarioId: qualificacao.funcionario_id,
+    certificadoArquivoId: qualificacao.certificado_arquivo_id ?? null,
+    empresaId: qualificacaoEmpresaId,
+  });
 
   const insertResult = await db
     .prepare(
@@ -562,9 +577,10 @@ export async function generateCertificateForHistorico(
              arquivo_url = ?,
              numero_certificado = ?,
              updated_at = datetime('now')
-         WHERE id = ?`,
+         WHERE id = ?
+           AND empresa_id = ?`,
     )
-    .bind(documentoId, `/api/pasta-virtual/stream/${documentoId}`, numeroCertificado, historicoId)
+    .bind(documentoId, `/api/pasta-virtual/stream/${documentoId}`, numeroCertificado, historicoId, qualificacaoEmpresaId)
     .run();
 
   try {
