@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { buildFortnightTimeline } from '../fortnightOperationalTimeline';
-import { formatFortnightMinutes } from '../fortnightOperationalLabels';
+import { formatFortnightMinutes, formatFortnightPeriodShort } from '../fortnightOperationalLabels';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -180,8 +180,8 @@ export default function FrmsCrewCumulativeChart({
           <h2 className="text-sm font-semibold text-slate-900">
             Jornada diária — {displayName}
           </h2>
-          <p className="text-xs text-slate-500">
-            {periodStart} → {periodEnd}
+          <p className="mt-1 text-sm text-slate-600">
+            Quinzena: {formatFortnightPeriodShort(periodStart, periodEnd)}
           </p>
         </div>
         {onClose && (
@@ -200,7 +200,6 @@ export default function FrmsCrewCumulativeChart({
         {canonicalAccum != null && (
           <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium text-slate-700">
             Acumulado quinzena: {formatFortnightMinutes(canonicalAccum)}
-            <span className="ml-1 text-slate-400">(fonte servidor)</span>
           </span>
         )}
         {canonicalAccum == null && timeline?.summary.cumulative_duty_min != null && (

@@ -197,29 +197,36 @@ export default function FrmsMetricCards({
   activeEffectivenessKey = null,
   onEffectivenessToggle,
 }: Props) {
+  const visibleComplianceCards = complianceCards.filter((entry) => entry.total > 0);
+  const visibleEffectivenessCards = effectivenessCards.filter((entry) => entry.total > 0);
+  const showComplianceSection = complianceCards.length > 0;
+  const showEffectivenessSection = effectivenessCards.length > 0;
+
   return (
     <div className="space-y-4">
+      {showComplianceSection && (
       <section className="rounded-[28px] border border-slate-200 bg-white/85 p-4 shadow-sm backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/85 dark:shadow-none sm:p-5">
         <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)] xl:items-start">
           <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-950/80">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Leitura operacional
+              Compliance legal
             </p>
-            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">Compliance Regulatório</h2>
+            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">Jornada e HV regulatórios</h2>
             <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Mantém o filtro principal do painel e mostra risco de jornada e horas de voo.
+              Separado de fadiga/check-in e de efetividade estimada.
             </p>
-            <span className="mt-4 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-              clique em um status para filtrar
-            </span>
           </div>
 
+          {visibleComplianceCards.length === 0 ? (
+            <p className="self-center text-sm text-slate-500 dark:text-slate-400">
+              Sem violações no período.
+            </p>
+          ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-            {CARDS.map((card) => {
-              const values = complianceCards.find((entry) => entry.key === card.key) ?? {
-                key: card.key,
-                total: 0,
-              };
+            {CARDS.filter((card) =>
+              visibleComplianceCards.some((entry) => entry.key === card.key),
+            ).map((card) => {
+              const values = visibleComplianceCards.find((entry) => entry.key === card.key)!;
               const isActive = activeComplianceKey === card.key;
               return (
                 <MetricCard
@@ -238,32 +245,39 @@ export default function FrmsMetricCards({
               );
             })}
           </div>
+          )}
         </div>
       </section>
+      )}
 
+      {showEffectivenessSection && (
       <section className="rounded-[28px] border border-slate-200 bg-gradient-to-r from-white via-slate-50/90 to-white p-4 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-900/95 dark:to-slate-900 dark:shadow-none sm:p-5">
         <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)] xl:items-start">
           <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 dark:border-slate-700 dark:bg-slate-950/85">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Leitura estimada
+              Efetividade estimada
             </p>
-            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">Índice de efetividade</h2>
+            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">Prontidão operacional estimada</h2>
             <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Proxy local de degradação operacional separado da lógica regulatória do compliance.
+              Proxy de apoio — não é compliance legal nem diagnóstico médico.
             </p>
-            <span className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              {effectivenessSemDados > 0
-                ? `${effectivenessSemDados} sem leitura no período`
-                : 'ocorrências por dia processado'}
-            </span>
+            {effectivenessSemDados > 0 && (
+              <span className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {effectivenessSemDados} sem leitura no período
+              </span>
+            )}
           </div>
 
+          {visibleEffectivenessCards.length === 0 ? (
+            <p className="self-center text-sm text-slate-500 dark:text-slate-400">
+              Sem ocorrências de efetividade no período.
+            </p>
+          ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-            {EFFECTIVENESS_CARDS.map((card) => {
-              const values = effectivenessCards.find((entry) => entry.key === card.key) ?? {
-                key: card.key,
-                total: 0,
-              };
+            {EFFECTIVENESS_CARDS.filter((card) =>
+              visibleEffectivenessCards.some((entry) => entry.key === card.key),
+            ).map((card) => {
+              const values = visibleEffectivenessCards.find((entry) => entry.key === card.key)!;
               const isActive = activeEffectivenessKey === card.key;
               return (
                 <MetricCard
@@ -283,8 +297,10 @@ export default function FrmsMetricCards({
               );
             })}
           </div>
+          )}
         </div>
       </section>
+      )}
     </div>
   );
 }
