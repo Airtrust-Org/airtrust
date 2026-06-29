@@ -34,18 +34,76 @@ type CrewSummary = {
   trend: FrmsFortnightIndicator['tendencia'] | null;
   primaryReason: string;
   recommendedAction: string;
+  dataSourceLabel: string;
+  actionGroup: FrmsActionGroup;
   estimatedOrIncomplete: boolean;
   checkinCritical: boolean;
+  checkinPending: boolean;
   needsAttention: boolean;
   periodKey: string | null;
   indicator: FrmsFortnightIndicator | null;
 };
+
+function formatDataSourceToken(value: string | null | undefined): string | null {
+  if (!value || value === 'REAL') return null;
+  if (value === 'ESTIMADO') return 'estimado';
+  if (value === 'AUSENTE') return 'ausente';
+  if (value === 'INCONSISTENTE') return 'inconsistente';
+  if (value === 'PARCIAL') return 'parcial';
+  return value.toLowerCase();
+}
+
+function resolveDataSourceLabel(primary: FrmsOperationalSnapshotItem): string {
+  const parts: string[] = [];
+  const jornada = formatDataSourceToken(primary.jornada_data_source);
+  const sono = formatDataSourceToken(primary.sleep_data_source);
+  const periodo = formatDataSourceToken(primary.fortnight_indicator?.fonte_periodo ?? undefined);
+  if (jornada) parts.push(`Jornada ${jornada}`);
+  if (sono) parts.push(`Sono ${sono}`);
+  if (periodo) parts.push(`Quinzena ${periodo}`);
+  if (parts.length === 0) {
+    return primary.teve_jornada ? 'Jornada registrada' : 'Fonte não classificada';
+  }
+  return parts.join(' · ');
+}
+
+function resolveActionGroup(
+  summary: Pick<
+    CrewSummary,
+    | 'snapshotStatus'
+    | 'fortnightStatus'
+    | 'checkinCritical'
+    | 'checkinPending'
+    | 'estimatedOrIncomplete'
+  >,
+): FrmsActionGroup {
+  if (summary.checkinCritical) return 'critical';
+  if (
+    summary.fortnightStatus === 'CRITICO' ||
+    summary.snapshotStatus === 'CRITICO'
+  ) {
+    return 'critical';
+  }
+  if (summary.checkinPending) return 'checkin';
+  if (summary.estimatedOrIncomplete) return 'source';
+  if (
+    summary.fortnightStatus === 'ATENCAO' ||
+    summary.snapshotStatus === 'ATENCAO'
+  ) {
+    return 'attention';
+  }
+  return 'observation';
+}
+
+export type FrmsActionGroup = 'critical' | 'attention' | 'checkin' | 'source' | 'observation';
 
 export interface FortnightAttentionItem {
   funcionarioId: number;
   displayName: string;
   secondaryLabel: string;
   statusLabel: string;
+  actionGroup: FrmsActionGroup;
+  dataSourceLabel: string;
   subjectiveScore: number | null;
   effectivenessPct: number | null;
   dutyTimeMin: number | null;
@@ -176,6 +234,10 @@ function resolveRecommendedAction(
   return 'Acompanhar no controle operacional';
 }
 
+function isCheckinPending(item: FrmsOperationalSnapshotItem): boolean {
+  return item.checkin_status === 'PENDENTE' || item.alertas.includes('CHECKIN_PENDENTE');
+}
+
 function buildCrewSummary(items: FrmsOperationalSnapshotItem[]): CrewSummary {
   const sorted = [...items].sort(compareItems);
   const primary = sorted[0];
@@ -193,14 +255,23 @@ function buildCrewSummary(items: FrmsOperationalSnapshotItem[]): CrewSummary {
   const latestEffectiveness = sorted.find((item) => item.effectiveness_pct != null)?.effectiveness_pct ?? null;
   const estimatedOrIncomplete = sorted.some(isEstimatedOrIncomplete);
   const checkinCritical = sorted.some(isCheckinCritical);
+  const checkinPending = sorted.some(isCheckinPending);
   const needsAttention =
     sorted.some((item) => rowSeverity(item) >= 2) ||
     estimatedOrIncomplete ||
     checkinCritical ||
-    sorted.some((item) => item.checkin_status === 'PENDENTE');
+    checkinPending;
   const indicator = primary.fortnight_indicator;
   const periodKey =
     indicator?.periodo_inicio && indicator?.periodo_fim ? `${indicator.periodo_inicio}__${indicator.periodo_fim}` : null;
+  const dataSourceLabel = resolveDataSourceLabel(primary);
+  const actionGroup = resolveActionGroup({
+    snapshotStatus: primary.snapshot_status,
+    fortnightStatus: indicator?.status_quinzena ?? null,
+    checkinCritical,
+    checkinPending,
+    estimatedOrIncomplete,
+  });
 
   return {
     funcionarioId: primary.funcionario_id,
@@ -216,8 +287,11 @@ function buildCrewSummary(items: FrmsOperationalSnapshotItem[]): CrewSummary {
     trend: indicator?.tendencia ?? null,
     primaryReason: resolvePrimaryReason(primary, estimatedOrIncomplete, checkinCritical),
     recommendedAction: resolveRecommendedAction(primary, estimatedOrIncomplete, checkinCritical),
+    dataSourceLabel,
+    actionGroup,
     estimatedOrIncomplete,
     checkinCritical,
+    checkinPending,
     needsAttention,
     periodKey,
     indicator,
@@ -226,19 +300,23 @@ function buildCrewSummary(items: FrmsOperationalSnapshotItem[]): CrewSummary {
 
 function buildAttentionItem(summary: CrewSummary, snapshotDate: string): FortnightAttentionItem {
   const statusLabel =
-    summary.fortnightStatus === 'CRITICO' || summary.snapshotStatus === 'CRITICO'
+    summary.actionGroup === 'critical'
       ? 'Critico'
-      : summary.fortnightStatus === 'ATENCAO' || summary.snapshotStatus === 'ATENCAO'
+      : summary.actionGroup === 'attention'
         ? 'Em atencao'
-        : summary.estimatedOrIncomplete
-          ? 'Dados incompletos'
-          : 'Monitorado';
+        : summary.actionGroup === 'checkin'
+          ? 'Check-in pendente'
+          : summary.actionGroup === 'source'
+            ? 'Fonte insuficiente'
+            : 'Observacao';
 
   return {
     funcionarioId: summary.funcionarioId,
     displayName: summary.displayName,
     secondaryLabel: [summary.roleLabel, summary.equipmentLabel].filter(Boolean).join(' · '),
     statusLabel,
+    actionGroup: summary.actionGroup,
+    dataSourceLabel: summary.dataSourceLabel,
     subjectiveScore: summary.subjectiveScore,
     effectivenessPct: summary.effectivenessPct,
     dutyTimeMin: summary.dutyTimeMin,

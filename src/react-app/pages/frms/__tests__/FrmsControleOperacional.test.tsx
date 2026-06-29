@@ -250,20 +250,12 @@ describe('FrmsControleOperacional', () => {
     renderControle();
 
     expect(screen.getByText('Controle operacional de fadiga')).toBeInTheDocument();
-    expect(screen.getByText('Acúmulo operacional da quinzena')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /O filtro mostra o recorte selecionado, mas o acúmulo considera a quinzena operacional disponível quando localizada/i,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Tripulantes monitorados')).toBeInTheDocument();
+    expect(screen.getByText('Quem exige atenção agora')).toBeInTheDocument();
+    expect(screen.getByText('Exigem ação agora')).toBeInTheDocument();
     expect(screen.getByText('Check-ins pendentes')).toBeInTheDocument();
-    expect(screen.getAllByText('Alertas').length).toBeGreaterThan(0);
-    expect(screen.getByText('Dados estimados/ausentes')).toBeInTheDocument();
-    expect(screen.getByText('Inconsistencias')).toBeInTheDocument();
-    expect(screen.getByText('Ciencia pendente')).toBeInTheDocument();
-    expect(screen.queryByText('Quinzena atencao')).not.toBeInTheDocument();
-    expect(screen.queryByText('Quinzena critica')).not.toBeInTheDocument();
+    expect(screen.getByText('Fonte incompleta/estimada')).toBeInTheDocument();
+    expect(screen.getByText('Limitação de fonte operacional')).toBeInTheDocument();
+    expect(screen.getByText('Acúmulo operacional da quinzena')).toBeInTheDocument();
   });
 
   it('mostra tabela hierarquizada com escala, excecoes, fontes e labels descritivos', () => {
