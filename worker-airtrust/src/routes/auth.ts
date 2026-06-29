@@ -794,7 +794,12 @@ authRoutes.post(
   '/login',
   rateLimiter({ ...rateLimitPresets.login, keyPrefix: 'auth-login' }),
   async (c) => {
+    const requestId = (c.get('requestId') as string) || crypto.randomUUID();
+    c.header('X-Request-ID', requestId);
     const logger = createLogger(c, 'AuthRoutes.login');
+    const logStep = (step: string, extra?: Record<string, unknown>) => {
+      try { logger.info(`[LOGIN:${step}]`, { requestId, ...extra }); } catch { /* never let logging break the response */ }
+    };
     try {
       const body = await c.req.json();
       // Aceita tanto 'password' quanto 'senha' para compatibilidade
@@ -922,17 +927,34 @@ authRoutes.post(
       }
 
       const authenticatedUser = user as NonNullable<DbUser>;
+      logStep('password_ok', { userId: authenticatedUser.id });
 
       // Gerar JWT access token (1 hora)
       const jwtSecret = c.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET não configurado no ambiente');
-      const empresaId = await resolveUserEmpresaId(db, authenticatedUser.id);
-      const resolvedRole = await resolveAuthRoleForUser(
-        db,
-        authenticatedUser.id,
-        empresaId,
-        authenticatedUser.perfil,
-      );
+
+      let empresaId: number;
+      try {
+        empresaId = await resolveUserEmpresaId(db, authenticatedUser.id);
+        logStep('empresa_resolved', { userId: authenticatedUser.id, empresaId });
+      } catch (empresaErr) {
+        logStep('empresa_failed', { error: toError(empresaErr).message });
+        throw empresaErr;
+      }
+
+      let resolvedRole: string;
+      try {
+        resolvedRole = await resolveAuthRoleForUser(
+          db,
+          authenticatedUser.id,
+          empresaId,
+          authenticatedUser.perfil,
+        );
+        logStep('role_resolved', { userId: authenticatedUser.id, empresaId });
+      } catch (roleErr) {
+        logStep('role_failed', { error: toError(roleErr).message });
+        throw roleErr;
+      }
 
       // Carregar permissões individuais do usuário
       const permissoesRows = await db
@@ -965,25 +987,32 @@ authRoutes.post(
         jwtSecret,
         3600,
       );
+      logStep('jwt_generated', { userId: authenticatedUser.id });
 
       // Gerar refresh token (7 dias)
       const refreshToken = generateRefreshToken();
       const expiresAt = getRefreshTokenExpiry(7);
 
       // Salvar refresh token com jti associado para blocklist no logout
-      await db
-        .prepare(
-          'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
-        )
-        .bind(authenticatedUser.id, refreshToken, expiresAt, jti)
-        .run()
-        .catch(() =>
-          // fallback: tabela pode não ter a coluna jti ainda (migration pendente)
-          db
-            .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-            .bind(authenticatedUser.id, refreshToken, expiresAt)
-            .run(),
-        );
+      try {
+        await db
+          .prepare(
+            'INSERT INTO refresh_tokens (user_id, token, expires_at, access_token_jti) VALUES (?, ?, ?, ?)',
+          )
+          .bind(authenticatedUser.id, refreshToken, expiresAt, jti)
+          .run()
+          .catch(() =>
+            // fallback: tabela pode não ter a coluna jti ainda (migration pendente)
+            db
+              .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
+              .bind(authenticatedUser.id, refreshToken, expiresAt)
+              .run(),
+          );
+        logStep('refresh_token_saved', { userId: authenticatedUser.id });
+      } catch (refreshErr) {
+        logStep('refresh_token_failed', { error: toError(refreshErr).message });
+        throw refreshErr;
+      }
 
       // Retornar tokens e dados do usuário
       return c.json({
@@ -1000,13 +1029,32 @@ authRoutes.post(
             funcionario_id: userFull?.funcionario_id ?? null,
           },
         },
+        requestId,
       });
     } catch (error) {
       // Preserve ApiError to allow specific codes/messages from helpers
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((error as any)?.name === 'ApiError') throw error as never;
-      logger.error('[AUTH] Login error', toError(error));
-      throw internalError('Erro ao processar login', 'LOGIN_ERROR');
+      const errorName = (error as any)?.name;
+      if (errorName === 'ApiError') {
+        // Inject requestId into ApiError responses so client can correlate
+        if ((error as any)?.code) {
+          try { c.header('X-Request-ID', requestId); } catch { /* best effort */ }
+        }
+        throw error as never;
+      }
+      // Log safely — logger may fail if env is misconfigured
+      try { logStep('login_error', { errorName, errorMessage: toError(error).message }); } catch { /* silent */ }
+      try { logger.error('[AUTH] Login error', toError(error)); } catch { /* silent */ }
+      // Always return JSON with requestId, never let an unexpected error crash the response
+      return c.json(
+        {
+          success: false,
+          error: 'Erro ao processar login',
+          code: 'LOGIN_ERROR',
+          requestId,
+        },
+        500,
+      );
     }
   },
 );
