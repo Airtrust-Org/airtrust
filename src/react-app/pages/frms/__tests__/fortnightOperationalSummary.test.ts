@@ -137,7 +137,9 @@ describe('buildFortnightOperationalSummary', () => {
     expect(summary.topFlightCrew?.displayName).toBe('Carla');
     expect(summary.attentionItems.map((item) => item.displayName)).toEqual(['Carla', 'Ana']);
     expect(summary.attentionItems[0]?.recommendedAction).toBe('Reduzir jornada');
-    expect(summary.attentionItems[1]?.primaryReason).toBe('Check-in pendente');
+    expect(summary.attentionItems[1]?.primaryReason).toBe(
+      'Check-in pendente — solicitar confirmação',
+    );
   });
 
   it('retorna quinzena nao confirmada quando nao ha indicador localizado', () => {

@@ -61,8 +61,7 @@ import {
 } from './frmsUtils';
 import { applyFrmsFrotaFilters, extractModelTokens } from './frmsFilterUtils';
 import {
-  formatFortnightMinutes,
-  formatFortnightPeriod,
+  formatFortnightPeriodShort,
 } from './fortnightOperationalLabels';
 import { buildFortnightOperationalSummary } from './fortnightOperationalSummary';
 
@@ -349,6 +348,22 @@ function DashboardContent() {
     [operationalSnapshotDate, visibleOperationalSnapshot],
   );
 
+  const actionRequiredCount = useMemo(
+    () =>
+      fortnightSummary.attentionItems.filter(
+        (item) =>
+          item.actionGroup === 'critical' ||
+          item.actionGroup === 'attention' ||
+          item.actionGroup === 'checkin',
+      ).length,
+    [fortnightSummary.attentionItems],
+  );
+
+  const fortnightLabel = useMemo(
+    () => formatFortnightPeriodShort(fortnightSummary.periodStart, fortnightSummary.periodEnd),
+    [fortnightSummary.periodEnd, fortnightSummary.periodStart],
+  );
+
   const heatmapDates = useMemo(() => {
     if (isMonthMode) return getMonthDays(filters.mesReferencia);
     const result: string[] = [];
@@ -587,7 +602,7 @@ function DashboardContent() {
                   FRMS
                 </h1>
                 <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
-                  Gerenciamento de fadiga com leitura diária de compliance e efetividade
+                  Painel de decisão operacional — quem exige ação, por quê e onde ver evidência
                 </p>
 
                 <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
@@ -702,17 +717,20 @@ function DashboardContent() {
           <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-4 sm:p-6">
             <FrmsFilterChips />
             <FrmsSourcePolicyBanner />
-            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-              Triagem operacional — índices estimados para apoio humano. Não substituem avaliação
-              regulatória, check-in médico ou decisão de aptidão.
-            </div>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-950">Resumo executivo FRMS</h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Atenção agora · pendências de fonte/check-in · tendência · evidência para auditoria.
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Quinzena operacional
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-slate-950">Quinzena: {fortnightLabel}</p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {loadingOperationalSnapshot
+                      ? 'Carregando recorte operacional...'
+                      : actionRequiredCount > 0
+                        ? `${actionRequiredCount} tripulante(s) exigem ação ou confirmação`
+                        : 'Nenhuma ação imediata — confira fontes e check-ins abaixo'}
                   </p>
                 </div>
                 <Button
@@ -720,34 +738,27 @@ function DashboardContent() {
                   onClick={() => navigate(`/frms/controle-operacional?data=${operationalSnapshotDate}`)}
                 >
                   <Activity className="mr-2 h-4 w-4" />
-                  Controle operacional completo
+                  Controle operacional
                 </Button>
               </div>
 
               {!loadingOperationalSnapshot && !operationalSnapshotError && (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2">
-                    <p className="text-[11px] font-medium uppercase text-red-700">Críticos</p>
-                    <p className="text-2xl font-semibold text-red-900">{fortnightSummary.criticalCount}</p>
-                  </div>
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                    <p className="text-[11px] font-medium uppercase text-amber-700">Check-in / fonte</p>
-                    <p className="text-2xl font-semibold text-amber-900">
-                      {fortnightSummary.criticalCheckinsCount + fortnightSummary.estimatedOrIncompleteCount}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
-                    <p className="text-[11px] font-medium uppercase text-sky-700">Tendência</p>
-                    <p className="text-sm font-semibold text-sky-950">{fortnightSummary.generalTrendLabel}</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                    <p className="text-[11px] font-medium uppercase text-slate-600">Quinzena</p>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {fortnightSummary.periodStart && fortnightSummary.periodEnd
-                        ? formatFortnightPeriod(fortnightSummary.periodStart, fortnightSummary.periodEnd)
-                        : 'Não confirmada'}
-                    </p>
-                  </div>
+                <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                  {fortnightSummary.criticalCount > 0 && (
+                    <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 font-medium text-red-800">
+                      {fortnightSummary.criticalCount} crítico(s)
+                    </span>
+                  )}
+                  {fortnightSummary.criticalCheckinsCount + fortnightSummary.estimatedOrIncompleteCount >
+                    0 && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-800">
+                      {fortnightSummary.criticalCheckinsCount} check-in ·{' '}
+                      {fortnightSummary.estimatedOrIncompleteCount} fonte incompleta
+                    </span>
+                  )}
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600">
+                    Tendência geral: {fortnightSummary.generalTrendLabel}
+                  </span>
                 </div>
               )}
 
@@ -755,16 +766,22 @@ function DashboardContent() {
                 <FrmsOperationalActionList
                   summary={fortnightSummary}
                   loading={loadingOperationalSnapshot}
-                  maxItems={8}
+                  maxItemsPerGroup={8}
+                  hideHeader
                 />
               </div>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <details className="rounded-2xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+                Detalhes técnicos — compliance, fadiga, efetividade e mapa
+              </summary>
+              <div className="space-y-4 border-t border-slate-100 p-4">
+            <section className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
               <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
                 {(
                   [
-                    ['compliance', 'Compliance regulatório'],
+                    ['compliance', 'Compliance legal'],
                     ['fatigue', 'Fadiga / check-in'],
                     ['effectiveness', 'Efetividade estimada'],
                   ] as const
@@ -780,7 +797,7 @@ function DashboardContent() {
                     className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
                       mapLens === key
                         ? 'bg-slate-900 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-white text-slate-700 hover:bg-slate-100'
                     }`}
                   >
                     {label}
@@ -789,12 +806,19 @@ function DashboardContent() {
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
                 {mapLens === 'compliance' &&
-                  'Mapa de compliance legal (HV/jornada regulatória). Fonte: registros FRMS consolidados.'}
+                  'Compliance legal (HV/jornada). Separado de fadiga/check-in e efetividade.'}
                 {mapLens === 'fatigue' &&
-                  'Indicadores de fadiga/check-in subjetivo. Não confundir com compliance ou efetividade.'}
+                  'Fadiga e check-in subjetivo. Não confundir com compliance ou efetividade.'}
                 {mapLens === 'effectiveness' &&
-                  'Prontidão estimada — modelo de apoio, não diagnóstico. Separado de compliance.'}
+                  'Prontidão estimada — apoio humano, não diagnóstico médico.'}
               </p>
+              {mapLens === 'fatigue' && (
+                <p className="mt-2 text-xs text-slate-600">
+                  {fortnightSummary.estimatedOrIncompleteCount > 0
+                    ? `${fortnightSummary.estimatedOrIncompleteCount} tripulante(s) com fonte incompleta ou estimada no recorte.`
+                    : 'Fonte confirmada no recorte operacional visível.'}
+                </p>
+              )}
             </section>
 
             {(mapLens === 'compliance' || mapLens === 'effectiveness') && (
@@ -835,7 +859,7 @@ function DashboardContent() {
 
             <details className="rounded-2xl border border-slate-200 bg-white">
               <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">
-                Mapa colorido detalhado (recolhido por padrão)
+                Mapa técnico colorido — não é lista de ação (recolhido)
               </summary>
               <div className="border-t border-slate-100 p-2">
             <FrmsHeatmap
@@ -899,7 +923,7 @@ function DashboardContent() {
 
                   {!selectedHeatmapDay ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Clique em um dia no mapa de fadiga para abrir o detalhe da jornada.
+                      Clique em um dia no mapa técnico para abrir o detalhe da jornada.
                     </p>
                   ) : loadingSelectedTripJornadas ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -929,13 +953,14 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* Row 2: Tabela de tripulantes (com expand → jornadas + radar) */}
             <FrmsTripulantesTable
               frota={filteredFrota}
               loading={loadingFrota}
               alertNivelByTripulante={alertNivelByTripulante}
               config={frmsConfig}
             />
+              </div>
+            </details>
           </div>
         </div>
       </main>

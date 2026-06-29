@@ -201,10 +201,9 @@ export default function FrmsOperationalHeatmap({
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="border-b border-slate-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-900">Mapa operacional (recorte)</h2>
+        <h2 className="text-sm font-semibold text-slate-900">Mapa técnico da quinzena — não é lista de ação</h2>
         <p className="text-xs text-slate-500">
-          Exibindo até {maxRows} tripulantes com sinal relevante. Clique no nome para ver jornada
-          diária.
+          Exibindo até {maxRows} tripulantes com sinal relevante. Use a lista de ação acima para decidir.
           {hiddenCount > 0 ? ` · ${hiddenCount} ocultos — use filtros para refinar.` : ''}
         </p>
       </div>

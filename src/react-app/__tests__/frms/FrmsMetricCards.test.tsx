@@ -42,8 +42,8 @@ describe('FrmsMetricCards', () => {
 
   it('displays labels on each card', () => {
     renderCards();
-    expect(screen.getByText('Compliance Regulatório')).toBeDefined();
-    expect(screen.getByText('Índice de efetividade')).toBeDefined();
+    expect(screen.getByText('Jornada e HV regulatórios')).toBeDefined();
+    expect(screen.getByText('Prontidão operacional estimada')).toBeDefined();
     expect(screen.getByText('Normal')).toBeDefined();
     expect(screen.getAllByText('Atenção')).toHaveLength(2);
     expect(screen.getByText('Crítico')).toBeDefined();
@@ -53,7 +53,7 @@ describe('FrmsMetricCards', () => {
     expect(screen.getByText('Atenção elevada')).toBeDefined();
   });
 
-  it('shows zero counts when all zeros', async () => {
+  it('esconde cards zerados e mostra texto discreto', async () => {
     const zeroCards = [
       { key: 'OK' as const, total: 0 },
       { key: 'ATENCAO' as const, total: 0 },
@@ -68,8 +68,9 @@ describe('FrmsMetricCards', () => {
     ];
     renderCards(zeroCards, zeroEffectiveness);
     await waitFor(() => {
-      const zeros = screen.getAllByText('0');
-      expect(zeros.length).toBeGreaterThanOrEqual(4);
+      expect(screen.getByText('Sem violações no período.')).toBeInTheDocument();
+      expect(screen.getByText('Sem ocorrências de efetividade no período.')).toBeInTheDocument();
+      expect(screen.queryByTestId('frms-card-ok')).not.toBeInTheDocument();
     });
   });
 
