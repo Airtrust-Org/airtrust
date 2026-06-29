@@ -1,8 +1,9 @@
 /**
  * Backup Routes — Tenant Isolation Disable Guard Tests
  *
- * Todos os endpoints de /api/backup estão temporariamente desativados
- * e devem retornar 503 BACKUP_DISABLED_PENDING_TENANT_ISOLATION.
+ * Todos os endpoints de /api/backup estão temporariamente desativados.
+ * auth() roda primeiro → 401 sem token.
+ * Após auth → 503 BACKUP_DISABLED_PENDING_TENANT_ISOLATION para qualquer role.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -46,9 +47,9 @@ const DISABLED_BODY = {
 };
 
 describe('backup routes — DISABLED pending tenant isolation', () => {
-  // ─── Auth bypass is irrelevant — feature is disabled for everyone ─────────
+  // ─── Auth runs first — unauthenticated returns 401 ─────────────────────────
 
-  it('retorna 503 mesmo sem autenticação (feature desativada, não vaza auth status)', async () => {
+  it('retorna 401 sem autenticação (auth roda antes do disable guard)', async () => {
     const app = createBackupApp();
 
     const response = await app.request(
@@ -61,9 +62,11 @@ describe('backup routes — DISABLED pending tenant isolation', () => {
       { __authMode: 'missing' } as unknown as Env,
     );
 
-    expect(response.status).toBe(503);
-    expect(response.headers.get('cache-control')).toContain('no-store');
-    await expect(response.json()).resolves.toMatchObject(DISABLED_BODY);
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'AUTH_REQUIRED',
+    });
   });
 
   it('retorna 503 para admin autenticado da empresa 6', async () => {
