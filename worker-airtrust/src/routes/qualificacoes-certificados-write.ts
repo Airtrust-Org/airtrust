@@ -19,14 +19,18 @@ import {
   backfillCertificadoAtualNaPastaVirtual,
   resolveCertificadoContext,
 } from './qualificacoes-certificados-helpers';
-import { generateCertificateForHistorico } from '../services/generate-certificate';
+import { generateCertificateForHistorico, buildCertificadoR2Key } from '../services/generate-certificate';
 
 const app = new Hono<{ Bindings: Env }>();
 
 /**
  * POST /historico/:id/certificados/gerar
- * Gera (ou regera) o PDF do certificado para uma qualificação.
- * Thin wrapper sobre generateCertificateForHistorico.
+ *
+ * Idempotente por padrão: se já houver certificado ativo vinculado ao histórico,
+ * devolve o existente com estado="EXISTS" (HTTP 200) sem criar novo documento.
+ *
+ * Para regenerar: enviar body { "force_regenerate": true }.
+ * Nesse caso, o documento anterior é soft-deleted antes de ser substituído.
  */
 app.post(
   '/historico/:id/certificados/gerar',
@@ -35,15 +39,75 @@ app.post(
   async (c) => {
     const id = parseInt(c.req.param('id'));
     const empresaId = getEmpresaId(c);
+    const db = c.env.DB;
 
     if (isNaN(id)) {
       return c.json({ success: false, error: 'ID inválido' }, 400);
     }
 
     const body = await c.req.json().catch(() => ({}));
+    const forceRegenerate = Boolean(body?.force_regenerate || body?.regenerate);
     const ua = extrairUsuarioAuditoria(c);
 
     try {
+      // 1. Verificar que o histórico pertence ao tenant
+      const currentHistorico = await db
+        .prepare(
+          `SELECT qh.id, qh.certificado_arquivo_id
+             FROM qualificacoes_historico qh
+             INNER JOIN funcionarios f
+               ON f.id = qh.funcionario_id
+              AND f.empresa_id = ?
+              AND f.deleted_at IS NULL
+            WHERE qh.id = ?
+              AND qh.deleted_at IS NULL
+            LIMIT 1`,
+        )
+        .bind(empresaId, id)
+        .first<{ id: number; certificado_arquivo_id: number | null }>();
+
+      if (!currentHistorico) {
+        return c.json(
+          { success: false, error: 'Qualificação não encontrada para esta empresa' },
+          404,
+        );
+      }
+
+      const existingDocId = currentHistorico.certificado_arquivo_id ?? null;
+
+      // 2. Idempotência: devolver existente se não for force_regenerate
+      if (existingDocId && !forceRegenerate) {
+        const existingDoc = await db
+          .prepare(
+            `SELECT id, uuid, r2_key, tamanho
+               FROM documentos
+              WHERE id = ?
+                AND deleted_at IS NULL
+              LIMIT 1`,
+          )
+          .bind(existingDocId)
+          .first<{ id: number; uuid: string; r2_key: string; tamanho: number }>();
+
+        if (existingDoc) {
+          return c.json(
+            {
+              success: true,
+              estado: 'EXISTS' as const,
+              data: {
+                id: existingDoc.id,
+                uuid: existingDoc.uuid,
+                r2_key: existingDoc.r2_key,
+                tamanho: existingDoc.tamanho,
+              },
+              message: 'Certificado já existe. Use force_regenerate=true para regenerar.',
+            },
+            200,
+          );
+        }
+        // Documento órfão (deleted_at setado) — prosseguir para regenerar
+      }
+
+      // 3. Gerar novo certificado
       const generated = await generateCertificateForHistorico(c.env, id, empresaId, {
         paraInstrutor: Boolean(body?.para_instrutor),
         nomeInstrutor: String(body?.nome_instrutor || '').trim(),
@@ -52,15 +116,57 @@ app.post(
         actorUserId: ua.userId ?? undefined,
       });
 
-      const response: ApiResponse<{ id: number; uuid: string; r2_key: string; tamanho: number }> = {
+      // 4. Soft-delete do documento anterior após geração bem-sucedida
+      if (existingDocId && generated.documentoId !== existingDocId) {
+        try {
+          const storageColumns = await getCertificadosStorageColumns(db);
+          const whereEmpresa = storageColumns.documentosHasEmpresaId ? ' AND empresa_id = ?' : '';
+          const bindArgs: Array<number> = storageColumns.documentosHasEmpresaId
+            ? [existingDocId, empresaId]
+            : [existingDocId];
+          await db
+            .prepare(
+              `UPDATE documentos
+                  SET deleted_at = datetime('now'),
+                      updated_at = datetime('now')
+                WHERE id = ?
+                  AND deleted_at IS NULL${whereEmpresa}`,
+            )
+            .bind(...bindArgs)
+            .run();
+          await registrarAuditoria({
+            db,
+            tabela: 'documentos',
+            acao: 'UPDATE',
+            registro_id: existingDocId,
+            dados_novos: {
+              substituido_por: generated.documentoId,
+              motivo: 'force_regenerate via /gerar',
+            },
+            userId: ua.userId ?? undefined,
+            empresaId,
+          });
+        } catch (cleanupErr) {
+          console.error('[gerar] Aviso: falha ao marcar doc anterior como substituído:', cleanupErr);
+        }
+      }
+
+      const estado = forceRegenerate && existingDocId ? ('REGENERATED' as const) : ('CREATED' as const);
+      const response: ApiResponse<{ id: number; uuid: string; r2_key: string; tamanho: number }> & {
+        estado: typeof estado;
+      } = {
         success: true,
+        estado,
         data: {
           id: generated.documentoId,
           uuid: generated.uuid,
           r2_key: generated.r2Key,
           tamanho: generated.tamanho,
         },
-        message: 'Certificado gerado com sucesso',
+        message:
+          estado === 'REGENERATED'
+            ? 'Certificado regenerado com sucesso'
+            : 'Certificado gerado com sucesso',
       };
 
       return c.json(response, 201);
@@ -189,6 +295,7 @@ app.post(
 
       const uuid = crypto.randomUUID().substring(0, 8);
 
+      // Nome do arquivo (usado como metadado/display, não como path R2)
       const nomeArquivo = gerarNomeArquivoPadronizado({
         tipo: 'CERTIFICADO_QUALIFICACAO',
         nomeFuncionario: nomeFuncionario,
@@ -200,12 +307,12 @@ app.post(
 
       console.log('[UPLOAD CERT] Gerando certificado:', {
         historicoId: id,
-        cpf,
         codigo,
         nomeArquivoGerado: nomeArquivo,
       });
 
-      const r2Key = `certificados/${nomeArquivo}`;
+      // R2 key tenant-scoped sem PII no path
+      const r2Key = buildCertificadoR2Key(empresaId, historico.funcionario_id, id, uuid);
       const uint8Array = new Uint8Array(arrayBuffer);
       const fileType = file.type || 'application/pdf';
 
@@ -219,7 +326,6 @@ app.post(
         },
         customMetadata: {
           tipo: 'CERTIFICADO_QUALIFICACAO',
-          cpf,
           codigo,
           historico_id: String(historico.id),
           data_referencia: dataRealização.toISOString(),
