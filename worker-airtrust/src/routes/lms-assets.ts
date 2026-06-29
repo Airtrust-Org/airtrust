@@ -1082,9 +1082,37 @@ function buildLaunchPage(cfg: LaunchPageConfig): string {
 </div>
 
 <script>
-${parseScormLocationMarker.toString()}
-${parseScormLocationPair.toString()}
-${resolveScormResumeTargetSlide.toString()}
+/* ── SCORM location helpers (stable names, injected as literals to survive minification) ── */
+function parseScormLocationMarker(location) {
+  if (typeof location !== 'string' || !location.trim()) return null;
+  var trimmed = location.trim();
+  var match = trimmed.match(/(\d+)\s*\/\s*(\d+)/);
+  if (!match) { match = trimmed.match(/(\d+)\s*of\s*(\d+)/i); }
+  if (match) {
+    var current = Number(match[1]);
+    var total = Number(match[2]);
+    if (!isFinite(current) || !isFinite(total) || total <= 0 || current < 0) return null;
+    return { current: current, total: total };
+  }
+  var single = Number(trimmed);
+  if (isFinite(single) && single > 0) return { current: single, total: null };
+  return null;
+}
+function parseScormLocationPair(location) {
+  var marker = parseScormLocationMarker(location);
+  if (!marker || marker.total == null) return null;
+  return { current: marker.current, total: marker.total };
+}
+function resolveScormResumeTargetSlide(savedLocation, observedLocation) {
+  var saved = parseScormLocationMarker(savedLocation);
+  if (!saved || saved.current <= 1) return null;
+  var observed = parseScormLocationMarker(observedLocation);
+  if (observed) {
+    if (observed.current >= saved.current) return null;
+    if (observed.total != null && saved.current > observed.total) return null;
+  }
+  return saved.current;
+}
 
 (function() {
   'use strict';
