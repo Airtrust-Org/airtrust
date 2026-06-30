@@ -124,7 +124,7 @@ export default function ControleVoosDashboard() {
                 {[
                   { to: '/controle-voos/voos', icon: <Plane className="h-5 w-5 text-blue-500" />, label: 'Voos / Programação' },
                   { to: '/controle-voos/rdv', icon: <FileText className="h-5 w-5 text-purple-500" />, label: 'RDVs' },
-                  { to: '/controle-voos/jornadas', icon: <Users className="h-5 w-5 text-teal-500" />, label: 'Jornadas', preview: true },
+                  { to: '/controle-voos/jornadas', icon: <Users className="h-5 w-5 text-teal-500" />, label: 'Jornadas' },
                   { to: '/controle-voos/indisponibilidades', icon: <Wrench className="h-5 w-5 text-amber-500" />, label: 'Indisponibilidades', preview: true },
                 ].map((link) => (
                   <Link

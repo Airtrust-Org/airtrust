@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ControleVoosRelatorios from '../ControleVoosRelatorios';
+import ControleVoosJornadas from '../ControleVoosJornadas';
 import ControleVoosTabelas from '../ControleVoosTabelas';
 import { fetchWithAuth } from '@/react-app/config/api';
 
@@ -45,6 +46,10 @@ const tabelasSource = readFileSync(
   resolve(process.cwd(), 'src/react-app/pages/controle-voos/ControleVoosTabelas.tsx'),
   'utf8',
 );
+const jornadasSource = readFileSync(
+  resolve(process.cwd(), 'src/react-app/pages/controle-voos/ControleVoosJornadas.tsx'),
+  'utf8',
+);
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -57,13 +62,17 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
 describe('controle voos real pages', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('remove import de mock das paginas reais e aponta para endpoints reais', () => {
     expect(relatoriosSource).not.toContain('controleVoosMockData');
     expect(tabelasSource).not.toContain('controleVoosMockData');
+    expect(jornadasSource).not.toContain('controleVoosMockData');
     expect(relatoriosSource).toContain('/api/controle-voos/relatorios/resumo-operacional');
     expect(tabelasSource).toContain('/api/controle-voos/catalogos/');
+    expect(jornadasSource).toContain('/api/frms/operational-snapshot?');
+    expect(jornadasSource).toContain('/api/frms/acumulo-frota?mes=');
   });
 
   it('carrega relatorios operacionais do endpoint real', async () => {
@@ -129,5 +138,70 @@ describe('controle voos real pages', () => {
     );
 
     expect(screen.getByText('Falha no catálogo')).toBeInTheDocument();
+  });
+
+  it('carrega jornadas operacionais de endpoints reais do FRMS', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const currentMonth = today.slice(0, 7);
+
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: [
+            {
+              data_operacional: today,
+              funcionario_id: 7,
+              nome: 'Ana Martins',
+              funcao: 'PIC',
+              aeronave: 'SK76',
+              hora_apresentacao: '06:10',
+              hora_termino: '10:40',
+              horas_voo_minutos: 130,
+              duracao_jornada_minutos: 270,
+              teve_jornada: true,
+              escalado: true,
+              escala_source: 'EVD',
+              jornada_data_source: 'REAL',
+              jornada_origem: 'SIGVOOS',
+              snapshot_status: 'OK',
+              alertas: [],
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: [
+            {
+              tripulante_id: '7',
+              hv_mes_min: 840,
+            },
+          ],
+        }),
+      );
+
+    render(<ControleVoosJornadas />);
+
+    expect(screen.getByText('Carregando jornadas operacionais…')).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByText('Jornadas Operacionais')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Ana Martins')).toBeInTheDocument());
+
+    expect(vi.mocked(fetchWithAuth)).toHaveBeenNthCalledWith(
+      1,
+      `/api/frms/operational-snapshot?data_inicio=${today}&data_fim=${today}&include_inconsistencies=true`,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(vi.mocked(fetchWithAuth)).toHaveBeenNthCalledWith(
+      2,
+      `/api/frms/acumulo-frota?mes=${currentMonth}`,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+
+    expect(screen.getByText('SIGVOOS')).toBeInTheDocument();
+    expect(screen.getByText('SK76')).toBeInTheDocument();
+    expect(screen.getByText('14h 00min')).toBeInTheDocument();
   });
 });
