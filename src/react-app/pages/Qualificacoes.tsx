@@ -252,13 +252,14 @@ export default function Qualificacoes() {
   const [setorFilter, setSetorFilter] = useState<string[]>(initialPrefs.setorFilter ?? []);
   const [categoriasSetorFilter, setCategoriasSetorFilter] = useState<string[]>(initialPrefs.categoriasSetorFilter ?? []);
 
-  // Estado para filtrar por status - renovadas, planejadas e apagadas ficam ocultas por padrao.
-  // Planejadas were removed from Historico defaults — they belong in the Planejados tab.
+  // Estado para filtrar por status - renovadas e apagadas ficam ocultas por padrao.
+  // Planejadas = individual planned qualification records in qualificacoes_historico.
+  // Turmas planejadas are in the Planejados tab (treinamentos_planejados).
   const [statusFiltro, setStatusFiltro] = useState<Set<string>>(
     new Set(
       highlightedHistoricoId
         ? ALL_STATUS_VALUES
-        : ['VALIDA', 'VENCIDA', 'VENCENDO_30'],
+        : ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
     ),
   );
 
@@ -267,7 +268,7 @@ export default function Qualificacoes() {
       new Set(
         highlightedHistoricoId
           ? ALL_STATUS_VALUES
-          : ['VALIDA', 'VENCIDA', 'VENCENDO_30'],
+          : ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
       ),
     [highlightedHistoricoId],
   );
@@ -429,25 +430,18 @@ export default function Qualificacoes() {
 
     const statusParam = searchParams.get('status');
     if (statusParam) {
-      const lowerStatus = statusParam.toLowerCase();
-      // 'planejada' redirects to Planejados tab — individual PLANEJADA records
-      // are managed there via turmas, not as a Historico filter.
-      if (lowerStatus === 'planejada') {
-        setActiveTab('planejados');
-        setPlannedView('turmas');
-      } else {
-        // Mapear parâmetros da URL para valores do Set
-        const statusMap: Record<string, string[]> = {
-          vencida: ['VENCIDA'],
-          vencendo: ['VENCENDO_30'],
-          valida: ['VALIDA'],
-          cancelada: ['CANCELADA'],
-        };
+      // Mapear parâmetros da URL para valores do Set
+      const statusMap: Record<string, string[]> = {
+        vencida: ['VENCIDA'],
+        vencendo: ['VENCENDO_30'],
+        valida: ['VALIDA'],
+        planejada: ['PLANEJADA'],
+        cancelada: ['CANCELADA'],
+      };
 
-        const statusValues = statusMap[lowerStatus];
-        if (statusValues) {
-          setStatusFiltro(new Set(statusValues));
-        }
+      const statusValues = statusMap[statusParam.toLowerCase()];
+      if (statusValues) {
+        setStatusFiltro(new Set(statusValues));
       }
     }
   }, [highlightedHistoricoId, searchParams]);
@@ -2752,7 +2746,7 @@ export default function Qualificacoes() {
                 <div className="relative">
                   <button type="button" onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
                     className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer">
-                    <ListFilter className="w-3.5 h-3.5" />Status ({statusFiltro.size}/5)
+                    <ListFilter className="w-3.5 h-3.5" />Status ({statusFiltro.size}/6)
                   </button>
                   {statusDropdownOpen && (
                     <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg border border-slate-200 shadow-lg p-3 min-w-[200px]">
@@ -2762,6 +2756,7 @@ export default function Qualificacoes() {
                         { key: 'VENCENDO_30', label: 'Vencendo (30 dias)', color: 'text-amber-600' },
                         { key: 'VENCIDA', label: 'Vencidas', color: 'text-red-600' },
                         { key: 'RENOVADA', label: 'Renovadas', color: 'text-blue-600' },
+                        { key: 'PLANEJADA', label: 'Planejadas', color: 'text-purple-600' },
                         { key: 'CANCELADA', label: 'Canceladas', color: 'text-slate-500' },
                       ].map(({ key, label, color }) => (
                         <label key={key} className="flex items-center gap-2 py-1 cursor-pointer select-none hover:bg-slate-50 px-1 rounded">
@@ -2772,7 +2767,7 @@ export default function Qualificacoes() {
                         </label>
                       ))}
                       <div className="border-t border-slate-200 mt-2 pt-2 flex gap-2">
-                        <button type="button" onClick={() => setStatusFiltro(new Set(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','CANCELADA']))} className="text-xs text-blue-600 hover:underline">Todos</button>
+                        <button type="button" onClick={() => setStatusFiltro(new Set(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','PLANEJADA','CANCELADA']))} className="text-xs text-blue-600 hover:underline">Todos</button>
                         <button type="button" onClick={() => setStatusFiltro(new Set())} className="text-xs text-slate-500 hover:underline">Limpar</button>
                       </div>
                     </div>
@@ -2841,21 +2836,35 @@ export default function Qualificacoes() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setActiveTab('planejados');
-                  setPlannedView('turmas');
-                  setPage(1);
-                }}
-                title="Ver turmas planejadas"
-                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-500/10 dark:text-purple-300"
+                onClick={() => applySingleStatusFromChip('PLANEJADA')}
+                title="Filtrar apenas planejadas"
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                  isOnlyStatusSelected('PLANEJADA')
+                    ? 'ring-2 ring-purple-300 bg-purple-100 text-purple-800'
+                    : 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-500/10 dark:text-purple-300'
+                }`}
               >
                 <span>Planejadas</span>
                 <strong>
-                  {treinamentosPlanejadosConvocacaoQuery.isLoading
+                  {loadingStats && !shouldUseLocalHistoricoHeaderStats
                     ? '...'
-                    : operationalTurmasCount}
+                    : historicoHeaderStats.planejadas || 0}
                 </strong>
               </button>
+              {operationalTurmasCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('planejados');
+                    setPlannedView('turmas');
+                    setPage(1);
+                  }}
+                  title="Ver turmas planejadas"
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition bg-purple-100/50 text-purple-600 hover:bg-purple-200 hover:text-purple-800"
+                >
+                  <span>Ver turmas ({operationalTurmasCount})</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => applySingleStatusFromChip('RENOVADA')}
@@ -3019,6 +3028,7 @@ export default function Qualificacoes() {
                             'VENCIDA',
                             'VENCENDO_30',
                             'RENOVADA',
+                            'PLANEJADA',
                             'CANCELADA',
                           ]),
                         )
