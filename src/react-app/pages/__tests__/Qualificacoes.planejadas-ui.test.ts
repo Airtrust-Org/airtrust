@@ -342,13 +342,25 @@ describe('Qualificacoes — Planejadas history restore (PR #206)', () => {
     expect(qualificacoesSource).toContain('Filtrar apenas planejadas');
   });
 
-  it('link_ver_turmas_secundario — optional "Ver turmas" secondary link exists when operational turmas exist', () => {
-    // A separate, explicit "Ver turmas (N)" link appears near the chip
-    expect(qualificacoesSource).toContain('Ver turmas (');
-    expect(qualificacoesSource).toContain('operationalTurmasCount');
-    // The secondary link navigates to Planejados tab (explicit, separate action)
-    expect(qualificacoesSource).toContain("setActiveTab('planejados')");
-    expect(qualificacoesSource).toContain("setPlannedView('turmas')");
+  it('header_historico_sem_ver_turmas — chip "Ver turmas (N)" não existe no cabeçalho do Histórico', () => {
+    // PR #206 incorrectly added this chip; it mixes turmas (Planejados tab) into the Histórico header.
+    // The Histórico header must only show individual-record chips (Total, Vencendo, Vencidas, Planejadas, Renovadas).
+    expect(qualificacoesSource).not.toContain('Ver turmas (');
+  });
+
+  it('sem_operational_turmas_count — operationalTurmasCount foi removido do componente', () => {
+    // This derived value only served the wrong "Ver turmas" chip; it must not exist.
+    expect(qualificacoesSource).not.toContain('operationalTurmasCount');
+  });
+
+  it('chip_planejadas_nao_muda_aba — chip Planejadas não navega para aba Planejados', () => {
+    // The Planejadas chip must stay on the Histórico tab (filter only).
+    // Only URL-param handlers are allowed to call setActiveTab('planejados').
+    const chipStart = qualificacoesSource.indexOf('Filtrar apenas planejadas');
+    expect(chipStart).toBeGreaterThan(0);
+    const chipSection = qualificacoesSource.substring(chipStart - 200, chipStart + 700);
+    expect(chipSection).not.toContain("setActiveTab('planejados')");
+    expect(chipSection).not.toContain("setPlannedView('turmas')");
   });
 
   it('dropdown_status_historico_com_planejadas — Historico status dropdown includes Planejadas option', () => {

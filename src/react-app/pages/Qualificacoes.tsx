@@ -380,13 +380,6 @@ export default function Qualificacoes() {
   // Query without status filter so we can count operational turmas for the Planejadas chip
   // (PLANEJADO + CONFIRMADO + EM_ANDAMENTO). Existing consumers filter by status internally.
   const treinamentosPlanejadosConvocacaoQuery = useTreinamentosPlanejados({});
-  const operationalTurmasCount = useMemo(
-    () =>
-      (treinamentosPlanejadosConvocacaoQuery.data?.items || []).filter(
-        (t) => t.status === 'PLANEJADO' || t.status === 'CONFIRMADO' || t.status === 'EM_ANDAMENTO',
-      ).length,
-    [treinamentosPlanejadosConvocacaoQuery.data?.items],
-  );
   const previewConvocacaoPlanejada = usePreviewConvocacaoTreinamento();
   const enviarConvocacaoPlanejada = useEnviarConvocacaoTreinamento();
   const reenviarConvocacaoPlanejada = useReenviarConvocacaoTreinamento();
@@ -2851,20 +2844,6 @@ export default function Qualificacoes() {
                     : historicoHeaderStats.planejadas || 0}
                 </strong>
               </button>
-              {operationalTurmasCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('planejados');
-                    setPlannedView('turmas');
-                    setPage(1);
-                  }}
-                  title="Ver turmas planejadas"
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition bg-purple-100/50 text-purple-600 hover:bg-purple-200 hover:text-purple-800"
-                >
-                  <span>Ver turmas ({operationalTurmasCount})</span>
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => applySingleStatusFromChip('RENOVADA')}
