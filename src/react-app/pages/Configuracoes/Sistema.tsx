@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { Image, Save, RotateCcw, Settings2, MonitorSmartphone } from 'lucide-react';
+import { Globe, Image, Save, RotateCcw, Settings2, MonitorSmartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { SupportedLanguage } from '@/react-app/i18n/translations';
@@ -17,6 +17,7 @@ import {
   uploadSystemBrandingAsset,
 } from '@/react-app/config/systemSettings';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
+import { AVIATION_TIMEZONES } from '@/react-app/utils/timezone';
 
 // Nota: todo o sistema de branding usa base64 data-URLs para máxima confiabilidade.
 // O upload para R2 acontece em background para outros usos (certificados etc.).
@@ -314,6 +315,40 @@ export default function SistemaConfiguracoes() {
             </select>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               {t('settings.system.language.help')}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+              <Globe className="w-3.5 h-3.5" />
+              Fuso horário operacional
+            </label>
+            <select
+              value={form.timezone}
+              onChange={(e) => setForm((prev) => ({ ...prev, timezone: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {Object.entries(
+                AVIATION_TIMEZONES.reduce<Record<string, typeof AVIATION_TIMEZONES>>(
+                  (acc, tz) => {
+                    if (!acc[tz.group]) acc[tz.group] = [];
+                    acc[tz.group].push(tz);
+                    return acc;
+                  },
+                  {},
+                ),
+              ).map(([group, tzList]) => (
+                <optgroup key={group} label={group}>
+                  {tzList.map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Define o fuso horário usado em alertas, relatórios e cálculos operacionais.
             </p>
           </div>
         </div>

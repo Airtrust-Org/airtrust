@@ -3504,4 +3504,54 @@ treinamentosPlanejadosRoutes.delete(
   },
 );
 
+// Backfill idempotente: materializa registros PLANEJADA em qualificacoes_historico para
+// turmas ativas que nunca passaram por syncTreinamentoPlanejadoIntegration.
+// Seguro de re-executar — upsertHistoricoPlanejadoForParticipante é idempotente.
+treinamentosPlanejadosRoutes.post(
+  '/planejados/backfill-sync',
+  requireRole('admin'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = c.get('empresaId');
+
+    const turmas = await db
+      .prepare(
+        `SELECT id FROM treinamentos_planejados
+         WHERE empresa_id = ?
+           AND deleted_at IS NULL
+           AND status NOT IN ('CANCELADO', 'CONCLUIDO')
+           AND qualificacao_tipo_id IS NOT NULL
+           AND id IN (
+             SELECT DISTINCT treinamento_id FROM treinamentos_participantes
+             WHERE deleted_at IS NULL
+           )
+         ORDER BY id`,
+      )
+      .bind(empresaId)
+      .all<{ id: number }>();
+
+    const ids = turmas.results.map((r) => r.id);
+    let processadas = 0;
+    const erros: Array<{ id: number; erro: string }> = [];
+
+    for (const treinamentoId of ids) {
+      try {
+        await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+        processadas++;
+      } catch (err) {
+        erros.push({ id: treinamentoId, erro: String(err) });
+      }
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        total: ids.length,
+        processadas,
+        erros,
+      },
+    });
+  },
+);
+
 export default treinamentosPlanejadosRoutes;
