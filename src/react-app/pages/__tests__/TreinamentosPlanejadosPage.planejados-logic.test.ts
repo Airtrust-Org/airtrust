@@ -143,21 +143,29 @@ describe('Qualificacoes.tsx — chip Planejadas no Histórico', () => {
     'utf8',
   );
 
-  it('chip usa historicoHeaderStats.planejadas (fonte API dashboard)', () => {
-    expect(qualificacoesSource).toContain('historicoHeaderStats.planejadas');
+  it('chip usa operationalTurmasCount das turmas planejadas (fonte treinamentos_planejados)', () => {
+    // After the fix, the Planejadas chip counts operational turmas (PLANEJADO + CONFIRMADO + EM_ANDAMENTO)
+    // from treinamentos_planejados, not individual qualificacoes_historico records.
+    expect(qualificacoesSource).toContain('operationalTurmasCount');
+    expect(qualificacoesSource).toContain('useTreinamentosPlanejados({})');
   });
 
-  it('planejadas vem do endpoint /dashboard/qualificacoes', () => {
+  it('planejadas dashboard stats ainda carregados para uso do Historico', () => {
+    // The dashboard stats are still loaded for internal use (historico stats, other chips)
     expect(qualificacoesSource).toContain('/dashboard/qualificacoes');
     expect(qualificacoesSource).toContain('data.planejadas');
   });
 
-  it('não usa plannedItemsCount no chip — evita confusão entre entidades', () => {
-    // plannedItemsCount é da query de turmas (TreinamentoPlanejado), não de qual_historicos
-    // O chip do histórico deve usar sempre a contagem do dashboard
-    const chipSection = qualificacoesSource.includes('Planejadas') &&
-      qualificacoesSource.includes('historicoHeaderStats.planejadas');
-    expect(chipSection).toBe(true);
+  it('chip Planejadas navega para aba Planejados — não filtra Historico', () => {
+    // The chip navigates to the Planejados tab, no longer filters Historico by PLANEJADA
+    expect(qualificacoesSource).toContain("setActiveTab('planejados')");
+    expect(qualificacoesSource).toContain("setPlannedView('turmas')");
+    expect(qualificacoesSource).not.toContain("applySingleStatusFromChip('PLANEJADA')");
+  });
+
+  it('query de turmas não filtra por status — contagem operacional é client-side', () => {
+    // Query fetches all turmas (no status filter), operational count computed on client
+    expect(qualificacoesSource).toContain("t.status === 'PLANEJADO' || t.status === 'CONFIRMADO' || t.status === 'EM_ANDAMENTO'");
   });
 });
 
