@@ -59,4 +59,55 @@ describe('tipoSaveFeedback', () => {
       '/dashboard/qualificacoes',
     ]);
   });
+
+  describe('buildTipoPayload — validade sempre presente no payload', () => {
+    it('inclui validade como null quando campo e null (remover vencimento)', () => {
+      const payload = buildTipoPayload({
+        nome: 'Curso X',
+        categoria: 'Outros',
+        validade: null,
+      });
+      expect(Object.prototype.hasOwnProperty.call(payload, 'validade')).toBe(true);
+      expect(payload.validade).toBeNull();
+    });
+
+    it('inclui validade como null quando valor e 0 (invalido — banco rejeita 0)', () => {
+      const payload = buildTipoPayload({
+        nome: 'Curso Y',
+        categoria: 'Manutenção',
+        validade: 0,
+      });
+      expect(payload.validade).toBeNull();
+    });
+
+    it('inclui validade positiva quando fornecida', () => {
+      const payload = buildTipoPayload({
+        nome: 'MGM',
+        categoria: 'EAD',
+        validade: 24,
+      });
+      expect(payload.validade).toBe(24);
+    });
+
+    it('inclui validade mesmo quando undefined (null por default)', () => {
+      const payload = buildTipoPayload({ nome: 'X', categoria: 'Outros' });
+      expect(Object.prototype.hasOwnProperty.call(payload, 'validade')).toBe(true);
+      expect(payload.validade).toBeNull();
+    });
+  });
+
+  describe('buildTipoSaveSuccessMessage — criação sem recalculo', () => {
+    it('retorna mensagem de criacao quando nao e edicao', () => {
+      expect(buildTipoSaveSuccessMessage(null, false)).toBe('Modelo criado.');
+    });
+
+    it('retorna contagem zero quando sem historico recalculado', () => {
+      const msg = buildTipoSaveSuccessMessage(
+        { historicos_recalculados: 0, historicos_ignorados: 5, warnings: [] },
+        true,
+      );
+      expect(msg).toContain('Modelo atualizado.');
+      expect(msg).toContain('0 registro(s)');
+    });
+  });
 });
