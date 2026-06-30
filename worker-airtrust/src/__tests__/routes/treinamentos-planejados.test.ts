@@ -1093,26 +1093,22 @@ describe('treinamentos planejados router', () => {
             }),
           },
         ],
-        // Query 2: participante counts
+        // Query 2: participantes (sem GROUP BY — agregação em JS)
         [
-          'GROUP BY treinamento_id',
+          'tp.treinamento_id, tp.qualificacao_historico_id, tp.resultado',
           {
             all: () => ({
               results: [
-                {
-                  treinamento_id: 10,
-                  total_participantes: 3,
-                  com_historico: 1,
-                  sem_historico: 2,
-                  concluidos: 0,
-                },
-                {
-                  treinamento_id: 20,
-                  total_participantes: 5,
-                  com_historico: 0,
-                  sem_historico: 5,
-                  concluidos: 1,
-                },
+                // Turma 10: 3 participantes, 1 com historico
+                { treinamento_id: 10, qualificacao_historico_id: 100, resultado: null },
+                { treinamento_id: 10, qualificacao_historico_id: null, resultado: null },
+                { treinamento_id: 10, qualificacao_historico_id: null, resultado: null },
+                // Turma 20: 5 participantes, 0 com historico, 1 concluido
+                { treinamento_id: 20, qualificacao_historico_id: null, resultado: 'APROVADO' },
+                { treinamento_id: 20, qualificacao_historico_id: null, resultado: null },
+                { treinamento_id: 20, qualificacao_historico_id: null, resultado: null },
+                { treinamento_id: 20, qualificacao_historico_id: null, resultado: null },
+                { treinamento_id: 20, qualificacao_historico_id: null, resultado: null },
               ],
             }),
           },

@@ -3555,48 +3555,69 @@ treinamentosPlanejadosRoutes.post(
         });
       }
 
-      const turmaIds = turmasInfo.results.map((t) => t.id);
-
-      // Contagens de participantes agrupadas por turma (sem JOIN — só tabela de participantes).
-      const contagens = await db
+      // Carrega todos os participantes das turmas ativas (sem GROUP BY — agregação em JS).
+      const participantes = await db
         .prepare(
-          `SELECT treinamento_id,
-                  COUNT(*) AS total_participantes,
-                  SUM(CASE WHEN qualificacao_historico_id IS NOT NULL THEN 1 ELSE 0 END) AS com_historico,
-                  SUM(CASE WHEN qualificacao_historico_id IS NULL THEN 1 ELSE 0 END) AS sem_historico,
-                  SUM(CASE WHEN resultado IN ('APROVADO', 'REPROVADO', 'CANCELADO', 'aprovado', 'reprovado', 'cancelado') THEN 1 ELSE 0 END) AS concluidos
-             FROM treinamentos_participantes
-            WHERE deleted_at IS NULL
-              AND treinamento_id IN (
+          `SELECT tp.treinamento_id, tp.qualificacao_historico_id, tp.resultado
+             FROM treinamentos_participantes tp
+            WHERE tp.deleted_at IS NULL
+              AND tp.treinamento_id IN (
                 SELECT id FROM treinamentos_planejados
                 WHERE empresa_id = ?
                   AND deleted_at IS NULL
                   AND status NOT IN ('CANCELADO', 'CONCLUIDO')
                   AND qualificacao_tipo_id IS NOT NULL
               )
-            GROUP BY treinamento_id
-            ORDER BY treinamento_id`,
+            ORDER BY tp.treinamento_id`,
         )
         .bind(empresaId)
         .all<{
           treinamento_id: number;
-          total_participantes: number;
-          com_historico: number;
-          sem_historico: number;
-          concluidos: number;
+          qualificacao_historico_id: number | null;
+          resultado: string | null;
         }>();
 
-      // Merge turma info com contagens.
+      // Agregação em JavaScript (evita GROUP BY que está causando erro no D1).
+      const STATUS_CONCLUIDO = new Set([
+        'APROVADO', 'REPROVADO', 'CANCELADO',
+        'aprovado', 'reprovado', 'cancelado',
+      ]);
+
+      type Contagem = {
+        total: number;
+        comHistorico: number;
+        semHistorico: number;
+        concluidos: number;
+      };
+      const contagemMap = new Map<number, Contagem>();
+
+      for (const p of participantes.results) {
+        let c = contagemMap.get(p.treinamento_id);
+        if (!c) {
+          c = { total: 0, comHistorico: 0, semHistorico: 0, concluidos: 0 };
+          contagemMap.set(p.treinamento_id, c);
+        }
+        c.total++;
+        if (p.qualificacao_historico_id) {
+          c.comHistorico++;
+        } else {
+          c.semHistorico++;
+        }
+        if (p.resultado && STATUS_CONCLUIDO.has(p.resultado)) {
+          c.concluidos++;
+        }
+      }
+
       const infoMap = new Map(turmasInfo.results.map((t) => [t.id, t]));
-      const turmas = contagens.results.map((c) => {
-        const info = infoMap.get(c.treinamento_id);
+      const turmas = turmasInfo.results.map((t) => {
+        const c = contagemMap.get(t.id) || { total: 0, comHistorico: 0, semHistorico: 0, concluidos: 0 };
         return {
-          turmaId: c.treinamento_id,
-          codigoTurma: info?.codigo_turma ?? null,
-          status: info?.status ?? '',
-          totalParticipantes: c.total_participantes,
-          comHistoricoExistente: c.com_historico,
-          semHistorico: c.sem_historico,
+          turmaId: t.id,
+          codigoTurma: t.codigo_turma ?? null,
+          status: t.status ?? '',
+          totalParticipantes: c.total,
+          comHistoricoExistente: c.comHistorico,
+          semHistorico: c.semHistorico,
           participantesConcluidos: c.concluidos,
         };
       });
