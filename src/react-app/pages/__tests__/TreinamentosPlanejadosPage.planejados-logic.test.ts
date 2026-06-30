@@ -167,15 +167,17 @@ describe('Qualificacoes.tsx — chip Planejadas no Histórico', () => {
     expect(chipSection).not.toContain("setActiveTab('planejados')");
   });
 
-  it('link secundario Ver turmas existe para navegar a Planejados', () => {
-    // A separate "Ver turmas (N)" link navigates to Planejados tab — explicit action
-    expect(qualificacoesSource).toContain('Ver turmas (');
-    expect(qualificacoesSource).toContain('operationalTurmasCount');
+  it('sem_chip_ver_turmas_no_historico — chip "Ver turmas" não existe no cabeçalho do Histórico', () => {
+    // PR #206 incorrectly added this chip. The Histórico header only shows individual-record chips.
+    expect(qualificacoesSource).not.toContain('Ver turmas (');
+    expect(qualificacoesSource).not.toContain('operationalTurmasCount');
   });
 
-  it('query sem filtro de status mantida para contagem operacional na aba Planejados', () => {
+  it('query_treinamentos_mantida_sem_contagem_errada — query de turmas mantida para getTurmasPlanejadasDisponiveis', () => {
+    // useTreinamentosPlanejados({}) must stay for getTurmasPlanejadasDisponiveis (convocação per funcionário).
+    // The operationalTurmasCount derived from it must NOT exist — it only served the wrong chip.
     expect(qualificacoesSource).toContain('useTreinamentosPlanejados({})');
-    expect(qualificacoesSource).toContain("t.status === 'PLANEJADO' || t.status === 'CONFIRMADO' || t.status === 'EM_ANDAMENTO'");
+    expect(qualificacoesSource).not.toContain('operationalTurmasCount');
   });
 });
 
