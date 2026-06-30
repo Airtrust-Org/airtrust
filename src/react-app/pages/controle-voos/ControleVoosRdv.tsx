@@ -6,13 +6,20 @@ import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import { useControleVoosVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
+import ControleVoosDateControls from './components/ControleVoosDateControls';
+import { useControleVoosDate } from './hooks/useControleVoosDate';
 
 function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
 }
 
 export default function ControleVoosRdv() {
-  const { data, isLoading, error } = useControleVoosVoos({ limit: 100 });
+  const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
+  const { data, isLoading, error } = useControleVoosVoos({
+    limit: 100,
+    data_inicio: selectedDate,
+    data_fim: selectedDate,
+  });
   const { data: aeroportos = [] } = useControleVoosAeroportos();
 
   const aeroMap = buildAeroMap(aeroportos);
@@ -25,7 +32,13 @@ export default function ControleVoosRdv() {
           <ControleVoosPageHeader
             title="RDVs — Relatórios Diários de Voo"
             description="Selecione um voo para iniciar, revisar ou finalizar o preenchimento operacional correspondente"
-          />
+          >
+            <ControleVoosDateControls
+              value={selectedDate}
+              onChange={setSelectedDate}
+              onToday={setToday}
+            />
+          </ControleVoosPageHeader>
 
           {isLoading && (
             <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
@@ -90,7 +103,7 @@ export default function ControleVoosRdv() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-                {voos.length} voo(s) — clique em "Abrir RDV" para ver ou preencher o relatório operacional
+                {voos.length} voo(s) em {formatDate(selectedDate)} — clique em "Abrir RDV" para ver ou preencher o relatório operacional
               </p>
             </>
           )}

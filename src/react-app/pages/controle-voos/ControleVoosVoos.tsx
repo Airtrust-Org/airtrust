@@ -6,13 +6,20 @@ import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import { useControleVoosVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
+import ControleVoosDateControls from './components/ControleVoosDateControls';
+import { useControleVoosDate } from './hooks/useControleVoosDate';
 
 function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
 }
 
 export default function ControleVoosVoos() {
-  const { data, isLoading, error } = useControleVoosVoos({ limit: 100 });
+  const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
+  const { data, isLoading, error } = useControleVoosVoos({
+    limit: 100,
+    data_inicio: selectedDate,
+    data_fim: selectedDate,
+  });
   const { data: aeroportos = [] } = useControleVoosAeroportos();
 
   const aeroMap = buildAeroMap(aeroportos);
@@ -26,13 +33,20 @@ export default function ControleVoosVoos() {
             title="Voos — Programação"
             description="Voos programados, em execução e realizados com dados reais N1 para uso operacional interno"
           >
-            <button
-              disabled
-              className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"
-              title="N1 — criação de voo em desenvolvimento"
-            >
-              <Plane className="h-4 w-4" />+ Novo Voo
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <ControleVoosDateControls
+                value={selectedDate}
+                onChange={setSelectedDate}
+                onToday={setToday}
+              />
+              <button
+                disabled
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"
+                title="N1 — criação de voo em desenvolvimento"
+              >
+                <Plane className="h-4 w-4" />+ Novo Voo
+              </button>
+            </div>
           </ControleVoosPageHeader>
 
           {isLoading && (
@@ -104,7 +118,7 @@ export default function ControleVoosVoos() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-                {voos.length} voo(s) — dados reais N1 · uso operacional interno
+                {voos.length} voo(s) em {formatDate(selectedDate)} — dados reais N1 · uso operacional interno
               </p>
             </>
           )}

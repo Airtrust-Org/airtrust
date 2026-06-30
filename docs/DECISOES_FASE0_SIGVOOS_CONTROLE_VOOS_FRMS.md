@@ -35,6 +35,34 @@ As decisões desta fase são:
 9. Implementar o novo fluxo em paralelo e liberar a virada somente após shadow mode aprovado.
 10. Manter `syncSigvoosForFrms()` funcional até a virada ser validada e estabilizada.
 
+## 0.1 Status operacional em 2026-06-30
+
+Política operacional vigente para implementação incremental:
+
+```text
+SIGVOOS (origem externa)
+  -> importação / staging / normalização em Controle de Voos
+  -> Controle de Voos (fonte canônica operacional interna)
+  -> contrato CV -> FRMS
+  -> FRMS (consumidor)
+```
+
+Classificação dos caminhos atuais:
+
+| Caminho | Classificação | Observação |
+|---|---|---|
+| `SIGVOOS -> Controle de Voos` | canônico alvo | fluxo correto para ingestão externa |
+| `Controle de Voos -> FRMS` | canônico alvo | contrato ainda parcial / em evolução |
+| `SIGVOOS -> FRMS` | legado temporário | manter isolado até shadow mode e virada |
+| `Escalas -> FRMS` | provisório | compatibilidade operacional existente |
+| `manual -> FRMS` | provisório | mantém operações locais enquanto CV não entrega tudo |
+
+Regra explícita para o frontend de Controle de Voos:
+
+- O módulo **não deve** usar endpoints do FRMS como fonte canônica de páginas operacionais.
+- Se um dado ainda não existir em `Controle de Voos`, a página deve permanecer em preview ou explicitar a lacuna.
+- A tela `Jornadas` não deve sair do preview antes de existir contrato canônico em `Controle de Voos` ou adaptador `CV -> FRMS` aprovado.
+
 Documentos-base:
 
 - `docs/AUDITORIA_SIGVOOS_CONTROLE_VOOS_FRMS.md`

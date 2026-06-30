@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ControleVoosRelatorios from '../ControleVoosRelatorios';
+import ControleVoosJornadas from '../ControleVoosJornadas';
 import ControleVoosTabelas from '../ControleVoosTabelas';
 import { fetchWithAuth } from '@/react-app/config/api';
 
@@ -37,12 +38,24 @@ vi.mock('../components/ControleVoosPageHeader', () => ({
   ),
 }));
 
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useSearchParams: () => [new URLSearchParams('data=2026-06-30'), vi.fn()],
+  };
+});
+
 const relatoriosSource = readFileSync(
   resolve(process.cwd(), 'src/react-app/pages/controle-voos/ControleVoosRelatorios.tsx'),
   'utf8',
 );
 const tabelasSource = readFileSync(
   resolve(process.cwd(), 'src/react-app/pages/controle-voos/ControleVoosTabelas.tsx'),
+  'utf8',
+);
+const jornadasSource = readFileSync(
+  resolve(process.cwd(), 'src/react-app/pages/controle-voos/ControleVoosJornadas.tsx'),
   'utf8',
 );
 
@@ -57,13 +70,18 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
 describe('controle voos real pages', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('remove import de mock das paginas reais e aponta para endpoints reais', () => {
     expect(relatoriosSource).not.toContain('controleVoosMockData');
     expect(tabelasSource).not.toContain('controleVoosMockData');
+    expect(jornadasSource).not.toContain('controleVoosMockData');
     expect(relatoriosSource).toContain('/api/controle-voos/relatorios/resumo-operacional');
     expect(tabelasSource).toContain('/api/controle-voos/catalogos/');
+    expect(jornadasSource).not.toContain('/api/frms/operational-snapshot?');
+    expect(jornadasSource).not.toContain('/api/frms/acumulo-frota?mes=');
+    expect(jornadasSource).toContain('Jornadas reais serão alimentadas pelo Controle de Voos');
   });
 
   it('carrega relatorios operacionais do endpoint real', async () => {
@@ -110,7 +128,7 @@ describe('controle voos real pages', () => {
     await waitFor(() => expect(screen.getByText('Voos no período')).toBeInTheDocument());
 
     expect(vi.mocked(fetchWithAuth)).toHaveBeenCalledWith(
-      expect.stringContaining('/api/controle-voos/relatorios/resumo-operacional?'),
+      '/api/controle-voos/relatorios/resumo-operacional?data_inicio=2026-06-30&data_fim=2026-06-30',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(screen.getByText('12')).toBeInTheDocument();
@@ -129,5 +147,14 @@ describe('controle voos real pages', () => {
     );
 
     expect(screen.getByText('Falha no catálogo')).toBeInTheDocument();
+  });
+
+  it('mantem jornadas em preview explicito sem consumir FRMS como fonte canonica', async () => {
+    render(<ControleVoosJornadas />);
+    expect(screen.getByText('Jornadas — Preview')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Jornadas reais serão alimentadas pelo Controle de Voos a partir do SIGVOOS importado e normalizado/i),
+    ).toBeInTheDocument();
+    expect(vi.mocked(fetchWithAuth)).not.toHaveBeenCalled();
   });
 });
