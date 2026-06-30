@@ -39,10 +39,9 @@ describe('Qualificações > Modelos — validade persistence', () => {
   });
 
   describe('Save handler — validade payload', () => {
-    it('conditionally includes validade in payload when not null', () => {
-      // The pattern: if (editingTipo.validade != null) { payload.validade = ... }
-      expect(source).toMatch(/editingTipo\.validade\s*!=\s*null/);
-      expect(source).toMatch(/payload\.validade\s*=\s*editingTipo\.validade/);
+    it('always sends validade in payload (even null — cleared field = no expiry)', () => {
+      // payload.validade = editingTipo.validade ?? null — sempre envia, mesmo null
+      expect(source).toMatch(/payload\.validade\s*=\s*editingTipo\.validade\s*\?\?\s*null/);
     });
 
     it('logs validade in the save console.log', () => {
@@ -54,8 +53,8 @@ describe('Qualificações > Modelos — validade persistence', () => {
       expect(source).toMatch(/setTipoUpdates.*prev.*\.\.\.prev.*tipoIdStr.*optimisticUpdate/);
     });
 
-    it('includes validade in optimisticUpdate when not null', () => {
-      expect(source).toContain("optimisticUpdate.validade = editingTipo.validade");
+    it('always includes validade in optimisticUpdate (even null)', () => {
+      expect(source).toMatch(/optimisticUpdate\.validade\s*=\s*editingTipo\.validade\s*\?\?\s*null/);
     });
 
     it('clears optimistic update after successful refetch', () => {
@@ -143,6 +142,15 @@ describe('Qualificações > Modelos — validade persistence', () => {
     it('help text explains empty = no expiry', () => {
       expect(source).toContain('Deixe vazio para qualificação sem vencimento');
       expect(source).toContain('indeterminada');
+    });
+
+    it('clearing the field sends null to remove expiry (sem vencimento)', () => {
+      // onChange sets validade to null when input is empty (falsy value → null)
+      expect(source).toMatch(/: null/);
+      // payload.validade = editingTipo.validade ?? null — always sent
+      expect(source).toMatch(/payload\.validade\s*=\s*editingTipo\.validade\s*\?\?\s*null/);
+      // optimistic update also includes null
+      expect(source).toMatch(/optimisticUpdate\.validade\s*=\s*editingTipo\.validade\s*\?\?\s*null/);
     });
   });
 });
