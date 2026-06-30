@@ -7,6 +7,7 @@ export interface SystemSettings {
   compactHeader: boolean;
   defaultPageSize: 20 | 50 | 100;
   enableAnimations: boolean;
+  timezone: string;
 }
 
 export const SYSTEM_SETTINGS_STORAGE_KEY = 'airtrust_system_settings_v1';
@@ -18,6 +19,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   compactHeader: false,
   defaultPageSize: 20,
   enableAnimations: true,
+  timezone: 'UTC',
 };
 
 export interface ServerSystemSettings {
@@ -28,6 +30,7 @@ export interface ServerSystemSettings {
   compactHeader: boolean;
   defaultPageSize: 20 | 50 | 100;
   enableAnimations: boolean;
+  timezone: string;
 }
 
 function resolveBrandingUrl(url: string | null | undefined): string | null {
@@ -55,6 +58,10 @@ export function normalizeSystemSettings(
 ): SystemSettings {
   const pageSize = input?.defaultPageSize;
   const normalizedPageSize = pageSize === 50 || pageSize === 100 ? pageSize : 20;
+  const tz =
+    typeof input?.timezone === 'string' && input.timezone.trim().length > 0
+      ? input.timezone.trim()
+      : DEFAULT_SYSTEM_SETTINGS.timezone;
 
   return {
     appName: input?.appName?.trim() || DEFAULT_SYSTEM_SETTINGS.appName,
@@ -63,6 +70,7 @@ export function normalizeSystemSettings(
     compactHeader: Boolean(input?.compactHeader),
     defaultPageSize: normalizedPageSize,
     enableAnimations: input?.enableAnimations ?? DEFAULT_SYSTEM_SETTINGS.enableAnimations,
+    timezone: tz,
   };
 }
 
@@ -74,6 +82,7 @@ export function mapServerToLocalSettings(server: ServerSystemSettings): SystemSe
     compactHeader: server.compactHeader,
     defaultPageSize: server.defaultPageSize,
     enableAnimations: server.enableAnimations,
+    timezone: server.timezone,
   });
 }
 
@@ -138,6 +147,7 @@ export async function saveSystemSettingsToServer(
       compactHeader: payload.compactHeader,
       defaultPageSize: payload.defaultPageSize,
       enableAnimations: payload.enableAnimations,
+      timezone: payload.timezone,
     }),
   });
 
@@ -153,6 +163,7 @@ export async function saveSystemSettingsToServer(
     compactHeader: payload.compactHeader,
     defaultPageSize: payload.defaultPageSize,
     enableAnimations: payload.enableAnimations,
+    timezone: payload.timezone,
   };
 }
 
