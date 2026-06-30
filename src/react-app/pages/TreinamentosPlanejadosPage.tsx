@@ -1,10 +1,11 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Ban,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -23,6 +24,7 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { DropdownMenu, type DropdownMenuItem } from '@/react-app/components/UI/DropdownMenu';
 import PageHeader from '@/react-app/components/PageHeader';
 import TimeInput from '@/react-app/components/TimeInput';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
@@ -56,6 +58,7 @@ import {
   type TreinamentoPlanejadoStatus,
 } from '@/react-app/hooks/useTreinamentosPlanejados';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
+import { getTodayYmdInTz, formatWithSystemTZ } from '@/react-app/utils/timezone';
 
 type AbaAtiva = 'calendario' | 'quadro' | 'auditoria';
 
@@ -290,7 +293,7 @@ const PRESENCA_DIA_OPTIONS: Array<{
 ];
 
 function getTodayYmd(): string {
-  return new Date().toISOString().slice(0, 10);
+  return getTodayYmdInTz();
 }
 
 function normalizeText(value: string): string | null {
@@ -300,13 +303,14 @@ function normalizeText(value: string): string | null {
 
 function formatDateLabel(value?: string | null): string {
   if (!value) return 'Sem data';
-  const date = new Date(`${value}T12:00:00`);
+  // Parse as UTC noon to avoid date-shifting when formatting in configured timezone.
+  const date = new Date(`${value}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('pt-BR', {
+  return formatWithSystemTZ(date, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  }).format(date);
+  });
 }
 
 function formatDateRange(inicio?: string | null, fim?: string | null): string {
@@ -318,15 +322,18 @@ function formatDateRange(inicio?: string | null, fim?: string | null): string {
 
 function formatDateTimeLabel(value?: string | null): string {
   if (!value) return 'Sem registro';
-  const date = new Date(value);
+  // Backend timestamps from auditoria are now ISO 8601 UTC (strftime with Z).
+  // Legacy space-separated SQLite format treated as UTC for correctness.
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T') + 'Z';
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('pt-BR', {
+  return formatWithSystemTZ(date, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date);
+  });
 }
 
 function formatMonthLabel(month: string): string {
@@ -747,6 +754,7 @@ export default function TreinamentosPlanejadosPage({
   const [modalConfirmacaoConvocacaoAberto, setModalConfirmacaoConvocacaoAberto] = useState(false);
   const [modalConfirmacaoConclusaoAberto, setModalConfirmacaoConclusaoAberto] = useState(false);
   const [modalResultadoConvocacaoAberto, setModalResultadoConvocacaoAberto] = useState(false);
+  const [trilhaRecenteAberta, setTrilhaRecenteAberta] = useState(false);
   const [treinamentoEditando, setTreinamentoEditando] = useState<TreinamentoPlanejado | null>(null);
   const [treinamentoSelecionadoId, setTreinamentoSelecionadoId] = useState<number | null>(null);
   const [sessaoSimuladorEditando, setSessaoSimuladorEditando] =
@@ -2869,56 +2877,98 @@ export default function TreinamentosPlanejadosPage({
           }
           size="5xl"
           footer={
-            <>
-              <Button
-                variant="secondary"
-                onClick={fecharModalDetalhes}
-              >
-                Fechar
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={gerarListaPresencaTurmaAtual}
-                disabled={gerandoListaPresencaTurma || !detalheTreinamento}
-                title="Gerar lista de presença da turma em PDF"
-              >
-                <ClipboardList className="h-4 w-4" />
-                {gerandoListaPresencaTurma ? 'Gerando...' : 'Lista de Presença'}
-              </Button>
-              {canWriteTraining ? (
-                <Button
-                  variant="danger"
-                  onClick={excluirTreinamentoSelecionado}
-                  disabled={excluindo || !detalheTreinamento}
-                >
-                  {excluindo ? 'Excluindo...' : 'Excluir'}
-                </Button>
-              ) : null}
-              {canWriteTraining ? (
-                <Button
-                  variant="secondary"
-                  onClick={abrirConvocacaoTurma}
-                  disabled={Boolean(convocacaoDisabledReason) || enviandoConvocacao}
-                  title={
-                    convocacaoDisabledReason ||
-                    'Enviar convocação por e-mail para todos os matriculados'
-                  }
-                >
-                  <Mail className="h-4 w-4" />
-                  {enviandoConvocacao ? 'Preparando...' : 'Convocar Turma'}
-                </Button>
-              ) : null}
-              {canWriteTraining ? (
-                <Button
-                  variant="ghost"
-                  onClick={() => abrirEditor(detalheQuery.data || treinamentoEditando)}
-                  disabled={!detalheTreinamento}
-                >
-                  Editar
-                </Button>
-              ) : null}
-            </>
-          }
+              (() => {
+                const isEncerrada =
+                  detalheTreinamento && STATUS_ENCERRADOS.has(detalheTreinamento.status);
+                const isPlanejadoOuConfirmado =
+                  detalheTreinamento &&
+                  (detalheTreinamento.status === 'PLANEJADO' ||
+                    detalheTreinamento.status === 'CONFIRMADO');
+                const isEmAndamento =
+                  detalheTreinamento && detalheTreinamento.status === 'EM_ANDAMENTO';
+                const convocacaoDisabled = Boolean(
+                  convocacaoDisabledReason || enviandoConvocacao,
+                );
+
+                // ── Ação primária contextual ──────────────────────────────
+                let primaryAction: ReactNode = null;
+                if (canWriteTraining && isPlanejadoOuConfirmado && !convocacaoDisabled) {
+                  primaryAction = (
+                    <Button onClick={abrirConvocacaoTurma} disabled={enviandoConvocacao}>
+                      <Mail className="h-4 w-4" />
+                      {enviandoConvocacao ? 'Preparando...' : 'Convocar Turma'}
+                    </Button>
+                  );
+                } else if (canWriteTraining && isEmAndamento) {
+                  primaryAction = (
+                    <Button
+                      onClick={abrirConfirmacaoConclusao}
+                      disabled={concluirTurma.isPending}
+                    >
+                      {concluirTurma.isPending ? 'Salvando...' : 'Concluir Turma'}
+                    </Button>
+                  );
+                }
+
+                // ── Ações secundárias (dropdown) ──────────────────────────
+                const dropdownItems: DropdownMenuItem[] = [];
+                if (canWriteTraining) {
+                  dropdownItems.push({
+                    key: 'editar',
+                    label: 'Editar',
+                    icon: <Edit2 className="h-4 w-4" />,
+                    onClick: () =>
+                      abrirEditor(detalheQuery.data || treinamentoEditando),
+                    disabled: !detalheTreinamento,
+                  });
+                }
+                // Convocar vai para o dropdown quando não é ação primária
+                if (
+                  canWriteTraining &&
+                  !isPlanejadoOuConfirmado &&
+                  !convocacaoDisabled
+                ) {
+                  dropdownItems.push({
+                    key: 'convocar',
+                    label: 'Convocar Turma',
+                    icon: <Mail className="h-4 w-4" />,
+                    onClick: abrirConvocacaoTurma,
+                  });
+                }
+                if (canWriteTraining && !isEncerrada) {
+                  dropdownItems.push({
+                    key: 'excluir',
+                    label: 'Excluir',
+                    icon: <Trash2 className="h-4 w-4" />,
+                    onClick: excluirTreinamentoSelecionado,
+                    danger: true,
+                    disabled: excluindo || !detalheTreinamento,
+                  });
+                }
+
+                return (
+                  <div className="flex w-full items-center gap-2">
+                    <Button variant="secondary" onClick={fecharModalDetalhes}>
+                      Fechar
+                    </Button>
+                    <div className="flex-1" />
+                    <Button
+                      variant="ghost"
+                      onClick={gerarListaPresencaTurmaAtual}
+                      disabled={gerandoListaPresencaTurma || !detalheTreinamento}
+                      title="Gerar lista de presença da turma em PDF"
+                    >
+                      <ClipboardList className="h-4 w-4" />
+                      Lista de Presença
+                    </Button>
+                    {dropdownItems.length > 0 && (
+                      <DropdownMenu items={dropdownItems} ariaLabel="Mais ações" />
+                    )}
+                    {primaryAction}
+                  </div>
+                );
+              })()
+            }
         >
           {!detalheTreinamento || detalheQuery.isLoading ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
@@ -2926,7 +2976,7 @@ export default function TreinamentosPlanejadosPage({
             </div>
           ) : (
             <div className="space-y-6">
-              <section className="grid gap-4 lg:grid-cols-[1.3fr,0.9fr]">
+              <section className="space-y-4">
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={detalheTreinamento.status} />
@@ -3043,34 +3093,6 @@ export default function TreinamentosPlanejadosPage({
                     <p className="mt-2 whitespace-pre-wrap">
                       {detalheTreinamento.observacoes || 'Sem observacoes registradas.'}
                     </p>
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <h3 className="text-base font-semibold text-slate-900">Trilha recente</h3>
-                  <div className="mt-4 space-y-3">
-                    {(detalheQuery.data?.auditoria || []).length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-500">
-                        Nenhuma alteracao auditada ainda.
-                      </div>
-                    ) : (
-                      (detalheQuery.data?.auditoria || []).map((registro) => (
-                        <div
-                          key={registro.id}
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                        >
-                          <div className="flex flex-col gap-1">
-                            <p className="text-sm font-semibold text-slate-900">{registro.acao}</p>
-                            <p className="text-xs text-slate-500">
-                              {formatDateTimeLabel(registro.created_at)}
-                            </p>
-                            <p className="text-sm text-slate-600">
-                              {registro.usuario_nome || 'Usuario do sistema'}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
                   </div>
                 </div>
               </section>
@@ -3267,123 +3289,126 @@ export default function TreinamentosPlanejadosPage({
                   )}
                 </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-                  {[
-                    ['Total', resumoConclusao.total],
-                    ['Presentes', resumoConclusao.presentes],
-                    ['Aprovados', resumoConclusao.aprovados],
-                    ['Pendentes', resumoConclusao.pendentes],
-                    ['Já concluídos', resumoConclusao.jaConcluidos],
-                    ['Históricos gerados', resumoConclusao.historicosGerados],
-                  ].map(([label, value]) => (
-                    <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                        {label}
-                      </p>
-                      <p className="mt-1 text-xl font-semibold text-slate-900">{value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {canConcluirTurma ? (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      variant="secondary"
-                      disabled={concluirTurma.isPending}
-                      onClick={() => aplicarConclusaoEmLote('presentes')}
-                    >
-                      Marcar todos como presentes
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      disabled={concluirTurma.isPending}
-                      onClick={() => aplicarConclusaoEmLote('aprovados')}
-                    >
-                      Marcar todos como aprovados
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      disabled={concluirTurma.isPending}
-                      onClick={() => aplicarConclusaoEmLote('presentes-aprovados')}
-                    >
-                      Marcar todos presentes e aprovados
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      disabled={concluirTurma.isPending}
-                      onClick={() => aplicarConclusaoEmLote('limpar')}
-                    >
-                      Limpar marcações
-                    </Button>
-                    <Button
-                      disabled={concluirTurma.isPending}
-                      onClick={abrirConfirmacaoConclusao}
-                    >
-                      {concluirTurma.isPending ? 'Salvando...' : 'Concluir turma e salvar'}
-                    </Button>
+                {detalheTreinamento.status === 'PLANEJADO' ||
+                detalheTreinamento.status === 'CONFIRMADO' ? (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                    A conclusão da turma estará disponível quando o treinamento estiver em andamento
+                    ou após a data de encerramento. Registre as presenças diárias durante a execução
+                    da turma e depois retorne aqui para concluir.
                   </div>
                 ) : (
-                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Apenas admin/gestor autorizado pode concluir a turma.
-                  </div>
-                )}
+                  <>
+                    <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                      {[
+                        ['Total', resumoConclusao.total],
+                        ['Presentes', resumoConclusao.presentes],
+                        ['Aprovados', resumoConclusao.aprovados],
+                        ['Pendentes', resumoConclusao.pendentes],
+                        ['Já concluídos', resumoConclusao.jaConcluidos],
+                        ['Históricos gerados', resumoConclusao.historicosGerados],
+                      ].map(([label, value]) => (
+                        <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            {label}
+                          </p>
+                          <p className="mt-1 text-xl font-semibold text-slate-900">{value}</p>
+                        </div>
+                      ))}
+                    </div>
 
-                <div className="mt-4 overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead>
-                      <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        <th className="px-3 py-3">Participante</th>
-                        <th className="px-3 py-3">Situação atual</th>
-                        <th className="px-3 py-3">Presenca</th>
-                        <th className="px-3 py-3">Resultado</th>
-                        <th className="px-3 py-3">Histórico</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {detalheTreinamento.participantes.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500">
-                            Nenhum convocado vinculado a este treinamento.
-                          </td>
-                        </tr>
-                      ) : (
-                        detalheTreinamento.participantes.map((participante) => {
-                          const draft =
-                            conclusaoDraft[participante.funcionario_id] ||
-                            buildConclusaoDraft(participante, defaultConclusaoDate);
-                          return (
-                            <tr key={participante.id} className="align-top">
-                              <td className="px-3 py-4">
-                                <p className="font-semibold text-slate-900">
-                                  {participante.funcionario_guerra ||
-                                    participante.funcionario_nome ||
-                                    'Sem nome'}
-                                </p>
-                                <p className="text-slate-500">
-                                  {[participante.funcionario_nome, participante.funcionario_matricula]
-                                    .filter(Boolean)
-                                    .join(' · ')}
-                                </p>
+                    {canConcluirTurma ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          disabled={concluirTurma.isPending}
+                          onClick={() => aplicarConclusaoEmLote('presentes')}
+                        >
+                          Marcar todos como presentes
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={concluirTurma.isPending}
+                          onClick={() => aplicarConclusaoEmLote('aprovados')}
+                        >
+                          Marcar todos como aprovados
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={concluirTurma.isPending}
+                          onClick={() => aplicarConclusaoEmLote('presentes-aprovados')}
+                        >
+                          Marcar todos presentes e aprovados
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={concluirTurma.isPending}
+                          onClick={() => aplicarConclusaoEmLote('limpar')}
+                        >
+                          Limpar marcações
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Apenas admin/gestor autorizado pode concluir a turma.
+                      </div>
+                    )}
+
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead>
+                          <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            <th className="px-3 py-3">Participante</th>
+                            <th className="px-3 py-3">Situação atual</th>
+                            <th className="px-3 py-3">Presenca</th>
+                            <th className="px-3 py-3">Resultado</th>
+                            <th className="px-3 py-3">Histórico</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {detalheTreinamento.participantes.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500">
+                                Nenhum convocado vinculado a este treinamento.
                               </td>
-                              <td className="px-3 py-4 text-slate-600">
-                                <p>
-                                  {[participante.funcionario_setor, participante.funcionario_funcao]
-                                    .filter(Boolean)
-                                    .join(' · ') || 'Nao informado'}
-                                </p>
-                                <p className="mt-2 text-xs text-slate-500">
-                                  {participante.confirmado ? 'Confirmado' : 'Ainda não confirmado'}
-                                  {participante.resultado
-                                    ? ` · Resultado atual: ${participante.resultado}`
-                                    : ' · Sem conclusão final'}
-                                </p>
-                              </td>
-                              <td className="px-3 py-4">
-                                <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                                  <input
-                                    type="checkbox"
-                                    checked={draft.presente === true}
-                                    disabled={!canConcluirTurma || concluirTurma.isPending}
+                            </tr>
+                          ) : (
+                            detalheTreinamento.participantes.map((participante) => {
+                              const draft =
+                                conclusaoDraft[participante.funcionario_id] ||
+                                buildConclusaoDraft(participante, defaultConclusaoDate);
+                              return (
+                                <tr key={participante.id} className="align-top">
+                                  <td className="px-3 py-4">
+                                    <p className="font-semibold text-slate-900">
+                                      {participante.funcionario_guerra ||
+                                        participante.funcionario_nome ||
+                                        'Sem nome'}
+                                    </p>
+                                    <p className="text-slate-500">
+                                      {[participante.funcionario_nome, participante.funcionario_matricula]
+                                        .filter(Boolean)
+                                        .join(' · ')}
+                                    </p>
+                                  </td>
+                                  <td className="px-3 py-4 text-slate-600">
+                                    <p>
+                                      {[participante.funcionario_setor, participante.funcionario_funcao]
+                                        .filter(Boolean)
+                                        .join(' · ') || 'Nao informado'}
+                                    </p>
+                                    <p className="mt-2 text-xs text-slate-500">
+                                      {participante.confirmado ? 'Confirmado' : 'Ainda não confirmado'}
+                                      {participante.resultado
+                                        ? ` · Resultado atual: ${participante.resultado}`
+                                        : ' · Sem conclusão final'}
+                                    </p>
+                                  </td>
+                                  <td className="px-3 py-4">
+                                    <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                      <input
+                                        type="checkbox"
+                                        checked={draft.presente === true}
+                                        disabled={!canConcluirTurma || concluirTurma.isPending}
                                     onChange={(event) =>
                                       atualizarConclusaoParticipante(participante, {
                                         presente: event.target.checked ? true : null,
@@ -3486,6 +3511,8 @@ export default function TreinamentosPlanejadosPage({
                     </tbody>
                   </table>
                 </div>
+                  </>
+                )}
               </section>
 
               <section className="rounded-3xl border border-slate-200 bg-white p-5">
@@ -3513,7 +3540,13 @@ export default function TreinamentosPlanejadosPage({
                       >
                         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                           <div>
-                            <p className="font-semibold text-slate-900">{convocacao.assunto}</p>
+                            <p className="font-semibold text-slate-900">
+                              {convocacao.assunto &&
+                              convocacao.assunto.includes('{{') &&
+                              detalheTreinamento
+                                ? `Convocação: ${getEventoTitulo(detalheTreinamento)}`
+                                : convocacao.assunto || 'Convocação de turma'}
+                            </p>
                             <p className="mt-1 text-sm text-slate-500">
                               {formatDateTimeLabel(convocacao.created_at)} ·{' '}
                               {convocacao.disparado_por_nome || 'Usuário do sistema'}
@@ -3538,6 +3571,57 @@ export default function TreinamentosPlanejadosPage({
                     ))
                   )}
                 </div>
+              </section>
+
+              {/* ── Trilha recente (colapsavel) ─────────────────────────── */}
+              <section className="rounded-3xl border border-slate-200 bg-white p-5">
+                <button
+                  type="button"
+                  onClick={() => setTrilhaRecenteAberta(!trilhaRecenteAberta)}
+                  className="flex w-full items-center justify-between text-left"
+                >
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Trilha recente
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      Registro auditado das alteracoes nesta turma.
+                    </p>
+                  </div>
+                  <ChevronDown
+                    className={`h-5 w-5 text-slate-400 transition-transform ${
+                      trilhaRecenteAberta ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                {trilhaRecenteAberta && (
+                  <div className="mt-4 space-y-3">
+                    {(detalheQuery.data?.auditoria || []).length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-500">
+                        Nenhuma alteracao auditada ainda.
+                      </div>
+                    ) : (
+                      (detalheQuery.data?.auditoria || []).map((registro) => (
+                        <div
+                          key={registro.id}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                        >
+                          <div className="flex flex-col gap-1">
+                            <p className="text-sm font-semibold text-slate-900">
+                              {registro.acao}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {formatDateTimeLabel(registro.created_at)}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {registro.usuario_nome || 'Usuario do sistema'}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </section>
             </div>
           )}
