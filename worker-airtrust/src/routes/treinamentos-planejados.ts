@@ -3557,12 +3557,12 @@ treinamentosPlanejadosRoutes.post(
       }
 
       // Carrega todos os participantes das turmas ativas (sem GROUP BY — agregação em JS).
+      // NOTA: treinamentos_participantes NÃO tem coluna deleted_at (usa hard-delete).
       const participantes = await db
         .prepare(
           `SELECT tp.treinamento_id, tp.qualificacao_historico_id, tp.resultado
              FROM treinamentos_participantes tp
-            WHERE tp.deleted_at IS NULL
-              AND tp.treinamento_id IN (
+            WHERE tp.treinamento_id IN (
                 SELECT id FROM treinamentos_planejados
                 WHERE empresa_id = ?
                   AND deleted_at IS NULL
