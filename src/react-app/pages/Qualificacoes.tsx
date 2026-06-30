@@ -4774,10 +4774,9 @@ export default function Qualificacoes() {
                   is_check: editingTipo.is_check ? 1 : 0,
                 };
 
-                // Campos opcionais - só adicionar se tiverem valor
-                if (editingTipo.validade != null) {
-                  payload.validade = editingTipo.validade;
-                }
+                // Sempre envia validade no payload — mesmo null (campo limpo = sem vencimento).
+                // Antes usava if (editingTipo.validade != null) o que impedia limpar a validade.
+                payload.validade = editingTipo.validade ?? null;
                 if (editingTipo.descricao?.trim() || editingTipo.observacoes?.trim()) {
                   payload.descricao =
                     editingTipo.descricao?.trim() || editingTipo.observacoes?.trim() || null;
@@ -4855,9 +4854,8 @@ export default function Qualificacoes() {
                   // na tabela e no modal ao reabrir".
                   const tipoIdStr = String(editingTipo.id);
                   const optimisticUpdate: Partial<QualificacaoTipoDTO> = {};
-                  if (editingTipo.validade != null) {
-                    optimisticUpdate.validade = editingTipo.validade;
-                  }
+                  // Sempre inclui validade — null = campo limpo (sem vencimento)
+                  optimisticUpdate.validade = editingTipo.validade ?? null;
                   // Outros campos que podem ter mudado e afetam a visualização da tabela
                   if (editingTipo.nome?.trim()) {
                     optimisticUpdate.nome = editingTipo.nome.trim();
