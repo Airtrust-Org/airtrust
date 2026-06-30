@@ -1871,9 +1871,24 @@ describe('controle voos routes', () => {
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = (await response.json()) as {
+      data: {
+        writesEnabled: boolean;
+        tenantScoped: boolean;
+        authContext: {
+          empresaId: number;
+          tenantScoped: boolean;
+          role: string | null;
+        };
+      };
+    };
     expect(body.data.writesEnabled).toBe(false);
     expect(body.data.tenantScoped).toBe(true);
+    expect(body.data.authContext).toMatchObject({
+      empresaId: 1,
+      tenantScoped: true,
+      role: 'manager',
+    });
   });
 
   it('bloqueia usuario sem permissao no shadow compare SIGVOOS', async () => {
@@ -1931,6 +1946,11 @@ describe('controle voos routes', () => {
 
     const body = JSON.parse(bodyText) as {
       data: {
+        authContext: {
+          empresaId: number;
+          tenantScoped: boolean;
+          role: string | null;
+        };
         writesEnabled: boolean;
         totals: {
           previewStagingRecords: number;
@@ -1954,6 +1974,11 @@ describe('controle voos routes', () => {
     };
 
     expect(body.data.writesEnabled).toBe(false);
+    expect(body.data.authContext).toMatchObject({
+      empresaId: 1,
+      tenantScoped: true,
+      role: 'manager',
+    });
     expect(body.data.totals).toMatchObject({
       previewStagingRecords: 2,
       cvFlights: 1,
@@ -2076,6 +2101,36 @@ describe('controle voos routes', () => {
     expect(body.data.divergences.byDate).toEqual([
       { key: '2026-06-14', cvTotal: 1, frmsTotal: 0, delta: 1, status: 'DIVERGENT' },
     ]);
+  });
+
+  it('retorna authContext sanitizado quando o usuario esta autenticado', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    seedSigvoosPreviewState(db.databasePath);
+    applyShadowCompareFrmsSchema(db.databasePath);
+    seedShadowCompareFrmsState(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-06-14&to=2026-06-15',
+      {},
+      77,
+      'admin',
+      { CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED: 'true', ENVIRONMENT: 'production' },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        tenantScoped: true,
+        empresaId: 77,
+        authContext: {
+          empresaId: 77,
+          tenantScoped: true,
+          role: 'admin',
+        },
+      },
+    });
   });
 
   it('rejeita janela maior que 31 dias no shadow compare SIGVOOS', async () => {

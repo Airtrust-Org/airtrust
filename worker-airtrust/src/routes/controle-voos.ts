@@ -1242,7 +1242,9 @@ controleVoos.get('/sigvoos/shadow-compare', auth(), requireControleVoosSigvoosPr
       from: c.req.query('from'),
       to: c.req.query('to'),
     });
-    const report = await buildSigvoosShadowCompareReport(c.env.DB, empresaId, window);
+    const rawRole = (c.get as (key: string) => unknown)('userRole');
+    const role = typeof rawRole === 'string' ? rawRole : null;
+    const report = await buildSigvoosShadowCompareReport(c.env.DB, empresaId, window, { role });
     return c.json({ success: true, data: report });
   } catch (error) {
     const safeError = error as { name?: string; code?: unknown; status?: unknown };
