@@ -4710,6 +4710,15 @@ export default function Qualificacoes() {
                 return;
               }
 
+              // Validade deve ser nula (sem vencimento) ou > 0.
+              // O banco tem CHECK(validade IS NULL OR validade > 0).
+              if (editingTipo.validade != null && editingTipo.validade <= 0) {
+                showToast.error(
+                  'Validade deve ser maior que zero. Deixe o campo vazio para qualificação sem vencimento.',
+                );
+                return;
+              }
+
               // ⚠️ Safety timeout: evita que o botão fique em "Salvando..." para sempre.
               // Timeout de 30s cobre até mesmo o pior caso de reconcileImportedEdappHistory.
               const SAVE_TIMEOUT_MS = 30_000;
@@ -5035,7 +5044,8 @@ export default function Qualificacoes() {
           <FormField label="Validade (meses)">
             <TextInput
               type="number"
-              placeholder="Ex: 12"
+              min={1}
+              placeholder="Ex: 12 (deixe vazio para sem validade)"
               value={editingTipo?.validade?.toString() || ''}
               onChange={(e) =>
                 setEditingTipo((prev) =>
@@ -5050,6 +5060,9 @@ export default function Qualificacoes() {
                 )
               }
             />
+            <p className="mt-1 text-xs text-slate-500">
+              Em meses. Deixe vazio para qualificação sem vencimento (indeterminada). Use um valor positivo (ex: 12, 24, 36).
+            </p>
           </FormField>
 
           <FormField label="Carga Horária Inicial (h)">
