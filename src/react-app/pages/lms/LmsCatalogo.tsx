@@ -1593,22 +1593,10 @@ export default function LmsCatalogo() {
     ? loadingPublishedCourses || loadingDraftCourses
     : loadingPublishedCourses;
   const myMatriculas = matriculas ?? [];
-  const hasCompletedTrainingEvidence = (matricula?: LmsMatricula | null) =>
-    Boolean(
-      matricula &&
-      (matricula.status === 'CONCLUIDO' ||
-        matricula.qualificacao_historico_id ||
-        matricula.data_conclusao),
-    );
   const matriculasByCurso = new Map(myMatriculas.map((m) => [m.curso_id, m]));
-  const cursoIdsOcultosAluno = new Set(
-    myMatriculas
-      .filter((m) => (isAluno || isInstrutor) && hasCompletedTrainingEvidence(m))
-      .map((m) => m.curso_id),
-  );
   const enrolledIds = new Set(
     myMatriculas
-      .filter((m) => m.status !== 'CANCELADO' && !cursoIdsOcultosAluno.has(m.curso_id))
+      .filter((m) => m.status !== 'CANCELADO')
       .map((m) => m.curso_id),
   );
   const categories = useMemo(
@@ -1692,7 +1680,18 @@ export default function LmsCatalogo() {
     }
     const mat = matriculasByCurso.get(curso.id);
     if (mat && mat.status !== 'CANCELADO') {
-      if (mat.status === 'CONCLUIDO') navigate(`/lms/cursos/${curso.id}`);
+      if (mat.status === 'CONCLUIDO') {
+        const base =
+          curso.tipo_conteudo === 'h5p'
+            ? `/lms/player/h5p/${mat.id}`
+            : curso.tipo_conteudo === 'pdf'
+              ? `/lms/player/pdf/${mat.id}`
+              : curso.tipo_conteudo === 'pptx'
+                ? `/lms/player/pptx/${mat.id}`
+                : `/lms/player/${mat.id}`;
+        navigate(`${base}?review=1`);
+        return;
+      }
       else navPlayer(curso, mat.id);
       return;
     }
