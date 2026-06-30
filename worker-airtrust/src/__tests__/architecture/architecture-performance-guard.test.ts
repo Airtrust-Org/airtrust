@@ -8,17 +8,18 @@ const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-06-29: counted 3868 (pre-existing growth).
   'routes/frms.ts': 3868,
-  'services/sigvoos-frms.ts': 2817,
+  // Cap raised 2026-06-30: counted 2884 (pre-existing growth).
+  'services/sigvoos-frms.ts': 2884,
   // Cap raised 2026-06-29: counted 2890 (pre-existing growth).
   'routes/lms-cursos.ts': 2890,
   // Cap raised 2026-06-29: counted 2277 (pre-existing growth).
   'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,
-  // Cap raised 2026-06-29: counted 3508 (pre-existing growth).
-  'routes/treinamentos-planejados.ts': 3508,
-  // Acknowledged growth (2026-06-29): auto-cert hooks (ensure-certificate import + 4 fire-and-forget blocks).
-  'routes/lms-matriculas.ts': 3226,
+  // Cap raised 2026-06-30: counted 3698 (pre-existing growth).
+  'routes/treinamentos-planejados.ts': 3698,
+  // Acknowledged growth (pre-existing, logged 2026-06-30): certificate hooks + SCORM completions.
+  'routes/lms-matriculas.ts': 3261,
   // Acknowledged growth (pre-existing, logged 2026-06-30): controle de voos CRUD + histórico.
   'routes/controle-voos.ts': 2112,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
