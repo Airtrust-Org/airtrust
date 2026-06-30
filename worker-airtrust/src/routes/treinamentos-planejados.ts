@@ -3507,13 +3507,81 @@ treinamentosPlanejadosRoutes.delete(
 // Backfill idempotente: materializa registros PLANEJADA em qualificacoes_historico para
 // turmas ativas que nunca passaram por syncTreinamentoPlanejadoIntegration.
 // Seguro de re-executar — upsertHistoricoPlanejadoForParticipante é idempotente.
+//
+// ?dryRun=true — preview only, no mutations. Retorna turmas e contagem de participantes
+//                com/sem historico existente.
 treinamentosPlanejadosRoutes.post(
   '/planejados/backfill-sync',
   requireRole('admin'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = c.get('empresaId');
+    const url = new URL(c.req.url);
+    const dryRun = url.searchParams.get('dryRun') === 'true';
 
+    if (dryRun) {
+      const preview = await db
+        .prepare(
+          `SELECT tp.treinamento_id,
+                  t.codigo_turma,
+                  t.status AS turma_status,
+                  COUNT(*) AS total_participantes,
+                  SUM(CASE WHEN tp.qualificacao_historico_id IS NOT NULL THEN 1 ELSE 0 END) AS com_historico,
+                  SUM(CASE WHEN tp.qualificacao_historico_id IS NULL THEN 1 ELSE 0 END) AS sem_historico,
+                  SUM(CASE WHEN UPPER(COALESCE(tp.resultado, '')) IN ('APROVADO', 'REPROVADO', 'CANCELADO') THEN 1 ELSE 0 END) AS concluidos
+             FROM treinamentos_participantes tp
+            INNER JOIN treinamentos_planejados t ON t.id = tp.treinamento_id
+            WHERE t.empresa_id = ?
+              AND t.deleted_at IS NULL
+              AND t.status NOT IN ('CANCELADO', 'CONCLUIDO')
+              AND t.qualificacao_tipo_id IS NOT NULL
+              AND tp.deleted_at IS NULL
+            GROUP BY tp.treinamento_id
+            ORDER BY tp.treinamento_id`,
+        )
+        .bind(empresaId)
+        .all<{
+          treinamento_id: number;
+          codigo_turma: string | null;
+          turma_status: string;
+          total_participantes: number;
+          com_historico: number;
+          sem_historico: number;
+          concluidos: number;
+        }>();
+
+      const turmas = preview.results;
+      const totalTurmas = turmas.length;
+      const totalParticipantes = turmas.reduce((s, t) => s + t.total_participantes, 0);
+      const totalComHistorico = turmas.reduce((s, t) => s + t.com_historico, 0);
+      const totalSemHistorico = turmas.reduce((s, t) => s + t.sem_historico, 0);
+      const totalConcluidos = turmas.reduce((s, t) => s + t.concluidos, 0);
+
+      return c.json({
+        success: true,
+        data: {
+          dryRun: true,
+          totalTurmas,
+          resumo: {
+            totalParticipantes,
+            comHistoricoExistente: totalComHistorico,
+            semHistorico: totalSemHistorico,
+            participantesConcluidos: totalConcluidos,
+          },
+          turmas: turmas.map((t) => ({
+            turmaId: t.treinamento_id,
+            codigoTurma: t.codigo_turma,
+            status: t.turma_status,
+            totalParticipantes: t.total_participantes,
+            comHistoricoExistente: t.com_historico,
+            semHistorico: t.sem_historico,
+            participantesConcluidos: t.concluidos,
+          })),
+        },
+      });
+    }
+
+    // Apply mode
     const turmas = await db
       .prepare(
         `SELECT id FROM treinamentos_planejados

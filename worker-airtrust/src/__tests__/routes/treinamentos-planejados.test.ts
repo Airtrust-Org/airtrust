@@ -2,19 +2,37 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const { registrarAuditoriaMock, syncTreinamentoPlanejadoIntegrationMock } = vi.hoisted(() => ({
+const {
+  registrarAuditoriaMock,
+  syncTreinamentoPlanejadoIntegrationMock,
+  authMode,
+  requireRoleMode,
+  tenantEmpresaId,
+} = vi.hoisted(() => ({
   registrarAuditoriaMock: vi.fn(),
   syncTreinamentoPlanejadoIntegrationMock: vi.fn(),
+  authMode: { current: 'pass' as 'pass' | 'missing' },
+  requireRoleMode: { current: 'pass' as 'pass' | 'forbidden' },
+  tenantEmpresaId: { current: 1 },
 }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (_c: unknown, next: () => Promise<void>) => {
+  auth: () => async (c: any, next: () => Promise<void>) => {
+    if (authMode.current === 'missing') {
+      return c.json({ success: false, error: 'Não autenticado' }, 401);
+    }
+    c.set?.('userId', 99);
+    c.set?.('userRole', 'admin');
+    c.set?.('empresaId', tenantEmpresaId.current);
     await next();
   },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
-  requireRole: () => async (_c: unknown, next: () => Promise<void>) => {
+  requireRole: () => async (c: any, next: () => Promise<void>) => {
+    if (requireRoleMode.current === 'forbidden') {
+      return c.json({ success: false, error: 'Acesso não autorizado' }, 403);
+    }
     await next();
   },
 }));
@@ -102,6 +120,9 @@ describe('treinamentos planejados router', () => {
     vi.clearAllMocks();
     registrarAuditoriaMock.mockResolvedValue(undefined);
     syncTreinamentoPlanejadoIntegrationMock.mockResolvedValue(undefined);
+    authMode.current = 'pass';
+    requireRoleMode.current = 'pass';
+    tenantEmpresaId.current = 1;
   });
 
   it('cria treinamento planejado com convocados', async () => {
@@ -1018,6 +1039,282 @@ describe('treinamentos planejados router', () => {
         total: 1,
         items: [expect.objectContaining({ id: 21, source: 'TURMA', read_only: false })],
       },
+    });
+  });
+
+  describe('POST /planejados/backfill-sync', () => {
+    it('sem auth retorna 401', async () => {
+      authMode.current = 'missing';
+
+      const { db } = createMockDb([]);
+      const app = new Hono<{ Bindings: Env }>();
+      app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+      const response = await app.fetch(
+        new Request('http://localhost/treinamentos/planejados/backfill-sync', {
+          method: 'POST',
+        }),
+        { DB: db } as Env,
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(401);
+    });
+
+    it('sem permissao admin retorna 403', async () => {
+      requireRoleMode.current = 'forbidden';
+
+      const { db } = createMockDb([]);
+      const app = new Hono<{ Bindings: Env }>();
+      app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+      const response = await app.fetch(
+        new Request('http://localhost/treinamentos/planejados/backfill-sync', {
+          method: 'POST',
+        }),
+        { DB: db } as Env,
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(403);
+    });
+
+    it('dryRun=true retorna preview sem executar mutacoes', async () => {
+      const { db } = createMockDb([
+        [
+          'GROUP BY tp.treinamento_id',
+          {
+            all: () => ({
+              results: [
+                {
+                  treinamento_id: 10,
+                  codigo_turma: 'T-001',
+                  turma_status: 'EM_ANDAMENTO',
+                  total_participantes: 3,
+                  com_historico: 1,
+                  sem_historico: 2,
+                  concluidos: 0,
+                },
+                {
+                  treinamento_id: 20,
+                  codigo_turma: 'T-002',
+                  turma_status: 'EM_ANDAMENTO',
+                  total_participantes: 5,
+                  com_historico: 0,
+                  sem_historico: 5,
+                  concluidos: 1,
+                },
+              ],
+            }),
+          },
+        ],
+      ]);
+
+      const app = new Hono<{ Bindings: Env }>();
+      app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+      const response = await app.fetch(
+        new Request('http://localhost/treinamentos/planejados/backfill-sync?dryRun=true', {
+          method: 'POST',
+        }),
+        { DB: db } as Env,
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(200);
+      const json = await response.json();
+      expect(json).toMatchObject({
+        success: true,
+        data: {
+          dryRun: true,
+          totalTurmas: 2,
+          resumo: {
+            totalParticipantes: 8,
+            comHistoricoExistente: 1,
+            semHistorico: 7,
+            participantesConcluidos: 1,
+          },
+          turmas: [
+            {
+              turmaId: 10,
+              codigoTurma: 'T-001',
+              status: 'EM_ANDAMENTO',
+              totalParticipantes: 3,
+              comHistoricoExistente: 1,
+              semHistorico: 2,
+              participantesConcluidos: 0,
+            },
+            {
+              turmaId: 20,
+              codigoTurma: 'T-002',
+              status: 'EM_ANDAMENTO',
+              totalParticipantes: 5,
+              comHistoricoExistente: 0,
+              semHistorico: 5,
+              participantesConcluidos: 1,
+            },
+          ],
+        },
+      });
+    });
+
+    it('dryRun=true com zero turmas retorna vazio', async () => {
+      const { db } = createMockDb([
+        [
+          'GROUP BY tp.treinamento_id',
+          {
+            all: () => ({ results: [] }),
+          },
+        ],
+      ]);
+
+      const app = new Hono<{ Bindings: Env }>();
+      app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+      const response = await app.fetch(
+        new Request('http://localhost/treinamentos/planejados/backfill-sync?dryRun=true', {
+          method: 'POST',
+        }),
+        { DB: db } as Env,
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        success: true,
+        data: {
+          dryRun: true,
+          totalTurmas: 0,
+          resumo: {
+            totalParticipantes: 0,
+            comHistoricoExistente: 0,
+            semHistorico: 0,
+            participantesConcluidos: 0,
+          },
+          turmas: [],
+        },
+      });
+    });
+
+    it('apply processa turmas e retorna contagem', async () => {
+      syncTreinamentoPlanejadoIntegrationMock.mockResolvedValue(undefined);
+
+      const { db } = createMockDb([
+        [
+          'SELECT id FROM treinamentos_planejados',
+          {
+            all: () => ({
+              results: [{ id: 10 }, { id: 20 }, { id: 30 }],
+            }),
+          },
+        ],
+      ]);
+
+      const app = new Hono<{ Bindings: Env }>();
+      app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+      const response = await app.fetch(
+        new Request('http://localhost/treinamentos/planejados/backfill-sync', {
+          method: 'POST',
+        }),
+        { DB: db } as Env,
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        success: true,
+        data: {
+          total: 3,
+          processadas: 3,
+          erros: [],
+        },
+      });
+
+      expect(syncTreinamentoPlanejadoIntegrationMock).toHaveBeenCalledTimes(3);
+      expect(syncTreinamentoPlanejadoIntegrationMock).toHaveBeenCalledWith(
+        expect.objectContaining({ empresaId: 1, treinamentoId: 10 }),
+      );
+      expect(syncTreinamentoPlanejadoIntegrationMock).toHaveBeenCalledWith(
+        expect.objectContaining({ empresaId: 1, treinamentoId: 20 }),
+      );
+      expect(syncTreinamentoPlanejadoIntegrationMock).toHaveBeenCalledWith(
+        expect.objectContaining({ empresaId: 1, treinamentoId: 30 }),
+      );
+    });
+
+    it('apply captura erros por turma sem interromper', async () => {
+      syncTreinamentoPlanejadoIntegrationMock
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('DB error'))
+        .mockResolvedValueOnce(undefined);
+
+      const { db } = createMockDb([
+        [
+          'SELECT id FROM treinamentos_planejados',
+          {
+            all: () => ({
+              results: [{ id: 10 }, { id: 20 }, { id: 30 }],
+            }),
+          },
+        ],
+      ]);
+
+      const app = new Hono<{ Bindings: Env }>();
+      app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+      const response = await app.fetch(
+        new Request('http://localhost/treinamentos/planejados/backfill-sync', {
+          method: 'POST',
+        }),
+        { DB: db } as Env,
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        success: true,
+        data: {
+          total: 3,
+          processadas: 2,
+          erros: [{ id: 20, erro: 'Error: DB error' }],
+        },
+      });
+
+      // A terceira turma (id=30) ainda deve ser processada após o erro na segunda
+      expect(syncTreinamentoPlanejadoIntegrationMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('apply usa tenant correto (empresaId=2)', async () => {
+      tenantEmpresaId.current = 2;
+      syncTreinamentoPlanejadoIntegrationMock.mockResolvedValue(undefined);
+
+      const { db } = createMockDb([
+        [
+          'SELECT id FROM treinamentos_planejados',
+          {
+            all: () => ({
+              results: [{ id: 50 }],
+            }),
+          },
+        ],
+      ]);
+
+      const app = new Hono<{ Bindings: Env }>();
+      app.route('/treinamentos', treinamentosPlanejadosRoutes);
+
+      const response = await app.fetch(
+        new Request('http://localhost/treinamentos/planejados/backfill-sync', {
+          method: 'POST',
+        }),
+        { DB: db } as Env,
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(200);
+      expect(syncTreinamentoPlanejadoIntegrationMock).toHaveBeenCalledWith(
+        expect.objectContaining({ empresaId: 2, treinamentoId: 50 }),
+      );
     });
   });
 });
