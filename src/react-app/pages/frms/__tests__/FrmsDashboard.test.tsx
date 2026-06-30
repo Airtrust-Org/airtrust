@@ -53,8 +53,14 @@ vi.mock('../components/FrmsFilterContext', () => ({
       status: ['OK', 'ATENCAO', 'CRITICO', 'VIOLACAO'],
       busca: '',
     },
+    setFilter: vi.fn(),
     periodoNumDias: 14,
     isMonthMode: false,
+    quinzenasDoMes: {
+      q1: { start: '2026-06-01', end: '2026-06-15', label: 'Q1: 01/06–15/06' },
+      q2: { start: '2026-06-16', end: '2026-06-30', label: 'Q2: 16/06–30/06' },
+    },
+    quinzenaAtiva: null,
   }),
 }));
 
@@ -267,8 +273,8 @@ describe('FrmsDashboard', () => {
   it('renderiza a quinzena e a lista de acao no topo e direciona ao controle operacional', () => {
     renderDashboard();
 
-    expect(screen.getByText(/Quinzena:/)).toBeInTheDocument();
-    expect(screen.getByText(/16\/06 a 30\/06/)).toBeInTheDocument();
+    expect(screen.getByText(/Q1:/)).toBeInTheDocument();
+    expect(screen.getByText(/Q2:/)).toBeInTheDocument();
     expect(screen.getByText('Check-ins pendentes')).toBeInTheDocument();
     expect(screen.getByText('Ana')).toBeInTheDocument();
     expect(screen.queryByText(/Central de Alertas/i)).not.toBeInTheDocument();

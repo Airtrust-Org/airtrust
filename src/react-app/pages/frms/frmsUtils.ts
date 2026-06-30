@@ -342,13 +342,99 @@ export function resolveFrmsDashboardNivel(
 
 export function getFrmsNivelWeight(nivel: string): number {
   const order: Record<string, number> = {
-    OK: 0,
-    AVISO: 1,
-    ATENCAO: 1,
-    CRITICO: 2,
-    VIOLACAO: 3,
+    VIOLACAO: 4,
+    CRITICO: 3,
+    ATENCAO: 2,
+    AVISO: 2,
+    OK: 1,
+    INCOMPLETO: 0,
   };
+  // Higher = worse — for sorting worst-first
   return order[nivel] ?? 0;
+}
+
+/**
+ * Shared severity styles — icon + color tokens.
+ * Use these instead of duplicating color-only status indicators.
+ */
+export const FRMS_NIVEL_STYLES: Record<string, {
+  icon: string;        // lucide icon name for reference
+  bg: string;
+  text: string;
+  border: string;
+  dot: string;
+  label: string;
+}> = {
+  VIOLACAO: {
+    icon: 'XCircle',
+    bg: 'bg-red-100 dark:bg-red-500/15',
+    text: 'text-red-800 dark:text-red-200',
+    border: 'border-red-300 dark:border-red-500/40',
+    dot: 'bg-red-600',
+    label: 'Violação',
+  },
+  CRITICO: {
+    icon: 'ShieldAlert',
+    bg: 'bg-orange-100 dark:bg-orange-500/15',
+    text: 'text-orange-800 dark:text-orange-200',
+    border: 'border-orange-300 dark:border-orange-500/40',
+    dot: 'bg-orange-600',
+    label: 'Crítico',
+  },
+  ATENCAO: {
+    icon: 'AlertTriangle',
+    bg: 'bg-amber-100 dark:bg-amber-500/15',
+    text: 'text-amber-800 dark:text-amber-200',
+    border: 'border-amber-300 dark:border-amber-500/40',
+    dot: 'bg-amber-500',
+    label: 'Atenção',
+  },
+  OK: {
+    icon: 'CheckCircle2',
+    bg: 'bg-emerald-100 dark:bg-emerald-500/15',
+    text: 'text-emerald-800 dark:text-emerald-200',
+    border: 'border-emerald-300 dark:border-emerald-500/40',
+    dot: 'bg-emerald-500',
+    label: 'Normal',
+  },
+  INCOMPLETO: {
+    icon: 'HelpCircle',
+    bg: 'bg-slate-100 dark:bg-slate-500/15',
+    text: 'text-slate-600 dark:text-slate-300',
+    border: 'border-slate-300 dark:border-slate-500/40',
+    dot: 'bg-slate-400',
+    label: 'Sem dado',
+  },
+};
+
+/**
+ * Sort comparator for compliance: worst first.
+ * VIOLACAO > CRITICO > ATENCAO > OK > sem dado
+ * When same level, lower percentage = worse (closer to limit).
+ */
+export function compareComplianceSeverity(
+  a: { nivel: string; pct?: number | null },
+  b: { nivel: string; pct?: number | null },
+): number {
+  const wa = getFrmsNivelWeight(a.nivel);
+  const wb = getFrmsNivelWeight(b.nivel);
+  if (wa !== wb) return wb - wa; // higher weight = worse = first
+  // Same level: lower pct = closer to limit = worse
+  const pa = a.pct ?? 0;
+  const pb = b.pct ?? 0;
+  return pa - pb;
+}
+
+/**
+ * Sort comparator for effectiveness: worst first (lowest pct).
+ */
+export function compareEffectivenessSeverity(
+  a: { pct?: number | null },
+  b: { pct?: number | null },
+): number {
+  const pa = a.pct ?? 100;
+  const pb = b.pct ?? 100;
+  return pa - pb; // lower = worse = first
 }
 
 // ============================================================
@@ -413,4 +499,74 @@ export function getMonthDays(mesRef: string): string[] {
   return Array.from({ length: daysInMonth }, (_, index) => {
     return toDateKeyLocal(new Date(ano, mes - 1, index + 1));
   });
+}
+
+// ── Tripulante operacional filter ──────────────────────────
+
+const TRIPULANTE_FUNCAO_SET = new Set([
+  'PILOTO',
+  'COPILOTO',
+  'COMANDANTE',
+  'PIC',
+  'SIC',
+]);
+
+/**
+ * Returns true if the given funcao/cargo value represents an operational crew member
+ * (cockpit crew) rather than maintenance, administrative, or other non-flying roles.
+ *
+ * Uses the same logic as the daily fatigue check-in backend:
+ *   UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
+ * Extended to also cover PIC/SIC (ICAO function codes used in Brazilian aviation).
+ */
+export function isTripulanteOperacional(funcao: string | null | undefined): boolean {
+  if (!funcao) return false;
+  return TRIPULANTE_FUNCAO_SET.has(funcao.toUpperCase().trim());
+}
+
+// ── Quinzena (fortnight) helpers ──────────────────────────
+
+export interface QuinzenaRange {
+  start: string;
+  end: string;
+  label: string;
+}
+
+/**
+ * Returns the date range for a specific quinzena within a month.
+ * Q1 = 1st to 15th, Q2 = 16th to last day of month.
+ */
+export function getQuinzenaDateRange(
+  mesReferencia: string,
+  quinzena: 'Q1' | 'Q2',
+): QuinzenaRange {
+  const [ano, mes] = mesReferencia.split('-').map(Number);
+  const mesPad = String(mes).padStart(2, '0');
+  const lastDay = new Date(ano, mes, 0).getDate();
+
+  if (quinzena === 'Q1') {
+    return {
+      start: `${ano}-${mesPad}-01`,
+      end: `${ano}-${mesPad}-15`,
+      label: `Q1: 01/${mesPad}–15/${mesPad}`,
+    };
+  }
+  return {
+    start: `${ano}-${mesPad}-16`,
+    end: `${ano}-${mesPad}-${String(lastDay).padStart(2, '0')}`,
+    label: `Q2: 16/${mesPad}–${String(lastDay).padStart(2, '0')}/${mesPad}`,
+  };
+}
+
+/**
+ * Returns both quinzenas for a month with their date ranges.
+ */
+export function getQuinzenasDoMes(mesReferencia: string): {
+  q1: QuinzenaRange;
+  q2: QuinzenaRange;
+} {
+  return {
+    q1: getQuinzenaDateRange(mesReferencia, 'Q1'),
+    q2: getQuinzenaDateRange(mesReferencia, 'Q2'),
+  };
 }

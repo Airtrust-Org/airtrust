@@ -36,6 +36,7 @@ import {
   formatFortnightPeriodShort,
   hasLocatedFortnight,
 } from './fortnightOperationalLabels';
+import { isTripulanteOperacional } from './frmsUtils';
 import { buildFortnightOperationalSummary } from './fortnightOperationalSummary';
 
 type ControlFilters = FrmsOperationalSnapshotFilters & {
@@ -311,6 +312,8 @@ function filterItems(
   const funcionarioId = filters.funcionario_id?.trim();
 
   return items.filter((item) => {
+    // Only show operational crew — exclude maintenance/administrative staff
+    if (!isTripulanteOperacional(item.funcao)) return false;
     if (funcionarioId && String(item.funcionario_id) !== funcionarioId) return false;
     if (base && normalizeSearch(item.base) !== base) return false;
     if (aeronave && !normalizeSearch(item.aeronave).includes(aeronave)) return false;
@@ -352,7 +355,7 @@ function buildOperationalSummary(
 function SourceBadge({ value }: { value: string }) {
   return (
     <span
-      className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneBySource(value)}`}
+      className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${toneBySource(value)}`}
     >
       {sourceLabel(value)}
     </span>
@@ -362,8 +365,9 @@ function SourceBadge({ value }: { value: string }) {
 function StatusBadge({ status }: { status: FrmsOperationalSnapshotStatus }) {
   return (
     <span
-      className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneBySnapshotStatus(status)}`}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${toneBySnapshotStatus(status)}`}
     >
+      <span className={`h-1.5 w-1.5 rounded-full ${status === 'CRITICO' ? 'bg-red-500' : status === 'ATENCAO' ? 'bg-amber-500' : status === 'INCOMPLETO' ? 'bg-slate-400' : 'bg-emerald-500'}`} aria-hidden="true" />
       {statusLabel(status)}
     </span>
   );
@@ -616,16 +620,21 @@ export default function FrmsControleOperacional() {
         <FrmsSourcePolicyBanner />
 
         <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Quinzena operacional
           </p>
           <p className="mt-1 text-lg font-semibold text-slate-950">
-            Quinzena:{' '}
-            {formatFortnightPeriodShort(fortnightSummary.periodStart, fortnightSummary.periodEnd)}
+            {formatFortnightPeriodShort(fortnightSummary.periodStart, fortnightSummary.periodEnd)
+              || `${formatDisplayDate(appliedFilters.data_inicio)} → ${formatDisplayDate(appliedFilters.data_fim)}`}
           </p>
           <p className="mt-1 text-xs text-slate-600">
-            Recorte diário {formatDisplayDate(appliedFilters.data_inicio)} →{' '}
-            {formatDisplayDate(appliedFilters.data_fim)} · {fortnightSummary.periodStatusLabel}
+            {fortnightSummary.totalMonitored > 0
+              ? `${fortnightSummary.totalMonitored} tripulantes operacionais · `
+              : ''}
+            {fortnightSummary.periodStatusLabel}
+            {fortnightSummary.pendingCheckins > 0
+              ? ` · ${fortnightSummary.pendingCheckins} check-ins pendentes`
+              : ''}
           </p>
         </section>
 
@@ -890,9 +899,9 @@ export default function FrmsControleOperacional() {
         {/* ── Bloco 3: Mapa operacional (recolhido) ─────────── */}
         <details className="rounded-lg border border-slate-200 bg-white">
           <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-            <span>Ver mapa técnico da quinzena</span>
+            <span>Mapa técnico da quinzena — apoio à evidência</span>
             <span className="text-xs font-normal text-slate-500">
-              Não é lista de ação · até 20 tripulantes · recolhido por padrão
+              Confirmar dados antes de decidir · até 20 tripulantes · recolhido por padrão
             </span>
           </summary>
           <div className="border-t border-slate-200 p-2">
@@ -943,7 +952,7 @@ export default function FrmsControleOperacional() {
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-medium text-slate-500">Status</p>
                   <span
-                    className={`mt-1 inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneByAggregatePeriodStatus(fortnightSummary.periodStatus)}`}
+                    className={`mt-1 inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${toneByAggregatePeriodStatus(fortnightSummary.periodStatus)}`}
                   >
                     {fortnightSummary.periodStatusLabel}
                   </span>
@@ -1074,7 +1083,7 @@ export default function FrmsControleOperacional() {
                           </td>
                           <td className="px-3 py-3">
                             <span
-                              className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneByCheckinStatus(item.checkin_status)}`}
+                              className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${toneByCheckinStatus(item.checkin_status)}`}
                             >
                               {item.checkin_status}
                             </span>
@@ -1086,7 +1095,7 @@ export default function FrmsControleOperacional() {
                             <div className="mt-1 text-xs text-slate-500">
                               Score de triagem subjetiva {formatNumber(item.fadiga_score)}
                             </div>
-                            <div className="text-[11px] text-slate-400">Quanto maior, pior.</div>
+                            <div className="text-xs text-slate-400">Quanto maior, pior.</div>
                           </td>
                           <td className="px-3 py-3">
                             <div className="font-medium text-slate-800">
@@ -1103,7 +1112,7 @@ export default function FrmsControleOperacional() {
                             <div className="font-medium text-slate-800">
                               Efetividade estimada {formatPercentage(item.effectiveness_pct)}
                             </div>
-                            <div className="text-[11px] text-slate-400">Quanto maior, melhor.</div>
+                            <div className="text-xs text-slate-400">Quanto maior, melhor.</div>
                             <div className="mt-2 text-xs font-medium text-slate-700">
                               Indicador operacional da quinzena
                             </div>
@@ -1157,7 +1166,7 @@ export default function FrmsControleOperacional() {
                                   visibleAlertas.map((alerta) => (
                                     <span
                                       key={`${item.funcionario_id}-${item.data_operacional}-${alerta}`}
-                                      className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700"
+                                      className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
                                     >
                                       {ALERT_LABELS[alerta] || alerta}
                                     </span>
@@ -1302,7 +1311,7 @@ export default function FrmsControleOperacional() {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span
-                            className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneByReadAckSeverity(event.severity)}`}
+                            className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${toneByReadAckSeverity(event.severity)}`}
                           >
                             {event.severity}
                           </span>

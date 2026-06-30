@@ -1,7 +1,7 @@
 /**
  * FRMS — Ficha Individual do Tripulante (/frms/tripulante/:id)
  *
- * - Cards de acúmulo (HV dia / 7d / mês / 365d / FDP)
+ * - Cards de acúmulo (HV dia / 15d quinzena / 30d / 365d / FDP)
  * - Tabela mensal detalhada
  * - Histórico de alertas
  * - Botão para lançar jornada
@@ -30,7 +30,7 @@ import FrmsFormJornada from './FrmsFormJornada';
 import FrmsEffectivenessPanel from './components/FrmsEffectivenessPanel';
 import FrmsDayExplanationPanel from './components/FrmsDayExplanationPanel';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
-import { formatFrmsDate } from './frmsUtils';
+import { formatFrmsDate, isTripulanteOperacional } from './frmsUtils';
 import { buildJornadaMensalPresentation } from './frmsJornadasMensaisPresentation';
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { FortnightConsolidatedPanel } from './components/FortnightOperationalIndicator';
@@ -165,9 +165,16 @@ function ProgressBar({
         <span>{label}</span>
         <span className={`font-bold ${textColor}`}>{pct.toFixed(1)}%</span>
       </div>
-      <div className="relative h-3 rounded-xl bg-slate-100 overflow-hidden shadow-inner border border-slate-200/50">
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(pct)}
+        aria-valuemin={0}
+        aria-valuemax={120}
+        aria-label={`${label}: ${pct.toFixed(1)}%`}
+        className="relative h-3 rounded-xl bg-slate-100 overflow-hidden shadow-inner border border-slate-200/50"
+      >
         <div
-          className={`${barColor} h-full shadow-lg group-hover:shadow-xl transition-all duration-700`}
+          className={`${barColor} h-full shadow-lg group-hover:shadow-xl transition-all duration-700 motion-safe:transition-all`}
           style={{ width: `${Math.min(clamped, 100)}%` }}
         />
       </div>
@@ -194,7 +201,7 @@ function nivelBadge(nivel: string) {
           : displayNivel;
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${colors[displayNivel] || 'bg-gray-100 text-gray-700'}`}
+      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${colors[displayNivel] || 'bg-gray-100 text-gray-700'}`}
     >
       {label}
     </span>
@@ -508,6 +515,15 @@ export default function FrmsFichaTripulante() {
           focusDate={hojeIso}
         />
 
+        {/* Non-operational crew warning */}
+        {!loadingFrmsSnapshot && todayFortnightSnapshotItem && !isTripulanteOperacional(todayFortnightSnapshotItem.funcao) && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <strong>Atenção:</strong> Este funcionário não é classificado como tripulante operacional
+            (função: {todayFortnightSnapshotItem.funcao || 'não informada'}).
+            Os dados de fadiga operacional podem não se aplicar.
+          </div>
+        )}
+
         {/* Effectiveness Panel (Painel A) + Compliance Cards (Painel B) */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           {/* Painel A — Score de Efetividade */}
@@ -549,16 +565,16 @@ export default function FrmsFichaTripulante() {
           {/* Painel B — Compliance Regulatório */}
           <div className={`${acumulo?.effectiveness ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'}`}>
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Compliance Regulatório (ANAC)
+              Compliance Regulatório
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {rolling || acumulo?.mensal ? (
                 <>
-                  {/* % Jornada Total */}
+                  {/* Janela 15 dias — Jornada */}
                   <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <ProgressBar
                       pct={Math.min(100, acumulo?.mensal?.jornada_fatorizada_pct ?? 0)}
-                      label="% Jornada Total"
+                      label="Jornada 15 dias"
                       limiteAvisoPct={limiteAvisoPct}
                       limiteCriticoPct={limiteCriticoPct}
                       limiteViolacaoPct={limiteViolacaoPct}
@@ -567,11 +583,11 @@ export default function FrmsFichaTripulante() {
                       {formatMin(acumulo?.mensal?.jornada_realizada_min ?? 0)} acumuladas
                     </p>
                   </div>
-                  {/* % HV Mês */}
+                  {/* Janela 30 dias — HV */}
                   <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <ProgressBar
                       pct={rolling?.pct_limite_mes_calendario ?? rolling?.pct_limite_28d ?? 0}
-                      label="% HV Mês"
+                      label="HV 30 dias"
                       limiteAvisoPct={limiteAvisoPct}
                       limiteCriticoPct={limiteCriticoPct}
                       limiteViolacaoPct={limiteViolacaoPct}
@@ -581,11 +597,11 @@ export default function FrmsFichaTripulante() {
                       {limites?.HV_MES_HORAS ?? 90}h
                     </p>
                   </div>
-                  {/* % HV Diária */}
+                  {/* HV Diária */}
                   <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <ProgressBar
                       pct={rolling?.pct_limite_dia ?? 0}
-                      label="% HV Diária"
+                      label="HV Dia"
                       limiteAvisoPct={limiteAvisoPct}
                       limiteCriticoPct={limiteCriticoPct}
                       limiteViolacaoPct={limiteViolacaoPct}
@@ -594,17 +610,17 @@ export default function FrmsFichaTripulante() {
                       {formatMin(rolling?.hv_dia_min ?? 0)} / {limites?.HV_DIARIA_HORAS ?? 8}h
                     </p>
                   </div>
-                  {/* Acúmulo Fadiga HV */}
+                  {/* Janela 365 dias — Acúmulo */}
                   <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <ProgressBar
                       pct={Math.min(100, acumulo?.mensal?.hv_fatorizada_pct ?? 0)}
-                      label="Acúmulo Fadiga HV"
+                      label="Acúmulo 365 dias"
                       limiteAvisoPct={limiteAvisoPct}
                       limiteCriticoPct={limiteCriticoPct}
                       limiteViolacaoPct={limiteViolacaoPct}
                     />
                     <p className="mt-2 text-center text-xs text-gray-500">
-                      {formatMin(acumulo?.mensal?.hv_realizada_min ?? 0)} HV no mês
+                      {formatMin(acumulo?.mensal?.hv_realizada_min ?? 0)} HV acumuladas
                     </p>
                   </div>
                 </>
@@ -739,14 +755,14 @@ export default function FrmsFichaTripulante() {
                       </td>
                       <td className="px-4 py-2.5">
                         <span
-                          className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold leading-none ${STATUS_COLORS[j.status] || 'bg-gray-100 text-gray-700'}`}
+                          className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold leading-none ${STATUS_COLORS[j.status] || 'bg-gray-100 text-gray-700'}`}
                           title={j.status === 'ES' ? 'Escala de Serviço' : STATUS_LABELS[j.status] || j.status}
                         >
                           {STATUS_LABELS[j.status] || j.status}
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${presentation.sourceBadgeClass}`}>
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${presentation.sourceBadgeClass}`}>
                           {presentation.sourceLabel}
                         </span>
                       </td>
@@ -763,7 +779,7 @@ export default function FrmsFichaTripulante() {
                         <div className="flex flex-col items-end gap-0.5">
                           <span>{presentation.operationalHvLabel}</span>
                           {presentation.auxiliarySourceLabel ? (
-                            <span className="text-[10px] font-medium text-amber-700">
+                            <span className="text-xs font-medium text-amber-700">
                               {presentation.auxiliarySourceLabel}
                             </span>
                           ) : null}
@@ -778,7 +794,7 @@ export default function FrmsFichaTripulante() {
                             <>
                               {presentation.hasIntegrityIssue ? (
                                 <div className="flex items-start gap-1.5">
-                                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
                                     {presentation.integrityLabel}
                                   </span>
                                   <span className="text-xs leading-4 text-rose-700">

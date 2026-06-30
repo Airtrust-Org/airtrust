@@ -3,7 +3,7 @@
  * Persistência via sessionStorage.
  */
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import { getMonthRange, toMonthKey } from '../frmsUtils';
+import { getMonthRange, toMonthKey, getQuinzenasDoMes, getQuinzenaDateRange, type QuinzenaRange } from '../frmsUtils';
 
 export interface FrmsFiltersState {
   modoPainel: 'OPERACIONAL' | 'PLANEJADO';
@@ -73,6 +73,8 @@ interface FrmsFilterContextValue {
   removeFilter: (key: keyof FrmsFiltersState) => void;
   periodoNumDias: number;
   isMonthMode: boolean;
+  quinzenasDoMes: { q1: QuinzenaRange; q2: QuinzenaRange };
+  quinzenaAtiva: QuinzenaRange | null;
 }
 
 const FrmsFilterContext = createContext<FrmsFilterContextValue | null>(null);
@@ -109,9 +111,14 @@ export function FrmsFilterProvider({ children }: { children: ReactNode }) {
       ? filters.periodo
       : 30;
 
+  const quinzenasDoMes = getQuinzenasDoMes(filters.mesReferencia);
+  const quinzenaAtiva = filters.quinzena
+    ? getQuinzenaDateRange(filters.mesReferencia, filters.quinzena)
+    : null;
+
   return (
     <FrmsFilterContext.Provider
-      value={{ filters, setFilter, resetFilters, removeFilter, periodoNumDias, isMonthMode }}
+      value={{ filters, setFilter, resetFilters, removeFilter, periodoNumDias, isMonthMode, quinzenasDoMes, quinzenaAtiva }}
     >
       {children}
     </FrmsFilterContext.Provider>

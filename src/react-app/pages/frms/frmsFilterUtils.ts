@@ -1,6 +1,6 @@
 import type { FrmsFrotaRow } from '@/react-app/hooks/useFrms';
 import type { FrmsFiltersState } from './components/FrmsFilterContext';
-import { resolveFrmsDashboardNivelCompleto } from './frmsUtils';
+import { resolveFrmsDashboardNivelCompleto, isTripulanteOperacional } from './frmsUtils';
 
 function normalizeText(value: string | null | undefined): string {
   return String(value || '')
@@ -52,6 +52,12 @@ export function applyFrmsFrotaFilters(
   const applyQuinzenaClientFilter = options?.applyQuinzenaClientFilter ?? true;
 
   return frota.filter((row) => {
+    // Only show operational crew — exclude maintenance/administrative staff.
+    // If funcao is not yet available (old backend), include the row by default.
+    if (row.funcao != null && !isTripulanteOperacional(row.funcao)) {
+      return false;
+    }
+
     if (filters.busca) {
       const query = normalizeText(filters.busca);
       const nomeComposto = normalizeText([row.nome_guerra, row.nome].filter(Boolean).join(' '));
