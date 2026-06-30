@@ -92,6 +92,12 @@ import {
   getHistoricoDisplayStatus,
   getPlanejamentoRelacionamentoKey as getPlanejamentoRelacionamentoKeyBase,
 } from '@/react-app/pages/qualificacoes/historicoStatusUtils';
+import {
+  buildTipoPayload,
+  buildTipoSaveSuccessMessage,
+  getTipoRelatedCachePatterns,
+  type TipoUpdateResponseData,
+} from '@/react-app/pages/qualificacoes/tipoSaveFeedback';
 import { readUserPreference, writeUserPreference } from '@/react-app/utils/userPreferences';
 
 const ALL_STATUS_VALUES = [
@@ -448,45 +454,42 @@ export default function Qualificacoes() {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [loadingStats, setLoadingStats] = useState(true);
 
+  const carregarStats = useCallback(async () => {
+    try {
+      setLoadingStats(true);
+      const token = getAccessToken();
+      // Cache busting
+      const response = await fetch(`${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`, {
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
+            }
+          : {},
+      });
+      if (!response.ok) throw new Error('Erro ao carregar stats');
+      const json = await response.json();
+      const data = json.data || json;
+      setDashboardStats({
+        total: data.total_ativas || 0,
+        validas: data.validas || 0,
+        vencendo: data.a_vencer_30_dias || 0,
+        vencidas: data.vencidas || 0,
+        renovadas: data.renovadas || 0,
+        planejadas: data.planejadas || 0,
+      });
+    } catch (error) {
+      console.error('Erro ao carregar stats do dashboard:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  }, []);
+
   // Buscar stats do dashboard
   useEffect(() => {
-    const carregarStats = async () => {
-      try {
-        setLoadingStats(true);
-        const token = getAccessToken();
-        // Cache busting
-        const response = await fetch(
-          `${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`,
-          {
-            headers: token
-              ? {
-                  Authorization: `Bearer ${token}`,
-                  'Cache-Control': 'no-cache',
-                  Pragma: 'no-cache',
-                }
-              : {},
-          },
-        );
-        if (!response.ok) throw new Error('Erro ao carregar stats');
-        const json = await response.json();
-        const data = json.data || json;
-        setDashboardStats({
-          total: data.total_ativas || 0,
-          validas: data.validas || 0,
-          vencendo: data.a_vencer_30_dias || 0,
-          vencidas: data.vencidas || 0,
-          renovadas: data.renovadas || 0,
-          planejadas: data.planejadas || 0,
-        });
-      } catch (error) {
-        console.error('Erro ao carregar stats do dashboard:', error);
-      } finally {
-        setLoadingStats(false);
-      }
-    };
-
-    carregarStats();
-  }, []);
+    void carregarStats();
+  }, [carregarStats]);
 
   const stats = historicoStats;
 
@@ -4757,30 +4760,9 @@ export default function Qualificacoes() {
 
                 // Construir payload
                 const payload: Record<string, unknown> = {
-                  nome: editingTipo.nome?.trim() || '',
+                  ...buildTipoPayload(editingTipo),
                   codigo: codigoNormalizado,
-                  categoria: editingTipo.categoria?.trim() || '',
-                  conteudo_programatico: editingTipo.conteudo_programatico?.trim() || null,
-                  carga_horaria_inicial:
-                    editingTipo.carga_horaria_inicial != null
-                      ? Number(editingTipo.carga_horaria_inicial)
-                      : null,
-                  carga_horaria_recorrente:
-                    editingTipo.carga_horaria_recorrente != null
-                      ? Number(editingTipo.carga_horaria_recorrente)
-                      : null,
-                  ativo: editingTipo.ativo ?? 1,
-                  vencimento_fim_mes: editingTipo.vencimento_fim_mes ?? 0,
-                  is_check: editingTipo.is_check ? 1 : 0,
                 };
-
-                // Sempre envia validade no payload — mesmo null (campo limpo = sem vencimento).
-                // Antes usava if (editingTipo.validade != null) o que impedia limpar a validade.
-                payload.validade = editingTipo.validade ?? null;
-                if (editingTipo.descricao?.trim() || editingTipo.observacoes?.trim()) {
-                  payload.descricao =
-                    editingTipo.descricao?.trim() || editingTipo.observacoes?.trim() || null;
-                }
 
                 console.log(
                   '[SalvarTipo] Enviando %s %s — categoria=%s validade=%s',
@@ -4814,7 +4796,7 @@ export default function Qualificacoes() {
 
                 if (response.ok) {
                   const responseJson = (await response.json().catch(() => null)) as
-                    | { data?: { id?: string | number } }
+                    | { data?: TipoUpdateResponseData }
                     | null;
                   const savedTipoId = String(responseJson?.data?.id || editingTipo.id || '').trim();
 
@@ -4846,15 +4828,15 @@ export default function Qualificacoes() {
                     return;
                   }
 
-                  clearApiCacheByPattern('/qualificacoes/tipos');
-                  showToast.success(isEdit ? 'Modelo atualizado!' : 'Modelo criado!');
+                  getTipoRelatedCachePatterns().forEach((pattern) => clearApiCacheByPattern(pattern));
+                  showToast.success(buildTipoSaveSuccessMessage(responseJson?.data, isEdit));
 
                   // Atualização otimista: reflete o valor salvo na tabela IMEDIATAMENTE,
                   // antes mesmo do refetch concluir. Isso corrige o bug de "validade antiga
                   // na tabela e no modal ao reabrir".
                   const tipoIdStr = String(editingTipo.id);
                   const optimisticUpdate: Partial<QualificacaoTipoDTO> = {};
-                  // Sempre inclui validade — null = campo limpo (sem vencimento)
+                  // Sempre propagar validade, incluindo null (limpar vencimento).
                   optimisticUpdate.validade = editingTipo.validade ?? null;
                   // Outros campos que podem ter mudado e afetam a visualização da tabela
                   if (editingTipo.nome?.trim()) {
@@ -4870,22 +4852,18 @@ export default function Qualificacoes() {
 
                   setShowTipoModal(false);
                   setEditingTipo(null);
-                  // Recarregar lista de tipos (refetch confirma os dados com o servidor;
-                  // o optimisticUpdate acima já garante que a UI mostre o valor correto).
                   try {
-                    await refetchTipos();
-                    // Após refetch bem-sucedido, os dados do hook já refletem o valor
-                    // salvo — podemos limpar o optimistic update para este tipo.
+                    await Promise.all([refetchTipos(), carregarHistorico(), carregarStats()]);
                     setTipoUpdates((prev) => {
                       const next = { ...prev };
                       delete next[tipoIdStr];
                       return next;
                     });
                   } catch (e) {
-                    // Mesmo se o refetch falhar, a UI já mostra o valor salvo via
-                    // optimistic update. Avisamos o usuário para recarregar se quiser.
                     logger.warn('[Qualificacoes] refetchTipos falhou — usando optimistic update', e);
-                    showToast.warning('Dados salvos, mas a lista pode estar desatualizada. Recarregue a página se necessário.');
+                    showToast.warning(
+                      'Dados salvos, mas histórico ou indicadores podem ainda estar desatualizados.',
+                    );
                   }
                 } else {
                   const err = await response.json().catch(() => null);

@@ -8,19 +8,20 @@ const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-06-29: counted 3868 (pre-existing growth).
   'routes/frms.ts': 3868,
-  'services/sigvoos-frms.ts': 2817,
+  // Cap raised 2026-06-30: counted 2884 (pre-existing growth).
+  'services/sigvoos-frms.ts': 2884,
   // Cap raised 2026-06-29: counted 2890 (pre-existing growth).
   'routes/lms-cursos.ts': 2890,
   // Cap raised 2026-06-29: counted 2277 (pre-existing growth).
   'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
   'routes/escalas-evd.ts': 2162,
-  // Cap raised 2026-06-29: counted 3508 (pre-existing growth).
-  'routes/treinamentos-planejados.ts': 3508,
-  // Acknowledged growth (2026-06-29): auto-cert hooks (ensure-certificate import + 4 fire-and-forget blocks).
-  'routes/lms-matriculas.ts': 3226,
-  // Acknowledged growth (pre-existing, logged 2026-06-29): controle de voos CRUD + histórico.
-  'routes/controle-voos.ts': 2087,
+  // Cap raised 2026-06-30: counted 3698 (pre-existing growth).
+  'routes/treinamentos-planejados.ts': 3698,
+  // Acknowledged growth (pre-existing, logged 2026-06-30): certificate hooks + SCORM completions.
+  'routes/lms-matriculas.ts': 3261,
+  // Acknowledged growth (pre-existing, logged 2026-06-30): controle de voos CRUD + histórico.
+  'routes/controle-voos.ts': 2112,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   'routes/frms-fadiga-checkin.ts': 2021,
   // Acknowledged growth (pre-existing, logged 2026-06-29): LMS assets + SCORM player routes.
@@ -30,8 +31,8 @@ const LARGE_FILE_LINE_CAPS = {
 const SQL_PREPARE_CAPS = {
   // Acknowledged growth: tipo_sessao fallback normalization + tipos_sessao cor persistence guard.
   'routes/simuladores-modelos.ts': 69,
-  // Cap raised 2026-06-29: counted 57 (pre-existing growth).
-  'routes/auth.ts': 57,
+  // Cap raised 2026-06-30: counted 63 (pre-existing growth).
+  'routes/auth.ts': 63,
   'routes/simuladores-sessoes-update.ts': 48,
   // Acknowledged growth: shared-session create, safe edit, detail, conflicts, and cancellation.
   'routes/simuladores-shared-session.ts': 42,

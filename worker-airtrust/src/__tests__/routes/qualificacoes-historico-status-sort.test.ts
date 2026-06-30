@@ -199,4 +199,242 @@ describe('qualificacoes historico status sort contract', () => {
     expect(dataQuery).toContain("ORDER BY (CASE");
     expect(dataQuery).toContain("END) ASC");
   });
+
+  it('prioriza a validade atual do modelo no historico quando o registro esta vinculado ao tipo', async () => {
+    const { db } = createMockDb();
+    const app = createApp(db);
+
+    (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
+      const bind = (...args: unknown[]) => ({
+        first: async () => {
+          if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
+            return { total: 1 };
+          }
+          if (query.includes('COUNT(*) as total') && query.includes('SUM(CASE')) {
+            return {
+              total: 1,
+              validas: 0,
+              vencendo: 0,
+              vencidas: 1,
+              renovadas: 0,
+              planejadas: 0,
+            };
+          }
+          return null;
+        },
+        all: async () => {
+          if (query.includes('PRAGMA table_info(qualificacoes_historico)')) {
+            return { results: [{ name: 'renovacao_de' }] };
+          }
+          if (query.includes('PRAGMA table_info(modelos_aeronave)')) {
+            return { results: [{ name: 'modelo' }] };
+          }
+          if (query.includes('LIMIT ? OFFSET ?')) {
+            return {
+              results: [
+                {
+                  id: 901,
+                  funcionario_id: 77,
+                  funcionario_nome: 'Francisco Sergio',
+                  tipo_id: 44,
+                  tipo_nome: 'MGM - Manual Geral de Manutenção',
+                  tipo_codigo: 'MGM',
+                  tipo_categoria: 'EAD',
+                  historico_validade_meses: 36,
+                  tipo_validade_atual: 24,
+                  qualificacao_validade: 36,
+                  validade_meses: 36,
+                  vencimento_fim_mes: 0,
+                  data_realizacao: '2018-08-08',
+                  data_vencimento: '2021-08-08',
+                  renovada: 0,
+                  tem_renovacao_posterior: 0,
+                  renovacao_de: null,
+                  qualificacao_status: 'CONCLUIDA',
+                },
+              ],
+            };
+          }
+          return { results: [] };
+        },
+        run: async () => ({ meta: { changes: 0 } }),
+      });
+
+      return {
+        bind,
+        first: () => bind().first(),
+        all: () => bind().all(),
+        run: () => bind().run(),
+      };
+    });
+
+    const response = await app.request('/historico?limit=10&page=1');
+    const body = (await response.json()) as {
+      success: boolean;
+      data: Array<{ id: number; validade_meses: number; data_vencimento: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data[0]).toMatchObject({
+      id: 901,
+      validade_meses: 24,
+      data_vencimento: '2020-08-08',
+    });
+  });
+
+  it('retorna validade_meses null e nao classifica como VENCIDA quando tipo nao tem validade', async () => {
+    const { db } = createMockDb();
+    const app = createApp(db);
+
+    (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
+      const bind = (...args: unknown[]) => ({
+        first: async () => {
+          if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
+            return { total: 1 };
+          }
+          if (query.includes('SUM(CASE')) {
+            return { total: 1, validas: 0, vencendo: 0, vencidas: 0, renovadas: 0, planejadas: 0 };
+          }
+          return null;
+        },
+        all: async () => {
+          if (query.includes('PRAGMA table_info(qualificacoes_historico)')) {
+            return { results: [{ name: 'renovacao_de' }] };
+          }
+          if (query.includes('PRAGMA table_info(modelos_aeronave)')) {
+            return { results: [{ name: 'modelo' }] };
+          }
+          if (query.includes('LIMIT ? OFFSET ?')) {
+            return {
+              results: [
+                {
+                  id: 501,
+                  funcionario_id: 10,
+                  funcionario_nome: 'Tecnico Outros',
+                  tipo_id: 77,
+                  tipo_nome: 'Curso Interno Geral',
+                  tipo_codigo: 'CIG',
+                  tipo_categoria: 'Outros',
+                  historico_validade_meses: null,
+                  tipo_validade_atual: null,
+                  qualificacao_validade: null,
+                  validade_meses: null,
+                  vencimento_fim_mes: 0,
+                  data_realizacao: '2022-03-10',
+                  data_vencimento: null,
+                  renovada: 0,
+                  tem_renovacao_posterior: 0,
+                  renovacao_de: null,
+                  qualificacao_status: 'CONCLUIDA',
+                },
+              ],
+            };
+          }
+          return { results: [] };
+        },
+        run: async () => ({ meta: { changes: 0 } }),
+      });
+      return {
+        bind,
+        first: () => bind().first(),
+        all: () => bind().all(),
+        run: () => bind().run(),
+      };
+    });
+
+    const response = await app.request('/historico?limit=10&page=1');
+    const body = (await response.json()) as {
+      success: boolean;
+      data: Array<{
+        id: number;
+        validade_meses: number | null;
+        data_vencimento: string | null;
+        status: string;
+      }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    const row = body.data[0];
+    expect(row.id).toBe(501);
+    expect(row.validade_meses).toBeNull();
+    expect(row.data_vencimento).toBeNull();
+    // Status CONCLUIDA do banco preservado quando sem vencimento definido
+    expect(row.status).toBe('CONCLUIDA');
+  });
+
+  it('nao classifica como VENCIDA registro sem validade mesmo com data_realizacao antiga', async () => {
+    const { db } = createMockDb();
+    const app = createApp(db);
+
+    (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
+      const bind = (...args: unknown[]) => ({
+        first: async () => {
+          if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
+            return { total: 1 };
+          }
+          if (query.includes('SUM(CASE')) {
+            return { total: 1, validas: 0, vencendo: 0, vencidas: 0, renovadas: 0, planejadas: 0 };
+          }
+          return null;
+        },
+        all: async () => {
+          if (query.includes('PRAGMA table_info(qualificacoes_historico)')) {
+            return { results: [{ name: 'renovacao_de' }] };
+          }
+          if (query.includes('PRAGMA table_info(modelos_aeronave)')) {
+            return { results: [{ name: 'modelo' }] };
+          }
+          if (query.includes('LIMIT ? OFFSET ?')) {
+            return {
+              results: [
+                {
+                  id: 502,
+                  funcionario_id: 11,
+                  tipo_id: 78,
+                  tipo_nome: 'Curso Antigo',
+                  tipo_codigo: 'CA01',
+                  tipo_categoria: 'Outros',
+                  historico_validade_meses: null,
+                  tipo_validade_atual: null,
+                  qualificacao_validade: null,
+                  validade_meses: null,
+                  vencimento_fim_mes: 0,
+                  data_realizacao: '2010-01-01',
+                  data_vencimento: null,
+                  renovada: 0,
+                  tem_renovacao_posterior: 0,
+                  renovacao_de: null,
+                  qualificacao_status: 'CONCLUIDO',
+                },
+              ],
+            };
+          }
+          return { results: [] };
+        },
+        run: async () => ({ meta: { changes: 0 } }),
+      });
+      return {
+        bind,
+        first: () => bind().first(),
+        all: () => bind().all(),
+        run: () => bind().run(),
+      };
+    });
+
+    const response = await app.request('/historico?limit=10&page=1');
+    const body = (await response.json()) as {
+      success: boolean;
+      data: Array<{ status: string; data_vencimento: string | null; validade_meses: number | null }>;
+    };
+
+    expect(response.status).toBe(200);
+    const row = body.data[0];
+    // Deve ter data_realizacao de 2010 mas sem validade → sem vencimento → não vencida
+    expect(row.data_vencimento).toBeNull();
+    expect(row.validade_meses).toBeNull();
+    expect(row.status).not.toBe('VENCIDA');
+    expect(row.status).not.toBe('VENCENDO_30');
+  });
 });

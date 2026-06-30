@@ -22,7 +22,12 @@ export type TipoUpdateResponseData = {
   warnings?: string[] | null;
 };
 
-export function buildTipoPayload(editingTipo: TipoSaveDraft) {
+/**
+ * Constrói o payload para criar/atualizar um tipo de qualificação.
+ * `validade` é SEMPRE incluído no payload — null significa "remover vencimento".
+ * Omitir a chave impede o hasOwnProperty check do backend de disparar o sync de historico.
+ */
+export function buildTipoPayload(editingTipo: TipoSaveDraft): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     nome: editingTipo.nome?.trim() || '',
     codigo: editingTipo.codigo?.trim() || '',
@@ -39,11 +44,12 @@ export function buildTipoPayload(editingTipo: TipoSaveDraft) {
     ativo: editingTipo.ativo ?? 1,
     vencimento_fim_mes: editingTipo.vencimento_fim_mes ?? 0,
     is_check: editingTipo.is_check ? 1 : 0,
+    // validade SEMPRE presente — null = sem vencimento (0 é proibido pela constraint DB)
+    validade:
+      editingTipo.validade != null && Number(editingTipo.validade) > 0
+        ? Number(editingTipo.validade)
+        : null,
   };
-
-  if (editingTipo.validade != null) {
-    payload.validade = Number(editingTipo.validade);
-  }
 
   if (editingTipo.descricao?.trim() || editingTipo.observacoes?.trim()) {
     payload.descricao = editingTipo.descricao?.trim() || editingTipo.observacoes?.trim() || null;
