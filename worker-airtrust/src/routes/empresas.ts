@@ -85,6 +85,7 @@ const SistemaConfigSchema = z.object({
   compactHeader: z.boolean().optional(),
   defaultPageSize: z.union([z.literal(20), z.literal(50), z.literal(100)]).optional(),
   enableAnimations: z.boolean().optional(),
+  timezone: z.string().min(1).max(64).optional(),
 });
 
 function inferImageExtension(fileName: string, contentType: string): string {
@@ -377,14 +378,14 @@ empresasRoutes.get('/minha/sistema', async (c) => {
   const empresa = await db
     .prepare(
       `
-      SELECT e.id, e.nome, e.logo_url, ec.cores_tema
+      SELECT e.id, e.nome, e.logo_url, ec.cores_tema, ec.timezone
       FROM empresas e
       LEFT JOIN empresas_config ec ON ec.empresa_id = e.id
       WHERE e.id = ? AND e.deleted_at IS NULL
     `,
     )
     .bind(tenantCtx.empresaId)
-    .first<{ id: number; nome: string; logo_url: string | null; cores_tema: string | null }>();
+    .first<{ id: number; nome: string; logo_url: string | null; cores_tema: string | null; timezone: string | null }>();
 
   if (!empresa) {
     throw new AppError('Empresa não encontrada', 404);
@@ -426,6 +427,10 @@ empresasRoutes.get('/minha/sistema', async (c) => {
           ? systemSettings.defaultPageSize
           : 20,
       enableAnimations: systemSettings.enableAnimations !== false,
+      timezone:
+        typeof empresa.timezone === 'string' && empresa.timezone.trim().length > 0
+          ? empresa.timezone.trim()
+          : 'UTC',
     },
   });
 });
@@ -442,6 +447,21 @@ empresasRoutes.put('/minha/sistema', requireTenantRole('admin'), async (c) => {
   }
 
   const payload = SistemaConfigSchema.parse(await c.req.json());
+
+  // Salvar timezone na coluna dedicada de empresas_config
+  if (payload.timezone !== undefined) {
+    const tz = payload.timezone && payload.timezone.trim().length > 0 ? payload.timezone.trim() : 'UTC';
+    await db
+      .prepare(
+        `INSERT INTO empresas_config (empresa_id, timezone, updated_at)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT(empresa_id) DO UPDATE SET
+           timezone = excluded.timezone,
+           updated_at = datetime('now')`,
+      )
+      .bind(tenantCtx.empresaId, tz)
+      .run();
+  }
 
   await saveEmpresaSystemSettings(db, tenantCtx.empresaId, {
     appName: payload.appName ?? 'AirTrust',

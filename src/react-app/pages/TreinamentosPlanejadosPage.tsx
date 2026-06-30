@@ -1605,6 +1605,7 @@ export default function TreinamentosPlanejadosPage({
           ? 'Turma concluída e resumo salvo.'
           : 'Resumo da turma salvo sem gerar novos históricos.',
       );
+      refetchPlanejadas();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : 'Não foi possível concluir a turma em lote.',
