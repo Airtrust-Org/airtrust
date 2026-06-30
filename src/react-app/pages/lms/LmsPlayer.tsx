@@ -114,7 +114,8 @@ export default function LmsPlayer() {
     refetch: refetchMatricula,
   } = useMatriculaDetalhe(id);
   const { data: curso } = useLmsCurso(matricula?.curso_id ?? 0);
-  const effectiveReviewMode = searchParams.get('review') === '1' || matricula?.status === 'CONCLUIDO';
+  const reviewParam = searchParams.get('review') === '1';
+  const effectiveReviewMode = reviewParam || matricula?.status === 'CONCLUIDO';
   const persistedLocation = readLocationFromCmiJson(
     (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
   );
@@ -141,7 +142,7 @@ export default function LmsPlayer() {
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
   const launchUrl =
     playerToken && matricula && matricula.tipo_conteudo !== 'h5p'
-      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(playerToken)}${effectiveReviewMode ? '&review=1' : ''}`
+      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(playerToken)}${reviewParam ? '&review=1' : ''}`
       : null;
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
@@ -310,8 +311,7 @@ export default function LmsPlayer() {
         typeof event.data === 'object' &&
         (event.data.type === 'lms:completed' ||
           event.data.type === 'lms:completion-pending' ||
-          event.data.type === 'lms:completion-error' ||
-          event.data.type === 'lms:progress')
+          event.data.type === 'lms:completion-error')
       ) {
         return;
       }
