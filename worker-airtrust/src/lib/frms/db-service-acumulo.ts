@@ -398,6 +398,8 @@ async function enrichWithFuncionarioContext<
       aeronave_modelo?: string | null;
       quinzena_numero?: number | null;
       quinzena_tipo?: 'Q1' | 'Q2' | 'PERSONALIZADA' | null;
+      funcao?: string | null;
+      cargo?: string | null;
     }
   >
 > {
@@ -412,6 +414,8 @@ async function enrichWithFuncionarioContext<
     .prepare(
       `SELECT
          CAST(f.id AS TEXT) AS tripulante_id,
+         NULLIF(TRIM(COALESCE(f.funcao, ''), '')) as funcao,
+         NULLIF(TRIM(COALESCE(f.cargo, ''), '')) as cargo,
          CASE
            WHEN UPPER(TRIM(COALESCE(f.aeronave, ''))) IN ('S76', 'SK76') THEN 'SK76'
            WHEN NULLIF(TRIM(COALESCE(f.aeronave, '')), '') IS NOT NULL THEN TRIM(f.aeronave)
@@ -435,6 +439,8 @@ async function enrichWithFuncionarioContext<
     .bind(...ids)
     .all<{
       tripulante_id: string;
+      funcao: string | null;
+      cargo: string | null;
       aeronave_modelo: string | null;
       quinzena_numero: number | null;
       quinzena_tipo: 'Q1' | 'Q2' | 'PERSONALIZADA' | null;

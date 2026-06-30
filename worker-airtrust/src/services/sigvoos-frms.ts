@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { carregarLimites } from '../lib/frms/db-service-config';
 import { confirmarImportacaoFira, enrichFiraPreviewLineIntegridade, type FiraImportacaoPreview, type FiraLinhPreview } from '../lib/frms/fira-service';
+import { classifyOperationalCrewRole } from '../lib/frms/operational-crew';
 
 const SIGVOOS_DEFAULT_BASE_URL = 'https://api.sigvoos.com.br/api';
 const SIGVOOS_DEFAULT_SYSTEM = 'sigtrip';
@@ -173,6 +174,10 @@ interface MatchedTripulante {
   id: string;
   nome: string;
   fonteResolucao: Exclude<SigvoosResolutionSource, 'NAO_ENCONTRADO'>;
+  funcao: string | null;
+  cargo: string | null;
+  elegivelFrms: boolean;
+  motivoInelegibilidade: 'NAO_TRIPULANTE_OPERACIONAL' | null;
 }
 
 interface MonthlyPreviewInput {
@@ -187,6 +192,29 @@ interface MonthlyPreviewInput {
   mes: number;
   groupedDays: SigvoosGroupedDay[];
   avisos?: string[];
+}
+
+type SigvoosTripulanteResolution = MatchedTripulante | null;
+
+function buildMatchedTripulante(
+  funcionario: {
+    id: string;
+    nome: string;
+    funcao?: string | null;
+    cargo?: string | null;
+  },
+  fonteResolucao: Exclude<SigvoosResolutionSource, 'NAO_ENCONTRADO'>,
+): MatchedTripulante {
+  const classification = classifyOperationalCrewRole(funcionario.funcao, funcionario.cargo);
+  return {
+    id: String(funcionario.id),
+    nome: funcionario.nome,
+    fonteResolucao,
+    funcao: funcionario.funcao ?? null,
+    cargo: funcionario.cargo ?? null,
+    elegivelFrms: classification.isOperational,
+    motivoInelegibilidade: classification.isOperational ? null : 'NAO_TRIPULANTE_OPERACIONAL',
+  };
 }
 
 export interface SigvoosMonthlyPreview {
@@ -1438,22 +1466,7 @@ export async function findTripulanteByCanacOrName(
     identificadorSigvoos?: string | null;
     name: string | null;
   },
-): Promise<MatchedTripulante | null> {
-  const manualMapping = await findSigvoosManualMapping(
-    db,
-    empresaId,
-    input.name,
-    input.canac,
-    input.identificadorSigvoos ?? null,
-  );
-  if (manualMapping) {
-    return {
-      id: String(manualMapping.funcionario_id),
-      nome: manualMapping.funcionario_nome,
-      fonteResolucao: 'MANUAL',
-    };
-  }
-
+): Promise<SigvoosTripulanteResolution> {
   const funcionariosColumns = await db
     .prepare("PRAGMA table_info('funcionarios')")
     .all<{ name: string }>();
@@ -1468,16 +1481,44 @@ export async function findTripulanteByCanacOrName(
 
   const rows = await db
     .prepare(
-      `SELECT id, nome, ${canacSelect} AS codigo_anac, ${matriculaSelect} AS matricula
+      `SELECT id, nome, funcao, cargo, ${canacSelect} AS codigo_anac, ${matriculaSelect} AS matricula
          FROM funcionarios
         WHERE deleted_at IS NULL
           AND (? IS NULL OR empresa_id = ?)
         LIMIT 5000`,
     )
     .bind(empresaId ?? null, empresaId ?? null)
-    .all<{ id: string; nome: string; codigo_anac?: string | null; matricula?: string | null }>();
+    .all<{
+      id: string;
+      nome: string;
+      funcao?: string | null;
+      cargo?: string | null;
+      codigo_anac?: string | null;
+      matricula?: string | null;
+    }>();
 
   const list = rows.results || [];
+  const manualMapping = await findSigvoosManualMapping(
+    db,
+    empresaId,
+    input.name,
+    input.canac,
+    input.identificadorSigvoos ?? null,
+  );
+  if (manualMapping) {
+    const funcionarioManual = list.find(
+      (item) => String(item.id) === String(manualMapping.funcionario_id),
+    );
+    return buildMatchedTripulante(
+      {
+        id: String(manualMapping.funcionario_id),
+        nome: manualMapping.funcionario_nome,
+        funcao: funcionarioManual?.funcao ?? null,
+        cargo: funcionarioManual?.cargo ?? null,
+      },
+      'MANUAL',
+    );
+  }
 
   const inscriptionInput = normalizarInscription(input.identificadorSigvoos ?? input.canac);
   const normalizedName = normalizarNomeSigvoos(input.name);
@@ -1486,7 +1527,7 @@ export async function findTripulanteByCanacOrName(
   if (input.canac) {
     const byCanac = list.find((item) => normalizeCanac(item.codigo_anac) === input.canac);
     if (byCanac) {
-      return { id: String(byCanac.id), nome: byCanac.nome, fonteResolucao: 'CANAC' };
+      return buildMatchedTripulante(byCanac, 'CANAC');
     }
   }
 
@@ -1495,11 +1536,7 @@ export async function findTripulanteByCanacOrName(
       (item) => normalizarInscription(item.matricula) === inscriptionInput,
     );
     if (byMatricula) {
-      return {
-        id: String(byMatricula.id),
-        nome: byMatricula.nome,
-        fonteResolucao: 'MATRICULA',
-      };
+      return buildMatchedTripulante(byMatricula, 'MATRICULA');
     }
   }
 
@@ -1507,11 +1544,7 @@ export async function findTripulanteByCanacOrName(
 
   const exactMatches = list.filter((item) => normalizarNomeSigvoos(item.nome) === normalizedName);
   if (exactMatches.length === 1) {
-    return {
-      id: String(exactMatches[0].id),
-      nome: exactMatches[0].nome,
-      fonteResolucao: 'NOME_FUZZY',
-    };
+    return buildMatchedTripulante(exactMatches[0], 'NOME_FUZZY');
   }
 
   const scored = list
@@ -1534,11 +1567,7 @@ export async function findTripulanteByCanacOrName(
   const margin = 0.03;
 
   if (top && top.score >= scoreThreshold && (!second || top.score - second.score >= margin)) {
-    return {
-      id: String(top.item.id),
-      nome: top.item.nome,
-      fonteResolucao: 'NOME_FUZZY',
-    };
+    return buildMatchedTripulante(top.item, 'NOME_FUZZY');
   }
 
   return null;
@@ -1551,10 +1580,12 @@ function findTripulanteInMemory(
   funcionarios: {
     id: string;
     nome: string;
+    funcao?: string | null;
+    cargo?: string | null;
     codigo_anac?: string | null;
     matricula?: string | null;
   }[],
-): MatchedTripulante | null {
+): SigvoosTripulanteResolution {
   const normalizedName = normalizeSigvoosNameForMatching(input.name);
   const candidateIdentifiers = new Set(
     [
@@ -1569,27 +1600,43 @@ function findTripulanteInMemory(
     return mi && candidateIdentifiers.has(mi);
   });
   if (byIdManual)
-    return {
-      id: String(byIdManual.funcionario_id),
-      nome: byIdManual.funcionario_nome,
-      fonteResolucao: 'MANUAL',
-    };
+    return buildMatchedTripulante(
+      {
+        id: String(byIdManual.funcionario_id),
+        nome: byIdManual.funcionario_nome,
+        funcao:
+          funcionarios.find((f) => String(f.id) === String(byIdManual.funcionario_id))?.funcao ??
+          null,
+        cargo:
+          funcionarios.find((f) => String(f.id) === String(byIdManual.funcionario_id))?.cargo ??
+          null,
+      },
+      'MANUAL',
+    );
   if (normalizedName) {
     const byNameManual = mappings.find(
       (m) => normalizeSigvoosNameForMatching(m.nome_sigvoos) === normalizedName,
     );
     if (byNameManual)
-      return {
-        id: String(byNameManual.funcionario_id),
-        nome: byNameManual.funcionario_nome,
-        fonteResolucao: 'MANUAL',
-      };
+      return buildMatchedTripulante(
+        {
+          id: String(byNameManual.funcionario_id),
+          nome: byNameManual.funcionario_nome,
+          funcao:
+            funcionarios.find((f) => String(f.id) === String(byNameManual.funcionario_id))
+              ?.funcao ?? null,
+          cargo:
+            funcionarios.find((f) => String(f.id) === String(byNameManual.funcionario_id))
+              ?.cargo ?? null,
+        },
+        'MANUAL',
+      );
   }
 
   // CANAC
   if (input.canac) {
     const byCanac = funcionarios.find((f) => normalizeCanac(f.codigo_anac) === input.canac);
-    if (byCanac) return { id: String(byCanac.id), nome: byCanac.nome, fonteResolucao: 'CANAC' };
+    if (byCanac) return buildMatchedTripulante(byCanac, 'CANAC');
   }
 
   // MATRICULA
@@ -1598,8 +1645,7 @@ function findTripulanteInMemory(
     const byMatricula = funcionarios.find(
       (f) => normalizarInscription(f.matricula) === inscriptionInput,
     );
-    if (byMatricula)
-      return { id: String(byMatricula.id), nome: byMatricula.nome, fonteResolucao: 'MATRICULA' };
+    if (byMatricula) return buildMatchedTripulante(byMatricula, 'MATRICULA');
   }
 
   // NOME_FUZZY
@@ -1611,11 +1657,7 @@ function findTripulanteInMemory(
     (f) => normalizarNomeSigvoos(f.nome) === normalizedInputName,
   );
   if (exactMatches.length === 1)
-    return {
-      id: String(exactMatches[0].id),
-      nome: exactMatches[0].nome,
-      fonteResolucao: 'NOME_FUZZY',
-    };
+    return buildMatchedTripulante(exactMatches[0], 'NOME_FUZZY');
 
   const scored = funcionarios
     .map((f) => {
@@ -1628,7 +1670,7 @@ function findTripulanteInMemory(
   const top = scored[0];
   const second = scored[1];
   if (top && top.score >= 0.86 && (!second || top.score - second.score >= 0.03)) {
-    return { id: String(top.item.id), nome: top.item.nome, fonteResolucao: 'NOME_FUZZY' };
+    return buildMatchedTripulante(top.item, 'NOME_FUZZY');
   }
   return null;
 }
@@ -1654,14 +1696,21 @@ export async function listSigvoosUnmappedTripulantes(
 
   const funcionariosRows = await db
     .prepare(
-      `SELECT id, nome, ${canacSelect} AS codigo_anac, ${matriculaSelect} AS matricula
+      `SELECT id, nome, funcao, cargo, ${canacSelect} AS codigo_anac, ${matriculaSelect} AS matricula
          FROM funcionarios
         WHERE deleted_at IS NULL
           AND (? IS NULL OR empresa_id = ?)
         LIMIT 5000`,
     )
     .bind(empresaId ?? null, empresaId ?? null)
-    .all<{ id: string; nome: string; codigo_anac?: string | null; matricula?: string | null }>();
+    .all<{
+      id: string;
+      nome: string;
+      funcao?: string | null;
+      cargo?: string | null;
+      codigo_anac?: string | null;
+      matricula?: string | null;
+    }>();
   const funcionarios = funcionariosRows.results || [];
 
   const aggregated = new Map<string, SigvoosUnmappedTripulante>();
@@ -1700,7 +1749,7 @@ export async function listSigvoosUnmappedTripulantes(
         mappings,
         funcionarios,
       );
-      if (resolved) continue;
+      if (resolved?.elegivelFrms) continue;
 
       const key = `${normalizeSigvoosNameForMatching(nomeSigvoos) || nomeSigvoos}::${identificadorSigvoos || 'SEM_ID'}`;
       const competencia = `${String(importacao.ano || '')}-${String(importacao.mes || '').padStart(2, '0')}`;
@@ -2492,6 +2541,7 @@ export async function syncSigvoosForFrms(
         identificadorSigvoos: first.identificadorSigvoos,
         name: first.tripulanteNome,
       });
+      const matchedOperational = matched?.elegivelFrms ? matched : null;
       const byMonth = groupDaysByMonth(days);
 
       for (const [monthKey, monthDays] of byMonth.entries()) {
@@ -2500,7 +2550,7 @@ export async function syncSigvoosForFrms(
           await buildSigvoosMonthlyPreview({
             db,
             importacaoId: generateId(),
-            tripulanteId: matched?.id || null,
+            tripulanteId: matchedOperational?.id || null,
             tripulanteNomeFira: first.tripulanteNome || matched?.nome || 'SIGVOOS',
             tripulanteNomeSistema: matched?.nome || null,
             canac: first.canac || 'SEM_CANAC',
@@ -2509,7 +2559,13 @@ export async function syncSigvoosForFrms(
             ano: Number(yearText),
             mes: Number(monthText),
             groupedDays: monthDays,
-            avisos: matched ? [] : ['Tripulante nao localizado automaticamente no AirTrust.'],
+            avisos: matchedOperational
+              ? []
+              : [
+                  matched?.motivoInelegibilidade === 'NAO_TRIPULANTE_OPERACIONAL'
+                    ? 'Funcionario resolvido no cadastro, mas sem funcao/cargo elegivel para FRMS operacional.'
+                    : 'Tripulante nao localizado automaticamente no AirTrust.',
+                ],
           }),
         );
       }
@@ -2538,7 +2594,10 @@ export async function syncSigvoosForFrms(
           canacSigvoos: monthly.canac,
           competencia: `${monthly.ano}-${String(monthly.mes).padStart(2, '0')}`,
           jornadas: monthly.preview.total_dias,
-          motivo: 'NAO_ENCONTRADO',
+          motivo:
+            monthly.preview.avisos?.some((aviso) => aviso.includes('sem funcao/cargo elegivel'))
+              ? 'NAO_TRIPULANTE_OPERACIONAL'
+              : 'NAO_ENCONTRADO',
           payload: {
             fonte_resolucao: monthly.fonteResolucao,
           },
@@ -2722,6 +2781,18 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
         mes: row.mes,
         resolved: false,
         error: 'Tripulante ainda não encontrado',
+      });
+      continue;
+    }
+
+    if (!matched.elegivelFrms) {
+      result.detalhes.push({
+        importacao_id: row.id,
+        tripulante_nome: nomeSigvoos,
+        ano: row.ano,
+        mes: row.mes,
+        resolved: false,
+        error: 'Funcionario resolvido, mas sem funcao/cargo elegivel para FRMS operacional',
       });
       continue;
     }

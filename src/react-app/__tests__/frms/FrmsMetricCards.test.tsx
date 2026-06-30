@@ -42,8 +42,8 @@ describe('FrmsMetricCards', () => {
 
   it('displays labels on each card', () => {
     renderCards();
-    expect(screen.getByText('Jornada e HV regulatórios')).toBeDefined();
-    expect(screen.getByText('Prontidão operacional estimada')).toBeDefined();
+    expect(screen.getByText('Jornada e HV')).toBeDefined();
+    expect(screen.getByText('Prontidão operacional')).toBeDefined();
     expect(screen.getByText('Normal')).toBeDefined();
     expect(screen.getAllByText('Atenção')).toHaveLength(2);
     expect(screen.getByText('Crítico')).toBeDefined();
@@ -68,8 +68,8 @@ describe('FrmsMetricCards', () => {
     ];
     renderCards(zeroCards, zeroEffectiveness);
     await waitFor(() => {
-      expect(screen.getByText('Sem violações no período.')).toBeInTheDocument();
-      expect(screen.getByText('Sem ocorrências de efetividade no período.')).toBeInTheDocument();
+      expect(screen.getByText('✅ Compliance: sem violações no período.')).toBeInTheDocument();
+      expect(screen.getByText('✅ Efetividade: sem ocorrências no período.')).toBeInTheDocument();
       expect(screen.queryByTestId('frms-card-ok')).not.toBeInTheDocument();
     });
   });

@@ -14,6 +14,7 @@ import {
   type FrmsMitigacaoRecomendada,
   type FrmsNaturezaDado,
 } from './decision-policy';
+import { classifyOperationalCrewRole } from './operational-crew';
 
 export type FrmsOperationalSnapshotAlertCode =
   | 'CHECKIN_PENDENTE'
@@ -322,6 +323,8 @@ export function buildFrmsOperationalSnapshot(
   const funcionarioMap = new Map<number, FuncionarioSnapshotRow>();
 
   for (const funcionario of input.rows.funcionarios) {
+    const classification = classifyOperationalCrewRole(funcionario.funcao, funcionario.cargo);
+    if (!classification.isOperational) continue;
     funcionarioMap.set(asNumber(funcionario.id), funcionario);
   }
 
@@ -414,6 +417,7 @@ export function buildFrmsOperationalSnapshot(
     const checkin = checkinMap.get(key) ?? null;
     const efetividade = effectivenessMap.get(key) ?? null;
     const funcionario = funcionarioMap.get(funcionario_id) ?? null;
+    if (!funcionario) continue;
 
     const escalado = Boolean(escala);
     const teveJornada = Boolean(jornada);
@@ -844,6 +848,39 @@ export async function listFrmsOperationalSnapshot(
       .all<FuncionarioSnapshotRow>();
 
     funcionarios = result.results || [];
+  }
+
+  const exclusionMetrics = funcionarios.reduce(
+    (acc, funcionario) => {
+      const classification = classifyOperationalCrewRole(funcionario.funcao, funcionario.cargo);
+      if (classification.isOperational) {
+        acc.operational += 1;
+        return acc;
+      }
+
+      if (classification.exclusionReason === 'MISSING_ROLE') {
+        acc.missingRole += 1;
+        return acc;
+      }
+
+      acc.nonOperational += 1;
+      return acc;
+    },
+    { operational: 0, missingRole: 0, nonOperational: 0 },
+  );
+
+  const missingFuncionario = ids.filter((id) => !funcionarios.some((funcionario) => asNumber(funcionario.id) === id))
+    .length;
+
+  if (exclusionMetrics.nonOperational > 0 || exclusionMetrics.missingRole > 0 || missingFuncionario > 0) {
+    console.info('[frms] operational snapshot filtered non-operational candidates', {
+      empresaId: params.empresaId,
+      totalCandidates: ids.length,
+      operationalCandidates: exclusionMetrics.operational,
+      filteredNonOperational: exclusionMetrics.nonOperational,
+      filteredMissingRole: exclusionMetrics.missingRole,
+      filteredMissingFuncionario: missingFuncionario,
+    });
   }
 
   const snapshot = buildFrmsOperationalSnapshot({
