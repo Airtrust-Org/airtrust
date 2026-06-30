@@ -32,6 +32,26 @@ export function ModalRenovarQualificacao({
   const initializedRef = useRef(false);
   const submitInFlightRef = useRef(false);
 
+  // Bloquear scroll do body enquanto o modal está aberto
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Fechar com Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isOpen, onClose]);
+
   useEffect(() => {
     if (isOpen && qualificacao && !initializedRef.current) {
       // Inicializar apenas uma vez quando o modal abre
@@ -138,8 +158,8 @@ export function ModalRenovarQualificacao({
 
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
               <RotateCcw className="w-6 h-6 text-blue-600" />
@@ -155,7 +175,7 @@ export function ModalRenovarQualificacao({
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
           <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
             <h3 className="font-medium text-gray-900">Qualificação Atual</h3>
             <p>
@@ -227,7 +247,7 @@ export function ModalRenovarQualificacao({
             />
           </div>
         </div>
-        <div className="p-6 border-t bg-gray-50">
+        <div className="p-6 border-t bg-gray-50 flex-shrink-0">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <button
               onClick={onClose}

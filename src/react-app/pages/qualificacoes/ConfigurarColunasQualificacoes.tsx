@@ -59,6 +59,12 @@ export default function ConfigurarColunasQualificacoes({
 
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const handleToggleVisibilidade = (id: string) => {
     setColunas(
       colunas.map((col) =>
@@ -106,7 +112,7 @@ export default function ConfigurarColunasQualificacoes({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Configurar Colunas</h3>
           <button

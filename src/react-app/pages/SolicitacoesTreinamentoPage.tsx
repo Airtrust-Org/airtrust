@@ -3,7 +3,7 @@
  * Workflow: SOLICITADA → APROVADA_GESTOR → APROVADA_OPS → AGENDADA → CONCLUIDA | REJEITADA
  * Rota: /treinamentos/solicitacoes
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CheckCircle2,
   Clock,
@@ -111,6 +111,13 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
   const [prioridade, setPrioridade] = useState<PrioridadeType>('NORMAL');
   const [dataPrevista, setDataPrevista] = useState('');
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!titulo.trim()) {
@@ -146,7 +153,7 @@ function CriarModal({ onClose, selfId, canAdmin }: CriarModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
-        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
+        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         data-testid="solicitacao-criar-modal"
       >
         <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -316,6 +323,13 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
   const agendar = useAgendar();
   const concluir = useConcluir();
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   const act = async (fn: () => Promise<unknown>, successMsg: string) => {
     try {
       await fn();
@@ -329,7 +343,7 @@ function DetalheModal({ item, canAdmin, onClose }: DetalheModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
-        className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl"
+        className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         data-testid="solicitacao-detalhe-modal"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
