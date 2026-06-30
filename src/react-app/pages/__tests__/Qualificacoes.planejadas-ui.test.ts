@@ -317,3 +317,103 @@ describe('Qualificacoes — Planejadas resilience', () => {
     expect(plannedView).toBe('lista');
   });
 });
+
+describe('Qualificacoes — Planejadas chip fix (PR #205)', () => {
+  it('chip_planejadas_conta_turmas_operacionais — chip shows operationalTurmasCount from treinamentos planejados, not historicoHeaderStats.planejadas', () => {
+    // The chip must show operationalTurmasCount (PLANEJADO + CONFIRMADO + EM_ANDAMENTO),
+    // not the old historicoHeaderStats.planejadas which counted individual qualificacoes_historico records.
+    expect(qualificacoesSource).toContain('operationalTurmasCount');
+    // The chip now uses the turmas query loading state, not the old loadingStats flag
+    expect(qualificacoesSource).toContain('treinamentosPlanejadosConvocacaoQuery.isLoading');
+  });
+
+  it('chip_planejadas_nao_usa_historico_header_stats — chip no longer reads historicoHeaderStats.planejadas', () => {
+    // After the fix, the Planejadas chip should NOT display historicoHeaderStats.planejadas
+    // Find the chip section by looking for the title attribute near the Planejadas chip
+    const chipStart = qualificacoesSource.indexOf('Ver turmas planejadas');
+    expect(chipStart).toBeGreaterThan(0);
+    const chipSection = qualificacoesSource.substring(chipStart, chipStart + 500);
+    // The chip should use operationalTurmasCount, not historicoHeaderStats.planejadas
+    expect(chipSection).toContain('operationalTurmasCount');
+    // Verify the old count reference is gone from the chip area
+    expect(chipSection).not.toContain('historicoHeaderStats.planejadas');
+  });
+
+  it('chip_planejadas_navega_para_planejados — clicking Planejadas chip navigates to Planejados tab, not Historico filter', () => {
+    // The chip should call setActiveTab('planejados'), not applySingleStatusFromChip('PLANEJADA')
+    expect(qualificacoesSource).toContain("setActiveTab('planejados')");
+    expect(qualificacoesSource).toContain("setPlannedView('turmas')");
+    // The old applySingleStatusFromChip('PLANEJADA') call must be gone
+    expect(qualificacoesSource).not.toContain("applySingleStatusFromChip('PLANEJADA')");
+  });
+
+  it('chip_planejadas_tem_titulo_ver_turmas — chip tooltip updated to reflect new navigation target', () => {
+    expect(qualificacoesSource).toContain('Ver turmas planejadas');
+    expect(qualificacoesSource).not.toContain('Filtrar apenas planejadas');
+  });
+
+  it('dropdown_status_historico_sem_planejadas — Historico status dropdown does NOT include Planejadas option', () => {
+    // The PLANEJADA option should be removed from the Historico status dropdown
+    expect(qualificacoesSource).not.toContain(
+      "{ key: 'PLANEJADA', label: 'Planejadas', color: 'text-purple-600' }",
+    );
+    // The other statuses should remain
+    expect(qualificacoesSource).toContain("{ key: 'VALIDA', label: 'Válidas'");
+    expect(qualificacoesSource).toContain("{ key: 'VENCENDO_30', label: 'Vencendo (30 dias)'");
+    expect(qualificacoesSource).toContain("{ key: 'VENCIDA', label: 'Vencidas'");
+    expect(qualificacoesSource).toContain("{ key: 'RENOVADA', label: 'Renovadas'");
+    expect(qualificacoesSource).toContain("{ key: 'CANCELADA', label: 'Canceladas'");
+  });
+
+  it('dropdown_status_contador_atualizado — status dropdown counter shows /5 instead of /6', () => {
+    expect(qualificacoesSource).toContain('Status ({statusFiltro.size}/5)');
+    expect(qualificacoesSource).not.toContain('Status ({statusFiltro.size}/6)');
+  });
+
+  it('botao_todos_sem_planejadas — "Todos" button in status dropdown no longer includes PLANEJADA', () => {
+    // Must use 5 statuses, not 6
+    expect(qualificacoesSource).toContain(
+      "new Set(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','CANCELADA'])",
+    );
+    expect(qualificacoesSource).not.toContain(
+      "new Set(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','PLANEJADA','CANCELADA'])",
+    );
+  });
+
+  it('filtro_padrao_sem_planejadas — default status filter no longer includes PLANEJADA', () => {
+    // Default statusFiltro should be ['VALIDA', 'VENCIDA', 'VENCENDO_30'] without PLANEJADA
+    expect(qualificacoesSource).toContain("['VALIDA', 'VENCIDA', 'VENCENDO_30']");
+    // The old default with PLANEJADA must be gone
+    expect(qualificacoesSource).not.toContain("['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA']");
+  });
+
+  it('url_param_planejada_redireciona — URL status=planejada redirects to Planejados tab', () => {
+    // The URL param handler must redirect 'planejada' to Planejados tab
+    expect(qualificacoesSource).toContain("if (lowerStatus === 'planejada')");
+    expect(qualificacoesSource).toContain("setActiveTab('planejados')");
+    expect(qualificacoesSource).toContain("setPlannedView('turmas')");
+    // Old statusMap entry for planejada is removed
+    expect(qualificacoesSource).not.toContain("planejada: ['PLANEJADA']");
+  });
+
+  it('empty_state_mostrar_todos_sem_planejadas — empty state "Mostrar todos" button excludes PLANEJADA', () => {
+    // The empty state button should show 5 statuses (no PLANEJADA)
+    expect(qualificacoesSource).toContain(
+      "'VALIDA',\n                            'VENCIDA',\n                            'VENCENDO_30',\n                            'RENOVADA',\n                            'CANCELADA'",
+    );
+  });
+
+  it('planejados_lista_presenca_intacta — attendance list PDF generation remains available', () => {
+    // Verify TreinamentosPlanejadosPage still has attendance list functionality
+    expect(treinamentosSource).toContain('gerandoListaPresencaTurma');
+    expect(treinamentosSource).toContain('Lista de Presença');
+    expect(treinamentosSource).toContain('gerarPDFListaPresencaTurma');
+  });
+
+  it('turnas_planejadas_query_sem_filtro_status — query fetches all turmas for operational count', () => {
+    // The treinamentos query should not filter by status (so we can count all operational turmas)
+    expect(qualificacoesSource).toContain('useTreinamentosPlanejados({})');
+    // The old status-filtered query must be gone
+    expect(qualificacoesSource).not.toContain("status: 'PLANEJADO'");
+  });
+});
