@@ -302,11 +302,13 @@ export const MODELO_AERONAVE_EXPR = `COALESCE(
 )`;
 
 export const SORTABLE_COLUMNS: Record<string, string> = {
+  // PLANEJADA records created via integration have data_conclusao set (= data_prevista),
+  // so we must check qh.status directly before falling through to date-based logic.
   status: `(
     CASE
       WHEN qh.deleted_at IS NOT NULL THEN 'CANCELADA'
-      WHEN qh.renovada = 1 THEN 'RENOVADA'
-      WHEN qh.data_conclusao IS NULL THEN 'PLANEJADA'
+      WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 'PLANEJADA'
+      WHEN qh.renovada = 1 OR UPPER(COALESCE(qh.status,'')) IN ('RENOVADA','RENOVADO') THEN 'RENOVADA'
       WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) IS NULL THEN 'INDEFINIDA'
       WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) < date('now') THEN 'VENCIDA'
       WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) <= date('now','+30 days') THEN 'VENCENDO_30'
@@ -338,8 +340,19 @@ export function buildOrderByClause(orderBy: string, order: string): string {
   const column = SORTABLE_COLUMNS[orderBy] || SORTABLE_COLUMNS['data_vencimento'];
 
   if (orderBy === 'status') {
-    const tiebreaker = `COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))`;
-    return `${column} ${direction}, ${tiebreaker} ASC`;
+    // Sort by numeric priority rank so PLANEJADA always comes first (rank 1) when ASC.
+    // Checking qh.status directly is critical: PLANEJADA records have data_conclusao set
+    // (= data_prevista), so relying on data_conclusao IS NULL alone would misclassify them.
+    const vencimento = `COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))`;
+    const rankExpr = `(CASE
+      WHEN qh.deleted_at IS NOT NULL THEN 6
+      WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 1
+      WHEN qh.renovada = 1 OR UPPER(COALESCE(qh.status,'')) IN ('RENOVADA','RENOVADO') THEN 5
+      WHEN ${vencimento} < date('now') THEN 2
+      WHEN ${vencimento} <= date('now','+30 days') THEN 3
+      ELSE 4
+    END)`;
+    return `${rankExpr} ${direction}, ${vencimento} ASC`;
   }
 
   if (orderBy === 'data_vencimento' || orderBy === 'vencimento') {
