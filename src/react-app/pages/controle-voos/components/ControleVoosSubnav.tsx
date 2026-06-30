@@ -14,7 +14,7 @@ const LINKS = [
 const PREVIEW_BADGE_TITLE = 'Tela em preview - nao usar como fonte operacional';
 
 export default function ControleVoosSubnav() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
 
   return (
     <nav className="-mx-1 mb-5 overflow-x-auto px-1">
@@ -26,7 +26,7 @@ export default function ControleVoosSubnav() {
           return (
             <Link
               key={link.to}
-              to={link.to}
+              to={`${link.to}${search}`}
               title={link.preview ? PREVIEW_BADGE_TITLE : undefined}
               className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                 active

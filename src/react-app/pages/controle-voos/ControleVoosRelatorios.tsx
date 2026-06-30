@@ -9,10 +9,12 @@ import {
   RefreshCw,
   TrendingUp,
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import AppLayout from '@/react-app/components/AppLayout';
 import { fetchWithAuth } from '@/react-app/config/api';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
+import ControleVoosDateControls from './components/ControleVoosDateControls';
 
 type ResumoOperacionalResponse = {
   success: boolean;
@@ -80,18 +82,11 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
 }
 
-function buildDefaultPeriod(): { dataInicio: string; dataFim: string } {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - 6);
-  return {
-    dataInicio: start.toISOString().slice(0, 10),
-    dataFim: end.toISOString().slice(0, 10),
-  };
+function getToday(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
-async function loadResumoOperacional(signal?: AbortSignal) {
-  const { dataInicio, dataFim } = buildDefaultPeriod();
+async function loadResumoOperacional(dataInicio: string, dataFim: string, signal?: AbortSignal) {
   const params = new URLSearchParams({ data_inicio: dataInicio, data_fim: dataFim });
   const response = await fetchWithAuth(`/api/controle-voos/relatorios/resumo-operacional?${params.toString()}`, {
     signal,
@@ -106,12 +101,16 @@ async function loadResumoOperacional(signal?: AbortSignal) {
 }
 
 export default function ControleVoosRelatorios() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get('data') || '')
+    ? (searchParams.get('data') as string)
+    : getToday();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
 
   useEffect(() => {
     const controller = new AbortController();
 
-    void loadResumoOperacional(controller.signal)
+    void loadResumoOperacional(selectedDate, selectedDate, controller.signal)
       .then((data) => setState({ status: 'success', data }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -122,11 +121,11 @@ export default function ControleVoosRelatorios() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [selectedDate]);
 
   const retry = () => {
     setState({ status: 'loading' });
-    void loadResumoOperacional()
+    void loadResumoOperacional(selectedDate, selectedDate)
       .then((data) => setState({ status: 'success', data }))
       .catch((error: unknown) =>
         setState({
@@ -134,6 +133,18 @@ export default function ControleVoosRelatorios() {
           message: error instanceof Error ? error.message : 'Falha ao carregar relatórios operacionais.',
         }),
       );
+  };
+
+  const setSelectedDate = (nextDate: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('data', nextDate);
+    setSearchParams(next, { replace: true });
+  };
+
+  const setToday = () => {
+    const next = new URLSearchParams(searchParams);
+    next.set('data', getToday());
+    setSearchParams(next, { replace: true });
   };
 
   return (
@@ -144,14 +155,22 @@ export default function ControleVoosRelatorios() {
             title="Relatórios Operacionais"
             description="Resumo real de voos, RDVs, atrasos e cancelamentos no período."
           >
-            <button
-              type="button"
-              onClick={retry}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Atualizar
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <ControleVoosDateControls
+                value={selectedDate}
+                onChange={setSelectedDate}
+                onToday={setToday}
+                label="Data do resumo"
+              />
+              <button
+                type="button"
+                onClick={retry}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Atualizar
+              </button>
+            </div>
           </ControleVoosPageHeader>
 
           {state.status === 'loading' && (

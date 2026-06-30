@@ -1,95 +1,61 @@
-import { useMemo } from 'react';
+import { Clock3, Layers3 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
-import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
-import { MOCK_TRIPULANTES, MOCK_JORNADAS } from './data/controleVoosMockData';
-import { formatHours } from './data/controleVoosUtils';
+import ControleVoosDateControls from './components/ControleVoosDateControls';
+import { useControleVoosDate } from './hooks/useControleVoosDate';
+import { formatDate } from './data/controleVoosUtils';
 
 export default function ControleVoosJornadas() {
-  const tripulantesComJornadas = useMemo(() => {
-    return MOCK_TRIPULANTES.map((t) => {
-      const jornadas = MOCK_JORNADAS.filter((j) => j.tripulanteId === t.id);
-      const totalHorasJornada = jornadas.reduce((sum, j) => sum + j.horasJornada, 0);
-      const totalHorasVoo = jornadas.reduce((sum, j) => sum + j.horasVoo, 0);
-      return { ...t, jornadas, totalHorasJornada, totalHorasVoo };
-    });
-  }, []);
+  const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
 
   return (
     <AppLayout>
       <div className="w-full">
         <ControleVoosPageShell>
-          <ControleVoosPageHeader title="Jornadas — Preview FRMS" description="Tela de preview. Ainda depende de contrato read-only entre Controle de Voos e FRMS para jornada realizada por tripulante. Enquanto esse contrato não existir, os dados aqui não são operacionais." />
+          <ControleVoosPageHeader
+            title="Jornadas — Preview"
+            description="Jornadas reais serão alimentadas pelo Controle de Voos a partir do SIGVOOS importado e normalizado, não pelo FRMS."
+          >
+            <ControleVoosDateControls
+              value={selectedDate}
+              onChange={setSelectedDate}
+              onToday={setToday}
+            />
+          </ControleVoosPageHeader>
 
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Tripulante</th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Função</th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Início jornada</th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Fim jornada</th>
-                    <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Horas voo (hoje)</th>
-                    <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Horas jornada (hoje)</th>
-                    <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Horas voo (mês)</th>
-                    <th className="px-4 py-3 text-center font-medium text-slate-600 dark:text-slate-300">Score FRMS</th>
-                    <th className="px-4 py-3 text-center font-medium text-slate-600 dark:text-slate-300">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {tripulantesComJornadas.map((t) => {
-                    const j = t.jornadas[0];
-                    return (
-                      <tr key={t.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-slate-800 dark:text-slate-200">{t.nome}</p>
-                          <p className="text-xs text-slate-400 dark:text-slate-500">Mat. {t.matricula}</p>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">{t.designacao}</td>
-                        <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{j?.horarioInicio || '—'}</td>
-                        <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{j?.horarioFim || '—'}</td>
-                        <td className="px-4 py-3 font-mono text-slate-700 dark:text-slate-300 text-right">{formatHours(t.totalHorasVoo)}</td>
-                        <td className="px-4 py-3 font-mono text-slate-700 dark:text-slate-300 text-right">{formatHours(t.totalHorasJornada)}</td>
-                        <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400 text-right">{formatHours(t.horasMes)}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-mono font-bold ${
-                            t.frmsScore >= 85 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
-                            t.frmsScore >= 70 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
-                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                          }`}>
-                            {t.frmsScore}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center"><ControleVoosStatusBadge status={t.frmsStatus} /></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+            Tela em preview. Ainda não existe contrato canônico de Jornadas em Controle de Voos baseado em `cv_voos`, `cv_voo_tripulantes`, `cv_voo_etapas` e RDV com rastreabilidade de origem.
           </div>
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-            Score FRMS &lt; 70 = OK · 70-85 = Atenção · &gt; 85 = Bloqueado — preview sem contrato real
-          </p>
 
-          {/* Legenda */}
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-            <h2 className="mb-3 text-base font-semibold text-slate-800 dark:text-slate-100">Legenda — Status FRMS</h2>
-            <div className="grid gap-3 sm:grid-cols-3 text-sm">
-              <div className="flex items-center gap-2">
-                <ControleVoosStatusBadge status="ok" />
-                <span className="text-slate-600 dark:text-slate-400">OK — estado apenas ilustrativo nesta preview</span>
+          <div className="rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-700 dark:bg-slate-900">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-800/60">
+                <div className="mb-3 flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                  <Clock3 className="h-4 w-4 text-teal-500" />
+                  <h2 className="text-base font-semibold">Data selecionada</h2>
+                </div>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  O contrato futuro deverá responder para <span className="font-medium">{formatDate(selectedDate)}</span> com apresentação, término, função a bordo, aeronave, fonte e última sincronização do dado importado.
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <ControleVoosStatusBadge status="atencao" />
-                <span className="text-slate-600 dark:text-slate-400">Atenção — estado ilustrativo ate existir snapshot operacional.</span>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-800/60">
+                <div className="mb-3 flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                  <Layers3 className="h-4 w-4 text-blue-500" />
+                  <h2 className="text-base font-semibold">Policy canônica</h2>
+                </div>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Caminho alvo: SIGVOOS → Controle de Voos → FRMS. Enquanto o endpoint canônico de Jornadas não existir em Controle de Voos, esta página permanece em preview e não exibe dado operacional fictício.
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <ControleVoosStatusBadge status="bloqueado" />
-                <span className="text-slate-600 dark:text-slate-400">Bloqueado — estado ilustrativo. O bloqueio real continua no backend FRMS, não nesta tela.</span>
-              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-900">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Contrato mínimo esperado para sair do preview</h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                `voo_id`, `etapa_id`, `tripulante_id`, `funcao`, `data_operacional`, `hora_apresentacao`, `hora_termino`, `horas_voo`, `aeronave`, `origem`, `qualidade_dado`, `estado_conflito`, `last_sync_at`, `external_id_sigvoos`.
+              </p>
             </div>
           </div>
         </ControleVoosPageShell>

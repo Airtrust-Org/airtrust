@@ -7,6 +7,8 @@ import ControleVoosStatCards from './components/ControleVoosStatCards';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import { useControleVoosDashboard } from '@/react-app/hooks/useControleVoos';
 import { formatTime, formatDate } from './data/controleVoosUtils';
+import ControleVoosDateControls from './components/ControleVoosDateControls';
+import { useControleVoosDate } from './hooks/useControleVoosDate';
 
 const DEMO_LINK_BADGE_CLASS =
   'rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300';
@@ -18,7 +20,8 @@ function AlertIcon({ gravidade }: { gravidade: 'critico' | 'alerta' | 'info' }) 
 }
 
 export default function ControleVoosDashboard() {
-  const { data: dashboard, isLoading, error } = useControleVoosDashboard();
+  const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
+  const { data: dashboard, isLoading, error } = useControleVoosDashboard(selectedDate);
 
   const totais = dashboard?.totais;
   const alertas = dashboard?.alertas_operacionais;
@@ -94,7 +97,13 @@ export default function ControleVoosDashboard() {
           <ControleVoosPageHeader
             title="Painel Operacional — Controle de Voos"
             description="Uso operacional interno com dados reais N1. Não regulado. Não fiscal. Não substitui Diário de Bordo, eDB ou SDRMe."
-          />
+          >
+            <ControleVoosDateControls
+              value={selectedDate}
+              onChange={setSelectedDate}
+              onToday={setToday}
+            />
+          </ControleVoosPageHeader>
 
           {isLoading && (
             <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
@@ -122,10 +131,10 @@ export default function ControleVoosDashboard() {
               {/* Links rápidos */}
               <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { to: '/controle-voos/voos', icon: <Plane className="h-5 w-5 text-blue-500" />, label: 'Voos / Programação' },
-                  { to: '/controle-voos/rdv', icon: <FileText className="h-5 w-5 text-purple-500" />, label: 'RDVs' },
-                  { to: '/controle-voos/jornadas', icon: <Users className="h-5 w-5 text-teal-500" />, label: 'Jornadas', preview: true },
-                  { to: '/controle-voos/indisponibilidades', icon: <Wrench className="h-5 w-5 text-amber-500" />, label: 'Indisponibilidades', preview: true },
+                  { to: `/controle-voos/voos?data=${selectedDate}`, icon: <Plane className="h-5 w-5 text-blue-500" />, label: 'Voos / Programação' },
+                  { to: `/controle-voos/rdv?data=${selectedDate}`, icon: <FileText className="h-5 w-5 text-purple-500" />, label: 'RDVs' },
+                  { to: `/controle-voos/jornadas?data=${selectedDate}`, icon: <Users className="h-5 w-5 text-teal-500" />, label: 'Jornadas', preview: true },
+                  { to: `/controle-voos/indisponibilidades?data=${selectedDate}`, icon: <Wrench className="h-5 w-5 text-amber-500" />, label: 'Indisponibilidades', preview: true },
                 ].map((link) => (
                   <Link
                     key={link.to}
