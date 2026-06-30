@@ -1424,6 +1424,41 @@ app.post('/scorm/commit', async (c) => {
     }
   }
 
+  // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
+  // Completed enrollments must never be downgraded to incomplete/failed/not attempted.
+  // Only idempotent commits preserving completion state are allowed.
+  const matriculaWasConcluido = matricula.status === 'CONCLUIDO';
+  if (matriculaWasConcluido) {
+    const incomingStatus = (
+      d.lesson_status ??
+      d.completion_status ??
+      ''
+    ).toLowerCase();
+
+    // Whitelist: statuses safe for an already-completed enrollment
+    const safeStatuses = new Set([
+      'passed',
+      'completed',
+      'complete',
+      '',
+    ]);
+
+    if (!safeStatuses.has(incomingStatus)) {
+      return c.json({
+        success: true,
+        data: {
+          id: d.matricula_id,
+          status: matricula.status,
+          progresso_pct: matricula.progresso_pct,
+          tentativas: matricula.tentativas,
+          qualificacao_historico_id: matricula.qualificacao_historico_id,
+          ignoredDowngrade: true,
+          message: 'Curso já concluído. Commit ignorado para preservar conclusão.',
+        },
+      });
+    }
+  }
+
   const runtimeMerge = mergeScormRuntimeState({
     currentCmiJson: scormAtual?.cmi_json ?? null,
     incomingCmiJson: d.cmi_json ?? null,
