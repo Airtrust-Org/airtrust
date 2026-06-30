@@ -39,7 +39,7 @@ export async function registrarAuditoria(params: AuditoriaParams): Promise<void>
         `INSERT INTO auditoria (
           usuario_id, usuario_nome, acao, tabela_afetada, registro_id,
           dados_antes, dados_depois, ip_address, user_agent, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
       )
       .bind(
         usuario_id,
