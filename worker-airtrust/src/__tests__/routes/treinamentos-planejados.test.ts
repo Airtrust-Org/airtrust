@@ -1081,15 +1081,26 @@ describe('treinamentos planejados router', () => {
 
     it('dryRun=true retorna preview sem executar mutacoes', async () => {
       const { db } = createMockDb([
+        // Query 1: turma info
         [
-          'GROUP BY tp.treinamento_id',
+          'SELECT id, codigo_turma, status',
+          {
+            all: () => ({
+              results: [
+                { id: 10, codigo_turma: 'T-001', status: 'EM_ANDAMENTO' },
+                { id: 20, codigo_turma: 'T-002', status: 'EM_ANDAMENTO' },
+              ],
+            }),
+          },
+        ],
+        // Query 2: participante counts
+        [
+          'GROUP BY treinamento_id',
           {
             all: () => ({
               results: [
                 {
                   treinamento_id: 10,
-                  codigo_turma: 'T-001',
-                  turma_status: 'EM_ANDAMENTO',
                   total_participantes: 3,
                   com_historico: 1,
                   sem_historico: 2,
@@ -1097,8 +1108,6 @@ describe('treinamentos planejados router', () => {
                 },
                 {
                   treinamento_id: 20,
-                  codigo_turma: 'T-002',
-                  turma_status: 'EM_ANDAMENTO',
                   total_participantes: 5,
                   com_historico: 0,
                   sem_historico: 5,
@@ -1160,8 +1169,9 @@ describe('treinamentos planejados router', () => {
 
     it('dryRun=true com zero turmas retorna vazio', async () => {
       const { db } = createMockDb([
+        // Query 1: turma info — empty
         [
-          'GROUP BY tp.treinamento_id',
+          'SELECT id, codigo_turma, status',
           {
             all: () => ({ results: [] }),
           },

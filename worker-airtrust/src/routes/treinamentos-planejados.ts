@@ -3520,42 +3520,92 @@ treinamentosPlanejadosRoutes.post(
     const dryRun = url.searchParams.get('dryRun') === 'true';
 
     if (dryRun) {
-      const preview = await db
+      // Carrega turmas ativas com participantes (mesmo critério do apply).
+      const turmasInfo = await db
         .prepare(
-          `SELECT tp.treinamento_id,
-                  t.codigo_turma,
-                  t.status AS turma_status,
+          `SELECT id, codigo_turma, status
+             FROM treinamentos_planejados
+            WHERE empresa_id = ?
+              AND deleted_at IS NULL
+              AND status NOT IN ('CANCELADO', 'CONCLUIDO')
+              AND qualificacao_tipo_id IS NOT NULL
+              AND id IN (
+                SELECT DISTINCT treinamento_id FROM treinamentos_participantes
+                WHERE deleted_at IS NULL
+              )
+            ORDER BY id`,
+        )
+        .bind(empresaId)
+        .all<{ id: number; codigo_turma: string | null; status: string }>();
+
+      if (turmasInfo.results.length === 0) {
+        return c.json({
+          success: true,
+          data: {
+            dryRun: true,
+            totalTurmas: 0,
+            resumo: {
+              totalParticipantes: 0,
+              comHistoricoExistente: 0,
+              semHistorico: 0,
+              participantesConcluidos: 0,
+            },
+            turmas: [],
+          },
+        });
+      }
+
+      const turmaIds = turmasInfo.results.map((t) => t.id);
+
+      // Contagens de participantes agrupadas por turma (sem JOIN — só tabela de participantes).
+      const contagens = await db
+        .prepare(
+          `SELECT treinamento_id,
                   COUNT(*) AS total_participantes,
-                  SUM(CASE WHEN tp.qualificacao_historico_id IS NOT NULL THEN 1 ELSE 0 END) AS com_historico,
-                  SUM(CASE WHEN tp.qualificacao_historico_id IS NULL THEN 1 ELSE 0 END) AS sem_historico,
-                  SUM(CASE WHEN tp.resultado IN ('APROVADO', 'REPROVADO', 'CANCELADO', 'aprovado', 'reprovado', 'cancelado') THEN 1 ELSE 0 END) AS concluidos
-             FROM treinamentos_participantes tp
-            INNER JOIN treinamentos_planejados t ON t.id = tp.treinamento_id
-            WHERE t.empresa_id = ?
-              AND t.deleted_at IS NULL
-              AND t.status NOT IN ('CANCELADO', 'CONCLUIDO')
-              AND t.qualificacao_tipo_id IS NOT NULL
-              AND tp.deleted_at IS NULL
-            GROUP BY tp.treinamento_id
-            ORDER BY tp.treinamento_id`,
+                  SUM(CASE WHEN qualificacao_historico_id IS NOT NULL THEN 1 ELSE 0 END) AS com_historico,
+                  SUM(CASE WHEN qualificacao_historico_id IS NULL THEN 1 ELSE 0 END) AS sem_historico,
+                  SUM(CASE WHEN resultado IN ('APROVADO', 'REPROVADO', 'CANCELADO', 'aprovado', 'reprovado', 'cancelado') THEN 1 ELSE 0 END) AS concluidos
+             FROM treinamentos_participantes
+            WHERE deleted_at IS NULL
+              AND treinamento_id IN (
+                SELECT id FROM treinamentos_planejados
+                WHERE empresa_id = ?
+                  AND deleted_at IS NULL
+                  AND status NOT IN ('CANCELADO', 'CONCLUIDO')
+                  AND qualificacao_tipo_id IS NOT NULL
+              )
+            GROUP BY treinamento_id
+            ORDER BY treinamento_id`,
         )
         .bind(empresaId)
         .all<{
           treinamento_id: number;
-          codigo_turma: string | null;
-          turma_status: string;
           total_participantes: number;
           com_historico: number;
           sem_historico: number;
           concluidos: number;
         }>();
 
-      const turmas = preview.results;
+      // Merge turma info com contagens.
+      const infoMap = new Map(turmasInfo.results.map((t) => [t.id, t]));
+      const turmas = contagens.results.map((c) => {
+        const info = infoMap.get(c.treinamento_id);
+        return {
+          turmaId: c.treinamento_id,
+          codigoTurma: info?.codigo_turma ?? null,
+          status: info?.status ?? '',
+          totalParticipantes: c.total_participantes,
+          comHistoricoExistente: c.com_historico,
+          semHistorico: c.sem_historico,
+          participantesConcluidos: c.concluidos,
+        };
+      });
+
       const totalTurmas = turmas.length;
-      const totalParticipantes = turmas.reduce((s, t) => s + t.total_participantes, 0);
-      const totalComHistorico = turmas.reduce((s, t) => s + t.com_historico, 0);
-      const totalSemHistorico = turmas.reduce((s, t) => s + t.sem_historico, 0);
-      const totalConcluidos = turmas.reduce((s, t) => s + t.concluidos, 0);
+      const totalParticipantes = turmas.reduce((s, t) => s + t.totalParticipantes, 0);
+      const totalComHistorico = turmas.reduce((s, t) => s + t.comHistoricoExistente, 0);
+      const totalSemHistorico = turmas.reduce((s, t) => s + t.semHistorico, 0);
+      const totalConcluidos = turmas.reduce((s, t) => s + t.participantesConcluidos, 0);
 
       return c.json({
         success: true,
@@ -3568,15 +3618,7 @@ treinamentosPlanejadosRoutes.post(
             semHistorico: totalSemHistorico,
             participantesConcluidos: totalConcluidos,
           },
-          turmas: turmas.map((t) => ({
-            turmaId: t.treinamento_id,
-            codigoTurma: t.codigo_turma,
-            status: t.turma_status,
-            totalParticipantes: t.total_participantes,
-            comHistoricoExistente: t.com_historico,
-            semHistorico: t.sem_historico,
-            participantesConcluidos: t.concluidos,
-          })),
+          turmas,
         },
       });
     }
