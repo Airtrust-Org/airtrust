@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Eye,
   Gauge,
   Loader2,
   Maximize2,
@@ -88,6 +89,7 @@ export default function LmsPlayer() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
   const { token } = useAuth();
+  const [searchParams] = useSearchParams();
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [completed, setCompleted] = useState(false);
@@ -112,6 +114,7 @@ export default function LmsPlayer() {
     refetch: refetchMatricula,
   } = useMatriculaDetalhe(id);
   const { data: curso } = useLmsCurso(matricula?.curso_id ?? 0);
+  const effectiveReviewMode = searchParams.get('review') === '1' || matricula?.status === 'CONCLUIDO';
   const persistedLocation = readLocationFromCmiJson(
     (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
   );
