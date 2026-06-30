@@ -7,8 +7,6 @@ const DEMO_ROUTES = [
   { prefix: '/controle-voos/jornadas', label: 'Jornadas' },
   { prefix: '/controle-voos/indisponibilidades', label: 'Indisponibilidades' },
   { prefix: '/controle-voos/hangaragem', label: 'Hangaragem' },
-  { prefix: '/controle-voos/relatorios', label: 'Relatórios' },
-  { prefix: '/controle-voos/tabelas', label: 'Tabelas' },
 ];
 
 export default function ControleVoosPageShell({ children }: { children: React.ReactNode }) {
@@ -20,12 +18,12 @@ export default function ControleVoosPageShell({ children }: { children: React.Re
       <ControleVoosPrototypeBanner />
       {demoRoute && (
         <ModuleGovernanceBanner
-          title={`${demoRoute.label} — tela demonstrativa`}
+          title={`${demoRoute.label} — preview controlado`}
           maturityLevel="N0"
           evidenceLevel="A0"
           isPrototype
           isRegulated={false}
-          description="Tela demonstrativa fora do fluxo operacional N1 conectado ao backend. Não usar como registro operacional."
+          description="Tela em preview, fora do fluxo operacional conectado. Nao usar como registro operacional nem como dado oficial."
           className="mb-3"
         />
       )}

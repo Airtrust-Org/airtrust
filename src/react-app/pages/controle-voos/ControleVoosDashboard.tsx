@@ -124,19 +124,19 @@ export default function ControleVoosDashboard() {
                 {[
                   { to: '/controle-voos/voos', icon: <Plane className="h-5 w-5 text-blue-500" />, label: 'Voos / Programação' },
                   { to: '/controle-voos/rdv', icon: <FileText className="h-5 w-5 text-purple-500" />, label: 'RDVs' },
-                  { to: '/controle-voos/jornadas', icon: <Users className="h-5 w-5 text-teal-500" />, label: 'Jornadas', demo: true },
-                  { to: '/controle-voos/indisponibilidades', icon: <Wrench className="h-5 w-5 text-amber-500" />, label: 'Indisponibilidades', demo: true },
+                  { to: '/controle-voos/jornadas', icon: <Users className="h-5 w-5 text-teal-500" />, label: 'Jornadas', preview: true },
+                  { to: '/controle-voos/indisponibilidades', icon: <Wrench className="h-5 w-5 text-amber-500" />, label: 'Indisponibilidades', preview: true },
                 ].map((link) => (
                   <Link
                     key={link.to}
                     to={link.to}
-                    title={link.demo ? 'Tela demonstrativa - nao usar como fonte operacional' : undefined}
+                    title={link.preview ? 'Tela em preview - nao usar como fonte operacional' : undefined}
                     className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-600"
                   >
                     {link.icon}
                     <span className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                       <span>{link.label}</span>
-                      {link.demo && <span className={DEMO_LINK_BADGE_CLASS}>Demo</span>}
+                      {link.preview && <span className={DEMO_LINK_BADGE_CLASS}>Preview</span>}
                     </span>
                   </Link>
                 ))}
