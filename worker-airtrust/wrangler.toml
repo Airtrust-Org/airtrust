@@ -83,6 +83,8 @@ APP_VERSION = "managed-by-script"
 APP_BUILD_TIME = "managed-by-script"
 # Feature flag: shared simulator sessions (2026-06-09 controlled activation)
 SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
+# Feature flag: SIGVOOS shadow compare read-only (2026-06-30 controlled activation)
+CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env production
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env production
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env production
