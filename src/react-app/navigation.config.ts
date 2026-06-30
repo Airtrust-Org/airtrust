@@ -227,6 +227,8 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
           id: 'controle_voos-jornadas',
           label: 'Jornadas',
           path: '/controle-voos/jornadas',
+          badge: 'Preview',
+          title: 'Tela em preview - aguardando contrato canônico do Controle de Voos',
         },
         {
           id: 'controle_voos-indisponibilidades',
