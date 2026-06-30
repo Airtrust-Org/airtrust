@@ -62,6 +62,11 @@ import {
   getLmsCourseThumbnailUrl,
   useLmsCourseThumbnailUrl,
   getMatriculaStatusMeta,
+  getLmsGridCardBorderClasses,
+  getLmsActionButtonClasses,
+  getLmsActionLabel,
+  getLmsProgressBarFillClasses,
+  getLmsProgressLabel,
   LmsCourseArtwork,
   LmsCourseMiniMeta,
   LmsEmptyState,
@@ -1343,17 +1348,15 @@ function CourseCard({
   const isEmAndamento = !canManage && matricula?.status === 'EM_ANDAMENTO';
   const isNaoIniciado = !canManage && (!matricula || matricula.status === 'NAO_INICIADO' || matricula.status === 'CANCELADO');
 
+  const gridBorderCls = isNaoIniciado || isEmAndamento || isConcluido
+    ? getLmsGridCardBorderClasses(matricula?.status ?? 'NAO_INICIADO')
+    : complianceCourse
+      ? 'border-amber-200'
+      : 'border-slate-200';
+
   return (
     <article
-      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg dark:bg-slate-900 dark:shadow-none ${
-        isConcluido
-          ? 'border-slate-200 dark:border-slate-700'
-          : isEmAndamento
-            ? 'border-emerald-300 border-t-4 border-t-emerald-500 bg-emerald-50/20 dark:border-emerald-800 dark:border-t-emerald-600 dark:bg-emerald-950/10'
-            : complianceCourse
-              ? 'border-amber-200'
-              : 'border-slate-200'
-      }`}
+      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg dark:bg-slate-900 dark:shadow-none ${gridBorderCls}`}
     >
       <div className="p-4 pb-0">
         <div className="relative">
@@ -1420,11 +1423,11 @@ function CourseCard({
               ) : null}
               <div className="mb-1 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
                 <span>Progresso</span>
-                <span>{enrollmentProgress}%</span>
+                <span>{getLmsProgressLabel(matricula.status, enrollmentProgress)}</span>
               </div>
               <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
                 <div
-                  className={`h-full rounded-full ${isConcluido ? 'bg-emerald-500' : isEmAndamento ? 'bg-primary' : 'bg-slate-400'}`}
+                  className={`h-full rounded-full ${getLmsProgressBarFillClasses(matricula.status)}`}
                   style={{ width: `${enrollmentProgress}%` }}
                 />
               </div>
@@ -1463,24 +1466,34 @@ function CourseCard({
         ) : (
           <div className="pt-3 space-y-2">
             <div className="flex gap-2">
-              <Button
-                variant={isConcluido ? 'secondary' : 'primary'}
-                className="flex-1"
-                onClick={() => {
-                  if (canManage && previewPath) {
-                    navigate(previewPath);
-                    return;
-                  }
-                  onAction(curso);
-                }}
-              >
-                {isConcluido ? (
-                  <Eye className="h-4 w-4" />
-                ) : (
+              {canManage ? (
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  onClick={() => {
+                    if (previewPath) {
+                      navigate(previewPath);
+                      return;
+                    }
+                    onAction(curso);
+                  }}
+                >
                   <Play className="h-4 w-4" />
-                )}
-                {actionLabel}
-              </Button>
+                  {actionLabel}
+                </Button>
+              ) : (
+                <button
+                  onClick={() => onAction(curso)}
+                  className={`flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${getLmsActionButtonClasses(matricula?.status ?? 'NAO_INICIADO')}`}
+                >
+                  {isConcluido ? (
+                    <Eye className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  {getLmsActionLabel(matricula?.status ?? 'NAO_INICIADO')}
+                </button>
+              )}
               <Button variant="secondary" onClick={() => navigate(`/lms/cursos/${curso.id}`)}>
                 <Eye className="h-4 w-4" />
               </Button>

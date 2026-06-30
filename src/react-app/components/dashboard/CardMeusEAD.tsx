@@ -20,6 +20,13 @@ import { useMinhasEAD, type LmsMatriculaEAD } from '@/react-app/hooks/useLms';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
+import {
+  getLmsRowCardBorderClasses,
+  getLmsActionButtonClasses,
+  getLmsActionLabel,
+  getLmsProgressBarFillClasses,
+  getLmsProgressLabel,
+} from '@/react-app/pages/lms/lmsUi';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,9 +53,10 @@ function statusLabel(s: LmsMatriculaEAD['status']) {
 }
 
 function StatusIcon({ status }: { status: LmsMatriculaEAD['status'] }) {
-  if (status === 'CONCLUIDO') return <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />;
-  if (status === 'EM_ANDAMENTO') return <Play className="w-4 h-4 text-blue-500 shrink-0" />;
+  if (status === 'CONCLUIDO') return <CheckCircle2 className="w-4 h-4 text-slate-400 shrink-0" />;
+  if (status === 'EM_ANDAMENTO') return <Play className="w-4 h-4 text-amber-500 shrink-0" />;
   if (status === 'REPROVADO') return <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />;
+  if (status === 'NAO_INICIADO') return <Circle className="w-4 h-4 text-emerald-500 shrink-0" />;
   return <Circle className="w-4 h-4 text-slate-400 shrink-0" />;
 }
 
@@ -121,17 +129,19 @@ function LinhaMatricula({
   const vencida = dias !== null && dias < 0;
   const concluido = matricula.status === 'CONCLUIDO';
   const emAndamento = matricula.status === 'EM_ANDAMENTO';
+  const naoIniciado = matricula.status === 'NAO_INICIADO';
+  const borderCls = getLmsRowCardBorderClasses(matricula.status);
+  const btnCls = getLmsActionButtonClasses(matricula.status);
+  const btnLabel = getLmsActionLabel(matricula.status);
+  const progressFillCls = getLmsProgressBarFillClasses(matricula.status);
+  const progressLabel = getLmsProgressLabel(matricula.status, matricula.progresso_pct ?? 0);
 
   return (
     <div
       className={`rounded-xl border transition-all ${
         urgente || vencida
           ? 'border-orange-200 bg-orange-50/60'
-          : concluido
-            ? 'border-slate-200 bg-white/60 dark:border-slate-700 dark:bg-slate-900/40'
-            : emAndamento
-              ? 'border-emerald-300 bg-emerald-50/30 border-l-4 border-l-emerald-500 dark:border-emerald-800 dark:bg-emerald-950/15 dark:border-l-emerald-600'
-              : 'border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200'
+          : borderCls
       }`}
     >
       <div className="px-3 sm:px-4 py-2.5 sm:py-3">
@@ -153,35 +163,27 @@ function LinhaMatricula({
           <span
             className={`text-xs font-medium ${
               concluido
-                ? 'text-emerald-700 dark:text-emerald-300'
-                : matricula.status === 'EM_ANDAMENTO'
-                  ? 'text-blue-600'
-                  : 'text-slate-400'
+                ? 'text-slate-500 dark:text-slate-400'
+                : emAndamento
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : naoIniciado
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-slate-400'
             }`}
           >
             {statusLabel(matricula.status)}
           </span>
 
-          {/* certificado ou abrir */}
+          {/* certificado ou ação principal */}
           <div className="shrink-0 flex items-center gap-2">
             {matricula.tem_certificado === 1 ? (
               <BotaoCertificado matricula={matricula} />
-            ) : concluido ? (
-              <button
-                onClick={onAbrir}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Rever conteúdo
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
             ) : (
               <button
                 onClick={onAbrir}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${btnCls}`}
               >
-                {matricula.status === 'NAO_INICIADO'
-                  ? 'Iniciar'
-                  : 'Continuar'}
+                {btnLabel}
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -195,20 +197,16 @@ function LinhaMatricula({
           </p>
         )}
 
-        {/* barra de progresso */}
-        {matricula.status !== 'NAO_INICIADO' && (
-          <div className="mt-1.5 flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden max-w-[160px] sm:max-w-[220px]">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  concluido ? 'bg-emerald-500' : 'bg-blue-500'
-                }`}
-                style={{ width: `${Math.min(matricula.progresso_pct ?? 0, 100)}%` }}
-              />
-            </div>
-            <span className="text-xs text-slate-500">{matricula.progresso_pct ?? 0}%</span>
+        {/* barra de progresso — sempre visível para todos os status */}
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden max-w-[160px] sm:max-w-[220px]">
+            <div
+              className={`h-full rounded-full transition-all ${progressFillCls}`}
+              style={{ width: `${Math.min(matricula.progresso_pct ?? 0, 100)}%` }}
+            />
           </div>
-        )}
+          <span className="text-xs text-slate-500">{progressLabel}</span>
+        </div>
 
         {/* vencimento */}
         {matricula.data_vencimento_qualificacao && (

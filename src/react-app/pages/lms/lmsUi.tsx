@@ -99,10 +99,12 @@ export function getMatriculaStatusMeta(
   status: MatriculaStatus | 'DISPONIVEL' | 'RASCUNHO' | 'PUBLICADO' | null | undefined,
 ) {
   switch (status) {
+    case 'NAO_INICIADO':
+      return { label: 'Não iniciado', className: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' };
     case 'EM_ANDAMENTO':
       return { label: 'Em andamento', className: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300' };
     case 'CONCLUIDO':
-      return { label: 'Concluído', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300' };
+      return { label: 'Concluído', className: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300' };
     case 'REPROVADO':
       return { label: 'Reprovado', className: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300' };
     case 'CANCELADO':
@@ -116,6 +118,80 @@ export function getMatriculaStatusMeta(
     default:
       return { label: 'Não iniciado', className: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' };
   }
+}
+
+// ─── helpers de status visual para cards LMS ──────────────────────────────────
+
+/** Bordas do card conforme status da matrícula (versão linha/lista com border-l-4) */
+export function getLmsRowCardBorderClasses(status: string | null | undefined): string {
+  switch (status) {
+    case 'EM_ANDAMENTO':
+      return 'border-amber-300 bg-amber-50/30 border-l-4 border-l-amber-500 dark:border-amber-800 dark:bg-amber-950/15 dark:border-l-amber-600';
+    case 'CONCLUIDO':
+      return 'border-slate-200 bg-white/60 dark:border-slate-700 dark:bg-slate-900/40';
+    case 'NAO_INICIADO':
+    default:
+      return 'border-emerald-200 bg-emerald-50/30 border-l-4 border-l-emerald-400 dark:border-emerald-800 dark:bg-emerald-950/15 dark:border-l-emerald-600';
+  }
+}
+
+/** Bordas do card conforme status da matrícula (versão grid/catálogo com border-t-4) */
+export function getLmsGridCardBorderClasses(status: string | null | undefined): string {
+  switch (status) {
+    case 'EM_ANDAMENTO':
+      return 'border-amber-300 border-t-4 border-t-amber-500 bg-amber-50/20 dark:border-amber-800 dark:border-t-amber-600 dark:bg-amber-950/10';
+    case 'CONCLUIDO':
+      return 'border-slate-200 dark:border-slate-700';
+    case 'NAO_INICIADO':
+    default:
+      return 'border-emerald-200 border-t-4 border-t-emerald-400 bg-emerald-50/10 dark:border-emerald-800 dark:border-t-emerald-600 dark:bg-emerald-950/10';
+  }
+}
+
+/** Classes do botão de ação principal conforme status */
+export function getLmsActionButtonClasses(status: string | null | undefined): string {
+  switch (status) {
+    case 'EM_ANDAMENTO':
+      return 'bg-amber-500 text-white hover:bg-amber-600 shadow-sm';
+    case 'CONCLUIDO':
+      return 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800';
+    case 'NAO_INICIADO':
+    default:
+      return 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm';
+  }
+}
+
+/** Label do botão de ação principal conforme status */
+export function getLmsActionLabel(status: string | null | undefined): string {
+  switch (status) {
+    case 'EM_ANDAMENTO':
+      return 'Continuar';
+    case 'CONCLUIDO':
+      return 'Rever';
+    case 'NAO_INICIADO':
+    default:
+      return 'Iniciar';
+  }
+}
+
+/** Classes da barra de progresso conforme status */
+export function getLmsProgressBarFillClasses(status: string | null | undefined): string {
+  switch (status) {
+    case 'EM_ANDAMENTO':
+      return 'bg-amber-500';
+    case 'CONCLUIDO':
+      return 'bg-slate-400';
+    default:
+      return 'bg-slate-300';
+  }
+}
+
+/** Label de progresso conforme status */
+export function getLmsProgressLabel(status: string | null | undefined, progressoPct: number): string {
+  if (status === 'CONCLUIDO') {
+    return `Concluído ${progressoPct}%`;
+  }
+  return `${progressoPct}%`;
 }
 
 export function LmsSectionNav({ canManage }: { canManage: boolean }) {
