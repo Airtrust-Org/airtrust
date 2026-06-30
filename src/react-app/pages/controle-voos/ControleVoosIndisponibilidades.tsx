@@ -12,11 +12,11 @@ export default function ControleVoosIndisponibilidades() {
     <AppLayout>
       <div className="w-full">
         <ControleVoosPageShell>
-          <ControleVoosPageHeader title="Indisponibilidades de Aeronave" description="Registro de aeronaves fora de operação por causa, grupo e período">
+          <ControleVoosPageHeader title="Indisponibilidades de Aeronave — Preview" description="Tela em preview. Ainda não existe schema operacional consolidado para indisponibilidades por causa, grupo e período nesta macroetapa.">
             <button
               disabled
               className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"
-              title="Protótipo — cadastro indisponível nesta prévia"
+              title="Preview - indisponibilidades ainda sem backend/schema operacional"
             >
               <AlertTriangle className="h-4 w-4" />+ Nova
             </button>
@@ -70,7 +70,7 @@ export default function ControleVoosIndisponibilidades() {
               );
             })}
           </div>
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">{MOCK_INDISPONIBILIDADES.length} registros — dados demonstrativos</p>
+          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">{MOCK_INDISPONIBILIDADES.length} registros ilustrativos — manter fora do fluxo operacional ate schema real</p>
         </ControleVoosPageShell>
       </div>
     </AppLayout>

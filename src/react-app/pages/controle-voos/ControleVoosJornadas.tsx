@@ -20,7 +20,7 @@ export default function ControleVoosJornadas() {
     <AppLayout>
       <div className="w-full">
         <ControleVoosPageShell>
-          <ControleVoosPageHeader title="Jornadas — Visão informativa FRMS" description="Visão demonstrativa de jornada, horas de voo e score FRMS por tripulante — dados demonstrativos, não regulados. O módulo N1 lerá esses dados diretamente do FRMS real (somente leitura, sem cálculo de fadiga)." />
+          <ControleVoosPageHeader title="Jornadas — Preview FRMS" description="Tela de preview. Ainda depende de contrato read-only entre Controle de Voos e FRMS para jornada realizada por tripulante. Enquanto esse contrato não existir, os dados aqui não são operacionais." />
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
             <div className="overflow-x-auto">
@@ -71,7 +71,7 @@ export default function ControleVoosJornadas() {
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-            Score FRMS &lt; 70 = OK · 70-85 = Atenção · &gt; 85 = Bloqueado — dados demonstrativos
+            Score FRMS &lt; 70 = OK · 70-85 = Atenção · &gt; 85 = Bloqueado — preview sem contrato real
           </p>
 
           {/* Legenda */}
@@ -80,15 +80,15 @@ export default function ControleVoosJornadas() {
             <div className="grid gap-3 sm:grid-cols-3 text-sm">
               <div className="flex items-center gap-2">
                 <ControleVoosStatusBadge status="ok" />
-                <span className="text-slate-600 dark:text-slate-400">OK — Tripulante apto para voo</span>
+                <span className="text-slate-600 dark:text-slate-400">OK — estado apenas ilustrativo nesta preview</span>
               </div>
               <div className="flex items-center gap-2">
                 <ControleVoosStatusBadge status="atencao" />
-                <span className="text-slate-600 dark:text-slate-400">Atenção — Score elevado. Avaliar antes de alocar.</span>
+                <span className="text-slate-600 dark:text-slate-400">Atenção — estado ilustrativo ate existir snapshot operacional.</span>
               </div>
               <div className="flex items-center gap-2">
                 <ControleVoosStatusBadge status="bloqueado" />
-                <span className="text-slate-600 dark:text-slate-400">Bloqueado — score FRMS crítico (demonstrativo). Alertas informativos no N1, não bloqueio regulatório.</span>
+                <span className="text-slate-600 dark:text-slate-400">Bloqueado — estado ilustrativo. O bloqueio real continua no backend FRMS, não nesta tela.</span>
               </div>
             </div>
           </div>
