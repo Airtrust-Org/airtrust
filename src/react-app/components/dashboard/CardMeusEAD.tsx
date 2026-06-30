@@ -120,6 +120,7 @@ function LinhaMatricula({
   const urgente = dias !== null && dias <= 7 && dias >= 0;
   const vencida = dias !== null && dias < 0;
   const concluido = matricula.status === 'CONCLUIDO';
+  const emAndamento = matricula.status === 'EM_ANDAMENTO';
 
   return (
     <div
@@ -127,8 +128,10 @@ function LinhaMatricula({
         urgente || vencida
           ? 'border-orange-200 bg-orange-50/60'
           : concluido
-            ? 'border-emerald-200 bg-emerald-50/40 border-l-4 border-l-emerald-500 dark:border-emerald-800 dark:bg-emerald-950/20 dark:border-l-emerald-600'
-            : 'border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200'
+            ? 'border-slate-200 bg-white/60 dark:border-slate-700 dark:bg-slate-900/40'
+            : emAndamento
+              ? 'border-emerald-300 bg-emerald-50/30 border-l-4 border-l-emerald-500 dark:border-emerald-800 dark:bg-emerald-950/15 dark:border-l-emerald-600'
+              : 'border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200'
       }`}
     >
       <div className="px-3 sm:px-4 py-2.5 sm:py-3">
@@ -166,7 +169,7 @@ function LinhaMatricula({
             ) : concluido ? (
               <button
                 onClick={onAbrir}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors dark:bg-slate-900 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Rever conteúdo
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -187,7 +190,7 @@ function LinhaMatricula({
 
         {/* subtexto para concluído */}
         {concluido && (
-          <p className="mt-1 text-xs text-emerald-600/70 dark:text-emerald-400/60">
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
             Disponível para consulta
           </p>
         )}
