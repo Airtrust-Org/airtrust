@@ -165,7 +165,11 @@ function LinhaMatricula({
                 onClick={onAbrir}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
               >
-                {matricula.status === 'NAO_INICIADO' ? 'Iniciar' : 'Continuar'}
+                {matricula.status === 'CONCLUIDO'
+                  ? 'Rever conteúdo'
+                  : matricula.status === 'NAO_INICIADO'
+                    ? 'Iniciar'
+                    : 'Continuar'}
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -218,17 +222,11 @@ export function CardMeusEAD() {
   const { isAluno, isInstrutor } = usePermissions();
   const { data: matriculas, isLoading, error } = useMinhasEAD();
 
-  const isRestrictedEadRole = isAluno || isInstrutor;
-  const hasCompletedTrainingEvidence = (matricula?: LmsMatriculaEAD | null) =>
-    Boolean(
-      matricula &&
-      (matricula.status === 'CONCLUIDO' ||
-        matricula.qualificacao_historico_id ||
-        matricula.data_conclusao),
-    );
-  const lista = (matriculas ?? []).filter(
-    (m) => !(isRestrictedEadRole && hasCompletedTrainingEvidence(m)),
+  const emAndamento = (matriculas ?? []).filter(
+    (m) => m.status !== 'CANCELADO' && m.status !== 'CONCLUIDO',
   );
+  const concluidos = (matriculas ?? []).filter((m) => m.status === 'CONCLUIDO');
+  const lista = [...emAndamento, ...concluidos];
 
   return (
     <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -289,7 +287,13 @@ export function CardMeusEAD() {
               <LinhaMatricula
                 key={m.id}
                 matricula={m}
-                onAbrir={() => navigate(`/lms/player/${m.id}`)}
+                onAbrir={() =>
+                  navigate(
+                    m.status === 'CONCLUIDO'
+                      ? `/lms/player/${m.id}?review=1`
+                      : `/lms/player/${m.id}`,
+                  )
+                }
               />
             ))}
             {lista.length > 10 && (
