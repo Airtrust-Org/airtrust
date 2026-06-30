@@ -257,7 +257,7 @@ export function buildFortnightCrewOrientation(
     return 'Sua quinzena pede atenção. Fale com a coordenação antes de assumir nova jornada.';
   }
   if (indicator.status_quinzena === 'ATENCAO') {
-    return 'Monitore descanso e check-ins. Avise a coordenação se não se sentir apto.';
+    return 'Monitore jornada registrada e check-ins. Avise a coordenação se não se sentir apto.';
   }
   if (indicator.dias_com_checkin_pendente && indicator.dias_com_checkin_pendente > 0) {
     return 'Há check-ins pendentes na quinzena. Registre o check-in diário.';

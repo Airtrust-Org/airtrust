@@ -72,7 +72,7 @@ function ProgressBarCompact({ pct, colorClass }: { pct: number; colorClass?: str
 
 // ── Tipos de ordenação ──────────────
 
-type SortCol = 'nome' | 'pct' | 'status' | 'hv7d' | 'hv28d';
+type SortCol = 'nome' | 'pct' | 'status' | 'hv15d' | 'hv30d' | 'efetividade';
 type SortDir = 'asc' | 'desc';
 
 // ── Component ──────────────────────
@@ -201,11 +201,14 @@ export default function FrmsTripulantesTable({
         case 'pct':
           cmp = Math.max(a.pct_mes, a.pct_7d) - Math.max(b.pct_mes, b.pct_7d);
           break;
-        case 'hv7d':
+        case 'hv15d':
           cmp = a.hv_7d_min - b.hv_7d_min;
           break;
-        case 'hv28d':
+        case 'hv30d':
           cmp = a.hv_mes_min - b.hv_mes_min;
+          break;
+        case 'efetividade':
+          cmp = (a.effectiveness_pct ?? 0) - (b.effectiveness_pct ?? 0);
           break;
         case 'status': {
           cmp =
@@ -341,8 +344,13 @@ export default function FrmsTripulantesTable({
                   Compliance % <SortIcon col="pct" />
                 </span>
               </th>
-              <th className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Efetividade
+              <th
+                className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 cursor-pointer"
+                onClick={() => toggleSort('efetividade')}
+              >
+                <span className="flex items-center gap-1">
+                  Efetiv. <SortIcon col="efetividade" />
+                </span>
               </th>
               <th
                 className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 cursor-pointer"
@@ -354,18 +362,18 @@ export default function FrmsTripulantesTable({
               </th>
               <th
                 className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 cursor-pointer text-right"
-                onClick={() => toggleSort('hv7d')}
+                onClick={() => toggleSort('hv15d')}
               >
                 <span className="flex items-center justify-end gap-1">
-                  7 dias <SortIcon col="hv7d" />
+                  15 dias <SortIcon col="hv15d" />
                 </span>
               </th>
               <th
                 className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 cursor-pointer text-right"
-                onClick={() => toggleSort('hv28d')}
+                onClick={() => toggleSort('hv30d')}
               >
                 <span className="flex items-center justify-end gap-1">
-                  {isMonthMode ? 'Mês' : '28 dias'} <SortIcon col="hv28d" />
+                  {isMonthMode ? 'Mês' : '30 dias'} <SortIcon col="hv30d" />
                 </span>
               </th>
               <th className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">
@@ -451,15 +459,17 @@ export default function FrmsTripulantesTable({
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
-                            className="rounded p-1 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700"
+                            className="rounded p-1 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/40"
                             onClick={(e) => {
                               e.stopPropagation();
                               setExpandedId(isExpanded ? null : row.tripulante_id);
                             }}
-                            title={isExpanded ? 'Recolher' : 'Expandir detalhes'}
+                            aria-label={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                            aria-expanded={isExpanded}
                           >
                             <ChevronDown
                               className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                              aria-hidden="true"
                             />
                           </button>
                             <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-500" />
@@ -491,18 +501,20 @@ export default function FrmsTripulantesTable({
             <button
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
+              aria-label="Página anterior"
               className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600
-                         transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                         transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
-              <ChevronLeft className="h-3.5 w-3.5 inline" /> Anterior
+              <ChevronLeft className="h-3.5 w-3.5 inline" aria-hidden="true" /> Anterior
             </button>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              aria-label="Próxima página"
               className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600
-                         transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                         transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
-              Próxima <ChevronRight className="h-3.5 w-3.5 inline" />
+              Próxima <ChevronRight className="h-3.5 w-3.5 inline" aria-hidden="true" />
             </button>
           </div>
         </div>

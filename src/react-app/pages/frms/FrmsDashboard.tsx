@@ -173,9 +173,10 @@ function TripulantePickerModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Fechar"
+            className="rounded-md p-1 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
-            <X className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+            <X className="h-5 w-5 text-slate-400 dark:text-slate-500" aria-hidden="true" />
           </button>
         </div>
         <div className="px-6 pt-4 pb-2">
@@ -220,7 +221,7 @@ function TripulantePickerModal({
 
 function DashboardContent() {
   const navigate = useNavigate();
-  const { filters, periodoNumDias, isMonthMode } = useFrmsFilters();
+  const { filters, setFilter, periodoNumDias, isMonthMode, quinzenasDoMes, quinzenaAtiva } = useFrmsFilters();
   const operationalSnapshotDate = useMemo(() => getTodayLocalIsoDate(), []);
   const [showPicker, setShowPicker] = useState(false);
   const [jornadaTripulante, setJornadaTripulante] = useState<{ id: string; nome: string } | null>(
@@ -575,7 +576,7 @@ function DashboardContent() {
           <aside className="relative flex h-full w-72 flex-col overflow-y-auto bg-white shadow-xl dark:bg-slate-950">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Filtros</span>
-              <button onClick={() => setSidebarOpen(false)}>
+              <button onClick={() => setSidebarOpen(false)} aria-label="Fechar filtros">
                 <X className="h-5 w-5 text-slate-500 dark:text-slate-400" />
               </button>
             </div>
@@ -585,16 +586,20 @@ function DashboardContent() {
       )}
 
       {/* ZONA 2 + 3: Main content */}
-      <main className="flex-1 flex min-w-0 flex-col overflow-hidden">
+      <main className="flex-1 flex min-w-0 flex-col overflow-hidden" id="main-content">
+        <a href="#frms-action-list" className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white">
+          Pular para conteúdo principal
+        </a>
         {/* Header fixo — botões SEMPRE visíveis */}
         <header className="flex-shrink-0 border-b border-slate-200/80 bg-white/90 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 sm:px-6">
           <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <button
-                className="mt-0.5 rounded-md p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"
+                className="mt-0.5 rounded-md p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden focus:outline-none focus:ring-2 focus:ring-primary/40"
                 onClick={() => setSidebarOpen(true)}
+                aria-label="Abrir filtros"
               >
-                <Menu className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+                <Menu className="h-5 w-5 text-slate-600 dark:text-slate-300" aria-hidden="true" />
               </button>
 
               <div className="min-w-0">
@@ -605,13 +610,43 @@ function DashboardContent() {
                   Painel de decisão operacional — quem exige ação, por quê e onde ver evidência
                 </p>
 
-                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
                   <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
-                    <CalendarRange className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                    <CalendarRange className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" aria-hidden="true" />
                     {isMonthMode
                       ? `Mensal · ${monthLabel(filters.mesReferencia)}`
                       : `Últimos ${periodoNumDias} dias`}
                   </span>
+                  {isMonthMode && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setFilter('quinzena', filters.quinzena === 'Q1' ? '' : 'Q1')}
+                        aria-label={`Quinzena 1: ${quinzenasDoMes?.q1?.label ?? '1–15'}`}
+                        aria-pressed={filters.quinzena === 'Q1'}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+                          filters.quinzena === 'Q1'
+                            ? 'border-teal-300 bg-teal-50 text-teal-700 font-semibold'
+                            : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                        }`}
+                      >
+                        {quinzenasDoMes?.q1?.label ?? 'Q1: 1–15'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilter('quinzena', filters.quinzena === 'Q2' ? '' : 'Q2')}
+                        aria-label={`Quinzena 2: ${quinzenasDoMes?.q2?.label ?? '16–31'}`}
+                        aria-pressed={filters.quinzena === 'Q2'}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+                          filters.quinzena === 'Q2'
+                            ? 'border-teal-300 bg-teal-50 text-teal-700 font-semibold'
+                            : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                        }`}
+                      >
+                        {quinzenasDoMes?.q2?.label ?? 'Q2: 16–31'}
+                      </button>
+                    </>
+                  )}
                   <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
                     <Users className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                     {stats.total} tripulantes monitorados
@@ -656,7 +691,7 @@ function DashboardContent() {
                 >
                   <Bell className="h-4 w-4" />
                   {alertCount > 0 && (
-                    <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white">
+                    <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
                       {alertCount > 99 ? '99+' : alertCount}
                     </span>
                   )}
@@ -718,13 +753,19 @@ function DashboardContent() {
             <FrmsFilterChips />
             <FrmsSourcePolicyBanner />
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" id="frms-action-list" aria-label="Painel de ação operacional">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    Quinzena operacional
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {isMonthMode
+                      ? `Quinzena operacional · ${monthLabel(filters.mesReferencia)}`
+                      : 'Recorte operacional'}
                   </p>
-                  <p className="mt-1 text-xl font-semibold text-slate-950">Quinzena: {fortnightLabel}</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-950">
+                    {filters.quinzena
+                      ? quinzenaAtiva?.label ?? `Quinzena: ${fortnightLabel}`
+                      : `Q1 ${quinzenasDoMes?.q1?.label ?? '1–15'}  ·  Q2 ${quinzenasDoMes?.q2?.label ?? '16–31'}`}
+                  </p>
                   <p className="mt-2 text-sm text-slate-600">
                     {loadingOperationalSnapshot
                       ? 'Carregando recorte operacional...'
@@ -773,7 +814,7 @@ function DashboardContent() {
             </section>
 
             <details className="rounded-2xl border border-slate-200 bg-white">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-2xl" aria-expanded="false">
                 Detalhes técnicos — compliance, fadiga, efetividade e mapa
               </summary>
               <div className="space-y-4 border-t border-slate-100 p-4">
@@ -794,7 +835,8 @@ function DashboardContent() {
                       setComplianceDayFilter(null);
                       setEffectivenessDayFilter(null);
                     }}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                    aria-pressed={mapLens === key}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 ${
                       mapLens === key
                         ? 'bg-slate-900 text-white'
                         : 'bg-white text-slate-700 hover:bg-slate-100'
@@ -804,7 +846,7 @@ function DashboardContent() {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[11px] text-slate-500">
+              <p className="mt-2 text-xs text-slate-500">
                 {mapLens === 'compliance' &&
                   'Compliance legal (HV/jornada). Separado de fadiga/check-in e efetividade.'}
                 {mapLens === 'fatigue' &&
@@ -858,8 +900,8 @@ function DashboardContent() {
             )}
 
             <details className="rounded-2xl border border-slate-200 bg-white">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">
-                Mapa técnico colorido — não é lista de ação (recolhido)
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-2xl">
+                Mapa técnico da quinzena — apoio à evidência
               </summary>
               <div className="border-t border-slate-100 p-2">
             <FrmsHeatmap
@@ -913,7 +955,7 @@ function DashboardContent() {
                       Dia selecionado no mapa
                     </h3>
                     {selectedHeatmapDay ? (
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                         {selectedHeatmapDay.date.slice(8, 10)}/{selectedHeatmapDay.date.slice(5, 7)}
                         {' · '}
                         {selectedHeatmapDay.tripulanteNome}

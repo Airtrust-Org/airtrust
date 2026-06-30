@@ -8,6 +8,7 @@
  * Anti-regressão: VIOLACAO_PCT=101 (não 100), separação crítico vs violação.
  */
 import { describe, it, expect } from 'vitest';
+import { isTripulanteOperacional, getQuinzenaDateRange, getQuinzenasDoMes } from '../frmsUtils';
 import {
   getComplianceColor,
   getComplianceHex,
@@ -252,5 +253,78 @@ describe('formatFrmsDate', () => {
   it('mantém entrada inválida sem quebrar', () => {
     expect(formatFrmsDate('30/05/2026')).toBe('30/05/2026');
     expect(formatFrmsDate(null)).toBe('—');
+  });
+});
+
+describe('isTripulanteOperacional', () => {
+  it('retorna true para PILOTO', () => {
+    expect(isTripulanteOperacional('PILOTO')).toBe(true);
+  });
+
+  it('retorna true para COPILOTO', () => {
+    expect(isTripulanteOperacional('COPILOTO')).toBe(true);
+  });
+
+  it('retorna true para COMANDANTE', () => {
+    expect(isTripulanteOperacional('COMANDANTE')).toBe(true);
+  });
+
+  it('retorna true para PIC', () => {
+    expect(isTripulanteOperacional('PIC')).toBe(true);
+  });
+
+  it('retorna true para SIC', () => {
+    expect(isTripulanteOperacional('SIC')).toBe(true);
+  });
+
+  it('retorna true com case insensitive', () => {
+    expect(isTripulanteOperacional('piloto')).toBe(true);
+    expect(isTripulanteOperacional('Piloto')).toBe(true);
+    expect(isTripulanteOperacional('  COMANDANTE  ')).toBe(true);
+  });
+
+  it('retorna false para null/undefined/vazio', () => {
+    expect(isTripulanteOperacional(null)).toBe(false);
+    expect(isTripulanteOperacional(undefined)).toBe(false);
+    expect(isTripulanteOperacional('')).toBe(false);
+  });
+
+  it('retorna false para funcoes nao tripulantes', () => {
+    expect(isTripulanteOperacional('INVA')).toBe(false);
+    expect(isTripulanteOperacional('MECANICO')).toBe(false);
+    expect(isTripulanteOperacional('MANUTENCAO')).toBe(false);
+    expect(isTripulanteOperacional('ADMINISTRATIVO')).toBe(false);
+  });
+});
+
+describe('getQuinzenaDateRange', () => {
+  it('Q1 de junho 2026: 01/06 a 15/06', () => {
+    const range = getQuinzenaDateRange('2026-06', 'Q1');
+    expect(range.start).toBe('2026-06-01');
+    expect(range.end).toBe('2026-06-15');
+    expect(range.label).toContain('Q1');
+  });
+
+  it('Q2 de junho 2026: 16/06 a 30/06', () => {
+    const range = getQuinzenaDateRange('2026-06', 'Q2');
+    expect(range.start).toBe('2026-06-16');
+    expect(range.end).toBe('2026-06-30');
+    expect(range.label).toContain('Q2');
+  });
+
+  it('Q2 de fevereiro 2026: 16/02 a 28/02 (ano nao bissexto)', () => {
+    const range = getQuinzenaDateRange('2026-02', 'Q2');
+    expect(range.start).toBe('2026-02-16');
+    expect(range.end).toBe('2026-02-28');
+  });
+});
+
+describe('getQuinzenasDoMes', () => {
+  it('retorna ambas quinzenas para junho 2026', () => {
+    const { q1, q2 } = getQuinzenasDoMes('2026-06');
+    expect(q1.start).toBe('2026-06-01');
+    expect(q1.end).toBe('2026-06-15');
+    expect(q2.start).toBe('2026-06-16');
+    expect(q2.end).toBe('2026-06-30');
   });
 });

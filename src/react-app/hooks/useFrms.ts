@@ -107,6 +107,7 @@ export interface FrmsFrotaRow {
   tripulante_id: string;
   nome: string;
   nome_guerra?: string;
+  funcao?: string | null;
   aeronave_id?: string | null;
   aeronave_prefixo?: string | null;
   aeronave_modelo?: string | null;

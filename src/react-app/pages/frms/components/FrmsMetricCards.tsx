@@ -3,7 +3,7 @@
  * Clicáveis para filtrar por status.
  */
 import { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, Brain, Moon } from 'lucide-react';
+import { Shield, AlertTriangle, Brain, Moon, XCircle, ShieldAlert } from 'lucide-react';
 
 interface Props {
   complianceCards: Array<{
@@ -66,8 +66,8 @@ const CARDS = [
   {
     key: 'CRITICO',
     label: 'Crítico',
-    icon: AlertTriangle,
-    accent: 'bg-orange-700',
+    icon: ShieldAlert,
+    accent: 'bg-orange-600',
     accentSoft:
       'bg-orange-50 text-orange-800 border-orange-200 dark:bg-orange-500/10 dark:text-orange-200 dark:border-orange-500/30',
     ringColor: 'ring-orange-100',
@@ -77,8 +77,8 @@ const CARDS = [
   {
     key: 'VIOLACAO',
     label: 'Violação',
-    icon: AlertTriangle,
-    accent: 'bg-red-700',
+    icon: XCircle,
+    accent: 'bg-red-600',
     accentSoft:
       'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-200 dark:border-red-500/30',
     ringColor: 'ring-red-100',
@@ -150,38 +150,46 @@ function MetricCard({
   unitLabel?: string;
 }) {
   const animated = useCountUp(total);
+  const isClickable = Boolean(onClick);
+  const ariaLabel = `${label}: ${total} ${unitLabel} — ${description}`;
 
   return (
     <button
       type="button"
       data-testid={testId}
       onClick={onClick}
-      className={`group relative min-h-[144px] overflow-hidden rounded-2xl border p-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+      aria-label={ariaLabel}
+      aria-pressed={isClickable ? active : undefined}
+      className={`group relative overflow-hidden rounded-2xl border p-3.5 text-left transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40 ${
         active
-          ? 'border-slate-300 bg-white shadow-md ring-2 ring-slate-200 ring-offset-1 dark:border-slate-600 dark:bg-slate-900 dark:ring-slate-700/80 dark:ring-offset-slate-900'
-          : 'border-slate-200 bg-white/95 shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-none dark:hover:border-slate-600'
-      } ${onClick ? '' : 'cursor-default hover:translate-y-0 hover:shadow-sm'}`}
+          ? 'min-h-[144px] border-slate-300 bg-white shadow-md ring-2 ring-slate-200 ring-offset-1 dark:border-slate-600 dark:bg-slate-900 dark:ring-slate-700/80 dark:ring-offset-slate-900'
+          : total === 0
+            ? 'min-h-[88px] border-slate-100 bg-white/70 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/70 dark:shadow-none'
+            : 'min-h-[144px] border-slate-200 bg-white/95 shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-none dark:hover:border-slate-600'
+      } ${isClickable ? 'cursor-pointer' : 'cursor-default motion-safe:hover:translate-y-0 motion-safe:hover:shadow-sm'}`}
     >
       <div className="relative z-10 flex items-start gap-3">
         <div
           className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${accentSoft}`}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               {label}
             </p>
-            <span className={`h-2.5 w-2.5 rounded-full ${accent}`} />
+            <span className={`h-2.5 w-2.5 rounded-full ${accent}`} aria-hidden="true" />
           </div>
           <p className="mt-2 text-[2rem] font-black leading-none tabular-nums text-slate-900 dark:text-slate-100">
             {animated}
           </p>
-          <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+          <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-300">
             {unitLabel}
           </span>
-          <p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>
+          {total > 0 && (
+            <p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>
+          )}
         </div>
       </div>
     </button>
@@ -201,32 +209,34 @@ export default function FrmsMetricCards({
   const visibleEffectivenessCards = effectivenessCards.filter((entry) => entry.total > 0);
   const showComplianceSection = complianceCards.length > 0;
   const showEffectivenessSection = effectivenessCards.length > 0;
+  const allComplianceZero = visibleComplianceCards.length === 0 && showComplianceSection;
+  const allEffectivenessZero = visibleEffectivenessCards.length === 0 && showEffectivenessSection;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3" role="region" aria-label="Indicadores de compliance e efetividade">
       {showComplianceSection && (
-      <section className="rounded-[28px] border border-slate-200 bg-white/85 p-4 shadow-sm backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/85 dark:shadow-none sm:p-5">
-        <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)] xl:items-start">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-950/80">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Compliance legal
+      <section className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/85 dark:shadow-none">
+        <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-start">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-700 dark:bg-slate-950/80">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+              Compliance regulatório
             </p>
-            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">Jornada e HV regulatórios</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Separado de fadiga/check-in e de efetividade estimada.
+            <h2 className="mt-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">Jornada e HV</h2>
+            <p className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              Limites legais de jornada e horas de voo.
             </p>
           </div>
 
-          {visibleComplianceCards.length === 0 ? (
-            <p className="self-center text-sm text-slate-500 dark:text-slate-400">
-              Sem violações no período.
+          {allComplianceZero ? (
+            <p className="self-center text-sm text-slate-500 dark:text-slate-400" role="status">
+              ✅ Compliance: sem violações no período.
             </p>
           ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
             {CARDS.filter((card) =>
-              visibleComplianceCards.some((entry) => entry.key === card.key),
+              complianceCards.some((entry) => entry.key === card.key),
             ).map((card) => {
-              const values = visibleComplianceCards.find((entry) => entry.key === card.key)!;
+              const values = complianceCards.find((entry) => entry.key === card.key)!;
               const isActive = activeComplianceKey === card.key;
               return (
                 <MetricCard
@@ -251,33 +261,33 @@ export default function FrmsMetricCards({
       )}
 
       {showEffectivenessSection && (
-      <section className="rounded-[28px] border border-slate-200 bg-gradient-to-r from-white via-slate-50/90 to-white p-4 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-900/95 dark:to-slate-900 dark:shadow-none sm:p-5">
-        <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)] xl:items-start">
-          <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 dark:border-slate-700 dark:bg-slate-950/85">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+      <section className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/85 dark:shadow-none">
+        <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-start">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-700 dark:bg-slate-950/80">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
               Efetividade estimada
             </p>
-            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">Prontidão operacional estimada</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Proxy de apoio — não é compliance legal nem diagnóstico médico.
+            <h2 className="mt-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">Prontidão operacional</h2>
+            <p className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              Proxy de apoio — não é diagnóstico médico.
             </p>
             {effectivenessSemDados > 0 && (
-              <span className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                {effectivenessSemDados} sem leitura no período
+              <span className="mt-3 inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {effectivenessSemDados} sem leitura
               </span>
             )}
           </div>
 
-          {visibleEffectivenessCards.length === 0 ? (
-            <p className="self-center text-sm text-slate-500 dark:text-slate-400">
-              Sem ocorrências de efetividade no período.
+          {allEffectivenessZero ? (
+            <p className="self-center text-sm text-slate-500 dark:text-slate-400" role="status">
+              ✅ Efetividade: sem ocorrências no período.
             </p>
           ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
             {EFFECTIVENESS_CARDS.filter((card) =>
-              visibleEffectivenessCards.some((entry) => entry.key === card.key),
+              effectivenessCards.some((entry) => entry.key === card.key),
             ).map((card) => {
-              const values = visibleEffectivenessCards.find((entry) => entry.key === card.key)!;
+              const values = effectivenessCards.find((entry) => entry.key === card.key)!;
               const isActive = activeEffectivenessKey === card.key;
               return (
                 <MetricCard
