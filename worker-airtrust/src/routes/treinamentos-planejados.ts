@@ -3528,7 +3528,7 @@ treinamentosPlanejadosRoutes.post(
                   COUNT(*) AS total_participantes,
                   SUM(CASE WHEN tp.qualificacao_historico_id IS NOT NULL THEN 1 ELSE 0 END) AS com_historico,
                   SUM(CASE WHEN tp.qualificacao_historico_id IS NULL THEN 1 ELSE 0 END) AS sem_historico,
-                  SUM(CASE WHEN UPPER(COALESCE(tp.resultado, '')) IN ('APROVADO', 'REPROVADO', 'CANCELADO') THEN 1 ELSE 0 END) AS concluidos
+                  SUM(CASE WHEN tp.resultado IN ('APROVADO', 'REPROVADO', 'CANCELADO', 'aprovado', 'reprovado', 'cancelado') THEN 1 ELSE 0 END) AS concluidos
              FROM treinamentos_participantes tp
             INNER JOIN treinamentos_planejados t ON t.id = tp.treinamento_id
             WHERE t.empresa_id = ?
