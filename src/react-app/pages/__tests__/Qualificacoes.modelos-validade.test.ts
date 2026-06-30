@@ -149,8 +149,8 @@ describe('Qualificações > Modelos — validade persistence', () => {
     it('clearing the field sends null to remove expiry (sem vencimento)', () => {
       // onChange sets validade to null when input is empty (falsy value → null)
       expect(source).toMatch(/: null/);
-      // payload.validade = editingTipo.validade ?? null — always sent
-      expect(source).toMatch(/payload\.validade\s*=\s*editingTipo\.validade\s*\?\?\s*null/);
+      // validade is always included via buildTipoPayload (handles null internally)
+      expect(source).toContain('buildTipoPayload(editingTipo)');
       // optimistic update also includes null
       expect(source).toMatch(/optimisticUpdate\.validade\s*=\s*editingTipo\.validade\s*\?\?\s*null/);
     });
