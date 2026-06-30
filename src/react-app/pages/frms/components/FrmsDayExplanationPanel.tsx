@@ -203,6 +203,17 @@ export default function FrmsDayExplanationPanel({
     );
   }, [data]);
 
+  useEffect(() => {
+    if (showJustificativaModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showJustificativaModal]);
+
   const comparisonRows = useMemo(() => {
     if (!comparisonData) return [];
     return comparisonData.dia_a.fatores.map((fatorA) => {
@@ -840,7 +851,7 @@ export default function FrmsDayExplanationPanel({
 
       {showJustificativaModal ? (
         <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-2xl bg-white p-4 shadow-2xl">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-4 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h5 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700">
                 Justificativa Operacional

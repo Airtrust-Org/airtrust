@@ -4,7 +4,7 @@
  * Gerenciamento das escalas de embarque/folga por tripulante.
  * Backend: POST/GET/PUT /api/frms/escalas
  */
-import { useState, useCallback, FormEvent } from 'react';
+import { useState, useCallback, useEffect, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -78,6 +78,13 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
   const [statusCiclo, setStatusCiclo] = useState(escala?.status_ciclo ?? 'ATIVO');
   const [obs, setObs] = useState(escala?.observacao ?? '');
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   const diasEmb = dataInicioEmb && dataFimEmb ? diffDays(dataInicioEmb, dataFimEmb) : 0;
   const diasFolga = dataInicioFolga && dataFimFolga ? diffDays(dataInicioFolga, dataFimFolga) : 0;
   const anoAtual = new Date().getFullYear();
@@ -121,7 +128,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
 
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <h2 className="text-base font-bold text-gray-900">
             {isEdit ? 'Editar Escala' : 'Nova Escala Quinzenal'}

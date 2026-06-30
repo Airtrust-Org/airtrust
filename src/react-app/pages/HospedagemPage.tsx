@@ -106,6 +106,13 @@ interface ModalProps {
 function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalProps) {
   const isEdit = !!hospedagem?.id;
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const [form, setForm] = useState({
     funcionario_id: hospedagem?.funcionario_id ?? 0,
     tipo: (hospedagem?.tipo ?? 'HOTEL') as TipoHospedagem,
@@ -166,7 +173,7 @@ function ModalHospedagem({ hospedagem, funcionarios, onClose, onSaved }: ModalPr
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="px-6 py-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">
             {isEdit ? 'Editar Hospedagem' : 'Nova Hospedagem'}

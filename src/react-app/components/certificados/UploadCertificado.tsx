@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { Upload, X, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,6 +15,12 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
   const [preview, setPreview] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -124,7 +130,7 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
+      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-semibold">Upload de Certificado</h2>

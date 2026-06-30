@@ -83,6 +83,13 @@ export default function FrmsFormJornada({
 
   const showHorarios = NEEDS_HORARIOS.has(status);
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   // Dispara preview ao mudar campos relevantes
   useEffect(() => {
     const horaApresNormalizada = normalizeTimeInput(horaApres);
@@ -236,7 +243,7 @@ export default function FrmsFormJornada({
 
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>

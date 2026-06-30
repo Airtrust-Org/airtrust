@@ -87,6 +87,14 @@ export default function ConfigurarFiltros({
   const [valores, setValores] = useState<Record<string, any>>({});
 
   useEffect(() => {
+    if (modalAberto) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [modalAberto]);
+
+  useEffect(() => {
     const configSalva = localStorage.getItem('funcionarios_filtros_config');
     if (configSalva) {
       const filtros = JSON.parse(configSalva);
@@ -211,7 +219,7 @@ export default function ConfigurarFiltros({
       {/* Modal de Seleção */}
       {modalAberto && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-xl font-bold">Adicionar Filtro</h2>
               <button

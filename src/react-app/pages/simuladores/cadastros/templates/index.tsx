@@ -35,6 +35,17 @@ export default function CrudTemplates() {
     carregarTemplates();
   }, []);
 
+  useEffect(() => {
+    if (modalAberto) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [modalAberto]);
+
   const carregarTemplates = async () => {
     try {
       setCarregando(true);
@@ -210,7 +221,7 @@ export default function CrudTemplates() {
       {/* Modal */}
       {modalAberto && (
         <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+          <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               {templateEditando ? 'Editar Template' : 'Novo Template'}
             </h3>
