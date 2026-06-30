@@ -38,6 +38,14 @@ vi.mock('../components/ControleVoosPageHeader', () => ({
   ),
 }));
 
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useSearchParams: () => [new URLSearchParams('data=2026-06-30'), vi.fn()],
+  };
+});
+
 const relatoriosSource = readFileSync(
   resolve(process.cwd(), 'src/react-app/pages/controle-voos/ControleVoosRelatorios.tsx'),
   'utf8',
@@ -71,8 +79,9 @@ describe('controle voos real pages', () => {
     expect(jornadasSource).not.toContain('controleVoosMockData');
     expect(relatoriosSource).toContain('/api/controle-voos/relatorios/resumo-operacional');
     expect(tabelasSource).toContain('/api/controle-voos/catalogos/');
-    expect(jornadasSource).toContain('/api/frms/operational-snapshot?');
-    expect(jornadasSource).toContain('/api/frms/acumulo-frota?mes=');
+    expect(jornadasSource).not.toContain('/api/frms/operational-snapshot?');
+    expect(jornadasSource).not.toContain('/api/frms/acumulo-frota?mes=');
+    expect(jornadasSource).toContain('Jornadas reais serão alimentadas pelo Controle de Voos');
   });
 
   it('carrega relatorios operacionais do endpoint real', async () => {
@@ -119,7 +128,7 @@ describe('controle voos real pages', () => {
     await waitFor(() => expect(screen.getByText('Voos no período')).toBeInTheDocument());
 
     expect(vi.mocked(fetchWithAuth)).toHaveBeenCalledWith(
-      expect.stringContaining('/api/controle-voos/relatorios/resumo-operacional?'),
+      '/api/controle-voos/relatorios/resumo-operacional?data_inicio=2026-06-30&data_fim=2026-06-30',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(screen.getByText('12')).toBeInTheDocument();
@@ -140,68 +149,12 @@ describe('controle voos real pages', () => {
     expect(screen.getByText('Falha no catálogo')).toBeInTheDocument();
   });
 
-  it('carrega jornadas operacionais de endpoints reais do FRMS', async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    const currentMonth = today.slice(0, 7);
-
-    vi.mocked(fetchWithAuth)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          success: true,
-          data: [
-            {
-              data_operacional: today,
-              funcionario_id: 7,
-              nome: 'Ana Martins',
-              funcao: 'PIC',
-              aeronave: 'SK76',
-              hora_apresentacao: '06:10',
-              hora_termino: '10:40',
-              horas_voo_minutos: 130,
-              duracao_jornada_minutos: 270,
-              teve_jornada: true,
-              escalado: true,
-              escala_source: 'EVD',
-              jornada_data_source: 'REAL',
-              jornada_origem: 'SIGVOOS',
-              snapshot_status: 'OK',
-              alertas: [],
-            },
-          ],
-        }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          success: true,
-          data: [
-            {
-              tripulante_id: '7',
-              hv_mes_min: 840,
-            },
-          ],
-        }),
-      );
-
+  it('mantem jornadas em preview explicito sem consumir FRMS como fonte canonica', async () => {
     render(<ControleVoosJornadas />);
-
-    expect(screen.getByText('Carregando jornadas operacionais…')).toBeInTheDocument();
-
-    await waitFor(() => expect(screen.getByText('Jornadas Operacionais')).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Ana Martins')).toBeInTheDocument());
-
-    expect(vi.mocked(fetchWithAuth)).toHaveBeenNthCalledWith(
-      1,
-      `/api/frms/operational-snapshot?data_inicio=${today}&data_fim=${today}&include_inconsistencies=true`,
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(vi.mocked(fetchWithAuth)).toHaveBeenNthCalledWith(
-      2,
-      `/api/frms/acumulo-frota?mes=${currentMonth}`,
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-
-    expect(screen.getByText('SIGVOOS')).toBeInTheDocument();
-    expect(screen.getByText('SK76')).toBeInTheDocument();
-    expect(screen.getByText('14h 00min')).toBeInTheDocument();
+    expect(screen.getByText('Jornadas — Preview')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Jornadas reais serão alimentadas pelo Controle de Voos a partir do SIGVOOS importado e normalizado/i),
+    ).toBeInTheDocument();
+    expect(vi.mocked(fetchWithAuth)).not.toHaveBeenCalled();
   });
 });
