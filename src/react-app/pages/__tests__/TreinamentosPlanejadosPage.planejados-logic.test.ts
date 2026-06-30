@@ -143,28 +143,38 @@ describe('Qualificacoes.tsx — chip Planejadas no Histórico', () => {
     'utf8',
   );
 
-  it('chip usa operationalTurmasCount das turmas planejadas (fonte treinamentos_planejados)', () => {
-    // After the fix, the Planejadas chip counts operational turmas (PLANEJADO + CONFIRMADO + EM_ANDAMENTO)
-    // from treinamentos_planejados, not individual qualificacoes_historico records.
-    expect(qualificacoesSource).toContain('operationalTurmasCount');
-    expect(qualificacoesSource).toContain('useTreinamentosPlanejados({})');
+  it('chip Planejadas usa historicoHeaderStats.planejadas (registros individuais)', () => {
+    // After the restore, the chip counts individual PLANEJADA records from qualificacoes_historico
+    // The chip section uses historicoHeaderStats.planejadas, not operationalTurmasCount
+    const chipStart = qualificacoesSource.indexOf('Filtrar apenas planejadas');
+    expect(chipStart).toBeGreaterThan(0);
+    const chipSection = qualificacoesSource.substring(chipStart, chipStart + 700);
+    expect(chipSection).toContain('historicoHeaderStats.planejadas');
+    expect(chipSection).not.toContain('operationalTurmasCount');
   });
 
-  it('planejadas dashboard stats ainda carregados para uso do Historico', () => {
-    // The dashboard stats are still loaded for internal use (historico stats, other chips)
+  it('dashboard stats sao carregados para uso do chip e Historico', () => {
     expect(qualificacoesSource).toContain('/dashboard/qualificacoes');
     expect(qualificacoesSource).toContain('data.planejadas');
   });
 
-  it('chip Planejadas navega para aba Planejados — não filtra Historico', () => {
-    // The chip navigates to the Planejados tab, no longer filters Historico by PLANEJADA
-    expect(qualificacoesSource).toContain("setActiveTab('planejados')");
-    expect(qualificacoesSource).toContain("setPlannedView('turmas')");
-    expect(qualificacoesSource).not.toContain("applySingleStatusFromChip('PLANEJADA')");
+  it('chip Planejadas filtra Historico — nao navega para Planejados', () => {
+    // The chip calls applySingleStatusFromChip('PLANEJADA') which sets activeTab='historico'
+    expect(qualificacoesSource).toContain("applySingleStatusFromChip('PLANEJADA')");
+    // The chip section does NOT call setActiveTab('planejados')
+    const chipStart = qualificacoesSource.indexOf('Filtrar apenas planejadas');
+    const chipSection = qualificacoesSource.substring(chipStart, chipStart + 700);
+    expect(chipSection).not.toContain("setActiveTab('planejados')");
   });
 
-  it('query de turmas não filtra por status — contagem operacional é client-side', () => {
-    // Query fetches all turmas (no status filter), operational count computed on client
+  it('link secundario Ver turmas existe para navegar a Planejados', () => {
+    // A separate "Ver turmas (N)" link navigates to Planejados tab — explicit action
+    expect(qualificacoesSource).toContain('Ver turmas (');
+    expect(qualificacoesSource).toContain('operationalTurmasCount');
+  });
+
+  it('query sem filtro de status mantida para contagem operacional na aba Planejados', () => {
+    expect(qualificacoesSource).toContain('useTreinamentosPlanejados({})');
     expect(qualificacoesSource).toContain("t.status === 'PLANEJADO' || t.status === 'CONFIRMADO' || t.status === 'EM_ANDAMENTO'");
   });
 });
