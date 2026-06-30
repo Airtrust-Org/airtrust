@@ -17,12 +17,15 @@ import {
   type ManagerAlertItem,
   type ManagerAlertSeverity,
 } from './managerAlertCenter.utils';
+import { getSystemTimeZone } from '@/react-app/utils/timezone';
 
 const MANAGER_ALERT_CENTER_ENABLED = false;
 
 function getTodayIsoSaoPaulo() {
+  // Usa o timezone configurado pela empresa; fallback 'UTC' (nunca hardcoded).
+  // O nome da função é mantido por compatibilidade com os call-sites existentes.
   const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
+    timeZone: getSystemTimeZone(),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

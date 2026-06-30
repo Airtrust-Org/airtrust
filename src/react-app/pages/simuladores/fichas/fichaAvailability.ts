@@ -1,4 +1,8 @@
-const OPERATIONAL_TIMEZONE = 'America/Sao_Paulo';
+import { getSystemTimeZone } from '@/react-app/utils/timezone';
+
+// Resolvido em runtime para usar o timezone configurado pela empresa.
+// Fallback: 'UTC' (definido em getSystemTimeZone — nunca hardcoded).
+const OPERATIONAL_TIMEZONE = getSystemTimeZone();
 
 interface FichaAvailabilityInput {
   dataHora?: string | null;
