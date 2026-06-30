@@ -617,6 +617,12 @@ export default function Qualificacoes() {
   // Remover estados locais desnecessários
   const [showTipoModal, setShowTipoModal] = useState(false);
   const [editingTipo, setEditingTipo] = useState<TipoQualificacao | null>(null);
+
+  // Cache de atualizações otimistas de tipos — garante que a tabela mostre
+  // o valor salvo IMEDIATAMENTE, antes mesmo do refetch completar.
+  // Chave: String(id do tipo), Valor: campos atualizados.
+  const [tipoUpdates, setTipoUpdates] = useState<Record<string, Partial<QualificacaoTipoDTO>>>({});
+
   const modelosPrefsHydratedRef = useRef(false);
 
   useEffect(() => {
@@ -1260,18 +1266,30 @@ export default function Qualificacoes() {
   const historicoTableLoading = loading && prioritizedHistorico.length === 0;
   const planejadosTableLoading = loading && planejadosHistorico.length === 0;
 
+  // Mescla atualizações otimistas com dados do hook —
+  // garante que a tabela reflita o valor salvo IMEDIATAMENTE após PUT,
+  // mesmo que o refetch ainda não tenha concluído ou tenha falhado.
+  const tiposEfetivos = useMemo(() => {
+    const updateKeys = Object.keys(tipoUpdates);
+    if (updateKeys.length === 0) return tipos;
+    return tipos.map((t) => {
+      const update = tipoUpdates[String(t.id)];
+      return update ? { ...t, ...update } : t;
+    });
+  }, [tipos, tipoUpdates]);
+
   // Filtrar tipos baseado no searchTipos
   const filteredTipos = useMemo(() => {
     const searchLower = searchTipos.trim().toLowerCase();
-    if (!searchLower) return tipos;
-    return tipos.filter((tipo) => {
+    if (!searchLower) return tiposEfetivos;
+    return tiposEfetivos.filter((tipo) => {
       return (
         tipo.nome?.toLowerCase().includes(searchLower) ||
         tipo.codigo?.toLowerCase().includes(searchLower) ||
         tipo.categoria?.toLowerCase().includes(searchLower)
       );
     });
-  }, [searchTipos, tipos]);
+  }, [searchTipos, tiposEfetivos]);
 
   const handleNew = () => {
     setEditingQualificacao(null);
@@ -3253,7 +3271,7 @@ export default function Qualificacoes() {
                     {
                       id: 'validade',
                       label: 'Valid.',
-                      accessor: (row) => row.validade || '-',
+                      accessor: (row) => (row.validade != null ? row.validade : '-'),
                       sortable: true,
                       visible: true,
                       render: (value) => (
@@ -4757,10 +4775,11 @@ export default function Qualificacoes() {
                 }
 
                 console.log(
-                  '[SalvarTipo] Enviando %s %s — categoria=%s',
+                  '[SalvarTipo] Enviando %s %s — categoria=%s validade=%s',
                   method,
                   url,
                   payload.categoria,
+                  payload.validade,
                 );
 
                 // ⚠️ AbortController com timeout para fetch — evita promise pendente eterna
@@ -4821,14 +4840,45 @@ export default function Qualificacoes() {
 
                   clearApiCacheByPattern('/qualificacoes/tipos');
                   showToast.success(isEdit ? 'Modelo atualizado!' : 'Modelo criado!');
+
+                  // Atualização otimista: reflete o valor salvo na tabela IMEDIATAMENTE,
+                  // antes mesmo do refetch concluir. Isso corrige o bug de "validade antiga
+                  // na tabela e no modal ao reabrir".
+                  const tipoIdStr = String(editingTipo.id);
+                  const optimisticUpdate: Partial<QualificacaoTipoDTO> = {};
+                  if (editingTipo.validade != null) {
+                    optimisticUpdate.validade = editingTipo.validade;
+                  }
+                  // Outros campos que podem ter mudado e afetam a visualização da tabela
+                  if (editingTipo.nome?.trim()) {
+                    optimisticUpdate.nome = editingTipo.nome.trim();
+                  }
+                  if (editingTipo.codigo?.trim()) {
+                    optimisticUpdate.codigo = editingTipo.codigo.trim();
+                  }
+                  if (editingTipo.categoria?.trim()) {
+                    optimisticUpdate.categoria = editingTipo.categoria.trim();
+                  }
+                  setTipoUpdates((prev) => ({ ...prev, [tipoIdStr]: optimisticUpdate }));
+
                   setShowTipoModal(false);
                   setEditingTipo(null);
-                  // Recarregar lista de tipos
+                  // Recarregar lista de tipos (refetch confirma os dados com o servidor;
+                  // o optimisticUpdate acima já garante que a UI mostre o valor correto).
                   try {
                     await refetchTipos();
+                    // Após refetch bem-sucedido, os dados do hook já refletem o valor
+                    // salvo — podemos limpar o optimistic update para este tipo.
+                    setTipoUpdates((prev) => {
+                      const next = { ...prev };
+                      delete next[tipoIdStr];
+                      return next;
+                    });
                   } catch (e) {
-                    // Silencioso - refetch pode não estar disponível em alguns fluxos
-                    logger.warn('[Qualificacoes] refetchTipos falhou', e);
+                    // Mesmo se o refetch falhar, a UI já mostra o valor salvo via
+                    // optimistic update. Avisamos o usuário para recarregar se quiser.
+                    logger.warn('[Qualificacoes] refetchTipos falhou — usando optimistic update', e);
+                    showToast.warning('Dados salvos, mas a lista pode estar desatualizada. Recarregue a página se necessário.');
                   }
                 } else {
                   const err = await response.json().catch(() => null);
