@@ -18,7 +18,7 @@ import {
 function createSigvoosDbStub({
   manualMappings = [],
   funcionarios = [],
-  columns = ['id', 'nome', 'codigo_anac', 'matricula'],
+  columns = ['id', 'nome', 'funcao', 'cargo', 'codigo_anac', 'matricula'],
 }: {
   manualMappings?: Array<Record<string, unknown>>;
   funcionarios?: Array<Record<string, unknown>>;
@@ -360,7 +360,14 @@ describe('sigvoos-frms service', () => {
         },
       ],
       funcionarios: [
-        { id: '88', nome: 'Jether Pontes e Silva', codigo_anac: '951681', matricula: '251' },
+        {
+          id: '88',
+          nome: 'Jether Pontes e Silva',
+          funcao: 'PILOTO',
+          cargo: 'COMANDANTE',
+          codigo_anac: '951681',
+          matricula: '251',
+        },
       ],
     });
 
@@ -380,7 +387,14 @@ describe('sigvoos-frms service', () => {
   it('falls back to funcionario matricula when SIGVOOS identifier is not a CANAC', async () => {
     const dbStub = createSigvoosDbStub({
       funcionarios: [
-        { id: '55', nome: 'Diego Bichara Benjamin', codigo_anac: null, matricula: '279' },
+        {
+          id: '55',
+          nome: 'Diego Bichara Benjamin',
+          funcao: 'COPILOTO',
+          cargo: 'SIC',
+          codigo_anac: null,
+          matricula: '279',
+        },
       ],
     });
 
@@ -399,7 +413,16 @@ describe('sigvoos-frms service', () => {
 
   it('normalizes inscription to 5 digits for matricula comparison', async () => {
     const dbStub = createSigvoosDbStub({
-      funcionarios: [{ id: '99', nome: 'Tripulante Zero', codigo_anac: null, matricula: '00042' }],
+      funcionarios: [
+        {
+          id: '99',
+          nome: 'Tripulante Zero',
+          funcao: 'PILOTO',
+          cargo: 'COMANDANTE',
+          codigo_anac: null,
+          matricula: '00042',
+        },
+      ],
     });
 
     const matched = await findTripulanteByCanacOrName(dbStub, 1, {
@@ -417,7 +440,14 @@ describe('sigvoos-frms service', () => {
   it('matches normalized crew names after stripping suffix noise', async () => {
     const dbStub = createSigvoosDbStub({
       funcionarios: [
-        { id: '77', nome: 'Jether Pontes e Silva', codigo_anac: null, matricula: null },
+        {
+          id: '77',
+          nome: 'Jether Pontes e Silva',
+          funcao: 'PILOTO',
+          cargo: 'COMANDANTE',
+          codigo_anac: null,
+          matricula: null,
+        },
       ],
     });
 
@@ -437,8 +467,22 @@ describe('sigvoos-frms service', () => {
   it('does not fuzzy-match when best candidates are ambiguous', async () => {
     const dbStub = createSigvoosDbStub({
       funcionarios: [
-        { id: '11', nome: 'MARCOS ANTONIO SILVA', codigo_anac: null, matricula: null },
-        { id: '12', nome: 'MARCOS ANTONIO SANTOS', codigo_anac: null, matricula: null },
+        {
+          id: '11',
+          nome: 'MARCOS ANTONIO SILVA',
+          funcao: 'PILOTO',
+          cargo: 'COMANDANTE',
+          codigo_anac: null,
+          matricula: null,
+        },
+        {
+          id: '12',
+          nome: 'MARCOS ANTONIO SANTOS',
+          funcao: 'COPILOTO',
+          cargo: 'SIC',
+          codigo_anac: null,
+          matricula: null,
+        },
       ],
     });
 
@@ -449,6 +493,34 @@ describe('sigvoos-frms service', () => {
     });
 
     expect(matched).toBeNull();
+  });
+
+  it('blocks SIGVOOS resolution when the matched funcionario is non-operational crew', async () => {
+    const dbStub = createSigvoosDbStub({
+      funcionarios: [
+        {
+          id: '21',
+          nome: 'Carlos Mecanico',
+          funcao: 'MECANICO',
+          cargo: 'MANUTENCAO',
+          codigo_anac: null,
+          matricula: '00321',
+        },
+      ],
+    });
+
+    const matched = await findTripulanteByCanacOrName(dbStub, 1, {
+      canac: null,
+      identificadorSigvoos: '321',
+      name: 'Carlos Mecanico',
+    });
+
+    expect(matched).toMatchObject({
+      id: '21',
+      fonteResolucao: 'MATRICULA',
+      elegivelFrms: false,
+      motivoInelegibilidade: 'NAO_TRIPULANTE_OPERACIONAL',
+    });
   });
 
   it('extracts aircraft, night and IFR fields from flight_report payload', () => {

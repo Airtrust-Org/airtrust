@@ -361,4 +361,62 @@ describe('frms operational snapshot builder', () => {
       expect.arrayContaining(['SONO_INSUFICIENTE_NO_PERIODO', 'KSS_ALTO_NO_PERIODO']),
     );
   });
+
+  it('9) exclui mecanico que entrou apenas por check-in no snapshot backend', () => {
+    const input = createBaseInput();
+    input.rows.funcionarios.push({
+      id: 12,
+      nome: 'Mecanico Doze',
+      nome_guerra: 'MEC12',
+      funcao: 'MECANICO',
+      cargo: 'MANUTENCAO',
+      base: 'SBJR',
+      aeronave: 'AW139',
+    });
+    input.rows.checkins.push({
+      data_operacional: '2026-05-31',
+      funcionario_id: 12,
+      hora_checkin: '07:10',
+      kss_score: 3,
+      horas_sono: 7,
+      qualidade_sono: 4,
+      wake_time: '06:15',
+      score_fadiga: 10,
+      nivel_fadiga: 'VERDE',
+      status_operacional: 'APTO',
+      computed_risk_level: 'normal',
+    });
+
+    const result = buildFrmsOperationalSnapshot(input);
+
+    expect(getByKey(result.items, '2026-05-31', 12)).toBeUndefined();
+  });
+
+  it('10) exclui funcao ausente mesmo quando existe jornada importada', () => {
+    const input = createBaseInput();
+    input.rows.funcionarios.push({
+      id: 13,
+      nome: 'Cadastro Incompleto',
+      nome_guerra: 'INC13',
+      funcao: null,
+      cargo: null,
+      base: 'SBJR',
+      aeronave: 'AW139',
+    });
+    input.rows.jornadas.push({
+      data_operacional: '2026-06-01',
+      funcionario_id: 13,
+      hora_apresentacao: '08:00',
+      hora_termino: '12:00',
+      horas_voo_minutos: 120,
+      duracao_jornada_minutos: 240,
+      origem: 'SIGVOOS',
+      has_operational_data: 1,
+      is_manual_empty: 0,
+    });
+
+    const result = buildFrmsOperationalSnapshot(input);
+
+    expect(getByKey(result.items, '2026-06-01', 13)).toBeUndefined();
+  });
 });
