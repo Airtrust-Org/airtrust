@@ -35,6 +35,14 @@ interface SigvoosImporterRecord {
   horaDecolagem: string | null;
   horaPouso: string | null;
   horaMotorDesligado: string | null;
+  tempoIfr: string | null;
+  tempoNoturno: string | null;
+  pousosDiurnos: number | null;
+  pousosNoturnos: number | null;
+  starts: number | null;
+  pax: number | null;
+  fuelStart: number | null;
+  fuelEnd: number | null;
   staffId: number | null;
   staffName: string | null;
   staffInscriptionRaw: string | null;
@@ -157,6 +165,14 @@ function parseInteger(value: unknown): number | null {
   if (!text) return null;
   const parsed = Number(text);
   return Number.isInteger(parsed) ? parsed : null;
+}
+
+function parseNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const text = normalizeText(value);
+  if (!text) return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function normalizeTime(value: unknown): string | null {
@@ -296,9 +312,14 @@ async function normalizeSigvoosImporterRecord(raw: SigvoosRecord): Promise<Sigvo
   const aircraftRegistration = normalizeUpper(
     asRecord(flightReport?.aircraft)?.registration || raw.aircraft_registration || raw.matricula_aeronave,
   );
-  const clientName = normalizeText(flightReport?.client_name) || pickFirstString(raw, ['client_name', 'cliente']);
+  const clientName =
+    normalizeText(asRecord(flightReport?.client)?.name) ||
+    normalizeText(flightReport?.client_name) ||
+    pickFirstString(raw, ['client_name', 'cliente']);
   const contractName =
-    normalizeText(flightReport?.contract_name) || pickFirstString(raw, ['contract_name', 'contrato']);
+    normalizeText(asRecord(flightReport?.contract)?.name) ||
+    normalizeText(flightReport?.contract_name) ||
+    pickFirstString(raw, ['contract_name', 'contrato']);
   const reportNumber = normalizeText(flightReport?.report_number) || pickFirstString(raw, ['report_number']);
   const flightNumber =
     normalizeUpper(flightReport?.flight_number) ||
@@ -318,6 +339,14 @@ async function normalizeSigvoosImporterRecord(raw: SigvoosRecord): Promise<Sigvo
   const horaPouso = normalizeTime(leg?.landing_time_str) || normalizeTime(raw.landing_time_str);
   const horaMotorDesligado =
     normalizeTime(leg?.engine_shutoff_time_str) || normalizeTime(raw.engine_shutoff_time_str);
+  const tempoIfr = normalizeTime(leg?.ifr_time_str) || normalizeTime(raw.ifr_time_str);
+  const tempoNoturno = normalizeTime(leg?.night_time_str) || normalizeTime(raw.night_time_str);
+  const pousosDiurnos = parseInteger(leg?.day_landings ?? raw.day_landings);
+  const pousosNoturnos = parseInteger(leg?.night_landings ?? raw.night_landings);
+  const starts = parseInteger(leg?.starts ?? raw.starts);
+  const pax = parseInteger(leg?.pax ?? raw.pax);
+  const fuelStart = parseNumber(leg?.fuel_start ?? raw.fuel_start);
+  const fuelEnd = parseNumber(leg?.fuel_end ?? raw.fuel_end);
   const legNumber = parseInteger(leg?.number);
   const staffRoleRaw =
     normalizeText(staff?.role) ||
@@ -368,6 +397,14 @@ async function normalizeSigvoosImporterRecord(raw: SigvoosRecord): Promise<Sigvo
     horaDecolagem,
     horaPouso,
     horaMotorDesligado,
+    tempoIfr,
+    tempoNoturno,
+    pousosDiurnos,
+    pousosNoturnos,
+    starts,
+    pax,
+    fuelStart,
+    fuelEnd,
     staffId: parseInteger(staff?.id),
     staffName: normalizeText(staff?.name) || pickFirstString(raw, ['tripulante_nome', 'crew_name', 'nome']),
     staffInscriptionRaw,
@@ -886,13 +923,21 @@ async function upsertEtapa(
            tempo_decolagem_pouso,
            tempo_total,
            tempo_navegacao,
+           tempo_ifr,
+           tempo_noturno,
+           pousos_diurnos,
+           pousos_noturnos,
+           starts,
+           pax,
+           combustivel_inicio,
+           combustivel_fim,
            origem_dados,
            sigvoos_importado_em,
            sigvoos_content_hash,
            metadata_sigvoos_json,
            created_by,
            updated_by
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SIGVOOS', datetime('now'), ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SIGVOOS', datetime('now'), ?, ?, ?, ?)`,
       )
       .bind(
         empresaId,
@@ -908,6 +953,14 @@ async function upsertEtapa(
         tempoDecolagemPouso,
         tempoTotal,
         tempoDecolagemPouso,
+        record.tempoIfr,
+        record.tempoNoturno,
+        record.pousosDiurnos,
+        record.pousosNoturnos,
+        record.starts,
+        record.pax,
+        record.fuelStart,
+        record.fuelEnd,
         record.etapaIdentityHash,
         record.payloadSanitizedJson,
         options.actorUserId ?? null,
@@ -934,6 +987,14 @@ async function upsertEtapa(
               tempo_decolagem_pouso = ?,
               tempo_total = ?,
               tempo_navegacao = ?,
+              tempo_ifr = ?,
+              tempo_noturno = ?,
+              pousos_diurnos = ?,
+              pousos_noturnos = ?,
+              starts = ?,
+              pax = ?,
+              combustivel_inicio = ?,
+              combustivel_fim = ?,
               origem_dados = 'SIGVOOS',
               sigvoos_importado_em = datetime('now'),
               sigvoos_content_hash = ?,
@@ -952,6 +1013,14 @@ async function upsertEtapa(
       tempoDecolagemPouso,
       tempoTotal,
       tempoDecolagemPouso,
+      record.tempoIfr,
+      record.tempoNoturno,
+      record.pousosDiurnos,
+      record.pousosNoturnos,
+      record.starts,
+      record.pax,
+      record.fuelStart,
+      record.fuelEnd,
       record.etapaIdentityHash,
       record.payloadSanitizedJson,
       options.actorUserId ?? null,

@@ -15,6 +15,7 @@ import {
   parseSigvoosShadowCompareWindow,
   SigvoosShadowCompareError,
 } from '../services/controle-voos/sigvoos-shadow-compare';
+import { listControleVoosJornadas } from '../services/controle-voos/controle-voos-jornadas';
 
 type FlightStatus =
   | 'planejado'
@@ -1258,6 +1259,28 @@ controleVoos.get('/sigvoos/shadow-compare', auth(), requireControleVoosSigvoosPr
       'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_FAILED',
     );
   }
+});
+
+controleVoos.get('/jornadas', auth(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const filters = parseOperationalReadFilters(c);
+
+  const result = await listControleVoosJornadas(c.env.DB, empresaId, {
+    dataInicio: filters.dataInicio,
+    dataFim: filters.dataFim,
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      uso_operacional_interno: true,
+      nao_regulado: true,
+      fonte: 'controle_voos',
+      periodo: result.periodo,
+      total: result.total,
+      items: result.items,
+    },
+  });
 });
 
 controleVoos.get('/voos', auth(), async (c) => {

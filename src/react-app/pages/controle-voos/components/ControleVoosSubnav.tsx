@@ -4,7 +4,7 @@ const LINKS = [
   { to: '/controle-voos', label: 'Dashboard', exact: true },
   { to: '/controle-voos/voos', label: 'Voos' },
   { to: '/controle-voos/rdv', label: 'RDV' },
-  { to: '/controle-voos/jornadas', label: 'Jornadas', preview: true },
+  { to: '/controle-voos/jornadas', label: 'Jornadas' },
   { to: '/controle-voos/indisponibilidades', label: 'Indisponibilidades', preview: true },
   { to: '/controle-voos/hangaragem', label: 'Hangaragem', preview: true },
   { to: '/controle-voos/relatorios', label: 'Relatórios' },
