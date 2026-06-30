@@ -138,7 +138,7 @@ export default function LmsPlayer() {
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
   const launchUrl =
     playerToken && matricula && matricula.tipo_conteudo !== 'h5p'
-      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(playerToken)}`
+      ? `${API_BASE_URL}/lms/scorm/launch/${id}?token=${encodeURIComponent(playerToken)}${effectiveReviewMode ? '&review=1' : ''}`
       : null;
   const launchOrigin = API_BASE_URL.replace(/\/api$/, '');
 
@@ -301,6 +301,17 @@ export default function LmsPlayer() {
 
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== launchOrigin) return;
+      if (
+        effectiveReviewMode &&
+        event.data &&
+        typeof event.data === 'object' &&
+        (event.data.type === 'lms:completed' ||
+          event.data.type === 'lms:completion-pending' ||
+          event.data.type === 'lms:completion-error' ||
+          event.data.type === 'lms:progress')
+      ) {
+        return;
+      }
       if (
         event.data &&
         typeof event.data === 'object' &&
@@ -639,6 +650,18 @@ export default function LmsPlayer() {
           </button>
         </div>
       </header>
+
+      {effectiveReviewMode && (
+        <div className="flex items-center gap-3 bg-blue-950/80 border-b border-blue-500/30 px-4 py-2.5 flex-shrink-0">
+          <Eye className="h-4 w-4 text-blue-400 flex-shrink-0" />
+          <div>
+            <p className="text-xs font-medium text-blue-300">Modo consulta — somente leitura</p>
+            <p className="text-[10px] text-blue-400/70">
+              Você está visualizando um curso já concluído. O progresso não será alterado.
+            </p>
+          </div>
+        </div>
+      )}
 
       <main className="relative flex-1">
         <div className="flex h-full min-h-0">
