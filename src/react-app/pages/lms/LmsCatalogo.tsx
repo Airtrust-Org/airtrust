@@ -1339,11 +1339,16 @@ function CourseCard({
         : 'Continuar';
   const isDeleting = pendingDeleteId === curso.id;
   const complianceCourse = impactsCompliance(curso);
+  const isConcluido = !canManage && matricula?.status === 'CONCLUIDO';
 
   return (
     <article
       className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg dark:bg-slate-900 dark:shadow-none ${
-        complianceCourse ? 'border-amber-200' : 'border-slate-200'
+        isConcluido
+          ? 'border-emerald-200 border-t-4 border-t-emerald-500 bg-emerald-50/30 dark:border-emerald-800 dark:border-t-emerald-600 dark:bg-emerald-950/15'
+          : complianceCourse
+            ? 'border-amber-200'
+            : 'border-slate-200'
       }`}
     >
       <div className="p-4 pb-0">
@@ -1415,7 +1420,7 @@ function CourseCard({
               </div>
               <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
                 <div
-                  className="h-full rounded-full bg-primary"
+                  className={`h-full rounded-full ${isConcluido ? 'bg-emerald-500' : 'bg-primary'}`}
                   style={{ width: `${enrollmentProgress}%` }}
                 />
               </div>
@@ -1455,8 +1460,8 @@ function CourseCard({
           <div className="pt-3 space-y-2">
             <div className="flex gap-2">
               <Button
-                variant="primary"
-                className="flex-1"
+                variant={isConcluido ? 'secondary' : 'primary'}
+                className={`flex-1 ${isConcluido ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/50' : ''}`}
                 onClick={() => {
                   if (canManage && previewPath) {
                     navigate(previewPath);
@@ -1465,7 +1470,11 @@ function CourseCard({
                   onAction(curso);
                 }}
               >
-                <Play className="h-4 w-4" />
+                {isConcluido ? (
+                  <Eye className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
                 {actionLabel}
               </Button>
               <Button variant="secondary" onClick={() => navigate(`/lms/cursos/${curso.id}`)}>

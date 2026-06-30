@@ -119,13 +119,16 @@ function LinhaMatricula({
   const dias = diasParaVencer(matricula.data_vencimento_qualificacao);
   const urgente = dias !== null && dias <= 7 && dias >= 0;
   const vencida = dias !== null && dias < 0;
+  const concluido = matricula.status === 'CONCLUIDO';
 
   return (
     <div
       className={`rounded-xl border transition-all ${
         urgente || vencida
           ? 'border-orange-200 bg-orange-50/60'
-          : 'border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200'
+          : concluido
+            ? 'border-emerald-200 bg-emerald-50/40 border-l-4 border-l-emerald-500 dark:border-emerald-800 dark:bg-emerald-950/20 dark:border-l-emerald-600'
+            : 'border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200'
       }`}
     >
       <div className="px-3 sm:px-4 py-2.5 sm:py-3">
@@ -136,7 +139,7 @@ function LinhaMatricula({
           {/* nome em linha própria no mobile */}
           <button
             onClick={onAbrir}
-            className="flex-1 min-w-0 text-sm font-semibold text-slate-800 hover:text-primary transition-colors text-left leading-snug truncate"
+            className="flex-1 min-w-0 text-sm font-semibold text-slate-800 hover:text-primary transition-colors text-left leading-snug truncate dark:text-slate-200 dark:hover:text-primary"
             title={matricula.titulo ?? `Curso #${matricula.curso_id}`}
           >
             {matricula.titulo ?? `Curso #${matricula.curso_id}`}
@@ -146,8 +149,8 @@ function LinhaMatricula({
         <div className="mt-2 flex items-center justify-between gap-3">
           <span
             className={`text-xs font-medium ${
-              matricula.status === 'CONCLUIDO'
-                ? 'text-emerald-600'
+              concluido
+                ? 'text-emerald-700 dark:text-emerald-300'
                 : matricula.status === 'EM_ANDAMENTO'
                   ? 'text-blue-600'
                   : 'text-slate-400'
@@ -160,21 +163,34 @@ function LinhaMatricula({
           <div className="shrink-0 flex items-center gap-2">
             {matricula.tem_certificado === 1 ? (
               <BotaoCertificado matricula={matricula} />
+            ) : concluido ? (
+              <button
+                onClick={onAbrir}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors dark:bg-slate-900 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+              >
+                Rever conteúdo
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             ) : (
               <button
                 onClick={onAbrir}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
               >
-                {matricula.status === 'CONCLUIDO'
-                  ? 'Rever conteúdo'
-                  : matricula.status === 'NAO_INICIADO'
-                    ? 'Iniciar'
-                    : 'Continuar'}
+                {matricula.status === 'NAO_INICIADO'
+                  ? 'Iniciar'
+                  : 'Continuar'}
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
         </div>
+
+        {/* subtexto para concluído */}
+        {concluido && (
+          <p className="mt-1 text-xs text-emerald-600/70 dark:text-emerald-400/60">
+            Disponível para consulta
+          </p>
+        )}
 
         {/* barra de progresso */}
         {matricula.status !== 'NAO_INICIADO' && (
@@ -182,7 +198,7 @@ function LinhaMatricula({
             <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden max-w-[160px] sm:max-w-[220px]">
               <div
                 className={`h-full rounded-full transition-all ${
-                  matricula.status === 'CONCLUIDO' ? 'bg-emerald-500' : 'bg-blue-500'
+                  concluido ? 'bg-emerald-500' : 'bg-blue-500'
                 }`}
                 style={{ width: `${Math.min(matricula.progresso_pct ?? 0, 100)}%` }}
               />
