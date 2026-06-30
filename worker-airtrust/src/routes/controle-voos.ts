@@ -1224,7 +1224,7 @@ controleVoos.get('/sigvoos/shadow-compare', auth(), requireControleVoosSigvoosPr
     throw new ApiError('Empresa nao identificada', 401, 'CONTROLE_VOOS_SIGVOOS_TENANT_REQUIRED');
   }
 
-  if (c.env.ENVIRONMENT !== 'staging') {
+  if (c.env.ENVIRONMENT !== 'staging' && c.env.ENVIRONMENT !== 'production') {
     throw new ApiError(
       'Shadow compare SIGVOOS indisponivel',
       404,

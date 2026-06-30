@@ -1829,9 +1829,34 @@ describe('controle voos routes', () => {
     });
   });
 
-  it('bloqueia shadow compare SIGVOOS fora de staging mesmo com a flag ativa', async () => {
+  it('bloqueia shadow compare SIGVOOS em development mesmo com a flag ativa', async () => {
     const db = createSqliteD1();
     applySigvoosSchema(db.databasePath);
+
+    const response = await request(
+      db,
+      '/api/controle-voos/sigvoos/shadow-compare?from=2026-06-14&to=2026-06-15',
+      {},
+      1,
+      'manager',
+      {
+        CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED: 'true',
+        ENVIRONMENT: 'development',
+      },
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_STAGING_ONLY',
+    });
+  });
+
+  it('permite shadow compare SIGVOOS em production com a flag ativa', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    seedSigvoosPreviewState(db.databasePath);
+    applyShadowCompareFrmsSchema(db.databasePath);
+    seedShadowCompareFrmsState(db.databasePath);
 
     const response = await request(
       db,
@@ -1845,10 +1870,10 @@ describe('controle voos routes', () => {
       },
     );
 
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toMatchObject({
-      code: 'CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_STAGING_ONLY',
-    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.writesEnabled).toBe(false);
+    expect(body.data.tenantScoped).toBe(true);
   });
 
   it('bloqueia usuario sem permissao no shadow compare SIGVOOS', async () => {
