@@ -38,6 +38,7 @@ export enum StatusQualificacao {
 // ============================================
 export enum StatusTreinamento {
   PLANEJADO = 'PLANEJADO',
+  CONFIRMADO = 'CONFIRMADO',
   EM_ANDAMENTO = 'EM_ANDAMENTO',
   CONCLUIDO = 'CONCLUIDO',
   CANCELADO = 'CANCELADO',
