@@ -3520,6 +3520,7 @@ treinamentosPlanejadosRoutes.post(
     const dryRun = url.searchParams.get('dryRun') === 'true';
 
     if (dryRun) {
+      try {
       // Carrega turmas ativas com participantes (mesmo critério do apply).
       const turmasInfo = await db
         .prepare(
@@ -3642,6 +3643,14 @@ treinamentosPlanejadosRoutes.post(
           turmas,
         },
       });
+      } catch (err) {
+        console.error('[backfill-sync dry-run]', err);
+        return c.json({
+          success: false,
+          error: 'Dry-run error: ' + (err instanceof Error ? err.message : String(err)),
+          code: 'DRY_RUN_ERROR',
+        }, 500);
+      }
     }
 
     // Apply mode
