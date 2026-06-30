@@ -252,6 +252,80 @@ afterAll(() => {
 });
 
 describe('controle-voos sigvoos importer', () => {
+  it('persiste campos operacionais da etapa SIGVOOS incluindo IFR, pax e combustivel', async () => {
+    const db = createSqliteD1();
+    const fixture = {
+      flight_report: {
+        id: 710301,
+        report_number: 'FR-710301',
+        flight_number: 'ATX7103',
+        client: { name: 'Cliente Teste' },
+        contract: { name: 'Contrato Teste' },
+      },
+      flight_report_leg: {
+        number: 1,
+        departure_location: { icao_code: 'SBRJ' },
+        arrival_location: { icao_code: 'SBSP' },
+        engine_start_time_str: '07:50',
+        takeoff_time_str: '08:05',
+        landing_time_str: '09:00',
+        engine_shutoff_time_str: '09:06',
+        ifr_time_str: '00:35',
+        night_time_str: '00:10',
+        day_landings: 1,
+        night_landings: 0,
+        starts: 1,
+        pax: 8,
+        fuel_start: 900,
+        fuel_end: 620,
+      },
+      staff: {
+        id: 8802,
+        name: 'TRIPULANTE_SIG_02',
+        inscription: '04567',
+      },
+      date: '2026-06-14',
+    };
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, fixture, { actorUserId: 10 });
+    expect(summary.processedRecords).toBe(1);
+
+    const etapa = db.queryJson<{
+      tempo_ifr: string | null;
+      tempo_noturno: string | null;
+      pousos_diurnos: number | null;
+      pax: number | null;
+      combustivel_inicio: number | null;
+      combustivel_fim: number | null;
+    }>(
+      `SELECT tempo_ifr, tempo_noturno, pousos_diurnos, pax, combustivel_inicio, combustivel_fim
+         FROM cv_voo_etapas
+        WHERE empresa_id = 6
+          AND sigvoos_leg_number = 1
+        LIMIT 1`,
+    );
+
+    expect(etapa[0]).toMatchObject({
+      tempo_ifr: '00:35',
+      tempo_noturno: '00:10',
+      pousos_diurnos: 1,
+      pax: 8,
+      combustivel_inicio: 900,
+      combustivel_fim: 620,
+    });
+
+    const voo = db.queryJson<{ sigvoos_client_name: string | null; sigvoos_contract_name: string | null }>(
+      `SELECT sigvoos_client_name, sigvoos_contract_name
+         FROM cv_voos
+        WHERE empresa_id = 6
+          AND sigvoos_flight_report_id = 710301`,
+    );
+    expect(voo[0]).toMatchObject({
+      sigvoos_client_name: 'Cliente Teste',
+      sigvoos_contract_name: 'Contrato Teste',
+    });
+  });
+
   it('imports a payload with flight_report.id into a matching manual flight without duplicating it', async () => {
     const db = createSqliteD1();
     const fixture = readFixture<Record<string, unknown>>('sigvoos-com-flight-report-id.json');
