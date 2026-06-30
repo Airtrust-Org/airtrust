@@ -73,8 +73,80 @@ interface TipoQualificacaoOption {
   id: number;
   nome: string;
   codigo?: string | null;
+  categoria?: string | null;
   carga_horaria_inicial?: number | null;
   carga_horaria_recorrente?: number | null;
+}
+
+// Palavras-chave que indicam público de Tripulação (voo)
+const PALAVRAS_TRIPULACAO = [
+  'tripulação', 'tripulacao', 'piloto', 'copiloto', 'comandante', 'pio', 'sic', 'pic',
+  'voo', 'aeronauta', 'cabin', 'comissário', 'comissario', 'purser',
+];
+
+// Palavras-chave que indicam público de Manutenção
+const PALAVRAS_MANUTENCAO = [
+  'manutenção', 'manutencao', 'mecânico', 'mecanico', 'técnico', 'tecnico', 'mec',
+  'maintenance', 'avionico', 'avionics', 'linha', 'hangar',
+];
+
+/**
+ * Determina o tipo de público de uma qualificação com base em sua categoria e nome.
+ * Retorna 'TRIPULACAO', 'MANUTENCAO' ou null (indeterminado).
+ */
+function determinarPublicoQualificacao(
+  tipoId?: string,
+  tiposQualificacao?: TipoQualificacaoOption[],
+): 'TRIPULACAO' | 'MANUTENCAO' | null {
+  if (!tipoId || !tiposQualificacao) return null;
+  const tipo = tiposQualificacao.find((t) => String(t.id) === String(tipoId));
+  if (!tipo) return null;
+
+  const textoBase = [tipo.categoria, tipo.nome, tipo.codigo]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+
+  const matchesTripulacao = PALAVRAS_TRIPULACAO.some((palavra) => textoBase.includes(palavra));
+  const matchesManutencao = PALAVRAS_MANUTENCAO.some((palavra) => textoBase.includes(palavra));
+
+  if (matchesTripulacao && !matchesManutencao) return 'TRIPULACAO';
+  if (matchesManutencao && !matchesTripulacao) return 'MANUTENCAO';
+  return null;
+}
+
+// Palavras-chave de funções/setores para Tripulação
+const FUNCAO_TRIPULACAO = [
+  'piloto', 'comandante', 'copiloto', 'purser', 'comissário', 'comissario',
+  'aeronauta', 'cabin crew', 'pic', 'sic',
+];
+
+// Palavras-chave de funções/setores para Manutenção
+const FUNCAO_MANUTENCAO = [
+  'manutenção', 'manutencao', 'mecânico', 'mecanico', 'técnico', 'tecnico',
+  'mec ', 'linha ', 'hangar', 'avionico',
+];
+
+/**
+ * Verifica se um funcionário é elegível para um tipo de público.
+ */
+function funcionarioElegivelParaPublico(
+  funcionario: FuncionarioOption,
+  publico: 'TRIPULACAO' | 'MANUTENCAO',
+): boolean {
+  const texto = [funcionario.funcao, funcionario.setor]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+
+  if (publico === 'TRIPULACAO') {
+    return FUNCAO_TRIPULACAO.some((kw) => texto.includes(kw));
+  }
+  return FUNCAO_MANUTENCAO.some((kw) => texto.includes(kw));
 }
 
 interface TreinamentoFormState {
@@ -149,6 +221,9 @@ interface ConclusaoParticipanteDraft {
   observacoes: string | null;
   data_conclusao_efetiva: string | null;
 }
+
+// Status que representam turmas encerradas — ocultas por padrão na listagem operacional
+const STATUS_ENCERRADOS = new Set<string>(['CONCLUIDO', 'CANCELADO']);
 
 const STATUS_META: Record<TreinamentoPlanejadoStatus, { label: string; className: string }> = {
   PLANEJADO: {
@@ -659,6 +734,9 @@ export default function TreinamentosPlanejadosPage({
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(forcedTab || 'calendario');
   const [mesReferencia, setMesReferencia] = useState(today.slice(0, 7));
   const [statusFiltro, setStatusFiltro] = useState('');
+  // Por padrão, turmas CONCLUIDO e CANCELADO ficam ocultas na listagem operacional.
+  // O usuário pode ativá-las individualmente via filtro de status.
+  const [mostrarEncerrados, setMostrarEncerrados] = useState(false);
   const [instrutorFiltro, setInstrutorFiltro] = useState('');
   const [busca, setBusca] = useState('');
   const [buscaConvocados, setBuscaConvocados] = useState('');
@@ -755,10 +833,14 @@ export default function TreinamentosPlanejadosPage({
   const enviarConvocacao = useEnviarConvocacaoTreinamento();
   const reenviarConvocacao = useReenviarConvocacaoTreinamento();
 
-  const listaTreinamentos = useMemo(
-    () => treinamentosQuery.data?.items || [],
-    [treinamentosQuery.data?.items],
-  );
+  // Quando nenhum filtro de status específico está ativo, oculta CONCLUIDO/CANCELADO por padrão.
+  // O usuário pode ver esses status selecionando-os explicitamente no filtro ou ativando "Mostrar encerrados".
+  const listaTreinamentos = useMemo(() => {
+    const items = treinamentosQuery.data?.items || [];
+    if (statusFiltro) return items; // filtro explícito ativo — respeita sem alterar
+    if (mostrarEncerrados) return items;
+    return items.filter((item) => !STATUS_ENCERRADOS.has(item.status));
+  }, [treinamentosQuery.data?.items, statusFiltro, mostrarEncerrados]);
   const calendarioTreinamentos = useMemo(
     () => calendarioQuery.data?.items || [],
     [calendarioQuery.data?.items],
@@ -873,10 +955,26 @@ export default function TreinamentosPlanejadosPage({
     return marcados.length > 0 ? marcados : base;
   }, [funcionarios]);
 
-  const convocadosFiltrados = useMemo(() => {
+  // Determinar elegibilidade de convocados com base no tipo de qualificação selecionada no formulário
+  const publicoQualificacaoSelecionada = useMemo(
+    () =>
+      determinarPublicoQualificacao(
+        formState.qualificacao_tipo_id,
+        tiposQualificacao as TipoQualificacaoOption[],
+      ),
+    [formState.qualificacao_tipo_id, tiposQualificacao],
+  );
+
+  // Pool de convocados elegíveis (antes da busca textual)
+  const convocadosElegiveis = useMemo(() => {
     const base = funcionarios as FuncionarioOption[];
-    if (!buscaConvocadosAdiada) return base;
-    return base.filter((funcionario) => {
+    if (!publicoQualificacaoSelecionada) return base; // indeterminado — mostrar todos
+    return base.filter((f) => funcionarioElegivelParaPublico(f, publicoQualificacaoSelecionada));
+  }, [funcionarios, publicoQualificacaoSelecionada]);
+
+  const convocadosFiltrados = useMemo(() => {
+    if (!buscaConvocadosAdiada) return convocadosElegiveis;
+    return convocadosElegiveis.filter((funcionario) => {
       const texto = [
         funcionario.nome,
         funcionario.guerra,
@@ -889,7 +987,7 @@ export default function TreinamentosPlanejadosPage({
         .toLowerCase();
       return texto.includes(buscaConvocadosAdiada);
     });
-  }, [buscaConvocadosAdiada, funcionarios]);
+  }, [buscaConvocadosAdiada, convocadosElegiveis]);
 
   const resumoLista = useMemo(() => {
     return listaTreinamentos.reduce(
@@ -1264,6 +1362,45 @@ export default function TreinamentosPlanejadosPage({
     setDiaPresencaSelecionadoId(null);
   }, []);
 
+  async function gerarListaPresencaTurmaAtual() {
+    const treinamento = detalheQuery.data || treinamentoEditando;
+    if (!treinamento) return;
+    setGerandoListaPresencaTurma(true);
+    try {
+      const { gerarPDFListaPresencaTurma } = await import('@/react-app/services/pdf-lista-presenca');
+      const blob = await gerarPDFListaPresencaTurma({
+        titulo: treinamento.titulo || treinamento.qualificacao_nome || 'Treinamento',
+        codigoQualificacao: treinamento.qualificacao_codigo || '',
+        dataInicio: treinamento.data_inicio || treinamento.data_prevista,
+        dataFim: treinamento.data_fim || treinamento.data_prevista,
+        horaInicio: treinamento.hora_inicio || '',
+        horaFim: treinamento.hora_fim || '',
+        local: treinamento.local || '',
+        instrutor: treinamento.instrutor_nome || treinamento.instrutor_guerra || '',
+        participantes: treinamento.participantes.map((p) => ({
+          nome: p.funcionario_nome || '',
+          matricula: p.funcionario_matricula || '',
+          setor: p.funcionario_setor || '',
+          funcao: p.funcionario_funcao || '',
+        })),
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const nomeArquivo = (treinamento.titulo || treinamento.qualificacao_codigo || 'turma')
+        .replace(/[^a-z0-9]/gi, '_')
+        .toLowerCase();
+      a.download = `lista_presenca_${nomeArquivo}_${treinamento.data_prevista}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Lista de presença gerada com sucesso.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao gerar lista de presença.');
+    } finally {
+      setGerandoListaPresencaTurma(false);
+    }
+  }
+
   async function excluirTreinamentoSelecionado() {
     const treinamento = detalheQuery.data || treinamentoEditando;
     if (!treinamento) return;
@@ -1575,6 +1712,7 @@ export default function TreinamentosPlanejadosPage({
   const salvandoFormulario = criarTreinamento.isPending || atualizarTreinamento.isPending;
   const excluindo = excluirTreinamento.isPending;
   const enviandoConvocacao = previewConvocacao.isPending || enviarConvocacao.isPending;
+  const [gerandoListaPresencaTurma, setGerandoListaPresencaTurma] = useState(false);
 
   const convocacaoDisabledReason = getConvocacaoDisabledReason(detalheTreinamento);
   const isTurmasView = sourceFilter === 'TURMA' || sourceFilter === 'TREINAMENTOS';
@@ -1702,13 +1840,30 @@ export default function TreinamentosPlanejadosPage({
           ) : null}
           <select
             value={statusFiltro}
-            onChange={(event) => setStatusFiltro(event.target.value)}
+            onChange={(event) => {
+              setStatusFiltro(event.target.value);
+              // Se o usuário selecionar CONCLUIDO ou CANCELADO explicitamente, mostrar encerrados
+              if (event.target.value === 'CONCLUIDO' || event.target.value === 'CANCELADO') {
+                setMostrarEncerrados(true);
+              }
+            }}
             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
           >
             {STATUS_OPTIONS.map((option) => (
               <option key={option.value || 'all'} value={option.value}>{option.label}</option>
             ))}
           </select>
+          {!statusFiltro && (
+            <label className="flex items-center gap-1.5 cursor-pointer select-none text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={mostrarEncerrados}
+                onChange={(e) => setMostrarEncerrados(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-primary-600"
+              />
+              Mostrar concluídos/cancelados
+            </label>
+          )}
           <select
             value={instrutorFiltro}
             onChange={(event) => setInstrutorFiltro(event.target.value)}
@@ -2631,8 +2786,19 @@ export default function TreinamentosPlanejadosPage({
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Convocados</h3>
                   <p className="text-sm text-slate-500">
-                    {formState.participante_ids.length} selecionado(s) para este treinamento.
+                    {formState.participante_ids.length} selecionado(s) de {convocadosElegiveis.length} elegível(is).
                   </p>
+                  {publicoQualificacaoSelecionada ? (
+                    <p className="mt-0.5 text-xs font-medium text-indigo-600">
+                      Filtro de público: {publicoQualificacaoSelecionada === 'TRIPULACAO' ? 'Tripulação' : 'Manutenção'}
+                    </p>
+                  ) : (
+                    convocadosElegiveis.length === (funcionarios as FuncionarioOption[]).length && formState.qualificacao_tipo_id ? (
+                      <p className="mt-0.5 text-xs text-amber-600">
+                        Tipo de público não identificado — revise a qualificação. Mostrando todos.
+                      </p>
+                    ) : null
+                  )}
                 </div>
                 <input
                   type="search"
@@ -2708,6 +2874,15 @@ export default function TreinamentosPlanejadosPage({
                 onClick={fecharModalDetalhes}
               >
                 Fechar
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={gerarListaPresencaTurmaAtual}
+                disabled={gerandoListaPresencaTurma || !detalheTreinamento}
+                title="Gerar lista de presença da turma em PDF"
+              >
+                <ClipboardList className="h-4 w-4" />
+                {gerandoListaPresencaTurma ? 'Gerando...' : 'Lista de Presença'}
               </Button>
               {canWriteTraining ? (
                 <Button
