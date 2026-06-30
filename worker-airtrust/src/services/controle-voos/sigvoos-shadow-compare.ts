@@ -58,6 +58,11 @@ export type SigvoosShadowCompareReport = {
   writesEnabled: false;
   provider: 'SIGVOOS';
   empresaId: number;
+  authContext: {
+    empresaId: number;
+    tenantScoped: true;
+    role: string | null;
+  };
   window: Window;
   totals: {
     previewStagingRecords: number;
@@ -287,6 +292,9 @@ export async function buildSigvoosShadowCompareReport(
   db: D1Database,
   empresaId: number,
   window: Window,
+  options?: {
+    role?: string | null;
+  },
 ): Promise<SigvoosShadowCompareReport> {
   const frmsJornadaExists = await tableExists(db, 'frms_jornada');
   const frmsAlertaExists = await tableExists(db, 'frms_alerta');
@@ -523,6 +531,11 @@ export async function buildSigvoosShadowCompareReport(
     writesEnabled: false,
     provider: 'SIGVOOS',
     empresaId,
+    authContext: {
+      empresaId,
+      tenantScoped: true,
+      role: options?.role ?? null,
+    },
     window,
     totals: {
       previewStagingRecords: totals[0],
