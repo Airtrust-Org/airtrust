@@ -15,12 +15,14 @@ import { auth } from '../../middleware/auth';
 import { requireRole } from '../../middleware/rbac';
 import { getTenantContext } from '../../middleware/tenant';
 import { ApiError, forbidden } from '../../middleware/error-handler';
+import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
 import { z } from 'zod';
 import {
   buildHistoricoTipoSnapshot,
   shouldSyncHistoricoSnapshotsOnTipoUpdate,
   type QualificacaoTipoSnapshot,
 } from '../../services/qualificacoes-tipos-sync';
+import { invalidateMaterializedStats } from './shared';
 import {
   isEadCategoria,
   reconcileImportedEdappHistory,
@@ -48,12 +50,35 @@ type TipoAtualizadoRow = {
 type HistoricoTipoSyncRow = {
   id: number;
   funcionario_id: number;
+  qualificacao_id: number | null;
   data_conclusao: string | null;
   data_vencimento: string | null;
   tipo_treinamento: string | null;
   qualificacao_codigo: string | null;
+  tipo_atual: string | null;
+  categoria_atual: string | null;
+  validade_meses_atual: number | null;
+  carga_horaria_atual: number | null;
   nascimento_funcionario: string | null;
   conflito_codigo: number;
+};
+
+type TipoAnteriorRow = {
+  empresa_id: number;
+  codigo: string | null;
+  nome: string | null;
+  categoria: string | null;
+  validade: number | null;
+  vencimento_fim_mes: number | null;
+};
+
+type TipoUpdateResponseData = {
+  id: string;
+  validade_anterior: number | null;
+  validade_nova: number | null;
+  historicos_recalculados: number;
+  historicos_ignorados: number;
+  warnings: string[];
 };
 
 type TipoExistenteRow = {
@@ -111,6 +136,12 @@ function deriveModeloTipo(validade: number | null | undefined, categoria?: strin
 
 function normalizeTipoCodigo(value: string): string {
   return value.trim().toUpperCase();
+}
+
+function normalizeHistoricoCodigo(value?: string | null): string {
+  return String(value || '')
+    .trim()
+    .toUpperCase();
 }
 
 function isTipoCodigoUniqueConstraintError(error: unknown): boolean {
@@ -972,10 +1003,10 @@ router.put(
 
     const rowAtual = (await db
       .prepare(
-        'SELECT empresa_id, categoria, validade FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+        'SELECT empresa_id, codigo, nome, categoria, validade, vencimento_fim_mes FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
       )
       .bind(id, empresaId)
-      .first()) as { empresa_id: number; categoria: string | null; validade: number | null } | null;
+      .first()) as TipoAnteriorRow | null;
 
     const categoriaFinal =
       data.categoria !== undefined
@@ -1080,6 +1111,8 @@ router.put(
     }
 
     let historicosSincronizados = 0;
+    let historicosIgnorados = 0;
+    const warnings: string[] = [];
 
     if (shouldSyncHistoricoSnapshotsOnTipoUpdate(data)) {
       const tipoAtualizado = (await db
@@ -1098,10 +1131,15 @@ router.put(
           .prepare(
             `SELECT qh.id,
                     qh.funcionario_id,
+                    qh.qualificacao_id,
                     qh.data_conclusao,
                     qh.data_vencimento,
                     qh.tipo_treinamento,
                     qh.qualificacao_codigo,
+                    qh.tipo AS tipo_atual,
+                    qh.categoria AS categoria_atual,
+                    qh.validade_meses AS validade_meses_atual,
+                    qh.carga_horaria AS carga_horaria_atual,
                     CASE
                       WHEN EXISTS(
                         SELECT 1
@@ -1115,13 +1153,24 @@ router.put(
                       ELSE 0
                     END AS conflito_codigo,
                     f.nascimento AS nascimento_funcionario
-               FROM qualificacoes_historico qh
+              FROM qualificacoes_historico qh
                LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
-              WHERE qh.qualificacao_id = ?
-                AND qh.empresa_id = ?
-                AND qh.deleted_at IS NULL`,
+              WHERE qh.empresa_id = ?
+                AND qh.deleted_at IS NULL
+                AND (
+                  qh.qualificacao_id = ?
+                  OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo, ''))) = ?
+                  OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo, ''))) = ?
+                )`,
           )
-          .bind(tipoAtualizado.codigo, tipoAtualizado.codigo, id, empresaId)
+          .bind(
+            tipoAtualizado.codigo,
+            tipoAtualizado.codigo,
+            empresaId,
+            id,
+            normalizeHistoricoCodigo(rowAtual?.codigo),
+            normalizeHistoricoCodigo(tipoAtualizado.codigo),
+          )
           .all()) as { results?: HistoricoTipoSyncRow[] };
 
         const tipoSnapshot: QualificacaoTipoSnapshot = {
@@ -1135,7 +1184,7 @@ router.put(
           cargaHorariaRecorrente: tipoAtualizado.carga_horaria_recorrente,
         };
 
-        const statements = (historicos.results || []).map((historico: HistoricoTipoSyncRow) => {
+        const statements = (historicos.results || []).flatMap((historico: HistoricoTipoSyncRow) => {
           const snapshot = buildHistoricoTipoSnapshot(tipoSnapshot, {
             dataConclusao: historico.data_conclusao,
             dataVencimentoAtual: historico.data_vencimento,
@@ -1147,36 +1196,68 @@ router.put(
             snapshot.qualificacaoCodigo !== historico.qualificacao_codigo
               ? historico.qualificacao_codigo
               : snapshot.qualificacaoCodigo;
+          const historicoCodigoAtual = normalizeHistoricoCodigo(historico.qualificacao_codigo);
+          const historicoCodigoFinal = normalizeHistoricoCodigo(qualificacaoCodigoFinal);
+          const shouldUpdateQualificacaoId =
+            String(historico.qualificacao_id ?? '') !== String(id);
+          const shouldUpdateCodigo = historicoCodigoAtual !== historicoCodigoFinal;
+          const shouldUpdateTipo = String(historico.tipo_atual || '') !== String(snapshot.tipo || '');
+          const shouldUpdateCategoria =
+            String(historico.categoria_atual || '') !== String(snapshot.categoria || '');
+          const shouldUpdateValidade =
+            Number(historico.validade_meses_atual || 0) !== Number(snapshot.validadeMeses || 0);
+          const shouldUpdateVencimento =
+            String(historico.data_vencimento || '') !== String(snapshot.dataVencimento || '');
+          const shouldUpdateCargaHoraria =
+            Number(historico.carga_horaria_atual || 0) !== Number(snapshot.cargaHoraria || 0);
 
-          return db
-            .prepare(
-              `UPDATE qualificacoes_historico
-                  SET qualificacao_codigo = ?,
-                      tipo = ?,
-                      categoria = ?,
-                      validade_meses = ?,
-                      data_vencimento = ?,
-                      carga_horaria = ?,
-                      updated_at = datetime('now')
-                WHERE id = ?
-                  AND empresa_id = ?
-                  AND deleted_at IS NULL`,
-            )
-            .bind(
-              qualificacaoCodigoFinal,
-              snapshot.tipo,
-              snapshot.categoria,
-              snapshot.validadeMeses,
-              snapshot.dataVencimento,
-              snapshot.cargaHoraria,
-              historico.id,
-              empresaId,
-            );
+          if (
+            !shouldUpdateQualificacaoId &&
+            !shouldUpdateCodigo &&
+            !shouldUpdateTipo &&
+            !shouldUpdateCategoria &&
+            !shouldUpdateValidade &&
+            !shouldUpdateVencimento &&
+            !shouldUpdateCargaHoraria
+          ) {
+            historicosIgnorados += 1;
+            return [];
+          }
+
+          return [
+            db
+              .prepare(
+                `UPDATE qualificacoes_historico
+                    SET qualificacao_id = ?,
+                        qualificacao_codigo = ?,
+                        tipo = ?,
+                        categoria = ?,
+                        validade_meses = ?,
+                        data_vencimento = ?,
+                        carga_horaria = ?,
+                        updated_at = datetime('now')
+                  WHERE id = ?
+                    AND empresa_id = ?
+                    AND deleted_at IS NULL`,
+              )
+              .bind(
+                id,
+                qualificacaoCodigoFinal,
+                snapshot.tipo,
+                snapshot.categoria,
+                snapshot.validadeMeses,
+                snapshot.dataVencimento,
+                snapshot.cargaHoraria,
+                historico.id,
+                empresaId,
+              ),
+          ];
         });
 
         if (statements.length > 0) {
           await db.batch(statements);
           historicosSincronizados = statements.length;
+          await invalidateMaterializedStats(db);
           console.log(
             `[TIPOS_SYNC] ${historicosSincronizados} historicos sincronizados para tipo_id=${id}`,
           );
@@ -1186,6 +1267,34 @@ router.put(
 
     // Auditoria
     await logAuditoria(db, 'qualificacoes_tipos', id, 'UPDATE');
+    await registrarAuditoria({
+      db,
+      tabela: 'qualificacoes_tipos',
+      acao: 'UPDATE',
+      registro_id: String(id),
+      dados_anteriores: {
+        codigo: rowAtual?.codigo || null,
+        nome: rowAtual?.nome || null,
+        categoria: rowAtual?.categoria || null,
+        validade: rowAtual?.validade ?? null,
+        vencimento_fim_mes: rowAtual?.vencimento_fim_mes ?? null,
+      },
+      dados_novos: {
+        codigo: data.codigo ? normalizeTipoCodigo(data.codigo) : rowAtual?.codigo || null,
+        nome: data.nome?.trim() || rowAtual?.nome || null,
+        categoria: categoriaFinal || null,
+        validade: validadeFinal,
+        vencimento_fim_mes:
+          data.vencimento_fim_mes !== undefined
+            ? data.vencimento_fim_mes
+              ? 1
+              : 0
+            : rowAtual?.vencimento_fim_mes ?? null,
+        historicos_recalculados: historicosSincronizados,
+        historicos_ignorados: historicosIgnorados,
+      },
+      ...extrairUsuarioAuditoria(c),
+    });
 
     const categoriaEraEad = isEadCategoria(rowAtual?.categoria);
     const categoriaEhEad = isEadCategoria(categoriaFinal);
@@ -1215,9 +1324,18 @@ router.put(
       });
     }
 
+    const responseData: TipoUpdateResponseData = {
+      id: String(id),
+      validade_anterior: rowAtual?.validade ?? null,
+      validade_nova: validadeFinal,
+      historicos_recalculados: historicosSincronizados,
+      historicos_ignorados: historicosIgnorados,
+      warnings,
+    };
+
     return c.json({
       success: true,
-      data: { id, historicos_sincronizados: historicosSincronizados },
+      data: responseData,
       message: 'Tipo atualizado',
     });
   }),

@@ -39,9 +39,10 @@ describe('Qualificações > Modelos — validade persistence', () => {
   });
 
   describe('Save handler — validade payload', () => {
-    it('always sends validade in payload (even null — cleared field = no expiry)', () => {
-      // payload.validade = editingTipo.validade ?? null — sempre envia, mesmo null
-      expect(source).toMatch(/payload\.validade\s*=\s*editingTipo\.validade\s*\?\?\s*null/);
+    it('usa buildTipoPayload para incluir validade (incluindo null) no payload', () => {
+      // buildTipoPayload sempre inclui validade — null = sem vencimento.
+      // O backend usa hasOwnProperty para disparar sync de historico.
+      expect(source).toContain('buildTipoPayload(editingTipo)');
     });
 
     it('logs validade in the save console.log', () => {
@@ -53,7 +54,7 @@ describe('Qualificações > Modelos — validade persistence', () => {
       expect(source).toMatch(/setTipoUpdates.*prev.*\.\.\.prev.*tipoIdStr.*optimisticUpdate/);
     });
 
-    it('always includes validade in optimisticUpdate (even null)', () => {
+    it('inclui validade no optimisticUpdate incluindo quando null (limpar vencimento)', () => {
       expect(source).toMatch(/optimisticUpdate\.validade\s*=\s*editingTipo\.validade\s*\?\?\s*null/);
     });
 
@@ -82,9 +83,10 @@ describe('Qualificações > Modelos — validade persistence', () => {
       expect(source).toMatch(/validade:\s*row\.validade\s*\?\?\s*null/);
     });
 
-    it('sends validade in PUT payload (confirmed by backend inspection)', () => {
-      // The payload construction block includes validade conditionally
-      expect(source).toMatch(/if\s*\(editingTipo\.validade\s*!=\s*null\)/);
+    it('sends validade in PUT payload via buildTipoPayload (including null)', () => {
+      // buildTipoPayload garante que validade está sempre no payload, inclusive null.
+      // Não usar mais o guard `if (editingTipo.validade != null)` para omitir o campo.
+      expect(source).toContain('buildTipoPayload');
     });
 
     it('form value renders validade.toString() or empty string', () => {
