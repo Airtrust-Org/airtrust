@@ -272,6 +272,17 @@ async function requestWithoutAuth(
 
 function applySigvoosSchema(databasePath: string) {
   runSql(databasePath, readFileSync(sigvoosMigrationPath, 'utf8'));
+  runSql(
+    databasePath,
+    `
+      CREATE TABLE IF NOT EXISTS funcionarios (
+        id INTEGER PRIMARY KEY,
+        nome TEXT,
+        empresa_id INTEGER NOT NULL,
+        deleted_at TEXT
+      );
+    `,
+  );
 }
 
 function applyShadowCompareFrmsSchema(databasePath: string) {
@@ -370,6 +381,44 @@ function seedSigvoosPreviewState(databasePath: string) {
         valor_airtrust, valor_sigvoos, staging_id, severidade, status
       ) VALUES
         (9201, 1, 'voo', 601, 'prefixo', 'ATX-1001', 'ATX-EXT', 'tenant-a-processed', 'MEDIA', 'ABERTO');
+    `,
+  );
+}
+
+function seedJornadasEndpointState(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      CREATE TABLE IF NOT EXISTS funcionarios (
+        id INTEGER PRIMARY KEY,
+        nome TEXT,
+        empresa_id INTEGER NOT NULL,
+        deleted_at TEXT
+      );
+
+      INSERT INTO funcionarios (id, nome, empresa_id, deleted_at)
+      VALUES (1001, 'Tripulante Tenant A', 1, NULL), (2001, 'Tripulante Tenant B', 2, NULL);
+
+      UPDATE cv_voos
+      SET origem_importacao = 'SIGVOOS',
+          sigvoos_flight_report_id = 700101,
+          sigvoos_importado_em = '2026-06-14T12:00:00Z'
+      WHERE id = 601;
+
+      INSERT INTO cv_voo_etapas (
+        id, empresa_id, voo_id, numero_etapa, sigvoos_leg_number,
+        origem_icao, destino_icao, horario_motor_ligado, horario_decolagem,
+        horario_pouso, horario_motor_desligado, tempo_total, tempo_navegacao,
+        tempo_ifr, pousos_diurnos, starts, pax, combustivel_inicio, combustivel_fim,
+        origem_dados, sigvoos_importado_em
+      ) VALUES (
+        9301, 1, 601, 1, 1, 'SBRJ', 'SBSP', '08:00', '08:12', '09:08', '09:14',
+        '01:14', '00:56', '00:30', 1, 1, 10, 1086, 730, 'SIGVOOS', '2026-06-14T12:00:00Z'
+      );
+
+      INSERT INTO cv_voo_tripulantes (
+        id, empresa_id, voo_id, funcionario_id, funcao, etapa_id, sigvoos_staff_id, created_by, updated_by
+      ) VALUES (9401, 1, 601, 1001, 'PIC', 9301, 7001, 10, 10);
     `,
   );
 }
@@ -2046,6 +2095,121 @@ describe('controle voos routes', () => {
     await expect(termResponse.json()).resolves.toMatchObject({
       code: 'CONTROLE_VOOS_SCOPE_TERM',
     });
+  });
+
+  it('lista jornadas read-only a partir do modelo Controle de Voos sem usar FRMS', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    seedJornadasEndpointState(db.databasePath);
+
+    const statements: string[] = [];
+    const readOnlyDb = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'prepare') {
+          return (sql: string) => {
+            statements.push(sql);
+            return target.prepare(sql);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as D1Database;
+
+    const response = await request(readOnlyDb, '/api/controle-voos/jornadas?data=2026-06-14');
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      success: boolean;
+      data: {
+        fonte: string;
+        total: number;
+        items: Array<{
+          voo_id: number;
+          tripulante_id: number;
+          nome: string;
+          origem_dados: string;
+          qualidade_dado: string;
+          external_id_sigvoos: number;
+          sigvoos_leg_number: number;
+        }>;
+      };
+    };
+
+    expect(body.success).toBe(true);
+    expect(body.data.fonte).toBe('controle_voos');
+    expect(body.data.total).toBe(1);
+    expect(body.data.items[0]).toMatchObject({
+      voo_id: 601,
+      tripulante_id: 1001,
+      nome: 'Tripulante Tenant A',
+      origem_dados: 'importado',
+      qualidade_dado: 'completo',
+      external_id_sigvoos: 700101,
+      sigvoos_leg_number: 1,
+    });
+    expect(statements.join('\n')).not.toMatch(/\bfrms_/i);
+    expect(statements.join('\n')).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i);
+  });
+
+  it('isola jornadas por tenant no endpoint read-only', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+    seedJornadasEndpointState(db.databasePath);
+
+    runSql(
+      db.databasePath,
+      `
+        UPDATE cv_voos
+        SET origem_importacao = 'SIGVOOS',
+            sigvoos_flight_report_id = 800101,
+            sigvoos_importado_em = '2026-06-14T12:00:00Z'
+        WHERE id = 701;
+
+        INSERT INTO cv_voo_etapas (
+          id, empresa_id, voo_id, numero_etapa, sigvoos_leg_number,
+          origem_icao, destino_icao, horario_motor_ligado, horario_decolagem,
+          horario_pouso, horario_motor_desligado, origem_dados
+        ) VALUES (9302, 2, 701, 1, 1, 'SBBR', 'SBCF', '10:00', '10:15', '11:00', '11:05', 'SIGVOOS');
+
+        INSERT INTO cv_voo_tripulantes (
+          id, empresa_id, voo_id, funcionario_id, funcao, etapa_id, sigvoos_staff_id, created_by, updated_by
+        ) VALUES (9402, 2, 701, 2001, 'PIC', 9302, 8001, 20, 20);
+      `,
+    );
+
+    const tenantA = await request(db, '/api/controle-voos/jornadas?data=2026-06-14', {}, 1);
+    const tenantB = await request(db, '/api/controle-voos/jornadas?data=2026-06-14', {}, 2);
+
+    expect(((await tenantA.json()) as { data: { total: number } }).data.total).toBe(1);
+    expect(((await tenantB.json()) as { data: { total: number } }).data.total).toBe(1);
+  });
+
+  it('retorna empty state no endpoint de jornadas quando nao ha dados', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await request(db, '/api/controle-voos/jornadas?data=2026-06-01');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        total: 0,
+        items: [],
+      },
+    });
+  });
+
+  it('exige autenticacao no endpoint de jornadas', async () => {
+    const db = createSqliteD1();
+    applySigvoosSchema(db.databasePath);
+
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/controle-voos/jornadas?data=2026-06-14'),
+      {},
+      createEnv(db),
+    );
+
+    expect(response.status).toBe(401);
   });
 
   it('nao referencia dominios externos fora do escopo da fase', () => {

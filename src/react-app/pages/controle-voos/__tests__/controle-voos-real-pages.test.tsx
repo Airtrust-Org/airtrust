@@ -79,9 +79,10 @@ describe('controle voos real pages', () => {
     expect(jornadasSource).not.toContain('controleVoosMockData');
     expect(relatoriosSource).toContain('/api/controle-voos/relatorios/resumo-operacional');
     expect(tabelasSource).toContain('/api/controle-voos/catalogos/');
+    expect(jornadasSource).toContain('/api/controle-voos/jornadas');
     expect(jornadasSource).not.toContain('/api/frms/operational-snapshot?');
     expect(jornadasSource).not.toContain('/api/frms/acumulo-frota?mes=');
-    expect(jornadasSource).toContain('Jornadas reais serão alimentadas pelo Controle de Voos');
+    expect(jornadasSource).not.toContain('Jornadas — Preview');
   });
 
   it('carrega relatorios operacionais do endpoint real', async () => {
@@ -149,12 +150,83 @@ describe('controle voos real pages', () => {
     expect(screen.getByText('Falha no catálogo')).toBeInTheDocument();
   });
 
-  it('mantem jornadas em preview explicito sem consumir FRMS como fonte canonica', async () => {
+  it('carrega jornadas do endpoint canonico do Controle de Voos sem usar FRMS', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        data: {
+          periodo: { data_inicio: '2026-06-30', data_fim: '2026-06-30' },
+          total: 1,
+          items: [
+            {
+              jornada_id: 'v601-e9001-t9101',
+              voo_id: 601,
+              etapa_id: 9001,
+              external_id_sigvoos: 700101,
+              sigvoos_leg_number: 1,
+              data_operacional: '2026-06-30',
+              tripulante_id: 1001,
+              nome: 'Tripulante A',
+              funcao: 'PIC',
+              funcao_origem: null,
+              aeronave: 'ATX-1001',
+              origem_icao: 'SBRJ',
+              destino_icao: 'SBSP',
+              engine_start: '08:00',
+              takeoff_time: '08:12',
+              landing_time: '09:08',
+              engine_shutoff: '09:14',
+              tempo_total: '01:14',
+              tempo_navegacao: '00:56',
+              tempo_ifr: null,
+              tempo_noturno: null,
+              pousos_diurnos: 1,
+              pousos_noturnos: 0,
+              starts: 1,
+              pax: 10,
+              fuel_start: null,
+              fuel_end: null,
+              origem_dados: 'importado',
+              qualidade_dado: 'completo',
+              estado_conflito: null,
+              evidencia: null,
+              last_sync_at: '2026-06-30T12:00:00Z',
+            },
+          ],
+        },
+      }),
+    );
+
     render(<ControleVoosJornadas />);
-    expect(screen.getByText('Jornadas — Preview')).toBeInTheDocument();
-    expect(
-      screen.getByText(/Jornadas reais serão alimentadas pelo Controle de Voos a partir do SIGVOOS importado e normalizado/i),
-    ).toBeInTheDocument();
-    expect(vi.mocked(fetchWithAuth)).not.toHaveBeenCalled();
+
+    expect(screen.getByText('Carregando jornadas do Controle de Voos…')).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByText('Tripulante A')).toBeInTheDocument());
+
+    expect(vi.mocked(fetchWithAuth)).toHaveBeenCalledWith(
+      '/api/controle-voos/jornadas?data=2026-06-30',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(screen.getByText('SIGVOOS')).toBeInTheDocument();
+    expect(screen.getByText('Completo')).toBeInTheDocument();
+  });
+
+  it('mostra empty state quando nao ha jornadas no periodo', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        data: {
+          periodo: { data_inicio: '2026-06-30', data_fim: '2026-06-30' },
+          total: 0,
+          items: [],
+        },
+      }),
+    );
+
+    render(<ControleVoosJornadas />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Nenhuma jornada para/i)).toBeInTheDocument(),
+    );
   });
 });
