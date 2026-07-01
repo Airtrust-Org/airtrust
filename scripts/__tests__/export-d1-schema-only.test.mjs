@@ -251,3 +251,48 @@ test('shell wrapper with --write-sql only emits sql on pass', () => {
   assert.equal(manifest.sql_emitted, false);
   assert.equal(fs.existsSync(path.join(outputDir, 'schema_baseline_pre0412.sql')), false);
 });
+
+test('canonical fk to documented residual __backup_pessoas warns not fails', () => {
+  const result = analyzeObjects([
+    { type: 'table', name: 'pessoas_papeis', sql: 'CREATE TABLE pessoas_papeis (pessoa_id INTEGER REFERENCES "__backup_pessoas"(id));' },
+  ]);
+
+  const finding = result.findings.find((f) => f.code === 'canonical_fk_to_excluded_or_absent');
+  assert.ok(finding);
+  assert.equal(finding.severity, 'warn');
+  assert.equal(finding.detail.includes('documented residual'), true);
+  assert.equal(result.findings.filter((f) => f.severity === 'fail').length, 0);
+});
+
+test('canonical fk to documented residual funcionarios_backup warns not fails', () => {
+  const result = analyzeObjects([
+    { type: 'table', name: 'solicitacoes_lgpd', sql: 'CREATE TABLE solicitacoes_lgpd (funcionario_id INTEGER REFERENCES funcionarios_backup(id));' },
+  ]);
+
+  const finding = result.findings.find((f) => f.code === 'canonical_fk_to_excluded_or_absent');
+  assert.ok(finding);
+  assert.equal(finding.severity, 'warn');
+  assert.equal(result.findings.filter((f) => f.severity === 'fail').length, 0);
+});
+
+test('canonical fk to documented residual escalas warns not fails', () => {
+  const result = analyzeObjects([
+    { type: 'table', name: 'hospedagem', sql: 'CREATE TABLE hospedagem (escala_id INTEGER REFERENCES escalas(id));' },
+  ]);
+
+  const finding = result.findings.find((f) => f.code === 'canonical_fk_to_excluded_or_absent');
+  assert.ok(finding);
+  assert.equal(finding.severity, 'warn');
+  assert.equal(result.findings.filter((f) => f.severity === 'fail').length, 0);
+});
+
+test('canonical fk to undocumented absent target still fails', () => {
+  const result = analyzeObjects([
+    { type: 'table', name: 'foo', sql: 'CREATE TABLE foo (ref_id INTEGER REFERENCES undocumented_missing(id));' },
+  ]);
+
+  const finding = result.findings.find((f) => f.code === 'canonical_fk_to_excluded_or_absent');
+  assert.ok(finding);
+  assert.equal(finding.severity, 'fail');
+  assert.equal(result.findings.filter((f) => f.severity === 'fail').length, 1);
+});
