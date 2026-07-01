@@ -72,6 +72,21 @@ export function isEadCategoria(categoria: string | null | undefined) {
   return normalized === 'EAD' || normalized === 'TREINAMENTO EAD';
 }
 
+/**
+ * Determina se uma qualificação/curso tem formato EAD.
+ * Usa formato_codigo (campo estruturado pós-migration 0412) com fallback para categoria string.
+ * Substitui progressivamente isEadCategoria() para novos flows.
+ */
+export function isEadFormato(tipo: {
+  formato_codigo?: string | null;
+  categoria?: string | null;
+}): boolean {
+  if (tipo.formato_codigo) {
+    return tipo.formato_codigo.toUpperCase() === 'EAD';
+  }
+  return isEadCategoria(tipo.categoria);
+}
+
 function hoursToMinutes(value: number | null | undefined) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
   return Math.max(0, Math.round(value * 60));

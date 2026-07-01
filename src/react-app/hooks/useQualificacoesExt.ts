@@ -138,6 +138,8 @@ export function useQualificacoesHistorico(
   setorIds?: string[],
   historicoId?: number,
   enabled: boolean = true,
+  categoriaId?: number | null,
+  formatoId?: number | null,
 ) {
   const [loadingExtra, setLoadingExtra] = useState(false);
   const safeLimit = Math.min(limit, 500); // Máximo 500 por página
@@ -156,6 +158,8 @@ export function useQualificacoesHistorico(
     endpoint += `&setor_ids=${encodeURIComponent(setorIds.join(','))}`;
   }
   if (historicoId) endpoint += `&id=${historicoId}`;
+  if (categoriaId) endpoint += `&categoria_id=${categoriaId}`;
+  if (formatoId) endpoint += `&formato_id=${formatoId}`;
 
   const { data, loading, error, refetch } = useApi<ApiResponse>(endpoint, {
     enabled,
@@ -255,12 +259,14 @@ export function useQualificacoesHistorico(
 
       // PRIORIDADE 2: Calcular status baseado em vencimento
       if (!h.data_vencimento) {
+        const isCompletionStatus =
+          statusPersistido === 'CONCLUIDA' || statusPersistido === 'CONCLUIDO';
         return {
           ...h,
-          qualificacao_status: statusPersistido || null,
+          qualificacao_status: isCompletionStatus ? statusPersistido : statusPersistido || null,
           tem_certificado: temCertificadoAtivo ? 1 : 0,
           certificado_url: temCertificadoAtivo ? h.certificado_url : null,
-          status: 'INDETERMINADA',
+          status: isCompletionStatus ? statusPersistido : 'INDETERMINADA',
         };
       }
       const dataVenc = String(h.data_vencimento || '')

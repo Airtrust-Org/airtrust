@@ -281,6 +281,8 @@ router.get(
       tipo_id = '',
       aeronave_id = '',
       categoria = '',
+      categoria_id = '',
+      formato_id = '',
       setor_id = '',
       setor_ids = '',
       orderBy = 'data_vencimento',
@@ -370,6 +372,16 @@ router.get(
       conditions.push('qt.categoria = ?');
       params.push(categoria);
     }
+    const categoriaIdNum = parseInt(categoria_id, 10);
+    if (Number.isFinite(categoriaIdNum) && categoriaIdNum > 0) {
+      conditions.push('(qt.categoria_id = ? OR qc.id = ?)');
+      params.push(categoriaIdNum, categoriaIdNum);
+    }
+    const formatoIdNum = parseInt(formato_id, 10);
+    if (Number.isFinite(formatoIdNum) && formatoIdNum > 0) {
+      conditions.push('(qh.formato_id = ? OR qt.formato_id = ?)');
+      params.push(formatoIdNum, formatoIdNum);
+    }
 
     // Save base conditions (without status filter) for global counts
     const nonStatusConditions = [...conditions];
@@ -391,7 +403,7 @@ router.get(
         switch (selectedStatus) {
           case 'VALIDA':
             statusConditions.push(
-              `(qh.deleted_at IS NULL AND NOT (${renewedQualificationPredicate}) AND qh.data_conclusao IS NOT NULL AND ${vencimentoExpr} > date('now','+30 days'))`,
+              `(qh.deleted_at IS NULL AND NOT (${renewedQualificationPredicate}) AND qh.data_conclusao IS NOT NULL AND (${vencimentoExpr} IS NULL OR ${vencimentoExpr} > date('now','+30 days')))`,
             );
             break;
           case 'VENCIDA':
@@ -440,6 +452,7 @@ router.get(
         SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
           WHEN qh.data_conclusao IS NULL THEN 0
+          WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months')) IS NULL THEN 1
           WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))) >= julianday('now')
            AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))) - julianday('now') > 30 THEN 1
           ELSE 0
@@ -667,15 +680,12 @@ router.get(
       ) {
         derivedStatus = QUALIFICACAO_STATUS.PLANEJADA;
       } else if (!dataVencimentoCalculada) {
-        // Quando validade_meses é null (tipo sem vencimento) e há data de realização,
-        // usa o status do banco se for de conclusão. Garante que "Outros" não apareça
-        // como INDEFINIDA quando foi devidamente registrado como CONCLUIDA/CONCLUIDO.
         const dbStatusUpper = String(dbStatus || '').toUpperCase();
         const isCompletionStatus =
           dbStatusUpper === 'CONCLUIDA' || dbStatusUpper === 'CONCLUIDO';
         derivedStatus =
-          validadeMesesEfetiva === null && r.data_realizacao && isCompletionStatus
-            ? dbStatus
+          r.data_realizacao && (isCompletionStatus || dbStatusUpper.length === 0)
+            ? QUALIFICACAO_STATUS.CONCLUIDA
             : 'INDEFINIDA';
       } else if (dataVencimentoCalculada < today) {
         derivedStatus = 'VENCIDA';

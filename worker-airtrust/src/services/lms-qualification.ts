@@ -50,13 +50,12 @@ export async function createLmsQualificationOnCompletion(params: LmsQualificatio
   }
 
   const validadeMeses =
-    typeof params.validade === 'number' && params.validade > 0 ? params.validade : 12;
+    typeof params.validade === 'number' && params.validade > 0 ? params.validade : null;
   const vencimentoFimMes = params.vencimentoFimMes === 0 ? 0 : 1;
-  const dataVencimento = calcularDataVencimento(
-    params.dataConclusao,
-    validadeMeses,
-    vencimentoFimMes,
-  );
+  const dataVencimento =
+    validadeMeses != null
+      ? calcularDataVencimento(params.dataConclusao, validadeMeses, vencimentoFimMes)
+      : null;
   const qualificacaoCodigo = params.qualificacaoCodigo ?? params.qualificacaoNome;
   const observacoes = `Origem: LMS | Gerado automaticamente ao concluir: ${params.cursoTitulo}`;
   const marcadorRenovacao = `Renovada via LMS matrícula #${params.matriculaId} em ${new Date().toISOString().slice(0, 10)}`;

@@ -147,16 +147,27 @@ async function tableExists(db: D1Database, tableName: string): Promise<boolean> 
   }
 }
 
+async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
+  try {
+    const { results } = await db.prepare(`PRAGMA table_info(${table})`).all();
+    return (results || []).some((col: any) => col?.name === column);
+  } catch {
+    return false;
+  }
+}
+
 async function getCourseSetorSchema(db: D1Database): Promise<{
   hasCursoSetores: boolean;
   hasQualificacaoTipoSetores: boolean;
+  hasLmsCursosFormato: boolean;
 }> {
-  const [hasCursoSetores, hasQualificacaoTipoSetores] = await Promise.all([
+  const [hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato] = await Promise.all([
     tableExists(db, 'lms_cursos_setores'),
     tableExists(db, 'qualificacoes_tipos_setores'),
+    hasColumn(db, 'lms_cursos', 'formato_id'),
   ]);
 
-  return { hasCursoSetores, hasQualificacaoTipoSetores };
+  return { hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato };
 }
 
 function assertSetorIdsWithinWriteScope(
@@ -628,6 +639,7 @@ const CursoCreateSchema = z.object({
   gerar_qualificacao_ao_concluir: binaryFlagWithDefault(0),
   publicado: binaryFlagWithDefault(0),
   setor_ids: setorIdsSchema,
+  formato_id: z.number().int().positive().nullable().optional(),
 });
 
 const CursoUpdateSchema = z.object({
@@ -655,6 +667,7 @@ const CursoUpdateSchema = z.object({
   ativo: optionalBinaryFlag,
   version_tag: trimNullableText,
   setor_ids: setorIdsSchema,
+  formato_id: z.number().int().positive().nullable().optional(),
 });
 
 const StructuredContentInitSchema = z.object({
@@ -1579,12 +1592,23 @@ app.get('/', async (c) => {
     .bind(...binds)
     .first<{ n: number }>();
 
+  const formatoJoin = courseSetorSchema.hasLmsCursosFormato
+    ? `LEFT JOIN qualificacoes_formatos qf
+         ON qf.id = c.formato_id
+        AND qf.empresa_id = c.empresa_id
+        AND qf.deleted_at IS NULL`
+    : '';
+  const formatoSelect = courseSetorSchema.hasLmsCursosFormato
+    ? 'qf.codigo AS formato_codigo, qf.nome AS formato_nome,'
+    : '';
+
   const rows = await db
     .prepare(
       `
       SELECT c.*,
         qt.nome AS qualificacao_tipo_nome,
         h.id AS h5p_conteudo_id,
+        ${formatoSelect}
         (SELECT COUNT(*) FROM lms_matriculas m
          WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL${matriculaScope.clause}) AS total_matriculas,
         (SELECT COUNT(*) FROM lms_matriculas m
@@ -1592,6 +1616,7 @@ app.get('/', async (c) => {
         ${setoresJsonExpr} AS setores_json
       FROM lms_cursos c
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
+      ${formatoJoin}
       LEFT JOIN lms_h5p_conteudos h
         ON h.empresa_id = c.empresa_id
        AND h.r2_key = c.scorm_package_r2_prefix
@@ -1981,35 +2006,39 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
     await validateSetorIds(db, empresaId, setorIds);
   }
 
+  const insertCols = [
+    'empresa_id', 'titulo', 'descricao', 'categoria', 'carga_horaria_minutos', 'idioma',
+    'conteudo_programatico', 'observacoes', 'carga_horaria_inicial_horas',
+    'carga_horaria_recorrente_horas', 'tipo_conteudo', 'scorm_versao',
+    'scorm_mastery_score', 'qualificacao_tipo_id', 'gerar_qualificacao_ao_concluir', 'publicado',
+  ];
+  const insertVals: unknown[] = [
+    empresaId,
+    d.titulo,
+    d.descricao ?? null,
+    d.categoria ?? null,
+    d.carga_horaria_minutos,
+    d.idioma,
+    d.conteudo_programatico ?? null,
+    d.observacoes ?? null,
+    d.carga_horaria_inicial_horas ?? null,
+    d.carga_horaria_recorrente_horas ?? null,
+    d.tipo_conteudo,
+    d.scorm_versao ?? null,
+    d.scorm_mastery_score,
+    resolvedQualificacaoTipoId,
+    d.gerar_qualificacao_ao_concluir,
+    d.publicado,
+  ];
+  if (courseSetorSchema.hasLmsCursosFormato) {
+    insertCols.push('formato_id');
+    insertVals.push(d.formato_id ?? null);
+  }
   const result = await db
     .prepare(
-      `
-      INSERT INTO lms_cursos
-        (empresa_id, titulo, descricao, categoria, carga_horaria_minutos, idioma,
-         conteudo_programatico, observacoes, carga_horaria_inicial_horas,
-         carga_horaria_recorrente_horas, tipo_conteudo, scorm_versao,
-         scorm_mastery_score, qualificacao_tipo_id, gerar_qualificacao_ao_concluir, publicado)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `,
+      `INSERT INTO lms_cursos (${insertCols.join(', ')}) VALUES (${insertCols.map(() => '?').join(', ')})`,
     )
-    .bind(
-      empresaId,
-      d.titulo,
-      d.descricao ?? null,
-      d.categoria ?? null,
-      d.carga_horaria_minutos,
-      d.idioma,
-      d.conteudo_programatico ?? null,
-      d.observacoes ?? null,
-      d.carga_horaria_inicial_horas ?? null,
-      d.carga_horaria_recorrente_horas ?? null,
-      d.tipo_conteudo,
-      d.scorm_versao ?? null,
-      d.scorm_mastery_score,
-      resolvedQualificacaoTipoId,
-      d.gerar_qualificacao_ao_concluir,
-      d.publicado,
-    )
+    .bind(...insertVals)
     .run();
 
   const id = result.meta.last_row_id;
@@ -2195,7 +2224,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     qualificacao_tipo_id: resolvedQualificacaoTipoId,
     gerar_qualificacao_ao_concluir: nextResolvedGerarQualificacao,
   };
-  for (const key of [
+  const updateKeys = [
     'titulo',
     'descricao',
     'categoria',
@@ -2213,7 +2242,9 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     'publicado',
     'ativo',
     'version_tag',
-  ]) {
+  ];
+  if (courseSetorSchema.hasLmsCursosFormato) updateKeys.push('formato_id');
+  for (const key of updateKeys) {
     if (key in map && map[key] !== undefined) {
       sets.push(`${key} = ?`);
       vals.push(map[key] as string | number | null);

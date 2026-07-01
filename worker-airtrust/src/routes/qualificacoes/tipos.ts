@@ -100,6 +100,11 @@ type TipoQualificacaoRow = {
   categoria?: string | null;
   categoria_id?: number | null;
   categoria_cor?: string | null;
+  formato_id?: number | null;
+  formato_codigo?: string | null;
+  formato_nome?: string | null;
+  formato_cor?: string | null;
+  classe_requisito?: string | null;
   carga_horaria?: number | null;
   carga_horaria_inicial?: number | null;
   carga_horaria_recorrente?: number | null;
@@ -125,6 +130,8 @@ type TiposColumnsSupport = {
   hasConteudoProgramatico: boolean;
   hasCargaInicial: boolean;
   hasCargaRecorrente: boolean;
+  hasFormatoId: boolean;
+  hasClasseRequisito: boolean;
 };
 
 function deriveModeloTipo(validade: number | null | undefined, categoria?: string | null): string {
@@ -173,12 +180,16 @@ async function loadQualificacoesTiposColumnsSupport(
   const hasCargaRecorrente = hasColumn('carga_horaria_recorrente');
   const hasConteudoProgramatico = hasColumn('conteudo_programatico');
   const hasIsCheck = hasColumn('is_check');
+  const hasFormatoId = hasColumn('formato_id');
+  const hasClasseRequisito = hasColumn('classe_requisito');
 
   return {
     hasIsCheck,
     hasConteudoProgramatico,
     hasCargaInicial,
     hasCargaRecorrente,
+    hasFormatoId,
+    hasClasseRequisito,
   };
 }
 
@@ -196,6 +207,8 @@ const createTipoSchema = z.object({
   observacoes: z.string().nullable().optional(),
   ativo: z.union([z.boolean(), z.number()]).optional().default(true),
   is_check: z.union([z.boolean(), z.number()]).optional().default(false),
+  formato_id: z.number().int().positive().nullable().optional(),
+  classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
 });
 
 const updateTipoSchema = z.object({
@@ -211,6 +224,8 @@ const updateTipoSchema = z.object({
   observacoes: z.string().nullable().optional(),
   ativo: z.union([z.boolean(), z.number()]).optional(),
   is_check: z.union([z.boolean(), z.number()]).optional(),
+  formato_id: z.number().int().positive().nullable().optional(),
+  classe_requisito: z.enum(['TREINAMENTO', 'AVALIACAO', 'DOCUMENTO', 'EXPERIENCIA']).nullable().optional(),
 });
 
 const updateTipoSetoresSchema = z.object({
@@ -422,6 +437,14 @@ function buildCategoriaJoin(): string {
    AND qc.deleted_at IS NULL`;
 }
 
+function buildFormatoJoin(hasFormatoId: boolean): string {
+  if (!hasFormatoId) return '';
+  return `LEFT JOIN qualificacoes_formatos qf
+    ON qf.id = qt.formato_id
+   AND qf.empresa_id = qt.empresa_id
+   AND qf.deleted_at IS NULL`;
+}
+
 async function listTipoSetores(
   db: D1Database,
   empresaId: number,
@@ -609,6 +632,8 @@ router.get(
       .prepare(
         `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria,
         qc.id as categoria_id, qc.cor as categoria_cor,
+        ${columnsSupport.hasFormatoId ? 'qt.formato_id, qf.codigo as formato_codigo, qf.nome as formato_nome, qf.cor as formato_cor' : 'NULL as formato_id, NULL as formato_codigo, NULL as formato_nome, NULL as formato_cor'},
+        ${columnsSupport.hasClasseRequisito ? 'qt.classe_requisito' : 'NULL as classe_requisito'},
         qt.carga_horaria, ${
           columnsSupport.hasCargaInicial ? 'carga_horaria_inicial' : 'NULL as carga_horaria_inicial'
         }, ${
@@ -626,6 +651,7 @@ router.get(
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
         ${buildCategoriaJoin()}
+        ${buildFormatoJoin(columnsSupport.hasFormatoId)}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE ${conditions.join(' AND ')}
         ORDER BY qt.categoria, qt.nome
@@ -659,6 +685,8 @@ router.get(
       .prepare(
         `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria,
         qc.id as categoria_id, qc.cor as categoria_cor,
+        ${columnsSupport.hasFormatoId ? 'qt.formato_id, qf.codigo as formato_codigo, qf.nome as formato_nome, qf.cor as formato_cor' : 'NULL as formato_id, NULL as formato_codigo, NULL as formato_nome, NULL as formato_cor'},
+        ${columnsSupport.hasClasseRequisito ? 'qt.classe_requisito' : 'NULL as classe_requisito'},
         qt.carga_horaria, ${
           columnsSupport.hasCargaInicial ? 'carga_horaria_inicial' : 'NULL as carga_horaria_inicial'
         }, ${
@@ -675,6 +703,7 @@ router.get(
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
         ${buildCategoriaJoin()}
+        ${buildFormatoJoin(columnsSupport.hasFormatoId)}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE qt.id = ? AND qt.deleted_at IS NULL AND qt.empresa_id = ? AND ${setorScope.clause}
         LIMIT 1`,
@@ -792,15 +821,12 @@ router.post(
     const ativo = data.ativo === false ? 0 : 1;
     const isCheck = data.is_check ? 1 : 0;
 
-    // Inserir
-    const insertSql = hasIsCheck
-      ? `INSERT INTO qualificacoes_tipos 
-         (tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, is_check, empresa_id, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`
-      : `INSERT INTO qualificacoes_tipos 
-         (tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, empresa_id, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`;
-
+    // Inserir — colunas opcionais adicionadas dinamicamente conforme migration aplicada
+    const insertCols = [
+      'tipo', 'codigo', 'nome', 'descricao', 'categoria',
+      'carga_horaria', 'carga_horaria_inicial', 'carga_horaria_recorrente',
+      'conteudo_programatico', 'validade', 'vencimento_fim_mes', 'observacoes', 'ativo',
+    ];
     const insertBinds: unknown[] = [
       deriveModeloTipo(validade, categoria),
       codigo,
@@ -816,47 +842,17 @@ router.post(
       data.observacoes || null,
       ativo,
     ];
-    if (hasIsCheck) insertBinds.push(isCheck);
+    if (hasIsCheck) { insertCols.push('is_check'); insertBinds.push(isCheck); }
+    if (columnsSupport.hasFormatoId) { insertCols.push('formato_id'); insertBinds.push(data.formato_id ?? null); }
+    if (columnsSupport.hasClasseRequisito) { insertCols.push('classe_requisito'); insertBinds.push(data.classe_requisito ?? null); }
     insertBinds.push(empresaId);
+    const valuePlaceholders = insertCols.map(() => '?').join(', ');
+    const insertSql = `INSERT INTO qualificacoes_tipos (${insertCols.join(', ')}, empresa_id, created_at, updated_at, deleted_at) VALUES (${valuePlaceholders}, ?, datetime('now'), datetime('now'), NULL)`;
 
     if (existing?.deleted_at) {
-      const restoreSql = hasIsCheck
-        ? `UPDATE qualificacoes_tipos
-              SET tipo = ?,
-                  codigo = ?,
-                  nome = ?,
-                  descricao = ?,
-                  categoria = ?,
-                  carga_horaria = ?,
-                  carga_horaria_inicial = ?,
-                  carga_horaria_recorrente = ?,
-                  conteudo_programatico = ?,
-                  validade = ?,
-                  vencimento_fim_mes = ?,
-                  observacoes = ?,
-                  ativo = ?,
-                  is_check = ?,
-                  deleted_at = NULL,
-                  updated_at = datetime('now')
-            WHERE id = ? AND empresa_id = ?`
-        : `UPDATE qualificacoes_tipos
-              SET tipo = ?,
-                  codigo = ?,
-                  nome = ?,
-                  descricao = ?,
-                  categoria = ?,
-                  carga_horaria = ?,
-                  carga_horaria_inicial = ?,
-                  carga_horaria_recorrente = ?,
-                  conteudo_programatico = ?,
-                  validade = ?,
-                  vencimento_fim_mes = ?,
-                  observacoes = ?,
-                  ativo = ?,
-                  deleted_at = NULL,
-                  updated_at = datetime('now')
-            WHERE id = ? AND empresa_id = ?`;
-
+      const restoreSetParts = insertCols.map((col) => `${col} = ?`);
+      restoreSetParts.push("deleted_at = NULL", "updated_at = datetime('now')");
+      const restoreSql = `UPDATE qualificacoes_tipos SET ${restoreSetParts.join(', ')} WHERE id = ? AND empresa_id = ?`;
       const restoreBinds = [...insertBinds.slice(0, -1), existing.id, empresaId];
 
       await db
@@ -1081,6 +1077,14 @@ router.put(
     if (hasIsCheck && data.is_check !== undefined) {
       updateParts.push('is_check = ?');
       binds.push(data.is_check ? 1 : 0);
+    }
+    if (columnsSupport.hasFormatoId && data.formato_id !== undefined) {
+      updateParts.push('formato_id = ?');
+      binds.push(data.formato_id ?? null);
+    }
+    if (columnsSupport.hasClasseRequisito && data.classe_requisito !== undefined) {
+      updateParts.push('classe_requisito = ?');
+      binds.push(data.classe_requisito ?? null);
     }
 
     if (updateParts.length === 0) {
