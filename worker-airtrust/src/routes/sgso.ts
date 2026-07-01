@@ -215,11 +215,10 @@ sgso.post('/relatos', async (c) => {
     if (relatorId) {
       const escalaRow = await db
         .prepare(
-          `SELECT ea.escala_id, ea.quinzena
+          `SELECT ea.escala_id, ea.quinzena_id AS quinzena
            FROM escala_alocacoes ea
-           JOIN escalas e ON ea.escala_id = e.id
            WHERE ea.funcionario_id = ? AND ea.empresa_id = ?
-             AND date(?) BETWEEN date(e.data_inicio) AND date(e.data_fim)
+             AND date(?) BETWEEN date(ea.data_inicio) AND date(ea.data_fim)
              AND ea.deleted_at IS NULL
            LIMIT 1`,
         )
