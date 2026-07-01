@@ -214,4 +214,89 @@ describe('sgso relatos beta contract', () => {
     expect(insertCall?.args[3]).toBe('INCIDENTE');
     expect(insertCall?.args[14]).toBe('Descricao funcional minima do relato');
   });
+
+  it('cria relato com relatorId e vincula escala automaticamente', async () => {
+    const { db, calls } = createMockDb([
+      [
+        'INSERT OR IGNORE INTO sgso_protocolo_sequencia',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+      [
+        'UPDATE sgso_protocolo_sequencia SET ultimo_numero = ultimo_numero + 1',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+      [
+        'SELECT ultimo_numero FROM sgso_protocolo_sequencia',
+        {
+          first: () => ({ ultimo_numero: 8 }),
+        },
+      ],
+      [
+        'FROM frms_jornada fj',
+        {
+          first: () => null,
+        },
+      ],
+      [
+        'FROM escala_alocacoes ea',
+        {
+          first: () => ({ escala_id: 'esc-abc-123', quinzena: 1 }),
+        },
+      ],
+      [
+        'INSERT INTO sgso_relatos (',
+        {
+          run: () => ({ meta: { changes: 1, last_row_id: 1 } }),
+        },
+      ],
+      [
+        'INSERT INTO sgso_relatos_historico_status',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/sgso', sgsoRoutes);
+
+    const response = await app.request(
+      '/sgso/relatos',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'OCORRENCIA',
+          data_ocorrencia: '2026-07-01T10:00:00.000Z',
+          descricao: 'Relato com escala vinculada via relator_id',
+          local_descricao: 'SBBR',
+          relator_id: 42,
+        }),
+      },
+      { DB: db } as Env,
+    );
+
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.success).toBe(true);
+    expect(json.data.vinculado_escala).toBe(true);
+    expect(json.data.vinculado_frms).toBe(false);
+
+    // Verificar que a query de escala foi chamada (args: relator_id, empresa_id, data_ocorrencia)
+    const escalaCall = calls.find((call) => call.query.includes('FROM escala_alocacoes ea'));
+    expect(escalaCall).toBeDefined();
+    expect(escalaCall?.args[0]).toBe(42);
+    expect(escalaCall?.args[1]).toBe(77);
+
+    // Verificar que a query de escala NÃO contém JOIN escalas (legacy)
+    expect(escalaCall?.query).not.toContain('JOIN escalas');
+
+    // Verificar que escala_id foi passado no INSERT
+    const insertCall = calls.find((call) => call.method === 'run' && call.query.includes('INSERT INTO sgso_relatos ('));
+    expect(insertCall?.args).toContain('esc-abc-123');
+  });
 });
