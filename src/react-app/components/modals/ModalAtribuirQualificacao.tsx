@@ -78,7 +78,7 @@ function isG1SemQualificacao(codigo?: string | null): boolean {
  * Fluxo cascata correto:
  * 1. Funcionário (select) - obrigatório
  * 2. Categoria (select) - obrigatório
- * 3. Categoria (select filtrado por categoria) - obrigatório (antes: Tipo de Qualificação)
+ * 3. Modelo (select filtrado por categoria) - obrigatório
  * 4. Data de Realização (input date) - obrigatório
  * 5. Data de Vencimento (auto-calculada) - readonly
  * 6. Certificado (somente gestão – sem campo de número)
@@ -469,7 +469,7 @@ export function ModalAtribuirQualificacao({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <FileText className="inline w-4 h-4 mr-1" />
-                  Tipo <span className="text-red-500">*</span>
+                  Modelo <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.qualificacao_codigo}

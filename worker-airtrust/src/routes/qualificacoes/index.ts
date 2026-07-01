@@ -19,6 +19,7 @@ import tiposRouter from './tipos';
 import historicoRouter from './historico';
 import estatisticasRouter from './estatisticas';
 import atribuicaoRouter from './atribuicao';
+import formatosRouter from './formatos';
 
 const router = new Hono<{ Bindings: Env }>();
 
@@ -27,6 +28,7 @@ router.route('/tipos', tiposRouter);
 router.route('/historico', historicoRouter);
 router.route('/stats', estatisticasRouter);
 router.route('/atribuir', atribuicaoRouter);
+router.route('/formatos', formatosRouter);
 
 // ===== HEALTH CHECK =====
 router.get('/health', (c) => {

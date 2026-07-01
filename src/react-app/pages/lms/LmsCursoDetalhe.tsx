@@ -348,7 +348,7 @@ export default function LmsCursoDetalhe() {
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Formato</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Tipo de conteúdo</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {curso.tipo_conteudo === 'scorm'
                     ? 'Executado no player SCORM protegido, com persistência de progresso.'

@@ -437,4 +437,86 @@ describe('qualificacoes historico status sort contract', () => {
     expect(row.status).not.toBe('VENCIDA');
     expect(row.status).not.toBe('VENCENDO_30');
   });
+
+  it('inclui qualificação sem vencimento no filtro VALIDA quando já concluída', async () => {
+    const { db, calls } = createMockDb();
+    const app = createApp(db);
+
+    (db.prepare as unknown as ReturnType<typeof vi.fn>).mockImplementation((query: string) => {
+      const bind = (...args: unknown[]) => ({
+        first: async () => {
+          if (query.includes('COUNT(*) as total') && !query.includes('SUM(CASE')) {
+            return { total: 1 };
+          }
+          if (query.includes('SUM(CASE')) {
+            return { total: 1, validas: 1, vencendo: 0, vencidas: 0, renovadas: 0, planejadas: 0 };
+          }
+          return null;
+        },
+        all: async () => {
+          if (query.includes('PRAGMA table_info(qualificacoes_historico)')) {
+            return { results: [{ name: 'renovacao_de' }] };
+          }
+          if (query.includes('PRAGMA table_info(modelos_aeronave)')) {
+            return { results: [{ name: 'modelo' }] };
+          }
+          if (query.includes('LIMIT ? OFFSET ?')) {
+            return {
+              results: [
+                {
+                  id: 503,
+                  funcionario_id: 22,
+                  tipo_id: 90,
+                  tipo_nome: 'Curso Interno Sem Validade',
+                  tipo_codigo: 'CISV',
+                  tipo_categoria: 'EAD',
+                  historico_validade_meses: null,
+                  tipo_validade_atual: null,
+                  qualificacao_validade: null,
+                  validade_meses: null,
+                  vencimento_fim_mes: 0,
+                  data_realizacao: '2026-06-01',
+                  data_vencimento: null,
+                  renovada: 0,
+                  tem_renovacao_posterior: 0,
+                  renovacao_de: null,
+                  qualificacao_status: 'CONCLUIDA',
+                },
+              ],
+            };
+          }
+          return { results: [] };
+        },
+        run: async () => ({ meta: { changes: 0 } }),
+      });
+      return {
+        bind,
+        first: () => bind().first(),
+        all: () => bind().all(),
+        run: () => bind().run(),
+      };
+    });
+
+    const response = await app.request('/historico?statuses=VALIDA&limit=10&page=1');
+    const body = (await response.json()) as {
+      success: boolean;
+      data: Array<{ id: number; status: string; data_vencimento: string | null }>;
+      stats: { validas: number; vencendo: number; vencidas: number };
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({
+      id: 503,
+      status: 'CONCLUIDA',
+      data_vencimento: null,
+    });
+    expect(body.stats).toMatchObject({
+      validas: 1,
+      vencendo: 0,
+      vencidas: 0,
+    });
+
+  });
 });

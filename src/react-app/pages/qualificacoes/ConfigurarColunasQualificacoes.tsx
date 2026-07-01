@@ -16,7 +16,7 @@ export interface Coluna {
 const COLUNAS_DEFAULT: Coluna[] = [
   { id: "acoes", nome: "Ações", visivel: true },
   { id: "funcionario", nome: "Funcionário", visivel: true },
-  { id: "tipo", nome: "Tipo", visivel: true },
+  { id: "tipo", nome: "Modelo", visivel: true },
   { id: "codigo", nome: "Código", visivel: true },
   { id: "nome", nome: "Nome", visivel: true },
   { id: "realizado", nome: "Conclusão", visivel: true },

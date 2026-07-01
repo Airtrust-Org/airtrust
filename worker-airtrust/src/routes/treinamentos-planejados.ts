@@ -32,6 +32,8 @@ interface TreinamentoSchemaCapabilities {
   hasLimiteParticipantes: boolean;
   hasInstrutoresTable: boolean;
   hasDiasTable: boolean;
+  hasQualificacoesTiposFormato: boolean;
+  hasQualificacoesTiposCategoria: boolean;
 }
 
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
@@ -108,7 +110,7 @@ async function detectTreinamentoSchemaCapabilities(
   db: D1Database,
 ): Promise<TreinamentoSchemaCapabilities> {
   if (_capabilitiesCache) return _capabilitiesCache;
-  const [hasModalidade, hasCodigoTurma, hasDataInicio, hasDataFim, hasBase, hasSala, hasEquipamentoDescricao, hasLimiteParticipantes] =
+  const [hasModalidade, hasCodigoTurma, hasDataInicio, hasDataFim, hasBase, hasSala, hasEquipamentoDescricao, hasLimiteParticipantes, hasQualificacoesTiposFormato, hasQualificacoesTiposCategoria] =
     await Promise.all([
       hasColumn(db, 'treinamentos_planejados', 'modalidade'),
       hasColumn(db, 'treinamentos_planejados', 'codigo_turma'),
@@ -118,6 +120,8 @@ async function detectTreinamentoSchemaCapabilities(
       hasColumn(db, 'treinamentos_planejados', 'sala'),
       hasColumn(db, 'treinamentos_planejados', 'equipamento_descricao'),
       hasColumn(db, 'treinamentos_planejados', 'limite_participantes'),
+      hasColumn(db, 'qualificacoes_tipos', 'formato_id'),
+      hasColumn(db, 'qualificacoes_tipos', 'categoria_id'),
     ]);
   const [hasInstrutoresTable, hasDiasTable] = await Promise.all([
     tableExists(db, 'treinamentos_instrutores'),
@@ -134,6 +138,8 @@ async function detectTreinamentoSchemaCapabilities(
     hasLimiteParticipantes,
     hasInstrutoresTable,
     hasDiasTable,
+    hasQualificacoesTiposFormato,
+    hasQualificacoesTiposCategoria,
   };
   return _capabilitiesCache;
 }
@@ -1152,6 +1158,9 @@ async function listTreinamentosPlanejadosBase(
     busca?: string | null;
     treinamentoId?: number | null;
     scopedSetorIds?: number[] | null;
+    categoriaId?: string | null;
+    formatoId?: string | null;
+    qualificacaoTipoId?: string | null;
   },
   capabilities: TreinamentoSchemaCapabilities,
 ) {
@@ -1249,6 +1258,27 @@ async function listTreinamentosPlanejadosBase(
     )`;
     params.push(busca, busca, busca, busca);
   }
+  if (filters.qualificacaoTipoId) {
+    const tipoIdNum = parseInt(filters.qualificacaoTipoId, 10);
+    if (Number.isFinite(tipoIdNum) && tipoIdNum > 0) {
+      sql += ' AND t.qualificacao_tipo_id = ?';
+      params.push(tipoIdNum);
+    }
+  }
+  if (filters.categoriaId && capabilities.hasQualificacoesTiposCategoria) {
+    const catIdNum = parseInt(filters.categoriaId, 10);
+    if (Number.isFinite(catIdNum) && catIdNum > 0) {
+      sql += ' AND qt.categoria_id = ?';
+      params.push(catIdNum);
+    }
+  }
+  if (filters.formatoId && capabilities.hasQualificacoesTiposFormato) {
+    const fmtIdNum = parseInt(filters.formatoId, 10);
+    if (Number.isFinite(fmtIdNum) && fmtIdNum > 0) {
+      sql += ' AND qt.formato_id = ?';
+      params.push(fmtIdNum);
+    }
+  }
   if (filters.scopedSetorIds !== null && filters.scopedSetorIds !== undefined) {
     if (filters.scopedSetorIds.length === 0) {
       sql += ' AND 1 = 0';
@@ -1299,6 +1329,9 @@ async function loadStandalonePlannedQualificationItems(
     funcionarioId?: string | null;
     busca?: string | null;
     scopedSetorIds?: number[] | null;
+    categoriaId?: string | null;
+    formatoId?: string | null;
+    qualificacaoTipoId?: string | null;
   },
 ): Promise<ConsolidatedTrainingItem[]> {
   if (filters.status && normalizeTrainingStatusForCompatibility(filters.status) !== 'PLANEJADO') {
@@ -1373,6 +1406,27 @@ async function loadStandalonePlannedQualificationItems(
       UPPER(COALESCE(qh.observacoes, '')) LIKE ?
     )`;
     params.push(busca, busca, busca, busca);
+  }
+  if (filters.qualificacaoTipoId) {
+    const tipoIdNum = parseInt(filters.qualificacaoTipoId, 10);
+    if (Number.isFinite(tipoIdNum) && tipoIdNum > 0) {
+      sql += ' AND qh.qualificacao_id = ?';
+      params.push(tipoIdNum);
+    }
+  }
+  if (filters.categoriaId) {
+    const catIdNum = parseInt(filters.categoriaId, 10);
+    if (Number.isFinite(catIdNum) && catIdNum > 0) {
+      sql += ' AND qt.categoria_id = ?';
+      params.push(catIdNum);
+    }
+  }
+  if (filters.formatoId) {
+    const fmtIdNum = parseInt(filters.formatoId, 10);
+    if (Number.isFinite(fmtIdNum) && fmtIdNum > 0) {
+      sql += ' AND qt.formato_id = ?';
+      params.push(fmtIdNum);
+    }
   }
   if (filters.scopedSetorIds !== null && filters.scopedSetorIds !== undefined) {
     if (filters.scopedSetorIds.length === 0) {
@@ -1754,6 +1808,9 @@ async function listEventos(
     treinamentoId?: number | null;
     source?: string | null;
     scopedSetorIds?: number[] | null;
+    categoriaId?: string | null;
+    formatoId?: string | null;
+    qualificacaoTipoId?: string | null;
   },
   capabilities?: TreinamentoSchemaCapabilities,
 ): Promise<{ items: ConsolidatedTrainingItem[]; diagnostics: ListEventosDiagnostics }> {
@@ -1867,6 +1924,9 @@ treinamentosPlanejadosRoutes.get('/planejados', async (c) => {
     busca: c.req.query('busca'),
     source: c.req.query('source'),
     scopedSetorIds,
+    categoriaId: c.req.query('categoria_id'),
+    formatoId: c.req.query('formato_id'),
+    qualificacaoTipoId: c.req.query('qualificacao_tipo_id'),
   }, capabilities);
 
   return c.json({
