@@ -268,6 +268,18 @@ function findForeignKeyReferences(sql) {
   return [...new Set(references)];
 }
 
+function extractCteAliases(sql) {
+  const aliases = new Set();
+  const normalized = stripStringsAndComments(sql).replace(/\s+/g, ' ').trim();
+  // Find all WITH ... AS ( patterns, extracting each CTE alias
+  const aliasPattern = /(?:^|\bWITH\s+(?:RECURSIVE\s+)?|,\s*)([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\))?\s+AS\s*\(/gi;
+  let aliasMatch;
+  while ((aliasMatch = aliasPattern.exec(normalized)) !== null) {
+    aliases.add(aliasMatch[1]);
+  }
+  return aliases;
+}
+
 function findPotentialObjectReferences(object) {
   const references = new Set();
   let relevantSql = object.sql;
@@ -277,10 +289,15 @@ function findPotentialObjectReferences(object) {
     const match = object.sql.match(/\bAS\b([\s\S]*)$/i);
     relevantSql = match ? match[1] : object.sql;
   }
+  // Collect CTE aliases declared in this view/trigger to filter them out
+  const cteAliases = object.type === 'view' || object.type === 'trigger' ? extractCteAliases(relevantSql) : new Set();
   const sanitizedSql = stripStringsAndComments(relevantSql);
   for (const pattern of OBJECT_REFERENCE_PATTERNS) {
     for (const match of sanitizedSql.matchAll(pattern)) {
-      references.add(match[2]);
+      const name = match[2];
+      if (!cteAliases.has(name)) {
+        references.add(name);
+      }
     }
   }
   return [...references];
