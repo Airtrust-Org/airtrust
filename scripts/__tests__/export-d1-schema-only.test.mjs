@@ -296,3 +296,47 @@ test('canonical fk to undocumented absent target still fails', () => {
   assert.equal(finding.severity, 'fail');
   assert.equal(result.findings.filter((f) => f.severity === 'fail').length, 1);
 });
+
+test('cte alias does not create false absent dependency', () => {
+  const result = analyzeObjects([
+    { type: 'table', name: 'funcionarios', sql: 'CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, nome TEXT);' },
+    {
+      type: 'view',
+      name: 'vw_test',
+      sql: "CREATE VIEW vw_test AS WITH base AS (SELECT id, nome FROM funcionarios) SELECT * FROM base;",
+    },
+  ]);
+
+  assert.equal(result.findings.filter((f) => f.severity === 'fail').length, 0);
+  assert.equal(result.canonicalObjects.some((o) => o.name === 'vw_test'), true);
+});
+
+test('multiple cte aliases do not create false absent dependencies', () => {
+  const result = analyzeObjects([
+    { type: 'table', name: 'users', sql: 'CREATE TABLE users (id INTEGER PRIMARY KEY);' },
+    { type: 'table', name: 'roles', sql: 'CREATE TABLE roles (id INTEGER PRIMARY KEY);' },
+    {
+      type: 'view',
+      name: 'vw_multi_cte',
+      sql: 'CREATE VIEW vw_multi_cte AS WITH a AS (SELECT * FROM users), b AS (SELECT * FROM roles) SELECT a.id, b.id FROM a JOIN b ON a.id = b.id;',
+    },
+  ]);
+
+  assert.equal(result.findings.filter((f) => f.severity === 'fail').length, 0);
+  assert.equal(result.canonicalObjects.some((o) => o.name === 'vw_multi_cte'), true);
+});
+
+test('cte alias with real missing table inside cte still fails', () => {
+  const result = analyzeObjects([
+    {
+      type: 'view',
+      name: 'vw_bad_cte',
+      sql: 'CREATE VIEW vw_bad_cte AS WITH base AS (SELECT * FROM really_missing_table) SELECT * FROM base;',
+    },
+  ]);
+
+  const finding = result.findings.find((f) => f.code === 'canonical_dependency_on_excluded_or_absent');
+  assert.ok(finding);
+  assert.equal(finding.severity, 'fail');
+  assert.equal(finding.detail.includes('really_missing_table'), true);
+});
