@@ -347,7 +347,7 @@ correto — o bloqueio é de dívida de schema, não de código.
 |---|---|---|
 | `funcionarios_backup` | BACKUP / HISTORICAL | DROP'd explicitamente em `0227_cleanup_backup_tables.sql`. Zero referências em runtime `src/`. |
 | `__backup_pessoas` (e `_backup_pessoas`) | BACKUP / HISTORICAL | DROP'd explicitamente em `0227_cleanup_backup_tables.sql`. Zero referências em runtime `src/`. |
-| `escalas` (sem sufixo) | LEGACY (nunca existiu) | Nunca foi criada como tabela real. Migrations corretas usam `escalas_mensais(id)`. A FK em `0277_create_hospedagem.sql` linha 24 referencia `escalas(id)` — erro histórico. |
+| `escalas` (sem sufixo) | LEGACY (nunca existiu) | Nunca foi criada como tabela real. Migrations corretas usam `escalas_mensais(id)`. A FK em `0277_create_hospedagem.sql` linha 24 referencia `escalas(id)` — erro histórico. **Ressalva**: `worker-airtrust/src/routes/sgso.ts:220` contém `JOIN escalas e ON ea.escala_id = e.id` — possível bug runtime ou referência legada. Fora do escopo desta decisão (wrapper analisa DDL, não runtime). |
 
 ### Tabelas canônicas afetadas
 
@@ -365,11 +365,11 @@ tabela referenciada não existe.
 | `pessoas_papeis` | `__backup_pessoas` | Nenhum — FK inerte |
 | `registros_frms` | `escalas` | Nenhum — FK inerte |
 | `sessoes_treinamento` | `escalas` | Nenhum — FK inerte |
-| `solicitacoes_lgpd` | `__backup_pessoas` | Nenhum — FK inerte |
+| `solicitacoes_lgpd` | `funcionarios_backup` | Nenhum — FK inerte |
 
 ### Decisão
 
-**Adicionar `funcionarios_backup`, `_backup_pessoas` e `escalas` à lista de exclusão explícita do
+**Adicionar `funcionarios_backup`, `__backup_pessoas` e `escalas` à lista de exclusão explícita do
 wrapper (`EXPLICIT_RESIDUAL_NAMES`), classificando FKs canônicas para esses nomes como `warn` em
 vez de `fail`.**
 
@@ -377,7 +377,10 @@ Justificativa:
 1. As três tabelas não existem no schema físico (`sqlite_master`).
 2. Duas foram deliberadamente removidas por migration de limpeza (`0227`).
 3. Uma (`escalas`) nunca existiu — é erro de digitação histórica em migration `0277`.
-4. Nenhuma é referenciada por código runtime.
+4. Nenhuma é referenciada por código runtime, com uma ressalva: `escalas` aparece em
+   `worker-airtrust/src/routes/sgso.ts:220` via `JOIN escalas e ON ea.escala_id = e.id`. Isso
+   pode ser bug runtime ou referência legada. Está fora do escopo desta decisão documental (o
+   wrapper analisa DDL de `sqlite_master`, não código runtime).
 5. As FKs são inertes: SQLite não as valida porque a tabela-alvo não existe.
 
 ### Risco
@@ -389,7 +392,7 @@ já são inócuas.
 ### Próximo passo técnico
 
 1. Abrir PR pequeno editando `scripts/export-d1-schema-only.mjs`:
-   - Adicionar `'funcionarios_backup'`, `'_backup_pessoas'`, `'escalas'` ao array
+   - Adicionar `'funcionarios_backup'`, `'__backup_pessoas'`, `'escalas'` ao array
      `EXPLICIT_RESIDUAL_NAMES`.
    - Ajustar lógica de severity para rebaixar `canonical_fk_to_excluded_or_absent` para `warn`
      quando a tabela-alvo estiver em `EXPLICIT_RESIDUAL_NAMES`.

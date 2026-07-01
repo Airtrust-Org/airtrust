@@ -19,9 +19,12 @@ const EXPLICIT_RESIDUAL_NAMES = new Set([
   '_data_recovery_log',
   '_qualificacoes_enriquecimento',
   '_qualificacoes_mapping',
+  '__backup_pessoas',
   'backups',
   'backups_controle',
   'backups_logs',
+  'escalas',
+  'funcionarios_backup',
   'migracao_log',
   'migracao_mapeamento_ids',
   'qualificacoes_tipos_backup_0063',
@@ -496,15 +499,18 @@ export function analyzeObjects(rawObjects, options = {}) {
     const code = edge.via === 'foreign_key'
       ? 'canonical_fk_to_excluded_or_absent'
       : 'canonical_dependency_on_excluded_or_absent';
+    const isDocumentedResidual = EXPLICIT_RESIDUAL_NAMES.has(edge.target);
     const finding = {
-      severity: 'fail',
+      severity: isDocumentedResidual ? 'warn' : 'fail',
       code,
       object: edge.source,
-      detail: `Canonical ${edge.source_type} ${edge.source} references ${target ? 'excluded' : 'absent'} object ${edge.target}.`,
+      detail: `Canonical ${edge.source_type} ${edge.source} references ${target ? 'excluded' : 'absent'} object ${edge.target}.${isDocumentedResidual ? ' Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).' : ''}`,
       edge,
     };
     findings.push(finding);
-    blockedDependencies.push(finding);
+    if (finding.severity === 'fail') {
+      blockedDependencies.push(finding);
+    }
   }
 
   findings.push(...collectPre0412Violations(objects).map((violation) => ({ severity: 'fail', ...violation })));
