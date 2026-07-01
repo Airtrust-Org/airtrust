@@ -328,3 +328,72 @@ Com o baseline DDL aplicado e o ledger `d1_migrations` vazio, aplicar a `0412` e
 - ✅ `wrangler.toml` sem diff
 - ✅ PR #168 intocado
 - ✅ `scripts/export-d1-schema-only.sh` não foi commitado
+
+---
+
+## Decisão documental — FKs órfãs bloqueantes (2026-07-01)
+
+### Contexto
+
+O wrapper schema-only (`scripts/export-d1-schema-only.mjs`) foi validado e mergeado (PR #221, SHA
+`24d497d`). Ao rodar contra produção em modo audit-only, o wrapper reportou `status = FAIL` com 11
+findings: 9 tabelas canônicas com FKs apontando para 3 tabelas ausentes, mais 2 objetos dependentes
+secundários. O replay de validação (dataset podado) comprovou que o mecanismo do wrapper está
+correto — o bloqueio é de dívida de schema, não de código.
+
+### Tabelas ausentes identificadas
+
+| Tabela ausente | Classificação | Evidência |
+|---|---|---|
+| `funcionarios_backup` | BACKUP / HISTORICAL | DROP'd explicitamente em `0227_cleanup_backup_tables.sql`. Zero referências em runtime `src/`. |
+| `__backup_pessoas` (e `_backup_pessoas`) | BACKUP / HISTORICAL | DROP'd explicitamente em `0227_cleanup_backup_tables.sql`. Zero referências em runtime `src/`. |
+| `escalas` (sem sufixo) | LEGACY (nunca existiu) | Nunca foi criada como tabela real. Migrations corretas usam `escalas_mensais(id)`. A FK em `0277_create_hospedagem.sql` linha 24 referencia `escalas(id)` — erro histórico. |
+
+### Tabelas canônicas afetadas
+
+As 9 tabelas abaixo são CANONICAL (em uso ativo no runtime) mas mantêm FKs inertes para as tabelas
+ausentes acima. Nenhuma delas tem seu funcionamento comprometido porque SQLite ignora FKs cuja
+tabela referenciada não existe.
+
+| Tabela canônica | FK para | Impacto real |
+|---|---|---|
+| `certificados_templates` | `__backup_pessoas` | Nenhum — FK inerte |
+| `credenciais` | `escalas` | Nenhum — FK inerte |
+| `hospedagem` | `escalas(id)` | Nenhum — `escala_id` é nullable, FK inerte |
+| `hospedagens` | `funcionarios_backup` | Nenhum — FK inerte |
+| `pessoas_auditoria_acessos` | `__backup_pessoas` | Nenhum — FK inerte |
+| `pessoas_papeis` | `__backup_pessoas` | Nenhum — FK inerte |
+| `registros_frms` | `escalas` | Nenhum — FK inerte |
+| `sessoes_treinamento` | `escalas` | Nenhum — FK inerte |
+| `solicitacoes_lgpd` | `__backup_pessoas` | Nenhum — FK inerte |
+
+### Decisão
+
+**Adicionar `funcionarios_backup`, `_backup_pessoas` e `escalas` à lista de exclusão explícita do
+wrapper (`EXPLICIT_RESIDUAL_NAMES`), classificando FKs canônicas para esses nomes como `warn` em
+vez de `fail`.**
+
+Justificativa:
+1. As três tabelas não existem no schema físico (`sqlite_master`).
+2. Duas foram deliberadamente removidas por migration de limpeza (`0227`).
+3. Uma (`escalas`) nunca existiu — é erro de digitação histórica em migration `0277`.
+4. Nenhuma é referenciada por código runtime.
+5. As FKs são inertes: SQLite não as valida porque a tabela-alvo não existe.
+
+### Risco
+
+Baixíssimo. A exclusão é apenas documental/política — não altera banco, não executa DML, não
+remove constraints do schema real. O baseline gerado com essa exclusão não conterá essas FKs, que
+já são inócuas.
+
+### Próximo passo técnico
+
+1. Abrir PR pequeno editando `scripts/export-d1-schema-only.mjs`:
+   - Adicionar `'funcionarios_backup'`, `'_backup_pessoas'`, `'escalas'` ao array
+     `EXPLICIT_RESIDUAL_NAMES`.
+   - Ajustar lógica de severity para rebaixar `canonical_fk_to_excluded_or_absent` para `warn`
+     quando a tabela-alvo estiver em `EXPLICIT_RESIDUAL_NAMES`.
+2. Rodar testes (`node --test`).
+3. Se passar, gerar baseline oficial contra produção com `--write-sql`.
+4. Submeter baseline a revisão humana.
+5. Após baseline validado, seguir runbook de rebuild de staging.
