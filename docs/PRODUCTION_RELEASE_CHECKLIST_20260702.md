@@ -1,7 +1,7 @@
 # Production Release Checklist — Preparado para o Próximo Operador
 
 > **Data:** 2026-07-02
-> **SHA main:** `4e41e6bbc48c1f97efb2eab03a92ae44351cea31`
+> **SHA main:** `953ef22603a4c1775b413f037cd66c23eae899c3` (SHA atual — antes da janela, rodar `git rev-parse HEAD` e confirmar que o working tree está limpo)
 > **Status:** Checklist preparado, NÃO EXECUTADO
 > **Modelo de execução recomendado:** DeepSeek v4 Pro
 
@@ -14,8 +14,40 @@
 - Rollback: reverter Worker primeiro; DDL reverso só com autorização separada.
 - PR #168 não deve ser tocado.
 - **`git status --short` deve estar vazio** (zero untracked, zero modified, zero staged).
-- **`git rev-parse HEAD` deve ser igual ao SHA main deste documento** antes de qualquer operação.
+- Branch deve ser `main`.
+- **`git rev-parse HEAD` deve ser registrado no relatório da execução** — não depender de SHA hardcoded neste documento.
+- Domínio canônico de produção é **`api.airtrust.online`**. O endpoint **`airtrust-api.airtrust.workers.dev`** NÃO é canônico e não deve ser usado para decisão de produção.
+- Fallback técnico aceitável: **`airtrust-api-production.airtrust.workers.dev`**.
 - Toda etapa deve ser confirmada antes de passar para a próxima.
+
+## 🔵 Pré-janela (antes de começar)
+
+```bash
+# 0. Confirmar working tree limpo
+git status --short
+# Deve estar vazio
+
+# 1. Confirmar branch
+git branch --show-current
+# Deve ser "main"
+
+# 2. Registrar SHA atual
+git rev-parse HEAD
+# Salvar no relatório da execução
+
+# 3. Confirmar CI verde do último commit em main
+gh run list --commit "$(git rev-parse HEAD)" --limit 10 --json name,conclusion,status
+
+# 4. Confirmar domínio canônico de produção
+dig +short api.airtrust.online
+echo ""
+echo "⚠️  ATENÇÃO: o endpoint airtrust-api.airtrust.workers.dev NÃO é canônico."
+echo "   Não usá-lo para decisão de produção."
+
+# 5. Confirmar produção saudável antes da janela
+curl -s https://api.airtrust.online/api/health | python3 -m json.tool
+# Deve retornar: status=healthy, database=ok, environment=production
+```
 
 ---
 
@@ -96,11 +128,11 @@ npx wrangler d1 execute airtrust-db --remote --command "SELECT COUNT(*) as n FRO
 # 1. Deploy do worker production
 npm run deploy:worker
 
-# 2. Verificar health
-curl -s https://airtrust-api.airtrust.workers.dev/api/health | python3 -m json.tool
+# 2. Verificar health (domínio canônico)
+curl -s https://api.airtrust.online/api/health | python3 -m json.tool
 
 # 3. Verificar versão
-curl -s https://airtrust-api.airtrust.workers.dev/api/version | python3 -m json.tool
+curl -s https://api.airtrust.online/api/version | python3 -m json.tool
 ```
 
 **Critério de aceite:** Health 200, versão contém o SHA esperado.
@@ -124,12 +156,15 @@ npm run deploy:pages
 
 ```bash
 # O Worker de produção está em:
-#   https://airtrust-api.airtrust.workers.dev
-# O frontend de produção está em:
-#   https://airtrust.online  (ou main.airtrust.pages.dev)
+#   CANÔNICO: https://api.airtrust.online
+#   Fallback técnico: https://airtrust-api-production.airtrust.workers.dev
+#
+# ⚠️  airtrust-api.airtrust.workers.dev NÃO é produção canônica.
+#      Este endpoint causou falso NO-GO em 2026-07-02 por estar
+#      rodando uma build dev-local. Ignorá-lo.
 #
 # Confirmar que o DNS aponta para o Workers correto:
-dig +short airtrust-api.airtrust.workers.dev
+dig +short api.airtrust.online
 # Deve retornar um IP da Cloudflare (104.x.x.x ou 172.x.x.x)
 ```
 
@@ -137,13 +172,13 @@ dig +short airtrust-api.airtrust.workers.dev
 
 > ⚠️ **Atenção:** O script `smoke-staging-auth.mjs` foi projetado para staging.  
 > Seu uso em produção é **temporário** — o próximo release deve ter um script `smoke-production-auth.mjs` dedicado.  
-> Antes de rodar, confirme que `STAGING_API_BASE_URL` aponta para produção e não para staging:
+> Antes de rodar, confirme que o alvo é `api.airtrust.online` (canônico) ou `airtrust-api-production.airtrust.workers.dev` (fallback):
 
 ```bash
 # CONFIRMAR ALVO ANTES DE RODAR:
-export SMOKE_TARGET='https://airtrust-api.airtrust.workers.dev'
+export SMOKE_TARGET='https://api.airtrust.online'
 echo "Alvo: $SMOKE_TARGET"
-# Deve mostrar "airtrust.workers.dev" (NÃO "staging")
+# Deve mostrar "api.airtrust.online"
 
 node scripts/smoke-staging-auth.mjs --dry-run
 ```
@@ -161,9 +196,9 @@ Checklist:
 ```bash
 # CONFIRMAR ALVO NOVAMENTE:
 echo "Alvo: $STAGING_API_BASE_URL"
-# Deve mostrar "airtrust.workers.dev" (NÃO "staging")
+# Deve mostrar "api.airtrust.online" (canônico) ou "airtrust-api-production.airtrust.workers.dev" (fallback)
 
-STAGING_API_BASE_URL='https://airtrust-api.airtrust.workers.dev' \
+STAGING_API_BASE_URL='https://api.airtrust.online' \
 STAGING_SMOKE_EMAIL='<email-admin-producao>' \
 STAGING_SMOKE_PASSWORD='<senha-admin-producao>' \
 node scripts/smoke-staging-auth.mjs
@@ -205,7 +240,9 @@ DROP TABLE IF EXISTS qualificacoes_formatos;
 - Snapshot de produção falha ou hash não confere
 - Migration 0412 retorna erro não idempotente
 - Worker deployado retorna 500 em health check
+- Domínio canônico `api.airtrust.online` não responde ou retorna unhealthy
 - Smoke autenticado falha em qualquer endpoint crítico
 - Cross-tenant detectado (empresa_id incorreto)
 - PR #168 foi tocado (não deve)
 - `env.production` foi alterado no wrangler.toml (não deve)
+- Endpoint `airtrust-api.airtrust.workers.dev` foi usado como referência de produção (não usar)
