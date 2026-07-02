@@ -1,0 +1,214 @@
+{
+  "stamp": "20260701release",
+  "mode": "audit+sql",
+  "source": {
+    "label": "production sqlite_master read-only query",
+    "database_name": "airtrust-db",
+    "database_id": "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+  },
+  "classification_model": {
+    "canonical": "included in baseline output",
+    "excluded": "excluded from baseline output",
+    "suspicious": "risk dimension recorded for policy-excluded residual objects; inspect finalDecision for confirmation"
+  },
+  "counts": {
+    "all": 1014,
+    "canonical": 957,
+    "suspicious": 32,
+    "excluded": 57,
+    "tables": 253,
+    "indexes": 707,
+    "views": 10,
+    "triggers": 44
+  },
+  "trigger_dml_objects": [
+    "trg_alertas_reforco_updated_at",
+    "trg_apply_reclassification",
+    "trg_calc_vencimento_insert",
+    "trg_edapp_config_updated",
+    "trg_funcionarios_setor_required_insert",
+    "trg_funcionarios_setor_required_update",
+    "trg_integracoes_edapp_cursos_updated_at",
+    "trg_integracoes_edapp_eventos_updated_at",
+    "trg_integracoes_edapp_usuarios_updated_at",
+    "trg_lms_cursos_updated_at",
+    "trg_lms_h5p_conteudos_updated_at",
+    "trg_lms_historico_importado_updated_at",
+    "trg_lms_matriculas_updated_at",
+    "trg_lms_progresso_scorm_updated_at",
+    "trg_qualificacoes_historico_set_tipo",
+    "trg_qualificacoes_historico_update_tipo",
+    "trg_qualificacoes_tipos_update",
+    "trg_tipo_update_auditoria",
+    "trg_treinamentos_dias_updated_at",
+    "trg_treinamentos_instrutores_updated_at",
+    "trg_treinamentos_presencas_updated_at",
+    "trigger_modelos_sessao_manobras_updated_at",
+    "update_credenciais_updated_at",
+    "update_papeis_updated_at"
+  ],
+  "findings": [
+    {
+      "severity": "warn",
+      "code": "excluded_fk_to_excluded_or_absent",
+      "object": "_backup_qh_tmp",
+      "detail": "Excluded table _backup_qh_tmp keeps a foreign key to absent object funcionarios_backup.",
+      "edge": {
+        "source": "_backup_qh_tmp",
+        "source_type": "table",
+        "target": "funcionarios_backup",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "excluded_fk_to_excluded_or_absent",
+      "object": "backups_logs",
+      "detail": "Excluded table backups_logs keeps a foreign key to excluded object backups_controle.",
+      "edge": {
+        "source": "backups_logs",
+        "source_type": "table",
+        "target": "backups_controle",
+        "target_type": "table",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "certificados_templates",
+      "detail": "Canonical table certificados_templates references absent object __backup_pessoas. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "certificados_templates",
+        "source_type": "table",
+        "target": "__backup_pessoas",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "credenciais",
+      "detail": "Canonical table credenciais references absent object __backup_pessoas. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "credenciais",
+        "source_type": "table",
+        "target": "__backup_pessoas",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "hospedagem",
+      "detail": "Canonical table hospedagem references absent object escalas. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "hospedagem",
+        "source_type": "table",
+        "target": "escalas",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "hospedagens",
+      "detail": "Canonical table hospedagens references absent object funcionarios_backup. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "hospedagens",
+        "source_type": "table",
+        "target": "funcionarios_backup",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "pessoas_auditoria_acessos",
+      "detail": "Canonical table pessoas_auditoria_acessos references absent object __backup_pessoas. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "pessoas_auditoria_acessos",
+        "source_type": "table",
+        "target": "__backup_pessoas",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "pessoas_papeis",
+      "detail": "Canonical table pessoas_papeis references absent object __backup_pessoas. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "pessoas_papeis",
+        "source_type": "table",
+        "target": "__backup_pessoas",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "registros_frms",
+      "detail": "Canonical table registros_frms references absent object funcionarios_backup. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "registros_frms",
+        "source_type": "table",
+        "target": "funcionarios_backup",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "sessoes_treinamento",
+      "detail": "Canonical table sessoes_treinamento references absent object funcionarios_backup. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "sessoes_treinamento",
+        "source_type": "table",
+        "target": "funcionarios_backup",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_fk_to_excluded_or_absent",
+      "object": "solicitacoes_lgpd",
+      "detail": "Canonical table solicitacoes_lgpd references absent object funcionarios_backup. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "solicitacoes_lgpd",
+        "source_type": "table",
+        "target": "funcionarios_backup",
+        "target_type": "absent",
+        "via": "foreign_key"
+      }
+    },
+    {
+      "severity": "warn",
+      "code": "canonical_dependency_on_excluded_or_absent",
+      "object": "trg_apply_reclassification",
+      "detail": "Canonical trigger trg_apply_reclassification references excluded object _data_recovery_log. Target is documented residual (see docs/SCHEMA_OBJECT_CANONICALITY_AUDIT_20260701.md).",
+      "edge": {
+        "source": "trg_apply_reclassification",
+        "source_type": "trigger",
+        "target": "_data_recovery_log",
+        "target_type": "table",
+        "via": "textual"
+      }
+    }
+  ],
+  "blocked_dependencies": [],
+  "status": "PASS",
+  "output_dir": "/private/tmp/claude-501/-Users-filipedaumas-SAAS-Airtrust/2111979f-3544-4b71-9623-73c54261d059/scratchpad/baseline-release/final",
+  "sql_sha256": "ae6fc54a77096c4e104ad6068db415030ad54e4052be5b9e0b54a2295a13c38a",
+  "sql_emitted": true,
+  "artifact_hash": "5f36d913e4a05e03d3a81b0252d4904024c3d7891d0ceb430e146ced8cb7c85c"
+}
