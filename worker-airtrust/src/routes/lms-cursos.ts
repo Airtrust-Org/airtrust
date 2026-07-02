@@ -22,6 +22,7 @@ import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 import {
   ensureQualificacaoTipoForCurso,
   isEadCategoria,
+  isEadFormato,
   reconcileImportedEdappHistory,
   resolveCanonicalEadQualificacaoTipoId,
   syncAllEadCoursesFromQualificacoes,

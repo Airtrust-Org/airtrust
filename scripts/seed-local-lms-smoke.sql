@@ -71,6 +71,7 @@ INSERT OR IGNORE INTO qualificacoes_tipos (
   nome,
   descricao,
   categoria,
+  formato_id,
   carga_horaria,
   validade,
   ativo,
@@ -83,7 +84,15 @@ INSERT OR IGNORE INTO qualificacoes_tipos (
   'LMS-SMOKE-EAD',
   'LMS Smoke EAD',
   'Synthetic local qualification used only by the LMS smoke job.',
-  'EAD',
+  'Treinamento Teórico',
+  (
+    SELECT id
+    FROM qualificacoes_formatos
+    WHERE empresa_id = 6
+      AND deleted_at IS NULL
+      AND UPPER(TRIM(codigo)) = 'EAD'
+    LIMIT 1
+  ),
   1,
   12,
   1,
@@ -94,7 +103,15 @@ INSERT OR IGNORE INTO qualificacoes_tipos (
 
 UPDATE qualificacoes_tipos
 SET empresa_id = 6,
-    categoria = 'EAD',
+    categoria = 'Treinamento Teórico',
+    formato_id = (
+      SELECT id
+      FROM qualificacoes_formatos
+      WHERE empresa_id = 6
+        AND deleted_at IS NULL
+        AND UPPER(TRIM(codigo)) = 'EAD'
+      LIMIT 1
+    ),
     ativo = 1,
     deleted_at = NULL,
     updated_at = datetime('now')

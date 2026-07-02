@@ -88,6 +88,77 @@ ensure_sqlite_column "qualificacoes_tipos" "carga_horaria_inicial" "REAL"
 ensure_sqlite_column "qualificacoes_tipos" "carga_horaria_recorrente" "REAL"
 ensure_sqlite_column "qualificacoes_historico" "renovacao_de" "INTEGER DEFAULT NULL"
 
+printf 'setup:lms:local: ensuring local qualificacoes formatos bootstrap\n'
+sqlite3 "$SQLITE_FILE" <<'SQL'
+CREATE TABLE IF NOT EXISTS qualificacoes_formatos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome TEXT NOT NULL,
+  codigo TEXT NOT NULL,
+  descricao TEXT,
+  cor TEXT DEFAULT '#6B7280',
+  ativo INTEGER NOT NULL DEFAULT 1 CHECK(ativo IN (0,1)),
+  empresa_id INTEGER NOT NULL REFERENCES empresas(id),
+  created_at DATETIME DEFAULT (datetime('now')),
+  updated_at DATETIME DEFAULT (datetime('now')),
+  deleted_at DATETIME
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_formatos_empresa_codigo_active
+  ON qualificacoes_formatos(empresa_id, codigo)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_formatos_empresa
+  ON qualificacoes_formatos(empresa_id, ativo)
+  WHERE deleted_at IS NULL;
+
+INSERT OR IGNORE INTO qualificacoes_formatos (nome, codigo, descricao, empresa_id, created_at, updated_at)
+VALUES
+  (
+    'EAD',
+    'EAD',
+    'Treinamento a distância (EAD/e-learning). Vinculado ao LMS nativo.',
+    6,
+    datetime('now'),
+    datetime('now')
+  ),
+  (
+    'Não classificado',
+    'NAO_CLASSIFICADO',
+    'Formato ainda não atribuído. Reclassificar conforme evidência do dado.',
+    6,
+    datetime('now'),
+    datetime('now')
+  );
+
+INSERT OR IGNORE INTO qualificacoes_formatos (nome, codigo, descricao, empresa_id, created_at, updated_at)
+SELECT DISTINCT
+  'EAD',
+  'EAD',
+  'Treinamento a distância (EAD/e-learning). Vinculado ao LMS nativo.',
+  empresa_id,
+  datetime('now'),
+  datetime('now')
+FROM qualificacoes_tipos
+WHERE deleted_at IS NULL;
+
+INSERT OR IGNORE INTO qualificacoes_formatos (nome, codigo, descricao, empresa_id, created_at, updated_at)
+SELECT DISTINCT
+  'Não classificado',
+  'NAO_CLASSIFICADO',
+  'Formato ainda não atribuído. Reclassificar conforme evidência do dado.',
+  empresa_id,
+  datetime('now'),
+  datetime('now')
+FROM qualificacoes_tipos
+WHERE deleted_at IS NULL;
+SQL
+
+ensure_sqlite_column "qualificacoes_tipos" "formato_id" "INTEGER REFERENCES qualificacoes_formatos(id)"
+ensure_sqlite_column "qualificacoes_historico" "formato_id" "INTEGER REFERENCES qualificacoes_formatos(id)"
+ensure_sqlite_column "qualificacoes_historico" "formato_codigo" "TEXT"
+ensure_sqlite_column "qualificacoes_historico" "categoria_id" "INTEGER REFERENCES qualificacoes_categorias(id)"
+ensure_sqlite_column "qualificacoes_historico" "categoria_codigo" "TEXT"
+
 printf 'setup:lms:local: applying LMS migrations locally\n'
 for migration_file in "${LMS_MIGRATIONS[@]}"; do
   [[ -f "$migration_file" ]] || error "migration not found: $migration_file"
@@ -99,6 +170,8 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
     printf 'setup:lms:local: migration returned warnings: %s\n' "$(basename "$migration_file")" >&2
   fi
 done
+
+ensure_sqlite_column "lms_cursos" "formato_id" "INTEGER REFERENCES qualificacoes_formatos(id)"
 
 printf 'setup:lms:local: applying synthetic LMS smoke seed\n'
 sqlite3 "$SQLITE_FILE" < "$SEED_FILE"
