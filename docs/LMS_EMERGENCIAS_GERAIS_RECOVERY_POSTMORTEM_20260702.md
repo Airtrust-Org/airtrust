@@ -1,7 +1,7 @@
 # Postmortem: Curso "Emergências Gerais" — LMS Shell Vazio pós-0412
 
 > **Data:** 2026-07-02
-> **SHA main (closeout):** a ser registrado
+> **SHA main (closeout):** `ecf9f54`
 > **Severidade:** Média — impacto restrito a um curso no Catálogo LMS de um tenant
 > **Duração do incidente:** ~3 horas (detecção → PR #234 → PR #236 → recovery)
 
