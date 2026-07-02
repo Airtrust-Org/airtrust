@@ -55,6 +55,8 @@ export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string
           qh.id,
           qh.funcionario_id,
           qh.data_conclusao,
+          qh.formato_id,
+          qf.codigo AS formato_codigo,
           ${vencimentoExpr} as data_vencimento,
           COALESCE(qt.nome, qh.qualificacao_codigo, 'Qualificação') AS nome_qualificacao,
           COALESCE(qh.qualificacao_codigo, qt.codigo) AS codigo_qualificacao,
@@ -66,6 +68,9 @@ export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string
        FROM qualificacoes_historico qh
        JOIN funcionarios p ON qh.funcionario_id = p.id
        LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+       LEFT JOIN qualificacoes_formatos qf
+         ON qf.id = COALESCE(qh.formato_id, qt.formato_id)
+        AND qf.deleted_at IS NULL
       WHERE qh.deleted_at IS NULL
         AND p.deleted_at IS NULL
         AND p.empresa_id = ?
@@ -103,6 +108,10 @@ export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string
         )
         AND ${vencimentoExpr} IS NOT NULL
         AND date(${vencimentoExpr}) <= date(?, '+' || ? || ' days')
+        AND (
+          UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
+          OR UPPER(TRIM(COALESCE(qh.categoria, qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+        )
       ORDER BY data_vencimento ASC`;
 }
 
@@ -691,7 +700,9 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
 
     // Verificar se é EAD ou CMA
     const categoria = (r.categoria as string)?.toUpperCase();
-    const isEAD = categoria === 'EAD' || categoria === 'TREINAMENTO EAD';
+    const formatoCodigo = String((r as any).formato_codigo || '').toUpperCase();
+    const isEAD =
+      formatoCodigo === 'EAD' || categoria === 'EAD' || categoria === 'TREINAMENTO EAD';
     const isCMA = categoria === 'CMA' || categoria === 'EXAME';
 
     if (!isEAD && !isCMA) {

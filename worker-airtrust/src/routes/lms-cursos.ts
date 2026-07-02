@@ -384,11 +384,11 @@ const optionalBinaryFlag = z.preprocess(
 function ensureQualificacaoBinding(
   gerarQualificacao: number | undefined,
   qualificacaoTipoId: number | null | undefined,
-  categoria: string | null | undefined,
+  isEadCourse: boolean,
 ) {
-  if (gerarQualificacao === 1 && !qualificacaoTipoId && !isEadCategoria(categoria)) {
+  if (gerarQualificacao === 1 && !qualificacaoTipoId && !isEadCourse) {
     throw new ApiError(
-      'Selecione um tipo de qualificação antes de ativar a geração automática, ou categorize o curso como EAD para criá-lo automaticamente.',
+      'Selecione um tipo de qualificação antes de ativar a geração automática, ou marque o curso como EAD pelo formato para criá-lo automaticamente.',
       400,
     );
   }
@@ -404,22 +404,24 @@ async function resolveEadQualificacaoBinding(
 
   const tipo = await db
     .prepare(
-      `SELECT id, nome, categoria
-       FROM qualificacoes_tipos
-       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      `SELECT qt.id, qt.nome, qt.categoria, qf.codigo AS formato_codigo
+       FROM qualificacoes_tipos qt
+       LEFT JOIN qualificacoes_formatos qf
+         ON qf.id = qt.formato_id
+        AND qf.deleted_at IS NULL
+       WHERE qt.id = ? AND qt.empresa_id = ? AND qt.deleted_at IS NULL`,
     )
     .bind(qualificacaoTipoId, empresaId)
-    .first<{ id: number; nome: string; categoria: string | null }>();
+    .first<{ id: number; nome: string; categoria: string | null; formato_codigo: string | null }>();
 
   if (!tipo) {
     if (options?.allowMissingForEad) return null;
     throw new ApiError('Tipo de qualificação não encontrado para esta empresa.', 404);
   }
 
-  const categoria = (tipo.categoria ?? '').trim().toUpperCase();
-  if (categoria !== 'EAD' && categoria !== 'TREINAMENTO EAD') {
+  if (!isEadFormato(tipo)) {
     throw new ApiError(
-      `O curso LMS só pode ser vinculado a tipos de qualificação EAD. "${tipo.nome}" está na categoria ${tipo.categoria ?? 'sem categoria'}.`,
+      `O curso LMS só pode ser vinculado a tipos de qualificação EAD. "${tipo.nome}" está na categoria ${tipo.categoria ?? 'sem categoria'} / formato ${tipo.formato_codigo ?? 'sem formato'}.`,
       400,
     );
   }
@@ -436,17 +438,60 @@ async function isLegacyNonEadQualificacaoBinding(
 
   const tipo = await db
     .prepare(
-      `SELECT categoria
-       FROM qualificacoes_tipos
-       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      `SELECT qt.categoria, qf.codigo AS formato_codigo
+       FROM qualificacoes_tipos qt
+       LEFT JOIN qualificacoes_formatos qf
+         ON qf.id = qt.formato_id
+        AND qf.deleted_at IS NULL
+       WHERE qt.id = ? AND qt.empresa_id = ? AND qt.deleted_at IS NULL`,
     )
     .bind(qualificacaoTipoId, empresaId)
-    .first<{ categoria: string | null }>();
+    .first<{ categoria: string | null; formato_codigo: string | null }>();
 
   if (!tipo) return false;
 
-  const categoria = (tipo.categoria ?? '').trim().toUpperCase();
-  return categoria !== 'EAD' && categoria !== 'TREINAMENTO EAD';
+  return !isEadFormato(tipo);
+}
+
+async function isEadCourseRequest(
+  db: D1Database,
+  empresaId: number,
+  params: {
+    qualificacaoTipoId?: number | null;
+    formatoId?: number | null;
+    categoria?: string | null;
+  },
+) {
+  if (params.qualificacaoTipoId) {
+    try {
+      await resolveEadQualificacaoBinding(db, empresaId, params.qualificacaoTipoId, {
+        allowMissingForEad: true,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  if (params.formatoId) {
+    const formato = await db
+      .prepare(
+        `SELECT codigo
+           FROM qualificacoes_formatos
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(params.formatoId, empresaId)
+      .first<{ codigo: string | null }>();
+
+    if (String(formato?.codigo || '').trim().toUpperCase() === 'EAD') {
+      return true;
+    }
+  }
+
+  return isEadCategoria(params.categoria);
 }
 
 type EadQualificacaoTipoRow = {
@@ -506,7 +551,7 @@ function buildEadCursoSeed(tipo: EadQualificacaoTipoRow) {
     descricao:
       descricao ??
       `Curso LMS espelhado automaticamente do tipo de qualificação EAD ${tipo.nome.trim()}.`,
-    categoria: normalizeNullableText(tipo.categoria) ?? 'EAD',
+    categoria: CANONICAL_TRAINING_CATEGORY,
     carga_horaria_minutos: resolveCursoCargaHorariaMinutos(tipo),
     conteudo_programatico: normalizeNullableText(tipo.conteudo_programatico),
     observacoes: normalizeNullableText(tipo.observacoes),
@@ -518,22 +563,29 @@ function buildEadCursoSeed(tipo: EadQualificacaoTipoRow) {
 async function listEmpresaEadQualificacaoTipos(db: D1Database, empresaId: number) {
   const result = await db
     .prepare(
-      `SELECT id,
-              empresa_id,
-              nome,
-              codigo,
-              categoria,
-              descricao,
-              conteudo_programatico,
-              observacoes,
-              carga_horaria,
-              carga_horaria_inicial,
-              carga_horaria_recorrente
-         FROM qualificacoes_tipos
-        WHERE empresa_id = ?
-          AND deleted_at IS NULL
-          AND UPPER(TRIM(COALESCE(categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
-        ORDER BY nome ASC`,
+      `SELECT qt.id,
+              qt.empresa_id,
+              qt.nome,
+              qt.codigo,
+              qt.categoria,
+              qf.codigo AS formato_codigo,
+              qt.descricao,
+              qt.conteudo_programatico,
+              qt.observacoes,
+              qt.carga_horaria,
+              qt.carga_horaria_inicial,
+              qt.carga_horaria_recorrente
+         FROM qualificacoes_tipos qt
+         LEFT JOIN qualificacoes_formatos qf
+           ON qf.id = qt.formato_id
+          AND qf.deleted_at IS NULL
+        WHERE qt.empresa_id = ?
+          AND qt.deleted_at IS NULL
+          AND (
+            UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
+            OR UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+          )
+        ORDER BY qt.nome ASC`,
     )
     .bind(empresaId)
     .all<EadQualificacaoTipoRow>();
@@ -1981,16 +2033,21 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   const courseSetorSchema = await getCourseSetorSchema(db);
 
   const { data: d, uploadFile } = await parseCursoCreateRequest(c);
+  const isEadCourse = await isEadCourseRequest(db, empresaId, {
+    qualificacaoTipoId: d.qualificacao_tipo_id ?? null,
+    formatoId: d.formato_id ?? null,
+    categoria: d.categoria ?? null,
+  });
   ensureQualificacaoBinding(
     d.gerar_qualificacao_ao_concluir,
     d.qualificacao_tipo_id ?? null,
-    d.categoria ?? null,
+    isEadCourse,
   );
   const resolvedQualificacaoTipoId = await resolveEadQualificacaoBinding(
     db,
     empresaId,
     d.qualificacao_tipo_id ?? null,
-    { allowMissingForEad: isEadCategoria(d.categoria) },
+    { allowMissingForEad: isEadCourse },
   );
 
   const setorIds = Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : [];
@@ -2074,7 +2131,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
   }
 
   let finalQualificacaoTipoId = resolvedQualificacaoTipoId;
-  if (!finalQualificacaoTipoId && isEadCategoria(d.categoria)) {
+  if (!finalQualificacaoTipoId && isEadCourse) {
     finalQualificacaoTipoId = await ensureQualificacaoTipoForCurso(db, {
       empresaId,
       cursoId: Number(id),
@@ -2181,11 +2238,21 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   const nextQualificacaoTipoId =
     d.qualificacao_tipo_id !== undefined ? d.qualificacao_tipo_id : existing.qualificacao_tipo_id;
   const nextCategoria = d.categoria !== undefined ? d.categoria : existing.categoria;
+  const nextFormatoId = d.formato_id !== undefined ? d.formato_id : undefined;
+  const isEadCourse = await isEadCourseRequest(db, empresaId, {
+    qualificacaoTipoId: nextQualificacaoTipoId ?? null,
+    formatoId: nextFormatoId ?? null,
+    categoria: nextCategoria,
+  });
   const qualificacaoBindingChanged =
     nextGerarQualificacao !== existing.gerar_qualificacao_ao_concluir ||
     nextQualificacaoTipoId !== existing.qualificacao_tipo_id;
 
-  ensureQualificacaoBinding(nextGerarQualificacao, nextQualificacaoTipoId ?? null, nextCategoria);
+  ensureQualificacaoBinding(
+    nextGerarQualificacao,
+    nextQualificacaoTipoId ?? null,
+    isEadCourse,
+  );
 
   let resolvedQualificacaoTipoId = nextQualificacaoTipoId ?? null;
 
@@ -2201,7 +2268,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
         db,
         empresaId,
         nextQualificacaoTipoId ?? null,
-        { allowMissingForEad: isEadCategoria(nextCategoria) },
+        { allowMissingForEad: isEadCourse },
       );
     }
   } else {
@@ -2209,7 +2276,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
       db,
       empresaId,
       nextQualificacaoTipoId ?? null,
-      { allowMissingForEad: isEadCategoria(nextCategoria) },
+      { allowMissingForEad: isEadCourse },
     );
   }
 
@@ -2280,7 +2347,7 @@ app.put('/:id', requireRole('admin', 'manager'), async (c) => {
     await replaceCursoSetores(db, empresaId, cursoId, updateSetorIds);
   }
 
-  if (!resolvedQualificacaoTipoId && isEadCategoria(nextCategoria)) {
+  if (!resolvedQualificacaoTipoId && isEadCourse) {
     resolvedQualificacaoTipoId = await ensureQualificacaoTipoForCurso(db, { empresaId, cursoId });
   }
 

@@ -1,5 +1,7 @@
 import { upsertImportedEdappCycle } from './lms-matricula-cycle';
 
+export const CANONICAL_TRAINING_CATEGORY = 'Treinamento Teórico';
+
 type QualificacaoTipoEadRow = {
   id: number;
   empresa_id: number;
@@ -7,6 +9,8 @@ type QualificacaoTipoEadRow = {
   nome: string;
   descricao: string | null;
   categoria: string | null;
+  formato_id: number | null;
+  formato_codigo: string | null;
   conteudo_programatico: string | null;
   observacoes: string | null;
   carga_horaria: number | null;
@@ -22,6 +26,8 @@ type LmsCursoMirrorRow = {
   titulo: string;
   descricao: string | null;
   categoria: string | null;
+  formato_id: number | null;
+  formato_codigo: string | null;
   carga_horaria_minutos: number | null;
   conteudo_programatico: string | null;
   observacoes: string | null;
@@ -33,6 +39,7 @@ type LmsCursoMirrorRow = {
   idioma: string | null;
   publicado: number;
   ativo: number;
+  deleted_at: string | null;
 };
 
 type ImportedHistoryRow = {
@@ -121,21 +128,26 @@ async function fetchQualificacaoTipo(
 ) {
   return db
     .prepare(
-      `SELECT id,
-              empresa_id,
-              codigo,
-              nome,
-              descricao,
-              categoria,
-              conteudo_programatico,
-              observacoes,
-              carga_horaria,
-              carga_horaria_inicial,
-              carga_horaria_recorrente,
-              deleted_at
+      `SELECT qualificacoes_tipos.id,
+              qualificacoes_tipos.empresa_id,
+              qualificacoes_tipos.codigo,
+              qualificacoes_tipos.nome,
+              qualificacoes_tipos.descricao,
+              qualificacoes_tipos.categoria,
+              qualificacoes_tipos.formato_id,
+              qf.codigo AS formato_codigo,
+              qualificacoes_tipos.conteudo_programatico,
+              qualificacoes_tipos.observacoes,
+              qualificacoes_tipos.carga_horaria,
+              qualificacoes_tipos.carga_horaria_inicial,
+              qualificacoes_tipos.carga_horaria_recorrente,
+              qualificacoes_tipos.deleted_at
          FROM qualificacoes_tipos
-        WHERE id = ?
-          AND empresa_id = ?
+         LEFT JOIN qualificacoes_formatos qf
+           ON qf.id = qualificacoes_tipos.formato_id
+          AND qf.deleted_at IS NULL
+        WHERE qualificacoes_tipos.id = ?
+          AND qualificacoes_tipos.empresa_id = ?
         LIMIT 1`,
     )
     .bind(qualificacaoTipoId, empresaId)
@@ -149,28 +161,33 @@ async function fetchCursoByQualificacaoTipo(
 ) {
   return db
     .prepare(
-      `SELECT id,
-              empresa_id,
-              qualificacao_tipo_id,
-              titulo,
-              descricao,
-              categoria,
-              carga_horaria_minutos,
-              conteudo_programatico,
-              observacoes,
-              carga_horaria_inicial_horas,
-              carga_horaria_recorrente_horas,
-              tipo_conteudo,
-              scorm_versao,
-              scorm_mastery_score,
-              idioma,
-              publicado,
-              ativo
+      `SELECT lms_cursos.id,
+              lms_cursos.empresa_id,
+              lms_cursos.qualificacao_tipo_id,
+              lms_cursos.titulo,
+              lms_cursos.descricao,
+              lms_cursos.categoria,
+              lms_cursos.formato_id,
+              qf.codigo AS formato_codigo,
+              lms_cursos.carga_horaria_minutos,
+              lms_cursos.conteudo_programatico,
+              lms_cursos.observacoes,
+              lms_cursos.carga_horaria_inicial_horas,
+              lms_cursos.carga_horaria_recorrente_horas,
+              lms_cursos.tipo_conteudo,
+              lms_cursos.scorm_versao,
+              lms_cursos.scorm_mastery_score,
+              lms_cursos.idioma,
+              lms_cursos.publicado,
+              lms_cursos.ativo,
+              lms_cursos.deleted_at
          FROM lms_cursos
-        WHERE empresa_id = ?
-          AND qualificacao_tipo_id = ?
-          AND deleted_at IS NULL
-        ORDER BY id DESC
+         LEFT JOIN qualificacoes_formatos qf
+           ON qf.id = lms_cursos.formato_id
+          AND qf.deleted_at IS NULL
+        WHERE lms_cursos.empresa_id = ?
+          AND lms_cursos.qualificacao_tipo_id = ?
+        ORDER BY lms_cursos.id DESC
         LIMIT 1`,
     )
     .bind(empresaId, qualificacaoTipoId)
@@ -180,27 +197,32 @@ async function fetchCursoByQualificacaoTipo(
 async function fetchCursoMirror(db: D1Database, empresaId: number, cursoId: number) {
   return db
     .prepare(
-      `SELECT id,
-              empresa_id,
-              qualificacao_tipo_id,
-              titulo,
-              descricao,
-              categoria,
-              carga_horaria_minutos,
-              conteudo_programatico,
-              observacoes,
-              carga_horaria_inicial_horas,
-              carga_horaria_recorrente_horas,
-              tipo_conteudo,
-              scorm_versao,
-              scorm_mastery_score,
-              idioma,
-              publicado,
-              ativo
+      `SELECT lms_cursos.id,
+              lms_cursos.empresa_id,
+              lms_cursos.qualificacao_tipo_id,
+              lms_cursos.titulo,
+              lms_cursos.descricao,
+              lms_cursos.categoria,
+              lms_cursos.formato_id,
+              qf.codigo AS formato_codigo,
+              lms_cursos.carga_horaria_minutos,
+              lms_cursos.conteudo_programatico,
+              lms_cursos.observacoes,
+              lms_cursos.carga_horaria_inicial_horas,
+              lms_cursos.carga_horaria_recorrente_horas,
+              lms_cursos.tipo_conteudo,
+              lms_cursos.scorm_versao,
+              lms_cursos.scorm_mastery_score,
+              lms_cursos.idioma,
+              lms_cursos.publicado,
+              lms_cursos.ativo
          FROM lms_cursos
-        WHERE id = ?
-          AND empresa_id = ?
-          AND deleted_at IS NULL
+         LEFT JOIN qualificacoes_formatos qf
+           ON qf.id = lms_cursos.formato_id
+          AND qf.deleted_at IS NULL
+        WHERE lms_cursos.id = ?
+          AND lms_cursos.empresa_id = ?
+          AND lms_cursos.deleted_at IS NULL
         LIMIT 1`,
     )
     .bind(cursoId, empresaId)
@@ -214,20 +236,30 @@ async function findExistingEadQualificacaoTipoByName(
 ) {
   const result = await db
     .prepare(
-      `SELECT id,
-              codigo,
-              conteudo_programatico,
-              descricao
+      `SELECT qualificacoes_tipos.id,
+              qualificacoes_tipos.codigo,
+              qualificacoes_tipos.formato_id,
+              qf.codigo AS formato_codigo,
+              qualificacoes_tipos.conteudo_programatico,
+              qualificacoes_tipos.descricao
          FROM qualificacoes_tipos
-        WHERE empresa_id = ?
-          AND deleted_at IS NULL
+         LEFT JOIN qualificacoes_formatos qf
+           ON qf.id = qualificacoes_tipos.formato_id
+          AND qf.deleted_at IS NULL
+        WHERE qualificacoes_tipos.empresa_id = ?
+          AND qualificacoes_tipos.deleted_at IS NULL
           AND UPPER(TRIM(nome)) = UPPER(TRIM(?))
-          AND UPPER(TRIM(COALESCE(categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')`,
+          AND (
+            UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
+            OR UPPER(TRIM(COALESCE(categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+          )`,
     )
     .bind(empresaId, nome)
     .all<{
       id: number;
       codigo: string | null;
+      formato_id: number | null;
+      formato_codigo: string | null;
       conteudo_programatico: string | null;
       descricao: string | null;
     }>();
@@ -272,7 +304,7 @@ export async function resolveCanonicalEadQualificacaoTipoId(
   if (!qualificacaoTipoId) return null;
 
   const tipo = await fetchQualificacaoTipo(db, empresaId, qualificacaoTipoId);
-  if (!tipo || tipo.deleted_at || !isEadCategoria(tipo.categoria)) {
+  if (!tipo || tipo.deleted_at || !isEadFormato(tipo)) {
     return qualificacaoTipoId;
   }
 
@@ -309,6 +341,22 @@ async function resolveUniqueQualificacaoTipoCode(
   return `EAD_${empresaId}_${Date.now()}`;
 }
 
+async function resolveEadFormatoId(db: D1Database, empresaId: number) {
+  const row = await db
+    .prepare(
+      `SELECT id
+         FROM qualificacoes_formatos
+        WHERE empresa_id = ?
+          AND deleted_at IS NULL
+          AND UPPER(TRIM(codigo)) = 'EAD'
+        LIMIT 1`,
+    )
+    .bind(empresaId)
+    .first<{ id: number }>();
+
+  return row?.id ?? null;
+}
+
 export async function syncLmsCourseFromQualificacaoTipo(
   db: D1Database,
   params: { empresaId: number; qualificacaoTipoId: string | number },
@@ -318,7 +366,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
 
   const tipo = await fetchQualificacaoTipo(db, params.empresaId, qualificacaoTipoId);
 
-  if (!tipo || tipo.deleted_at || !isEadCategoria(tipo.categoria)) {
+  if (!tipo || tipo.deleted_at || !isEadFormato(tipo)) {
     return null;
   }
 
@@ -330,7 +378,8 @@ export async function syncLmsCourseFromQualificacaoTipo(
 
   const titulo = tipo.nome.trim();
   const descricao = normalizeNullableText(tipo.descricao);
-  const categoria = normalizeNullableText(tipo.categoria) ?? 'EAD';
+  const categoria = CANONICAL_TRAINING_CATEGORY;
+  const formatoId = normalizeNullableNumber(tipo.formato_id) ?? (await resolveEadFormatoId(db, params.empresaId));
   const conteudoProgramatico = normalizeNullableText(tipo.conteudo_programatico);
   const observacoes = normalizeNullableText(tipo.observacoes);
   const cargaInicial = normalizeNullableNumber(tipo.carga_horaria_inicial);
@@ -344,6 +393,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
             SET titulo = ?,
                 descricao = ?,
                 categoria = ?,
+                formato_id = ?,
                 carga_horaria_minutos = ?,
                 conteudo_programatico = ?,
                 observacoes = ?,
@@ -360,6 +410,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
         titulo,
         descricao,
         categoria,
+        formatoId,
         cargaMinutos,
         conteudoProgramatico,
         observacoes,
@@ -380,6 +431,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
          titulo,
          descricao,
          categoria,
+         formato_id,
          carga_horaria_minutos,
          idioma,
          tipo_conteudo,
@@ -396,13 +448,14 @@ export async function syncLmsCourseFromQualificacaoTipo(
          created_at,
          updated_at,
          deleted_at
-       ) VALUES (?, ?, ?, ?, ?, 'pt-BR', 'scorm', '1.2', 70, ?, 1, 0, 1, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, 'pt-BR', 'scorm', '1.2', 70, ?, 1, 0, 1, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL)`,
     )
     .bind(
       params.empresaId,
       titulo,
       descricao,
       categoria,
+      formatoId,
       cargaMinutos,
       tipo.id,
       conteudoProgramatico,
@@ -421,7 +474,7 @@ export async function ensureQualificacaoTipoForCurso(
 ) {
   const curso = await fetchCursoMirror(db, params.empresaId, params.cursoId);
 
-  if (!curso || curso.qualificacao_tipo_id || !isEadCategoria(curso.categoria)) {
+  if (!curso || curso.qualificacao_tipo_id || !isEadFormato(curso)) {
     return curso?.qualificacao_tipo_id ?? null;
   }
 
@@ -444,6 +497,8 @@ export async function ensureQualificacaoTipoForCurso(
     const cargaPadrao =
       cargaRecorrente ?? cargaInicial ?? minutesToHours(curso.carga_horaria_minutos);
     const codigo = await resolveUniqueQualificacaoTipoCode(db, params.empresaId, curso.titulo);
+    const formatoId =
+      normalizeNullableNumber(curso.formato_id) ?? (await resolveEadFormatoId(db, params.empresaId));
 
     const insert = await db
       .prepare(
@@ -454,6 +509,7 @@ export async function ensureQualificacaoTipoForCurso(
            nome,
            descricao,
            categoria,
+           formato_id,
            carga_horaria,
            carga_horaria_inicial,
            carga_horaria_recorrente,
@@ -475,7 +531,8 @@ export async function ensureQualificacaoTipoForCurso(
         codigo,
         curso.titulo.trim(),
         normalizeNullableText(curso.descricao),
-        normalizeNullableText(curso.categoria) ?? 'EAD',
+        CANONICAL_TRAINING_CATEGORY,
+        formatoId,
         cargaPadrao,
         cargaInicial,
         cargaRecorrente,
@@ -510,20 +567,41 @@ export async function ensureQualificacaoTipoForCurso(
 export async function syncAllEadCoursesFromQualificacoes(db: D1Database, empresaId: number) {
   const tipos = await db
     .prepare(
-      `SELECT id
-         FROM qualificacoes_tipos
-        WHERE empresa_id = ?
-          AND deleted_at IS NULL
-          AND UPPER(TRIM(COALESCE(categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+      `SELECT qt.id,
+              qt.nome,
+              qt.codigo,
+              qt.categoria,
+              qt.formato_id,
+              qf.codigo AS formato_codigo,
+              qt.descricao,
+              qt.conteudo_programatico,
+              qt.observacoes,
+              qt.carga_horaria,
+              qt.carga_horaria_inicial,
+              qt.carga_horaria_recorrente
+         FROM qualificacoes_tipos qt
+         LEFT JOIN qualificacoes_formatos qf
+           ON qf.id = qt.formato_id
+          AND qf.deleted_at IS NULL
+        WHERE qt.empresa_id = ?
+          AND qt.deleted_at IS NULL
         ORDER BY nome ASC`,
     )
     .bind(empresaId)
-    .all<{ id: number }>();
+    .all<QualificacaoTipoEadRow>();
 
   const created: number[] = [];
   const updated: number[] = [];
+  let skipped = 0;
+  let totalTiposEad = 0;
 
   for (const tipo of tipos.results ?? []) {
+    if (!isEadFormato(tipo)) {
+      skipped += 1;
+      continue;
+    }
+    totalTiposEad += 1;
+
     const existed = await fetchCursoByQualificacaoTipo(db, empresaId, tipo.id);
     const cursoId = await syncLmsCourseFromQualificacaoTipo(db, {
       empresaId,
@@ -539,10 +617,10 @@ export async function syncAllEadCoursesFromQualificacoes(db: D1Database, empresa
   }
 
   return {
-    total_tipos_ead: (tipos.results ?? []).length,
+    total_tipos_ead: totalTiposEad,
     created,
     updated,
-    skipped: 0,
+    skipped,
   };
 }
 
@@ -558,17 +636,27 @@ export async function syncQualificacaoTipoFromCurso(
               c.titulo,
               c.descricao,
               c.categoria,
+              c.formato_id,
+              qf.codigo AS formato_codigo,
               c.carga_horaria_minutos,
               c.conteudo_programatico,
               c.observacoes,
               c.carga_horaria_inicial_horas,
               c.carga_horaria_recorrente_horas,
-              qt.categoria AS qualificacao_categoria
+              qt.categoria AS qualificacao_categoria,
+              qt.formato_id AS qualificacao_formato_id,
+              qf_tipo.codigo AS qualificacao_formato_codigo
          FROM lms_cursos c
          JOIN qualificacoes_tipos qt
            ON qt.id = c.qualificacao_tipo_id
           AND qt.empresa_id = c.empresa_id
           AND qt.deleted_at IS NULL
+         LEFT JOIN qualificacoes_formatos qf
+           ON qf.id = c.formato_id
+          AND qf.deleted_at IS NULL
+         LEFT JOIN qualificacoes_formatos qf_tipo
+           ON qf_tipo.id = qt.formato_id
+          AND qf_tipo.deleted_at IS NULL
         WHERE c.id = ?
           AND c.empresa_id = ?
           AND c.deleted_at IS NULL
@@ -578,10 +666,17 @@ export async function syncQualificacaoTipoFromCurso(
     .first<
       LmsCursoMirrorRow & {
         qualificacao_categoria: string | null;
+        qualificacao_formato_codigo: string | null;
       }
     >();
 
-  if (!curso?.qualificacao_tipo_id || !isEadCategoria(curso.qualificacao_categoria)) {
+  if (
+    !curso?.qualificacao_tipo_id ||
+    !isEadFormato({
+      categoria: curso.qualificacao_categoria,
+      formato_codigo: curso.qualificacao_formato_codigo ?? curso.formato_codigo,
+    })
+  ) {
     return null;
   }
 
@@ -594,6 +689,8 @@ export async function syncQualificacaoTipoFromCurso(
     cargaInicial;
   const cargaPadrao =
     cargaRecorrente ?? cargaInicial ?? minutesToHours(curso.carga_horaria_minutos);
+  const formatoId =
+    normalizeNullableNumber(curso.formato_id) ?? (await resolveEadFormatoId(db, params.empresaId));
 
   await db
     .prepare(
@@ -601,6 +698,7 @@ export async function syncQualificacaoTipoFromCurso(
           SET nome = ?,
               descricao = ?,
               categoria = ?,
+              formato_id = ?,
               conteudo_programatico = ?,
               observacoes = ?,
               carga_horaria = ?,
@@ -614,7 +712,8 @@ export async function syncQualificacaoTipoFromCurso(
     .bind(
       curso.titulo.trim(),
       normalizeNullableText(curso.descricao),
-      normalizeNullableText(curso.categoria) ?? 'EAD',
+      CANONICAL_TRAINING_CATEGORY,
+      formatoId,
       normalizeNullableText(curso.conteudo_programatico),
       normalizeNullableText(curso.observacoes),
       cargaPadrao,

@@ -25,6 +25,7 @@ import {
 import { invalidateMaterializedStats } from './shared';
 import {
   isEadCategoria,
+  isEadFormato,
   reconcileImportedEdappHistory,
   softDeleteLmsCourseForQualificacaoTipo,
   syncLmsCourseFromQualificacaoTipo,
@@ -40,6 +41,8 @@ type TipoAtualizadoRow = {
   codigo: string | null;
   nome: string | null;
   categoria: string | null;
+  formato_id: number | null;
+  formato_codigo: string | null;
   validade: number | null;
   vencimento_fim_mes: number | null;
   carga_horaria: number | null;
@@ -68,6 +71,8 @@ type TipoAnteriorRow = {
   codigo: string | null;
   nome: string | null;
   categoria: string | null;
+  formato_id: number | null;
+  formato_codigo: string | null;
   validade: number | null;
   vencimento_fim_mes: number | null;
 };
@@ -862,16 +867,40 @@ router.post(
 
       const restored = await db
         .prepare(
-          `SELECT id, empresa_id, tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, ${
-            hasIsCheck ? 'is_check' : '0 as is_check'
-          }, created_at, updated_at FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? LIMIT 1`,
+          `SELECT qt.id,
+                  qt.empresa_id,
+                  qt.tipo,
+                  qt.codigo,
+                  qt.nome,
+                  qt.descricao,
+                  qt.categoria,
+                  ${
+                    columnsSupport.hasFormatoId
+                      ? 'qt.formato_id, qf.codigo AS formato_codigo, qf.nome AS formato_nome, qf.cor AS formato_cor,'
+                      : 'NULL AS formato_id, NULL AS formato_codigo, NULL AS formato_nome, NULL AS formato_cor,'
+                  }
+                  qt.carga_horaria,
+                  qt.carga_horaria_inicial,
+                  qt.carga_horaria_recorrente,
+                  qt.conteudo_programatico,
+                  qt.validade,
+                  qt.vencimento_fim_mes,
+                  qt.observacoes,
+                  qt.ativo,
+                  ${hasIsCheck ? 'qt.is_check' : '0 as is_check'},
+                  qt.created_at,
+                  qt.updated_at
+             FROM qualificacoes_tipos qt
+             ${columnsSupport.hasFormatoId ? 'LEFT JOIN qualificacoes_formatos qf ON qf.id = qt.formato_id AND qf.deleted_at IS NULL' : ''}
+            WHERE qt.id = ? AND qt.empresa_id = ? LIMIT 1`,
         )
         .bind(existing.id, empresaId)
         .first();
 
       await logAuditoria(db, 'qualificacoes_tipos', String(existing.id), 'RESTORE');
 
-      if (isEadCategoria(categoria) && (restored as { empresa_id?: number | null })?.empresa_id) {
+      if (isEadFormato(restored as { formato_codigo?: string | null; categoria?: string | null }) &&
+        (restored as { empresa_id?: number | null })?.empresa_id) {
         await syncLmsCourseFromQualificacaoTipo(db, {
           empresaId: Number((restored as { empresa_id: number }).empresa_id),
           qualificacaoTipoId: existing.id,
@@ -914,9 +943,32 @@ router.post(
     // Buscar registro criado
     const created = await db
       .prepare(
-        `SELECT id, empresa_id, tipo, codigo, nome, descricao, categoria, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, conteudo_programatico, validade, vencimento_fim_mes, observacoes, ativo, ${
-          hasIsCheck ? 'is_check' : '0 as is_check'
-        }, created_at, updated_at FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? LIMIT 1`,
+        `SELECT qt.id,
+                qt.empresa_id,
+                qt.tipo,
+                qt.codigo,
+                qt.nome,
+                qt.descricao,
+                qt.categoria,
+                ${
+                  columnsSupport.hasFormatoId
+                    ? 'qt.formato_id, qf.codigo AS formato_codigo, qf.nome AS formato_nome, qf.cor AS formato_cor,'
+                    : 'NULL AS formato_id, NULL AS formato_codigo, NULL AS formato_nome, NULL AS formato_cor,'
+                }
+                qt.carga_horaria,
+                qt.carga_horaria_inicial,
+                qt.carga_horaria_recorrente,
+                qt.conteudo_programatico,
+                qt.validade,
+                qt.vencimento_fim_mes,
+                qt.observacoes,
+                qt.ativo,
+                ${hasIsCheck ? 'qt.is_check' : '0 as is_check'},
+                qt.created_at,
+                qt.updated_at
+           FROM qualificacoes_tipos qt
+           ${columnsSupport.hasFormatoId ? 'LEFT JOIN qualificacoes_formatos qf ON qf.id = qt.formato_id AND qf.deleted_at IS NULL' : ''}
+          WHERE qt.id = ? AND qt.empresa_id = ? LIMIT 1`,
       )
       .bind(newId, empresaId)
       .first();
@@ -924,7 +976,8 @@ router.post(
     // Auditoria
     await logAuditoria(db, 'qualificacoes_tipos', String(newId), 'CREATE');
 
-    if (isEadCategoria(categoria) && (created as { empresa_id?: number | null })?.empresa_id) {
+    if (isEadFormato(created as { formato_codigo?: string | null; categoria?: string | null }) &&
+      (created as { empresa_id?: number | null })?.empresa_id) {
       await syncLmsCourseFromQualificacaoTipo(db, {
         empresaId: Number((created as { empresa_id: number }).empresa_id),
         qualificacaoTipoId: Number(newId),
@@ -999,7 +1052,17 @@ router.put(
 
     const rowAtual = (await db
       .prepare(
-        'SELECT empresa_id, codigo, nome, categoria, validade, vencimento_fim_mes FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+        `SELECT qt.empresa_id,
+                qt.codigo,
+                qt.nome,
+                qt.categoria,
+                qt.validade,
+                qt.vencimento_fim_mes,
+                ${columnsSupport.hasFormatoId ? 'qt.formato_id, qf.codigo AS formato_codigo' : 'NULL AS formato_id, NULL AS formato_codigo'}
+           FROM qualificacoes_tipos qt
+           ${columnsSupport.hasFormatoId ? 'LEFT JOIN qualificacoes_formatos qf ON qf.id = qt.formato_id AND qf.deleted_at IS NULL' : ''}
+          WHERE qt.id = ? AND qt.empresa_id = ? AND qt.deleted_at IS NULL
+          LIMIT 1`,
       )
       .bind(id, empresaId)
       .first()) as TipoAnteriorRow | null;
@@ -1008,6 +1071,21 @@ router.put(
       data.categoria !== undefined
         ? (data.categoria || '').trim()
         : String(rowAtual?.categoria || '');
+    let formatoCodigoFinal = rowAtual?.formato_codigo ?? null;
+    if (
+      columnsSupport.hasFormatoId &&
+      data.formato_id !== undefined &&
+      data.formato_id !== rowAtual?.formato_id
+    ) {
+      const formatoFinal = await db
+        .prepare(
+          'SELECT codigo FROM qualificacoes_formatos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+        )
+        .bind(data.formato_id, empresaId)
+        .first<{ codigo: string | null }>();
+
+      formatoCodigoFinal = formatoFinal?.codigo ?? null;
+    }
     const validadeFinal =
       data.validade !== undefined
         ? data.validade == null
@@ -1300,13 +1378,19 @@ router.put(
       ...extrairUsuarioAuditoria(c),
     });
 
-    const categoriaEraEad = isEadCategoria(rowAtual?.categoria);
-    const categoriaEhEad = isEadCategoria(categoriaFinal);
+    const tipoEraEad = isEadFormato({
+      categoria: rowAtual?.categoria,
+      formato_codigo: rowAtual?.formato_codigo,
+    });
+    const tipoEhEad = isEadFormato({
+      categoria: categoriaFinal,
+      formato_codigo: formatoCodigoFinal,
+    });
 
     // ⚠️ qualificacoes_tipos.id é TEXT (UUID desde migration 0031) — usar string diretamente
     const qualificacaoTipoId = String(id);
 
-    if (rowAtual?.empresa_id && categoriaEhEad) {
+    if (rowAtual?.empresa_id && tipoEhEad) {
       console.log(
         `[TIPOS_EAD] Sync EAD/LMS para tipo_id=${qualificacaoTipoId}, empresa=${rowAtual.empresa_id}`,
       );
@@ -1318,7 +1402,7 @@ router.put(
         empresaId: rowAtual.empresa_id,
         qualificacaoTipoId,
       });
-    } else if (rowAtual?.empresa_id && categoriaEraEad && !categoriaEhEad) {
+    } else if (rowAtual?.empresa_id && tipoEraEad && !tipoEhEad) {
       console.log(
         `[TIPOS_EAD] Soft-delete LMS para tipo_id=${qualificacaoTipoId} (não é mais EAD)`,
       );
