@@ -40,6 +40,12 @@ type LmsCursoMirrorRow = {
   publicado: number;
   ativo: number;
   deleted_at: string | null;
+  scorm_package_r2_prefix?: string | null;
+  scorm_launch_file?: string | null;
+  thumbnail_r2_key?: string | null;
+  conteudo_arquivo_nome?: string | null;
+  matriculas_total?: number | null;
+  progressos_scorm_total?: number | null;
 };
 
 type ImportedHistoryRow = {
@@ -159,7 +165,7 @@ async function fetchCursoByQualificacaoTipo(
   empresaId: number,
   qualificacaoTipoId: number,
 ) {
-  return db
+  const result = await db
     .prepare(
       `SELECT lms_cursos.id,
               lms_cursos.empresa_id,
@@ -180,18 +186,83 @@ async function fetchCursoByQualificacaoTipo(
               lms_cursos.idioma,
               lms_cursos.publicado,
               lms_cursos.ativo,
-              lms_cursos.deleted_at
+              lms_cursos.deleted_at,
+              lms_cursos.scorm_package_r2_prefix,
+              lms_cursos.scorm_launch_file,
+              lms_cursos.thumbnail_r2_key,
+              lms_cursos.conteudo_arquivo_nome,
+              (
+                SELECT COUNT(*)
+                  FROM lms_matriculas m
+                 WHERE m.curso_id = lms_cursos.id
+                   AND m.empresa_id = lms_cursos.empresa_id
+                   AND m.deleted_at IS NULL
+              ) AS matriculas_total,
+              (
+                SELECT COUNT(*)
+                  FROM lms_progresso_scorm ps
+                  JOIN lms_matriculas m
+                    ON m.id = ps.matricula_id
+                   AND m.empresa_id = lms_cursos.empresa_id
+                 WHERE m.curso_id = lms_cursos.id
+                   AND m.deleted_at IS NULL
+              ) AS progressos_scorm_total
          FROM lms_cursos
          LEFT JOIN qualificacoes_formatos qf
            ON qf.id = lms_cursos.formato_id
           AND qf.deleted_at IS NULL
         WHERE lms_cursos.empresa_id = ?
           AND lms_cursos.qualificacao_tipo_id = ?
-        ORDER BY lms_cursos.id DESC
-        LIMIT 1`,
+        ORDER BY lms_cursos.id DESC`,
     )
     .bind(empresaId, qualificacaoTipoId)
-    .first<LmsCursoMirrorRow>();
+    .all<LmsCursoMirrorRow>();
+
+  const rows = result.results ?? [];
+  if (rows.length === 0) return null;
+
+  const recoverable = rows.filter((row) => {
+    const hasAssets =
+      Boolean(normalizeNullableText(row.scorm_package_r2_prefix)) ||
+      Boolean(normalizeNullableText(row.scorm_launch_file)) ||
+      Boolean(normalizeNullableText(row.thumbnail_r2_key)) ||
+      Boolean(normalizeNullableText(row.conteudo_arquivo_nome));
+    const hasState =
+      Number(row.matriculas_total ?? 0) > 0 || Number(row.progressos_scorm_total ?? 0) > 0;
+
+    return hasAssets || hasState;
+  });
+
+  if (recoverable.length > 1) {
+    const scored = recoverable.map((row) => ({
+      row,
+      score:
+        (Number(row.matriculas_total ?? 0) > 0 ? 4 : 0) +
+        (Number(row.progressos_scorm_total ?? 0) > 0 ? 3 : 0) +
+        (normalizeNullableText(row.scorm_package_r2_prefix) ? 2 : 0) +
+        (normalizeNullableText(row.thumbnail_r2_key) ? 1 : 0) +
+        (normalizeNullableText(row.conteudo_arquivo_nome) ? 1 : 0),
+    }));
+    scored.sort((left, right) => right.score - left.score || left.row.id - right.row.id);
+    const best = scored[0];
+    const tied = scored.filter((entry) => entry.score === best.score);
+
+    if (tied.length > 1) {
+      throw new Error(
+        `Ambiguidade ao resolver curso LMS canônico para qualificacao_tipo_id=${qualificacaoTipoId} empresa_id=${empresaId}: ${tied
+          .map((entry) => entry.row.id)
+          .join(', ')}`,
+      );
+    }
+
+    return best.row;
+  }
+
+  if (recoverable.length === 1) {
+    return recoverable[0];
+  }
+
+  return rows[0];
 }
 
 async function fetchCursoMirror(db: D1Database, empresaId: number, cursoId: number) {
@@ -248,7 +319,7 @@ async function findExistingEadQualificacaoTipoByName(
           AND qf.deleted_at IS NULL
         WHERE qualificacoes_tipos.empresa_id = ?
           AND qualificacoes_tipos.deleted_at IS NULL
-          AND UPPER(TRIM(nome)) = UPPER(TRIM(?))
+          AND UPPER(TRIM(qualificacoes_tipos.nome)) = UPPER(TRIM(?))
           AND (
             UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
             OR UPPER(TRIM(COALESCE(categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
