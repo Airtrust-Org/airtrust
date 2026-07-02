@@ -9,6 +9,15 @@
  * Versão: 2.0 - Layout melhorado
  */
 
+import {
+  NOTECHS_ORDEM_BASE,
+  NOTECHS_GRUPOS,
+  NOTECHS_PROVENIENCIA_AVISO,
+  getNotechsItensPorGrupo,
+  getNotechsDescritores,
+  splitManobrasNotechs,
+} from '../pages/simuladores/fichas/notechs';
+
 export interface FichaPDFData {
   fichaId: string | number;
   sessao_titulo: string;
@@ -241,6 +250,121 @@ function drawFichaAvaliacaoScale(
   });
 
   return legendTop + legendHeight + 1;
+}
+
+/**
+ * Bloco compacto NOTECHS — código + título + nota, SEM descritores completos
+ * (esses ficam só na página de referência opcional / modal). Layout em 2
+ * colunas, altura fixa e pequena — nunca compete pelo orçamento de altura
+ * variável das manobras técnicas (ver NOTECHS_RESERVED em gerarPDFFichaCliente).
+ */
+function drawNotechsCompactBlock(
+  doc: {
+    setFont: (family: string, style?: string) => void;
+    setFontSize: (size: number) => void;
+    setTextColor: (color: string | number, g?: number, b?: number) => void;
+    setDrawColor: (color: string | number, g?: number, b?: number) => void;
+    setFillColor: (color: string | number, g?: number, b?: number) => void;
+    rect: (x: number, y: number, w: number, h: number, style?: string) => void;
+    roundedRect: (x: number, y: number, w: number, h: number, rx: number, ry: number, style?: string) => void;
+    text: (text: string | string[], x: number, y: number, options?: Record<string, unknown>) => void;
+    splitTextToSize: (text: string, maxWidth: number) => string[];
+  },
+  x: number,
+  y: number,
+  width: number,
+  itens: FichaPDFData['manobras'],
+): number {
+  const NOTECHS_COLOR = '#7c3aed';
+  const HEADER_H = 5;
+  const ROW_H = 4.2;
+  const colGap = 3;
+  const colWidth = (width - colGap) / 2;
+  const half = Math.ceil(itens.length / 2);
+  const colunaEsquerda = itens.slice(0, half);
+  const colunaDireita = itens.slice(half);
+
+  doc.setFillColor(NOTECHS_COLOR);
+  doc.rect(x, y, width, HEADER_H, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.text('NOTECHS — Habilidades Nao Tecnicas (CRM)', x + 2, y + 3.6);
+
+  const bodyY = y + HEADER_H + 1;
+
+  const drawColuna = (coluna: FichaPDFData['manobras'], colX: number) => {
+    coluna.forEach((item, index) => {
+      const rowY = bodyY + index * ROW_H;
+      const isEven = index % 2 === 0;
+      if (isEven) {
+        doc.setFillColor(COLORS.bgLight);
+        doc.rect(colX, rowY, colWidth, ROW_H, 'F');
+      }
+
+      const numLabel = String(item.ordem - NOTECHS_ORDEM_BASE + 1).padStart(2, '0');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6);
+      doc.setTextColor(NOTECHS_COLOR);
+      doc.text(numLabel, colX + 1.5, rowY + 3);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(COLORS.text);
+      const tituloWidth = colWidth - 22;
+      const tituloLines = doc.splitTextToSize((item.nome || item.descricao || '').trim(), tituloWidth);
+      doc.text(tituloLines[0] || '', colX + 7, rowY + 3, { maxWidth: tituloWidth });
+
+      const resultadoRaw = item.resultado;
+      const isNR = resultadoRaw === 'NR' || resultadoRaw === 'NAO_REALIZADA';
+      const notaNum = typeof resultadoRaw === 'number' ? resultadoRaw : Number(resultadoRaw);
+      const notaValida = !isNR && resultadoRaw !== null && resultadoRaw !== undefined && !isNaN(notaNum) && notaNum > 0;
+
+      const badgeW = 10;
+      const badgeH = 3.4;
+      const badgeX = colX + colWidth - badgeW - 1;
+      const badgeY = rowY + (ROW_H - badgeH) / 2;
+
+      if (isNR) {
+        doc.setFillColor('#64748B');
+        doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('NR', badgeX + badgeW / 2, badgeY + badgeH - 0.9, { align: 'center' });
+      } else if (notaValida) {
+        doc.setFillColor(getNotaColor(notaNum));
+        doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(5);
+        doc.setTextColor(255, 255, 255);
+        doc.text(notaNum.toFixed(1), badgeX + badgeW / 2, badgeY + badgeH - 0.9, { align: 'center' });
+      } else {
+        doc.setDrawColor(COLORS.border);
+        doc.setFillColor(COLORS.white);
+        doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'FD');
+      }
+    });
+  };
+
+  drawColuna(colunaEsquerda, x);
+  drawColuna(colunaDireita, x + colWidth + colGap);
+
+  const maxRows = Math.max(colunaEsquerda.length, colunaDireita.length);
+  return bodyY + maxRows * ROW_H + 2;
+}
+
+function getNotechsCompactReservedHeight(itensCount: number): number {
+  if (itensCount <= 0) return 0;
+
+  const HEADER_H = 5;
+  const BODY_TOP_GAP = 1;
+  const ROW_H = 4.2;
+  const BLOCK_BOTTOM_GAP = 2;
+  const AFTER_BLOCK_GAP = 2;
+  const maxRows = Math.ceil(itensCount / 2);
+
+  return HEADER_H + BODY_TOP_GAP + maxRows * ROW_H + BLOCK_BOTTOM_GAP + AFTER_BLOCK_GAP;
 }
 
 /**
@@ -741,7 +865,14 @@ export async function gerarPDFFichaCliente(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(TABLE_FONT);
 
-  const manobras = dados.manobras || [];
+  // NOTECHS (ordem >= NOTECHS_ORDEM_BASE) nunca entra na tabela de manobras
+  // técnicas variáveis — tem bloco compacto próprio, com orçamento de altura
+  // reservado à parte (NOTECHS_RESERVED), para nunca competir pelo espaço da
+  // tabela variável. Fichas antigas sem NOTECHS têm manobrasNotechs vazio e
+  // NOTECHS_RESERVED = 0 — layout idêntico ao anterior, sem regressão.
+  const { tecnicas: manobras, notechs: manobrasNotechs } = splitManobrasNotechs(
+    dados.manobras || [],
+  );
 
   // 1ª passagem: altura natural de cada linha (ITENS=1 linha, OBS=3 linhas máx)
   const rowData = manobras.map((m) => {
@@ -766,10 +897,21 @@ export async function gerarPDFFichaCliente(
   //   gap: 4mm
   const FOOTER_H = 6; // espaço do rodapé no fundo
   const SIG_RESERVED = 40; // altura máxima reservada para as caixas de assinatura
-  const OBS_RESERVED = 14; // obs gerais max
+  const OBS_RESERVED = 23; // caixa mínima (~18mm) + gap antes das assinaturas
   const SCALE_RESERVED = FICHA_AVALIACAO_SCALE_HEIGHT;
+  // Reserva derivada do layout real do bloco compacto NOTECHS, incluindo o gap
+  // imediatamente antes da régua. 0 quando a ficha não tem NOTECHS.
+  const NOTECHS_RESERVED = getNotechsCompactReservedHeight(manobrasNotechs.length);
   const tableBodyBudget =
-    pageHeight - currentY - 4 - SCALE_RESERVED - OBS_RESERVED - 3 - SIG_RESERVED - FOOTER_H;
+    pageHeight -
+    currentY -
+    4 -
+    NOTECHS_RESERVED -
+    SCALE_RESERVED -
+    OBS_RESERVED -
+    3 -
+    SIG_RESERVED -
+    FOOTER_H;
 
   // Factor de escala — só encolhe, nunca cresce
   const scaleFactor = totalNatural > tableBodyBudget ? tableBodyBudget / totalNatural : 1;
@@ -892,6 +1034,11 @@ export async function gerarPDFFichaCliente(
   });
 
   currentY += 4;
+
+  if (manobrasNotechs.length > 0) {
+    currentY = drawNotechsCompactBlock(doc, margin, currentY, contentWidth, manobrasNotechs) + 2;
+  }
+
   currentY = drawFichaAvaliacaoScale(doc, margin, currentY, contentWidth) + 4;
 
   // ========== OBSERVAÇÕES GERAIS — mínimo 3 linhas de texto ==========
@@ -1032,6 +1179,72 @@ export async function gerarPDFFichaCliente(
     FOOTER_Y,
     { align: 'center' },
   );
+
+  // ========== PÁGINA 2 (opcional) — Régua NOTECHS, descritores completos ==========
+  // Só é adicionada quando a ficha tem itens NOTECHS. Mantém a página 1 (A4
+  // principal) legível e compacta — os 60 descritores completos ficam aqui,
+  // fora do orçamento de altura da página principal.
+  if (manobrasNotechs.length > 0) {
+    doc.addPage();
+    let refY = margin;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(COLORS.text);
+    doc.text('Régua NOTECHS — Descritores Completos', margin, refY);
+    refY += 5;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(6.5);
+    doc.setTextColor(COLORS.textSecondary);
+    const avisoLines = doc.splitTextToSize(NOTECHS_PROVENIENCIA_AVISO, contentWidth);
+    doc.text(avisoLines, margin, refY);
+    refY += avisoLines.length * 3 + 3;
+
+    NOTECHS_GRUPOS.forEach((grupo) => {
+      const itensGrupo = getNotechsItensPorGrupo(grupo.codigo);
+      if (itensGrupo.length === 0) return;
+
+      if (refY > pageHeight - 30) {
+        doc.addPage();
+        refY = margin;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor('#7c3aed');
+      doc.text(`${grupo.tituloPt} / ${grupo.tituloEn}`, margin, refY);
+      refY += 4.5;
+
+      itensGrupo.forEach((item) => {
+        if (refY > pageHeight - 25) {
+          doc.addPage();
+          refY = margin;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(COLORS.text);
+        doc.text(`${item.tituloPt} / ${item.tituloEn}`, margin, refY);
+        refY += 3.5;
+
+        getNotechsDescritores(item.codigo).forEach((descritor) => {
+          const faixa = FICHA_AVALIACAO_FAIXAS.find((f) => f.rangeLabel === descritor.rangeLabel);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(6);
+          doc.setTextColor(faixa?.color || COLORS.textSecondary);
+          doc.text(descritor.rangeLabel, margin + 2, refY);
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6);
+          doc.setTextColor(COLORS.textSecondary);
+          const descLines = doc.splitTextToSize(descritor.texto, contentWidth - 16);
+          doc.text(descLines, margin + 14, refY);
+          refY += Math.max(3, descLines.length * 3);
+        });
+        refY += 1.5;
+      });
+      refY += 2;
+    });
+  }
 
   // Preview do PDF com opcao de download
   const fallbackName = isModoModelo

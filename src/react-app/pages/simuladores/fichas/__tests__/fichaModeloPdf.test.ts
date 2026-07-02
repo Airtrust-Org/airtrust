@@ -4,10 +4,15 @@ import {
   getFichaPdfTableHeaders,
   getFichaPdfTableLayout,
 } from '@/react-app/services/pdf-ficha-client';
-import { buildFichaModeloPdfData, buildFichaModeloPdfFileName } from '../fichaModeloPdf';
+import { NOTECHS_ORDEM_BASE } from '../notechs';
+import {
+  buildFichaModeloPdfData,
+  buildFichaModeloPdfFileName,
+  FICHA_MODELO_TECNICAS_PREVIEW_LIMIT as FICHA_MODELO_TECNICAS_PREVIEW_LIMIT_LOCAL,
+} from '../fichaModeloPdf';
 
 describe('fichaModeloPdf', () => {
-  it('monta a ficha modelo em branco com manobras ordenadas', () => {
+  it('monta a ficha modelo em branco com preview de 18 técnicas + 15 NOTECHS', () => {
     const dados = buildFichaModeloPdfData(
       {
         id: 12,
@@ -16,38 +21,35 @@ describe('fichaModeloPdf', () => {
         tipo_sessao_nome: 'CHECK',
         modelo_aeronave: 'SK76',
       },
-      [
-        {
-          ordem: 2,
-          manobra_codigo: 'M02',
-          manobra_nome: 'Pouso monomotor',
-          manobra_descricao: 'Pouso monomotor completo',
-          tripulante: 'B',
-        },
-        {
-          ordem: 1,
-          manobra_codigo: 'M01',
-          manobra_nome: 'Pane hidráulica',
-          manobra_descricao: 'Procedimento pane hidráulica',
-          tripulante: 'A',
-        },
-      ],
+      Array.from({ length: 22 }, (_, index) => ({
+        ordem: 22 - index,
+        manobra_codigo: `M${String(22 - index).padStart(2, '0')}`,
+        manobra_nome: `Manobra ${22 - index}`,
+        manobra_descricao: `Descricao ${22 - index}`,
+        tripulante: (22 - index) % 2 === 0 ? 'B' : 'A',
+      })),
       '/logo.png',
     );
 
+    expect(FICHA_MODELO_TECNICAS_PREVIEW_LIMIT_LOCAL).toBe(18);
     expect(dados.modoModelo).toBe(true);
     expect(dados.status).toBe('MODELO');
     expect(dados.tripulante_nome).toBe('');
     expect(dados.instrutor_nome).toBe('');
     expect(dados.simulador).toBe('SK76');
     expect(dados.logoUrl).toBe('/logo.png');
-    expect(dados.manobras).toHaveLength(2);
+    expect(dados.manobras).toHaveLength(33);
     expect(dados.manobras[0].ordem).toBe(1);
     expect(dados.manobras[0].codigo).toBe('M01');
     expect(dados.manobras[0].resultado).toBeNull();
     expect(dados.manobras[0].tripulante).toBe('A');
-    expect(dados.manobras[1].ordem).toBe(2);
-    expect(dados.manobras[1].tripulante).toBe('B');
+    expect(dados.manobras[17].ordem).toBe(18);
+    expect(dados.manobras[17].codigo).toBe('M18');
+    expect(dados.manobras[17].tripulante).toBe('B');
+    expect(dados.manobras[18].ordem).toBe(NOTECHS_ORDEM_BASE);
+    expect(dados.manobras[18].codigo).toBe('NOTECHS-01');
+    expect(dados.manobras.at(-1)?.ordem).toBe(1015);
+    expect(dados.manobras.at(-1)?.codigo).toBe('NOTECHS-15');
   });
 
   it('gera nome de arquivo estável e sanitizado', () => {

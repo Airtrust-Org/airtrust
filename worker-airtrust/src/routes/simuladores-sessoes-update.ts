@@ -36,6 +36,7 @@ import {
   sincronizarQualificacoesDaSessaoConcluida,
 } from './simuladores-shared';
 import { getTenantContext } from '../middleware/tenant';
+import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -775,7 +776,7 @@ app.put('/sessoes/:id', async (c) => {
           }
 
           if (modeloIdFinal) {
-            const manobras = await c.env.DB.prepare(
+            const manobrasModelo = await c.env.DB.prepare(
               `SELECT m.codigo, m.nome, COALESCE(m.nome, m.descricao) AS descricao, m.categoria,
                       msm.ordem, COALESCE(msm.tripulante, 'AB') as tripulante
                  FROM modelos_sessao_manobras msm
@@ -786,7 +787,10 @@ app.put('/sessoes/:id', async (c) => {
               .bind(modeloIdFinal)
               .all();
 
-            for (const man of manobras.results || []) {
+            const manobras = buildOperationalFichaManobras(
+              ((manobrasModelo.results || []) as unknown) as FichaManobraBase[],
+            );
+            for (const man of manobras) {
               const m = man as {
                 codigo: string;
                 nome: string;
@@ -796,11 +800,12 @@ app.put('/sessoes/:id', async (c) => {
                 tripulante: string;
               };
               await c.env.DB.prepare(
-                `INSERT INTO fichas_sessao_manobras (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '')`,
+                `INSERT INTO fichas_sessao_manobras (ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, '')`,
               )
                 .bind(
                   fichaId,
+                  empresaId,
                   m.codigo,
                   m.nome || m.descricao || '',
                   m.descricao || '',

@@ -15,6 +15,7 @@ import {
   type NormalizedSharedSessionRequest,
   validateAndNormalizeSharedSessionRequest,
 } from './simuladores-shared-session-logic';
+import { buildOperationalFichaManobras } from '../constants/notechs';
 
 type ModeloSessaoMapRow = {
   id: number;
@@ -365,6 +366,7 @@ async function assertNoExternalConflicts(
 
 async function insertFichaManobrasFromModelo(
   db: D1Database,
+  empresaId: number,
   fichaId: number,
   modeloSessaoId: number,
 ) {
@@ -375,11 +377,12 @@ async function insertFichaManobrasFromModelo(
     db
       .prepare(
         `INSERT INTO fichas_sessao_manobras
-           (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         fichaId,
+        empresaId,
         manobra.codigo,
         manobra.nome,
         manobra.descricao || manobra.nome,
@@ -674,7 +677,7 @@ async function loadFichaManobrasForModelo(
       tripulante: string | null;
     }>();
 
-  return manobras.results || [];
+  return buildOperationalFichaManobras(manobras.results || []);
 }
 
 function assertModeloSessaoTemManobras(
@@ -932,11 +935,12 @@ async function buildSharedSessionBatchPlan(
           db
             .prepare(
               `INSERT INTO fichas_sessao_manobras
-                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
-               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
+                 (ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante)
+               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
             )
             .bind(
               fichaUuid,
+              empresaId,
               manobra.codigo,
               manobra.nome,
               manobra.descricao || manobra.nome,
@@ -1275,9 +1279,10 @@ async function updateSharedSessionStructureTransactional(
             prepareStatement(
               db,
               `INSERT INTO fichas_sessao_manobras
-                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante)
-               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
+                 (ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante)
+               VALUES ((SELECT id FROM fichas_sessao WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
               fichaUuid,
+              empresaId,
               manobra.codigo,
               manobra.nome,
               manobra.descricao || manobra.nome,
@@ -1564,7 +1569,7 @@ async function createSharedSessionStructure(
         .run();
       const fichaId = Number(insertFicha.meta.last_row_id);
       persistence.fichaIds.push(fichaId);
-      await insertFichaManobrasFromModelo(db, fichaId, Number(participant.modelo_sessao_id));
+      await insertFichaManobrasFromModelo(db, empresaId, fichaId, Number(participant.modelo_sessao_id));
     }
 
     if (participant.modelo_sessao_id && modelo?.gera_qualificacao) {
