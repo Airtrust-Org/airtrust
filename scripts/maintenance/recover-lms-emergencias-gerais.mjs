@@ -194,14 +194,25 @@ function makeRemoteTarget(database, envName) {
       return parsed[0]?.results ?? [];
     },
     exec(sql) {
-      const output = execFileSync(
-        'wrangler',
-        ['d1', 'execute', database, '--env', envName, '--remote', '--json', '--command', sql],
-        { encoding: 'utf8' },
-      ).trim();
-      const parsed = output ? JSON.parse(output) : [];
-      const meta = parsed[0]?.meta ?? {};
-      return { changes: Number(meta.changes ?? 0) };
+      const tempFile = path.join(
+        process.cwd(),
+        `.recover-lms-emergencias-gerais-${Date.now()}-${Math.random().toString(16).slice(2)}.sql`,
+      );
+      fs.writeFileSync(tempFile, sql);
+      try {
+        execFileSync(
+          'wrangler',
+          ['d1', 'execute', database, '--env', envName, '--remote', '--file', tempFile],
+          { encoding: 'utf8' },
+        );
+        return { changes: null };
+      } finally {
+        try {
+          fs.unlinkSync(tempFile);
+        } catch {
+          // ignore cleanup failures
+        }
+      }
     },
   };
 }
@@ -385,7 +396,6 @@ function validateState({ args, source, shell, sourceCounters, shellCounters }) {
 
 function buildApplySql({ empresaId, sourceCursoId, shellCursoId }) {
   return `
-BEGIN;
 UPDATE lms_cursos
    SET ativo = 1,
        deleted_at = NULL,
@@ -399,10 +409,32 @@ UPDATE lms_cursos
        deleted_at = COALESCE(deleted_at, datetime('now')),
        updated_at = datetime('now')
  WHERE empresa_id = ${empresaId}
+  AND id = ${shellCursoId}
+   AND (COALESCE(ativo, 1) <> 0 OR deleted_at IS NULL);
+`.trim();
+}
+
+function buildApplyStatements({ empresaId, sourceCursoId, shellCursoId }) {
+  return [
+    `
+UPDATE lms_cursos
+   SET ativo = 1,
+       deleted_at = NULL,
+       updated_at = datetime('now')
+ WHERE empresa_id = ${empresaId}
+   AND id = ${sourceCursoId}
+   AND (COALESCE(ativo, 1) <> 1 OR deleted_at IS NOT NULL);
+`.trim(),
+    `
+UPDATE lms_cursos
+   SET ativo = 0,
+       deleted_at = COALESCE(deleted_at, datetime('now')),
+       updated_at = datetime('now')
+ WHERE empresa_id = ${empresaId}
    AND id = ${shellCursoId}
    AND (COALESCE(ativo, 1) <> 0 OR deleted_at IS NULL);
-COMMIT;
-`.trim();
+`.trim(),
+  ];
 }
 
 function main() {
@@ -466,7 +498,11 @@ function main() {
   }
 
   const sql = buildApplySql(args);
-  const execution = target.exec(sql);
+  const execution = { changes: 0 };
+  for (const statement of buildApplyStatements(args)) {
+    const result = target.exec(statement);
+    execution.changes += Number(result?.changes ?? 0);
+  }
   const sourceAfter = getCursoSnapshot(target, args.sourceCursoId);
   const shellAfter = getCursoSnapshot(target, args.shellCursoId);
   const sourceCountersAfter = getCursoCounters(target, args.empresaId, args.sourceCursoId);
