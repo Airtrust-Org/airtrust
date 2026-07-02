@@ -1,0 +1,45 @@
+name: Smoke Staging
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+      STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      CI: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: URL guard
+        run: npm run lint:api-base
+
+      - name: Guard rails for smoke scripts
+        run: node --test scripts/__tests__/smoke-auth-guards.test.mjs
+
+      - name: Staging smoke
+        run: npm run smoke:staging:auth
+
+      - name: Staging doctor
+        run: npm run staging:doctor
