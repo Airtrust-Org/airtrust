@@ -44,6 +44,7 @@ import {
   type TreinamentoPlanejado,
   type TreinamentoPlanejadoConvocacaoPreview,
 } from '@/react-app/hooks/useTreinamentosPlanejados';
+import { lmsKeys } from '@/react-app/hooks/useLms';
 import { useAeronavesConfig } from '@/react-app/hooks/useAeronavesConfig';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { clearApiCacheByPattern, useApi } from '@/react-app/hooks/useApi';
@@ -94,6 +95,9 @@ import {
   getPlanejamentoRelacionamentoKey as getPlanejamentoRelacionamentoKeyBase,
 } from '@/react-app/pages/qualificacoes/historicoStatusUtils';
 import { FormatosTab, type Formato } from '@/react-app/pages/qualificacoes/FormatosTab';
+import {
+  resolveClassificationTagAppearance,
+} from '@/react-app/pages/qualificacoes/classificacaoColors';
 import {
   buildTipoPayload,
   buildTipoSaveSuccessMessage,
@@ -2447,9 +2451,7 @@ export default function Qualificacoes() {
       width: '145px',
       render: (value, row) => {
         const categoriaName = String(value ?? '');
-        // 1. Prioridade: cor vinda diretamente do backend (JOIN com qualificacoes_categorias)
         const corDireta = (row as any).categoria_cor;
-        // 2. Fallback: buscar no mapa local de categorias (caso backend não retorne cor)
         const categoriaByName = !corDireta
           ? categoriasMap.get(normalizeCategoriaKey(categoriaName))
           : undefined;
@@ -2462,27 +2464,17 @@ export default function Qualificacoes() {
           categoriaName,
           corDireta || categoriaByName?.cor || categoriaById?.cor,
         );
-        let corBg = '#f1f5f9';
-        let corText = '#64748b';
-
-        if (corFinal) {
-          // Normalizar hex: #rgb -> #rrggbb
-          let hex = corFinal.replace('#', '');
-          if (hex.length === 3) {
-            hex = hex
-              .split('')
-              .map((c: string) => c + c)
-              .join('');
-          }
-          corBg = `#${hex}22`;
-          corText = `#${hex}`;
-        }
+        const appearance = resolveClassificationTagAppearance({
+          variant: 'category',
+          label: categoriaName,
+          color: corFinal ?? null,
+        });
 
         return (
           <span
             key={`cat-${(row as any).id}-${value}-${corFinal || 'default'}`}
-            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-            style={{ backgroundColor: corBg, color: corText }}
+            className={appearance.className}
+            style={appearance.style}
           >
             {categoriaName}
           </span>
@@ -3373,16 +3365,16 @@ export default function Qualificacoes() {
                       render: (value, row) => {
                         const nome = String(value ?? '');
                         const cor = (row as any).formato_cor as string | undefined;
+                        const codigo = (row as any).formato_codigo as string | undefined;
                         if (!nome || nome === '-') return <span className="text-sm font-normal text-slate-400">-</span>;
-                        let bg = '#f1f5f9', text = '#64748b';
-                        if (cor) {
-                          let hex = cor.replace('#', '');
-                          if (hex.length === 3) hex = hex.split('').map((c: string) => c + c).join('');
-                          bg = `#${hex}22`;
-                          text = `#${hex}`;
-                        }
+                        const appearance = resolveClassificationTagAppearance({
+                          variant: 'format',
+                          label: nome,
+                          code: codigo,
+                          color: cor ?? null,
+                        });
                         return (
-                          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ backgroundColor: bg, color: text }}>
+                          <span className={appearance.className} style={appearance.style}>
                             {nome}
                           </span>
                         );
@@ -5106,6 +5098,10 @@ export default function Qualificacoes() {
                   }
 
                   getTipoRelatedCachePatterns().forEach((pattern) => clearApiCacheByPattern(pattern));
+                  clearApiCacheByPattern('/api/lms/cursos');
+                  clearApiCacheByPattern('/api/lms/stats');
+                  await queryClient.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
+                  await queryClient.invalidateQueries({ queryKey: lmsKeys.adminStats() });
                   showToast.success(buildTipoSaveSuccessMessage(responseJson?.data, isEdit));
 
                   // Atualização otimista: reflete o valor salvo na tabela IMEDIATAMENTE,

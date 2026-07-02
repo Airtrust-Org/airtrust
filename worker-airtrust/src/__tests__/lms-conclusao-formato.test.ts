@@ -55,7 +55,9 @@ describe('LMS — isEadCategoria / isEadFormato', () => {
     it('formato_codigo tem precedência sobre categoria', () => {
       // Se formato_codigo=NÃO_EAD mas categoria=EAD, ganha o formato
       expect(isEadFormato({ formato_codigo: 'PRESENCIAL', categoria: 'EAD' })).toBe(false);
-      expect(isEadFormato({ formato_codigo: 'EAD', categoria: 'PRESENCIAL' })).toBe(true);
+      expect(isEadFormato({ formato_codigo: 'EAD', categoria: 'TREINAMENTO TEORICO' })).toBe(
+        true,
+      );
     });
 
     it('trata null/undefined com segurança', () => {
@@ -123,7 +125,7 @@ describe('LMS — conclusão → qualificacoes_historico', () => {
 
     const qualificacaoTipo = {
       id: 42,
-      nome: 'CRM Teórico',
+      nome: 'CRM Treinamento Teórico',
       categoria: 'EAD',
       formato_id: 1,                // mesmo formato EAD
       formato_codigo: 'EAD',

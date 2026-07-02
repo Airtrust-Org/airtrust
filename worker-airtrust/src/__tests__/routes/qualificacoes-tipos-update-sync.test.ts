@@ -41,7 +41,20 @@ vi.mock('../../utils/auditoria', () => ({
 }));
 
 vi.mock('../../services/lms-ead-ssot', () => ({
-  isEadCategoria: () => false,
+  isEadCategoria: (categoria: string | null | undefined) =>
+    String(categoria || '').trim().toUpperCase() === 'EAD' ||
+    String(categoria || '').trim().toUpperCase() === 'TREINAMENTO EAD',
+  isEadFormato: ({
+    formato_codigo,
+    categoria,
+  }: {
+    formato_codigo?: string | null;
+    categoria?: string | null;
+  }) =>
+    formato_codigo != null
+      ? String(formato_codigo).trim().toUpperCase() === 'EAD'
+      : String(categoria || '').trim().toUpperCase() === 'EAD' ||
+        String(categoria || '').trim().toUpperCase() === 'TREINAMENTO EAD',
   reconcileImportedEdappHistory: vi.fn(),
   softDeleteLmsCourseForQualificacaoTipo: vi.fn(),
   syncLmsCourseFromQualificacaoTipo: vi.fn(),
@@ -52,6 +65,10 @@ vi.mock('../../services/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ isAdmin: true, allowedSetorIds: [] })),
 }));
 
+import {
+  softDeleteLmsCourseForQualificacaoTipo,
+  syncLmsCourseFromQualificacaoTipo,
+} from '../../services/lms-ead-ssot';
 import tiposRouter from '../../routes/qualificacoes/tipos';
 
 type QueryHandler = {
@@ -63,6 +80,7 @@ type QueryHandler = {
 function createMockDb(handlers: Array<[string, QueryHandler]>) {
   const calls: Array<{ query: string; args: unknown[]; method: 'first' | 'run' | 'all' | 'batch' }> =
     [];
+  const normalizeSql = (value: string) => value.replace(/\s+/g, ' ').trim();
 
   const makeBoundStatement = (query: string, args: unknown[]) => ({
     __sql: query,
@@ -71,7 +89,8 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
 
   const db = {
     prepare: vi.fn((query: string) => {
-      const entry = handlers.find(([matcher]) => query.includes(matcher));
+      const normalizedQuery = normalizeSql(query);
+      const entry = handlers.find(([matcher]) => normalizedQuery.includes(normalizeSql(matcher)));
       if (!entry) {
         throw new Error(`Unhandled query: ${query}`);
       }
@@ -160,7 +179,7 @@ describe('qualificacoes tipos update sync', () => {
         },
       ],
       [
-        'SELECT empresa_id, codigo, nome, categoria, validade, vencimento_fim_mes',
+        'SELECT qt.empresa_id, qt.codigo, qt.nome, qt.categoria, qt.validade, qt.vencimento_fim_mes',
         {
           first: () => ({
             empresa_id: 7,
@@ -296,5 +315,121 @@ describe('qualificacoes tipos update sync', () => {
     expect(batchCall?.query).toContain('UPDATE qualificacoes_historico');
     expect(batchCall?.args).toContain(202);
     expect(batchCall?.args).toContain('AS350-B2');
+  });
+
+  it('usa formato EAD para manter o curso sincronizado mesmo quando a categoria muda', async () => {
+    const { db } = createMockDb([
+      [
+        "PRAGMA table_info('qualificacoes_tipos')",
+        {
+          all: () => ({
+            results: [
+              { name: 'id' },
+              { name: 'codigo' },
+              { name: 'validade' },
+              { name: 'is_check' },
+              { name: 'formato_id' },
+            ],
+          }),
+        },
+      ],
+      [
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='auditoria_avancada_v2' LIMIT 1",
+        {
+          first: () => ({ name: 'auditoria_avancada_v2' }),
+        },
+      ],
+      [
+        'SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+        {
+          first: () => ({ id: 10 }),
+        },
+      ],
+      [
+        'SELECT id FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND id != ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+        {
+          first: () => null,
+        },
+      ],
+      [
+        'SELECT qt.empresa_id, qt.codigo, qt.nome, qt.categoria, qt.validade, qt.vencimento_fim_mes, qt.formato_id, qf.codigo AS formato_codigo',
+        {
+          first: () => ({
+            empresa_id: 7,
+            categoria: 'EAD',
+            formato_id: 2,
+            formato_codigo: 'EAD',
+            validade: 12,
+            codigo: 'EMERG-001',
+            nome: 'Emergências Gerais',
+            vencimento_fim_mes: 1,
+          }),
+        },
+      ],
+      [
+        'UPDATE qualificacoes_tipos SET',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+      [
+        'SELECT id, codigo, nome, categoria, validade, vencimento_fim_mes, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente',
+        {
+          first: () => ({
+            id: 10,
+            codigo: 'EMERG-001',
+            nome: 'Emergências Gerais',
+            categoria: 'TREINAMENTO TEORICO',
+            validade: 12,
+            vencimento_fim_mes: 1,
+            carga_horaria: 8,
+            carga_horaria_inicial: 8,
+            carga_horaria_recorrente: 8,
+          }),
+        },
+      ],
+      [
+        'SELECT qh.id,',
+        {
+          all: () => ({ results: [] }),
+        },
+      ],
+      [
+        'INSERT INTO auditoria_avancada_v2',
+        {
+          run: () => ({ meta: { changes: 1 } }),
+        },
+      ],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/tipos', tiposRouter);
+
+    const response = await app.fetch(
+      new Request('http://localhost/tipos/10', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          nome: 'Emergências Gerais',
+          codigo: 'EMERG-001',
+          categoria: 'TREINAMENTO TEORICO',
+          validade: 12,
+          vencimento_fim_mes: 1,
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(vi.mocked(syncLmsCourseFromQualificacaoTipo)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(syncLmsCourseFromQualificacaoTipo)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        empresaId: 7,
+        qualificacaoTipoId: '10',
+      }),
+    );
+    expect(vi.mocked(softDeleteLmsCourseForQualificacaoTipo)).not.toHaveBeenCalled();
   });
 });

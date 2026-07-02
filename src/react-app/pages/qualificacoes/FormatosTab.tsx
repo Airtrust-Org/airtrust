@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, Search, SearchX, X } from 'lucide-react';
 import { Card, CardContent, EmptyState, Badge } from '@/react-app/components/UI';
 import Button from '@/react-app/components/Button';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { resolveClassificationTagColor } from '@/react-app/pages/qualificacoes/classificacaoColors';
 
 export interface Formato {
   id: number;
@@ -251,9 +252,19 @@ export const FormatosTab: React.FC<FormatosTabProps> = ({
                     <div className="flex items-center gap-1.5">
                       <div
                         className="w-5 h-5 rounded border border-slate-300 flex-shrink-0"
-                        style={{ backgroundColor: fmt.cor || '#6B7280' }}
+                        style={{ backgroundColor: resolveClassificationTagColor({
+                          variant: 'format',
+                          code: fmt.codigo,
+                          color: fmt.cor || null,
+                        }) }}
                       />
-                      <span className="text-xs text-slate-500">{fmt.cor || '-'}</span>
+                      <span className="text-xs text-slate-500">
+                        {resolveClassificationTagColor({
+                          variant: 'format',
+                          code: fmt.codigo,
+                          color: fmt.cor || null,
+                        })}
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-2.5 whitespace-nowrap text-sm text-slate-600">

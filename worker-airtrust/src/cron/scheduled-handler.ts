@@ -50,7 +50,9 @@ export function buildQualificacoesEadRenovacaoAutomaticaQuery() {
               AND UPPER(TRIM(COALESCE(qh.qualificacao_codigo, ''))) = UPPER(TRIM(COALESCE(qt.codigo, '')))
             )
           )
-          AND UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+         LEFT JOIN qualificacoes_formatos qf
+           ON qf.id = COALESCE(qh.formato_id, qt.formato_id)
+          AND qf.deleted_at IS NULL
          JOIN lms_cursos lc
            ON lc.qualificacao_tipo_id = qt.id
           AND lc.ativo = 1
@@ -63,7 +65,11 @@ export function buildQualificacoesEadRenovacaoAutomaticaQuery() {
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         WHERE qh.deleted_at IS NULL
+        WHERE qh.deleted_at IS NULL
+          AND (
+            UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
+            OR UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+          )
            AND COALESCE(qh.renovada, 0) = 0
            AND (qh.data_vencimento IS NOT NULL OR qh.data_conclusao IS NOT NULL)
            AND NOT EXISTS (
