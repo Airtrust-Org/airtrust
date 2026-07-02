@@ -241,12 +241,14 @@ function buildCounts(dbFile, empresaId) {
   };
 }
 
-function buildSqlStatements({ empresaId, eadFormatId, teoricoCategoryId }) {
+function buildSqlStatements({ empresaId, eadFormatId, teoricoCategory }) {
+  const catNome = shellQuote(teoricoCategory.nome);
+  const catCodigo = shellQuote(teoricoCategory.codigo);
   return [
     'BEGIN;',
     `
       UPDATE qualificacoes_tipos
-         SET categoria = 'Treinamento Teórico',
+         SET categoria = ${catNome},
              formato_id = ${eadFormatId},
              updated_at = datetime('now')
        WHERE empresa_id = ${empresaId}
@@ -255,7 +257,7 @@ function buildSqlStatements({ empresaId, eadFormatId, teoricoCategoryId }) {
     `,
     `
       UPDATE lms_cursos
-         SET categoria = 'Treinamento Teórico',
+         SET categoria = ${catNome},
              formato_id = ${eadFormatId},
              updated_at = datetime('now')
        WHERE empresa_id = ${empresaId}
@@ -265,9 +267,9 @@ function buildSqlStatements({ empresaId, eadFormatId, teoricoCategoryId }) {
     `,
     `
       UPDATE qualificacoes_historico
-         SET categoria = 'Treinamento Teórico',
-             categoria_id = ${teoricoCategoryId},
-             categoria_codigo = 'TERICO',
+         SET categoria = ${catNome},
+             categoria_id = ${Number(teoricoCategory.id)},
+             categoria_codigo = ${catCodigo},
              formato_id = ${eadFormatId},
              formato_codigo = 'EAD',
              updated_at = datetime('now')
@@ -321,7 +323,7 @@ function main() {
         FROM qualificacoes_categorias
        WHERE empresa_id = ${args.empresaId}
          AND deleted_at IS NULL
-         AND UPPER(TRIM(COALESCE(codigo, ''))) = 'TERICO'
+         AND TRIM(COALESCE(nome, '')) = 'Treinamento Teórico'
        ORDER BY id ASC
        LIMIT 1;
     `,
@@ -329,7 +331,13 @@ function main() {
 
   if (!teoricoCategory?.id) {
     throw new Error(
-      'Não encontrei a categoria canônica Treinamento Teórico (codigo TERICO) para esta empresa.',
+      'Categoria canônica "Treinamento Teórico" não encontrada para esta empresa.',
+    );
+  }
+
+  if (!teoricoCategory.nome || !teoricoCategory.codigo) {
+    throw new Error(
+      `Categoria "Treinamento Teórico" retornou nome/codigo vazio: ${JSON.stringify(teoricoCategory)}`,
     );
   }
 
@@ -372,7 +380,7 @@ function main() {
           sql: buildSqlStatements({
             empresaId: args.empresaId,
             eadFormatId: Number(eadFormat.id),
-            teoricoCategoryId: Number(teoricoCategory.id),
+            teoricoCategory,
           }),
         },
         null,
@@ -385,7 +393,7 @@ function main() {
   const sql = buildSqlStatements({
     empresaId: args.empresaId,
     eadFormatId: Number(eadFormat.id),
-    teoricoCategoryId: Number(teoricoCategory.id),
+    teoricoCategory,
   });
 
   runSql(dbFile, sql);
