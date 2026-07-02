@@ -1,7 +1,7 @@
 # Production Release Checklist — Preparado para o Próximo Operador
 
 > **Data:** 2026-07-02
-> **SHA main:** `953ef22603a4c1775b413f037cd66c23eae899c3` (SHA atual — antes da janela, rodar `git rev-parse HEAD` e confirmar que o working tree está limpo)
+> **SHA main:** registrar no momento da janela com `git rev-parse HEAD`
 > **Status:** Checklist preparado, NÃO EXECUTADO
 > **Modelo de execução recomendado:** DeepSeek v4 Pro
 
@@ -86,7 +86,7 @@ Registrar no ledger (ex: `domain_events` ou arquivo versionado):
 | Campo | Valor |
 |-------|-------|
 | Evento | `production_release_pre_0412` |
-| SHA main | `4e41e6bbc48c1f97efb2eab03a92ae44351cea31` |
+| SHA main | `<SHA obtido por git rev-parse HEAD na pré-janela>` |
 | Snapshot R2 path | `<path do snapshot>` |
 | Snapshot hash | `<sha256 do snapshot>` |
 | Autorização | `<aprovador>` |
@@ -105,14 +105,14 @@ Usar o pipeline de release oficial que registra o evento em `domain_events` ou o
 ```bash
 # 1. Registrar PRE no ledger
 #    Exemplo: INSERT INTO domain_events (empresa_id, modulo, tipo, payload)
-#    VALUES (1, 'qualificacoes', 'MIGRATION_0412_PRE', '{"sha":"4e41e6b","status":"starting"}')
+#    VALUES (1, 'qualificacoes', 'MIGRATION_0412_PRE', '{"sha":"<SHA_ATUAL_DA_JANELA>","status":"starting"}')
 
 # 2. Aplicar migration
 npx wrangler d1 execute airtrust-db --remote --file worker-airtrust/migrations/0412_qualificacoes_classificacao.sql
 
 # 3. Registrar PÓS no ledger
 #    Exemplo: INSERT INTO domain_events (empresa_id, modulo, tipo, payload)
-#    VALUES (1, 'qualificacoes', 'MIGRATION_0412_POST', '{"sha":"4e41e6b","status":"applied"}')
+#    VALUES (1, 'qualificacoes', 'MIGRATION_0412_POST', '{"sha":"<SHA_ATUAL_DA_JANELA>","status":"applied"}')
 
 # 4. Confirmar idempotência (pode rodar novamente sem dano)
 npx wrangler d1 execute airtrust-db --remote --command "SELECT COUNT(*) as n FROM qualificacoes_formatos;"
