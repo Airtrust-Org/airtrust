@@ -35,6 +35,7 @@ import sessoesUpdateRoutes from './simuladores-sessoes-update';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import { sendSimulatorSessionEmailNotifications } from '../services/simuladores-session-notifications';
+import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
 
 const app = new Hono<{ Bindings: Env }>();
 // Todos os endpoints de sessões requerem autenticação
@@ -1119,7 +1120,7 @@ app.post('/sessoes', async (c) => {
       }
 
       if (modeloId) {
-        const manobras = await c.env.DB.prepare(
+        const manobrasModelo = await c.env.DB.prepare(
           `SELECT
             m.codigo,
             m.nome,
@@ -1133,13 +1134,15 @@ app.post('/sessoes', async (c) => {
            WHERE msm.modelo_id = ?
              AND msm.deleted_at IS NULL
              AND m.deleted_at IS NULL
-           ORDER BY msm.ordem ASC
-           LIMIT 22`,
+           ORDER BY msm.ordem ASC`,
         )
           .bind(modeloId)
           .all();
 
-        for (const man of manobras.results) {
+        const manobras = buildOperationalFichaManobras(
+          ((manobrasModelo.results || []) as unknown) as FichaManobraBase[],
+        );
+        for (const man of manobras) {
           const m = man as {
             codigo: string;
             nome: string;
@@ -1153,10 +1156,11 @@ app.post('/sessoes', async (c) => {
           manobraStmts.push(
             c.env.DB.prepare(
               `INSERT INTO fichas_sessao_manobras (
-                ficha_id, codigo, nome, descricao, categoria, ordem, tripulante
-              ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                ficha_id, empresa_id, codigo, nome, descricao, categoria, ordem, tripulante
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             ).bind(
               ficha_id,
+              empresaId,
               m.codigo,
               m.nome || m.descricao,
               m.descricao,

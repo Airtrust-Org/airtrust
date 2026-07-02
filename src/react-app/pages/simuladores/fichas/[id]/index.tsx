@@ -5,7 +5,7 @@ import AppLayout from '@/react-app/components/AppLayout';
  *
  * Exibe ficha completa com:
  * - Cabeçalho (participante, instrutor, simulador, sessão/modelo, data/hora, carga horária)
- * - Grade de 22 manobras (11 à esquerda, 11 à direita)
+ * - Grade técnica operacional + bloco NOTECHS separado
  * - Cada manobra: número, descrição, código, nota (badge colorido 0-10)
  * - Observações gerais
  * - Assinaturas digitais (Tripulante + Instrutor)
@@ -34,6 +34,7 @@ import {
   Clock,
   FileCheck,
   History,
+  Info,
   Lock,
   Pencil,
   PenTool,
@@ -49,6 +50,8 @@ import {
 } from '@/react-app/services/pdf-ficha-client';
 import { openPreviewWindow } from '@/react-app/utils/pdfPreview';
 import AssinaturaModal from '@/react-app/components/AssinaturaModal';
+import ModalNotechsReferencia from '../components/ModalNotechsReferencia';
+import { NOTECHS_ORDEM_BASE, splitManobrasNotechs } from '../notechs';
 
 interface ManobraAvaliacao {
   id: number;
@@ -111,6 +114,8 @@ interface FichaDetalhada {
   tripulacao_nomes?: string | null;
   edicao_pendente?: boolean;
   edicoes_pendentes_count?: number;
+  notechs_status?: 'missing' | 'partial' | 'complete';
+  missing_notechs_count?: number;
 }
 
 interface AlteracaoEdicaoFicha {
@@ -211,6 +216,7 @@ export default function FichaDetalhe() {
   >({});
   const [edicoes, setEdicoes] = useState<EdicaoFicha[]>([]);
   const [modalSolicitarEdicao, setModalSolicitarEdicao] = useState(false);
+  const [modalNotechsAberto, setModalNotechsAberto] = useState(false);
   const [motivoEdicao, setMotivoEdicao] = useState('');
   const [observacoesGeraisEdicao, setObservacoesGeraisEdicao] = useState('');
   const [observacoesManobrasEdicao, setObservacoesManobrasEdicao] = useState<
@@ -947,9 +953,14 @@ export default function FichaDetalhe() {
     }
   };
 
-  // Dividir manobras em duas colunas (1-11 e 12-22)
-  const manobrasEsquerda = ficha?.manobras.filter((m) => m.ordem >= 1 && m.ordem <= 11) || [];
-  const manobrasDireita = ficha?.manobras.filter((m) => m.ordem >= 12 && m.ordem <= 22) || [];
+  // Separar manobras técnicas variáveis do bloco NOTECHS (namespace de
+  // ordem reservado >= 1001) — sempre separado, independentemente do modelo.
+  const { tecnicas: manobrasTecnicas, notechs: manobrasNotechs } = splitManobrasNotechs(
+    ficha?.manobras || [],
+  );
+  // Dividir manobras técnicas em duas colunas para preservar legibilidade A4.
+  const manobrasEsquerda = manobrasTecnicas.filter((m) => m.ordem >= 1 && m.ordem <= 11);
+  const manobrasDireita = manobrasTecnicas.filter((m) => m.ordem >= 12 && m.ordem <= 22);
   const fichaFinalizada = STATUS_FICHA_FINALIZADA.has(normalizarPerfil(ficha?.status));
   const isEditMode = mode === 'edit' && !fichaFinalizada;
   const perfilUsuario = normalizarPerfil(user?.role);
@@ -1261,6 +1272,75 @@ export default function FichaDetalhe() {
                 </div>
               </div>
             </div>
+            {manobrasNotechs.length > 0 && (
+              <div className="mb-6 rounded-lg border border-purple-200 bg-white p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-purple-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+                      NOTECHS
+                    </span>
+                    <h3 className="text-lg font-bold text-slate-900">
+                      Habilidades Não Técnicas (CRM)
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalNotechsAberto(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-purple-300 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-50"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                    Ver descritores completos
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                  {manobrasNotechs.map((manobra) => (
+                    <div
+                      key={manobra.id}
+                      className="flex items-center gap-3 rounded-md border border-purple-100 bg-purple-50/40 p-2.5"
+                    >
+                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
+                        {manobra.ordem - NOTECHS_ORDEM_BASE + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {manobra.nome || manobra.descricao}
+                        </p>
+                      </div>
+                      {isEditMode ? (
+                        <select
+                          value={getNotaSelectValue(manobra.nota)}
+                          onChange={(e) => handleNotaChange(manobra.ordem, e.target.value)}
+                          className={`w-24 shrink-0 rounded border px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
+                            manobra.nota === null
+                              ? 'border-red-300 bg-red-50 text-red-700'
+                              : 'border-slate-300'
+                          }`}
+                        >
+                          <option value="">Selecione</option>
+                          {opcoesNota.map((opcao) => (
+                            <option key={opcao} value={opcao}>
+                              {opcao}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className={`shrink-0 px-3 py-1 rounded-full text-sm font-bold ${getNotaBadgeClass(
+                            manobra.nota,
+                          )}`}
+                        >
+                          {getNotaLabel(manobra.nota)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <ModalNotechsReferencia
+              isOpen={modalNotechsAberto}
+              onClose={() => setModalNotechsAberto(false)}
+            />
             <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
               {/* Observações Gerais */}
               <h3 className="text-lg font-bold text-slate-900 mb-3">Observações Gerais</h3>

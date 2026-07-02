@@ -16,6 +16,7 @@ import {
   getQualificacaoGeracaoErrorStatus,
 } from './simuladores-fichas-helpers';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
+import { buildOperationalFichaManobras, FICHA_TECNICAS_PADRAO_LIMITE } from '../constants/notechs';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -121,11 +122,12 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
 
         await c.env.DB.prepare(
           `INSERT INTO fichas_sessao_manobras(
-             ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             ficha_id, empresa_id, codigo, descricao, categoria, ordem, resultado, observacoes
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
           .bind(
             fichaId,
+            empresaId,
             codigo,
             descricao,
             categoria,
@@ -143,11 +145,12 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
       } else {
         await c.env.DB.prepare(
           `INSERT INTO fichas_sessao_manobras(
-             ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             ficha_id, empresa_id, codigo, descricao, categoria, ordem, resultado, observacoes
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
           .bind(
             fichaId,
+            empresaId,
             `ORD-${ordem}`,
             `Manobra ordem ${ordem}`,
             'GERAL',
@@ -190,8 +193,7 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
 });
 
 // POST /fichas-simulador/:id/popular-manobras
-// MODEL: 22 manobras per ficha (11 left + 11 right)
-// Order 1-11 = left column | 12-22 = right column
+// Novo padrão operacional: 18 técnicas + 15 NOTECHS fixos.
 app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
   try {
     const empresaId = getEmpresaId(c);
@@ -221,32 +223,33 @@ app.post('/fichas-simulador/:id/popular-manobras', async (c) => {
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
     const m = await c.env.DB.prepare(
-      'SELECT codigo, COALESCE(nome, descricao) AS descricao, categoria, ordem FROM manobras WHERE empresa_id = ? AND tipo_sessao=? AND tipo_aeronave=? AND deleted_at IS NULL ORDER BY ordem LIMIT 22',
+      'SELECT codigo, COALESCE(nome, descricao) AS descricao, categoria, ordem FROM manobras WHERE empresa_id = ? AND tipo_sessao=? AND tipo_aeronave=? AND deleted_at IS NULL ORDER BY ordem',
     )
       .bind(empresaId, f.tipo_sessao, f.tipo_aeronave || '')
       .all();
 
-    if (m.results.length < 22) {
+    if (m.results.length < FICHA_TECNICAS_PADRAO_LIMITE) {
       return c.json(
         {
           success: false,
-          error: `Apenas ${m.results.length} manobras disponíveis no catálogo. Necessário 22 (11+11).`,
+          error: `Apenas ${m.results.length} manobras disponíveis no catálogo. Necessário ${FICHA_TECNICAS_PADRAO_LIMITE}.`,
         },
         400,
       );
     }
 
-    const insertStmts = m.results.slice(0, 22).map((ma: any, i: number) =>
+    const manobras = buildOperationalFichaManobras(m.results as any[]);
+    const insertStmts = manobras.map((ma: any) =>
       c.env.DB.prepare(
-        'INSERT INTO fichas_sessao_manobras(ficha_id,codigo,descricao,categoria,ordem)VALUES(?,?,?,?,?)',
-      ).bind(fid, ma.codigo, ma.descricao, ma.categoria, i + 1),
+        'INSERT INTO fichas_sessao_manobras(ficha_id,empresa_id,codigo,nome,descricao,categoria,ordem,tripulante)VALUES(?,?,?,?,?,?,?,?)',
+      ).bind(fid, empresaId, ma.codigo, ma.nome, ma.descricao, ma.categoria, ma.ordem, ma.tripulante || 'AB'),
     );
     await c.env.DB.batch(insertStmts);
     return c.json({
       success: true,
-      message: `22 manobras populadas (11 esquerda + 11 direita)`,
-      total: 22,
-      layout: '11 manobras por coluna',
+      message: `${FICHA_TECNICAS_PADRAO_LIMITE} técnicas + 15 NOTECHS populados`,
+      total: manobras.length,
+      layout: '18 tecnicas + 15 NOTECHS',
     });
   } catch (e: any) {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);

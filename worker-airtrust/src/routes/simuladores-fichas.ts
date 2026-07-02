@@ -28,6 +28,11 @@ import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { resolveFichaScope } from '../utils/ficha-role-scope';
 import { audit, requireAdminForDelete } from './simuladores-shared';
 import { syncHorasVooFromSimulador } from '../shared/handlers/horasVooFromSimulador.handler';
+import {
+  getMissingNotechsItens,
+  getNotechsStatus,
+  isFichaStatusFinalizado,
+} from '../constants/notechs';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
 import {
   gerarQualificacaoDaFicha,
@@ -627,240 +632,31 @@ app.get('/fichas/:id', async (c) => {
       .bind(tenantEmpresaId, id)
       .all();
 
-    // ============================================================
-    // AUTO-POPULATE / SELF-HEAL
-    // Garante que as manobras da ficha correspondem ao modelo correto.
-    // Executa em dois cenários:
-    //  1. Ficha sem manobras (população inicial)
-    //  2. Ficha com manobras que não correspondem ao modelo correto
-    //     E todas com resultado IS NULL (nunca avaliadas)
-    // ============================================================
     let modeloSessaoResolvidoId =
       f.modelo_sessao_id && Number.isFinite(Number(f.modelo_sessao_id))
         ? Number(f.modelo_sessao_id)
         : null;
+    const fichaStatusFinalizado = isFichaStatusFinalizado((f as any).status);
+    const notechsMissingCount = getMissingNotechsItens(m.results || []).length;
+    const notechsStatus = getNotechsStatus(m.results || []);
 
-    {
-      // Helper para recarregar manobras (com JOIN para nome correto)
-      const reloadManobras = async () =>
-        c.env.DB.prepare(
-          `SELECT fsm.id, fsm.ordem, fsm.codigo,
-            COALESCE(man.nome, fsm.nome, fsm.descricao) as nome,
-            COALESCE(man.descricao, fsm.descricao) as descricao,
-            fsm.categoria, fsm.resultado, fsm.observacoes, COALESCE(fsm.tripulante, 'AB') as tripulante
-           FROM fichas_sessao_manobras fsm
-           LEFT JOIN (
-             SELECT codigo, MIN(nome) as nome, MIN(descricao) as descricao
-             FROM manobras
-             WHERE deleted_at IS NULL AND empresa_id = ?
-             GROUP BY codigo
-           ) man
-             ON man.codigo = fsm.codigo
-           WHERE fsm.ficha_id = ? AND fsm.deleted_at IS NULL ORDER BY fsm.ordem ASC`,
-        )
-          .bind(tenantEmpresaId, id)
-          .all();
-
-      // Helper para inserir manobras a partir do modelo
-      const insertFromModelo = async (modeloIdFinal: number) => {
-        const manobrasModelo = await c.env.DB.prepare(
-          `SELECT man.codigo, man.nome, man.descricao, man.categoria,
-                  msm.ordem, COALESCE(msm.tripulante, 'AB') as tripulante
-           FROM modelos_sessao_manobras msm
-           INNER JOIN manobras man ON msm.manobra_id = man.id
-           WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL AND man.deleted_at IS NULL AND man.empresa_id = ?
-           ORDER BY msm.ordem ASC LIMIT 22`,
-        )
-          .bind(modeloIdFinal, tenantEmpresaId)
-          .all();
-
-        if (manobrasModelo.results && manobrasModelo.results.length > 0) {
-          const stmts = manobrasModelo.results.map((manobra) => {
-            const man = manobra as {
-              codigo: string;
-              nome: string;
-              descricao: string;
-              categoria: string;
-              ordem: number;
-              tripulante: string;
-            };
-            return c.env.DB.prepare(
-              `INSERT INTO fichas_sessao_manobras
-                 (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '')`,
-            ).bind(
-              id,
-              man.codigo,
-              man.nome || man.descricao,
-              man.descricao || '',
-              man.categoria,
-              man.ordem,
-              man.tripulante || 'AB',
-            );
-          });
-          await c.env.DB.batch(stmts);
-          return manobrasModelo.results.length;
-        }
-        return 0;
-      };
-
-      // ── Passo A: Encontrar o modelo correto para esta ficha (3 estratégias)
-      const fichaCtx = await c.env.DB.prepare(
-        `SELECT fs.tipo_sessao as ficha_tipo_sessao,
-                sa.template_id as sessao_template_id,
-                COALESCE(sa.tipo_sessao, fs.tipo_sessao) as tipo_sessao,
-                COALESCE(aer.modelo, s.modelo, fs.tipo_aeronave) as tipo_aeronave,
-                sa.nome as sessao_nome
-         FROM fichas_sessao fs
-         LEFT JOIN simulador_agendamentos sa ON fs.agendamento_slot_id = sa.id
-         LEFT JOIN simuladores s ON sa.simulador_id = s.id
-         LEFT JOIN aeronaves aer ON fs.tipo_aeronave = aer.id
-         WHERE fs.id = ?`,
-      )
-        .bind(id)
-        .first<any>();
-
-      let modeloCorreto: { id: number } | null = null;
-
-      if (fichaCtx) {
-        // Estratégia 0: vínculo explícito do modelo salvo na sessão
-        if (fichaCtx.sessao_template_id) {
-          modeloCorreto = (await c.env.DB.prepare(
-            `SELECT id FROM modelos_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
-          )
-            .bind(fichaCtx.sessao_template_id, tenantEmpresaId)
-            .first()) as any;
-        }
-
-        // Estratégia 1: código direto do modelo (fichas especiais: CHECK-CRED-EXAMINADOR, etc.)
-        modeloCorreto =
-          ((await c.env.DB.prepare(
-            `SELECT id FROM modelos_sessao WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
-          )
-            .bind(fichaCtx.ficha_tipo_sessao, tenantEmpresaId)
-            .first()) as any) || modeloCorreto;
-
-        // Estratégia 2: nome exato da sessão (mais precisa para fichas regulares com múltiplos modelos)
-        if (!modeloCorreto && fichaCtx.sessao_nome) {
-          modeloCorreto = (await c.env.DB.prepare(
-            `SELECT id FROM modelos_sessao WHERE nome = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
-          )
-            .bind(fichaCtx.sessao_nome, tenantEmpresaId)
-            .first()) as any;
-        }
-
-        // Estratégia 3: tipo genérico + aeronave (fallback — pode ser impreciso com múltiplos modelos)
-        if (!modeloCorreto) {
-          modeloCorreto = (await c.env.DB.prepare(
-            `SELECT ms.id FROM modelos_sessao ms
-             INNER JOIN tipos_sessao ts
-               ON ms.tipo_sessao_id = ts.id
-              AND ts.empresa_id = ?
-              AND ts.deleted_at IS NULL
-             WHERE ts.codigo = ? AND ms.modelo_aeronave = ? AND ms.empresa_id = ? AND ms.deleted_at IS NULL LIMIT 1`,
-          )
-            .bind(tenantEmpresaId, fichaCtx.tipo_sessao, fichaCtx.tipo_aeronave, tenantEmpresaId)
-            .first()) as any;
-        }
-      }
-
-      console.log(
-        `[AUTO-POPULATE] ficha=${id} modeloCorreto=${modeloCorreto?.id ?? 'N/A'} manobrasAtuais=${m.results?.length ?? 0}`,
-      );
-
-      if (modeloCorreto?.id) {
-        modeloSessaoResolvidoId = modeloCorreto.id;
-      }
-
-      // ── Passo B: Decidir se precisa popular/corrigir
-      let needsPopulate = !m.results || m.results.length === 0;
-
-      if (!needsPopulate && modeloCorreto && m.results && m.results.length > 0) {
-        // Verificar se as manobras existentes correspondem ao modelo correto:
-        // Condição: nenhuma foi avaliada (resultado IS NULL) E o código da primeira não bate com o modelo
-        const todasSemResultado = m.results.every(
-          (r: any) => r.resultado === null || r.resultado === undefined,
-        );
-        if (todasSemResultado) {
-          const primeiraModoelo = await c.env.DB.prepare(
-            `SELECT man.codigo FROM modelos_sessao_manobras msm
-             INNER JOIN manobras man ON msm.manobra_id = man.id
-             WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL AND man.deleted_at IS NULL AND man.empresa_id = ?
-             ORDER BY msm.ordem ASC LIMIT 1`,
-          )
-            .bind(modeloCorreto.id, tenantEmpresaId)
-            .first<any>();
-
-          if (primeiraModoelo && primeiraModoelo.codigo !== (m.results[0] as any).codigo) {
-            console.log(
-              `[AUTO-POPULATE] ⚠️ Ficha ${id}: manobras incorretas (${(m.results[0] as any).codigo} ≠ ${primeiraModoelo.codigo}). Corrigindo...`,
-            );
-            // Soft-delete manobras erradas
-            await c.env.DB.prepare(
-              `UPDATE fichas_sessao_manobras SET deleted_at = datetime('now') WHERE ficha_id = ? AND deleted_at IS NULL`,
-            )
-              .bind(id)
-              .run();
-            needsPopulate = true;
-          }
-        }
-      }
-
-      // ── Passo C: Popular se necessário
-      if (needsPopulate) {
-        if (modeloCorreto) {
-          const inserted = await insertFromModelo(modeloCorreto.id);
-          console.log(
-            `[AUTO-POPULATE] ✅ Inseridas ${inserted} manobras do modelo ${modeloCorreto.id}`,
-          );
-          if (inserted === 0) {
-            return c.json(
-              {
-                success: false,
-                code: 'FICHA_MODELO_SEM_MANOBRAS',
-                error:
-                  'Ficha modelo sem manobras cadastradas. Cadastre as manobras do modelo antes de avaliar o tripulante.',
-                details: {
-                  ficha_id: Number(id),
-                  modelo_sessao_id: modeloCorreto.id,
-                },
-              },
-              409,
-            );
-          }
-        } else {
-          return c.json(
-            {
-              success: false,
-              code: 'FICHA_MODELO_NAO_ENCONTRADO',
-              error:
-                'Ficha sem modelo de sessão resolvido. Vincule um modelo com manobras antes de avaliar o tripulante.',
-              details: {
-                ficha_id: Number(id),
-              },
-            },
-            409,
-          );
-        }
-        m = await reloadManobras();
-        console.log(`[AUTO-POPULATE] Recarregou: ${m.results?.length ?? 0} manobras`);
-      }
-
-      if (!m.results || m.results.length === 0) {
-        return c.json(
-          {
-            success: false,
-            code: 'FICHA_SEM_MANOBRAS',
-            error:
-              'Ficha sem manobras. Corrija o cadastro do modelo antes de avaliar ou assinar esta ficha.',
-            details: {
-              ficha_id: Number(id),
-              modelo_sessao_id: modeloSessaoResolvidoId,
-            },
+    if (!m.results || m.results.length === 0) {
+      return c.json(
+        {
+          success: false,
+          code: 'FICHA_SEM_MANOBRAS',
+          error:
+            'Ficha sem manobras materializadas. Corrija o fluxo explícito de criação/população antes de avaliar ou assinar esta ficha.',
+          details: {
+            ficha_id: Number(id),
+            modelo_sessao_id: modeloSessaoResolvidoId,
+            notechsStatus,
+            missingNotechsCount: notechsMissingCount,
+            fichaStatusFinalizado,
           },
-          409,
-        );
-      }
+        },
+        409,
+      );
     }
 
     let duracaoTotalMinutos = Number(f.duracao_minutos || 0);
@@ -965,6 +761,8 @@ app.get('/fichas/:id', async (c) => {
       tripulacao_nomes: f.tripulacao_nomes || null,
       edicoes_pendentes_count: Number(f.edicoes_pendentes_count || 0),
       edicao_pendente: Number(f.edicoes_pendentes_count || 0) > 0,
+      notechs_status: notechsStatus,
+      missing_notechs_count: notechsMissingCount,
     };
 
     return c.json({ success: true, data: ficha });

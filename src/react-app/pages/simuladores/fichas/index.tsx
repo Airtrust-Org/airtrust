@@ -377,6 +377,8 @@ export function FichasAvaliacaoContent() {
 
       let gerados = 0;
       const falhas: string[] = [];
+      const previewPolicyMessage =
+        'Preview controlado: 18 técnicas por ordem + 15 NOTECHS fixos; seleção pedagógica final pendente.';
 
       for (const modelo of selecionadosImprimiveis) {
         try {
@@ -411,6 +413,7 @@ export function FichasAvaliacaoContent() {
         mensagens.push(
           gerados === 1 ? '1 ficha modelo gerada com sucesso.' : `${gerados} fichas modelo geradas com sucesso.`,
         );
+        mensagens.push(previewPolicyMessage);
       }
 
       if (bloqueados.length > 0) {
@@ -493,7 +496,9 @@ export function FichasAvaliacaoContent() {
       const dadosPDF = buildFichaModeloPdfData(modelo, manobras, logoUrl);
       const { gerarPDFFichaCliente } = await import('@/react-app/services/pdf-ficha-client');
       await gerarPDFFichaCliente(dadosPDF, { mode: 'download' });
-      toast.success('Ficha modelo da sessão gerada com sucesso');
+      toast.success(
+        'Ficha modelo da sessão gerada em preview controlado: 18 técnicas por ordem + 15 NOTECHS fixos.',
+      );
     } catch (error) {
       console.error('Erro ao gerar ficha modelo da sessão:', error);
       toast.error(error instanceof Error ? error.message : 'Erro ao gerar ficha modelo');

@@ -1,4 +1,5 @@
 import type { FichaPDFData } from '@/react-app/services/pdf-ficha-client';
+import { NOTECHS_ITENS } from './notechs';
 
 export interface ModeloSessaoResumo {
   id: number;
@@ -17,6 +18,8 @@ export interface ModeloSessaoManobra {
   observacoes?: string | null;
   tripulante?: 'A' | 'B' | 'AB';
 }
+
+export const FICHA_MODELO_TECNICAS_PREVIEW_LIMIT = 18;
 
 function sanitizeFilePart(value: string): string {
   return value
@@ -39,6 +42,18 @@ export function buildFichaModeloPdfData(
   logoUrl?: string,
 ): FichaPDFData {
   const sessaoTitulo = [modelo.codigo, modelo.nome].filter(Boolean).join(' - ');
+  const tecnicasPreview = [...manobras]
+    .sort((a, b) => a.ordem - b.ordem)
+    .slice(0, FICHA_MODELO_TECNICAS_PREVIEW_LIMIT);
+  const notechsPreview = NOTECHS_ITENS.map((item) => ({
+    ordem: item.ordem,
+    nome: item.tituloPt,
+    descricao: item.tituloEn,
+    codigo: item.codigo,
+    resultado: null,
+    observacoes: '',
+    tripulante: 'AB' as const,
+  }));
 
   return {
     fichaId: `modelo-${modelo.id}`,
@@ -62,8 +77,7 @@ export function buildFichaModeloPdfData(
     logoUrl,
     modoModelo: true,
     fileName: buildFichaModeloPdfFileName(modelo),
-    manobras: [...manobras]
-      .sort((a, b) => a.ordem - b.ordem)
+    manobras: tecnicasPreview
       .map((manobra) => ({
         ordem: manobra.ordem,
         nome: manobra.manobra_nome || manobra.manobra_descricao || manobra.manobra_codigo || '',
@@ -72,6 +86,7 @@ export function buildFichaModeloPdfData(
         resultado: null,
         observacoes: manobra.observacoes || '',
         tripulante: manobra.tripulante || 'AB',
-      })),
+      }))
+      .concat(notechsPreview),
   };
 }
