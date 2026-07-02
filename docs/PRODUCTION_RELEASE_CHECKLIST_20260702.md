@@ -170,21 +170,19 @@ dig +short api.airtrust.online
 
 ### Smoke público (sem auth)
 
-> ⚠️ **Atenção:** O script `smoke-staging-auth.mjs` foi projetado para staging.  
-> Seu uso em produção é **temporário** — o próximo release deve ter um script `smoke-production-auth.mjs` dedicado.  
-> Antes de rodar, confirme que o alvo é `api.airtrust.online` (canônico) ou `airtrust-api-production.airtrust.workers.dev` (fallback):
+> ⚠️ **Atenção:** `smoke-staging-auth.mjs` é staging-only.  
+> Em produção, use `smoke-production-auth.mjs` e bloqueie explicitamente `airtrust-api.airtrust.workers.dev`:
 
 ```bash
-# CONFIRMAR ALVO ANTES DE RODAR:
-export SMOKE_TARGET='https://api.airtrust.online'
-echo "Alvo: $SMOKE_TARGET"
-# Deve mostrar "api.airtrust.online"
-
-node scripts/smoke-staging-auth.mjs --dry-run
+PROD_API_BASE_URL='https://api.airtrust.online' \
+PROD_SMOKE_EMAIL='<email-admin-producao>' \
+PROD_SMOKE_PASSWORD='<senha-admin-producao>' \
+node scripts/smoke-production-auth.mjs --dry-run
 ```
 
 Checklist:
 - [ ] `/api/health` → 200
+- [ ] `/api/version` → 200
 - [ ] `/api/auth/me` → 401 (sem token)
 - [ ] `/api/qualificacoes/formatos` → 401 (sem token)
 - [ ] `/api/qualificacoes/tipos` → 401 (sem token)
@@ -195,13 +193,13 @@ Checklist:
 
 ```bash
 # CONFIRMAR ALVO NOVAMENTE:
-echo "Alvo: $STAGING_API_BASE_URL"
+echo "Alvo: $PROD_API_BASE_URL"
 # Deve mostrar "api.airtrust.online" (canônico) ou "airtrust-api-production.airtrust.workers.dev" (fallback)
 
-STAGING_API_BASE_URL='https://api.airtrust.online' \
-STAGING_SMOKE_EMAIL='<email-admin-producao>' \
-STAGING_SMOKE_PASSWORD='<senha-admin-producao>' \
-node scripts/smoke-staging-auth.mjs
+PROD_API_BASE_URL='https://api.airtrust.online' \
+PROD_SMOKE_EMAIL='<email-admin-producao>' \
+PROD_SMOKE_PASSWORD='<senha-admin-producao>' \
+node scripts/smoke-production-auth.mjs
 ```
 
 Checklist:
@@ -213,6 +211,7 @@ Checklist:
 - [ ] `/api/lms/cursos` → 200, count > 0
 - [ ] JSON válido, sem erro de schema
 - [ ] Sem indício cross-tenant
+- [ ] `airtrust-api.airtrust.workers.dev` rejeitado como produção canônica
 
 ---
 

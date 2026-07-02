@@ -2,7 +2,7 @@
 
 import {
   assert,
-  assertAllowedStagingBaseUrl,
+  assertAllowedProductionBaseUrl,
   buildReadOnlyEndpointSpecs,
   decodeJwtPayload,
   extractAccessToken,
@@ -12,15 +12,15 @@ import {
   NEGATIVE_SMOKE_PATHS,
 } from './smoke-auth-common.mjs';
 
-const DEFAULT_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev';
-const REQUIRED_SECRET_VARS = ['STAGING_SMOKE_EMAIL', 'STAGING_SMOKE_PASSWORD'];
-const EXPECTED_ENVIRONMENT = 'staging';
+const DEFAULT_BASE_URL = 'https://api.airtrust.online';
+const REQUIRED_SECRET_VARS = ['PROD_SMOKE_EMAIL', 'PROD_SMOKE_PASSWORD'];
+const EXPECTED_ENVIRONMENT = 'production';
 
 async function main() {
   const args = new Set(process.argv.slice(2));
   const dryRunFlag = args.has('--dry-run');
   const strict = args.has('--strict') || process.env.CI === 'true';
-  const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL || DEFAULT_BASE_URL);
+  const baseUrl = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL || DEFAULT_BASE_URL);
 
   log(`BASE_URL=${baseUrl}`);
 
@@ -41,8 +41,8 @@ async function main() {
     return;
   }
 
-  const email = String(process.env.STAGING_SMOKE_EMAIL || '').trim().toLowerCase();
-  const password = String(process.env.STAGING_SMOKE_PASSWORD || '');
+  const email = String(process.env.PROD_SMOKE_EMAIL || '').trim().toLowerCase();
+  const password = String(process.env.PROD_SMOKE_PASSWORD || '');
 
   const loginPayload = await login(baseUrl, email, password);
   const accessToken = extractAccessToken(loginPayload);
@@ -94,7 +94,7 @@ async function checkHealth(baseUrl) {
   assert(response.status === 200, `/api/health retornou ${response.status}`);
   const environment = response.json?.stats?.environment ?? response.json?.environment;
   if (environment) {
-    assert(String(environment) === EXPECTED_ENVIRONMENT, `health nao confirmou staging: ${environment}`);
+    assert(String(environment) === EXPECTED_ENVIRONMENT, `health nao confirmou production: ${environment}`);
   }
   log(`HEALTH_OK status=200 environment=${String(environment || EXPECTED_ENVIRONMENT)}`);
 }
@@ -114,11 +114,11 @@ async function runNegativeSmoke(baseUrl) {
 }
 
 function log(message) {
-  process.stdout.write(`[staging-auth-smoke] ${message}\n`);
+  process.stdout.write(`[production-auth-smoke] ${message}\n`);
 }
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`[staging-auth-smoke][ERROR] ${message}\n`);
+  process.stderr.write(`[production-auth-smoke][ERROR] ${message}\n`);
   process.exitCode = 1;
 });

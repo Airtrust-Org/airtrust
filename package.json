@@ -143,6 +143,8 @@
     "smoke:assets-public": "bash scripts/smoke-assets-public.sh",
     "smoke:auth:login": "bash scripts/smoke-auth-login.sh",
     "smoke:staging:auth": "node scripts/smoke-staging-auth.mjs",
+    "smoke:production:auth": "node scripts/smoke-production-auth.mjs",
+    "staging:doctor": "node scripts/staging-doctor.mjs",
     "smoke:core:prod": "BASE=https://api.airtrust.online bash scripts/smoke-test-core.sh",
     "sync:prod:local:safe": "bash scripts/sync-d1-production-sanitized.sh --target local",
     "sync:prod:dev:safe": "bash scripts/sync-d1-production-sanitized.sh --target development",

@@ -1,6 +1,6 @@
 # Staging Environment Stabilization 2026-07-01
 
-## Problema atual
+## Status atual
 
 O staging reconstruido pelo PR #226 ficou com schema valido, `0412` aplicada e Worker publicado em `https://airtrust-api-staging.airtrust.workers.dev`, mas sem dados-base de autenticacao e tenant.
 
@@ -28,6 +28,7 @@ O caminho estabilizado passa a ser:
 4. Executar smoke read-only com esse token.
 
 Token nao deve ser commitado, impresso nem armazenado em arquivo.
+O smoke de staging deve usar `scripts/smoke-staging-auth.mjs`; o smoke de producao, quando necessario, deve usar `scripts/smoke-production-auth.mjs`.
 
 ## Fixture smoke
 
@@ -88,6 +89,7 @@ npm run smoke:staging:auth
 Comportamento:
 
 - valida `/api/health`;
+- valida `/api/version`;
 - valida smoke negativo sem token:
   - `/api/auth/me`
   - `/api/qualificacoes/formatos`
@@ -133,6 +135,43 @@ Propriedades:
 - nao grava token;
 - nao grava senha em arquivo versionado;
 - escreve apenas no D1 staging novo.
+
+### 3. Doctor de staging
+
+Arquivo:
+
+- [scripts/staging-doctor.mjs](/Users/filipedaumas/SAAS/Airtrust/scripts/staging-doctor.mjs)
+
+Comando:
+
+```bash
+npm run staging:doctor
+```
+
+Comportamento:
+
+- valida branch e working tree quando ha contexto git util;
+- confirma que `worker-airtrust/wrangler.toml` aponta para:
+  - `ENVIRONMENT = "staging"`
+  - `name = "airtrust-api-staging"`
+  - `database_name = "airtrust-db-staging-baseline-20260701"`
+- valida `https://airtrust-api-staging.airtrust.workers.dev`;
+- confirma `health`, `version`, smoke negativo e smoke autenticado;
+- confirma que `https://airtrust-api.airtrust.workers.dev` nao e aceito como producao canonica;
+- nao imprime senha, token, JWT ou cookie.
+
+### 4. Workflow manual de staging
+
+Arquivo:
+
+- [.github/workflows/smoke-staging.yml](/Users/filipedaumas/SAAS/Airtrust/.github/workflows/smoke-staging.yml)
+
+Uso:
+
+- disparo manual via `workflow_dispatch`;
+- usa `STAGING_API_BASE_URL`, `STAGING_SMOKE_EMAIL`, `STAGING_SMOKE_PASSWORD` dos GitHub Secrets;
+- roda smoke de staging e staging-doctor;
+- nao faz seed automatico, nao faz deploy e nao toca producao.
 
 ## Como interpretar o resultado
 
@@ -218,6 +257,9 @@ Cobre: D1 production/staging bloqueados; D1 desconhecido bloqueado; confirmacao 
 - nao aplicar migration em producao;
 - nao executar DML em producao;
 - nao fazer deploy em producao;
+- nao imprimir senha, token, JWT ou cookie;
+- nao armazenar token em arquivo;
+- nao usar `airtrust-api.airtrust.workers.dev` como producao canonica;
 - nao alterar `env.production`;
 - nao disparar workflow de Pages production;
 - nao imprimir tokens/senhas;
