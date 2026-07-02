@@ -1,7 +1,7 @@
 # Production Release Checklist — Preparado para o Próximo Operador
 
 > **Data:** 2026-07-02
-> **SHA main:** `fde847781d458c52c8b519da86c8081dabda8c1a`
+> **SHA main:** `4e41e6bbc48c1f97efb2eab03a92ae44351cea31`
 > **Status:** Checklist preparado, NÃO EXECUTADO
 > **Modelo de execução recomendado:** DeepSeek v4 Pro
 
@@ -13,22 +13,34 @@
 - Não pular snapshots.
 - Rollback: reverter Worker primeiro; DDL reverso só com autorização separada.
 - PR #168 não deve ser tocado.
+- **`git status --short` deve estar vazio** (zero untracked, zero modified, zero staged).
+- **`git rev-parse HEAD` deve ser igual ao SHA main deste documento** antes de qualquer operação.
+- Toda etapa deve ser confirmada antes de passar para a próxima.
 
 ---
 
 ## Etapa 1 — Snapshot/Backup do D1 de Produção
 
 ```bash
-# 1. Exportar schema + dados completos
-npx wrangler d1 export airtrust-db --remote --output ./backups/production-pre-0412-$(date -u +%Y%m%dT%H%M%SZ).sql
+# 0. Criar diretório de backup
+mkdir -p ./backups
+
+# 1. Exportar schema + dados completos com timestamp único
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+BACKUP="./backups/production-pre-0412-${TS}.sql"
+npx wrangler d1 export airtrust-db --remote --output "$BACKUP"
 
 # 2. Gerar hash do arquivo
-sha256sum ./backups/production-pre-0412-*.sql > ./backups/production-pre-0412-$(date -u +%Y%m%dT%H%M%SZ).sha256
+HASH=$(sha256sum "$BACKUP" | cut -d' ' -f1)
+echo "$HASH  $BACKUP" > "${BACKUP}.sha256"
 
 # 3. Fazer upload para R2 (backup externo)
-npx wrangler r2 object put airtrust-files/backups/production-pre-0412-$(date -u +%Y%m%dT%H%M%SZ).sql --file ./backups/production-pre-0412-*.sql
+npx wrangler r2 object put "airtrust-files/backups/production-pre-0412-${TS}.sql" --file "$BACKUP"
 
 # 4. Verificar hash no R2
+echo "=== HASH do snapshot ==="
+echo "$HASH"
+echo "=== Salve este hash no ledger ==="
 ```
 
 **Critério de aceite:** Snapshot salvo em R2 com hash verificado. SHA registrado no ledger.
@@ -42,7 +54,7 @@ Registrar no ledger (ex: `domain_events` ou arquivo versionado):
 | Campo | Valor |
 |-------|-------|
 | Evento | `production_release_pre_0412` |
-| SHA main | `fde847781d458c52c8b519da86c8081dabda8c1a` |
+| SHA main | `4e41e6bbc48c1f97efb2eab03a92ae44351cea31` |
 | Snapshot R2 path | `<path do snapshot>` |
 | Snapshot hash | `<sha256 do snapshot>` |
 | Autorização | `<aprovador>` |
@@ -52,17 +64,29 @@ Registrar no ledger (ex: `domain_events` ou arquivo versionado):
 
 ## Etapa 3 — Aplicar Migration 0412
 
+**Mecanismo preferencial (registra no ledger):**
+
+Usar o pipeline de release oficial que registra o evento em `domain_events` ou o mecanismo definido no runbook de staging baseline. Se houver script de release que já faz o registro no ledger, utilizá-lo.
+
+**Alternativa emergencial (apenas se o pipeline oficial não estiver disponível):**
+
 ```bash
-# 1. Deploy da migration via wrangler (ou pipeline)
+# 1. Registrar PRE no ledger
+#    Exemplo: INSERT INTO domain_events (empresa_id, modulo, tipo, payload)
+#    VALUES (1, 'qualificacoes', 'MIGRATION_0412_PRE', '{"sha":"4e41e6b","status":"starting"}')
+
+# 2. Aplicar migration
 npx wrangler d1 execute airtrust-db --remote --file worker-airtrust/migrations/0412_qualificacoes_classificacao.sql
 
-# 2. Confirmar idempotência (pode rodar novamente sem dano)
-npx wrangler d1 execute airtrust-db --remote --command "SELECT COUNT(*) as n FROM qualificacoes_formatos;"
+# 3. Registrar PÓS no ledger
+#    Exemplo: INSERT INTO domain_events (empresa_id, modulo, tipo, payload)
+#    VALUES (1, 'qualificacoes', 'MIGRATION_0412_POST', '{"sha":"4e41e6b","status":"applied"}')
 
-# 3. Registrar no ledger
+# 4. Confirmar idempotência (pode rodar novamente sem dano)
+npx wrangler d1 execute airtrust-db --remote --command "SELECT COUNT(*) as n FROM qualificacoes_formatos;"
 ```
 
-**Critério de aceite:** Migration aplicada, tabelas criadas, seeds inseridos, 0 erros.
+**Critério de aceite:** Migration aplicada, tabelas criadas, seeds inseridos, 0 erros. Eventos PRE e POST registrados no ledger.
 
 ---
 
@@ -96,11 +120,32 @@ npm run deploy:pages
 
 ## Etapa 6 — Smoke Produção
 
-### Smoke público (sem auth)
+**Antes de iniciar, confirmar o domínio canônico de produção:**
 
 ```bash
+# O Worker de produção está em:
+#   https://airtrust-api.airtrust.workers.dev
+# O frontend de produção está em:
+#   https://airtrust.online  (ou main.airtrust.pages.dev)
+#
+# Confirmar que o DNS aponta para o Workers correto:
+dig +short airtrust-api.airtrust.workers.dev
+# Deve retornar um IP da Cloudflare (104.x.x.x ou 172.x.x.x)
+```
+
+### Smoke público (sem auth)
+
+> ⚠️ **Atenção:** O script `smoke-staging-auth.mjs` foi projetado para staging.  
+> Seu uso em produção é **temporário** — o próximo release deve ter um script `smoke-production-auth.mjs` dedicado.  
+> Antes de rodar, confirme que `STAGING_API_BASE_URL` aponta para produção e não para staging:
+
+```bash
+# CONFIRMAR ALVO ANTES DE RODAR:
+export SMOKE_TARGET='https://airtrust-api.airtrust.workers.dev'
+echo "Alvo: $SMOKE_TARGET"
+# Deve mostrar "airtrust.workers.dev" (NÃO "staging")
+
 node scripts/smoke-staging-auth.mjs --dry-run
-# Adaptar para apontar para produção: STAGING_API_BASE_URL=https://airtrust-api.airtrust.workers.dev
 ```
 
 Checklist:
@@ -114,6 +159,10 @@ Checklist:
 ### Smoke autenticado (com admin de produção)
 
 ```bash
+# CONFIRMAR ALVO NOVAMENTE:
+echo "Alvo: $STAGING_API_BASE_URL"
+# Deve mostrar "airtrust.workers.dev" (NÃO "staging")
+
 STAGING_API_BASE_URL='https://airtrust-api.airtrust.workers.dev' \
 STAGING_SMOKE_EMAIL='<email-admin-producao>' \
 STAGING_SMOKE_PASSWORD='<senha-admin-producao>' \
