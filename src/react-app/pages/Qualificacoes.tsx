@@ -305,6 +305,10 @@ export default function Qualificacoes() {
   const isPlanejadosTab = activeTab === 'planejados';
   const usesHistoricoDataset = isHistoricoTab;
 
+  // Filtros por categoria_id e formato_id no Histórico (pós-migration 0412)
+  const [historicoCategoriaId, setHistoricoCategoriaId] = useState<number | null>(null);
+  const [historicoFormatoId, setHistoricoFormatoId] = useState<number | null>(null);
+
   useEffect(() => {
     writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
       activeTab,
@@ -674,8 +678,7 @@ export default function Qualificacoes() {
   const [novoFormatoCor, setNovoFormatoCor] = useState('#6B7280');
 
   // Filtros por categoria_id e formato_id no Histórico (pós-migration 0412)
-  const [historicoCategoriaId, setHistoricoCategoriaId] = useState<number | null>(null);
-  const [historicoFormatoId, setHistoricoFormatoId] = useState<number | null>(null);
+  // (declarados acima, antes do useEffect que os usa)
 
   const getTipoTreinamentoDisplay = (value?: string | null, validadeMeses?: number | null) => {
     const tipo = String(value || '')
