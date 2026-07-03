@@ -1,0 +1,448 @@
+#!/usr/bin/env node
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+
+import {
+  buildModelMetadataObservacoes,
+  loadSimuladoresMatrizV6Data,
+} from './lib/simuladores-matriz-v6-data.mjs';
+
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+const LOCAL_DB_GLOB = path.join(
+  ROOT,
+  'worker-airtrust',
+  '.wrangler',
+  'state',
+  'v3',
+  'd1',
+  'miniflare-D1DatabaseObject',
+);
+const CONFIRM_TEXT = 'APLICAR MATRIZ V6 COSTA DO SOL';
+
+function parseArgs(argv) {
+  let empresaId = null;
+  let dbFile = null;
+  let confirm = '';
+  let apply = false;
+  let dryRun = true;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--empresa-id') {
+      empresaId = Number(argv[++index]);
+      continue;
+    }
+    if (arg === '--db-file') {
+      dbFile = argv[++index] || null;
+      continue;
+    }
+    if (arg === '--confirm') {
+      confirm = argv[++index] || '';
+      continue;
+    }
+    if (arg === '--apply') {
+      apply = true;
+      dryRun = false;
+      continue;
+    }
+    if (arg === '--dry-run') {
+      dryRun = true;
+      apply = false;
+      continue;
+    }
+    throw new Error(`unknown_argument:${arg}`);
+  }
+
+  if (!Number.isInteger(empresaId) || empresaId <= 0) {
+    throw new Error('--empresa-id deve ser um número positivo.');
+  }
+
+  return { empresaId, dbFile, confirm, apply, dryRun };
+}
+
+function detectLocalDbFile() {
+  if (!fs.existsSync(LOCAL_DB_GLOB)) return null;
+  const file = fs
+    .readdirSync(LOCAL_DB_GLOB)
+    .find((name) => name.endsWith('.sqlite') && name !== 'metadata.sqlite');
+  return file ? path.join(LOCAL_DB_GLOB, file) : null;
+}
+
+function sqliteJson(dbFile, sql) {
+  const output = execFileSync('sqlite3', ['-json', dbFile, sql], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  }).trim();
+  return output ? JSON.parse(output) : [];
+}
+
+function sqliteExec(dbFile, sql) {
+  execFileSync('sqlite3', [dbFile], {
+    input: sql,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+}
+
+function sqlString(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function buildManeuverCatalog(models, registry) {
+  const catalog = new Map();
+  for (const model of models) {
+    for (const row of model.rows) {
+      const ref = registry.get(row.codigo);
+      if (!ref) {
+        throw new Error(`missing_registry_entry:${row.codigo}`);
+      }
+      catalog.set(row.codigo, {
+        codigo: row.codigo,
+        nome: ref.nome,
+        descricao: ref.origem_documental || ref.nome,
+        categoria: ref.categoria || null,
+        tipo_sessao: ref.tipo_sessao || 'TREINAMENTO',
+        tipo_aeronave: ref.tipo_aeronave || model.aircraft,
+        ordem: row.ordem,
+      });
+    }
+  }
+  return [...catalog.values()].sort((left, right) => left.codigo.localeCompare(right.codigo));
+}
+
+function buildTargetRows(data) {
+  return data.models.flatMap((model) =>
+    model.rows.map((row) => ({
+      modelCode: model.modelCode,
+      modelName: model.modelName,
+      aircraft: model.aircraft,
+      ordem: row.ordem,
+      codigo: row.codigo,
+      nome: row.nome,
+      observacoes: buildModelMetadataObservacoes(model, row),
+    })),
+  );
+}
+
+function buildAnalyticalSummary(data, empresaId, dbFile) {
+  const targetRows = buildTargetRows(data);
+  const targetModelCodes = [...new Set(targetRows.map((row) => row.modelCode))].sort();
+  const currentRows = data.sourceMapSummary.currentRows.filter((row) => targetModelCodes.includes(row.modelo_codigo));
+  const currentModelCounts = new Map();
+  for (const row of currentRows) {
+    currentModelCounts.set(row.modelo_codigo, (currentModelCounts.get(row.modelo_codigo) || 0) + 1);
+  }
+
+  return {
+    status: data.issues.length === 0 ? 'READY_FOR_REVIEW' : 'BLOCKED',
+    mode: dbFile ? 'db-aware' : 'analytical',
+    empresa_id: empresaId,
+    db_file: dbFile,
+    model_count: targetModelCodes.length,
+    technical_rows_total: targetRows.length,
+    notechs_expected_total: data.notechsCodes.length,
+    current_source_map_models: currentModelCounts.size,
+    current_source_map_rows: currentRows.length,
+    current_model_row_counts: Object.fromEntries([...currentModelCounts.entries()].sort()),
+    target_models: targetModelCodes,
+    validation_issues: data.issues,
+  };
+}
+
+function ensureDbHasData(dbFile) {
+  const modelosColumns = sqliteJson(dbFile, `PRAGMA table_info(modelos_sessao);`).map((row) => row.name);
+  const manobrasColumns = sqliteJson(dbFile, `PRAGMA table_info(manobras);`).map((row) => row.name);
+
+  if (!modelosColumns.includes('empresa_id') || !manobrasColumns.includes('empresa_id')) {
+    throw new Error('db_schema_incompatible_for_tenant_scope');
+  }
+
+  const counts = sqliteJson(
+    dbFile,
+    `
+      SELECT
+        (SELECT COUNT(*) FROM modelos_sessao WHERE deleted_at IS NULL AND empresa_id = 6) AS modelos,
+        (SELECT COUNT(*) FROM manobras WHERE deleted_at IS NULL AND empresa_id = 6) AS manobras;
+    `,
+  )[0];
+
+  if (!counts || Number(counts.modelos || 0) === 0 || Number(counts.manobras || 0) === 0) {
+    throw new Error('db_snapshot_sem_catalogo_ou_modelos');
+  }
+}
+
+function buildApplySql(data, empresaId) {
+  const catalog = buildManeuverCatalog(data.models, data.registry);
+  const targetRows = buildTargetRows(data);
+  const targetValues = targetRows
+    .map(
+      (row) =>
+        `(${sqlString(row.modelCode)}, ${sqlString(row.codigo)}, ${row.ordem}, ${sqlString(row.observacoes)})`,
+    )
+    .join(',\n    ');
+  const catalogValues = catalog
+    .map(
+      (row) =>
+        `(${sqlString(row.codigo)}, ${sqlString(row.nome)}, ${sqlString(row.descricao)}, ${
+          row.categoria ? sqlString(row.categoria) : 'NULL'
+        }, ${sqlString(row.tipo_sessao)}, ${sqlString(row.tipo_aeronave)}, ${row.ordem})`,
+    )
+    .join(',\n    ');
+
+  return `
+BEGIN TRANSACTION;
+
+WITH catalog_rows(codigo, nome, descricao, categoria, tipo_sessao, tipo_aeronave, ordem) AS (
+  VALUES
+    ${catalogValues}
+)
+INSERT INTO manobras (
+  codigo, nome, descricao, categoria, tipo_sessao, tipo_aeronave, ordem, empresa_id, created_at, updated_at
+)
+SELECT
+  cr.codigo,
+  cr.nome,
+  cr.descricao,
+  cr.categoria,
+  cr.tipo_sessao,
+  cr.tipo_aeronave,
+  cr.ordem,
+  ${empresaId},
+  datetime('now'),
+  datetime('now')
+FROM catalog_rows cr
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM manobras m
+  WHERE m.codigo = cr.codigo
+    AND m.empresa_id = ${empresaId}
+    AND m.deleted_at IS NULL
+);
+
+WITH target_rows(modelo_codigo, manobra_codigo, ordem, observacoes) AS (
+  VALUES
+    ${targetValues}
+),
+resolved_rows AS (
+  SELECT
+    ms.id AS modelo_id,
+    ms.codigo AS modelo_codigo,
+    m.id AS manobra_id,
+    tr.manobra_codigo,
+    tr.ordem,
+    tr.observacoes
+  FROM target_rows tr
+  INNER JOIN modelos_sessao ms
+    ON ms.codigo = tr.modelo_codigo
+   AND ms.empresa_id = ${empresaId}
+   AND ms.deleted_at IS NULL
+  INNER JOIN manobras m
+    ON m.codigo = tr.manobra_codigo
+   AND m.empresa_id = ${empresaId}
+   AND m.deleted_at IS NULL
+),
+obsolete_rows AS (
+  SELECT msm.id
+  FROM modelos_sessao_manobras msm
+  INNER JOIN modelos_sessao ms
+    ON ms.id = msm.modelo_id
+   AND ms.empresa_id = ${empresaId}
+   AND ms.deleted_at IS NULL
+  WHERE msm.deleted_at IS NULL
+    AND ms.codigo IN (SELECT DISTINCT modelo_codigo FROM target_rows)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM resolved_rows rr
+      WHERE rr.modelo_id = msm.modelo_id
+        AND rr.manobra_id = msm.manobra_id
+    )
+)
+UPDATE modelos_sessao_manobras
+SET deleted_at = datetime('now'),
+    updated_at = datetime('now')
+WHERE id IN (SELECT id FROM obsolete_rows);
+
+WITH target_rows(modelo_codigo, manobra_codigo, ordem, observacoes) AS (
+  VALUES
+    ${targetValues}
+),
+resolved_rows AS (
+  SELECT
+    ms.id AS modelo_id,
+    m.id AS manobra_id,
+    tr.ordem,
+    tr.observacoes
+  FROM target_rows tr
+  INNER JOIN modelos_sessao ms
+    ON ms.codigo = tr.modelo_codigo
+   AND ms.empresa_id = ${empresaId}
+   AND ms.deleted_at IS NULL
+  INNER JOIN manobras m
+    ON m.codigo = tr.manobra_codigo
+   AND m.empresa_id = ${empresaId}
+   AND m.deleted_at IS NULL
+)
+INSERT INTO modelos_sessao_manobras (
+  modelo_id, manobra_id, ordem, obrigatoria, observacoes, created_at, updated_at
+)
+SELECT
+  rr.modelo_id,
+  rr.manobra_id,
+  rr.ordem,
+  1,
+  rr.observacoes,
+  datetime('now'),
+  datetime('now')
+FROM resolved_rows rr
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM modelos_sessao_manobras msm
+  WHERE msm.modelo_id = rr.modelo_id
+    AND msm.manobra_id = rr.manobra_id
+    AND msm.deleted_at IS NULL
+);
+
+WITH target_rows(modelo_codigo, manobra_codigo, ordem, observacoes) AS (
+  VALUES
+    ${targetValues}
+),
+resolved_rows AS (
+  SELECT
+    ms.id AS modelo_id,
+    m.id AS manobra_id,
+    tr.ordem,
+    tr.observacoes
+  FROM target_rows tr
+  INNER JOIN modelos_sessao ms
+    ON ms.codigo = tr.modelo_codigo
+   AND ms.empresa_id = ${empresaId}
+   AND ms.deleted_at IS NULL
+  INNER JOIN manobras m
+    ON m.codigo = tr.manobra_codigo
+   AND m.empresa_id = ${empresaId}
+   AND m.deleted_at IS NULL
+)
+UPDATE modelos_sessao_manobras
+SET ordem = (
+      SELECT rr.ordem
+      FROM resolved_rows rr
+      WHERE rr.modelo_id = modelos_sessao_manobras.modelo_id
+        AND rr.manobra_id = modelos_sessao_manobras.manobra_id
+    ),
+    observacoes = (
+      SELECT rr.observacoes
+      FROM resolved_rows rr
+      WHERE rr.modelo_id = modelos_sessao_manobras.modelo_id
+        AND rr.manobra_id = modelos_sessao_manobras.manobra_id
+    ),
+    updated_at = datetime('now')
+WHERE deleted_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM resolved_rows rr
+    WHERE rr.modelo_id = modelos_sessao_manobras.modelo_id
+      AND rr.manobra_id = modelos_sessao_manobras.manobra_id
+      AND (
+        rr.ordem <> modelos_sessao_manobras.ordem
+        OR COALESCE(rr.observacoes, '') <> COALESCE(modelos_sessao_manobras.observacoes, '')
+      )
+  );
+
+COMMIT;
+`.trim();
+}
+
+function validateDbOutcome(dbFile, data, empresaId) {
+  const modelCodes = data.models.map((model) => sqlString(model.modelCode)).join(', ');
+  const rows = sqliteJson(
+    dbFile,
+    `
+      SELECT
+        ms.codigo AS modelo_codigo,
+        COUNT(*) AS total,
+        COUNT(DISTINCT m.codigo) AS distintos
+      FROM modelos_sessao_manobras msm
+      INNER JOIN modelos_sessao ms ON ms.id = msm.modelo_id
+      INNER JOIN manobras m ON m.id = msm.manobra_id
+      WHERE ms.empresa_id = ${empresaId}
+        AND ms.codigo IN (${modelCodes})
+        AND ms.deleted_at IS NULL
+        AND msm.deleted_at IS NULL
+        AND m.deleted_at IS NULL
+      GROUP BY ms.codigo
+      ORDER BY ms.codigo;
+    `,
+  );
+
+  const invalid = rows.filter((row) => Number(row.total) !== 18 || Number(row.distintos) !== 18);
+  if (invalid.length > 0) {
+    throw new Error(`post_apply_validation_failed:${JSON.stringify(invalid)}`);
+  }
+}
+
+function main() {
+  const options = parseArgs(process.argv.slice(2));
+  const data = loadSimuladoresMatrizV6Data();
+  if (data.issues.length > 0) {
+    throw new Error(`matriz_v6_invalid:${data.issues.join(',')}`);
+  }
+
+  const autoDb = detectLocalDbFile();
+  const dbFile = options.dbFile || autoDb;
+  const summary = buildAnalyticalSummary(data, options.empresaId, dbFile);
+  const sql = buildApplySql(data, options.empresaId);
+
+  if (options.dryRun) {
+    const payload = {
+      ...summary,
+      sql_preview_first_lines: sql.split('\n').slice(0, 40),
+      db_snapshot_detected: Boolean(dbFile),
+      apply_requires_confirm: CONFIRM_TEXT,
+    };
+
+    if (dbFile && fs.existsSync(dbFile)) {
+      try {
+        ensureDbHasData(dbFile);
+        payload.db_snapshot_status = 'seeded';
+      } catch (error) {
+        payload.db_snapshot_status = 'empty_or_unseeded';
+        payload.db_snapshot_warning = String(error.message || error);
+      }
+    }
+
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    return;
+  }
+
+  if (!dbFile) {
+    throw new Error('--apply exige --db-file explícito ou snapshot local detectável.');
+  }
+  if (!fs.existsSync(dbFile)) {
+    throw new Error(`db_file_not_found:${dbFile}`);
+  }
+  if (options.confirm !== CONFIRM_TEXT) {
+    throw new Error(`--confirm deve ser exatamente: ${CONFIRM_TEXT}`);
+  }
+
+  ensureDbHasData(dbFile);
+  sqliteExec(dbFile, sql);
+  validateDbOutcome(dbFile, data, options.empresaId);
+
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        status: 'APPLY_OK_LOCAL_ONLY',
+        empresa_id: options.empresaId,
+        db_file: dbFile,
+        model_count: data.models.length,
+        technical_rows_total: data.models.length * 18,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+main();
