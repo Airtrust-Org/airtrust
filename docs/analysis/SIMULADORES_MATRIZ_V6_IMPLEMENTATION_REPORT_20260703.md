@@ -79,6 +79,40 @@
 | `SK76-S-02/02` | SK76 / semestral | trilha semestral legada fora do pacote Costa do Sol V6 | medio |
 | `TRE-INST` | instrutor | trilha de treinamento de instrutor, fora do curriculo operacional Costa do Sol | baixo |
 
+### Preservacao dos 12 modelos excluidos — regra inequivoca
+
+A diferenca entre os 51 modelos historicos e os 39 modelos V6 e esperada e intencional, confirmada pelo owner.
+
+**Regras absolutas para os 12 modelos excluidos:**
+
+1. **Nao apagar.** Nenhum hard delete, soft delete ou `DELETE FROM modelos_sessao` sobre qualquer um dos 12.
+2. **Nao migrar.** Nenhum DML de atualizacao, reclassificacao ou resequenciamento sobre qualquer um dos 12.
+3. **Nao reclassificar.** Nenhum `UPDATE` de `tipo`, `nome`, `ordem_no_treinamento` ou `modelo_aeronave` sobre qualquer um dos 12.
+4. **Manter disponiveis.** Os 12 modelos permanecem como fichas utilizaveis fora do escopo da matriz V6 Costa do Sol — operacao noturna, semestral, reaquisicao, credenciamento/exame e treinamento de instrutor seguem com seu conteudo atual inalterado.
+5. **A V6 atua somente sobre os 39 modelos-alvo.** Qualquer script, teste ou validacao deve ter `empresa_id = 6` E modelo pertencente ao conjunto dos 39.
+
+**Lista dos 12 modelos excluidos (nao tocar):**
+
+| modelo | familia |
+|---|---|
+| `A139-NOT-01` | AW139 noturno |
+| `A139-NOT-02` | AW139 noturno |
+| `A139-REQ-01` | AW139 reaquisicao |
+| `A139-S-01/02` | AW139 semestral |
+| `A139-S-02/02` | AW139 semestral |
+| `CRED-EXA` | credenciamento/exame |
+| `S76-NOT-01` | S76 noturno |
+| `S76-NOT-02` | S76 noturno |
+| `S76-REQ-01` | S76 reaquisicao |
+| `SK76-S-01/02` | SK76 semestral |
+| `SK76-S-02/02` | SK76 semestral |
+| `TRE-INST` | instrutor |
+
+**Confirmacao de producao e merge:**
+- Producao continua NO-GO.
+- Merge continua NO-GO ate revisao final humana e autorizacao explicita do owner.
+- Nenhum apply foi executado em qualquer ambiente.
+
 ### Leitura de escopo
 
 - Os 39 incluidos cobrem exatamente:

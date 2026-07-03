@@ -10,6 +10,7 @@ export type HistoricoStatusLike = {
   renovada?: number | boolean | null;
   tem_renovacao_posterior?: number | boolean | null;
   renovacao_de?: number | string | null;
+  vigente_operacional?: number | boolean | null;
   status?: string | null;
   data_vencimento?: string | null;
   data_validade?: string | null;
@@ -49,18 +50,22 @@ export function getHistoricoDisplayStatus(item: HistoricoStatusLike): string {
   const normalized = rawStatus === 'PROXIMA_VENCIMENTO' ? 'VENCENDO_30' : rawStatus;
   const temRenovacaoPosterior =
     item.tem_renovacao_posterior === 1 || item.tem_renovacao_posterior === true;
+  const vigenteOperacional =
+    item.vigente_operacional === 1 || item.vigente_operacional === true;
   const ehRenovada =
     temRenovacaoPosterior ||
-    item.renovada === 1 ||
-    item.renovada === true ||
-    qualificacaoStatus === 'RENOVADA';
+    ((!vigenteOperacional || temRenovacaoPosterior) &&
+      (item.renovada === 1 || item.renovada === true)) ||
+    (qualificacaoStatus === 'RENOVADA' && (!vigenteOperacional || temRenovacaoPosterior));
 
   if (qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'CANCELADA') {
     return qualificacaoStatus;
   }
 
   if (STATUS_RECONHECIDOS.has(normalized)) {
-    return normalized;
+    if (normalized !== 'RENOVADA' || !vigenteOperacional || temRenovacaoPosterior) {
+      return normalized;
+    }
   }
 
   if (ehRenovada) {

@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 
+// source_reference: scripts/maintenance/lib/simuladores-matriz-v6-data.mjs + docs/analysis/COSTA_DO_SOL_MATRIZ_V6_1_FICHAS_RESTANTES_FINAL_REVISAVEL_20260703.md
+// operational_decision: local-only preparation of Costa do Sol matrix V6/V6.1 without remote apply
+// dry_run_required: use --dry-run by default and never execute remote/prod apply from this script
+// rollback_plan_required: rollback is the inverse of generated local SQL review; no remote state is touched here
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import {
   buildModelMetadataObservacoes,
+  buildRowReferencias,
   loadSimuladoresMatrizV6Data,
 } from './lib/simuladores-matriz-v6-data.mjs';
 
@@ -98,7 +104,9 @@ function buildManeuverCatalog(models, registry) {
       if (!ref) {
         throw new Error(`missing_registry_entry:${row.codigo}`);
       }
-      catalog.set(row.codigo, {
+      const existing = catalog.get(row.codigo);
+      const referencias = buildRowReferencias(row);
+      const next = {
         codigo: row.codigo,
         nome: ref.nome,
         descricao: ref.origem_documental || ref.nome,
@@ -106,7 +114,17 @@ function buildManeuverCatalog(models, registry) {
         tipo_sessao: ref.tipo_sessao || 'TREINAMENTO',
         tipo_aeronave: ref.tipo_aeronave || model.aircraft,
         ordem: row.ordem,
-      });
+        referencias_json: referencias ? JSON.stringify(referencias) : null,
+      };
+
+      if (!existing) {
+        catalog.set(row.codigo, next);
+        continue;
+      }
+
+      if (!existing.referencias_json && next.referencias_json) {
+        existing.referencias_json = next.referencias_json;
+      }
     }
   }
   return [...catalog.values()].sort((left, right) => left.codigo.localeCompare(right.codigo));
@@ -151,7 +169,7 @@ function buildAnalyticalSummary(data, empresaId, dbFile) {
   };
 }
 
-function ensureDbHasData(dbFile) {
+function ensureDbHasData(dbFile, empresaId) {
   const modelosColumns = sqliteJson(dbFile, `PRAGMA table_info(modelos_sessao);`).map((row) => row.name);
   const manobrasColumns = sqliteJson(dbFile, `PRAGMA table_info(manobras);`).map((row) => row.name);
 
@@ -163,8 +181,8 @@ function ensureDbHasData(dbFile) {
     dbFile,
     `
       SELECT
-        (SELECT COUNT(*) FROM modelos_sessao WHERE deleted_at IS NULL AND empresa_id = 6) AS modelos,
-        (SELECT COUNT(*) FROM manobras WHERE deleted_at IS NULL AND empresa_id = 6) AS manobras;
+        (SELECT COUNT(*) FROM modelos_sessao WHERE deleted_at IS NULL AND empresa_id = ${empresaId}) AS modelos,
+        (SELECT COUNT(*) FROM manobras WHERE deleted_at IS NULL AND empresa_id = ${empresaId}) AS manobras;
     `,
   )[0];
 
@@ -187,19 +205,21 @@ function buildApplySql(data, empresaId) {
       (row) =>
         `(${sqlString(row.codigo)}, ${sqlString(row.nome)}, ${sqlString(row.descricao)}, ${
           row.categoria ? sqlString(row.categoria) : 'NULL'
-        }, ${sqlString(row.tipo_sessao)}, ${sqlString(row.tipo_aeronave)}, ${row.ordem})`,
+        }, ${sqlString(row.tipo_sessao)}, ${sqlString(row.tipo_aeronave)}, ${row.ordem}, ${
+          row.referencias_json ? sqlString(row.referencias_json) : 'NULL'
+        })`,
     )
     .join(',\n    ');
 
   return `
 BEGIN TRANSACTION;
 
-WITH catalog_rows(codigo, nome, descricao, categoria, tipo_sessao, tipo_aeronave, ordem) AS (
+WITH catalog_rows(codigo, nome, descricao, categoria, tipo_sessao, tipo_aeronave, ordem, referencias_json) AS (
   VALUES
     ${catalogValues}
 )
 INSERT INTO manobras (
-  codigo, nome, descricao, categoria, tipo_sessao, tipo_aeronave, ordem, empresa_id, created_at, updated_at
+  codigo, nome, descricao, categoria, tipo_sessao, tipo_aeronave, ordem, referencias_json, empresa_id, created_at, updated_at
 )
 SELECT
   cr.codigo,
@@ -209,6 +229,7 @@ SELECT
   cr.tipo_sessao,
   cr.tipo_aeronave,
   cr.ordem,
+  cr.referencias_json,
   ${empresaId},
   datetime('now'),
   datetime('now')
@@ -404,7 +425,7 @@ function main() {
 
     if (dbFile && fs.existsSync(dbFile)) {
       try {
-        ensureDbHasData(dbFile);
+        ensureDbHasData(dbFile, options.empresaId);
         payload.db_snapshot_status = 'seeded';
       } catch (error) {
         payload.db_snapshot_status = 'empty_or_unseeded';
@@ -426,7 +447,7 @@ function main() {
     throw new Error(`--confirm deve ser exatamente: ${CONFIRM_TEXT}`);
   }
 
-  ensureDbHasData(dbFile);
+  ensureDbHasData(dbFile, options.empresaId);
   sqliteExec(dbFile, sql);
   validateDbOutcome(dbFile, data, options.empresaId);
 
