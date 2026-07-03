@@ -13,7 +13,7 @@ import { getFicha360 } from '../../routes/ficha360';
 
 type QueryResult = { results?: unknown[]; first?: unknown };
 
-function createMockDb() {
+function createMockDb(options?: { includeOperationalRenewedQualification?: boolean }) {
   const tableColumns: Record<string, string[]> = {
     funcionarios: ['id', 'empresa_id', 'nome', 'nome_completo', 'matricula', 'funcao', 'deleted_at'],
     qualificacoes_historico: [
@@ -101,10 +101,61 @@ function createMockDb() {
       }
 
       if (normalized.includes('WITH qualificacoes_ativas AS')) {
+        if (options?.includeOperationalRenewedQualification) {
+          if (
+            normalized.includes("NOT IN ('CANCELADA', 'RENOVADA')") ||
+            normalized.includes('COALESCE(q.renovada, 0) = 0')
+          ) {
+            return { results: [] };
+          }
+
+          return {
+            results: [
+              {
+                id: 7001,
+                funcionario_id: 42,
+                tipo_id: 55,
+                data_realizacao: '2026-06-01',
+                data_vencimento: '2099-12-31',
+                observacoes: 'vigente',
+                created_at: '2026-06-01T00:00:00Z',
+                updated_at: '2026-06-01T00:00:00Z',
+                categoria: 'MANUTENCAO',
+                nome: 'NR-12',
+                codigo: 'NR-12',
+                origem_tipo: null,
+                lms_matricula_id: null,
+              },
+            ],
+          };
+        }
         return { results: [] };
       }
 
       if (normalized.includes('FROM qualificacoes_historico q')) {
+        if (options?.includeOperationalRenewedQualification) {
+          return {
+            results: [
+              {
+                id: 7001,
+                funcionario_id: 42,
+                tipo_id: 55,
+                data_realizacao: '2026-06-01',
+                data_vencimento: '2099-12-31',
+                observacoes: 'vigente',
+                created_at: '2026-06-01T00:00:00Z',
+                updated_at: '2026-06-01T00:00:00Z',
+                origem_tipo: null,
+                lms_matricula_id: null,
+                status: 'RENOVADA',
+                renovada: 1,
+                categoria: 'MANUTENCAO',
+                nome: 'NR-12',
+                codigo: 'NR-12',
+              },
+            ],
+          };
+        }
         return { results: [] };
       }
 
@@ -288,5 +339,28 @@ describe('ficha360 treinamento de voo pontos de atencao', () => {
         observacao: 'Houve desvio na potência.',
       }),
     ]);
+  });
+
+  it('mantem a qualificacao vigente na ficha 360 mesmo quando o ultimo registro veio marcado como renovada', async () => {
+    const db = createMockDb({ includeOperationalRenewedQualification: true });
+
+    const data = await getFicha360(db, 42, 1);
+
+    expect(data).not.toBeNull();
+    expect(data?.qualificacoes).toEqual([
+      expect.objectContaining({
+        codigo: 'NR-12',
+        data_vencimento: '2099-12-31',
+      }),
+    ]);
+    expect(data?.qualificacoes_historico).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          codigo: 'NR-12',
+          renovada: 1,
+          status: 'RENOVADA',
+        }),
+      ]),
+    );
   });
 });

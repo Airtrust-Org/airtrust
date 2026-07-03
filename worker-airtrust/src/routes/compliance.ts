@@ -296,7 +296,6 @@ app.get('/compliance/funcionarios', auth(), async (c: Context<{ Bindings: Env }>
 
     // 3. Buscar qualificações vigentes (uma por código) em uma query
     const statusExpr = histCols.has('status') ? 'UPPER(COALESCE(q.status, \"\"))' : "''";
-    const renovadaExpr = histCols.has('renovada') ? 'COALESCE(q.renovada, 0)' : '0';
     const qualRaw = await c.env.DB.prepare(
       `WITH qualificacoes_ativas AS (
          SELECT
@@ -312,8 +311,8 @@ app.get('/compliance/funcionarios', auth(), async (c: Context<{ Bindings: Env }>
          JOIN qualificacoes_tipos tq ON q.${colTipo} = tq.id
          WHERE q.funcionario_id IN (${placeholders})
            AND q.deleted_at IS NULL
-           AND ${statusExpr} NOT IN ('CANCELADA', 'RENOVADA')
-           AND ${renovadaExpr} = 0
+           AND ${statusExpr} != 'CANCELADA'
+           AND COALESCE(q.${colFim}, q.${colInicio}) IS NOT NULL
        )
        SELECT funcionario_id, data_vencimento, codigo
        FROM qualificacoes_ativas

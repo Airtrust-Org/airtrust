@@ -598,7 +598,6 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
 
     // 2. Qualificações (somente vigentes, uma por código)
     const statusExpr = histCols.has('status') ? 'UPPER(COALESCE(q.status, \"\"))' : "''";
-    const renovadaExpr = histCols.has('renovada') ? 'COALESCE(q.renovada, 0)' : '0';
     const qualificacoesRaw = await db
       .prepare(
         `WITH qualificacoes_ativas AS (
@@ -625,8 +624,8 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
            JOIN qualificacoes_tipos tq ON q.${colTipo} = tq.id
            WHERE q.funcionario_id = ?
              AND q.deleted_at IS NULL
-             AND ${statusExpr} NOT IN ('CANCELADA', 'RENOVADA')
-             AND ${renovadaExpr} = 0
+             AND ${statusExpr} != 'CANCELADA'
+             AND COALESCE(q.${colFim}, q.${colInicio}) IS NOT NULL
          )
          SELECT id, funcionario_id, tipo_id, data_realizacao, data_vencimento, observacoes,
                 created_at, updated_at, categoria, nome, codigo, origem_tipo, lms_matricula_id

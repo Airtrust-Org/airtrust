@@ -136,6 +136,32 @@ function createMockDb(options: {
             return { results: hasRenovacaoDe ? [{ name: 'renovacao_de' }] : [] };
           }
           if (query.includes('LIMIT ? OFFSET ?')) {
+            if (query.includes('qh.id = ?') && query.includes("date('now','+30 days')")) {
+              if (!query.includes('AS vigente_operacional')) {
+                return { results: [] };
+              }
+
+              return {
+                results: [
+                  {
+                    id: 503,
+                    funcionario_id: 10,
+                    funcionario_nome: 'Tripulante Teste',
+                    tipo_id: 21,
+                    tipo_nome: 'NR-12',
+                    tipo_codigo: 'NR-12',
+                    validade_meses: 12,
+                    data_realizacao: '2026-06-01',
+                    data_vencimento: '2099-12-31',
+                    renovada: 1,
+                    tem_renovacao_posterior: 0,
+                    renovacao_de: null,
+                    vigente_operacional: 1,
+                    qualificacao_status: 'RENOVADA',
+                  },
+                ],
+              };
+            }
             return {
               results: [
                 {
@@ -281,6 +307,27 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.data[1]).toMatchObject({ id: 502, status: 'VALIDA', renovacao_de: 321 });
+  });
+
+  it('inclui como valida operacional o ultimo registro futuro mesmo quando legado o marcou como renovada', async () => {
+    const { db } = createMockDb();
+    const app = createApp(db);
+
+    const response = await app.request('/historico?statuses=VALIDA&id=503');
+    const body = (await response.json()) as {
+      success: boolean;
+      data: Array<{ id: number; status: string; vigente_operacional?: number }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data).toEqual([
+      expect.objectContaining({
+        id: 503,
+        status: 'VALIDA',
+        vigente_operacional: 1,
+      }),
+    ]);
   });
 
   it('honra stats=false e evita agregacoes pesadas para a query planejada', async () => {

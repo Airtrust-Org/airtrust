@@ -32,6 +32,15 @@ describe('qualificacoes historico status utils', () => {
         tem_renovacao_posterior: 1,
       }),
     ).toBe('RENOVADA');
+    expect(
+      getHistoricoDisplayStatus({
+        status: 'RENOVADA',
+        renovada: 1,
+        vigente_operacional: 1,
+        tem_renovacao_posterior: 0,
+        data_vencimento: '2099-12-31',
+      }),
+    ).toBe('VALIDA');
   });
 
   it('detecta quando uma qualificação vencida já possui ação planejada relacionada', () => {

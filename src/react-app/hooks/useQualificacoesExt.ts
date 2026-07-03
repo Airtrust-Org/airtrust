@@ -47,6 +47,7 @@ export interface HistoricoQualificacao {
   data_emissao?: string;
   data_vencimento?: string;
   data_validade?: string;
+  vigente_operacional?: number | boolean;
   certificado_numero?: string;
   certificado_url?: string;
   tem_certificado?: number | boolean;
