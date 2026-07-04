@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { X, AlertTriangle } from 'lucide-react';
 
 interface ConfirmDeleteModalProps {
@@ -40,11 +41,11 @@ export function ConfirmDeleteModal({
     await onConfirm();
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-modal overflow-y-auto p-4">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-lg bg-white shadow-xl my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex shrink-0 items-center justify-between p-6 border-b">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-red-100 rounded-full">
               <AlertTriangle className="w-6 h-6 text-red-600" />
@@ -57,7 +58,7 @@ export function ConfirmDeleteModal({
         </div>
 
         {/* Body */}
-        <div className="p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <p className="text-gray-700 mb-4">{displayMessage}</p>
           {itemName && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -70,7 +71,7 @@ export function ConfirmDeleteModal({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
+        <div className="flex shrink-0 justify-end gap-3 p-6 border-t bg-gray-50">
           <button
             onClick={onClose}
             disabled={isLoading}
@@ -90,7 +91,8 @@ export function ConfirmDeleteModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
