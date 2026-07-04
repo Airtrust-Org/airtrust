@@ -134,7 +134,7 @@ const SK76_SEMESTRAL_MODELS = [
       { ordem: 15, codigo: 'S76-ARN-01', nome: 'Arremetida noturna', fase_voo: 'missed_approach', fap_refs: 'FAP06 IAP2.3', observacao: '' },
       { ordem: 16, codigo: 'S76-APN-01', nome: 'Aproximação normal visual noturna', fase_voo: 'aproximacao', fap_refs: 'FAP05.2 H4.3', observacao: '' },
       { ordem: 17, codigo: 'S76-PNO-01', nome: 'Pouso normal noturno', fase_voo: 'pouso', fap_refs: 'FAP05.2 H4.3', observacao: '' },
-      { ordem: 18, codigo: 'S76-LDP-00', nome: 'Pouso/decolagem em helideck', fase_voo: 'encerramento', fap_refs: 'FAP14 Offshore', observacao: '' },
+      { ordem: 18, codigo: 'S76-EST-01', nome: 'Encerramento pós-voo noturno', fase_voo: 'pos_pouso', fap_refs: 'FAP05.2 H4.5/C2.3', observacao: 'Corte e estacionamento' },
     ],
   },
   {
@@ -162,7 +162,7 @@ const SK76_SEMESTRAL_MODELS = [
       { ordem: 15, codigo: 'S76-NRL-00', nome: 'Nr low na subida', fase_voo: 'evento_rotor', fap_refs: '-', observacao: 'QRH interno' },
       { ordem: 16, codigo: 'S76-CST-00', nome: 'Estol de compressor em cruzeiro', fase_voo: 'evento_motor', fap_refs: '-', observacao: 'QRH interno' },
       { ordem: 17, codigo: 'S76-ARN-01', nome: 'Arremetida IFR', fase_voo: 'decisao', fap_refs: 'FAP06 IAP2.3', observacao: '' },
-      { ordem: 18, codigo: 'S76-LDP-00', nome: 'Pouso/decolagem em helideck', fase_voo: 'encerramento', fap_refs: 'FAP14 Offshore', observacao: '' },
+      { ordem: 18, codigo: 'S76-EST-01', nome: 'Encerramento e procedimentos pós-voo — check IFR', fase_voo: 'pos_pouso', fap_refs: 'FAP05.2 H4.5/C2.3', observacao: 'Fechamento do check' },
     ],
   },
 ];
