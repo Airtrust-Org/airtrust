@@ -62,3 +62,58 @@ decisão seria "corrigir problema em produção no escuro" — proibido pelas re
 - `0408`–`0412` continuam pendentes/bloqueadas por motivos próprios (fora de escopo da Matriz V6.1
   ou exigindo autorização separada) — não fazem parte desta reconciliação de ledger, que trata
   apenas do desalinhamento entre "aplicado de fato" e "registrado no ledger" para 0413/0414.
+
+---
+
+## Migration de reconciliação criada: `0416_reconcile_matriz_v6_d1_ledger.sql`
+
+**Data de criação:** 2026-07-04.
+
+**O que ela faz (3 INSERTs):**
+- Registra `0413_notechs_categoria_itens.sql` no ledger, se ausente, com `applied_at = '2026-07-04'`.
+  Verifica presença de dados NOTECHS (`manobras_categorias.nome = 'NOTECHS'` + `manobras.codigo =
+  'NOT-COM-01'`) antes de inserir.
+- Registra `0414_add_manobras_referencias_json.sql` no ledger, se ausente, com `applied_at =
+  '2026-07-04'`. Verifica presença da coluna `referencias_json` em `manobras` via
+  `pragma_table_info` antes de inserir.
+- **Auto-registra `0416_reconcile_matriz_v6_d1_ledger.sql`** no ledger com `applied_at =
+  '2026-07-04'`. Necessário porque 0416 é aplicada via `d1 execute --file` (não via wrangler
+  migration runner), então não há runner externo que a registre — ao contrário de 0398/0400/0403
+  que foram aplicadas pelo wrangler e contavam com auto-registro do runner.
+
+**Desvio intencional do padrão 0398/0400/0403:** 0398, 0400 e 0403 não se auto-registram porque
+foram aplicadas via `wrangler d1 migrations apply`, cujo runner insere a própria entrada no ledger.
+0416 será aplicada via `d1 execute --file` (mesmo caminho de 0413/0414), então deve se
+auto-registrar para evitar deslocar a dívida de reconciliação para a frente (que exigiria uma 0417
+para reconciliar 0416, ad infinitum).
+
+**Estado do ledger após apply da 0416:**
+```
+0407_qualificacoes_tipos_setores.sql      ← última aplicada pelo wrangler
+0413_notechs_categoria_itens.sql          ← registrada pela 0416
+0414_add_manobras_referencias_json.sql     ← registrada pela 0416
+0416_reconcile_matriz_v6_d1_ledger.sql     ← auto-registrada
+```
+
+**O que ela NÃO faz:**
+- Não executa DDL (`ALTER TABLE`, `CREATE`, etc.).
+- Não insere/atualiza/deleta dados de domínio (`manobras`, `modelos_sessao`, etc.).
+- Não registra `0412_qualificacoes_classificacao.sql` (permanece bloqueada).
+- Não registra `0408`–`0411` (permanecem pendentes, fora de escopo).
+
+**Idempotência:** `WHERE NOT EXISTS` no ledger + verificação de schema real. Rodar 2x resulta em
+0 linhas inseridas na segunda execução.
+
+**Padrão:** Segue o mesmo formato de `0398_reconcile_wave1_wave2_d1_ledger.sql`,
+`0400_reconcile_wave3_d1_ledger.sql` e `0403_reconcile_wave4_d1_ledger.sql`, com a adição do
+auto-registro justificado acima.
+
+**Aplicação:** Exige autorização explícita. A migration existe e está versionada, mas NÃO foi
+aplicada em produção nesta etapa. Comando futuro (após autorização):
+```bash
+npx wrangler d1 execute airtrust-db --env production --remote --file=worker-airtrust/migrations/0416_reconcile_matriz_v6_d1_ledger.sql
+```
+
+**Risco residual:** Baixo. Escreve apenas em `d1_migrations` (metadado de controle), com
+verificação de schema real como pré-condição. Rollback simples via `DELETE` das 3 entradas
+inseridas, sem perda de dados de domínio.
