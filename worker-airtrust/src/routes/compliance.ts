@@ -98,13 +98,24 @@ function calcularStatusRequisito(
     if (matricula) {
       return { ...baseReq, status: 'ok', dias_restantes: null };
     }
-    // Tem matrícula em andamento → risco (está tentando mas ainda não concluiu)
+    // Tem matrícula em andamento → risco (está tentando mas ainda não concluiu),
+    // a menos que o prazo de conclusão (data_expiracao) já tenha passado —
+    // nesse caso é um gap real, não apenas um alerta.
     const emAndamento = (matriculasLms ?? []).find(
       (m) =>
         Number(m.curso_id) === cursoId &&
         (m.status === 'EM_ANDAMENTO' || m.status === 'NAO_INICIADO'),
     );
     if (emAndamento) {
+      const prazoConclusao = emAndamento.data_expiracao as string | null | undefined;
+      if (prazoConclusao) {
+        const dtPrazo = parseISO(prazoConclusao);
+        const diasPrazo = differenceInDays(dtPrazo, hoje);
+        if (diasPrazo < 0) {
+          return { ...baseReq, status: 'faltando', dias_restantes: diasPrazo };
+        }
+        return { ...baseReq, status: 'risco', dias_restantes: diasPrazo };
+      }
       return { ...baseReq, status: 'risco', dias_restantes: null };
     }
     return { ...baseReq, status: 'faltando', dias_restantes: null };
@@ -198,7 +209,7 @@ app.get('/funcionarios/:id/compliance', auth(), async (c: Context<{ Bindings: En
 
     // Buscar matrículas LMS do funcionário (para verificar cursos obrigatórios)
     const lmsMatriculas = await c.env.DB.prepare(
-      `SELECT curso_id, status FROM lms_matriculas
+      `SELECT curso_id, status, data_expiracao FROM lms_matriculas
        WHERE funcionario_id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
       .bind(id, empresaId)
@@ -383,7 +394,7 @@ app.get('/compliance/funcionarios', auth(), async (c: Context<{ Bindings: Env }>
     const lmsByEmployee = new Map<number, Array<Record<string, unknown>>>();
     try {
       const lmsRaw = await c.env.DB.prepare(
-        `SELECT funcionario_id, curso_id, status FROM lms_matriculas
+        `SELECT funcionario_id, curso_id, status, data_expiracao FROM lms_matriculas
          WHERE funcionario_id IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
       )
         .bind(...ids, empresaId)
