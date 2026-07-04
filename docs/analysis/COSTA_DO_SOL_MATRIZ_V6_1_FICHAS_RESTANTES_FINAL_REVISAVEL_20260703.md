@@ -456,13 +456,15 @@ Para `TRE-INST` e `CRED-EXA`, códigos novos podem ser necessários após valida
 
 ## 13. Fechamento de Encerramento S76 (2026-07-04)
 
-**Contexto:** A auditoria didática da V6.1 identificou que a ficha `S76-REQ-01` não possuía item explícito de encerramento operacional/pós-voo, com a última posição ocupada por `S76-LDP-00` (Pouso/decolagem em heliponto), que é manobra operacional e não cumpre função de fechamento da sessão. As fichas `SK76-S-01/02` e `SK76-S-02/02` já terminavam com `S76-EST-01`.
+**Contexto:** A auditoria didática da V6.1 identificou que a ficha `S76-REQ-01` não possuía item explícito de encerramento operacional/pós-voo, com a última posição ocupada por `S76-LDP-00` (Pouso/decolagem em heliponto), que é manobra operacional e não cumpre função de fechamento da sessão. Esta seção originalmente afirmava que `SK76-S-01/02` e `SK76-S-02/02` já terminavam com `S76-EST-01` — **essa afirmação estava incorreta**: uma auditoria de execução controlada de produção (2026-07-04, pré-apply) verificou o loader diretamente e confirmou que ambas ainda terminavam em `S76-LDP-00`. As duas fichas foram corrigidas nesta rodada, junto com esta correção de registro.
 
-**Ficha ajustada:**
+**Fichas ajustadas:**
 
 | Ficha | Item removido | Item inserido | Técnicas |
 |---|---|---|---|
 | `S76-REQ-01` | `S76-LDP-00` (Pouso/decolagem em heliponto) | `S76-EST-01` (Encerramento e procedimentos pós-voo) | 18 |
+| `SK76-S-01/02` | `S76-LDP-00` (Pouso/decolagem em helideck) | `S76-EST-01` (Encerramento pós-voo noturno) | 18 |
+| `SK76-S-02/02` | `S76-LDP-00` (Pouso/decolagem em helideck) | `S76-EST-01` (Encerramento e procedimentos pós-voo — check IFR) | 18 |
 
 **Item utilizado:** `S76-EST-01` — "Encerramento e procedimentos pós-voo", `fase_voo: pos_pouso`, referência FAP05.2 H4.5/C2.3. Já existente no catálogo de manobras S76 e semanticamente adequado como fechamento operacional.
 
@@ -471,8 +473,7 @@ Para `TRE-INST` e `CRED-EXA`, códigos novos podem ser necessários após valida
 **PTO referência:** Seção 2.2.6 (fichas com identificação, módulo, avaliação por item, comentários técnicos), Seção 2.3.4.2 (registro de desempenho por item), Seção 4.3 (fichas SK76 padronizadas).
 
 **Confirmações:**
-- ✅ `S76-REQ-01` com encerramento explícito `S76-EST-01`.
-- ✅ `SK76-S-01/02` e `SK76-S-02/02` já estavam corretos.
+- ✅ `S76-REQ-01`, `SK76-S-01/02` e `SK76-S-02/02` com encerramento explícito `S76-EST-01`.
 - ✅ Nenhuma ficha ultrapassa 18 técnicas.
 - ✅ NOTECHS permanecem separados (15 globais).
 - ✅ Dry-run `READY_FOR_REVIEW`, zero validation issues.

@@ -147,6 +147,20 @@ describe('simuladores matriz v6 data', () => {
     }
   });
 
+  it('S76-REQ-01, SK76-S-01/02 e SK76-S-02/02 terminam (ordem 18) com S76-EST-01, não com manobra operacional de heliponto', () => {
+    // PR #247 corrigiu S76-REQ-01 mas afirmou incorretamente que os dois
+    // semestrais SK76 já terminavam em S76-EST-01 — nenhum teste cobria isso.
+    const data = loadSimuladoresMatrizV6Data();
+
+    for (const modelCode of ['S76-REQ-01', 'SK76-S-01/02', 'SK76-S-02/02']) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      expect(model, `modelo ausente: ${modelCode}`).toBeDefined();
+      const lastRow = model?.rows.find((row) => row.ordem === 18);
+      expect(lastRow?.codigo, `${modelCode} deveria encerrar com S76-EST-01`).toBe('S76-EST-01');
+      expect(model?.rows.some((row) => row.codigo === 'S76-LDP-00')).toBe(false);
+    }
+  });
+
   it('TRE-INST e CRED-EXA permanecem fora do loader/apply operacional (GO documental preliminar, sem fonte FAP/PTO interna confirmada)', () => {
     const data = loadSimuladoresMatrizV6Data();
     const codes = new Set(data.models.map((model) => model.modelCode));
