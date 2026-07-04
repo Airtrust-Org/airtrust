@@ -4,6 +4,8 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
+import { CANCELLED_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
+import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 
 const matrizTreinamento = new Hono<{ Bindings: Env }>();
 
@@ -591,7 +593,6 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
         ? 'data_validade'
         : 'data_vencimento';
     const statusExpr = histColSet.has('status') ? "UPPER(COALESCE(qh.status, ''))" : "''";
-    const renovadaExpr = histColSet.has('renovada') ? 'COALESCE(qh.renovada, 0)' : '0';
     const empresaExpr = histColSet.has('empresa_id') ? 'AND qh.empresa_id = ?' : '';
 
     const tipoIds = requisitos.map((r) => r.qualificacao_tipo_id);
@@ -615,8 +616,7 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
            WHERE qh.funcionario_id = ?
              ${empresaExpr}
              AND qh.deleted_at IS NULL
-             AND ${statusExpr} NOT IN ('CANCELADA', 'RENOVADA')
-             AND ${renovadaExpr} = 0
+             AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
              AND qh.${tipoCol} IN (${placeholders})
          )
          SELECT tipo_id, ultima_data, data_vencimento
@@ -653,10 +653,12 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
         }
 
         if (data_validade) {
-          dias_para_vencer = Math.round(
-            (new Date(data_validade).getTime() - new Date(today).getTime()) / 86400000,
-          );
-          status = data_validade >= today ? 'EM_DIA' : 'VENCIDO';
+          const classificacao = classificarStatusPorVencimento(data_validade, today);
+          dias_para_vencer = diasEntreDatas(data_validade, today);
+          // Matriz de treinamento ainda não expõe um status intermediário de
+          // "vencendo" (ver relatório de auditoria); VALIDA e VENCENDO_30 são
+          // ambos reportados como EM_DIA para preservar o contrato atual.
+          status = classificacao === 'VENCIDA' ? 'VENCIDO' : 'EM_DIA';
         } else {
           // Sem validade definida, assumir EM_DIA se tem histórico
           status = 'EM_DIA';
@@ -704,6 +706,12 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
       },
     });
   } catch (error) {
+    if (error instanceof ApiError) {
+      return c.json(
+        { success: false, error: error.message },
+        error.statusCode as 400 | 401 | 403 | 404 | 500,
+      );
+    }
     console.error('[matriz-treinamento] /requisitos/:funcionario_id failed', error);
     return c.json(
       {
