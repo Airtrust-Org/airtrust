@@ -451,3 +451,32 @@ Para `TRE-INST` e `CRED-EXA`, códigos novos podem ser necessários após valida
 - ✅ Nenhum termo "homologado" ou "aprovado pela ANAC" foi usado.
 - ✅ Nenhuma FAP ou regulamento foi inventado.
 - ✅ Pendências regulatórias explicitamente listadas na seção 10.
+
+---
+
+## 13. Fechamento de Encerramento S76 (2026-07-04)
+
+**Contexto:** A auditoria didática da V6.1 identificou que a ficha `S76-REQ-01` não possuía item explícito de encerramento operacional/pós-voo, com a última posição ocupada por `S76-LDP-00` (Pouso/decolagem em heliponto), que é manobra operacional e não cumpre função de fechamento da sessão. As fichas `SK76-S-01/02` e `SK76-S-02/02` já terminavam com `S76-EST-01`.
+
+**Ficha ajustada:**
+
+| Ficha | Item removido | Item inserido | Técnicas |
+|---|---|---|---|
+| `S76-REQ-01` | `S76-LDP-00` (Pouso/decolagem em heliponto) | `S76-EST-01` (Encerramento e procedimentos pós-voo) | 18 |
+
+**Item utilizado:** `S76-EST-01` — "Encerramento e procedimentos pós-voo", `fase_voo: pos_pouso`, referência FAP05.2 H4.5/C2.3. Já existente no catálogo de manobras S76 e semanticamente adequado como fechamento operacional.
+
+**Justificativa pedagógica:** A sequência lógica de uma ficha de voo deve seguir: preparação → execução técnica → anormalidade/emergência → estabilização → pouso/chegada → encerramento. `S76-EST-01` fornece o encerramento operacional observável (corte, estacionamento, pós-voo), em contraste com `S76-LDP-00` que é manobra de heliponto (execução, não encerramento).
+
+**PTO referência:** Seção 2.2.6 (fichas com identificação, módulo, avaliação por item, comentários técnicos), Seção 2.3.4.2 (registro de desempenho por item), Seção 4.3 (fichas SK76 padronizadas).
+
+**Confirmações:**
+- ✅ `S76-REQ-01` com encerramento explícito `S76-EST-01`.
+- ✅ `SK76-S-01/02` e `SK76-S-02/02` já estavam corretos.
+- ✅ Nenhuma ficha ultrapassa 18 técnicas.
+- ✅ NOTECHS permanecem separados (15 globais).
+- ✅ Dry-run `READY_FOR_REVIEW`, zero validation issues.
+- ✅ 16/16 testes da Matriz V6.1 passando.
+- ✅ Lint limpo.
+- ✅ Sem alteração em TRE-INST, CRED-EXA, AW139, V6 originais, Qualificações.
+- ✅ Sem produção, sem DML, sem migration remota, sem deploy.
