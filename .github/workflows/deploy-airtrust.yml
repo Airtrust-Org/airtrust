@@ -253,7 +253,7 @@ jobs:
           health_body="$(mktemp)"
           protected_body="$(mktemp)"
 
-          curl -fsS -o "$version_body" "$WORKER_VERSION_ENDPOINT"
+          # Health and auth checks are immediate — not subject to edge propagation
           curl -fsS -o "$health_body" "$WORKER_HEALTH_ENDPOINT"
           status="$(curl -sS -o "$protected_body" -w '%{http_code}' "$LMS_PROTECTED_ENDPOINT")"
           if [[ "$status" != "401" ]]; then
@@ -261,11 +261,27 @@ jobs:
             cat "$protected_body" >&2
             exit 1
           fi
-          if ! grep -q "${{ needs.guard.outputs.app_version }}" "$version_body"; then
-            echo "APP_VERSION ${{ needs.guard.outputs.app_version }} not found in /api/version response." >&2
-            cat "$version_body" >&2
-            exit 1
-          fi
+
+          # Version check with retry: Cloudflare edge may serve stale Worker
+          # for several seconds after wrangler deploy reports success
+          max_retries=6
+          retry_delay=10
+          for i in $(seq 1 $max_retries); do
+            curl -fsS -o "$version_body" "$WORKER_VERSION_ENDPOINT"
+            if grep -q "${{ needs.guard.outputs.app_version }}" "$version_body"; then
+              echo "[Smoke] attempt ${i}/${max_retries}: version match OK"
+              break
+            fi
+            received="$(grep -o '"version":"[^"]*"' "$version_body" || echo 'unknown')"
+            echo "[Smoke] attempt ${i}/${max_retries}: version mismatch — received ${received}, expected ${{ needs.guard.outputs.app_version }}"
+            if [[ $i -eq $max_retries ]]; then
+              echo "APP_VERSION ${{ needs.guard.outputs.app_version }} not found after ${max_retries} attempts." >&2
+              cat "$version_body" >&2
+              exit 1
+            fi
+            sleep "$retry_delay"
+          done
+
           cat "$version_body"
           cat "$health_body"
 
