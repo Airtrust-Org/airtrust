@@ -6,7 +6,7 @@ export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKER_DIR="$ROOT_DIR/worker-airtrust"
 BACKUPS_DIR="$ROOT_DIR/backups"
-WRANGLER=(npx -y node@20 node_modules/wrangler/bin/wrangler.js)
+WRANGLER=(npx -y node@22 node_modules/wrangler/bin/wrangler.js)
 TARGET="local"
 ASSUME_YES=0
 CONFIRM_SYNC_TEXT="I understand this exports production D1 and writes only to the selected non-production target"
@@ -65,6 +65,7 @@ done
 [[ "${AIRTRUST_ALLOW_PROD_SYNC:-0}" == "1" ]] || fail "Defina AIRTRUST_ALLOW_PROD_SYNC=1 para autorizar export de produção"
 command -v sqlite3 >/dev/null 2>&1 || fail "sqlite3 não encontrado"
 [[ -d "$WORKER_DIR" ]] || fail "worker-airtrust não encontrado"
+[[ "$TARGET" != "development" ]] || fail "Sync remoto para development está desabilitado: o replay SQL do export D1 falha no import remoto deste schema. Use --target local até existir um caminho seguro de clone/snapshot."
 
 warn "PRODUCTION D1 EXPORT PATH: este script exporta produção e escreve apenas em target não-produtivo."
 

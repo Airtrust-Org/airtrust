@@ -8,9 +8,9 @@
 # --reset  apaga o banco local antes de recriar (limpa tudo)
 #
 # Estratégia:
-#   1. Aplica scripts/schema-local.sql via wrangler (DDL do prod)
-#   2. Aplica scripts/seed-local.sql via sqlite3 (wrangler ignora
-#      PRAGMA foreign_keys=OFF que o seed precisa para tabelas legado)
+#   1. Aplica scripts/schema-local.sql via wrangler (DDL local versionado)
+#   2. Aplica migrations locais incrementais exigidas pelo app atual
+#   3. Aplica seeds sintéticos versionados via sqlite3
 #
 # O schema local versionado fica em scripts/schema-local.sql.
 # Se ele sumir ou ficar desatualizado, restaure-o a partir do repositório
@@ -28,12 +28,12 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKER_DIR="$ROOT_DIR/worker-airtrust"
 DEV_CONFIG="$WORKER_DIR/wrangler.dev.toml"
 SCHEMA_FILE="$SCRIPT_DIR/schema-local.sql"
-SEED_FILE="$SCRIPT_DIR/seed-local.sql"
+SEED_FILE="$WORKER_DIR/seeds/dev-seed.sql"
 OVERRIDES_FILE="$SCRIPT_DIR/setup-local-overrides.sql"
 CONTROLE_VOOS_SEED_FILE="$SCRIPT_DIR/seed-local-controle-voos.sql"
 DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
-LMS_MIGRATIONS=(
+APP_MIGRATIONS=(
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
@@ -51,6 +51,9 @@ LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0360_matriz_treinamento_funcao.sql"
   "$WORKER_DIR/migrations/0389_platform_roles_support_access_foundation.sql"
   "$WORKER_DIR/migrations/0390_training_class_management.sql"
+  "$WORKER_DIR/migrations/0394_tenant_scope_catalogos_f5.sql"
+  "$WORKER_DIR/migrations/0413_notechs_categoria_itens.sql"
+  "$WORKER_DIR/migrations/0414_add_manobras_referencias_json.sql"
 )
 CONTROLE_VOOS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0410_controle_voos_n1_schema.sql"
@@ -71,7 +74,7 @@ command -v sqlite3 >/dev/null 2>&1 || error "sqlite3 não encontrado (brew insta
 
 [[ -f "$DEV_CONFIG"   ]] || error "wrangler.dev.toml não encontrado em $WORKER_DIR"
 [[ -f "$SCHEMA_FILE"  ]] || error "schema-local.sql não encontrado em $SCRIPT_DIR — restaure scripts/schema-local.sql e tente novamente"
-[[ -f "$SEED_FILE"    ]] || error "seed-local.sql não encontrado em $SCRIPT_DIR"
+[[ -f "$SEED_FILE"    ]] || error "seed sintético não encontrado em $SEED_FILE"
 [[ -f "$CONTROLE_VOOS_SEED_FILE" ]] || error "seed-local-controle-voos.sql não encontrado em $SCRIPT_DIR"
 
 # ── Reset ────────────────────────────────────────────────────
@@ -109,18 +112,16 @@ SQLITE_FILE=$(find "$LOCAL_STATE_DIR/v3/d1/miniflare-D1DatabaseObject" \
 
 [[ -n "$SQLITE_FILE" ]] || error "Arquivo SQLite local não encontrado após aplicar schema"
 
-# ── Aplicar seed diretamente via sqlite3 ────────────────────
-# (wrangler ignora PRAGMA foreign_keys=OFF — usamos sqlite3 diretamente)
-info "Aplicando seed de desenvolvimento..."
-if sqlite3 "$SQLITE_FILE" < "$SEED_FILE" 2>/dev/null; then
-  success "Seed aplicado"
-else
-  warn "Seed parcialmente aplicado (alguns registros já existiam — normal em re-runs)"
-fi
+record_local_migration() {
+  local migration_name="$1"
+  sqlite3 "$SQLITE_FILE" \
+    "INSERT OR IGNORE INTO d1_migrations (name, applied_at) VALUES ('$migration_name', datetime('now'));" \
+    >/dev/null 2>&1 || true
+}
 
 # ── Aplicar migrations incrementais críticas (módulos recentes) ─────────────
-info "Aplicando migrations incrementais do LMS..."
-for migration_file in "${LMS_MIGRATIONS[@]}"; do
+info "Aplicando migrations incrementais do app..."
+for migration_file in "${APP_MIGRATIONS[@]}"; do
   [[ -f "$migration_file" ]] || error "Migration não encontrada: $migration_file"
   if npx wrangler d1 execute "$DB_NAME" \
       --config "$DEV_CONFIG" \
@@ -128,8 +129,10 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
       --file "$migration_file" \
       >/dev/null 2>&1; then
     success "Migration aplicada: $(basename "$migration_file")"
+    record_local_migration "$(basename "$migration_file")"
   else
     warn "Migration aplicada com avisos: $(basename "$migration_file")"
+    record_local_migration "$(basename "$migration_file")"
   fi
 done
 
@@ -143,10 +146,20 @@ for migration_file in "${CONTROLE_VOOS_MIGRATIONS[@]}"; do
       --file "$migration_file" \
       >/dev/null 2>&1; then
     success "Migration aplicada: $(basename "$migration_file")"
+    record_local_migration "$(basename "$migration_file")"
   else
     warn "Migration aplicada com avisos: $(basename "$migration_file")"
+    record_local_migration "$(basename "$migration_file")"
   fi
 done
+
+# ── Aplicar seed diretamente via sqlite3 ────────────────────
+info "Aplicando seed sintético de desenvolvimento..."
+if sqlite3 "$SQLITE_FILE" < "$SEED_FILE" 2>/dev/null; then
+  success "Seed aplicado"
+else
+  warn "Seed parcialmente aplicado (alguns registros já existiam — normal em re-runs)"
+fi
 
 # ── Seed mínimo e demonstrativo de Controle de Voos N1 ───────────────────────
 info "Aplicando seed mínimo de Controle de Voos..."

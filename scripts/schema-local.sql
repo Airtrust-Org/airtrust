@@ -4,6 +4,20 @@ CREATE TABLE d1_migrations(
 		name       TEXT UNIQUE,
 		applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+CREATE TABLE IF NOT EXISTS habilitacoes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome TEXT NOT NULL UNIQUE,
+  descricao TEXT,
+  ativo INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT,
+  habilitacao_anterior_id INTEGER,
+  eh_renovada INTEGER DEFAULT 0,
+  renovada_em TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_habilitacoes_anterior ON habilitacoes(habilitacao_anterior_id);
+CREATE INDEX IF NOT EXISTS idx_habilitacoes_renovada ON habilitacoes(eh_renovada);
 CREATE TABLE funcoes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   codigo TEXT UNIQUE NOT NULL,
