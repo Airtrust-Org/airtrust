@@ -48,7 +48,7 @@ AND EXISTS (
   SELECT 1 FROM manobras_categorias WHERE nome = 'NOTECHS'
 )
 AND EXISTS (
-  SELECT 1 FROM manobras WHERE codigo = 'NOT-COM-01' AND empresa_id IS NOT NULL
+  SELECT 1 FROM manobras WHERE categoria = 'NOTECHS' AND empresa_id IS NOT NULL
 );
 
 -- ============================================================================
