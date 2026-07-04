@@ -294,7 +294,7 @@ const FICHAS_RESTANTES_MODELS = [
       { ordem: 15, codigo: '76-MOTCZ', nome: 'Falha de motor em cruzeiro', fase_voo: 'evento_motor', fap_refs: 'FAP05.2 H7.9', observacao: 'Item essencial de emergência' },
       { ordem: 16, codigo: 'S76-XFD-20', nome: 'Crossfeed total após falha de motor', fase_voo: 'procedimento', fap_refs: '-', observacao: 'Combustível pós-falha' },
       { ordem: 17, codigo: 'S76-AUT-70', nome: 'Autorotação', fase_voo: 'emergencia', fap_refs: 'FAP05.2 H7.1', observacao: 'Controle de energia' },
-      { ordem: 18, codigo: 'S76-LDP-00', nome: 'Pouso/decolagem em heliponto', fase_voo: 'pouso', fap_refs: 'FAP14 Offshore', observacao: 'Operação de heliponto' },
+      { ordem: 18, codigo: 'S76-EST-01', nome: 'Encerramento e procedimentos pós-voo', fase_voo: 'pos_pouso', fap_refs: 'FAP05.2 H4.5/C2.3', observacao: 'Fechamento' },
     ],
   },
   {
