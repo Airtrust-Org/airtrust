@@ -36,10 +36,16 @@ Nao deve tocar:
 - `LOFT` foi mantido nos nomes das 4 sessoes semestrais por decisao curricular/auditoria do owner
 - `A139-S-01/02`, `A139-S-02/02`, `SK76-S-01/02` e `SK76-S-02/02` agora possuem enquadramento LOFT explicito no documento-fonte
 - `LOFT` nao exige necessariamente codigo `LOFT-*`; o guardrail passa a validar `LOFT` por codigo aprovado ou por cenario estruturado (`Enquadramento LOFT`)
+- os 6 ciclos `IFR-noturno-offshore` foram renomeados para `IFR-emergencias` porque o conteudo tecnico real nao sustentava o rotulo anterior
+- `OPS-NOT-X1` foi criado como codigo atual para ilusão visual noturna / black hole effect nas 6 sessoes aprovadas, sem reativar `LOFT-NOT-*` ou `S76-LOFT-*`
+- `A139-AUT-03` foi criado para autorrotacao noturna dedicada AW139 em `A139-NOT-01` e `A139-S-01/02`
+- `INV-ETH-01` foi criado para rastrear postura etica do instrutor em `TRE-INST`; `EXA-PAD-01` permanece com rubricas internas separadas em `CRED-EXA`
+- `EXA-CND-01` passou a carregar nota documental de drift semantico: legado = planejamento; V6.2 = conducao; planejamento atual = `EXA-PLN-01`
 - `SK76-P-CHECK` usa `LOFT-CHK-*`
 - `A139-I-01/12` encerra em `A139-EST-01`
 - `SK76-I-10/12` encerra em `S76-FLU-01`
 - codigos `76-*` legados permanecem preservados quando ainda exigidos pelo documento
+- qualquer ocorrencia de `NOTECHS-*`, `INV-CRM-*` ou `EXA-NTS-*` dentro das 18 tecnicas deve falhar no loader/testes
 - **nenhuma limpeza/arquivamento de manobras sem uso nesta etapa** — a lista de manobras ativas sem uso (`docs/analysis/MANOBRAS_SEM_USO_EM_MODELOS_SESSAO_SNAPSHOT_20260705.md`) so deve ser recalculada depois deste fechamento do target 51, porque o denominador de "uso" muda quando os 10 modelos passam a ter `modelos_sessao_manobras`
 
 ## Por que sao 51 modelos

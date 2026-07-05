@@ -117,6 +117,48 @@ describe('simuladores matriz v6.2 data', () => {
     expect(credExa?.rows).toHaveLength(18);
     expect(treInst?.rows.some((row) => row.codigo.startsWith('INV-CRM-'))).toBe(false);
     expect(credExa?.rows.some((row) => row.codigo.startsWith('EXA-NTS-'))).toBe(false);
+    expect(treInst?.rows.some((row) => row.codigo === 'INV-ETH-01')).toBe(true);
+    expect(credExa?.sourceNotes.some((note) => /EXA-CND-01.*EXA-PLN-01/i.test(note))).toBe(true);
+    expect(credExa?.sourceNotes.some((note) => /rubricas internas separadas/i.test(note))).toBe(true);
+  });
+
+  it('renomeia os 6 ciclos IFR para IFR-emergencias quando nao ha conteudo noturno-offshore real', () => {
+    const data = loadSimuladoresMatrizV6Data();
+    const expectedNames = new Map([
+      ['A139-P-C1/IFR', 'Ciclo 1 / IFR-emergências'],
+      ['A139-P-C2/IFR', 'Ciclo 2 / IFR-emergências'],
+      ['A139-P-C3/IFR', 'Ciclo 3 / IFR-emergências'],
+      ['S76-P-C1/IFR', 'Ciclo 1 / IFR-emergências'],
+      ['S76-P-C2/IFR', 'Ciclo 2 / IFR-emergências'],
+      ['S76-P-C3/IFR', 'Ciclo 3 / IFR-emergências'],
+    ]);
+
+    for (const [modelCode, modelName] of expectedNames.entries()) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      expect(model?.modelName).toBe(modelName);
+    }
+  });
+
+  it('reintroduz black hole/ilusao visual noturna nas 6 sessoes aprovadas e autorrotacao noturna dedicada AW139 nas 2 sessoes aprovadas', () => {
+    const data = loadSimuladoresMatrizV6Data();
+    const blackHoleModels = [
+      'A139-NOT-01',
+      'A139-NOT-02',
+      'A139-S-01/02',
+      'S76-NOT-01',
+      'S76-NOT-02',
+      'SK76-S-01/02',
+    ];
+
+    for (const modelCode of blackHoleModels) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      expect(model?.rows.some((row) => row.codigo === 'OPS-NOT-X1')).toBe(true);
+    }
+
+    for (const modelCode of ['A139-NOT-01', 'A139-S-01/02']) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      expect(model?.rows.some((row) => row.codigo === 'A139-AUT-03')).toBe(true);
+    }
   });
 
   it('marca sessoes de check como avaliativas, sem contaminar sessoes de treino puro', () => {
