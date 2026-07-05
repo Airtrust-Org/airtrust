@@ -75,8 +75,8 @@ import {
 import { NOTECHS_ITENS } from '@/react-app/pages/simuladores/fichas/notechs';
 
 const A139_I_01_12_MANOBRAS: ModeloSessaoManobra[] = [
-  { ordem: 1, manobra_codigo: 'A139-CAB-01', manobra_nome: 'Cabine AW139 e power-up', tripulante: 'AB' },
-  { ordem: 2, manobra_codigo: 'A139-CKL-01', manobra_nome: 'Normal checklist', tripulante: 'AB' },
+  { ordem: 1, manobra_codigo: 'A139-CAB-01', manobra_nome: 'Cabine AW139 e power-up', tripulante: 'AB', observacoes: 'tipo_item=tecnica; fase_voo=pre_voo_cockpit; carater=treinamento; fap_refs=FAP05.2basico/normais; nota=Familiarizacao antes de qualquer manobra.; matriz_v6_modelo=A139-I-01/12' },
+  { ordem: 2, manobra_codigo: 'A139-CKL-01', manobra_nome: 'Normal checklist', tripulante: 'AB', observacoes: 'tipo_item=tecnica; fase_voo=pre_partida; carater=treinamento; matriz_v6_modelo=A139-I-01/12' },
   { ordem: 3, manobra_codigo: 'A139-CAS-01', manobra_nome: 'Leitura e reconhecimento basico de CAS', tripulante: 'AB' },
   { ordem: 4, manobra_codigo: 'A139-QRH-01', manobra_nome: 'Localizacao guiada de procedimento no QRH', tripulante: 'AB' },
   { ordem: 5, manobra_codigo: 'A139-AFC-01', manobra_nome: 'Engajamento e desconexao normal do AFCS', tripulante: 'AB' },
