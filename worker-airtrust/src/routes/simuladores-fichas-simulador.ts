@@ -103,7 +103,7 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
 
       if (modelo) {
         const m = await c.env.DB.prepare(
-          `SELECT m.codigo, COALESCE(m.nome, m.descricao) AS descricao, m.categoria
+          `SELECT m.codigo, COALESCE(m.nome, m.descricao) AS descricao, m.categoria, msm.observacoes
            FROM modelos_sessao_manobras msm
            INNER JOIN manobras m ON m.id = msm.manobra_id
            WHERE msm.modelo_id = ?
@@ -114,10 +114,11 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
            LIMIT 1`,
         )
           .bind(modelo.id, ordem, empresaId)
-          .first();
+          .first<{ codigo: string; descricao: string; categoria: string; observacoes: string | null }>();
 
         const codigo = m?.codigo || `ORD-${ordem}`;
-        const descricao = m?.descricao || `Manobra ordem ${ordem}`;
+        const descricaoOverride = String(m?.observacoes || '').trim();
+        const descricao = descricaoOverride || m?.descricao || `Manobra ordem ${ordem}`;
         const categoria = m?.categoria || 'GERAL';
 
         await c.env.DB.prepare(

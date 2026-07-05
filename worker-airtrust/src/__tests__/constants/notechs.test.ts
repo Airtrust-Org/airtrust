@@ -157,4 +157,54 @@ describe('buildOperationalFichaManobras', () => {
     expect(notechsMaterialized[0]?.codigo).toBe('NOTECHS-01');
     expect(notechsMaterialized.at(-1)?.codigo).toBe('NOTECHS-15');
   });
+
+  it('uses modelos_sessao_manobras.observacoes as a per-model text override when present', () => {
+    const tecnicas = [
+      {
+        codigo: 'A139-CKL-01',
+        nome: 'Normal checklist — preparação noturna',
+        descricao: 'Normal checklist — preparação noturna',
+        categoria: 'PROCEDIMENTO',
+        ordem: 1,
+        tripulante: 'AB',
+        observacoes: 'Normal checklist — preparação IFR semestral',
+      },
+      {
+        codigo: 'A139-EST-01',
+        nome: 'Estacionamento e corte pós-voo noturno',
+        descricao: 'Estacionamento e corte pós-voo noturno',
+        categoria: 'PROCEDIMENTO',
+        ordem: 2,
+        tripulante: 'AB',
+        observacoes: '   ',
+      },
+    ];
+
+    const [first, second] = buildOperationalFichaManobras(tecnicas);
+
+    expect(first?.nome).toBe('Normal checklist — preparação IFR semestral');
+    expect(first?.descricao).toBe('Normal checklist — preparação IFR semestral');
+    // Blank/whitespace-only override falls back to the catalog text unchanged.
+    expect(second?.nome).toBe('Estacionamento e corte pós-voo noturno');
+  });
+
+  it('ignora override de observacoes que contenha metadado interno de engenharia', () => {
+    const tecnicas = [
+      {
+        codigo: 'A139-CKL-01',
+        nome: 'Normal checklist',
+        descricao: 'Normal checklist',
+        categoria: 'PROCEDIMENTO',
+        ordem: 1,
+        tripulante: 'AB',
+        observacoes:
+          'tipo_item=tecnica; fase_voo=pre_partida; carater=treinamento; matriz_v6_modelo=A139-I-01/12',
+      },
+    ];
+
+    const [first] = buildOperationalFichaManobras(tecnicas);
+
+    expect(first?.nome).toBe('Normal checklist');
+    expect(first?.descricao).toBe('Normal checklist');
+  });
 });

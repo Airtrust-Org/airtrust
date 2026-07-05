@@ -658,6 +658,7 @@ async function loadFichaManobrasForModelo(
          m.descricao,
          m.categoria,
          msm.ordem,
+         msm.observacoes,
          COALESCE(msm.tripulante, 'AB') AS tripulante
        FROM modelos_sessao_manobras msm
        INNER JOIN manobras m
@@ -675,6 +676,7 @@ async function loadFichaManobrasForModelo(
       categoria: string | null;
       ordem: number;
       tripulante: string | null;
+      observacoes: string | null;
     }>();
 
   return buildOperationalFichaManobras(manobras.results || []);
