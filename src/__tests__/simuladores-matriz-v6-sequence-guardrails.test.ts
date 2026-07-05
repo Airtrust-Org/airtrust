@@ -121,10 +121,10 @@ describe('matriz v6.2 — guardrails especificos do documento final', () => {
 
     for (const model of data.models) {
       for (const row of model.rows) {
-        const haystack = norm(row.nome);
+        const haystack = norm(`${row.nome} ${row.fase_voo ?? ''}`);
         for (const token of FORBIDDEN_METADATA_TOKENS) {
           if (haystack.includes(norm(token))) {
-            offenders.push(`${model.modelCode}/${row.codigo}: ${row.nome}`);
+            offenders.push(`${model.modelCode}/${row.codigo}: ${row.nome} :: ${row.fase_voo ?? '-'}`);
           }
         }
       }
@@ -159,6 +159,20 @@ describe('matriz v6.2 — guardrails especificos do documento final', () => {
     expect(credExa?.rows.some((row) => row.codigo.startsWith('EXA-NTS-'))).toBe(false);
   });
 
+  it('nenhuma tecnica usa NOTECHS-*, INV-CRM-* ou EXA-NTS-* dentro das 18 linhas', () => {
+    const offenders: string[] = [];
+
+    for (const model of data.models) {
+      for (const row of model.rows) {
+        if (/^(NOTECHS-|INV-CRM-|EXA-NTS-)/.test(row.codigo)) {
+          offenders.push(`${model.modelCode}:${row.codigo}`);
+        }
+      }
+    }
+
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
   it('IFR basico nao aparece como bloco principal antes de A139-I-05/12 e SK76-I-05/12', () => {
     const a139I03 = data.models.find((item) => item.modelCode === 'A139-I-03/12');
     const a139I04 = data.models.find((item) => item.modelCode === 'A139-I-04/12');
@@ -188,5 +202,45 @@ describe('matriz v6.2 — guardrails especificos do documento final', () => {
       expect(model).toBeDefined();
       expect(model?.rows.find((row) => row.ordem === 18)?.codigo).toBe(terminalCode);
     }
+  });
+
+  it('A139-I-02/12 posiciona holding e navegacao offshore antes do bloco de aproximacao final', () => {
+    const model = data.models.find((item) => item.modelCode === 'A139-I-02/12');
+    expect(model).toBeDefined();
+
+    const hold = model?.rows.find((row) => row.codigo === 'A139-HLD-01');
+    const offshore = model?.rows.find((row) => row.codigo === 'OPS-OFF-X1');
+    const stabilized = model?.rows.find((row) => row.codigo === 'A139-STB-02');
+
+    expect((hold?.ordem ?? 99) < (stabilized?.ordem ?? 0)).toBe(true);
+    expect((offshore?.ordem ?? 99) < (stabilized?.ordem ?? 0)).toBe(true);
+  });
+
+  it('A139-I-05/12 termina o bloco IFR em missed approach, sem regressao didatica depois das aproximacoes', () => {
+    const model = data.models.find((item) => item.modelCode === 'A139-I-05/12');
+    expect(model).toBeDefined();
+
+    expect(model?.rows.find((row) => row.ordem === 18)?.codigo).toBe('OPS-APP-X3');
+    expect((model?.rows.find((row) => row.codigo === 'A139-CKL-01')?.ordem ?? 99) < 14).toBe(true);
+    expect((model?.rows.find((row) => row.codigo === 'A139-MOD-01')?.ordem ?? 99) < 14).toBe(true);
+  });
+
+  it('A139-I-08/12 move landing gear emergency antes do bloco final de autorrotacao', () => {
+    const model = data.models.find((item) => item.modelCode === 'A139-I-08/12');
+    expect(model).toBeDefined();
+
+    const gear = model?.rows.find((row) => row.codigo === 'WAR-GER-27');
+    const auto = model?.rows.find((row) => row.codigo === 'FLY-BAS-17');
+    expect((gear?.ordem ?? 99) < (auto?.ordem ?? 0)).toBe(true);
+  });
+
+  it('A139-P-C2/IFR reordena landing gear emergency antes do bloco final de aproximacao IFR', () => {
+    const model = data.models.find((item) => item.modelCode === 'A139-P-C2/IFR');
+    expect(model).toBeDefined();
+
+    const gear = model?.rows.find((row) => row.codigo === 'WAR-GER-27');
+    const nonPrecision = model?.rows.find((row) => row.codigo === 'OPS-APP-X2');
+    expect((gear?.ordem ?? 99) < (nonPrecision?.ordem ?? 0)).toBe(true);
+    expect(model?.rows.find((row) => row.ordem === 18)?.codigo).toBe('OPS-APP-X3');
   });
 });
