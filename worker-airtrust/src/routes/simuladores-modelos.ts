@@ -11,6 +11,10 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import {
+  sanitizeModeloSessaoObservacoesForStorage,
+  validateModeloSessaoObservacoesInput,
+} from '../../../src/shared/simuladores/modelos-sessao-observacoes';
+import {
   TipoSessaoSchema,
   ModeloSessaoSchema,
   requireAdminForDelete,
@@ -25,6 +29,24 @@ app.use('*', auth());
 
 function getEmpresaIdFromRequest(c: Parameters<typeof getTenantContext>[0]): number {
   return getTenantContext(c).empresaId;
+}
+
+function validateObservacoesBatchInput(
+  manobras: Array<{ observacoes?: unknown }>,
+): { ok: true; values: Array<string | null> } | { ok: false; error: string } {
+  const values: Array<string | null> = [];
+  for (let index = 0; index < manobras.length; index++) {
+    const validation = validateModeloSessaoObservacoesInput(manobras[index]?.observacoes);
+    if (!validation.ok) {
+      return {
+        ok: false,
+        error: `manobras[${index}].${validation.error}`,
+      };
+    }
+    values.push(validation.value);
+  }
+
+  return { ok: true, values };
 }
 
 async function normalizeChecksIdsModelo(
@@ -858,6 +880,12 @@ app.post('/modelos-sessao', async (c) => {
       checks_ids,
       manobras,
     } = parsed.data;
+    const observacoesValidation = validateObservacoesBatchInput(
+      manobras as Array<{ observacoes?: unknown }>,
+    );
+    if (!observacoesValidation.ok) {
+      return c.json({ success: false, error: observacoesValidation.error }, 400);
+    }
     let checksIdsNormalizados: number[] = [];
     try {
       checksIdsNormalizados = await normalizeChecksIdsModelo(
@@ -967,7 +995,7 @@ app.post('/modelos-sessao', async (c) => {
             m.manobra_id,
             m.ordem || i + 1,
             m.obrigatoria !== undefined ? m.obrigatoria : 1,
-            m.observacoes || null,
+            observacoesValidation.values[i] ?? null,
           )
           .run();
       }
@@ -1024,6 +1052,13 @@ app.post('/modelos-sessao/:id/manobras', async (c) => {
     }
 
     // Inserir novas manobras
+    const observacoesValidation = validateObservacoesBatchInput(
+      manobras as Array<{ observacoes?: unknown }>,
+    );
+    if (!observacoesValidation.ok) {
+      return c.json({ success: false, error: observacoesValidation.error }, 400);
+    }
+
     let inseridas = 0;
     for (let i = 0; i < manobras.length; i++) {
       const m = manobras[i];
@@ -1053,7 +1088,7 @@ app.post('/modelos-sessao/:id/manobras', async (c) => {
           m.manobra_id,
           m.ordem || i + 1,
           m.obrigatoria !== undefined ? m.obrigatoria : 1,
-          m.observacoes || null,
+          observacoesValidation.values[i] ?? null,
           tripulanteVal,
         )
         .run();
@@ -1190,7 +1225,7 @@ app.post('/modelos-sessao/:id/clonar', async (c) => {
           manobra.manobra_id,
           manobra.ordem,
           manobra.obrigatoria,
-          manobra.observacoes || null,
+          sanitizeModeloSessaoObservacoesForStorage(manobra.observacoes),
           manobra.tripulante || 'AB',
         )
         .run();
@@ -1419,7 +1454,17 @@ app.post('/modelos-sessao/importar-relacoes', async (c) => {
         .bind(modelo.id, manobra.id)
         .first<{ id: number }>();
 
-      const observacoes = normalizeText(row.observacoes);
+      const observacoesValidation = validateModeloSessaoObservacoesInput(row.observacoes);
+      if (!observacoesValidation.ok) {
+        resultado.resumo.erros++;
+        resultado.detalhes.erros.push({
+          linha,
+          motivo: observacoesValidation.error,
+        });
+        continue;
+      }
+
+      const observacoes = observacoesValidation.value;
       const tripulante = ['A', 'B', 'AB'].includes(String(row.tripulante || '').toUpperCase())
         ? String(row.tripulante).toUpperCase()
         : 'AB';

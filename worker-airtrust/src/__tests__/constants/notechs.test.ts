@@ -137,6 +137,14 @@ describe('getMissingNotechsItens / hasCompleteNotechsItens', () => {
 });
 
 describe('buildOperationalFichaManobras', () => {
+  const blockedObservacoes = [
+    'tipo_item=tecnica; fase_voo=pre_partida; carater=treinamento; matriz_v6_modelo=A139-I-01/12',
+    'ver sourceNotes do loader',
+    'prompt interno do agente',
+    'debug RBAC role tenant',
+    '{"metadata":"internal"}',
+  ];
+
   it('keeps the first 18 técnicas by ordem and appends the 15 fixed NOTECHS rows', () => {
     const tecnicas = Array.from({ length: 22 }, (_, index) => ({
       codigo: `MAN-${index + 1}`,
@@ -188,23 +196,25 @@ describe('buildOperationalFichaManobras', () => {
     expect(second?.nome).toBe('Estacionamento e corte pós-voo noturno');
   });
 
-  it('ignora override de observacoes que contenha metadado interno de engenharia', () => {
-    const tecnicas = [
-      {
-        codigo: 'A139-CKL-01',
-        nome: 'Normal checklist',
-        descricao: 'Normal checklist',
-        categoria: 'PROCEDIMENTO',
-        ordem: 1,
-        tripulante: 'AB',
-        observacoes:
-          'tipo_item=tecnica; fase_voo=pre_partida; carater=treinamento; matriz_v6_modelo=A139-I-01/12',
-      },
-    ];
+  it.each(blockedObservacoes)(
+    'ignora override de observacoes que contenha metadado interno: %s',
+    (observacoes) => {
+      const tecnicas = [
+        {
+          codigo: 'A139-CKL-01',
+          nome: 'Normal checklist',
+          descricao: 'Normal checklist',
+          categoria: 'PROCEDIMENTO',
+          ordem: 1,
+          tripulante: 'AB',
+          observacoes,
+        },
+      ];
 
-    const [first] = buildOperationalFichaManobras(tecnicas);
+      const [first] = buildOperationalFichaManobras(tecnicas);
 
-    expect(first?.nome).toBe('Normal checklist');
-    expect(first?.descricao).toBe('Normal checklist');
-  });
+      expect(first?.nome).toBe('Normal checklist');
+      expect(first?.descricao).toBe('Normal checklist');
+    },
+  );
 });

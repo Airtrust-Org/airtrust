@@ -12,6 +12,14 @@ import {
 } from '../fichaModeloPdf';
 
 describe('fichaModeloPdf', () => {
+  const blockedObservacoes = [
+    'tipo_item=tecnica; fase_voo=pre_partida',
+    'sourceNotes do loader',
+    'prompt interno',
+    'debug RBAC role tenant',
+    '{"metadata":"internal"}',
+  ];
+
   it('monta a ficha modelo em branco com preview de 18 técnicas + 15 NOTECHS', () => {
     const dados = buildFichaModeloPdfData(
       {
@@ -80,6 +88,29 @@ describe('fichaModeloPdf', () => {
     expect(dados.manobras[0].observacoes).toBe('');
     expect(dados.manobras[1].nome).toBe('Estacionamento e corte pós-voo noturno');
   });
+
+  it.each(blockedObservacoes)(
+    'ignora override com metadado interno no preview/PDF: %s',
+    (observacoes) => {
+      const dados = buildFichaModeloPdfData(
+        { id: 1, codigo: 'A139-REQ-01', nome: 'Reaquisição de Experiência Recente' },
+        [
+          {
+            ordem: 1,
+            manobra_codigo: 'A139-CKL-01',
+            manobra_nome: 'Normal checklist',
+            manobra_descricao: 'Normal checklist',
+            observacoes,
+            tripulante: 'AB',
+          },
+        ],
+      );
+
+      expect(dados.manobras[0].nome).toBe('Normal checklist');
+      expect(dados.manobras[0].descricao).toBe('Normal checklist');
+      expect(dados.manobras[0].observacoes).toBe('');
+    },
+  );
 
   it('gera nome de arquivo estável e sanitizado', () => {
     const fileName = buildFichaModeloPdfFileName({
