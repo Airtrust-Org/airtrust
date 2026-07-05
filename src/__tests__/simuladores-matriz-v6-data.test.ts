@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import {
   RPEA_PENDING_GAPS,
@@ -6,6 +8,9 @@ import {
   loadSimuladoresMatrizV6Data,
   normalizeRpeaAlias,
 } from '../../scripts/maintenance/lib/simuladores-matriz-v6-data.mjs';
+
+const ROOT = path.resolve(import.meta.dirname, '..', '..');
+const ACCEPTANCE_MATRIX = path.join(ROOT, 'docs', 'analysis', 'matriz-v6-2-acceptance-matrix-51-modelos.md');
 
 const EXPECTED_MODELS = [
   'A139-I-01/12',
@@ -175,6 +180,52 @@ describe('simuladores matriz v6.2 data', () => {
     for (const row of model?.rows ?? []) {
       expect(row.codigo.startsWith('LOFT-CHK-')).toBe(true);
       expect(row.codigo.startsWith('S76-LOFT-')).toBe(false);
+    }
+  });
+
+  it('sessoes com LOFT no nome mantem evidencia LOFT por codigo aprovado ou enquadramento estruturado', () => {
+    const data = loadSimuladoresMatrizV6Data();
+    const loftModels = data.models.filter((item) => /loft/i.test(item.modelName));
+
+    expect(loftModels.length).toBeGreaterThan(0);
+    for (const model of loftModels) {
+      expect(model.loftEvidence, `sessao LOFT sem evidencia: ${model.modelCode}`).toBe(true);
+    }
+
+    const semestralLoft = ['A139-S-01/02', 'A139-S-02/02', 'SK76-S-01/02', 'SK76-S-02/02'];
+    for (const modelCode of semestralLoft) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      expect(model?.loftScenario, `sessao semestral sem bloco LOFT estruturado: ${modelCode}`).toBe(true);
+    }
+  });
+
+  it('reaquisicoes nao carregam rotulo noturno indevido nas descricoes e fases', () => {
+    const data = loadSimuladoresMatrizV6Data();
+    const reqCodes = ['A139-REQ-01', 'S76-REQ-01'];
+
+    for (const modelCode of reqCodes) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      expect(model).toBeDefined();
+      for (const row of model?.rows ?? []) {
+        expect(row.nome).not.toMatch(/preparaç[aã]o noturna|p[oó]s-voo noturno|pouso normal noturno|aproximaç[aã]o normal visual noturna/i);
+        expect(row.fase_voo ?? '').not.toMatch(/p[oó]s-voo noturno/i);
+      }
+    }
+  });
+
+  it('matriz de aceite registra o achado LOFT, a decisao do owner e a acao corretiva nas 4 sessoes semestrais', () => {
+    const matrix = fs.readFileSync(ACCEPTANCE_MATRIX, 'utf8');
+
+    expect(matrix).toMatch(/risco de [`'"]?LOFT no nome sem evid[eê]ncia estrutural/i);
+    expect(matrix).toMatch(/decis[aã]o do owner: manter LOFT/i);
+    expect(matrix).toMatch(/a[cç][aã]o tomada: enquadramento LOFT estruturado/i);
+
+    for (const modelCode of ['A139-S-01/02', 'A139-S-02/02', 'SK76-S-01/02', 'SK76-S-02/02']) {
+      const row = matrix.split('\n').find((line) => line.startsWith('|') && line.includes(`\`${modelCode}\``));
+      expect(row, `linha ausente na matriz: ${modelCode}`).toBeDefined();
+      expect(row).toMatch(/sim \(com bloco LOFT estruturado\)/i);
+      expect(row).toMatch(/GO/i);
+      expect(row).toMatch(/achado LOFT documentado; owner manteve o nome; enquadramento estruturado adicionado/i);
     }
   });
 

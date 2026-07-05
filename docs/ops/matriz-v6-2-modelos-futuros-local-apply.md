@@ -33,6 +33,9 @@ Nao deve tocar:
 - `A139-NOT-01`, `A139-NOT-02`, `A139-REQ-01`, `A139-S-01/02`, `A139-S-02/02`, `S76-NOT-01`, `S76-NOT-02`, `S76-REQ-01`, `SK76-S-01/02` e `SK76-S-02/02` entram no mesmo padrao (Decisao 15), preservando as 18 tecnicas ja documentadas em `docs/MODELOS_SESSAO_MANOBRAS.md`
 - `SK76-S-02/02` usa `S76-LGB-47` (nao `S76-LGE-44`), Decisao 16
 - `S76-NOT-02` termina em `S76-FLU-01`, sem `S76-EST-01` redundante, Decisao 17
+- `LOFT` foi mantido nos nomes das 4 sessoes semestrais por decisao curricular/auditoria do owner
+- `A139-S-01/02`, `A139-S-02/02`, `SK76-S-01/02` e `SK76-S-02/02` agora possuem enquadramento LOFT explicito no documento-fonte
+- `LOFT` nao exige necessariamente codigo `LOFT-*`; o guardrail passa a validar `LOFT` por codigo aprovado ou por cenario estruturado (`Enquadramento LOFT`)
 - `SK76-P-CHECK` usa `LOFT-CHK-*`
 - `A139-I-01/12` encerra em `A139-EST-01`
 - `SK76-I-10/12` encerra em `S76-FLU-01`
