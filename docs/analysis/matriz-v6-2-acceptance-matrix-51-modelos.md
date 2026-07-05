@@ -15,6 +15,9 @@
 - todos os `51` modelos do catalogo operacional agora refletem o loader V6.2 final (Decisao 15, `docs/analysis/airtrust_matriz_v6_2_todas_sessoes_manobras_final.md`);
 - os `10` modelos antes marcados `corrigir` (noturno, reaquisicao e semestral AW139/SK76) foram incorporados preservando as `18` tecnicas ja documentadas operacionalmente, sem inventar codigo novo;
 - `SK76-S-02/02` recebeu a correcao da Decisao 16 (`S76-LGE-44` -> `S76-LGB-47`) e `S76-NOT-02` recebeu a correcao da Decisao 17 (terminal unico `S76-FLU-01`, sem `S76-EST-01` redundante);
+- a auditoria independente encontrou risco de LOFT no nome sem evidencia estrutural nas sessoes `A139-S-01/02`, `A139-S-02/02`, `SK76-S-01/02` e `SK76-S-02/02`;
+- decisao do owner: manter LOFT nos nomes por necessidade curricular/auditoria, sem mascarar o achado;
+- acao tomada: enquadramento LOFT estruturado foi adicionado ao documento-fonte, e o guardrail passa a validar LOFT por codigo aceito ou por bloco Enquadramento LOFT;
 - esta matriz fecha a rastreabilidade e a conversao dos `51` modelos para o pacote `18 tecnicas + 15 NOTECHS`;
 - a lista de manobras ativas sem uso (`docs/analysis/MANOBRAS_SEM_USO_EM_MODELOS_SESSAO_SNAPSHOT_20260705.md`) permanece intocada nesta PR e so deve ser recalculada apos este fechamento.
 
@@ -57,8 +60,8 @@
 | `A139-P-LOFT/CHECK` | LOFT Check | Periódico | AW139 | 18 | 15 | target 41 corrigido | sim | sim | sim | sim | sim | GO | mantido no target 41 com 18 técnicas e 15 NOTECHS fora das técnicas |
 | `A139-P-LOFT/OFFSHORE` | LOFT Offshore | Periódico | AW139 | 18 | 15 | target 41 corrigido | sim | sim | sim | sim | sim | GO | mantido no target 41 com 18 técnicas e 15 NOTECHS fora das técnicas |
 | `A139-REQ-01` | AW139 - REAQUISIÇÃO DE EXPERIÊNCIA RECENTE | Periódico | AW139 | 18 | 15 | target 51 fechado | sim | sim | sim | não aplicável | sim | GO | incorporado ao target 51 (Decisão 15); 18 técnicas preservadas do snapshot operacional |
-| `A139-S-01/02` | AW139 - SEMESTRAL - 01/02: LOFT e OPERAÇÃO NOTURNA | Semestral | AW139 | 18 | 15 | target 51 fechado | sim | sim | sim | não aplicável | sim | GO | incorporado ao target 51 (Decisão 15); 18 técnicas preservadas do snapshot operacional |
-| `A139-S-02/02` | AW139 - SEMESTRAL - 02/02: LOFT e CHECK DE IFR | Semestral | AW139 | 18 | 15 | target 51 fechado | sim | sim | sim | sim | sim | GO | incorporado ao target 51 (Decisão 15); 18 técnicas preservadas do snapshot operacional |
+| `A139-S-01/02` | AW139 - SEMESTRAL - 01/02: LOFT e OPERAÇÃO NOTURNA | Semestral | AW139 | 18 | 15 | target 51 fechado | sim (com bloco LOFT estruturado) | sim | sim | não aplicável | sim | GO | achado LOFT documentado; owner manteve o nome; enquadramento estruturado adicionado; sequência fechada com pouso e corte |
+| `A139-S-02/02` | AW139 - SEMESTRAL - 02/02: LOFT e CHECK DE IFR | Semestral | AW139 | 18 | 15 | target 51 fechado | sim (com bloco LOFT estruturado) | sim | sim | sim | sim | GO | achado LOFT documentado; owner manteve o nome; enquadramento estruturado adicionado; caráter avaliativo LOFT explicitado |
 | `S76-NOT-01` | SK76 - TREINAMENTO NOTURNO - ONSHORE | Periódico | SK76 | 18 | 15 | target 51 fechado | sim | sim | sim | não aplicável | sim | GO | incorporado ao target 51 (Decisão 15); 18 técnicas preservadas do snapshot operacional |
 | `S76-NOT-02` | SK76 - TREINAMENTO NOTURNO - OFFSHORE | Periódico | SK76 | 18 | 15 | target 51 fechado | sim | sim | sim | sim | sim | GO | incorporado ao target 51 (Decisão 15); corrigido pela Decisão 17 (terminal único `S76-FLU-01`, sem `S76-EST-01` redundante) |
 | `S76-P-C1/IFR` | Ciclo 1 / IFR-noturno-offshore | Periódico | SK76 | 18 | 15 | target 41 corrigido | sim | sim | sim | sim | sim | GO | mantido no target 41 com 18 técnicas e 15 NOTECHS fora das técnicas |
@@ -81,8 +84,8 @@
 | `SK76-I-11/12` | LOFT | Inicial | SK76 | 18 | 15 | target 41 corrigido | sim | sim | sim | sim | sim | GO | mantido no target 41 com 18 técnicas e 15 NOTECHS fora das técnicas |
 | `SK76-I-12/12` | LOFT Check | Inicial | SK76 | 18 | 15 | target 41 corrigido | sim | sim | sim | sim | sim | GO | mantido no target 41 com 18 técnicas e 15 NOTECHS fora das técnicas |
 | `SK76-P-CHECK` | LOFT/check | Periódico | SK76 | 18 | 15 | target 41 corrigido | sim | sim | sim | sim | sim | GO | mantido no target 41 com 18 técnicas e 15 NOTECHS fora das técnicas |
-| `SK76-S-01/02` | SK76 - SEMESTRAL - 01/02: LOFT e OPERAÇÃO NOTURNA | Semestral | SK76 | 18 | 15 | target 51 fechado | sim | sim | sim | não aplicável | sim | GO | incorporado ao target 51 (Decisão 15); 18 técnicas preservadas do snapshot operacional |
-| `SK76-S-02/02` | SK76 - SEMESTRAL - 02/02: LOFT e CHECK DE IFR | Semestral | SK76 | 18 | 15 | target 51 fechado | sim | sim | sim | sim | sim | GO | incorporado ao target 51 (Decisão 15); corrigido pela Decisão 16 (`S76-LGE-44` → `S76-LGB-47`) |
+| `SK76-S-01/02` | SK76 - SEMESTRAL - 01/02: LOFT e OPERAÇÃO NOTURNA | Semestral | SK76 | 18 | 15 | target 51 fechado | sim (com bloco LOFT estruturado) | sim | sim | não aplicável | sim | GO | achado LOFT documentado; owner manteve o nome; enquadramento estruturado adicionado; perfil OEI substitui fechamento solto por continuidade de cenário |
+| `SK76-S-02/02` | SK76 - SEMESTRAL - 02/02: LOFT e CHECK DE IFR | Semestral | SK76 | 18 | 15 | target 51 fechado | sim (com bloco LOFT estruturado) | sim | sim | sim | sim | GO | achado LOFT documentado; owner manteve o nome; enquadramento estruturado adicionado; corrigido pela Decisão 16 (`S76-LGE-44` → `S76-LGB-47`) e encerrado com pouso/pós-voo |
 
 ## Conclusao operacional
 

@@ -177,6 +177,8 @@ function buildModels() {
     models: sections.map((section) => {
       const aircraft = inferAircraft(section.modelCode);
       const isEvaluative = /check/i.test(section.modelName) || section.notes.some((note) => /avaliativ/i.test(note));
+      const loftByCode = section.table.some((row) => /^LOFT-(CHK|OFF|NOT)-/.test(row[1]));
+      const loftByStructuredNote = section.notes.some((note) => /enquadramento loft/i.test(note));
 
       return {
         modelCode: section.modelCode,
@@ -185,6 +187,9 @@ function buildModels() {
         kind: inferKind(section.modelCode),
         sourceFile,
         sourceHeading: `${section.modelCode} — ${section.modelName}`,
+        sourceNotes: [...section.notes],
+        loftScenario: loftByStructuredNote,
+        loftEvidence: loftByCode || loftByStructuredNote,
         rows: section.table.map((row) => ({
           ordem: Number(row[0]),
           codigo: row[1],
@@ -214,6 +219,9 @@ function validateModels(models) {
     }
 
     const codes = model.rows.map((row) => row.codigo);
+    if (/loft/i.test(model.modelName) && !model.loftEvidence) {
+      issues.push(`loft_without_evidence:${model.modelCode}`);
+    }
     if (new Set(codes).size !== codes.length) {
       issues.push(`duplicate_codes:${model.modelCode}`);
     }

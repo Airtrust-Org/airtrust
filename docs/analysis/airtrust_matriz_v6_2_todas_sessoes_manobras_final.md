@@ -666,13 +666,13 @@ Exceções aceitas:
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
-| 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist |
+| 1 | A139-CKL-01 | Normal checklist — preparação operacional | Pré-voo / checklist |
 | 2 | FLY-BAS-X3 | Hover e taxi | Hover / taxi |
 | 3 | OPS-NRM-X2 | Decolagens e pousos | Decolagem |
 | 4 | FLY-BAS-X1 | Controle geral VFR | Cruzeiro visual |
 | 5 | A139-PWR-01 | Controle de potência e parâmetros | Cruzeiro / perfil |
 | 6 | OPS-NRM-X1 | Procedimentos normais | Normalização |
-| 7 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
+| 7 | A139-ARN-01 | Arremetida com NVG/NVIS | Arremetida |
 | 8 | OPS-NAV-X2 | Uso AP e automação | Automação |
 | 9 | FLY-BAS-X2 | Controle geral IFR | IFR básico |
 | 10 | OPS-APP-X1 | Precision approach | Aproximação IFR |
@@ -683,9 +683,21 @@ Exceções aceitas:
 | 15 | WAR-FIR-21 | Engine fire | Fogo motor |
 | 16 | FLY-BAS-17 | Autorrotação | Autorrotação |
 | 17 | WAR-GER-27 | Landing gear emergency | Trem / pouso |
-| 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
+| 18 | A139-EST-01 | Estacionamento e corte pós-voo | Pós-pouso |
 
 ## A139-S-01/02 — Semestral 01/02: LOFT e Operação Noturna
+
+> **Enquadramento LOFT:** esta sessão deve ser conduzida como cenário operacional contínuo, não como execução isolada de manobras. As 18 técnicas abaixo são os pontos avaliáveis do cenário. NOTECHS permanecem fora da lista técnica.
+> **Tipo de cenário:** LOFT semestral.
+> **Objetivo da sessão:** verificar manutenção de proficiência em missão noturna com deterioração progressiva de sistemas, tomada de decisão, reconfiguração e retorno seguro para pouso e encerramento.
+> **Narrativa operacional:** a tripulação inicia uma missão noturna rotineira, estabiliza a automação e a navegação, recebe degradações elétricas e de combustível em rota, administra falha de motor e conduz a recuperação do perfil até a aproximação final e o encerramento da sessão.
+> **Ponto de partida:** pré-voo, checklist, hover/taxi e decolagem noturna para missão local.
+> **Evento principal:** falha de motor em rota com necessidade de perfil OEI noturno e replanejamento do retorno.
+> **Evento secundário:** degradações elétricas progressivas e necessidade de QRH/reconfiguração antes da aproximação final.
+> **Decisão operacional esperada:** decidir o retorno/diversão, priorizar QRH e automação, estabilizar a aeronave e conduzir uma aproximação segura antes do pouso e corte.
+> **Critério de encerramento:** pouso normal após reconfiguração, seguido de estacionamento e corte pós-voo.
+> **Observação técnica:** as 18 linhas abaixo são itens técnicos avaliáveis dentro do cenário LOFT; a condução continua sendo por cenário, não por manobras soltas.
+> **Observação NOTECHS:** NOTECHS são avaliados fora das 18 técnicas, pelo mecanismo global da matriz.
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -701,15 +713,26 @@ Exceções aceitas:
 | 10 | WAR-OUT-15 | Engine failure | Motor |
 | 11 | CAU-LIC-60 | OEI limit timer | OEI |
 | 12 | A139-OEI-01 | Perfil OEI noturno | Perfil OEI |
-| 13 | OPS-APP-X1 | Precision approach | Aproximação noturna |
-| 14 | OPS-APP-X3 | Missed approach | Missed approach |
-| 15 | OPS-NRM-X1 | Procedimentos normais | Normalização |
-| 16 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
-| 17 | WAR-GEN-11 | Dual DC GEN failure | Elétrico avançado |
+| 13 | WAR-GEN-11 | Dual DC GEN failure | Elétrico avançado |
+| 14 | OPS-APP-X1 | Precision approach | Aproximação noturna |
+| 15 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
+| 16 | OPS-NRM-X1 | Procedimentos normais | Reconfiguração para nova aproximação |
+| 17 | A139-PNO-01 | Pouso normal | Pouso |
 | 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
 
 ## A139-S-02/02 — Semestral 02/02: LOFT e Check de IFR
 
+> **Enquadramento LOFT:** esta sessão deve ser conduzida como cenário operacional contínuo, não como execução isolada de manobras. As 18 técnicas abaixo são os pontos avaliáveis do cenário. NOTECHS permanecem fora da lista técnica.
+> **Tipo de cenário:** LOFT semestral.
+> **Objetivo da sessão:** avaliar proficiência IFR em cenário contínuo, sem introduzir conteúdo novo, confirmando disciplina de automação, navegação, anormais e encerramento seguro de uma chegada monomotora IFR.
+> **Narrativa operacional:** a tripulação decola para uma missão IFR semestral, conduz navegação e espera, absorve degradações de automação e sensores, executa aproximações e conclui o cenário com pouso monomotor IFR e pós-voo.
+> **Ponto de partida:** preparação IFR completa, briefing e saída por navegação publicada.
+> **Evento principal:** degradações de AFCS/FMS/AHRS durante a sequência IFR, exigindo reconfiguração sem perda de controle ou consciência situacional.
+> **Evento secundário:** falha de motor próxima ao segmento final, levando a pouso monomotor IFR já dentro do envelope treinado.
+> **Decisão operacional esperada:** manter o caráter avaliativo, sem ensinar conteúdo novo, decidir continuidade, arremetida ou conclusão conforme critérios estabilizados e encerrar a missão com pouso monomotor seguro.
+> **Critério de encerramento:** pouso monomotor IFR seguido de estacionamento e corte pós-voo.
+> **Observação técnica:** as 18 linhas abaixo são itens técnicos avaliáveis dentro do cenário LOFT; a condução continua sendo por cenário, não por manobras soltas.
+> **Observação NOTECHS:** NOTECHS são avaliados fora das 18 técnicas, pelo mecanismo global da matriz.
 > Sessão avaliativa (`carater=avaliativo` em metadados internos; não exibir na ficha final).
 
 | # | Código | Item técnico | Fase |
@@ -1240,16 +1263,16 @@ Exceções aceitas:
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
-| 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
+| 1 | S76-CKL-01 | Checklist e preparação operacional | Pré-voo / checklist |
 | 2 | S76-NVF-00 | Procedimentos Normais VFR | Normal / cruzeiro |
 | 3 | S76-HOV-00 | Controle Geral VFR — Hover e Táxi | Hover / taxi |
-| 4 | S76-DNR-01 | Decolagem normal noturna | Decolagem |
-| 5 | S76-SUB-01 | Subida controlada noturna | Subida |
+| 4 | S76-DNR-01 | Decolagem normal | Decolagem |
+| 5 | S76-SUB-01 | Subida controlada | Subida |
 | 6 | S76-PWR-01 | Controle de potência e torque | Cruzeiro / perfil |
 | 7 | S76-CRV-01 | Curvas e controle de atitude | Manobras visuais |
-| 8 | S76-APN-01 | Aproximação normal visual noturna | Aproximação |
-| 9 | S76-PNO-01 | Pouso normal noturno | Pouso |
-| 10 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 8 | S76-APN-01 | Aproximação normal visual | Aproximação |
+| 9 | S76-PNO-01 | Pouso normal | Pouso |
+| 10 | S76-ARN-01 | Arremetida | Arremetida |
 | 11 | S76-TDP-00 | Decolagem Classe 2 — Helideck (TDP) | Decolagem offshore |
 | 12 | S76-NDT-00 | Decolagem noturna | Decolagem noturna |
 | 13 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
@@ -1257,9 +1280,21 @@ Exceções aceitas:
 | 15 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
 | 16 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
 | 17 | S76-AUT-70 | Autorotação | Autorrotação |
-| 18 | S76-EST-01 | Encerramento pós-voo noturno | Pós-pouso |
+| 18 | S76-EST-01 | Encerramento pós-voo | Pós-pouso |
 
 ## SK76-S-01/02 — Semestral 01/02: LOFT e Operação Noturna
+
+> **Enquadramento LOFT:** esta sessão deve ser conduzida como cenário operacional contínuo, não como execução isolada de manobras. As 18 técnicas abaixo são os pontos avaliáveis do cenário. NOTECHS permanecem fora da lista técnica.
+> **Tipo de cenário:** LOFT semestral.
+> **Objetivo da sessão:** verificar a manutenção da proficiência noturna SK76 em cenário contínuo, com panes progressivas, gerenciamento OEI e retorno seguro à base.
+> **Narrativa operacional:** a tripulação decola à noite para missão local, estabiliza o perfil visual, recebe falhas elétricas e depois falha de motor em cruzeiro, conduz o perfil OEI, voa uma sequência de aproximações e encerra com pouso e pós-voo.
+> **Ponto de partida:** checklist, hover/taxi, decolagem e subida noturna para circuito/missão curta.
+> **Evento principal:** falha de motor durante o cruzeiro noturno, com necessidade de gerenciamento de combustível e condução OEI.
+> **Evento secundário:** degradações elétricas anteriores ao evento principal, exigindo monitoramento, QRH implícito e priorização da automação básica.
+> **Decisão operacional esperada:** replanejar a recuperação noturna, administrar o perfil OEI, selecionar a melhor aproximação e concluir o pouso com encerramento formal da sessão.
+> **Critério de encerramento:** pouso normal após a sequência de recuperação e estacionamento pós-voo.
+> **Observação técnica:** as 18 linhas abaixo são itens técnicos avaliáveis dentro do cenário LOFT; a condução continua sendo por cenário, não por manobras soltas.
+> **Observação NOTECHS:** NOTECHS são avaliados fora das 18 técnicas, pelo mecanismo global da matriz.
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1274,7 +1309,7 @@ Exceções aceitas:
 | 9 | 76-FALFF | Falha de alimentação — feeder / bateria no nariz | Elétrico |
 | 10 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
 | 11 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
-| 12 | S76-AUT-70 | Autorotação | Autorrotação |
+| 12 | S76-OEI-01 | Perfil OEI noturno | Perfil OEI |
 | 13 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
 | 14 | S76-RNV-00 | Aproximação RNAV (GPS) | Aproximação IFR |
 | 15 | S76-ARN-01 | Arremetida noturna | Arremetida |
@@ -1284,27 +1319,38 @@ Exceções aceitas:
 
 ## SK76-S-02/02 — Semestral 02/02: LOFT e Check de IFR
 
+> **Enquadramento LOFT:** esta sessão deve ser conduzida como cenário operacional contínuo, não como execução isolada de manobras. As 18 técnicas abaixo são os pontos avaliáveis do cenário. NOTECHS permanecem fora da lista técnica.
+> **Tipo de cenário:** LOFT semestral.
+> **Objetivo da sessão:** avaliar a proficiência IFR SK76 em cenário contínuo de linha, com anormais progressivas e encerramento formal da missão sem introdução de conteúdo novo.
+> **Narrativa operacional:** a tripulação inicia uma missão IFR semestral, conduz a navegação e os briefings, absorve cautions de transmissão, combustível e rotor, administra falha de motor e extensão de trem de emergência, executa arremetida e conclui a recuperação com pouso e pós-voo.
+> **Ponto de partida:** preparação IFR, briefing, partida e entrada na rota publicada.
+> **Evento principal:** falha de motor em cruzeiro com necessidade de crossfeed, gerenciamento de energia e decisão de continuidade da sequência avaliativa para pouso seguro.
+> **Evento secundário:** degradações de transmissão, combustível, rotor e trem de pouso, tratadas dentro do cenário sem descaracterizar o objetivo avaliativo IFR.
+> **Decisão operacional esperada:** manter disciplina IFR e padrão de avaliação, escolher a melhor aproximação final, tratar a extensão de trem de emergência e encerrar a sessão com pouso e corte pós-voo.
+> **Critério de encerramento:** pouso após arremetida e reaproximação, seguido de encerramento pós-voo.
+> **Observação técnica:** as 18 linhas abaixo são itens técnicos avaliáveis dentro do cenário LOFT; a condução continua sendo por cenário, não por manobras soltas.
+> **Observação NOTECHS:** NOTECHS são avaliados fora das 18 técnicas, pelo mecanismo global da matriz.
 > Sessão avaliativa (`carater=avaliativo` em metadados internos; não exibir na ficha final). Corrigido pela decisão 16 (§4): `S76-LGE-44` substituído por `S76-LGB-47` (código já existente, já usado em `S76-P-C2/VFR`).
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
 | 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
 | 2 | S76-NIF-00 | Procedimentos Normais IFR | IFR básico |
-| 3 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
-| 4 | S76-RNV-00 | Aproximação RNAV (GPS) | Aproximação IFR |
-| 5 | S76-VOR-00 | Aproximação VOR/NDB | Aproximação IFR |
-| 6 | S76-CKL-02 | Aplicação de checklist anormal | QRH / checklist |
-| 7 | S76-MGP-33 | Pressão de Óleo da MGB 40–45 PSI | Transmissão |
-| 8 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
-| 9 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
-| 10 | S76-AUT-70 | Autorotação | Autorrotação |
-| 11 | S76-LGB-47 | Trem de Pouso — Extensão de Emergência | Trem / pouso |
-| 12 | S76-FFL-32 | Luz de Cautela do Filtro de Combustível | Combustível |
-| 13 | S76-FFM-32 | Fluxo de Combustível fora do Normal | Combustível |
-| 14 | S76-NRO-00 | Disparo de NR (NR Overspeed) | Rotor RPM |
-| 15 | S76-NRL-00 | Queda de NR (NR Low) | Rotor RPM |
-| 16 | S76-CST-00 | Estol de Compressor (Compressor Stall) | Motor |
-| 17 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 3 | S76-CKL-02 | Aplicação de checklist anormal | QRH / checklist |
+| 4 | S76-MGP-33 | Pressão de Óleo da MGB 40–45 PSI | Transmissão |
+| 5 | S76-FFL-32 | Luz de Cautela do Filtro de Combustível | Combustível |
+| 6 | S76-FFM-32 | Fluxo de Combustível fora do Normal | Combustível |
+| 7 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
+| 8 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
+| 9 | S76-NRO-00 | Disparo de NR (NR Overspeed) | Rotor RPM |
+| 10 | S76-NRL-00 | Queda de NR (NR Low) | Rotor RPM |
+| 11 | S76-CST-00 | Estol de Compressor (Compressor Stall) | Motor |
+| 12 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
+| 13 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 14 | S76-RNV-00 | Aproximação RNAV (GPS) | Reaproximação IFR |
+| 15 | S76-VOR-00 | Aproximação VOR/NDB | Aproximação final |
+| 16 | S76-LGB-47 | Trem de Pouso — Extensão de Emergência | Trem / pouso |
+| 17 | S76-PNO-01 | Pouso normal | Pouso |
 | 18 | S76-EST-01 | Encerramento pós-voo noturno | Pós-pouso |
 
 ---
@@ -1340,6 +1386,8 @@ Adicionar/ajustar testes para garantir:
 14. `A139-NOT-01`, `A139-NOT-02`, `A139-REQ-01`, `A139-S-01/02`, `A139-S-02/02`, `S76-NOT-01`, `S76-NOT-02`, `S76-REQ-01`, `SK76-S-01/02` e `SK76-S-02/02` estão presentes no `target_models`, cada um com `18` técnicas distintas.
 15. `SK76-S-02/02` usa `S76-LGB-47` e não usa `S76-LGE-44`.
 16. `S76-NOT-02` termina em `S76-FLU-01` e não contém `S76-EST-01`.
+17. Toda sessão com `LOFT` no nome tem evidência LOFT válida por código aceito (`LOFT-CHK-*`, `LOFT-OFF-*`, `LOFT-NOT-*`) ou por bloco estruturado `Enquadramento LOFT` no documento-fonte.
+18. A matriz de aceite não pode marcar `nome compatível com conteúdo = sim` para sessão LOFT sem registrar o achado, a decisão do owner e a ação corretiva de enquadramento estruturado.
 
 # 11. Prompt para implantação
 
