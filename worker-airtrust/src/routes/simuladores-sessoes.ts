@@ -1128,6 +1128,7 @@ app.post('/sessoes', async (c) => {
             m.descricao,
             m.categoria,
             msm.ordem,
+            msm.observacoes,
             COALESCE(msm.tripulante, 'AB') as tripulante
            FROM modelos_sessao_manobras msm
            INNER JOIN manobras m ON m.id = msm.manobra_id

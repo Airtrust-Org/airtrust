@@ -52,6 +52,35 @@ describe('fichaModeloPdf', () => {
     expect(dados.manobras.at(-1)?.codigo).toBe('NOTECHS-15');
   });
 
+  it('usa observacoes do vínculo modelo↔manobra como override de nome/descrição quando presente', () => {
+    const dados = buildFichaModeloPdfData(
+      { id: 1, codigo: 'A139-S-02/02', nome: 'Semestral 02/02: LOFT e Check de IFR' },
+      [
+        {
+          ordem: 1,
+          manobra_codigo: 'A139-CKL-01',
+          manobra_nome: 'Normal checklist — preparação noturna',
+          manobra_descricao: 'Normal checklist — preparação noturna',
+          observacoes: 'Normal checklist — preparação IFR semestral',
+          tripulante: 'AB',
+        },
+        {
+          ordem: 2,
+          manobra_codigo: 'A139-EST-01',
+          manobra_nome: 'Estacionamento e corte pós-voo noturno',
+          manobra_descricao: 'Estacionamento e corte pós-voo noturno',
+          observacoes: null,
+          tripulante: 'AB',
+        },
+      ],
+    );
+
+    expect(dados.manobras[0].nome).toBe('Normal checklist — preparação IFR semestral');
+    expect(dados.manobras[0].descricao).toBe('Normal checklist — preparação IFR semestral');
+    expect(dados.manobras[0].observacoes).toBe('');
+    expect(dados.manobras[1].nome).toBe('Estacionamento e corte pós-voo noturno');
+  });
+
   it('gera nome de arquivo estável e sanitizado', () => {
     const fileName = buildFichaModeloPdfFileName({
       id: 99,

@@ -30,6 +30,8 @@ export interface FichaManobraBase {
   categoria?: string | null;
   ordem: number;
   tripulante?: string | null;
+  /** Override de texto por vínculo modelo↔manobra (modelos_sessao_manobras.observacoes). */
+  observacoes?: string | null;
 }
 
 export interface FichaManobraMaterializada {
@@ -99,20 +101,38 @@ export function getNotechsStatus(
   return 'partial';
 }
 
+/**
+ * Metadados internos de engenharia que nunca podem aparecer em texto visível
+ * na ficha (mesmo padrão do guardrail `metadata_in_name` do loader em
+ * scripts/maintenance/lib/simuladores-matriz-v6-data.mjs). Um override de
+ * `observacoes` que combine com este padrão é tratado como inválido/ignorado
+ * em vez de ser exibido ao aluno/instrutor.
+ */
+const INTERNAL_METADATA_LEAK_RE = /tipo_item\s*=|fase_voo\s*=|carater\s*=|fap_refs\s*=|matriz_v6_modelo\s*=/i;
+
 export function buildOperationalFichaManobras(
   manobrasTecnicas: FichaManobraBase[],
 ): FichaManobraMaterializada[] {
   const tecnicas = [...manobrasTecnicas]
     .sort((left, right) => Number(left.ordem || 0) - Number(right.ordem || 0))
     .slice(0, FICHA_TECNICAS_PADRAO_LIMITE)
-    .map((item) => ({
-      codigo: item.codigo,
-      nome: String(item.nome || item.descricao || item.codigo || '').trim(),
-      descricao: String(item.descricao || item.nome || '').trim(),
-      categoria: String(item.categoria || 'GERAL').trim() || 'GERAL',
-      ordem: Number(item.ordem),
-      tripulante: String(item.tripulante || 'AB').trim() || 'AB',
-    }));
+    .map((item) => {
+      // observacoes é um override de texto por vínculo modelo↔manobra: permite que
+      // um mesmo item de catálogo (manobras.nome/descricao) tenha redação distinta
+      // em modelos diferentes, sem duplicar o registro de manobra compartilhado.
+      const rawOverride = String(item.observacoes || '').trim();
+      const override = INTERNAL_METADATA_LEAK_RE.test(rawOverride) ? '' : rawOverride;
+      const nome = override || String(item.nome || item.descricao || item.codigo || '').trim();
+      const descricao = override || String(item.descricao || item.nome || '').trim();
+      return {
+        codigo: item.codigo,
+        nome,
+        descricao,
+        categoria: String(item.categoria || 'GERAL').trim() || 'GERAL',
+        ordem: Number(item.ordem),
+        tripulante: String(item.tripulante || 'AB').trim() || 'AB',
+      };
+    });
 
   const notechs = NOTECHS_ITENS_CATALOGO.map((item) => ({
     codigo: item.codigo,

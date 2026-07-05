@@ -21,6 +21,14 @@ export interface ModeloSessaoManobra {
 
 export const FICHA_MODELO_TECNICAS_PREVIEW_LIMIT = 18;
 
+/**
+ * Metadados internos de engenharia que nunca podem aparecer em texto visível
+ * na ficha (mesmo padrão do guardrail `metadata_in_name` do loader). Um
+ * override de `observacoes` que combine com este padrão é tratado como
+ * inválido/ignorado em vez de ser exibido ao aluno/instrutor.
+ */
+const INTERNAL_METADATA_LEAK_RE = /tipo_item\s*=|fase_voo\s*=|carater\s*=|fap_refs\s*=|matriz_v6_modelo\s*=/i;
+
 function sanitizeFilePart(value: string): string {
   return value
     .normalize('NFD')
@@ -78,17 +86,25 @@ export function buildFichaModeloPdfData(
     modoModelo: true,
     fileName: buildFichaModeloPdfFileName(modelo),
     manobras: tecnicasPreview
-      .map((manobra) => ({
-        ordem: manobra.ordem,
-        nome: manobra.manobra_nome || manobra.manobra_descricao || manobra.manobra_codigo || '',
-        descricao: manobra.manobra_descricao || manobra.manobra_nome || '',
-        codigo: manobra.manobra_codigo || '',
-        resultado: null,
-        // Ficha modelo (impressão em branco): não exibe metadados internos
-        // (tipo_item, fase_voo, carater, fap_refs, matriz_v6_modelo) nas observações.
-        observacoes: '',
-        tripulante: manobra.tripulante || 'AB',
-      }))
+      .map((manobra) => {
+        // Override de texto por vínculo modelo↔manobra (modelos_sessao_manobras.observacoes),
+        // não confundir com o campo `observacoes` da ficha impressa abaixo (nota do avaliador).
+        const rawOverride = (manobra.observacoes || '').trim();
+        const override = INTERNAL_METADATA_LEAK_RE.test(rawOverride) ? '' : rawOverride;
+        const nome = override || manobra.manobra_nome || manobra.manobra_descricao || manobra.manobra_codigo || '';
+        const descricao = override || manobra.manobra_descricao || manobra.manobra_nome || '';
+        return {
+          ordem: manobra.ordem,
+          nome,
+          descricao,
+          codigo: manobra.manobra_codigo || '',
+          resultado: null,
+          // Ficha modelo (impressão em branco): não exibe metadados internos
+          // (tipo_item, fase_voo, carater, fap_refs, matriz_v6_modelo) nas observações.
+          observacoes: '',
+          tripulante: manobra.tripulante || 'AB',
+        };
+      })
       .concat(notechsPreview),
   };
 }

@@ -778,7 +778,7 @@ app.put('/sessoes/:id', async (c) => {
           if (modeloIdFinal) {
             const manobrasModelo = await c.env.DB.prepare(
               `SELECT m.codigo, m.nome, COALESCE(m.nome, m.descricao) AS descricao, m.categoria,
-                      msm.ordem, COALESCE(msm.tripulante, 'AB') as tripulante
+                      msm.ordem, msm.observacoes, COALESCE(msm.tripulante, 'AB') as tripulante
                  FROM modelos_sessao_manobras msm
                  INNER JOIN manobras m ON m.id = msm.manobra_id
                  WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL AND m.deleted_at IS NULL
