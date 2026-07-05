@@ -35,7 +35,7 @@ describe('matriz v6.2 — guardrails estruturais', () => {
 
   it('o loader nao reporta issues estruturais', () => {
     expect(data.issues).toEqual([]);
-    expect(data.models).toHaveLength(39);
+    expect(data.models).toHaveLength(41);
   });
 
   it('nenhuma sessao executa item operacional apos um item terminal', () => {
@@ -147,5 +147,32 @@ describe('matriz v6.2 — guardrails especificos do documento final', () => {
     }
 
     expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
+  it('TRE-INST e CRED-EXA nao reintroduzem familias NOTECHS/CRM dentro das 18 tecnicas', () => {
+    const treInst = data.models.find((item) => item.modelCode === 'TRE-INST');
+    const credExa = data.models.find((item) => item.modelCode === 'CRED-EXA');
+
+    expect(treInst).toBeDefined();
+    expect(credExa).toBeDefined();
+    expect(treInst?.rows.some((row) => row.codigo.startsWith('INV-CRM-'))).toBe(false);
+    expect(credExa?.rows.some((row) => row.codigo.startsWith('EXA-NTS-'))).toBe(false);
+  });
+
+  it('IFR basico nao aparece como bloco principal antes de A139-I-05/12 e SK76-I-05/12', () => {
+    const a139I03 = data.models.find((item) => item.modelCode === 'A139-I-03/12');
+    const a139I04 = data.models.find((item) => item.modelCode === 'A139-I-04/12');
+    const a139I05 = data.models.find((item) => item.modelCode === 'A139-I-05/12');
+    const sk76I03 = data.models.find((item) => item.modelCode === 'SK76-I-03/12');
+    const sk76I04 = data.models.find((item) => item.modelCode === 'SK76-I-04/12');
+    const sk76I05 = data.models.find((item) => item.modelCode === 'SK76-I-05/12');
+
+    expect(a139I03?.rows.some((row) => row.codigo.startsWith('OPS-APP-'))).toBe(false);
+    expect(a139I04?.rows.some((row) => row.codigo.startsWith('OPS-APP-'))).toBe(false);
+    expect(a139I05?.rows.some((row) => row.codigo.startsWith('OPS-APP-'))).toBe(true);
+
+    expect(sk76I03?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(false);
+    expect(sk76I04?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(false);
+    expect(sk76I05?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(true);
   });
 });
