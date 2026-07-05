@@ -10,6 +10,8 @@
  * de referência estático, não avaliado nem armazenado por linha de ficha.
  */
 
+import { resolveModeloSessaoObservacoesOverride } from '../../../src/shared/simuladores/modelos-sessao-observacoes';
+
 export const NOTECHS_CATEGORIA = 'NOTECHS';
 export const FICHA_TECNICAS_PADRAO_LIMITE = 18;
 
@@ -101,15 +103,6 @@ export function getNotechsStatus(
   return 'partial';
 }
 
-/**
- * Metadados internos de engenharia que nunca podem aparecer em texto visível
- * na ficha (mesmo padrão do guardrail `metadata_in_name` do loader em
- * scripts/maintenance/lib/simuladores-matriz-v6-data.mjs). Um override de
- * `observacoes` que combine com este padrão é tratado como inválido/ignorado
- * em vez de ser exibido ao aluno/instrutor.
- */
-const INTERNAL_METADATA_LEAK_RE = /tipo_item\s*=|fase_voo\s*=|carater\s*=|fap_refs\s*=|matriz_v6_modelo\s*=/i;
-
 export function buildOperationalFichaManobras(
   manobrasTecnicas: FichaManobraBase[],
 ): FichaManobraMaterializada[] {
@@ -120,8 +113,7 @@ export function buildOperationalFichaManobras(
       // observacoes é um override de texto por vínculo modelo↔manobra: permite que
       // um mesmo item de catálogo (manobras.nome/descricao) tenha redação distinta
       // em modelos diferentes, sem duplicar o registro de manobra compartilhado.
-      const rawOverride = String(item.observacoes || '').trim();
-      const override = INTERNAL_METADATA_LEAK_RE.test(rawOverride) ? '' : rawOverride;
+      const override = resolveModeloSessaoObservacoesOverride(item.observacoes);
       const nome = override || String(item.nome || item.descricao || item.codigo || '').trim();
       const descricao = override || String(item.descricao || item.nome || '').trim();
       return {

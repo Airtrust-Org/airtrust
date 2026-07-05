@@ -11,6 +11,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
+import { resolveModeloSessaoObservacoesOverride } from '../../../src/shared/simuladores/modelos-sessao-observacoes';
 import {
   gerarQualificacaoDaFicha,
   getQualificacaoGeracaoErrorStatus,
@@ -117,7 +118,7 @@ app.put('/fichas-simulador/:fichaId/manobras/:ordem', async (c) => {
           .first<{ codigo: string; descricao: string; categoria: string; observacoes: string | null }>();
 
         const codigo = m?.codigo || `ORD-${ordem}`;
-        const descricaoOverride = String(m?.observacoes || '').trim();
+        const descricaoOverride = resolveModeloSessaoObservacoesOverride(m?.observacoes);
         const descricao = descricaoOverride || m?.descricao || `Manobra ordem ${ordem}`;
         const categoria = m?.categoria || 'GERAL';
 
