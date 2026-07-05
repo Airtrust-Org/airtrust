@@ -20,23 +20,27 @@ const EXPECTED_MODELS = [
   'TRE-INST',
 ];
 
-const OUTSIDE_PACKAGE_MODELS = [
+const CLOSING_10_MODELS = [
+  'A139-NOT-01',
+  'A139-NOT-02',
+  'A139-REQ-01',
   'A139-S-01/02',
   'A139-S-02/02',
-  'A139-REQ-01',
+  'S76-NOT-01',
+  'S76-NOT-02',
   'S76-REQ-01',
   'SK76-S-01/02',
   'SK76-S-02/02',
 ];
 
 describe('simuladores matriz v6.2 data', () => {
-  it('gera exatamente os 41 modelos do documento final, com 18 tecnicas distintas cada', () => {
+  it('gera exatamente os 51 modelos do documento final, com 18 tecnicas distintas cada', () => {
     const data = loadSimuladoresMatrizV6Data();
     const totalRows = data.models.reduce((sum, model) => sum + model.rows.length, 0);
 
     expect(data.issues).toEqual([]);
-    expect(data.models).toHaveLength(41);
-    expect(totalRows).toBe(738);
+    expect(data.models).toHaveLength(51);
+    expect(totalRows).toBe(918);
 
     for (const model of data.models) {
       expect(model.rows).toHaveLength(18);
@@ -54,13 +58,33 @@ describe('simuladores matriz v6.2 data', () => {
     }
   });
 
-  it('nao inclui sessoes fora do pacote explicitamente preservadas pelo documento final', () => {
+  it('fecha o target 51 incorporando os 10 modelos antes fora do pacote (Decisao 15)', () => {
     const data = loadSimuladoresMatrizV6Data();
     const codes = new Set(data.models.map((model) => model.modelCode));
 
-    for (const modelCode of OUTSIDE_PACKAGE_MODELS) {
-      expect(codes.has(modelCode), `modelo fora do pacote apareceu no loader: ${modelCode}`).toBe(false);
+    for (const modelCode of CLOSING_10_MODELS) {
+      expect(codes.has(modelCode), `modelo do target 51 ausente: ${modelCode}`).toBe(true);
     }
+  });
+
+  it('SK76-S-02/02 usa S76-LGB-47 e nao usa S76-LGE-44 (Decisao 16)', () => {
+    const data = loadSimuladoresMatrizV6Data();
+    const model = data.models.find((item) => item.modelCode === 'SK76-S-02/02');
+    expect(model).toBeDefined();
+
+    const codes = model?.rows.map((row) => row.codigo) ?? [];
+    expect(codes).toContain('S76-LGB-47');
+    expect(codes).not.toContain('S76-LGE-44');
+  });
+
+  it('S76-NOT-02 termina em S76-FLU-01 e nao contem S76-EST-01 (Decisao 17)', () => {
+    const data = loadSimuladoresMatrizV6Data();
+    const model = data.models.find((item) => item.modelCode === 'S76-NOT-02');
+    expect(model).toBeDefined();
+
+    const codes = model?.rows.map((row) => row.codigo) ?? [];
+    expect(model?.rows[model.rows.length - 1]?.codigo).toBe('S76-FLU-01');
+    expect(codes).not.toContain('S76-EST-01');
   });
 
   it('mantem os 15 NOTECHS fora das 18 tecnicas', () => {

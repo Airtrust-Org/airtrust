@@ -35,7 +35,7 @@ describe('matriz v6.2 — guardrails estruturais', () => {
 
   it('o loader nao reporta issues estruturais', () => {
     expect(data.issues).toEqual([]);
-    expect(data.models).toHaveLength(41);
+    expect(data.models).toHaveLength(51);
   });
 
   it('nenhuma sessao executa item operacional apos um item terminal', () => {
