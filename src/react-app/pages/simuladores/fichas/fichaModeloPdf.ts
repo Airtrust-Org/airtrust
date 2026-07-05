@@ -84,7 +84,9 @@ export function buildFichaModeloPdfData(
         descricao: manobra.manobra_descricao || manobra.manobra_nome || '',
         codigo: manobra.manobra_codigo || '',
         resultado: null,
-        observacoes: manobra.observacoes || '',
+        // Ficha modelo (impressão em branco): não exibe metadados internos
+        // (tipo_item, fase_voo, carater, fap_refs, matriz_v6_modelo) nas observações.
+        observacoes: '',
         tripulante: manobra.tripulante || 'AB',
       }))
       .concat(notechsPreview),
