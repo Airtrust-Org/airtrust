@@ -20,6 +20,7 @@ const SOURCE_MAP = path.join(
 const MODEL_HEADING_RE = /^##\s+([A-Z0-9/-]+)\s+—\s+(.+)$/;
 const APPROVED_CODE_RE = /^(A139|S76|76|CAU|WAR|OPS|FLY|LOFT|NOTECHS|INV|EXA)-/;
 const TERMINAL_CODE_RE = /(-EST-|S76-FLU-01$|OPS-OFF-X3$)/;
+const FORBIDDEN_TECHNICAL_CODE_RE = /^(NOTECHS-|INV-CRM-|EXA-NTS-)/;
 
 const RPEA_ALIAS_MAP = {
   '690-2.43BA': '690-2.43BB',
@@ -230,10 +231,17 @@ function validateModels(models) {
       if (!APPROVED_CODE_RE.test(row.codigo)) {
         issues.push(`rogue_code:${model.modelCode}:${row.codigo}`);
       }
+      if (FORBIDDEN_TECHNICAL_CODE_RE.test(row.codigo)) {
+        issues.push(`forbidden_technical_code:${model.modelCode}:${row.codigo}`);
+      }
       if (/(?:FAP\d|FAP[ ._]\d|FCOM|FDM|Rev\.|Página|Pagina)/i.test(row.codigo)) {
         issues.push(`manual_ref_in_code:${model.modelCode}:${row.codigo}`);
       }
-      if (/[Tt]ipo_item|fase_voo|carater|matriz_v6_modelo|V4\.1|renomeado|validar se fica/.test(row.nome)) {
+      if (
+        /[Tt]ipo_item|fase_voo|carater|matriz_v6_modelo|V4\.1|renomeado|validar se fica/.test(
+          `${row.nome} ${row.fase_voo || ''}`,
+        )
+      ) {
         issues.push(`metadata_in_name:${model.modelCode}:${row.codigo}`);
       }
     }
