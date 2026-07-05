@@ -2,6 +2,11 @@
 
 Fonte obrigatoria: `airtrust_matriz_v6_2_todas_sessoes_manobras_final.md`.
 
+Documentacao de apoio desta fase:
+
+- `docs/analysis/matriz-v6-2-postmortem-escopo-e-coerencia.md`
+- `docs/analysis/matriz-v6-2-acceptance-matrix-51-modelos.md`
+
 ## Escopo
 
 Esta implantacao atualiza apenas:
