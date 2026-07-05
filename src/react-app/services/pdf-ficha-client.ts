@@ -274,13 +274,14 @@ function drawNotechsCompactBlock(
   y: number,
   width: number,
   itens: FichaPDFData['manobras'],
+  columns: 1 | 2 = 2,
 ): number {
-  const NOTECHS_COLOR = '#7c3aed';
+  const NOTECHS_COLOR = COLORS.textSecondary;
   const HEADER_H = 5;
   const ROW_H = 4.2;
   const colGap = 3;
-  const colWidth = (width - colGap) / 2;
-  const half = Math.ceil(itens.length / 2);
+  const colWidth = columns === 1 ? width : (width - colGap) / 2;
+  const half = columns === 1 ? itens.length : Math.ceil(itens.length / 2);
   const colunaEsquerda = itens.slice(0, half);
   const colunaDireita = itens.slice(half);
 
@@ -354,7 +355,7 @@ function drawNotechsCompactBlock(
   return bodyY + maxRows * ROW_H + 2;
 }
 
-function getNotechsCompactReservedHeight(itensCount: number): number {
+function getNotechsCompactReservedHeight(itensCount: number, columns: 1 | 2 = 2): number {
   if (itensCount <= 0) return 0;
 
   const HEADER_H = 5;
@@ -362,7 +363,7 @@ function getNotechsCompactReservedHeight(itensCount: number): number {
   const ROW_H = 4.2;
   const BLOCK_BOTTOM_GAP = 2;
   const AFTER_BLOCK_GAP = 2;
-  const maxRows = Math.ceil(itensCount / 2);
+  const maxRows = columns === 1 ? itensCount : Math.ceil(itensCount / 2);
 
   return HEADER_H + BODY_TOP_GAP + maxRows * ROW_H + BLOCK_BOTTOM_GAP + AFTER_BLOCK_GAP;
 }
@@ -898,10 +899,15 @@ export async function gerarPDFFichaCliente(
   const FOOTER_H = 6; // espaço do rodapé no fundo
   const SIG_RESERVED = 40; // altura máxima reservada para as caixas de assinatura
   const OBS_RESERVED = 23; // caixa mínima (~18mm) + gap antes das assinaturas
-  const SCALE_RESERVED = FICHA_AVALIACAO_SCALE_HEIGHT;
+  // Ficha modelo (impressão em branco, sem avaliação) não exibe a régua.
+  const SCALE_RESERVED = isModoModelo ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
   // Reserva derivada do layout real do bloco compacto NOTECHS, incluindo o gap
   // imediatamente antes da régua. 0 quando a ficha não tem NOTECHS.
-  const NOTECHS_RESERVED = getNotechsCompactReservedHeight(manobrasNotechs.length);
+  // Ficha modelo usa coluna única (um item por linha, sem competir por nota).
+  const NOTECHS_RESERVED = getNotechsCompactReservedHeight(
+    manobrasNotechs.length,
+    isModoModelo ? 1 : 2,
+  );
   const tableBodyBudget =
     pageHeight -
     currentY -
@@ -1036,10 +1042,21 @@ export async function gerarPDFFichaCliente(
   currentY += 4;
 
   if (manobrasNotechs.length > 0) {
-    currentY = drawNotechsCompactBlock(doc, margin, currentY, contentWidth, manobrasNotechs) + 2;
+    currentY =
+      drawNotechsCompactBlock(
+        doc,
+        margin,
+        currentY,
+        contentWidth,
+        manobrasNotechs,
+        isModoModelo ? 1 : 2,
+      ) + 2;
   }
 
-  currentY = drawFichaAvaliacaoScale(doc, margin, currentY, contentWidth) + 4;
+  // Ficha modelo (impressão em branco, sem avaliação) não exibe a régua.
+  if (!isModoModelo) {
+    currentY = drawFichaAvaliacaoScale(doc, margin, currentY, contentWidth) + 4;
+  }
 
   // ========== OBSERVAÇÕES GERAIS — mínimo 3 linhas de texto ==========
   if (dados.observacoes_gerais || isModoModelo) {
@@ -1181,10 +1198,11 @@ export async function gerarPDFFichaCliente(
   );
 
   // ========== PÁGINA 2 (opcional) — Régua NOTECHS, descritores completos ==========
-  // Só é adicionada quando a ficha tem itens NOTECHS. Mantém a página 1 (A4
-  // principal) legível e compacta — os 60 descritores completos ficam aqui,
-  // fora do orçamento de altura da página principal.
-  if (manobrasNotechs.length > 0) {
+  // Só é adicionada quando a ficha tem itens NOTECHS e não é uma ficha modelo
+  // (impressão em branco, sem avaliação). Mantém a página 1 (A4 principal)
+  // legível e compacta — os 60 descritores completos ficam aqui, fora do
+  // orçamento de altura da página principal.
+  if (manobrasNotechs.length > 0 && !isModoModelo) {
     doc.addPage();
     let refY = margin;
     doc.setFont('helvetica', 'bold');
@@ -1210,7 +1228,7 @@ export async function gerarPDFFichaCliente(
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8.5);
-      doc.setTextColor('#7c3aed');
+      doc.setTextColor(COLORS.textSecondary);
       doc.text(`${grupo.tituloPt} / ${grupo.tituloEn}`, margin, refY);
       refY += 4.5;
 
