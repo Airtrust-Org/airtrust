@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
-// source_reference: scripts/maintenance/lib/simuladores-matriz-v6-data.mjs + docs/analysis/COSTA_DO_SOL_MATRIZ_V6_1_FICHAS_RESTANTES_FINAL_REVISAVEL_20260703.md
-// operational_decision: local-only preparation of Costa do Sol matrix V6/V6.1 without remote apply
+// source_reference: scripts/maintenance/lib/simuladores-matriz-v6-data.mjs + airtrust_matriz_v6_2_todas_sessoes_manobras_final.md
+// operational_decision: local-only preparation of Costa do Sol matrix V6.2 without remote apply
 // dry_run_required: use --dry-run by default and never execute remote/prod apply from this script
 // rollback_plan_required: rollback is the inverse of generated local SQL review; no remote state is touched here
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
 import {
@@ -25,7 +26,15 @@ const LOCAL_DB_GLOB = path.join(
   'd1',
   'miniflare-D1DatabaseObject',
 );
-const CONFIRM_TEXT = 'APLICAR MATRIZ V6 COSTA DO SOL';
+const CONFIRM_TEXT = 'APLICAR MATRIZ V6.2 MODELOS FUTUROS SEM ALTERAR FICHAS EXISTENTES';
+const TEMPLATE_TABLES = ['modelos_sessao', 'modelos_sessao_manobras', 'manobras'];
+const HISTORICAL_TABLES = [
+  'fichas_sessao',
+  'fichas_sessao_manobras',
+  'simulador_agendamentos',
+  'avaliacoes_manobras',
+  'fichas_manobras_historico',
+];
 
 function parseArgs(argv) {
   let empresaId = null;
@@ -109,7 +118,7 @@ function buildManeuverCatalog(models, registry) {
       const next = {
         codigo: row.codigo,
         nome: ref.nome,
-        descricao: ref.origem_documental || ref.nome,
+        descricao: ref.nome,
         categoria: ref.categoria || null,
         tipo_sessao: ref.tipo_sessao || 'TREINAMENTO',
         tipo_aeronave: ref.tipo_aeronave || model.aircraft,
@@ -189,6 +198,43 @@ function ensureDbHasData(dbFile, empresaId) {
   if (!counts || Number(counts.modelos || 0) === 0 || Number(counts.manobras || 0) === 0) {
     throw new Error('db_snapshot_sem_catalogo_ou_modelos');
   }
+}
+
+function tableExists(dbFile, tableName) {
+  const rows = sqliteJson(
+    dbFile,
+    `SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ${sqlString(tableName)};`,
+  );
+  return rows.length > 0;
+}
+
+function buildTableSnapshot(dbFile, tableName) {
+  if (!tableExists(dbFile, tableName)) {
+    return { table: tableName, exists: false, row_count: null, sha256: null };
+  }
+
+  const countRow = sqliteJson(dbFile, `SELECT COUNT(*) AS row_count FROM ${tableName};`)[0] || {};
+  const rows = sqliteJson(dbFile, `SELECT * FROM ${tableName} ORDER BY 1;`);
+  return {
+    table: tableName,
+    exists: true,
+    row_count: Number(countRow.row_count || 0),
+    sha256: crypto.createHash('sha256').update(JSON.stringify(rows)).digest('hex'),
+  };
+}
+
+function buildSnapshots(dbFile, tables) {
+  return Object.fromEntries(tables.map((tableName) => [tableName, buildTableSnapshot(dbFile, tableName)]));
+}
+
+function compareSnapshots(before, after) {
+  const changed = [];
+  for (const tableName of Object.keys(before)) {
+    if (JSON.stringify(before[tableName]) !== JSON.stringify(after[tableName])) {
+      changed.push(tableName);
+    }
+  }
+  return changed;
 }
 
 function buildApplySql(data, empresaId) {
@@ -414,10 +460,16 @@ function main() {
   const dbFile = options.dbFile || autoDb;
   const summary = buildAnalyticalSummary(data, options.empresaId, dbFile);
   const sql = buildApplySql(data, options.empresaId);
+  const writePlan = {
+    source_file: data.sourceFile,
+    template_tables_only: TEMPLATE_TABLES,
+    explicitly_not_touched: HISTORICAL_TABLES,
+  };
 
   if (options.dryRun) {
     const payload = {
       ...summary,
+      ...writePlan,
       sql_preview_first_lines: sql.split('\n').slice(0, 40),
       db_snapshot_detected: Boolean(dbFile),
       apply_requires_confirm: CONFIRM_TEXT,
@@ -427,6 +479,8 @@ function main() {
       try {
         ensureDbHasData(dbFile, options.empresaId);
         payload.db_snapshot_status = 'seeded';
+        payload.historical_tables_before = buildSnapshots(dbFile, HISTORICAL_TABLES);
+        payload.template_tables_before = buildSnapshots(dbFile, TEMPLATE_TABLES);
       } catch (error) {
         payload.db_snapshot_status = 'empty_or_unseeded';
         payload.db_snapshot_warning = String(error.message || error);
@@ -448,7 +502,13 @@ function main() {
   }
 
   ensureDbHasData(dbFile, options.empresaId);
+  const historicalBefore = buildSnapshots(dbFile, HISTORICAL_TABLES);
   sqliteExec(dbFile, sql);
+  const historicalAfter = buildSnapshots(dbFile, HISTORICAL_TABLES);
+  const changedHistoricalTables = compareSnapshots(historicalBefore, historicalAfter);
+  if (changedHistoricalTables.length > 0) {
+    throw new Error(`historical_tables_changed:${changedHistoricalTables.join(',')}`);
+  }
   validateDbOutcome(dbFile, data, options.empresaId);
 
   process.stdout.write(
@@ -459,6 +519,11 @@ function main() {
         db_file: dbFile,
         model_count: data.models.length,
         technical_rows_total: data.models.length * 18,
+        source_file: data.sourceFile,
+        template_tables_only: TEMPLATE_TABLES,
+        historical_tables_verified_unchanged: HISTORICAL_TABLES,
+        historical_tables_before: historicalBefore,
+        historical_tables_after: historicalAfter,
       },
       null,
       2,
