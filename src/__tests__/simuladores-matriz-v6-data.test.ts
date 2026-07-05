@@ -32,9 +32,11 @@ const OUTSIDE_PACKAGE_MODELS = [
 describe('simuladores matriz v6.2 data', () => {
   it('gera exatamente os 41 modelos do documento final, com 18 tecnicas distintas cada', () => {
     const data = loadSimuladoresMatrizV6Data();
+    const totalRows = data.models.reduce((sum, model) => sum + model.rows.length, 0);
 
     expect(data.issues).toEqual([]);
     expect(data.models).toHaveLength(41);
+    expect(totalRows).toBe(738);
 
     for (const model of data.models) {
       expect(model.rows).toHaveLength(18);
