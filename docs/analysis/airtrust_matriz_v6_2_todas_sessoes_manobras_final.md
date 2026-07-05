@@ -4,6 +4,8 @@
 
 Este arquivo substitui os fechamentos parciais anteriores sobre a ordem das manobras. Ele consolida, em uma única especificação, as sessões e as 18 manobras técnicas de cada ficha contemplada nos documentos de proposta AW139 e SK76 enviados pelo owner, incluindo TRE-INST e CRED-EXA no mesmo padrão estrutural.
 
+**Atualização de escopo (fechamento do target 51):** a redação original da §9 tratava sessões de noturno, semestral, reaquisição e instrutor/examinador como "fora dos PDFs enviados" e instruía não alterá-las. A decisão 12 (§4) já havia revertido isso para `TRE-INST`/`CRED-EXA`. A decisão 15 (§4) estende a mesma lógica aos 10 modelos remanescentes do catálogo operacional de 51 modelos, fechando o target em `51` modelos / `918` linhas técnicas / `15` NOTECHS fora das técnicas. Nenhuma manobra foi apagada nesta fase; a lista de manobras ativas sem uso (`docs/analysis/MANOBRAS_SEM_USO_EM_MODELOS_SESSAO_SNAPSHOT_20260705.md`) só deve ser recalculada depois do target 51 fechado.
+
 ## 0. Status e regra de uso
 
 - **Não é ficha homologada/aprovada pela ANAC.**
@@ -84,6 +86,9 @@ Exceções aceitas:
 12. `TRE-INST` e `CRED-EXA` deixam de ser modelos preservados fora do alvo e passam a seguir o padrão `18 técnicas + 15 NOTECHS`.
 13. `A139-I-03/12` e `A139-I-04/12` permanecem em sistemas/anormalidades/automação; IFR básico começa em `A139-I-05/12`.
 14. `SK76-I-03/12` e `SK76-I-04/12` permanecem em sistemas/anormalidades/automação; IFR básico começa em `SK76-I-05/12`.
+15. Fechamento do target 51: `A139-NOT-01`, `A139-NOT-02`, `A139-REQ-01`, `A139-S-01/02`, `A139-S-02/02`, `S76-NOT-01`, `S76-NOT-02`, `S76-REQ-01`, `SK76-S-01/02` e `SK76-S-02/02` deixam de ser "sessões fora dos PDFs enviados" (§9, redação original) e passam a integrar o loader, preservando os `18` itens técnicos já documentados operacionalmente em `docs/MODELOS_SESSAO_MANOBRAS.md`, sem inventar código novo. Os `15` NOTECHS continuam fora das `18` técnicas para esses modelos, pelo mesmo mecanismo global já usado pelos demais `41` (constante compartilhada, não vínculo por modelo).
+16. `SK76-S-02/02` estava fora do target quando a decisão 11 foi escrita; agora que entra no loader, a decisão 11 é aplicada: `S76-LGE-44` é substituído por `S76-LGB-47` (código já existente e já usado em `S76-P-C2/VFR`).
+17. `S76-NOT-02`: a sequência operacional original encerrava em `S76-DIT-71` → `S76-FLU-01` → `S76-EST-01`. Isso conflita com a regra de terminal único (`S76-FLU-01` já é o encerramento de ditching/evacuação; nenhum item pode vir depois). `S76-EST-01` foi removido do fim da sequência e `76-FALFF` (já usado em `S76-NOT-01`) foi inserido no bloco elétrico para preservar as `18` técnicas sem introduzir código novo.
 
 ---
 
@@ -607,6 +612,129 @@ Exceções aceitas:
 
 ---
 
+# 6C. AW139 — Noturno, Reaquisição e Semestral (Decisão 15)
+
+> Incorporados ao target 51 pela Decisão 15 (§4). Sequências preservadas do snapshot operacional (`docs/MODELOS_SESSAO_MANOBRAS.md`), reusando códigos já existentes no catálogo. Ver §4 decisões 15–17 para as correções aplicadas.
+
+## A139-NOT-01 — Treinamento Noturno Onshore
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist noturno |
+| 2 | FLY-BAS-X3 | Hover e taxi | Hover / taxi |
+| 3 | OPS-NRM-X2 | Decolagens e pousos | Decolagem |
+| 4 | FLY-BAS-X1 | Controle geral VFR | Subida / cruzeiro visual noturno |
+| 5 | A139-MOD-01 | Seleção e transição de modos AFCS em condição noturna | Cruzeiro / automação |
+| 6 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação noturna |
+| 7 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
+| 8 | A139-CKL-02 | Aplicação do QRH para caution noturna | QRH / checklist |
+| 9 | CAU-FLO-73 | Fuel low | Combustível |
+| 10 | WAR-OUT-15 | Engine failure | Motor |
+| 11 | CAU-LIC-60 | OEI limit timer | OEI |
+| 12 | A139-OEI-01 | Perfil OEI noturno | Perfil OEI |
+| 13 | OPS-APP-X1 | Precision approach | Aproximação noturna |
+| 14 | OPS-APP-X4 | Aproximação grande ângulo | Aproximação |
+| 15 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
+| 16 | OPS-NRM-X1 | Procedimentos normais | Normalização |
+| 17 | WAR-GEN-11 | Dual DC GEN failure | Elétrico avançado |
+| 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
+
+## A139-NOT-02 — Treinamento Noturno Offshore
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist noturno |
+| 2 | OPS-OFF-X1 | Navegação offshore | Rota offshore noturna |
+| 3 | FLY-BAS-X3 | Hover e taxi | Hover / taxi |
+| 4 | OPS-NRM-X2 | Decolagens e pousos | Decolagem |
+| 5 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação noturna |
+| 6 | FLY-BAS-X1 | Controle geral VFR | Cruzeiro visual noturno |
+| 7 | OPS-OFF-X2 | Aproximação offshore | Aproximação offshore |
+| 8 | OPS-APP-X4 | Aproximação grande ângulo | Aproximação |
+| 9 | CAU-FLO-73 | Fuel low | Combustível |
+| 10 | WAR-OUT-15 | Engine failure | Motor |
+| 11 | CAU-LIC-60 | OEI limit timer | OEI |
+| 12 | WAR-GEN-11 | Dual DC GEN failure | Elétrico |
+| 13 | A139-CKL-02 | Aplicação do QRH para caution noturna | QRH / checklist |
+| 14 | OPS-APP-X1 | Precision approach | Aproximação noturna |
+| 15 | OPS-APP-X3 | Missed approach | Arremetida |
+| 16 | OPS-NRM-X1 | Procedimentos normais | Normalização |
+| 17 | FLY-BAS-17 | Autorrotação | Autorrotação |
+| 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
+
+## A139-REQ-01 — Reaquisição de Experiência Recente
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist |
+| 2 | FLY-BAS-X3 | Hover e taxi | Hover / taxi |
+| 3 | OPS-NRM-X2 | Decolagens e pousos | Decolagem |
+| 4 | FLY-BAS-X1 | Controle geral VFR | Cruzeiro visual |
+| 5 | A139-PWR-01 | Controle de potência e parâmetros | Cruzeiro / perfil |
+| 6 | OPS-NRM-X1 | Procedimentos normais | Normalização |
+| 7 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
+| 8 | OPS-NAV-X2 | Uso AP e automação | Automação |
+| 9 | FLY-BAS-X2 | Controle geral IFR | IFR básico |
+| 10 | OPS-APP-X1 | Precision approach | Aproximação IFR |
+| 11 | OPS-APP-X3 | Missed approach | Missed approach |
+| 12 | WAR-OUT-15 | Engine failure | Motor |
+| 13 | CAU-LIC-60 | OEI limit timer | OEI |
+| 14 | CAU-FLO-73 | Fuel low | Combustível |
+| 15 | WAR-FIR-21 | Engine fire | Fogo motor |
+| 16 | FLY-BAS-17 | Autorrotação | Autorrotação |
+| 17 | WAR-GER-27 | Landing gear emergency | Trem / pouso |
+| 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
+
+## A139-S-01/02 — Semestral 01/02: LOFT e Operação Noturna
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist noturno |
+| 2 | FLY-BAS-X3 | Hover e taxi | Hover / taxi |
+| 3 | OPS-NRM-X2 | Decolagens e pousos | Decolagem |
+| 4 | FLY-BAS-X1 | Controle geral VFR | Subida / cruzeiro visual noturno |
+| 5 | A139-MOD-01 | Seleção e transição de modos AFCS em condição noturna | Cruzeiro / automação |
+| 6 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação noturna |
+| 7 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
+| 8 | A139-CKL-02 | Aplicação do QRH para caution noturna | QRH / checklist |
+| 9 | CAU-FLO-73 | Fuel low | Combustível |
+| 10 | WAR-OUT-15 | Engine failure | Motor |
+| 11 | CAU-LIC-60 | OEI limit timer | OEI |
+| 12 | A139-OEI-01 | Perfil OEI noturno | Perfil OEI |
+| 13 | OPS-APP-X1 | Precision approach | Aproximação noturna |
+| 14 | OPS-APP-X3 | Missed approach | Missed approach |
+| 15 | OPS-NRM-X1 | Procedimentos normais | Normalização |
+| 16 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
+| 17 | WAR-GEN-11 | Dual DC GEN failure | Elétrico avançado |
+| 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
+
+## A139-S-02/02 — Semestral 02/02: LOFT e Check de IFR
+
+> Sessão avaliativa (`carater=avaliativo` em metadados internos; não exibir na ficha final).
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist |
+| 2 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação IFR |
+| 3 | OPS-NAV-X2 | Uso AP e automação | Automação |
+| 4 | FLY-BAS-X2 | Controle geral IFR | IFR básico |
+| 5 | OPS-NAV-X4 | SID e STAR | Saída / chegada IFR |
+| 6 | OPS-NAV-X3 | Holding pattern | Espera IFR |
+| 7 | CAU-APO-38 | AP OFF | AFCS |
+| 8 | CAU-FMS-51 | FMS failure | Navegação |
+| 9 | CAU-AHR-47 | AHRS failure | Avionics |
+| 10 | FLY-BAS-X4 | Recuperação de atitudes anormais | Recuperação |
+| 11 | OPS-APP-X2 | Non-precision approach | Aproximação IFR |
+| 12 | OPS-APP-X3 | Missed approach | Missed approach |
+| 13 | OPS-APP-X1 | Precision approach | Aproximação IFR |
+| 14 | WAR-OUT-15 | Engine failure | Motor |
+| 15 | CAU-LIC-60 | OEI limit timer | OEI |
+| 16 | WAR-GER-27 | Landing gear emergency | Trem / pouso |
+| 17 | A139-POU-01 | Pouso monomotor IFR | Pouso OEI |
+| 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
+
+---
+
 # 7. SK76/S76 — Treinamento Inicial
 
 ## SK76-I-01/12 — Familiarização / Checklist Normal / Voo Normal Básico
@@ -1056,13 +1184,140 @@ Exceções aceitas:
 
 ---
 
-# 9. Sessões fora dos PDFs enviados
+# 8C. SK76/S76 — Noturno, Reaquisição e Semestral (Decisão 15)
 
-Os PDFs enviados declaram que fichas fora do pacote — noturno, semestral, reaquisição, instrutor/examinador/credenciamento — devem permanecer preservadas. Portanto:
+> Incorporados ao target 51 pela Decisão 15 (§4). Sequências preservadas do snapshot operacional (`docs/MODELOS_SESSAO_MANOBRAS.md`), reusando códigos já existentes no catálogo. Ver §4 decisões 15–17 para as correções aplicadas.
 
-- Não alterar essas sessões nesta implantação.
-- O agente deve inventariar se elas aparecem no loader.
-- Se o loader contiver modelos adicionais além dos listados neste documento, bloquear alteração desses modelos e reportar.
+## S76-NOT-01 — Treinamento Noturno Onshore
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
+| 2 | S76-NVF-00 | Procedimentos Normais VFR | Normal / cruzeiro |
+| 3 | S76-HOV-00 | Controle Geral VFR — Hover e Táxi | Hover / taxi |
+| 4 | S76-DNR-01 | Decolagem normal noturna | Decolagem |
+| 5 | S76-SUB-01 | Subida controlada noturna | Subida |
+| 6 | S76-PWR-01 | Controle de potência e torque | Cruzeiro / perfil |
+| 7 | S76-NDL-00 | Voo Noturno NDL (Circuito Padrão) | Circuito noturno |
+| 8 | 76-FALGC | Falha em um gerador DC | Elétrico |
+| 9 | 76-FALFF | Falha de alimentação — feeder / bateria no nariz | Elétrico |
+| 10 | 76-FLWNR | Vazão de combustível fora da faixa normal | Combustível |
+| 11 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
+| 12 | S76-CKL-03 | Aplicação do ECL para falha de motor | QRH / ECL |
+| 13 | S76-OEI-01 | Perfil OEI noturno | Perfil OEI |
+| 14 | S76-APN-01 | Aproximação normal visual noturna | Aproximação |
+| 15 | S76-PNO-01 | Pouso normal noturno | Pouso |
+| 16 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 17 | S76-AUT-70 | Autorotação | Autorrotação |
+| 18 | S76-EST-01 | Encerramento pós-voo noturno | Pós-pouso |
+
+## S76-NOT-02 — Treinamento Noturno Offshore
+
+> Corrigido pela decisão 17 (§4): `S76-EST-01` removido do fim por conflitar com o terminal único `S76-FLU-01`; `76-FALFF` inserido (já usado em `S76-NOT-01`) para preservar 18 itens sem novo código.
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
+| 2 | S76-TDP-00 | Decolagem Classe 2 — Helideck (TDP) | Decolagem offshore |
+| 3 | S76-HOV-00 | Controle Geral VFR — Hover e Táxi | Hover / taxi |
+| 4 | S76-NVF-00 | Procedimentos Normais VFR | Normal / cruzeiro |
+| 5 | S76-PWR-01 | Controle de potência e torque | Cruzeiro / perfil |
+| 6 | 76-FLWNR | Vazão de combustível fora da faixa normal | Combustível |
+| 7 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
+| 8 | S76-CKL-03 | Aplicação do ECL para falha de motor | QRH / ECL |
+| 9 | S76-OEI-01 | Perfil OEI noturno | Perfil OEI |
+| 10 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
+| 11 | 76-FALGC | Falha em um gerador DC | Elétrico |
+| 12 | 76-FALFF | Falha de alimentação — feeder / bateria no nariz | Elétrico |
+| 13 | S76-LDP-00 | Pouso Classe 2 — Helideck (Committal Point) | Aproximação / pouso offshore |
+| 14 | S76-APO-01 | Aproximação offshore a Unidade Marítima | Aproximação offshore |
+| 15 | S76-ARO-01 | Arremetida offshore | Arremetida |
+| 16 | 76-AUTAG | Autorrotação para a água | Autorrotação / água |
+| 17 | S76-DIT-71 | Ditching com Potência | Ditching |
+| 18 | S76-FLU-01 | Flutuabilidade e evacuação aquática | Ditching / encerramento |
+
+## S76-REQ-01 — Reaquisição de Experiência Recente
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
+| 2 | S76-NVF-00 | Procedimentos Normais VFR | Normal / cruzeiro |
+| 3 | S76-HOV-00 | Controle Geral VFR — Hover e Táxi | Hover / taxi |
+| 4 | S76-DNR-01 | Decolagem normal noturna | Decolagem |
+| 5 | S76-SUB-01 | Subida controlada noturna | Subida |
+| 6 | S76-PWR-01 | Controle de potência e torque | Cruzeiro / perfil |
+| 7 | S76-CRV-01 | Curvas e controle de atitude | Manobras visuais |
+| 8 | S76-APN-01 | Aproximação normal visual noturna | Aproximação |
+| 9 | S76-PNO-01 | Pouso normal noturno | Pouso |
+| 10 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 11 | S76-TDP-00 | Decolagem Classe 2 — Helideck (TDP) | Decolagem offshore |
+| 12 | S76-NDT-00 | Decolagem noturna | Decolagem noturna |
+| 13 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
+| 14 | S76-RNV-00 | Aproximação RNAV (GPS) | Aproximação IFR |
+| 15 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
+| 16 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
+| 17 | S76-AUT-70 | Autorotação | Autorrotação |
+| 18 | S76-EST-01 | Encerramento pós-voo noturno | Pós-pouso |
+
+## SK76-S-01/02 — Semestral 01/02: LOFT e Operação Noturna
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
+| 2 | S76-NVF-00 | Procedimentos Normais VFR | Normal / cruzeiro |
+| 3 | S76-HOV-00 | Controle Geral VFR — Hover e Táxi | Hover / taxi |
+| 4 | S76-DNR-01 | Decolagem normal noturna | Decolagem |
+| 5 | S76-SUB-01 | Subida controlada noturna | Subida |
+| 6 | S76-PWR-01 | Controle de potência e torque | Cruzeiro / perfil |
+| 7 | S76-NDL-00 | Voo Noturno NDL (Circuito Padrão) | Circuito noturno |
+| 8 | 76-FALGC | Falha em um gerador DC | Elétrico |
+| 9 | 76-FALFF | Falha de alimentação — feeder / bateria no nariz | Elétrico |
+| 10 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
+| 11 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
+| 12 | S76-AUT-70 | Autorotação | Autorrotação |
+| 13 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
+| 14 | S76-RNV-00 | Aproximação RNAV (GPS) | Aproximação IFR |
+| 15 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 16 | S76-APN-01 | Aproximação normal visual noturna | Aproximação |
+| 17 | S76-PNO-01 | Pouso normal noturno | Pouso |
+| 18 | S76-EST-01 | Encerramento pós-voo noturno | Pós-pouso |
+
+## SK76-S-02/02 — Semestral 02/02: LOFT e Check de IFR
+
+> Sessão avaliativa (`carater=avaliativo` em metadados internos; não exibir na ficha final). Corrigido pela decisão 16 (§4): `S76-LGE-44` substituído por `S76-LGB-47` (código já existente, já usado em `S76-P-C2/VFR`).
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
+| 2 | S76-NIF-00 | Procedimentos Normais IFR | IFR básico |
+| 3 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
+| 4 | S76-RNV-00 | Aproximação RNAV (GPS) | Aproximação IFR |
+| 5 | S76-VOR-00 | Aproximação VOR/NDB | Aproximação IFR |
+| 6 | S76-CKL-02 | Aplicação de checklist anormal | QRH / checklist |
+| 7 | S76-MGP-33 | Pressão de Óleo da MGB 40–45 PSI | Transmissão |
+| 8 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
+| 9 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
+| 10 | S76-AUT-70 | Autorotação | Autorrotação |
+| 11 | S76-LGB-47 | Trem de Pouso — Extensão de Emergência | Trem / pouso |
+| 12 | S76-FFL-32 | Luz de Cautela do Filtro de Combustível | Combustível |
+| 13 | S76-FFM-32 | Fluxo de Combustível fora do Normal | Combustível |
+| 14 | S76-NRO-00 | Disparo de NR (NR Overspeed) | Rotor RPM |
+| 15 | S76-NRL-00 | Queda de NR (NR Low) | Rotor RPM |
+| 16 | S76-CST-00 | Estol de Compressor (Compressor Stall) | Motor |
+| 17 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 18 | S76-EST-01 | Encerramento pós-voo noturno | Pós-pouso |
+
+---
+
+# 9. Sessões fora dos PDFs enviados (histórico — superado pela Decisão 15)
+
+Os PDFs enviados declaravam que fichas fora do pacote — noturno, semestral, reaquisição, instrutor/examinador/credenciamento — deveriam permanecer preservadas nesta implantação. Essa era a regra vigente enquanto o target era `41`.
+
+A decisão 12 (§4) já havia revertido essa regra para `TRE-INST`/`CRED-EXA`. A decisão 15 (§4) estende a mesma reversão aos 10 modelos restantes (noturno AW139/SK76, reaquisição AW139/SK76, semestral 01/02 e 02/02 AW139/SK76), que agora estão explicitamente listados nas §§6C e 8C. O princípio de fundo continua o mesmo:
+
+- Não alterar fichas, sessões já criadas, avaliações, notas, assinaturas ou histórico.
+- Não inventar código novo se um código equivalente já existir no catálogo.
+- Se o loader contiver modelos adicionais além dos listados neste documento (isto é, além dos 51 do catálogo operacional), bloquear alteração desses modelos e reportar.
 - Só aplicar alterações a modelos explicitamente listados neste documento.
 
 # 10. Guardrails obrigatórios para implementação
@@ -1081,6 +1336,10 @@ Adicionar/ajustar testes para garantir:
 10. Nenhum código novo com página/revisão de manual no código.
 11. Nenhuma descrição final contém metadados internos: `tipo_item`, `fase_voo`, `carater`, `matriz_v6_modelo`, `V4.1`, `renomeado`, `validar se fica`.
 12. Nenhuma normalização `76-*` → `S76-*` é aplicada sem alias/compatibilidade documentada.
+13. `target_models` é exatamente `51` e o total de linhas técnicas é exatamente `918` (`51 × 18`).
+14. `A139-NOT-01`, `A139-NOT-02`, `A139-REQ-01`, `A139-S-01/02`, `A139-S-02/02`, `S76-NOT-01`, `S76-NOT-02`, `S76-REQ-01`, `SK76-S-01/02` e `SK76-S-02/02` estão presentes no `target_models`, cada um com `18` técnicas distintas.
+15. `SK76-S-02/02` usa `S76-LGB-47` e não usa `S76-LGE-44`.
+16. `S76-NOT-02` termina em `S76-FLU-01` e não contém `S76-EST-01`.
 
 # 11. Prompt para implantação
 
