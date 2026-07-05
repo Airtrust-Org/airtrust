@@ -193,6 +193,7 @@ scripts/export_producao.py
 # ========== SENSITIVE SQL DUMPS / BACKUPS ==========
 # Scoped to avoid hiding official migrations in worker-airtrust/migrations/
 .local-dumps/
+artifacts/apply-plans/
 artifacts/db-backups/
 artifacts/local-dev-db/
 artifacts/sanitization/
