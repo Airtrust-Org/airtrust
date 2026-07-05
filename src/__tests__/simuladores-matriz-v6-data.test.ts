@@ -12,10 +12,12 @@ const EXPECTED_MODELS = [
   'A139-I-12/12',
   'A139-P-C1/VFR',
   'A139-P-LOFT/CHECK',
+  'CRED-EXA',
   'SK76-I-01/12',
   'SK76-I-12/12',
   'SK76-P-CHECK',
   'S76-P-C3/IFR',
+  'TRE-INST',
 ];
 
 const OUTSIDE_PACKAGE_MODELS = [
@@ -25,16 +27,14 @@ const OUTSIDE_PACKAGE_MODELS = [
   'S76-REQ-01',
   'SK76-S-01/02',
   'SK76-S-02/02',
-  'TRE-INST',
-  'CRED-EXA',
 ];
 
 describe('simuladores matriz v6.2 data', () => {
-  it('gera exatamente os 39 modelos do documento final, com 18 tecnicas distintas cada', () => {
+  it('gera exatamente os 41 modelos do documento final, com 18 tecnicas distintas cada', () => {
     const data = loadSimuladoresMatrizV6Data();
 
     expect(data.issues).toEqual([]);
-    expect(data.models).toHaveLength(39);
+    expect(data.models).toHaveLength(41);
 
     for (const model of data.models) {
       expect(model.rows).toHaveLength(18);
@@ -73,6 +73,21 @@ describe('simuladores matriz v6.2 data', () => {
     }
   });
 
+  it('inclui TRE-INST e CRED-EXA no alvo com 18 tecnicas e sem NOTECHS legados nas tecnicas', () => {
+    const data = loadSimuladoresMatrizV6Data();
+    const treInst = data.models.find((item) => item.modelCode === 'TRE-INST');
+    const credExa = data.models.find((item) => item.modelCode === 'CRED-EXA');
+
+    expect(treInst?.aircraft).toBe('N/A');
+    expect(credExa?.aircraft).toBe('N/A');
+    expect(treInst?.kind).toBe('instrutor');
+    expect(credExa?.kind).toBe('examinador');
+    expect(treInst?.rows).toHaveLength(18);
+    expect(credExa?.rows).toHaveLength(18);
+    expect(treInst?.rows.some((row) => row.codigo.startsWith('INV-CRM-'))).toBe(false);
+    expect(credExa?.rows.some((row) => row.codigo.startsWith('EXA-NTS-'))).toBe(false);
+  });
+
   it('marca sessoes de check como avaliativas, sem contaminar sessoes de treino puro', () => {
     const data = loadSimuladoresMatrizV6Data();
     const checkCodes = ['A139-I-12/12', 'A139-P-LOFT/CHECK', 'SK76-I-12/12', 'SK76-P-CHECK'];
@@ -93,12 +108,37 @@ describe('simuladores matriz v6.2 data', () => {
 
   it('preserva codigos legados 76-* onde a V6.2 final ainda os usa, sem normalizacao cega', () => {
     const data = loadSimuladoresMatrizV6Data();
-    const sk76I03 = data.models.find((item) => item.modelCode === 'SK76-I-03/12');
+    const sk76I04 = data.models.find((item) => item.modelCode === 'SK76-I-04/12');
+    const sk76I05 = data.models.find((item) => item.modelCode === 'SK76-I-05/12');
     const sk76I06 = data.models.find((item) => item.modelCode === 'SK76-I-06/12');
 
-    expect(sk76I03?.rows.some((row) => row.codigo === '76-PRGGP')).toBe(true);
-    expect(sk76I03?.rows.some((row) => row.codigo === '76-APXPR')).toBe(true);
+    expect(sk76I04?.rows.some((row) => row.codigo === '76-PRGGP')).toBe(true);
+    expect(sk76I05?.rows.some((row) => row.codigo === '76-APXPR')).toBe(true);
     expect(sk76I06?.rows.some((row) => row.codigo === '76-POUMO')).toBe(true);
+  });
+
+  it('promove o IFR basico para A139-I-05/12 e SK76-I-05/12, mantendo 03/12 e 04/12 sem bloco principal de aproximacoes IFR', () => {
+    const data = loadSimuladoresMatrizV6Data();
+    const a139I03 = data.models.find((item) => item.modelCode === 'A139-I-03/12');
+    const a139I04 = data.models.find((item) => item.modelCode === 'A139-I-04/12');
+    const a139I05 = data.models.find((item) => item.modelCode === 'A139-I-05/12');
+    const sk76I03 = data.models.find((item) => item.modelCode === 'SK76-I-03/12');
+    const sk76I04 = data.models.find((item) => item.modelCode === 'SK76-I-04/12');
+    const sk76I05 = data.models.find((item) => item.modelCode === 'SK76-I-05/12');
+
+    expect(a139I03?.modelName).toMatch(/Sistema Elétrico/i);
+    expect(a139I04?.modelName).toMatch(/AFCS, Aviônicos/i);
+    expect(a139I05?.modelName).toMatch(/IFR\/PBN Básico/i);
+    expect(a139I03?.rows.some((row) => row.codigo.startsWith('OPS-APP-'))).toBe(false);
+    expect(a139I04?.rows.some((row) => row.codigo.startsWith('OPS-APP-'))).toBe(false);
+    expect(a139I05?.rows.some((row) => row.codigo.startsWith('OPS-APP-'))).toBe(true);
+
+    expect(sk76I03?.modelName).toMatch(/Sistemas Básicos/i);
+    expect(sk76I04?.modelName).toMatch(/Automação, Aviônicos/i);
+    expect(sk76I05?.modelName).toMatch(/IFR \/ Navegação Básico/i);
+    expect(sk76I03?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(false);
+    expect(sk76I04?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(false);
+    expect(sk76I05?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(true);
   });
 
   it('SK76-P-CHECK usa a familia LOFT-CHK-* e nao reintroduz S76-LOFT-*', () => {

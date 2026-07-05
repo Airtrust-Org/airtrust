@@ -2,7 +2,7 @@
 
 **Documento de implantação técnica — não regulatório.**
 
-Este arquivo substitui os fechamentos parciais anteriores sobre a ordem das manobras. Ele consolida, em uma única especificação, as sessões e as 18 manobras técnicas de cada ficha contemplada nos documentos de proposta AW139 e SK76 enviados pelo owner.
+Este arquivo substitui os fechamentos parciais anteriores sobre a ordem das manobras. Ele consolida, em uma única especificação, as sessões e as 18 manobras técnicas de cada ficha contemplada nos documentos de proposta AW139 e SK76 enviados pelo owner, incluindo TRE-INST e CRED-EXA no mesmo padrão estrutural.
 
 ## 0. Status e regra de uso
 
@@ -24,6 +24,7 @@ Este arquivo substitui os fechamentos parciais anteriores sobre a ordem das mano
    - SK76-P-CHECK não pode usar família `S76-LOFT-*` sem treino prévio;
    - `S76-LGE-44` deve ser substituído por `S76-LGB-47` se mantida a lógica de treino prévio;
    - referências de FAP/RIPEA/manual devem ir em `referencias_json`, não no código.
+5. `docs/MODELOS_SESSAO_MANOBRAS.md` como evidência operacional do estado legado a ser corrigido.
 
 ## 2. Regras de sequência aplicadas
 
@@ -80,10 +81,61 @@ Exceções aceitas:
 9. `SK76-I-10/12`: ditching/flutuabilidade/evacuação encerra. Não pode haver aproximação/decolagem depois de ditching.
 10. `SK76-P-CHECK`: substituir família `S76-LOFT-*` por `LOFT-CHK-*` treinada, com `LOFT-CHK-23` antes da chegada/pouso.
 11. `SK76-S-02/02`: substituir `S76-LGE-44` por `S76-LGB-47`, se essa sessão estiver no loader alvo.
+12. `TRE-INST` e `CRED-EXA` deixam de ser modelos preservados fora do alvo e passam a seguir o padrão `18 técnicas + 15 NOTECHS`.
+13. `A139-I-03/12` e `A139-I-04/12` permanecem em sistemas/anormalidades/automação; IFR básico começa em `A139-I-05/12`.
+14. `SK76-I-03/12` e `SK76-I-04/12` permanecem em sistemas/anormalidades/automação; IFR básico começa em `SK76-I-05/12`.
 
 ---
 
-# 5. AW139 — Treinamento Inicial
+# 5. Modelos N/A — Instrutor e Examinador
+
+## CRED-EXA — Credenciamento de Examinador
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | EXA-CGE-01 | Conhecimento da IS 00-002 e normas aplicáveis ao examinador | Base normativa |
+| 2 | EXA-CGE-02 | Métodos de avaliação e julgamento | Base normativa |
+| 3 | EXA-CGE-03 | Conhecimento do SOP, MGO, PTO e currículos | Preparação do exame |
+| 4 | EXA-CGE-04 | Conhecimentos técnicos e limitações | Preparação técnica |
+| 5 | EXA-CGE-05 | Planejamento de voo, desempenho e preparação do exame | Planejamento |
+| 6 | EXA-PLN-01 | Planejamento do exame de proficiência | Planejamento |
+| 7 | EXA-BRF-01 | Briefing do exame | Briefing |
+| 8 | EXA-FAP-01 | Aplicação da FAP/checklist de avaliação | Critérios / execução |
+| 9 | EXA-SCN-01 | Condução de cenário avaliativo | Condução |
+| 10 | EXA-CND-01 | Condução do exame de proficiência | Condução |
+| 11 | EXA-STD-01 | Aplicação de padrões, tolerâncias e critérios de desempenho | Julgamento |
+| 12 | EXA-RSK-01 | Gestão de segurança e risco durante o exame | Segurança |
+| 13 | EXA-EMR-01 | Avaliação de procedimentos anormais e emergências | Segurança / avaliação |
+| 14 | EXA-DEC-01 | Determinação do resultado do exame | Decisão |
+| 15 | EXA-DBF-01 | Debriefing do exame | Debriefing |
+| 16 | EXA-ADM-01 | Procedimentos administrativos do exame | Encerramento |
+| 17 | EXA-ETH-01 | Imparcialidade, isenção e ética do examinador | Governança |
+| 18 | EXA-PAD-01 | Padronização operacional e representatividade da autoridade | Governança |
+
+## TRE-INST — Treinamento de Instrutor de Voo
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | INV-CGE-01 | Instrumentos, equipamentos e documentos | Base técnica |
+| 2 | INV-CGE-02 | Conhecimentos técnicos e sistemas | Base técnica |
+| 3 | INV-CGE-03 | Procedimentos normais | Base técnica |
+| 4 | INV-CGE-04 | Procedimentos anormais e de emergência | Base técnica |
+| 5 | INV-CGE-05 | Peso, balanceamento e performance | Preparação |
+| 6 | INV-CGE-06 | Meteorologia e informações aeronáuticas | Preparação |
+| 7 | INV-PLN-01 | Planejamento da instrução e objetivos da sessão | Planejamento |
+| 8 | INV-BRF-01 | Briefing da instrução | Briefing |
+| 9 | INV-DEM-01 | Técnica de demonstração de manobras | Demonstração |
+| 10 | INV-CTL-01 | Supervisão e transferência de comandos | Condução |
+| 11 | INV-SAF-01 | Intervenção do instrutor e segurança da instrução | Segurança |
+| 12 | INV-ERR-01 | Gerenciamento de erros do aluno durante a instrução | Segurança / correção |
+| 13 | INV-EMR-01 | Instrução de procedimentos anormais e emergências | Emergências |
+| 14 | INV-AUT-01 | Instrução de autorrotação ou falha de motor | Emergências |
+| 15 | INV-UAR-01 | Instrução de recuperação de atitudes anormais | Emergências |
+| 16 | INV-EVL-01 | Avaliação do desempenho do aluno | Avaliação |
+| 17 | INV-DBF-01 | Debriefing técnico e plano de melhoria | Debriefing |
+| 18 | INV-ADM-01 | Registros administrativos e critérios de conclusão | Encerramento |
+
+# 6. AW139 — Treinamento Inicial
 
 ## A139-I-01/12 — Familiarização / Checklist Normal / Voo Normal
 
@@ -131,30 +183,7 @@ Exceções aceitas:
 | 17 | A139-TAX-01 | Taxi/deslocamento pós-pouso | Pós-pouso |
 | 18 | A139-EST-01 | Estacionamento/corte | Pós-pouso |
 
-## A139-I-03/12 — IFR/PBN Básico
-
-| # | Código | Item técnico | Fase |
-|---:|---|---|---|
-| 1 | OPS-NAV-X1 | Navegação FMS e convencional | Preparação IFR |
-| 2 | OPS-NAV-X4 | SID e STAR | Preparação / saída IFR |
-| 3 | OPS-NAV-X2 | Uso AP e automação normal | Preparação / IFR normal |
-| 4 | FLY-BAS-X2 | Controle geral IFR | Saída/enroute IFR |
-| 5 | A139-SCN-02 | Varredura de instrumentos IFR | Enroute IFR |
-| 6 | A139-VMA-01 | Voo manual por instrumentos | Enroute IFR |
-| 7 | A139-ORI-01 | Orientação e correção de rumo por instrumentos | Enroute IFR |
-| 8 | FLY-BAS-X4 | Recuperação de atitudes anormais em IFR básico | Recuperação |
-| 9 | OPS-NAV-X3 | Holding pattern | Espera IFR |
-| 10 | A139-RNP-01 | Aproximação RNP básica | Aproximação IFR |
-| 11 | OPS-APP-X2 | Non-precision approach | Aproximação IFR |
-| 12 | OPS-APP-X1 | Precision approach | Aproximação IFR |
-| 13 | OPS-APP-X3 | Missed approach | Missed approach |
-| 14 | OPS-APP-X4 | Large angle approach introdutório | Aproximação |
-| 15 | A139-CKL-01 | Normal checklist em contexto IFR | Checklist |
-| 16 | FLY-BAS-X1 | Transição visual/instrumental | Transição |
-| 17 | A139-MOD-01 | Seleção e transição de modos AFCS em perfil visual normal | Cruzeiro / automação |
-| 18 | A139-FMA-02 | Monitoramento de FMA durante mudança de modo | Cruzeiro / automação |
-
-## A139-I-04/12 — CAS/QRH Anormalidades Simples
+## A139-I-03/12 — Sistema Elétrico, Barras, Geradores e Anormalidades Básicas
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -177,28 +206,51 @@ Exceções aceitas:
 | 17 | CAU-MIS-40 | AP MISTRIM | AFCS simples |
 | 18 | CAU-SAS-41 | SAS degraded | AFCS simples |
 
-## A139-I-05/12 — Engine/OEI Introdutório
+## A139-I-04/12 — AFCS, Aviônicos e Degradações Simples
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
-| 1 | A139-CKL-02 | Aplicação prática do QRH para CAS/caution | Preparação do método |
-| 2 | WAR-OUT-15 | Engine failure | Cruzeiro estabilizado / evento |
-| 3 | A139-IDF-01 | Identificação de falha de motor | Reconhecimento |
-| 4 | A139-CKL-03 | QRH para engine failure / EEC FAIL em cruzeiro | QRH |
-| 5 | A139-OEI-01 | Perfil OEI em cruzeiro | Perfil OEI |
-| 6 | CAU-LIC-60 | OEI limit timer | Monitoramento OEI |
-| 7 | WAR-EEC-18 | EEC FAIL | Motor / evento correlato |
-| 8 | CAU-CST-59 | Compressor stall | Motor / evento |
-| 9 | CAU-OVS-64 | Engine overspeed | Motor / evento |
-| 10 | CAU-NGO-63 | NG overspeed | Motor / evento |
-| 11 | CAU-HOT-65 | Hot start | Motor / solo/partida |
-| 12 | CAU-FLO-73 | Fuel low | Combustível em contexto motor |
-| 13 | CAU-2FP-74 | Double fuel pump failure | Combustível |
-| 14 | CAU-EFP-75 | Engine fuel pump failure | Combustível motor |
-| 15 | WAR-OIL-18 | Oil pressure low | Óleo motor |
-| 16 | CAU-CND-61 | Compressor no demand | Motor |
-| 17 | CAU-TNF-62 | Throttle non-follow | Motor/controle |
-| 18 | WAR-IDL-16 | Engine stuck IDLE | Evento correlato |
+| 1 | A139-MOD-01 | Seleção e transição de modos AFCS em perfil normal | Cruzeiro / automação |
+| 2 | A139-FMA-02 | Monitoramento de FMA durante mudança de modo | Cruzeiro / automação |
+| 3 | CAU-APO-38 | AP OFF — retomada controlada | AFCS simples |
+| 4 | CAU-APF-37 | AP failure | AFCS |
+| 5 | CAU-MIS-40 | AP MISTRIM | AFCS |
+| 6 | CAU-SAS-41 | SAS degraded | AFCS |
+| 7 | CAU-AFD-41 | AFCS degraded | AFCS |
+| 8 | CAU-ADS-46 | ADS failure | Avionics |
+| 9 | CAU-AHR-47 | AHRS failure | Avionics |
+| 10 | CAU-DUD-46 | Display unit degraded | Displays |
+| 11 | CAU-PFD-45 | PFD failure | Displays |
+| 12 | CAU-MFD-45 | MFD failure | Displays |
+| 13 | CAU-EIC-45 | EICAS failure | Displays/EICAS |
+| 14 | CAU-ADC-48 | ADC failure | Dados ar |
+| 15 | CAU-GPS-52 | GPS failure | Navegação |
+| 16 | CAU-FMS-51 | FMS failure | Navegação |
+| 17 | A139-VMA-01 | Voo manual por instrumentos em contexto degradado | Voo manual |
+| 18 | FLY-BAS-X4 | Recuperação de atitudes anormais com automação degradada | Recuperação |
+
+## A139-I-05/12 — IFR/PBN Básico
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | OPS-NAV-X1 | Navegação FMS e convencional | Preparação IFR |
+| 2 | OPS-NAV-X4 | SID e STAR | Preparação / saída IFR |
+| 3 | OPS-NAV-X2 | Uso AP e automação normal | Preparação / IFR normal |
+| 4 | FLY-BAS-X2 | Controle geral IFR | Saída/enroute IFR |
+| 5 | A139-SCN-02 | Varredura de instrumentos IFR | Enroute IFR |
+| 6 | A139-VMA-01 | Voo manual por instrumentos | Enroute IFR |
+| 7 | A139-ORI-01 | Orientação e correção de rumo por instrumentos | Enroute IFR |
+| 8 | FLY-BAS-X4 | Recuperação de atitudes anormais em IFR básico | Recuperação |
+| 9 | OPS-NAV-X3 | Holding pattern | Espera IFR |
+| 10 | A139-RNP-01 | Aproximação RNP básica | Aproximação IFR |
+| 11 | OPS-APP-X2 | Non-precision approach | Aproximação IFR |
+| 12 | OPS-APP-X1 | Precision approach | Aproximação IFR |
+| 13 | OPS-APP-X3 | Missed approach | Missed approach |
+| 14 | OPS-APP-X4 | Large angle approach introdutório | Aproximação |
+| 15 | A139-CKL-01 | Normal checklist em contexto IFR | Checklist |
+| 16 | FLY-BAS-X1 | Transição visual/instrumental | Transição |
+| 17 | A139-MOD-01 | Seleção e transição de modos AFCS em perfil visual normal | Cruzeiro / automação |
+| 18 | A139-FMA-02 | Monitoramento de FMA durante mudança de modo | Cruzeiro / automação |
 
 ## A139-I-06/12 — CAT A/B Introdutório
 
@@ -603,30 +655,7 @@ Exceções aceitas:
 | 17 | S76-TAX-01 | Taxi e deslocamento pós-pouso | Pós-pouso |
 | 18 | S76-EST-01 | Estacionamento e corte de motores | Pós-pouso |
 
-## SK76-I-03/12 — IFR / Navegação Básico
-
-| # | Código | Item técnico | Fase |
-|---:|---|---|---|
-| 1 | S76-CKL-01 | Execução do checklist normal por fase de voo | Pré-partida |
-| 2 | 76-PRGGP | Programação do GPS, HSI e EFIS | Preparação IFR |
-| 3 | S76-NIF-00 | Procedimentos normais IFR | Preparação IFR |
-| 4 | S76-FDA-00 | Uso do diretor de voo e automação | Preparação / decolagem IFR |
-| 5 | 76-DECSI | Decolagem por instrumentos / SID | Decolagem IFR |
-| 6 | S76-SID-00 | SID & STAR | Saída / chegada IFR |
-| 7 | S76-CGI-00 | Controle geral IFR | Enroute IFR |
-| 8 | S76-SCN-01 | Varredura instrumental primária e secundária em IFR básico | Enroute IFR |
-| 9 | S76-VMA-01 | Voo manual por instrumentos em condição normal | Enroute IFR |
-| 10 | S76-UAR-00 | Recuperação de atitudes anormais básica | IFR básico / segurança |
-| 11 | S76-HLD-00 | Holding pattern | Espera IFR |
-| 12 | S76-RNV-00 | Aproximação RNAV/GPS | Aproximação IFR |
-| 13 | 76-APXNP | Aproximação de não precisão IFR | Aproximação IFR |
-| 14 | 76-APXPR | Aproximação de precisão IFR | Aproximação IFR |
-| 15 | S76-ILS-00 | Aproximação ILS | Reaproximação |
-| 16 | S76-VOR-00 | Aproximação VOR/NDB | Aproximação IFR |
-| 17 | 76-APXPI | Aproximação perdida IFR / procedimento publicado | Missed approach |
-| 18 | 76-ARRIF | Arremetida IFR normal | Missed approach |
-
-## SK76-I-04/12 — Anormalidades Simples / Checklist/ECL
+## SK76-I-03/12 — Sistemas Básicos, ECL e Anormalidades Simples
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -649,28 +678,51 @@ Exceções aceitas:
 | 17 | 76-HIDPB | Falha simples de bomba/perda de pressão servo/hidráulica | Mini-cenário hidráulico simples |
 | 18 | 76-FALFF | Falha de alimentação feeder/bateria | Mini-cenário final / validar frota |
 
-## SK76-I-05/12 — Motor em Cruzeiro / OEI Introdutório
+## SK76-I-04/12 — Automação, Aviônicos e Degradações Básicas
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
 | 1 | S76-CKL-01 | Execução do checklist normal por fase de voo | Pré-partida |
-| 2 | 76-MOTCZ | Falha de motor durante o cruzeiro | Cruzeiro estabilizado / evento |
-| 3 | S76-IDF-01 | Identificação e diagnóstico de falha de motor | Reconhecimento |
-| 4 | S76-CKL-03 | Aplicação do ECL para falha de motor em cruzeiro | Checklist/ECL |
-| 5 | S76-OEI-01 | Perfil OEI em cruzeiro | Perfil OEI |
-| 6 | S76-XFD-20 | Crossfeed total após falha de motor | Gerenciamento de combustível |
-| 7 | S76-DMN-21 | DECU — falha menor | Evento correlato de baixa severidade |
-| 8 | 76-N1TQF | Monitoramento de N1/Torque após falha | Monitoramento |
-| 9 | 76-FLWNR | Vazão de combustível em contexto de falha | Monitoramento |
-| 10 | 76-OILMT | Falha no sistema de óleo do motor em contexto de falha | Monitoramento |
-| 11 | 76-FALGC | Falha de gerador DC correlata | Evento secundário leve |
-| 12 | 76-DUACZ | Falha dupla de motor durante cruzeiro | Falha múltipla controlada |
-| 13 | S76-CGI-00 | Controle geral IFR se aplicável ao cenário OEI | Navegação/IFR |
-| 14 | S76-SCN-01 | Varredura de instrumentos pós-falha | Navegação/IFR |
-| 15 | S76-APX-02 | Aproximação planejada com um motor inoperante | Aproximação |
-| 16 | 76-APXOI | Aproximação IFR com um motor inoperante | Aproximação IFR/OEI |
-| 17 | S76-UAR-00 | Recuperação de atitude anormal em contexto OEI | Recuperação |
-| 18 | S76-PNO-01 | Pouso em contexto OEI planejado | Pouso |
+| 2 | 76-PRGGP | Programação do GPS, HSI e EFIS | Preparação técnica |
+| 3 | S76-NIF-00 | Procedimentos instrumentais normais e disciplina de scan | Preparação técnica |
+| 4 | S76-FDA-00 | Uso do diretor de voo e automação | Automação |
+| 5 | S76-SCN-01 | Varredura instrumental primária e secundária | Monitoramento |
+| 6 | S76-CGI-00 | Controle geral por instrumentos em cenário simples | Controle |
+| 7 | 76-FALAD | Falha no sistema de dados de voo | Instrumentos |
+| 8 | 76-PERAT | Perda do indicador primário de atitude em IMC | Instrumentos |
+| 9 | 76-FALEF | Mau funcionamento do EFIS | Aviônicos |
+| 10 | 76-FALPA | Falha no piloto automático | Automação |
+| 11 | 76-FALFD | Falha no flight director | Automação |
+| 12 | 76-FALRM | Falha no sistema mestre de rádio | Comunicação técnica |
+| 13 | 76-FALGC | Falha em um gerador DC | Elétrico |
+| 14 | 76-PER26 | Perda de referência de 26 VAC | Elétrico |
+| 15 | 76-FALIV | Falha no inversor | Elétrico |
+| 16 | 76-N1TQF | Falha nos indicadores N1/Torque | Indicação motor |
+| 17 | 76-FALTS | Falha no indicador TS | Indicação motor |
+| 18 | S76-UAR-00 | Recuperação de atitudes anormais básica | Segurança / recuperação |
+
+## SK76-I-05/12 — IFR / Navegação Básico
+
+| # | Código | Item técnico | Fase |
+|---:|---|---|---|
+| 1 | S76-CKL-01 | Execução do checklist normal por fase de voo | Pré-partida |
+| 2 | 76-PRGGP | Programação do GPS, HSI e EFIS | Preparação IFR |
+| 3 | S76-NIF-00 | Procedimentos normais IFR | Preparação IFR |
+| 4 | S76-FDA-00 | Uso do diretor de voo e automação | Preparação / decolagem IFR |
+| 5 | 76-DECSI | Decolagem por instrumentos / SID | Decolagem IFR |
+| 6 | S76-SID-00 | SID & STAR | Saída / chegada IFR |
+| 7 | S76-CGI-00 | Controle geral IFR | Enroute IFR |
+| 8 | S76-SCN-01 | Varredura instrumental primária e secundária em IFR básico | Enroute IFR |
+| 9 | S76-VMA-01 | Voo manual por instrumentos em condição normal | Enroute IFR |
+| 10 | S76-UAR-00 | Recuperação de atitudes anormais básica | IFR básico / segurança |
+| 11 | S76-HLD-00 | Holding pattern | Espera IFR |
+| 12 | S76-RNV-00 | Aproximação RNAV/GPS | Aproximação IFR |
+| 13 | 76-APXNP | Aproximação de não precisão IFR | Aproximação IFR |
+| 14 | 76-APXPR | Aproximação de precisão IFR | Aproximação IFR |
+| 15 | S76-ILS-00 | Aproximação ILS | Reaproximação |
+| 16 | S76-VOR-00 | Aproximação VOR/NDB | Aproximação IFR |
+| 17 | 76-APXPI | Aproximação perdida IFR / procedimento publicado | Missed approach |
+| 18 | 76-ARRIF | Arremetida IFR normal | Missed approach |
 
 ## SK76-I-06/12 — OEI Decolagem/Aproximação / DECU
 
@@ -1054,7 +1106,7 @@ Regras absolutas:
 - Não tocar Qualificações.
 - Não tocar RBAC/auth/multi-tenant.
 - Não tocar LMS/SCORM.
-- Não alterar TRE-INST/CRED-EXA.
+- Incluir TRE-INST/CRED-EXA no mesmo padrão `18 técnicas + 15 NOTECHS`, sem misturar NOTECHS nas 18 técnicas.
 - Não commitar PDFs de preview.
 - Não aplicar normalização de código 76-* → S76-* sem alias/compatibilidade.
 - Não inventar nova manobra se o código já existir.
@@ -1089,4 +1141,3 @@ Relatório final:
 - confirmação sem produção;
 - GO/NO-GO para revisão humana.
 ```
-

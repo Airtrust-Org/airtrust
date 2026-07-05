@@ -18,7 +18,7 @@ const SOURCE_MAP = path.join(
 );
 
 const MODEL_HEADING_RE = /^##\s+([A-Z0-9/-]+)\s+—\s+(.+)$/;
-const APPROVED_CODE_RE = /^(A139|S76|76|CAU|WAR|OPS|FLY|LOFT|NOTECHS)-/;
+const APPROVED_CODE_RE = /^(A139|S76|76|CAU|WAR|OPS|FLY|LOFT|NOTECHS|INV|EXA)-/;
 const TERMINAL_CODE_RE = /(-EST-|S76-FLU-01$|OPS-OFF-X3$)/;
 
 const RPEA_ALIAS_MAP = {
@@ -70,12 +70,15 @@ function read(filePath) {
 }
 
 function inferAircraft(modelCode) {
+  if (modelCode === 'TRE-INST' || modelCode === 'CRED-EXA') return 'N/A';
   return modelCode.startsWith('A139-') ? 'AW139' : 'SK76';
 }
 
 function inferKind(modelCode) {
   if (modelCode.includes('-I-')) return 'inicial';
   if (modelCode.includes('-P-')) return 'periodico';
+  if (modelCode === 'TRE-INST') return 'instrutor';
+  if (modelCode === 'CRED-EXA') return 'examinador';
   return 'outro';
 }
 
@@ -219,7 +222,7 @@ function validateModels(models) {
       if (!APPROVED_CODE_RE.test(row.codigo)) {
         issues.push(`rogue_code:${model.modelCode}:${row.codigo}`);
       }
-      if (/[Ff]AP|FCOM|FDM|Rev\.|Página|Pagina/.test(row.codigo)) {
+      if (/(?:FAP\d|FAP[ ._]\d|FCOM|FDM|Rev\.|Página|Pagina)/i.test(row.codigo)) {
         issues.push(`manual_ref_in_code:${model.modelCode}:${row.codigo}`);
       }
       if (/[Tt]ipo_item|fase_voo|carater|matriz_v6_modelo|V4\.1|renomeado|validar se fica/.test(row.nome)) {
