@@ -35,7 +35,7 @@ describe('matriz v6.2 — guardrails estruturais', () => {
 
   it('o loader nao reporta issues estruturais', () => {
     expect(data.issues).toEqual([]);
-    expect(data.models).toHaveLength(41);
+    expect(data.models).toHaveLength(51);
   });
 
   it('nenhuma sessao executa item operacional apos um item terminal', () => {
@@ -174,5 +174,19 @@ describe('matriz v6.2 — guardrails especificos do documento final', () => {
     expect(sk76I03?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(false);
     expect(sk76I04?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(false);
     expect(sk76I05?.rows.some((row) => /APX|RNV|ILS|VOR/.test(row.codigo))).toBe(true);
+  });
+
+  it('S76-REQ-01 e sessoes semestrais SK76 encerram em item terminal aceitavel', () => {
+    const expectedTerminal = new Map([
+      ['S76-REQ-01', 'S76-EST-01'],
+      ['SK76-S-01/02', 'S76-EST-01'],
+      ['SK76-S-02/02', 'S76-EST-01'],
+    ]);
+
+    for (const [modelCode, terminalCode] of expectedTerminal.entries()) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      expect(model).toBeDefined();
+      expect(model?.rows.find((row) => row.ordem === 18)?.codigo).toBe(terminalCode);
+    }
   });
 });
