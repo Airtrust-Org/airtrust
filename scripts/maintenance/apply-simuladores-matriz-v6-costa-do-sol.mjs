@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 import {
   buildModelMetadataObservacoes,
@@ -26,7 +27,8 @@ const LOCAL_DB_GLOB = path.join(
   'd1',
   'miniflare-D1DatabaseObject',
 );
-const CONFIRM_TEXT = 'APLICAR MATRIZ V6.2 MODELOS FUTUROS SEM ALTERAR FICHAS EXISTENTES';
+export const CONFIRM_TEXT =
+  'APLICAR MATRIZ V6.2 TRE-INST CRED-EXA E NOMES SEM ALTERAR FICHAS EXISTENTES';
 const TEMPLATE_TABLES = ['modelos_sessao', 'modelos_sessao_manobras', 'manobras'];
 const HISTORICAL_TABLES = [
   'fichas_sessao',
@@ -237,9 +239,12 @@ function compareSnapshots(before, after) {
   return changed;
 }
 
-function buildApplySql(data, empresaId) {
+export function buildApplySql(data, empresaId) {
   const catalog = buildManeuverCatalog(data.models, data.registry);
   const targetRows = buildTargetRows(data);
+  const targetModels = data.models
+    .map((model) => `(${sqlString(model.modelCode)}, ${sqlString(model.modelName)})`)
+    .join(',\n    ');
   const targetValues = targetRows
     .map(
       (row) =>
@@ -259,6 +264,26 @@ function buildApplySql(data, empresaId) {
 
   return `
 BEGIN TRANSACTION;
+
+WITH target_models(modelo_codigo, modelo_nome) AS (
+  VALUES
+    ${targetModels}
+)
+UPDATE modelos_sessao
+SET nome = (
+      SELECT tm.modelo_nome
+      FROM target_models tm
+      WHERE tm.modelo_codigo = modelos_sessao.codigo
+    ),
+    updated_at = datetime('now')
+WHERE empresa_id = ${empresaId}
+  AND deleted_at IS NULL
+  AND codigo IN (SELECT modelo_codigo FROM target_models)
+  AND COALESCE(nome, '') <> COALESCE((
+      SELECT tm.modelo_nome
+      FROM target_models tm
+      WHERE tm.modelo_codigo = modelos_sessao.codigo
+    ), '');
 
 WITH catalog_rows(codigo, nome, descricao, categoria, tipo_sessao, tipo_aeronave, ordem, referencias_json) AS (
   VALUES
@@ -423,11 +448,13 @@ COMMIT;
 
 function validateDbOutcome(dbFile, data, empresaId) {
   const modelCodes = data.models.map((model) => sqlString(model.modelCode)).join(', ');
+  const expectedNames = new Map(data.models.map((model) => [model.modelCode, model.modelName]));
   const rows = sqliteJson(
     dbFile,
     `
       SELECT
         ms.codigo AS modelo_codigo,
+        ms.nome AS modelo_nome,
         COUNT(*) AS total,
         COUNT(DISTINCT m.codigo) AS distintos
       FROM modelos_sessao_manobras msm
@@ -443,7 +470,19 @@ function validateDbOutcome(dbFile, data, empresaId) {
     `,
   );
 
-  const invalid = rows.filter((row) => Number(row.total) !== 18 || Number(row.distintos) !== 18);
+  const missingModels = data.models
+    .map((model) => model.modelCode)
+    .filter((modelCode) => !rows.some((row) => row.modelo_codigo === modelCode));
+  if (missingModels.length > 0) {
+    throw new Error(`post_apply_models_missing:${missingModels.join(',')}`);
+  }
+
+  const invalid = rows.filter(
+    (row) =>
+      Number(row.total) !== 18 ||
+      Number(row.distintos) !== 18 ||
+      row.modelo_nome !== expectedNames.get(row.modelo_codigo),
+  );
   if (invalid.length > 0) {
     throw new Error(`post_apply_validation_failed:${JSON.stringify(invalid)}`);
   }
@@ -531,4 +570,6 @@ function main() {
   );
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
