@@ -84,6 +84,8 @@ function inferKind(modelCode) {
 }
 
 function inferCategoria(codigo) {
+  if (codigo === 'OPS-NOT-X1') return 'EMERGENCIA';
+  if (codigo === 'INV-ETH-01') return 'TREINAMENTO';
   if (codigo.startsWith('NOTECHS-')) return 'NOTECHS';
   if (codigo.startsWith('LOFT-')) return 'LOFT';
   if (/CKL|QRH|ECL/.test(codigo)) return 'PROCEDIMENTO';
@@ -199,6 +201,7 @@ function buildModels() {
           fap_refs: '-',
           observacao: '',
           carater: isEvaluative ? 'avaliativo' : 'treinamento',
+          categoria: inferCategoria(row[1]),
         })),
       };
     }),

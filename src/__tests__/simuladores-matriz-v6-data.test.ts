@@ -279,6 +279,26 @@ describe('simuladores matriz v6.2 data', () => {
     expect(refsFap).toContainEqual(expect.objectContaining({ tipo: 'FAP', item: 'IAP3.2', status: 'CONFIRMADA' }));
   });
 
+  it('classifica explicitamente os novos codigos OPS-NOT-X1 e INV-ETH-01 sem cair em fallback', () => {
+    const data = loadSimuladoresMatrizV6Data();
+
+    for (const modelCode of ['A139-NOT-01', 'A139-NOT-02', 'A139-S-01/02', 'S76-NOT-01', 'S76-NOT-02', 'SK76-S-01/02']) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      const opsNotRow = model?.rows.find((row) => row.codigo === 'OPS-NOT-X1');
+      expect(opsNotRow?.categoria).toBe('EMERGENCIA');
+    }
+
+    const treInst = data.models.find((item) => item.modelCode === 'TRE-INST');
+    const invEthRow = treInst?.rows.find((row) => row.codigo === 'INV-ETH-01');
+    expect(invEthRow?.categoria).toBe('TREINAMENTO');
+
+    for (const modelCode of ['A139-NOT-01', 'A139-S-01/02']) {
+      const model = data.models.find((item) => item.modelCode === modelCode);
+      const autRow = model?.rows.find((row) => row.codigo === 'A139-AUT-03');
+      expect(autRow?.categoria).toBe('EMERGENCIA');
+    }
+  });
+
   it('expõe a lista canonica de gaps RPEA e a normalizacao de aliases sem mapas concorrentes', () => {
     const data = loadSimuladoresMatrizV6Data();
 
