@@ -96,6 +96,9 @@ Exceções aceitas:
 
 ## CRED-EXA — Credenciamento de Examinador
 
+> **Nota de governança:** `EXA-CND-01` tem drift semântico em relação ao legado. Antes da V6.2, o código era usado para planejamento do exame; na V6.2 ativa, `EXA-CND-01` significa condução do exame. O planejamento agora é coberto por `EXA-PLN-01`. Manter esta nota como rastreabilidade documental interna, sem exibir esse texto na ficha final.
+> **Rubrica de aplicação:** `EXA-PAD-01` permanece como técnica única dentro das 18, mas deve ser avaliado com duas rubricas internas separadas: padronização operacional e representatividade da autoridade.
+
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
 | 1 | EXA-CGE-01 | Conhecimento da IS 00-002 e normas aplicáveis ao examinador | Base normativa |
@@ -115,9 +118,12 @@ Exceções aceitas:
 | 15 | EXA-DBF-01 | Debriefing do exame | Debriefing |
 | 16 | EXA-ADM-01 | Procedimentos administrativos do exame | Encerramento |
 | 17 | EXA-ETH-01 | Imparcialidade, isenção e ética do examinador | Governança |
-| 18 | EXA-PAD-01 | Padronização operacional e representatividade da autoridade | Governança |
+| 18 | EXA-PAD-01 | Padronização operacional e representatividade da autoridade (rubricas separadas) | Governança |
 
 ## TRE-INST — Treinamento de Instrutor de Voo
+
+> **Nota de governança:** a ética/postura do instrutor foi reinserida como técnica nomeada na V6.2 atual, sem reativar `INV-CRM-04`. O conteúdo meteorologia/informações aeronáuticas permanece pressuposto na base técnica e no planejamento da instrução, mas deixa de ocupar linha própria para abrir espaço à rastreabilidade ética.
+> **Aplicação NOTECHS em modelos N/A:** os 15 NOTECHS continuam fora das 18 técnicas, mas em `TRE-INST` e `CRED-EXA` devem ser interpretados no contexto de instrução/exame e padronização, não como CRM puro de tripulação em voo.
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -126,7 +132,7 @@ Exceções aceitas:
 | 3 | INV-CGE-03 | Procedimentos normais | Base técnica |
 | 4 | INV-CGE-04 | Procedimentos anormais e de emergência | Base técnica |
 | 5 | INV-CGE-05 | Peso, balanceamento e performance | Preparação |
-| 6 | INV-CGE-06 | Meteorologia e informações aeronáuticas | Preparação |
+| 6 | INV-ETH-01 | Postura ética, limites de atuação e responsabilidade do instrutor | Governança da instrução |
 | 7 | INV-PLN-01 | Planejamento da instrução e objetivos da sessão | Planejamento |
 | 8 | INV-BRF-01 | Briefing da instrução | Briefing |
 | 9 | INV-DEM-01 | Técnica de demonstração de manobras | Demonstração |
@@ -177,14 +183,14 @@ Exceções aceitas:
 | 6 | A139-MOD-01 | Seleção e transição de modos AFCS em perfil visual normal | Cruzeiro / automação |
 | 7 | A139-FMA-02 | Monitoramento de FMA durante mudança de modo | Cruzeiro / automação |
 | 8 | A139-CRV-01 | Curvas e controle de atitude/velocidade | Manobras visuais |
-| 9 | A139-DSC-01 | Descida controlada visual | Descida |
-| 10 | A139-STB-02 | Correção de perfil em aproximação visual estabilizada | Aproximação |
-| 11 | A139-ARN-01 | Arremetida normal | Aproximação / arremetida |
-| 12 | A139-REC-02 | Reentrada no circuito | Circuito |
-| 13 | OPS-NRM-X3 | Circuito de tráfego | Circuito |
-| 14 | A139-VCZ-01 | Pouso/decolagem com vento cruzado leve | Aproximação / pouso |
-| 15 | A139-HLD-01 | Holding/espera visual ou vetoração básica | Espera / vetoração |
-| 16 | OPS-OFF-X1 | Navegação offshore introdutória sem emergência | Rota normal / navegação |
+| 9 | A139-HLD-01 | Holding/espera visual ou vetoração básica | Espera / vetoração |
+| 10 | OPS-OFF-X1 | Navegação offshore introdutória sem emergência | Rota normal / navegação |
+| 11 | A139-DSC-01 | Descida controlada visual | Descida |
+| 12 | A139-STB-02 | Correção de perfil em aproximação visual estabilizada | Aproximação |
+| 13 | A139-ARN-01 | Arremetida normal | Aproximação / arremetida |
+| 14 | A139-REC-02 | Reentrada no circuito | Circuito |
+| 15 | OPS-NRM-X3 | Circuito de tráfego | Circuito |
+| 16 | A139-VCZ-01 | Pouso/decolagem com vento cruzado leve | Aproximação / pouso |
 | 17 | A139-TAX-01 | Taxi/deslocamento pós-pouso | Pós-pouso |
 | 18 | A139-EST-01 | Estacionamento/corte | Pós-pouso |
 
@@ -222,16 +228,16 @@ Exceções aceitas:
 | 5 | CAU-MIS-40 | AP MISTRIM | AFCS |
 | 6 | CAU-SAS-41 | SAS degraded | AFCS |
 | 7 | CAU-AFD-41 | AFCS degraded | AFCS |
-| 8 | CAU-ADS-46 | ADS failure | Avionics |
-| 9 | CAU-AHR-47 | AHRS failure | Avionics |
-| 10 | CAU-DUD-46 | Display unit degraded | Displays |
-| 11 | CAU-PFD-45 | PFD failure | Displays |
-| 12 | CAU-MFD-45 | MFD failure | Displays |
-| 13 | CAU-EIC-45 | EICAS failure | Displays/EICAS |
-| 14 | CAU-ADC-48 | ADC failure | Dados ar |
-| 15 | CAU-GPS-52 | GPS failure | Navegação |
-| 16 | CAU-FMS-51 | FMS failure | Navegação |
-| 17 | A139-VMA-01 | Voo manual por instrumentos em contexto degradado | Voo manual |
+| 8 | OPS-NAV-X2 | Uso AP e automação em contexto degradado | Automação / degradação |
+| 9 | A139-SCN-02 | Varredura de instrumentos com degradação de sensores | Instrumentos |
+| 10 | A139-VMA-01 | Voo manual por instrumentos em contexto degradado | Voo manual |
+| 11 | A139-ORI-01 | Correção de rumo por instrumentos com dados degradados | Navegação / instrumentos |
+| 12 | CAU-AHR-47 | AHRS failure | Avionics |
+| 13 | CAU-ADC-48 | ADC failure | Dados ar |
+| 14 | CAU-GPS-52 | GPS failure | Navegação |
+| 15 | CAU-FMS-51 | FMS failure | Navegação |
+| 16 | A139-CKL-02 | Aplicação de QRH para falhas simples de AFCS/aviônicos | QRH / checklist |
+| 17 | OPS-NAV-X1 | Reconfiguração de navegação FMS e convencional | Navegação |
 | 18 | FLY-BAS-X4 | Recuperação de atitudes anormais com automação degradada | Recuperação |
 
 ## A139-I-05/12 — IFR/PBN Básico
@@ -245,17 +251,17 @@ Exceções aceitas:
 | 5 | A139-SCN-02 | Varredura de instrumentos IFR | Enroute IFR |
 | 6 | A139-VMA-01 | Voo manual por instrumentos | Enroute IFR |
 | 7 | A139-ORI-01 | Orientação e correção de rumo por instrumentos | Enroute IFR |
-| 8 | FLY-BAS-X4 | Recuperação de atitudes anormais em IFR básico | Recuperação |
-| 9 | OPS-NAV-X3 | Holding pattern | Espera IFR |
-| 10 | A139-RNP-01 | Aproximação RNP básica | Aproximação IFR |
-| 11 | OPS-APP-X2 | Non-precision approach | Aproximação IFR |
-| 12 | OPS-APP-X1 | Precision approach | Aproximação IFR |
-| 13 | OPS-APP-X3 | Missed approach | Missed approach |
-| 14 | OPS-APP-X4 | Large angle approach introdutório | Aproximação |
-| 15 | A139-CKL-01 | Normal checklist em contexto IFR | Checklist |
-| 16 | FLY-BAS-X1 | Transição visual/instrumental | Transição |
-| 17 | A139-MOD-01 | Seleção e transição de modos AFCS em perfil visual normal | Cruzeiro / automação |
-| 18 | A139-FMA-02 | Monitoramento de FMA durante mudança de modo | Cruzeiro / automação |
+| 8 | A139-CKL-01 | Normal checklist em contexto IFR | Checklist |
+| 9 | FLY-BAS-X1 | Transição visual/instrumental | Transição |
+| 10 | A139-MOD-01 | Seleção e transição de modos AFCS em perfil IFR básico | Automação IFR |
+| 11 | A139-FMA-02 | Monitoramento de FMA durante mudança de modo | Automação IFR |
+| 12 | FLY-BAS-X4 | Recuperação de atitudes anormais em IFR básico | Recuperação |
+| 13 | OPS-NAV-X3 | Holding pattern | Espera IFR |
+| 14 | A139-RNP-01 | Aproximação RNP básica | Aproximação IFR |
+| 15 | OPS-APP-X2 | Non-precision approach | Aproximação IFR |
+| 16 | OPS-APP-X1 | Precision approach | Aproximação IFR |
+| 17 | OPS-APP-X4 | Large angle approach introdutório | Aproximação |
+| 18 | OPS-APP-X3 | Missed approach | Missed approach |
 
 ## A139-I-06/12 — CAT A/B Introdutório
 
@@ -319,12 +325,12 @@ Exceções aceitas:
 | 10 | A139-CKL-05 | Ações de memória e QRH para rotor/transmissão | QRH |
 | 11 | WAR-LOW-29 | Rotor RPM low | Rotor RPM |
 | 12 | WAR-HIG-29 | Rotor RPM high | Rotor RPM |
-| 13 | A139-ENE-01 | Controle de energia/RPM em autorrotação | Autorrotação / energia |
-| 14 | FLY-BAS-17 | Autorrotação | Autorrotação |
-| 15 | A139-REC-01 | Recuperação de autorrotação | Recuperação |
-| 16 | A139-AUT-02 | Flare e recuperação avançada da autorrotação | Autorrotação |
-| 17 | A139-RPM-02 | Gerenciamento avançado de energia e RPM em flare/recuperação | Autorrotação |
-| 18 | WAR-GER-27 | Landing gear emergency | Trem/pouso |
+| 13 | WAR-GER-27 | Landing gear emergency | Trem/pouso |
+| 14 | A139-ENE-01 | Controle de energia/RPM em autorrotação | Autorrotação / energia |
+| 15 | FLY-BAS-17 | Autorrotação | Autorrotação |
+| 16 | A139-REC-01 | Recuperação de autorrotação | Recuperação |
+| 17 | A139-AUT-02 | Flare e recuperação avançada da autorrotação | Autorrotação |
+| 18 | A139-RPM-02 | Gerenciamento avançado de energia e RPM em flare/recuperação | Autorrotação |
 
 ## A139-I-09/12 — Fire/Smoke/Emergências Avançadas
 
@@ -447,7 +453,7 @@ Exceções aceitas:
 | 17 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
 | 18 | WAR-GEN-11 | Dual DC GEN failure | Elétrico |
 
-## A139-P-C1/IFR — Ciclo 1 / IFR-noturno-offshore
+## A139-P-C1/IFR — Ciclo 1 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -541,7 +547,7 @@ Exceções aceitas:
 | 17 | WAR-TMP-30 | MGB oil temp high | Transmissão |
 | 18 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
 
-## A139-P-C2/IFR — Ciclo 2 / IFR-noturno-offshore
+## A139-P-C2/IFR — Ciclo 2 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -557,12 +563,12 @@ Exceções aceitas:
 | 10 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação |
 | 11 | OPS-NAV-X4 | SID e STAR | Saída/chegada |
 | 12 | OPS-NAV-X3 | Holding pattern | Espera |
-| 13 | OPS-APP-X2 | Non-precision approach | Aproximação |
-| 14 | OPS-APP-X1 | Precision approach | Aproximação |
-| 15 | OPS-APP-X3 | Missed approach | Arremetida |
-| 16 | WAR-OUT-15 | Engine failure | Motor |
-| 17 | CAU-HYP-77 | Hydraulic pressure low | Hidráulico |
-| 18 | WAR-GER-27 | Landing gear emergency | Trem/pouso |
+| 13 | WAR-OUT-15 | Engine failure | Motor |
+| 14 | CAU-HYP-77 | Hydraulic pressure low | Hidráulico |
+| 15 | WAR-GER-27 | Landing gear emergency | Trem/pouso |
+| 16 | OPS-APP-X2 | Non-precision approach | Aproximação |
+| 17 | OPS-APP-X1 | Precision approach | Aproximação |
+| 18 | OPS-APP-X3 | Missed approach | Arremetida |
 
 ## A139-P-C3/VFR — Ciclo 3 / VFR-emergências
 
@@ -587,7 +593,7 @@ Exceções aceitas:
 | 17 | WAR-TRC-X1 | Tail rotor binding | Rotor de cauda |
 | 18 | CAU-MGP-105 | MGB chip detected | Transmissão |
 
-## A139-P-C3/IFR — Ciclo 3 / IFR-noturno-offshore
+## A139-P-C3/IFR — Ciclo 3 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -618,6 +624,8 @@ Exceções aceitas:
 
 ## A139-NOT-01 — Treinamento Noturno Onshore
 
+> **Correção pedagógica aplicada:** `OPS-NOT-X1` foi criado como código atual rastreável para ilusão visual noturna / black hole effect, evitando reativar `LOFT-NOT-31`. `A139-AUT-03` foi criado para autorrotação noturna dedicada AW139, evitando depender de nomenclatura genérica.
+
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
 | 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist noturno |
@@ -626,20 +634,22 @@ Exceções aceitas:
 | 4 | FLY-BAS-X1 | Controle geral VFR | Subida / cruzeiro visual noturno |
 | 5 | A139-MOD-01 | Seleção e transição de modos AFCS em condição noturna | Cruzeiro / automação |
 | 6 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação noturna |
-| 7 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
-| 8 | A139-CKL-02 | Aplicação do QRH para caution noturna | QRH / checklist |
-| 9 | CAU-FLO-73 | Fuel low | Combustível |
-| 10 | WAR-OUT-15 | Engine failure | Motor |
-| 11 | CAU-LIC-60 | OEI limit timer | OEI |
-| 12 | A139-OEI-01 | Perfil OEI noturno | Perfil OEI |
-| 13 | OPS-APP-X1 | Precision approach | Aproximação noturna |
-| 14 | OPS-APP-X4 | Aproximação grande ângulo | Aproximação |
-| 15 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
-| 16 | OPS-NRM-X1 | Procedimentos normais | Normalização |
-| 17 | WAR-GEN-11 | Dual DC GEN failure | Elétrico avançado |
+| 7 | OPS-NOT-X1 | Ilusão visual noturna / black hole effect — reconhecimento, correção e recuperação | Segurança noturna |
+| 8 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
+| 9 | A139-CKL-02 | Aplicação do QRH para caution noturna | QRH / checklist |
+| 10 | CAU-FLO-73 | Fuel low | Combustível |
+| 11 | WAR-OUT-15 | Engine failure | Motor |
+| 12 | CAU-LIC-60 | OEI limit timer | OEI |
+| 13 | A139-OEI-01 | Perfil OEI noturno | Perfil OEI |
+| 14 | A139-AUT-03 | Autorrotação noturna dedicada AW139 | Autorrotação noturna |
+| 15 | OPS-APP-X1 | Precision approach | Aproximação noturna |
+| 16 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
+| 17 | A139-PNO-01 | Pouso normal | Pouso |
 | 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
 
 ## A139-NOT-02 — Treinamento Noturno Offshore
+
+> **Correção pedagógica aplicada:** `OPS-NOT-X1` foi criado como código atual rastreável para ilusão visual noturna / black hole effect, evitando reativar `LOFT-NOT-31`.
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -650,16 +660,16 @@ Exceções aceitas:
 | 5 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação noturna |
 | 6 | FLY-BAS-X1 | Controle geral VFR | Cruzeiro visual noturno |
 | 7 | OPS-OFF-X2 | Aproximação offshore | Aproximação offshore |
-| 8 | OPS-APP-X4 | Aproximação grande ângulo | Aproximação |
+| 8 | OPS-NOT-X1 | Ilusão visual noturna / black hole effect — reconhecimento, correção e recuperação | Segurança noturna |
 | 9 | CAU-FLO-73 | Fuel low | Combustível |
 | 10 | WAR-OUT-15 | Engine failure | Motor |
 | 11 | CAU-LIC-60 | OEI limit timer | OEI |
 | 12 | WAR-GEN-11 | Dual DC GEN failure | Elétrico |
 | 13 | A139-CKL-02 | Aplicação do QRH para caution noturna | QRH / checklist |
-| 14 | OPS-APP-X1 | Precision approach | Aproximação noturna |
-| 15 | OPS-APP-X3 | Missed approach | Arremetida |
-| 16 | OPS-NRM-X1 | Procedimentos normais | Normalização |
-| 17 | FLY-BAS-17 | Autorrotação | Autorrotação |
+| 14 | FLY-BAS-17 | Autorrotação | Autorrotação |
+| 15 | OPS-APP-X1 | Precision approach | Aproximação noturna |
+| 16 | OPS-APP-X3 | Missed approach | Arremetida |
+| 17 | A139-PNO-01 | Pouso normal | Pouso |
 | 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
 
 ## A139-REQ-01 — Reaquisição de Experiência Recente
@@ -677,11 +687,11 @@ Exceções aceitas:
 | 9 | FLY-BAS-X2 | Controle geral IFR | IFR básico |
 | 10 | OPS-APP-X1 | Precision approach | Aproximação IFR |
 | 11 | OPS-APP-X3 | Missed approach | Missed approach |
-| 12 | WAR-OUT-15 | Engine failure | Motor |
-| 13 | CAU-LIC-60 | OEI limit timer | OEI |
-| 14 | CAU-FLO-73 | Fuel low | Combustível |
-| 15 | WAR-FIR-21 | Engine fire | Fogo motor |
-| 16 | FLY-BAS-17 | Autorrotação | Autorrotação |
+| 12 | CAU-FLO-73 | Fuel low | Combustível |
+| 13 | WAR-OUT-15 | Engine failure | Motor |
+| 14 | CAU-LIC-60 | OEI limit timer | OEI |
+| 15 | A139-OEI-01 | Perfil OEI em reaquisição operacional | Perfil OEI |
+| 16 | OPS-APP-X4 | Large angle approach de reaquisição | Aproximação |
 | 17 | WAR-GER-27 | Landing gear emergency | Trem / pouso |
 | 18 | A139-EST-01 | Estacionamento e corte pós-voo | Pós-pouso |
 
@@ -699,6 +709,8 @@ Exceções aceitas:
 > **Observação técnica:** as 18 linhas abaixo são itens técnicos avaliáveis dentro do cenário LOFT; a condução continua sendo por cenário, não por manobras soltas.
 > **Observação NOTECHS:** NOTECHS são avaliados fora das 18 técnicas, pelo mecanismo global da matriz.
 
+> **Correção pedagógica aplicada:** `OPS-NOT-X1` foi criado como código atual rastreável para ilusão visual noturna / black hole effect, evitando reativar `LOFT-NOT-31`. `A139-AUT-03` foi criado para autorrotação noturna dedicada AW139.
+
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
 | 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist noturno |
@@ -707,16 +719,16 @@ Exceções aceitas:
 | 4 | FLY-BAS-X1 | Controle geral VFR | Subida / cruzeiro visual noturno |
 | 5 | A139-MOD-01 | Seleção e transição de modos AFCS em condição noturna | Cruzeiro / automação |
 | 6 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação noturna |
-| 7 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
-| 8 | A139-CKL-02 | Aplicação do QRH para caution noturna | QRH / checklist |
-| 9 | CAU-FLO-73 | Fuel low | Combustível |
-| 10 | WAR-OUT-15 | Engine failure | Motor |
-| 11 | CAU-LIC-60 | OEI limit timer | OEI |
-| 12 | A139-OEI-01 | Perfil OEI noturno | Perfil OEI |
-| 13 | WAR-GEN-11 | Dual DC GEN failure | Elétrico avançado |
-| 14 | OPS-APP-X1 | Precision approach | Aproximação noturna |
-| 15 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
-| 16 | OPS-NRM-X1 | Procedimentos normais | Reconfiguração para nova aproximação |
+| 7 | OPS-NOT-X1 | Ilusão visual noturna / black hole effect — reconhecimento, correção e recuperação | Segurança noturna |
+| 8 | CAU-DCG-53 | Single DC GEN failure | Elétrico |
+| 9 | A139-CKL-02 | Aplicação do QRH para caution noturna | QRH / checklist |
+| 10 | CAU-FLO-73 | Fuel low | Combustível |
+| 11 | WAR-OUT-15 | Engine failure | Motor |
+| 12 | CAU-LIC-60 | OEI limit timer | OEI |
+| 13 | A139-OEI-01 | Perfil OEI noturno | Perfil OEI |
+| 14 | A139-AUT-03 | Autorrotação noturna dedicada AW139 | Autorrotação noturna |
+| 15 | OPS-APP-X1 | Precision approach | Aproximação noturna |
+| 16 | A139-ARN-01 | Arremetida noturna com NVG/NVIS | Arremetida |
 | 17 | A139-PNO-01 | Pouso normal | Pouso |
 | 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
 
@@ -737,7 +749,7 @@ Exceções aceitas:
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
-| 1 | A139-CKL-01 | Normal checklist — preparação noturna | Pré-voo / checklist |
+| 1 | A139-CKL-01 | Normal checklist — preparação IFR semestral | Pré-voo / checklist |
 | 2 | OPS-NAV-X1 | Navegação FMS e convencional | Navegação IFR |
 | 3 | OPS-NAV-X2 | Uso AP e automação | Automação |
 | 4 | FLY-BAS-X2 | Controle geral IFR | IFR básico |
@@ -754,7 +766,7 @@ Exceções aceitas:
 | 15 | CAU-LIC-60 | OEI limit timer | OEI |
 | 16 | WAR-GER-27 | Landing gear emergency | Trem / pouso |
 | 17 | A139-POU-01 | Pouso monomotor IFR | Pouso OEI |
-| 18 | A139-EST-01 | Estacionamento e corte pós-voo noturno | Pós-pouso |
+| 18 | A139-EST-01 | Estacionamento e corte pós-voo | Pós-pouso |
 
 ---
 
@@ -827,7 +839,7 @@ Exceções aceitas:
 | 15 | 76-N1TQF | Falha nos indicadores N1/Torque | Mini-cenário indicação motor |
 | 16 | 76-FALTS | Falha no indicador TS | Mini-cenário indicação motor |
 | 17 | 76-HIDPB | Falha simples de bomba/perda de pressão servo/hidráulica | Mini-cenário hidráulico simples |
-| 18 | 76-FALFF | Falha de alimentação feeder/bateria | Mini-cenário final / validar frota |
+| 18 | 76-FALFF | Falha de alimentação feeder/bateria | Mini-cenário final / encerramento técnico |
 
 ## SK76-I-04/12 — Automação, Aviônicos e Degradações Básicas
 
@@ -865,7 +877,7 @@ Exceções aceitas:
 | 7 | S76-CGI-00 | Controle geral IFR | Enroute IFR |
 | 8 | S76-SCN-01 | Varredura instrumental primária e secundária em IFR básico | Enroute IFR |
 | 9 | S76-VMA-01 | Voo manual por instrumentos em condição normal | Enroute IFR |
-| 10 | S76-UAR-00 | Recuperação de atitudes anormais básica | IFR básico / segurança |
+| 10 | S76-UAR-00 | Recuperação de atitudes anormais básica após perda momentânea de referências | Recuperação IFR básica |
 | 11 | S76-HLD-00 | Holding pattern | Espera IFR |
 | 12 | S76-RNV-00 | Aproximação RNAV/GPS | Aproximação IFR |
 | 13 | 76-APXNP | Aproximação de não precisão IFR | Aproximação IFR |
@@ -964,8 +976,8 @@ Exceções aceitas:
 | 14 | 76-FALGD | Falha em ambos os geradores DC | Sistema alto estresse |
 | 15 | 76-POUAB | Pouso abortado por fogo/fumaça | Decolagem abortada |
 | 16 | 76-POUMO | Pouso monomotor por falha associada | Pouso emergência |
-| 17 | S76-SFE-10 | Eliminação de Fumaça e Vapores | Repetição técnica |
-| 18 | S76-BCS-10 | Fumaça no Compartimento de Bagagem | Repetição técnica |
+| 17 | 76-APXOI | Aproximação IFR com um motor inoperante | Aproximação OEI/IFR |
+| 18 | 76-APXAL | Aproximação alternada — Categoria A | Aproximação alternativa |
 
 ## SK76-I-10/12 — Offshore / Unidade Marítima
 
@@ -1063,9 +1075,9 @@ Exceções aceitas:
 | 15 | S76-MGP-33 | Pressão de Óleo da MGB 40-45 PSI | MGB |
 | 16 | S76-SSS-42 | Servo SYS — luz do sistema servo simples | Servo |
 | 17 | S76-FFL-32 | Luz de Cautela do Filtro de Combustível | Combustível |
-| 18 | S76-FFM-32 | Fluxo de Combustível fora do Normal | Combustível |
+| 18 | S76-FFM-32 | Fluxo de Combustível fora do Normal — decisão de retorno e encerramento | Combustível / decisão operacional |
 
-## S76-P-C1/IFR — Ciclo 1 / IFR-noturno-offshore
+## S76-P-C1/IFR — Ciclo 1 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1136,7 +1148,7 @@ Exceções aceitas:
 | 17 | S76-AUT-70 | Autorrotação | Autorrotação |
 | 18 | S76-DIT-71 | Ditching com Potência | Ditching |
 
-## S76-P-C2/IFR — Ciclo 2 / IFR-noturno-offshore
+## S76-P-C2/IFR — Ciclo 2 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1182,7 +1194,7 @@ Exceções aceitas:
 | 17 | S76-TDM-41 | Dano no Rotor de Cauda | Rotor de cauda |
 | 18 | S76-FCD-67 | Emperramento do Amortecedor de Comando | Comandos |
 
-## S76-P-C3/IFR — Ciclo 3 / IFR-noturno-offshore
+## S76-P-C3/IFR — Ciclo 3 / IFR-emergências
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1213,6 +1225,8 @@ Exceções aceitas:
 
 ## S76-NOT-01 — Treinamento Noturno Onshore
 
+> **Correção pedagógica aplicada:** `OPS-NOT-X1` foi criado como código atual rastreável para ilusão visual noturna / black hole effect, evitando reativar `S76-LOFT-23`/`S76-LOFT-33`.
+
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
 | 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
@@ -1220,8 +1234,8 @@ Exceções aceitas:
 | 3 | S76-HOV-00 | Controle Geral VFR — Hover e Táxi | Hover / taxi |
 | 4 | S76-DNR-01 | Decolagem normal noturna | Decolagem |
 | 5 | S76-SUB-01 | Subida controlada noturna | Subida |
-| 6 | S76-PWR-01 | Controle de potência e torque | Cruzeiro / perfil |
-| 7 | S76-NDL-00 | Voo Noturno NDL (Circuito Padrão) | Circuito noturno |
+| 6 | S76-NDL-00 | Voo Noturno NDL (Circuito Padrão) | Circuito noturno |
+| 7 | OPS-NOT-X1 | Ilusão visual noturna / black hole effect — reconhecimento, correção e recuperação | Segurança noturna |
 | 8 | 76-FALGC | Falha em um gerador DC | Elétrico |
 | 9 | 76-FALFF | Falha de alimentação — feeder / bateria no nariz | Elétrico |
 | 10 | 76-FLWNR | Vazão de combustível fora da faixa normal | Combustível |
@@ -1229,14 +1243,15 @@ Exceções aceitas:
 | 12 | S76-CKL-03 | Aplicação do ECL para falha de motor | QRH / ECL |
 | 13 | S76-OEI-01 | Perfil OEI noturno | Perfil OEI |
 | 14 | S76-APN-01 | Aproximação normal visual noturna | Aproximação |
-| 15 | S76-PNO-01 | Pouso normal noturno | Pouso |
-| 16 | S76-ARN-01 | Arremetida noturna | Arremetida |
-| 17 | S76-AUT-70 | Autorotação | Autorrotação |
+| 15 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 16 | S76-AUT-70 | Autorotação | Autorrotação |
+| 17 | S76-PNO-01 | Pouso normal noturno | Pouso |
 | 18 | S76-EST-01 | Encerramento pós-voo noturno | Pós-pouso |
 
 ## S76-NOT-02 — Treinamento Noturno Offshore
 
 > Corrigido pela decisão 17 (§4): `S76-EST-01` removido do fim por conflitar com o terminal único `S76-FLU-01`; `76-FALFF` inserido (já usado em `S76-NOT-01`) para preservar 18 itens sem novo código.
+> **Correção pedagógica aplicada:** `OPS-NOT-X1` foi criado como código atual rastreável para ilusão visual noturna / black hole effect, evitando reativar `S76-LOFT-23`/`S76-LOFT-33`.
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
@@ -1245,13 +1260,13 @@ Exceções aceitas:
 | 3 | S76-HOV-00 | Controle Geral VFR — Hover e Táxi | Hover / taxi |
 | 4 | S76-NVF-00 | Procedimentos Normais VFR | Normal / cruzeiro |
 | 5 | S76-PWR-01 | Controle de potência e torque | Cruzeiro / perfil |
-| 6 | 76-FLWNR | Vazão de combustível fora da faixa normal | Combustível |
-| 7 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
-| 8 | S76-CKL-03 | Aplicação do ECL para falha de motor | QRH / ECL |
-| 9 | S76-OEI-01 | Perfil OEI noturno | Perfil OEI |
-| 10 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
-| 11 | 76-FALGC | Falha em um gerador DC | Elétrico |
-| 12 | 76-FALFF | Falha de alimentação — feeder / bateria no nariz | Elétrico |
+| 6 | OPS-NOT-X1 | Ilusão visual noturna / black hole effect — reconhecimento, correção e recuperação | Segurança noturna |
+| 7 | 76-FLWNR | Vazão de combustível fora da faixa normal | Combustível |
+| 8 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
+| 9 | S76-CKL-03 | Aplicação do ECL para falha de motor | QRH / ECL |
+| 10 | S76-OEI-01 | Perfil OEI noturno | Perfil OEI |
+| 11 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
+| 12 | 76-FALGC | Falha em um gerador DC | Elétrico |
 | 13 | S76-LDP-00 | Pouso Classe 2 — Helideck (Committal Point) | Aproximação / pouso offshore |
 | 14 | S76-APO-01 | Aproximação offshore a Unidade Marítima | Aproximação offshore |
 | 15 | S76-ARO-01 | Arremetida offshore | Arremetida |
@@ -1296,6 +1311,8 @@ Exceções aceitas:
 > **Observação técnica:** as 18 linhas abaixo são itens técnicos avaliáveis dentro do cenário LOFT; a condução continua sendo por cenário, não por manobras soltas.
 > **Observação NOTECHS:** NOTECHS são avaliados fora das 18 técnicas, pelo mecanismo global da matriz.
 
+> **Correção pedagógica aplicada:** `OPS-NOT-X1` foi criado como código atual rastreável para ilusão visual noturna / black hole effect, evitando reativar `S76-LOFT-23`/`S76-LOFT-33`.
+
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
 | 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
@@ -1305,13 +1322,13 @@ Exceções aceitas:
 | 5 | S76-SUB-01 | Subida controlada noturna | Subida |
 | 6 | S76-PWR-01 | Controle de potência e torque | Cruzeiro / perfil |
 | 7 | S76-NDL-00 | Voo Noturno NDL (Circuito Padrão) | Circuito noturno |
-| 8 | 76-FALGC | Falha em um gerador DC | Elétrico |
-| 9 | 76-FALFF | Falha de alimentação — feeder / bateria no nariz | Elétrico |
-| 10 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
-| 11 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
-| 12 | S76-OEI-01 | Perfil OEI noturno | Perfil OEI |
-| 13 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
-| 14 | S76-RNV-00 | Aproximação RNAV (GPS) | Aproximação IFR |
+| 8 | OPS-NOT-X1 | Ilusão visual noturna / black hole effect — reconhecimento, correção e recuperação | Segurança noturna |
+| 9 | 76-FALGC | Falha em um gerador DC | Elétrico |
+| 10 | 76-FALFF | Falha de alimentação — feeder / bateria no nariz | Elétrico |
+| 11 | 76-MOTCZ | Falha de motor durante o cruzeiro | Motor |
+| 12 | S76-XFD-20 | Crossfeed Total após Falha de Motor | Combustível / motor |
+| 13 | S76-OEI-01 | Perfil OEI noturno | Perfil OEI |
+| 14 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
 | 15 | S76-ARN-01 | Arremetida noturna | Arremetida |
 | 16 | S76-APN-01 | Aproximação normal visual noturna | Aproximação |
 | 17 | S76-PNO-01 | Pouso normal noturno | Pouso |
@@ -1334,7 +1351,7 @@ Exceções aceitas:
 
 | # | Código | Item técnico | Fase |
 |---:|---|---|---|
-| 1 | S76-CKL-01 | Checklist e preparação noturna | Pré-voo / checklist |
+| 1 | S76-CKL-01 | Checklist e preparação IFR | Pré-voo / checklist |
 | 2 | S76-NIF-00 | Procedimentos Normais IFR | IFR básico |
 | 3 | S76-CKL-02 | Aplicação de checklist anormal | QRH / checklist |
 | 4 | S76-MGP-33 | Pressão de Óleo da MGB 40–45 PSI | Transmissão |
@@ -1346,12 +1363,12 @@ Exceções aceitas:
 | 10 | S76-NRL-00 | Queda de NR (NR Low) | Rotor RPM |
 | 11 | S76-CST-00 | Estol de Compressor (Compressor Stall) | Motor |
 | 12 | S76-ILS-00 | Aproximação ILS | Aproximação IFR |
-| 13 | S76-ARN-01 | Arremetida noturna | Arremetida |
+| 13 | S76-ARN-01 | Arremetida IFR | Arremetida |
 | 14 | S76-RNV-00 | Aproximação RNAV (GPS) | Reaproximação IFR |
 | 15 | S76-VOR-00 | Aproximação VOR/NDB | Aproximação final |
 | 16 | S76-LGB-47 | Trem de Pouso — Extensão de Emergência | Trem / pouso |
 | 17 | S76-PNO-01 | Pouso normal | Pouso |
-| 18 | S76-EST-01 | Encerramento pós-voo noturno | Pós-pouso |
+| 18 | S76-EST-01 | Encerramento pós-voo | Pós-pouso |
 
 ---
 
