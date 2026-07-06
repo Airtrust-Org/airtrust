@@ -170,6 +170,30 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     }
   });
 
+  it('mostra header bilingue NOTECHS e 4 divisores de categoria no PDF V6.2', async () => {
+    const dadosPDF = buildA139Modelo();
+    await gerarPDFFichaCliente(dadosPDF);
+
+    const allText = capturedTexts.join('\n');
+
+    // Header bilingue
+    expect(allText).toContain('NOTECHS \u2014 Non-Technical Skills');
+    expect(allText).toContain('Habilidades N\u00E3o T\u00E9cnicas / Comportamentais');
+
+    // 4 category dividers
+    expect(allText).toContain('COOPERA\u00C7\u00C3O / COOPERATION');
+    expect(allText).toContain('LIDERAN\u00C7A E HABILIDADES GERENCIAIS / LEADERSHIP AND MANAGEMENT SKILLS');
+    expect(allText).toContain('CONSCI\u00CANCIA SITUACIONAL / SITUATIONAL AWARENESS');
+    expect(allText).toContain('TOMADA DE DECIS\u00C3O / DECISION MAKING');
+
+    // No CRM, no Notecs
+    expect(allText).not.toMatch(/\(CRM\)/i);
+    expect(allText).not.toMatch(/\bNotecs\b/);
+
+    // No extra page
+    expect(addPageCalls.count).toBe(0);
+  });
+
   it('usa cor cinza (nao roxo/rosa) no bloco NOTECHS', async () => {
     const dadosPDF = buildA139Modelo();
     await gerarPDFFichaCliente(dadosPDF);

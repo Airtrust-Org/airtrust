@@ -850,12 +850,18 @@ export async function gerarPDFFichaCliente(
   const isTemplateV6 = dados.templateVersion === 'v6' || isModoModelo;
   const SCALE_RESERVED = isTemplateV6 ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
   // NOTECHS agora é parte da tabela, não um bloco separado — sem reserva extra.
-  const NOTECHS_DIVIDER_H = manobrasNotechs.length > 0 ? 6 : 0; // linha sutil do divisor
+  // Header bilíngue (~18pt) + até 3 sub-divisores de categoria (~9pt cada)
+  const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 18 : 0;
+  const NOTECHS_CATEGORY_DIVIDER_H = 9;
+  const NOTECHS_DIVIDER_H = NOTECHS_HEADER_H;
+  // Estima até 3 sub-divisores de categoria entre os 4 grupos NOTECHS
+  const NOTECHS_CATEGORY_BUDGET = manobrasNotechs.length > 0 ? NOTECHS_CATEGORY_DIVIDER_H * 4 : 0;
   const tableBodyBudget =
     pageHeight -
     currentY -
     4 -
     NOTECHS_DIVIDER_H -
+    NOTECHS_CATEGORY_BUDGET -
     SCALE_RESERVED -
     OBS_RESERVED -
     3 -
@@ -879,23 +885,64 @@ export async function gerarPDFFichaCliente(
 
   // Flag: já inserimos o divisor NOTECHS?
   let notechsDividerInserted = false;
+  let lastNotechsGroup = '';
+
+  // NOTECHS category sub-divider labels
+  const NOTECHS_GROUP_LABELS: Record<string, string> = {
+    COO: 'COOPERAÇÃO / COOPERATION',
+    LID: 'LIDERANÇA E HABILIDADES GERENCIAIS / LEADERSHIP AND MANAGEMENT SKILLS',
+    CSA: 'CONSCIÊNCIA SITUACIONAL / SITUATIONAL AWARENESS',
+    TMD: 'TOMADA DE DECISÃO / DECISION MAKING',
+  };
+
+  const getNotechsGroupLocal = (codigo: string): string => {
+    if (codigo.includes('-COO-')) return 'COO';
+    if (codigo.includes('-LID-')) return 'LID';
+    if (codigo.includes('-CSA-')) return 'CSA';
+    if (codigo.includes('-TMD-')) return 'TMD';
+    return '';
+  };
 
   // Renderizar todas as linhas (técnicas + NOTECHS)
   scaledRows.forEach(({ m, nomeLines, obsLines, rowH }, index) => {
     // Insere divisor NOTECHS antes do primeiro item NOTECHS
     if ((m as Record<string, unknown>)._section === 'notechs' && !notechsDividerInserted) {
       notechsDividerInserted = true;
-      // Linha divisora sutil com label NOTECHS
+      // Linha divisora + header bilíngue NOTECHS
       doc.setDrawColor(COLORS.border);
-      doc.setLineWidth(0.3);
+      doc.setLineWidth(0.5);
       doc.line(margin, currentY + 1, margin + contentWidth, currentY + 1);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(6.5);
       doc.setTextColor(COLORS.textSecondary);
-      doc.text('NOTECHS', margin + 2, currentY + 4.2);
-      doc.setLineWidth(0.3);
-      doc.line(margin, currentY + 5.5, margin + contentWidth, currentY + 5.5);
+      doc.text('NOTECHS \u2014 Non-Technical Skills', margin + 2, currentY + 4.2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5.5);
+      doc.text('Habilidades N\u00E3o T\u00E9cnicas / Comportamentais', margin + 2, currentY + 9.5);
+      doc.setLineWidth(0.5);
+      doc.line(margin, currentY + 12, margin + contentWidth, currentY + 12);
       currentY += NOTECHS_DIVIDER_H;
+    }
+
+    // NOTECHS category sub-divider
+    if ((m as Record<string, unknown>)._section === 'notechs' && notechsDividerInserted) {
+      const codigo = (m as Record<string, string>).codigo || '';
+      const group = getNotechsGroupLocal(codigo);
+      if (group && group !== lastNotechsGroup) {
+        currentY += 2;
+        doc.setDrawColor(COLORS.border);
+        doc.setLineWidth(0.3);
+        doc.line(margin, currentY + 1, margin + contentWidth, currentY + 1);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(5);
+        doc.setTextColor(COLORS.textSecondary);
+        const label = NOTECHS_GROUP_LABELS[group] || group;
+        doc.text(label, margin + 4, currentY + 4.5);
+        doc.setLineWidth(0.3);
+        doc.line(margin, currentY + 7, margin + contentWidth, currentY + 7);
+        currentY += NOTECHS_CATEGORY_DIVIDER_H;
+      }
+      if (group) lastNotechsGroup = group;
     }
 
     const isEven = index % 2 === 0;
