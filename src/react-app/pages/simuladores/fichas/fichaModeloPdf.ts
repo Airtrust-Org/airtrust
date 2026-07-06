@@ -77,6 +77,7 @@ export function buildFichaModeloPdfData(
     assinatura_instrutor_timestamp: null,
     logoUrl,
     modoModelo: true,
+    templateVersion: 'v6',
     fileName: buildFichaModeloPdfFileName(modelo),
     manobras: tecnicasPreview
       .map((manobra) => {

@@ -508,6 +508,7 @@ app.get('/fichas/:id', async (c) => {
         fs.colaborador_id_aluno,
         fs.atribuicao_curricular_id,
         fs.tipo_sessao as ficha_tipo_sessao,
+        fs.created_at as ficha_created_at,
         sa.tipo_sessao,
         sa.modo_compartilhado,
         sa.nome as sessao_nome,
@@ -763,6 +764,7 @@ app.get('/fichas/:id', async (c) => {
       edicao_pendente: Number(f.edicoes_pendentes_count || 0) > 0,
       notechs_status: notechsStatus,
       missing_notechs_count: notechsMissingCount,
+      created_at: f.ficha_created_at || null,
     };
 
     return c.json({ success: true, data: ficha });
@@ -791,6 +793,7 @@ app.post('/fichas/:id/pdf', async (c) => {
         fs.assinatura_instrutor_timestamp,
         fs.colaborador_id_aluno,
         fs.data_sessao as ficha_data_sessao,
+        fs.created_at as ficha_created_at,
         sa.tipo_sessao,
         sa.data as sessao_data,
         sa.hora_inicio as horario_inicio,
@@ -907,6 +910,13 @@ app.post('/fichas/:id/pdf', async (c) => {
     const dataSessaoIso = extractIsoDateOnly(dataSessaoFonte);
     const dataSessaoPtBr = formatIsoDateOnlyPtBr(dataSessaoFonte);
 
+    // Template version: fichas criadas a partir de 2026-07-01 usam V6.2 (sem régua).
+    // Fichas anteriores preservam o template legado (com régua).
+    const V6_CUTOFF = '2026-07-01';
+    const fichaCreatedAt = f.ficha_created_at || '';
+    const templateVersion: 'legacy' | 'v6' =
+      fichaCreatedAt >= V6_CUTOFF ? 'v6' : 'legacy';
+
     const dadosPDF = {
       fichaId: f.id.toString(),
       sessao_titulo,
@@ -925,6 +935,7 @@ app.post('/fichas/:id/pdf', async (c) => {
       assinatura_aluno_timestamp: f.assinatura_aluno_timestamp,
       assinatura_instrutor_timestamp: f.assinatura_instrutor_timestamp,
       logoBytes,
+      templateVersion,
       manobras: m.results.map((man: any) => ({
         ordem: man.ordem,
         descricao: man.descricao,

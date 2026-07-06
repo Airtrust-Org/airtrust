@@ -25,6 +25,8 @@ interface FichaPDFData {
   assinatura_aluno_timestamp: string | null;
   assinatura_instrutor_timestamp: string | null;
   logoBytes?: Buffer;
+  /** Template version: 'legacy' = pre-V6.2 (with régua), 'v6' = V6.2+ (no régua). */
+  templateVersion?: 'legacy' | 'v6';
   manobras: Array<{
     ordem: number;
     descricao: string;
@@ -86,6 +88,13 @@ export async function gerarPDFFicha(dados: FichaPDFData): Promise<Buffer> {
 
   currentY = drawManobrasSection(page, fontRegular, fontBold, dados, currentY, contentWidth);
   currentY -= 10;
+
+  // Régua de avaliação: apenas para template legado (pre-V6.2).
+  // Fichas V6.2 NUNCA exibem régua.
+  if (dados.templateVersion === 'legacy') {
+    currentY = drawAvaliacaoScaleSection(page, fontRegular, fontBold, currentY, contentWidth);
+    currentY -= 10;
+  }
 
   currentY = drawObservacoesSection(page, fontRegular, fontBold, dados, currentY, contentWidth);
   currentY -= 14;
@@ -524,6 +533,42 @@ function drawObservacoesSection(
   drawWrappedText(page, textLines, PAGE.margin + 5, boxTop - 8, fontRegular, 6, 8, COLOR.text);
 
   return boxTop - boxHeight;
+}
+
+function drawAvaliacaoScaleSection(
+  page: PDFPage,
+  fontRegular: PDFFont,
+  fontBold: PDFFont,
+  startY: number,
+  contentWidth: number,
+): number {
+  const notas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const faixas = [
+    { rangeLabel: '1-2', color: rgb(0.78, 0.16, 0.16), noteIndexes: [0, 1] },
+    { rangeLabel: '3-4', color: rgb(0.94, 0.43, 0), noteIndexes: [2, 3] },
+    { rangeLabel: '5-7', color: rgb(0.96, 0.77, 0.26), noteIndexes: [4, 5, 6] },
+    { rangeLabel: '8-10', color: rgb(0.18, 0.49, 0.2), noteIndexes: [7, 8, 9] },
+  ];
+
+  drawText(page, 'REGUA DE AVALIACAO', PAGE.margin, startY, fontBold, 7, COLOR.text);
+
+  const tableTop = startY - 10;
+  const cellWidth = contentWidth / notas.length;
+  const cellHeight = 12;
+
+  notas.forEach((nota, index) => {
+    const faixa = faixas.find((c) => c.noteIndexes.includes(index));
+    const x = PAGE.margin + index * cellWidth;
+    page.drawRectangle({
+      x, y: tableTop - cellHeight,
+      width: cellWidth, height: cellHeight,
+      color: faixa?.color || COLOR.textSecondary,
+      borderColor: COLOR.white, borderWidth: 0.5,
+    });
+    drawTextCentered(page, String(nota), x, tableTop - 9, cellWidth, fontBold, 7, COLOR.white);
+  });
+
+  return tableTop - cellHeight - 2;
 }
 
 function drawAssinaturasSection(

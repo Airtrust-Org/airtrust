@@ -94,6 +94,7 @@ interface FichaDetalhada {
   tipo_sessao?: string;
   tripulante_codigo_anac?: string;
   instrutor_codigo_anac?: string;
+  created_at?: string | null;
   nota_geral?: number;
   aprovado?: boolean | number | null;
   status: string;
@@ -2062,6 +2063,10 @@ export default function FichaDetalhe() {
                         assinatura_aluno_dataUrl: ficha.assinatura_aluno_imagem,
                         assinatura_instrutor_dataUrl: ficha.assinatura_instrutor_imagem,
                         logoUrl: logoUrl,
+                        // Fichas criadas a partir de 2026-07-01 usam V6.2 (sem régua).
+                        // Fichas anteriores preservam template legado.
+                        templateVersion:
+                          ficha.created_at && ficha.created_at >= '2026-07-01' ? 'v6' : 'legacy',
                         manobras: ficha.manobras.map((m) => ({
                           ordem: m.ordem,
                           nome: m.nome, // nome curto da manobra (nunca usar descricao aqui)

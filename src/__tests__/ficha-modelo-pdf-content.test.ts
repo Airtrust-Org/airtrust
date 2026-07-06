@@ -175,6 +175,7 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
   it('mantem regua e pagina de descritores para ficha real (nao-modelo) com NOTECHS', async () => {
     const dadosPDF = buildA139Modelo();
     dadosPDF.modoModelo = false;
+    dadosPDF.templateVersion = 'legacy'; // ficha antiga (pre-V6.2) preserva régua
     dadosPDF.manobras = dadosPDF.manobras.map((m) => ({ ...m, resultado: 8 }));
 
     await gerarPDFFichaCliente(dadosPDF);
@@ -183,5 +184,23 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     expect(allText).toMatch(/REGUA DE AVALIACAO/i);
     expect(allText).toMatch(/Descritores Completos/i);
     expect(addPageCalls.count).toBeGreaterThan(0);
+  });
+
+  it('ficha real nova V6.2 nao mostra regua nem pagina extra de descritores', async () => {
+    const dadosPDF = buildA139Modelo();
+    dadosPDF.modoModelo = false;
+    dadosPDF.templateVersion = 'v6'; // ficha nova V6.2 — sem régua
+    dadosPDF.manobras = dadosPDF.manobras.map((m) => ({ ...m, resultado: 8 }));
+
+    await gerarPDFFichaCliente(dadosPDF);
+
+    const allText = capturedTexts.join('\n');
+    expect(allText).not.toMatch(/REGUA DE AVALIACAO/i);
+    expect(allText).not.toMatch(/Descritores Completos/i);
+    expect(addPageCalls.count).toBe(0);
+    // NOTECHS ainda aparece integrado na tabela
+    expect(allText).toMatch(/NOTECHS/);
+    expect(allText).toContain('NOTECHS-01');
+    expect(allText).toContain('NOTECHS-15');
   });
 });
