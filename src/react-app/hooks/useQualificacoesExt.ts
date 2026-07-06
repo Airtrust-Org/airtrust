@@ -237,6 +237,7 @@ export function useQualificacoesHistorico(
         statusPersistidoRaw === 'PROXIMA_VENCIMENTO' ? 'VENCENDO_30' : statusPersistidoRaw;
 
       // Fonte de verdade: se backend já classificou status conhecido, preservar.
+      // RENOVADA: backend só envia se tem_renovacao_posterior=1 (sucessora real).
       if (statusNormalizados.has(statusPersistido)) {
         return {
           ...h,
@@ -248,14 +249,10 @@ export function useQualificacoesHistorico(
       }
 
       // Fallback para bases antigas sem status derivado no backend.
-      if (h.renovada === 1 || statusPersistido === 'RENOVADA') {
-        return {
-          ...h,
-          qualificacao_status: statusPersistido || 'RENOVADA',
-          tem_certificado: temCertificadoAtivo ? 1 : 0,
-          certificado_url: temCertificadoAtivo ? h.certificado_url : null,
-          status: 'RENOVADA',
-        };
+      // NUNCA derivar RENOVADA de renovada=1 — legado informativo apenas.
+      if (statusPersistido === 'RENOVADA' || statusPersistido === 'RENOVADO') {
+        // status=RENOVADA/RENOVADO sem reconhecimento do backend → reclassificar por data
+        // (não retornar RENOVADA sem sucessora real)
       }
 
       // PRIORIDADE 2: Calcular status baseado em vencimento
@@ -309,7 +306,7 @@ export function useQualificacoesHistorico(
           if (q.status === 'VALIDA') acc.validas += 1;
           if (q.status === 'VENCENDO_30') acc.vencendo += 1;
           if (q.status === 'VENCIDA') acc.vencidas += 1;
-          if (q.renovada === 1 || q.status === 'RENOVADA') acc.renovadas += 1;
+          if (q.status === 'RENOVADA') acc.renovadas += 1;
           return acc;
         },
         { total: 0, validas: 0, vencendo: 0, vencidas: 0, renovadas: 0 },
