@@ -1,0 +1,5532 @@
+[
+  {
+    "results": [
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 1,
+        "manobra_codigo": "A139-CAB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 2,
+        "manobra_codigo": "A139-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 3,
+        "manobra_codigo": "A139-CAS-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 4,
+        "manobra_codigo": "A139-QRH-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 5,
+        "manobra_codigo": "A139-AFC-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 6,
+        "manobra_codigo": "A139-TAX-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 7,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 8,
+        "manobra_codigo": "A139-PWR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 9,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 10,
+        "manobra_codigo": "FLY-BAS-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 11,
+        "manobra_codigo": "FLY-BAS-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 12,
+        "manobra_codigo": "OPS-NRM-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 13,
+        "manobra_codigo": "A139-FMA-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 14,
+        "manobra_codigo": "OPS-NRM-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 15,
+        "manobra_codigo": "A139-STB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 16,
+        "manobra_codigo": "A139-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 17,
+        "manobra_codigo": "A139-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-01/12",
+        "ordem": 18,
+        "manobra_codigo": "A139-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 1,
+        "manobra_codigo": "A139-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 4,
+        "manobra_codigo": "A139-SUB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 5,
+        "manobra_codigo": "FLY-BAS-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 6,
+        "manobra_codigo": "A139-MOD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 7,
+        "manobra_codigo": "A139-FMA-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 8,
+        "manobra_codigo": "A139-CRV-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 9,
+        "manobra_codigo": "A139-HLD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 10,
+        "manobra_codigo": "OPS-OFF-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 11,
+        "manobra_codigo": "A139-DSC-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 12,
+        "manobra_codigo": "A139-STB-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 13,
+        "manobra_codigo": "A139-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 14,
+        "manobra_codigo": "A139-REC-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 15,
+        "manobra_codigo": "OPS-NRM-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 16,
+        "manobra_codigo": "A139-VCZ-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 17,
+        "manobra_codigo": "A139-TAX-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-02/12",
+        "ordem": 18,
+        "manobra_codigo": "A139-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 1,
+        "manobra_codigo": "A139-CKL-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 2,
+        "manobra_codigo": "CAU-DCG-53",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 3,
+        "manobra_codigo": "CAU-BOF-55",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 4,
+        "manobra_codigo": "CAU-DCB-56",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 5,
+        "manobra_codigo": "CAU-ACB-57",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 6,
+        "manobra_codigo": "CAU-28D-58",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 7,
+        "manobra_codigo": "CAU-ADS-46",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 8,
+        "manobra_codigo": "CAU-AHR-47",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 9,
+        "manobra_codigo": "CAU-DUD-46",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 10,
+        "manobra_codigo": "CAU-PFD-45",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 11,
+        "manobra_codigo": "CAU-MFD-45",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 12,
+        "manobra_codigo": "CAU-EIC-45",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 13,
+        "manobra_codigo": "CAU-ADC-48",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 14,
+        "manobra_codigo": "CAU-GPS-52",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 15,
+        "manobra_codigo": "CAU-FMS-51",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 16,
+        "manobra_codigo": "CAU-APO-38",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 17,
+        "manobra_codigo": "CAU-MIS-40",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-03/12",
+        "ordem": 18,
+        "manobra_codigo": "CAU-SAS-41",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 1,
+        "manobra_codigo": "A139-MOD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 2,
+        "manobra_codigo": "A139-FMA-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 3,
+        "manobra_codigo": "CAU-APO-38",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 4,
+        "manobra_codigo": "CAU-APF-37",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 5,
+        "manobra_codigo": "CAU-MIS-40",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 6,
+        "manobra_codigo": "CAU-SAS-41",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 7,
+        "manobra_codigo": "CAU-AFD-41",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 8,
+        "manobra_codigo": "OPS-NAV-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 9,
+        "manobra_codigo": "A139-SCN-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 10,
+        "manobra_codigo": "A139-VMA-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 11,
+        "manobra_codigo": "A139-ORI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 12,
+        "manobra_codigo": "CAU-AHR-47",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 13,
+        "manobra_codigo": "CAU-ADC-48",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 14,
+        "manobra_codigo": "CAU-GPS-52",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 15,
+        "manobra_codigo": "CAU-FMS-51",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 16,
+        "manobra_codigo": "A139-CKL-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 17,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-04/12",
+        "ordem": 18,
+        "manobra_codigo": "FLY-BAS-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 1,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 2,
+        "manobra_codigo": "OPS-NAV-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NAV-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 4,
+        "manobra_codigo": "FLY-BAS-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 5,
+        "manobra_codigo": "A139-SCN-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 6,
+        "manobra_codigo": "A139-VMA-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 7,
+        "manobra_codigo": "A139-ORI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 8,
+        "manobra_codigo": "A139-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 9,
+        "manobra_codigo": "FLY-BAS-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 10,
+        "manobra_codigo": "A139-MOD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 11,
+        "manobra_codigo": "A139-FMA-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 12,
+        "manobra_codigo": "FLY-BAS-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 13,
+        "manobra_codigo": "OPS-NAV-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 14,
+        "manobra_codigo": "A139-RNP-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 15,
+        "manobra_codigo": "OPS-APP-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 16,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 17,
+        "manobra_codigo": "OPS-APP-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-05/12",
+        "ordem": 18,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 1,
+        "manobra_codigo": "A139-CKL-04",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 4,
+        "manobra_codigo": "A139-CATB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 5,
+        "manobra_codigo": "A139-CATB-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 6,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 7,
+        "manobra_codigo": "A139-IDF-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 8,
+        "manobra_codigo": "A139-CKL-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 9,
+        "manobra_codigo": "WAR-EEC-18",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 10,
+        "manobra_codigo": "WAR-IDL-16",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 11,
+        "manobra_codigo": "A139-OEI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 12,
+        "manobra_codigo": "WAR-LOW-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 13,
+        "manobra_codigo": "WAR-HIG-29",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 14,
+        "manobra_codigo": "CAU-HYP-77",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 15,
+        "manobra_codigo": "CAU-SRV-80",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 16,
+        "manobra_codigo": "WAR-GER-27",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 17,
+        "manobra_codigo": "A139-POU-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-06/12",
+        "ordem": 18,
+        "manobra_codigo": "OPS-NRM-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 1,
+        "manobra_codigo": "A139-MOD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 2,
+        "manobra_codigo": "CAU-APO-38",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 3,
+        "manobra_codigo": "CAU-APF-37",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 4,
+        "manobra_codigo": "CAU-MIS-40",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 5,
+        "manobra_codigo": "CAU-SAS-41",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 6,
+        "manobra_codigo": "CAU-AFD-41",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 7,
+        "manobra_codigo": "FLY-BAS-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 8,
+        "manobra_codigo": "A139-VMA-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 9,
+        "manobra_codigo": "CAU-ADS-46",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 10,
+        "manobra_codigo": "CAU-AHR-47",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 11,
+        "manobra_codigo": "CAU-DUD-46",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 12,
+        "manobra_codigo": "CAU-PFD-45",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 13,
+        "manobra_codigo": "CAU-MFD-45",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 14,
+        "manobra_codigo": "CAU-EIC-45",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 15,
+        "manobra_codigo": "CAU-ADC-48",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 16,
+        "manobra_codigo": "CAU-GPS-52",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 17,
+        "manobra_codigo": "CAU-FMS-51",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-07/12",
+        "ordem": 18,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 1,
+        "manobra_codigo": "WAR-MGB-30",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 2,
+        "manobra_codigo": "WAR-TMP-30",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 3,
+        "manobra_codigo": "CAU-MGP-105",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 4,
+        "manobra_codigo": "WAR-TDR-X1",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 5,
+        "manobra_codigo": "WAR-TCS-X1",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 6,
+        "manobra_codigo": "WAR-MRC-X1",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 7,
+        "manobra_codigo": "WAR-TRC-X1",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 8,
+        "manobra_codigo": "CAU-HYP-77",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 9,
+        "manobra_codigo": "CAU-SRV-80",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 10,
+        "manobra_codigo": "A139-CKL-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 11,
+        "manobra_codigo": "WAR-LOW-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 12,
+        "manobra_codigo": "WAR-HIG-29",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 13,
+        "manobra_codigo": "WAR-GER-27",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 14,
+        "manobra_codigo": "A139-ENE-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 15,
+        "manobra_codigo": "FLY-BAS-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 16,
+        "manobra_codigo": "A139-REC-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 17,
+        "manobra_codigo": "A139-AUT-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-08/12",
+        "ordem": 18,
+        "manobra_codigo": "A139-RPM-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 1,
+        "manobra_codigo": "WAR-FIR-21",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 2,
+        "manobra_codigo": "A139-CKL-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 3,
+        "manobra_codigo": "WAR-CAB-23",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 4,
+        "manobra_codigo": "WAR-BAG-23",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 5,
+        "manobra_codigo": "CAU-O2P-82",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 6,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 7,
+        "manobra_codigo": "CAU-HOT-65",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 8,
+        "manobra_codigo": "CAU-FLO-73",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 9,
+        "manobra_codigo": "CAU-2FP-74",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 10,
+        "manobra_codigo": "CAU-EFP-75",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 11,
+        "manobra_codigo": "CAU-HYP-77",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 12,
+        "manobra_codigo": "CAU-SRV-80",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 13,
+        "manobra_codigo": "WAR-LOW-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 14,
+        "manobra_codigo": "WAR-HIG-29",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 15,
+        "manobra_codigo": "WAR-GER-27",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 16,
+        "manobra_codigo": "FLY-BAS-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 17,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-09/12",
+        "ordem": 18,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 1,
+        "manobra_codigo": "CAU-HOT-65",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 2,
+        "manobra_codigo": "OPS-OFF-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 4,
+        "manobra_codigo": "OPS-NAV-X2",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 5,
+        "manobra_codigo": "CAU-FLO-73",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 6,
+        "manobra_codigo": "WAR-GEN-11",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 7,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 8,
+        "manobra_codigo": "CAU-2FP-74",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 9,
+        "manobra_codigo": "CAU-LIC-60",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 10,
+        "manobra_codigo": "OPS-OFF-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 11,
+        "manobra_codigo": "OPS-APP-X4",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 12,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 13,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 14,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 15,
+        "manobra_codigo": "WAR-LOW-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 16,
+        "manobra_codigo": "WAR-HIG-29",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 17,
+        "manobra_codigo": "FLY-BAS-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-10/12",
+        "ordem": 18,
+        "manobra_codigo": "OPS-OFF-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 1,
+        "manobra_codigo": "LOFT-CHK-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 2,
+        "manobra_codigo": "LOFT-CHK-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 3,
+        "manobra_codigo": "LOFT-CHK-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 4,
+        "manobra_codigo": "LOFT-CHK-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 5,
+        "manobra_codigo": "LOFT-CHK-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 6,
+        "manobra_codigo": "LOFT-CHK-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 7,
+        "manobra_codigo": "LOFT-CHK-08",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 8,
+        "manobra_codigo": "LOFT-CHK-09",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 9,
+        "manobra_codigo": "LOFT-CHK-10",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 10,
+        "manobra_codigo": "LOFT-CHK-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 11,
+        "manobra_codigo": "LOFT-CHK-23",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 12,
+        "manobra_codigo": "LOFT-CHK-12",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 13,
+        "manobra_codigo": "LOFT-CHK-13",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 14,
+        "manobra_codigo": "LOFT-CHK-14",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 15,
+        "manobra_codigo": "LOFT-CHK-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 16,
+        "manobra_codigo": "LOFT-CHK-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 17,
+        "manobra_codigo": "LOFT-CHK-18",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-11/12",
+        "ordem": 18,
+        "manobra_codigo": "LOFT-CHK-19",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 1,
+        "manobra_codigo": "LOFT-CHK-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 2,
+        "manobra_codigo": "LOFT-CHK-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 3,
+        "manobra_codigo": "LOFT-CHK-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 4,
+        "manobra_codigo": "LOFT-CHK-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 5,
+        "manobra_codigo": "LOFT-CHK-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 6,
+        "manobra_codigo": "LOFT-CHK-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 7,
+        "manobra_codigo": "LOFT-CHK-08",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 8,
+        "manobra_codigo": "LOFT-CHK-09",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 9,
+        "manobra_codigo": "LOFT-CHK-10",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 10,
+        "manobra_codigo": "LOFT-CHK-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 11,
+        "manobra_codigo": "LOFT-CHK-23",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 12,
+        "manobra_codigo": "LOFT-CHK-12",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 13,
+        "manobra_codigo": "LOFT-CHK-13",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 14,
+        "manobra_codigo": "LOFT-CHK-14",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 15,
+        "manobra_codigo": "LOFT-CHK-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 16,
+        "manobra_codigo": "LOFT-CHK-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 17,
+        "manobra_codigo": "LOFT-CHK-18",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-I-12/12",
+        "ordem": 18,
+        "manobra_codigo": "LOFT-CHK-19",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 1,
+        "manobra_codigo": "CAU-HOT-65",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 4,
+        "manobra_codigo": "OPS-OFF-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 5,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 6,
+        "manobra_codigo": "WAR-IDL-16",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 7,
+        "manobra_codigo": "CAU-CST-59",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 8,
+        "manobra_codigo": "CAU-OVS-64",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 9,
+        "manobra_codigo": "WAR-LOW-29",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 10,
+        "manobra_codigo": "WAR-HIG-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 11,
+        "manobra_codigo": "WAR-FIR-21",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 12,
+        "manobra_codigo": "FLY-BAS-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 13,
+        "manobra_codigo": "WAR-CAB-23",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 14,
+        "manobra_codigo": "CAU-MGP-105",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 15,
+        "manobra_codigo": "WAR-MGB-30",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 16,
+        "manobra_codigo": "WAR-TMP-30",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 17,
+        "manobra_codigo": "CAU-DCG-53",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/VFR",
+        "ordem": 18,
+        "manobra_codigo": "WAR-GEN-11",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 1,
+        "manobra_codigo": "OPS-NRM-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NAV-X2",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 4,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 5,
+        "manobra_codigo": "OPS-NAV-X4",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 6,
+        "manobra_codigo": "CAU-APF-37",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 7,
+        "manobra_codigo": "CAU-AFD-41",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 8,
+        "manobra_codigo": "CAU-AHR-47",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 9,
+        "manobra_codigo": "CAU-FMS-51",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 10,
+        "manobra_codigo": "CAU-GPS-52",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 11,
+        "manobra_codigo": "CAU-DCB-56",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 12,
+        "manobra_codigo": "WAR-BAG-23",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 13,
+        "manobra_codigo": "CAU-HYP-77",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 14,
+        "manobra_codigo": "CAU-SRV-80",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 15,
+        "manobra_codigo": "OPS-NAV-X3",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 16,
+        "manobra_codigo": "OPS-APP-X2",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 17,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C1/IFR",
+        "ordem": 18,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 1,
+        "manobra_codigo": "CAU-HOT-65",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 3,
+        "manobra_codigo": "FLY-BAS-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 4,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 5,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 6,
+        "manobra_codigo": "WAR-SHT-19",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 7,
+        "manobra_codigo": "WAR-LOW-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 8,
+        "manobra_codigo": "WAR-HIG-29",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 9,
+        "manobra_codigo": "WAR-EEC-18",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 10,
+        "manobra_codigo": "WAR-IDL-16",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 11,
+        "manobra_codigo": "WAR-FIR-21",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 12,
+        "manobra_codigo": "CAU-2FP-74",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 13,
+        "manobra_codigo": "CAU-FLO-73",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 14,
+        "manobra_codigo": "CAU-LIC-60",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 15,
+        "manobra_codigo": "OPS-OFF-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 16,
+        "manobra_codigo": "WAR-MGB-30",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 17,
+        "manobra_codigo": "WAR-TMP-30",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/VFR",
+        "ordem": 18,
+        "manobra_codigo": "CAU-DCG-53",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 1,
+        "manobra_codigo": "OPS-NRM-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NAV-X2",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 4,
+        "manobra_codigo": "CAU-APO-38",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 5,
+        "manobra_codigo": "CAU-SAS-41",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 6,
+        "manobra_codigo": "FLY-BAS-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 7,
+        "manobra_codigo": "CAU-AHR-47",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 8,
+        "manobra_codigo": "CAU-FMS-51",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 9,
+        "manobra_codigo": "WAR-CAB-23",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 10,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 11,
+        "manobra_codigo": "OPS-NAV-X4",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 12,
+        "manobra_codigo": "OPS-NAV-X3",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 13,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 14,
+        "manobra_codigo": "CAU-HYP-77",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 15,
+        "manobra_codigo": "WAR-GER-27",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 16,
+        "manobra_codigo": "OPS-APP-X2",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 17,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C2/IFR",
+        "ordem": 18,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 1,
+        "manobra_codigo": "OPS-NRM-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 4,
+        "manobra_codigo": "OPS-NRM-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 5,
+        "manobra_codigo": "WAR-LOW-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 6,
+        "manobra_codigo": "WAR-HIG-29",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 7,
+        "manobra_codigo": "WAR-EEC-18",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 8,
+        "manobra_codigo": "CAU-OVS-64",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 9,
+        "manobra_codigo": "WAR-FIR-21",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 10,
+        "manobra_codigo": "FLY-BAS-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 11,
+        "manobra_codigo": "WAR-BAT-14",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 12,
+        "manobra_codigo": "WAR-AUX-14",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 13,
+        "manobra_codigo": "WAR-STA-X1",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 14,
+        "manobra_codigo": "WAR-TDR-X1",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 15,
+        "manobra_codigo": "WAR-TCS-X1",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 16,
+        "manobra_codigo": "WAR-MRC-X1",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 17,
+        "manobra_codigo": "WAR-TRC-X1",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/VFR",
+        "ordem": 18,
+        "manobra_codigo": "CAU-MGP-105",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 1,
+        "manobra_codigo": "OPS-NRM-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NAV-X2",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 4,
+        "manobra_codigo": "CAU-APF-37",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 5,
+        "manobra_codigo": "FLY-BAS-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 6,
+        "manobra_codigo": "CAU-ADS-46",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 7,
+        "manobra_codigo": "CAU-DUD-46",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 8,
+        "manobra_codigo": "WAR-CAB-23",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 9,
+        "manobra_codigo": "CAU-GPS-52",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 10,
+        "manobra_codigo": "WAR-HIG-29",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 11,
+        "manobra_codigo": "WAR-LOW-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 12,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 13,
+        "manobra_codigo": "CAU-SRV-80",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 14,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 15,
+        "manobra_codigo": "OPS-NAV-X3",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 16,
+        "manobra_codigo": "OPS-APP-X2",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 17,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "A139-P-C3/IFR",
+        "ordem": 18,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 1,
+        "manobra_codigo": "LOFT-CHK-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 2,
+        "manobra_codigo": "LOFT-CHK-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 3,
+        "manobra_codigo": "LOFT-CHK-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 4,
+        "manobra_codigo": "LOFT-CHK-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 5,
+        "manobra_codigo": "LOFT-CHK-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 6,
+        "manobra_codigo": "LOFT-CHK-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 7,
+        "manobra_codigo": "LOFT-CHK-08",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 8,
+        "manobra_codigo": "LOFT-CHK-09",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 9,
+        "manobra_codigo": "LOFT-CHK-10",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 10,
+        "manobra_codigo": "LOFT-CHK-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 11,
+        "manobra_codigo": "LOFT-CHK-23",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 12,
+        "manobra_codigo": "LOFT-CHK-12",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 13,
+        "manobra_codigo": "LOFT-CHK-13",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 14,
+        "manobra_codigo": "LOFT-CHK-14",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 15,
+        "manobra_codigo": "LOFT-CHK-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 16,
+        "manobra_codigo": "LOFT-CHK-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 17,
+        "manobra_codigo": "LOFT-CHK-18",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/CHECK",
+        "ordem": 18,
+        "manobra_codigo": "LOFT-CHK-19",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 1,
+        "manobra_codigo": "LOFT-CHK-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 2,
+        "manobra_codigo": "LOFT-CHK-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 3,
+        "manobra_codigo": "LOFT-CHK-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 4,
+        "manobra_codigo": "LOFT-CHK-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 5,
+        "manobra_codigo": "LOFT-CHK-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 6,
+        "manobra_codigo": "LOFT-CHK-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 7,
+        "manobra_codigo": "LOFT-CHK-08",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 8,
+        "manobra_codigo": "LOFT-CHK-09",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 9,
+        "manobra_codigo": "LOFT-CHK-10",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 10,
+        "manobra_codigo": "LOFT-CHK-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 11,
+        "manobra_codigo": "LOFT-CHK-23",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 12,
+        "manobra_codigo": "LOFT-CHK-12",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 13,
+        "manobra_codigo": "LOFT-CHK-13",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 14,
+        "manobra_codigo": "LOFT-CHK-14",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 15,
+        "manobra_codigo": "LOFT-CHK-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 16,
+        "manobra_codigo": "LOFT-CHK-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 17,
+        "manobra_codigo": "LOFT-CHK-18",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-P-CHECK",
+        "ordem": 18,
+        "manobra_codigo": "LOFT-CHK-19",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 1,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 2,
+        "manobra_codigo": "S76-HOT-00",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 3,
+        "manobra_codigo": "S76-STF-00",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 4,
+        "manobra_codigo": "S76-FMG-08",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 5,
+        "manobra_codigo": "S76-FMI-09",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 6,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 7,
+        "manobra_codigo": "S76-TRH-38",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 8,
+        "manobra_codigo": "S76-TDP-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 9,
+        "manobra_codigo": "S76-FMA-14",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 10,
+        "manobra_codigo": "S76-FMC-15",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 11,
+        "manobra_codigo": "S76-NRO-00",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 12,
+        "manobra_codigo": "S76-NRL-00",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 13,
+        "manobra_codigo": "S76-CST-00",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 14,
+        "manobra_codigo": "S76-MRV-00",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 15,
+        "manobra_codigo": "S76-MGP-33",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 16,
+        "manobra_codigo": "S76-SSS-42",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 17,
+        "manobra_codigo": "S76-FFL-32",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/VFR",
+        "ordem": 18,
+        "manobra_codigo": "S76-FFM-32",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 1,
+        "manobra_codigo": "S76-NIF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 2,
+        "manobra_codigo": "S76-FDA-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 3,
+        "manobra_codigo": "S76-CGI-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 4,
+        "manobra_codigo": "S76-SID-00",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 5,
+        "manobra_codigo": "S76-FCR-17",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 6,
+        "manobra_codigo": "S76-DMN-21",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 7,
+        "manobra_codigo": "S76-DM1-22",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 8,
+        "manobra_codigo": "S76-N1T-30",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 9,
+        "manobra_codigo": "S76-EOP-25",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 10,
+        "manobra_codigo": "S76-SDC-50",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 11,
+        "manobra_codigo": "S76-APF-57",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 12,
+        "manobra_codigo": "S76-TRM-58",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 13,
+        "manobra_codigo": "S76-FDF-60",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 14,
+        "manobra_codigo": "S76-AHR-65",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 15,
+        "manobra_codigo": "S76-HLD-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 16,
+        "manobra_codigo": "S76-EFV-11",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 17,
+        "manobra_codigo": "S76-ILS-00",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C1/IFR",
+        "ordem": 18,
+        "manobra_codigo": "S76-MIS-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 1,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 2,
+        "manobra_codigo": "S76-HNG-00",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 3,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 4,
+        "manobra_codigo": "S76-TDP-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 5,
+        "manobra_codigo": "S76-OSP-27",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 6,
+        "manobra_codigo": "S76-FMF-07",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 7,
+        "manobra_codigo": "S76-XFD-20",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 8,
+        "manobra_codigo": "S76-FPL-31",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 9,
+        "manobra_codigo": "S76-LOW-32",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 10,
+        "manobra_codigo": "S76-MGL-33",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 11,
+        "manobra_codigo": "S76-MGC-36",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 12,
+        "manobra_codigo": "S76-TRD-39",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 13,
+        "manobra_codigo": "S76-SS2-43",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 14,
+        "manobra_codigo": "S76-CLB-69",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 15,
+        "manobra_codigo": "S76-UGR-46",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 16,
+        "manobra_codigo": "S76-LGB-47",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 17,
+        "manobra_codigo": "S76-AUT-70",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/VFR",
+        "ordem": 18,
+        "manobra_codigo": "S76-DIT-71",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 1,
+        "manobra_codigo": "S76-NIF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 2,
+        "manobra_codigo": "S76-FDA-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 3,
+        "manobra_codigo": "S76-CGI-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 4,
+        "manobra_codigo": "S76-SID-00",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 5,
+        "manobra_codigo": "S76-FCR-17",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 6,
+        "manobra_codigo": "S76-ECO-20",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 7,
+        "manobra_codigo": "S76-DDE-21",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 8,
+        "manobra_codigo": "S76-ECH-26",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 9,
+        "manobra_codigo": "S76-T5I-31",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 10,
+        "manobra_codigo": "S76-DCD-50",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 11,
+        "manobra_codigo": "S76-BTO-53",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 12,
+        "manobra_codigo": "S76-CDC-59",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 13,
+        "manobra_codigo": "S76-ADC-61",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 14,
+        "manobra_codigo": "S76-CRT-63",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 15,
+        "manobra_codigo": "S76-EFI-12",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 16,
+        "manobra_codigo": "S76-HLD-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 17,
+        "manobra_codigo": "S76-WSH-54",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C2/IFR",
+        "ordem": 18,
+        "manobra_codigo": "S76-RNV-00",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 1,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 2,
+        "manobra_codigo": "S76-FGF-29",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 3,
+        "manobra_codigo": "S76-WCP-73",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 4,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 5,
+        "manobra_codigo": "S76-TDP-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 6,
+        "manobra_codigo": "S76-BFL-28",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 7,
+        "manobra_codigo": "S76-PAL-30",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 8,
+        "manobra_codigo": "S76-SFE-10",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 9,
+        "manobra_codigo": "S76-BCS-10",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 10,
+        "manobra_codigo": "S76-ESF-18",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 11,
+        "manobra_codigo": "S76-ERF-18",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 12,
+        "manobra_codigo": "S76-EOT-25",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 13,
+        "manobra_codigo": "S76-OFL-30",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 14,
+        "manobra_codigo": "S76-MOH-35",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 15,
+        "manobra_codigo": "S76-IGB-37",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 16,
+        "manobra_codigo": "S76-TCS-39",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 17,
+        "manobra_codigo": "S76-TDM-41",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/VFR",
+        "ordem": 18,
+        "manobra_codigo": "S76-FCD-67",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 1,
+        "manobra_codigo": "S76-NIF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 2,
+        "manobra_codigo": "S76-FDA-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 3,
+        "manobra_codigo": "S76-CGI-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 4,
+        "manobra_codigo": "S76-SID-00",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 5,
+        "manobra_codigo": "S76-FCR-17",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 6,
+        "manobra_codigo": "S76-CCF-10",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 7,
+        "manobra_codigo": "S76-DMB-24",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 8,
+        "manobra_codigo": "S76-AGB-48",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 9,
+        "manobra_codigo": "S76-EBV-54",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 10,
+        "manobra_codigo": "S76-EAI-55",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 11,
+        "manobra_codigo": "S76-HOM-59",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 12,
+        "manobra_codigo": "S76-MBF-61",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 13,
+        "manobra_codigo": "S76-IID-62",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 14,
+        "manobra_codigo": "S76-SGA-62",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 15,
+        "manobra_codigo": "S76-CFC-63",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 16,
+        "manobra_codigo": "S76-UAR-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 17,
+        "manobra_codigo": "S76-ILS-00",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "S76-P-C3/IFR",
+        "ordem": 18,
+        "manobra_codigo": "S76-MIS-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 1,
+        "manobra_codigo": "LOFT-OFF-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 2,
+        "manobra_codigo": "LOFT-OFF-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 3,
+        "manobra_codigo": "LOFT-OFF-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 4,
+        "manobra_codigo": "LOFT-OFF-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 5,
+        "manobra_codigo": "LOFT-OFF-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 6,
+        "manobra_codigo": "LOFT-OFF-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 7,
+        "manobra_codigo": "LOFT-OFF-08",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 8,
+        "manobra_codigo": "LOFT-OFF-09",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 9,
+        "manobra_codigo": "LOFT-OFF-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 10,
+        "manobra_codigo": "LOFT-OFF-12",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 11,
+        "manobra_codigo": "LOFT-OFF-14",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 12,
+        "manobra_codigo": "LOFT-OFF-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 13,
+        "manobra_codigo": "LOFT-OFF-16",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 14,
+        "manobra_codigo": "LOFT-OFF-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 15,
+        "manobra_codigo": "LOFT-OFF-18",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 16,
+        "manobra_codigo": "LOFT-OFF-19",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 17,
+        "manobra_codigo": "LOFT-OFF-20",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-P-LOFT/OFFSHORE",
+        "ordem": 18,
+        "manobra_codigo": "LOFT-OFF-21",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 1,
+        "manobra_codigo": "A139-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 4,
+        "manobra_codigo": "FLY-BAS-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 5,
+        "manobra_codigo": "A139-MOD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 6,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 7,
+        "manobra_codigo": "OPS-NOT-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 8,
+        "manobra_codigo": "CAU-DCG-53",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 9,
+        "manobra_codigo": "A139-CKL-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 10,
+        "manobra_codigo": "CAU-FLO-73",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 11,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 12,
+        "manobra_codigo": "CAU-LIC-60",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 13,
+        "manobra_codigo": "A139-OEI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 14,
+        "manobra_codigo": "A139-AUT-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 15,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 16,
+        "manobra_codigo": "A139-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 17,
+        "manobra_codigo": "A139-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-01/02",
+        "ordem": 18,
+        "manobra_codigo": "A139-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 1,
+        "manobra_codigo": "A139-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 2,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NAV-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 4,
+        "manobra_codigo": "FLY-BAS-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 5,
+        "manobra_codigo": "OPS-NAV-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 6,
+        "manobra_codigo": "OPS-NAV-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 7,
+        "manobra_codigo": "CAU-APO-38",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 8,
+        "manobra_codigo": "CAU-FMS-51",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 9,
+        "manobra_codigo": "CAU-AHR-47",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 10,
+        "manobra_codigo": "FLY-BAS-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 11,
+        "manobra_codigo": "OPS-APP-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 12,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 13,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 14,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 15,
+        "manobra_codigo": "CAU-LIC-60",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 16,
+        "manobra_codigo": "WAR-GER-27",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 17,
+        "manobra_codigo": "A139-POU-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-S-02/02",
+        "ordem": 18,
+        "manobra_codigo": "A139-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 1,
+        "manobra_codigo": "INV-CGE-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 2,
+        "manobra_codigo": "INV-CGE-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 3,
+        "manobra_codigo": "INV-CGE-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 4,
+        "manobra_codigo": "INV-CGE-04",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 5,
+        "manobra_codigo": "INV-CGE-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 6,
+        "manobra_codigo": "INV-ETH-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 7,
+        "manobra_codigo": "INV-PLN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 8,
+        "manobra_codigo": "INV-BRF-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 9,
+        "manobra_codigo": "INV-DEM-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 10,
+        "manobra_codigo": "INV-CTL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 11,
+        "manobra_codigo": "INV-SAF-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 12,
+        "manobra_codigo": "INV-ERR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 13,
+        "manobra_codigo": "INV-EMR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 14,
+        "manobra_codigo": "INV-AUT-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 15,
+        "manobra_codigo": "INV-UAR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 16,
+        "manobra_codigo": "INV-EVL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 17,
+        "manobra_codigo": "INV-DBF-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "TRE-INST",
+        "ordem": 18,
+        "manobra_codigo": "INV-ADM-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 1,
+        "manobra_codigo": "EXA-CGE-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 2,
+        "manobra_codigo": "EXA-CGE-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 3,
+        "manobra_codigo": "EXA-CGE-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 4,
+        "manobra_codigo": "EXA-CGE-04",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 5,
+        "manobra_codigo": "EXA-CGE-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 6,
+        "manobra_codigo": "EXA-PLN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 7,
+        "manobra_codigo": "EXA-BRF-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 8,
+        "manobra_codigo": "EXA-FAP-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 9,
+        "manobra_codigo": "EXA-SCN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 10,
+        "manobra_codigo": "EXA-CND-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 11,
+        "manobra_codigo": "EXA-STD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 12,
+        "manobra_codigo": "EXA-RSK-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 13,
+        "manobra_codigo": "EXA-EMR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 14,
+        "manobra_codigo": "EXA-DEC-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 15,
+        "manobra_codigo": "EXA-DBF-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 16,
+        "manobra_codigo": "EXA-ADM-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 17,
+        "manobra_codigo": "EXA-ETH-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "CRED-EXA",
+        "ordem": 18,
+        "manobra_codigo": "EXA-PAD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 1,
+        "manobra_codigo": "A139-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 4,
+        "manobra_codigo": "FLY-BAS-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 5,
+        "manobra_codigo": "A139-MOD-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 6,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 7,
+        "manobra_codigo": "OPS-NOT-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 8,
+        "manobra_codigo": "CAU-DCG-53",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 9,
+        "manobra_codigo": "A139-CKL-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 10,
+        "manobra_codigo": "CAU-FLO-73",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 11,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 12,
+        "manobra_codigo": "CAU-LIC-60",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 13,
+        "manobra_codigo": "A139-OEI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 14,
+        "manobra_codigo": "A139-AUT-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 15,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 16,
+        "manobra_codigo": "A139-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 17,
+        "manobra_codigo": "A139-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-01",
+        "ordem": 18,
+        "manobra_codigo": "A139-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 2,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 3,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 4,
+        "manobra_codigo": "S76-DNR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 5,
+        "manobra_codigo": "S76-SUB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 6,
+        "manobra_codigo": "S76-NDL-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 7,
+        "manobra_codigo": "OPS-NOT-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 8,
+        "manobra_codigo": "76-FALGC",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 9,
+        "manobra_codigo": "76-FALFF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 10,
+        "manobra_codigo": "76-FLWNR",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 11,
+        "manobra_codigo": "76-MOTCZ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 12,
+        "manobra_codigo": "S76-CKL-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 13,
+        "manobra_codigo": "S76-OEI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 14,
+        "manobra_codigo": "S76-APN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 15,
+        "manobra_codigo": "S76-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 16,
+        "manobra_codigo": "S76-AUT-70",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 17,
+        "manobra_codigo": "S76-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-01",
+        "ordem": 18,
+        "manobra_codigo": "S76-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 2,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 3,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 4,
+        "manobra_codigo": "S76-DNR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 5,
+        "manobra_codigo": "S76-SUB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 6,
+        "manobra_codigo": "S76-PWR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 7,
+        "manobra_codigo": "S76-CRV-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 8,
+        "manobra_codigo": "S76-APN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 9,
+        "manobra_codigo": "S76-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 10,
+        "manobra_codigo": "S76-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 11,
+        "manobra_codigo": "S76-TDP-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 12,
+        "manobra_codigo": "S76-NDT-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 13,
+        "manobra_codigo": "S76-ILS-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 14,
+        "manobra_codigo": "S76-RNV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 15,
+        "manobra_codigo": "76-MOTCZ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 16,
+        "manobra_codigo": "S76-XFD-20",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 17,
+        "manobra_codigo": "S76-AUT-70",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-REQ-01",
+        "ordem": 18,
+        "manobra_codigo": "S76-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 1,
+        "manobra_codigo": "A139-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 2,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 3,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 4,
+        "manobra_codigo": "FLY-BAS-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 5,
+        "manobra_codigo": "A139-PWR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 6,
+        "manobra_codigo": "OPS-NRM-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 7,
+        "manobra_codigo": "A139-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 8,
+        "manobra_codigo": "OPS-NAV-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 9,
+        "manobra_codigo": "FLY-BAS-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 10,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 11,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 12,
+        "manobra_codigo": "CAU-FLO-73",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 13,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 14,
+        "manobra_codigo": "CAU-LIC-60",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 15,
+        "manobra_codigo": "A139-OEI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 16,
+        "manobra_codigo": "OPS-APP-X4",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 17,
+        "manobra_codigo": "WAR-GER-27",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-REQ-01",
+        "ordem": 18,
+        "manobra_codigo": "A139-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 1,
+        "manobra_codigo": "S76-CAB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 2,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 3,
+        "manobra_codigo": "S76-PNR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 4,
+        "manobra_codigo": "S76-INS-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 5,
+        "manobra_codigo": "S76-TAX-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 6,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 7,
+        "manobra_codigo": "S76-PED-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 8,
+        "manobra_codigo": "S76-HVT-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 9,
+        "manobra_codigo": "S76-DNR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 10,
+        "manobra_codigo": "S76-SUB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 11,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 12,
+        "manobra_codigo": "S76-PWR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 13,
+        "manobra_codigo": "S76-CRV-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 14,
+        "manobra_codigo": "S76-CIR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 15,
+        "manobra_codigo": "S76-APN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 16,
+        "manobra_codigo": "S76-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 17,
+        "manobra_codigo": "S76-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-01/12",
+        "ordem": 18,
+        "manobra_codigo": "S76-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 2,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 3,
+        "manobra_codigo": "S76-DNR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 4,
+        "manobra_codigo": "S76-SUB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 5,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 6,
+        "manobra_codigo": "S76-CTV-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 7,
+        "manobra_codigo": "S76-CRV-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 8,
+        "manobra_codigo": "S76-DSC-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 9,
+        "manobra_codigo": "S76-APN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 10,
+        "manobra_codigo": "S76-STB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 11,
+        "manobra_codigo": "S76-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 12,
+        "manobra_codigo": "S76-REC-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 13,
+        "manobra_codigo": "S76-CIR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 14,
+        "manobra_codigo": "S76-VCZ-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 15,
+        "manobra_codigo": "S76-GAR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 16,
+        "manobra_codigo": "S76-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 17,
+        "manobra_codigo": "S76-TAX-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-02/12",
+        "ordem": 18,
+        "manobra_codigo": "S76-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 2,
+        "manobra_codigo": "76-FLWNR",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 3,
+        "manobra_codigo": "S76-FPL-31",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 4,
+        "manobra_codigo": "76-OILMT",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 5,
+        "manobra_codigo": "S76-CKL-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 6,
+        "manobra_codigo": "S76-APN-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 7,
+        "manobra_codigo": "76-FALGC",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 8,
+        "manobra_codigo": "76-PER26",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 9,
+        "manobra_codigo": "76-FALIV",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 10,
+        "manobra_codigo": "76-FALAD",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 11,
+        "manobra_codigo": "76-PERAT",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 12,
+        "manobra_codigo": "76-FALEF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 13,
+        "manobra_codigo": "76-FALFD",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 14,
+        "manobra_codigo": "76-FALRM",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 15,
+        "manobra_codigo": "76-N1TQF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 16,
+        "manobra_codigo": "76-FALTS",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 17,
+        "manobra_codigo": "76-HIDPB",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-03/12",
+        "ordem": 18,
+        "manobra_codigo": "76-FALFF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 2,
+        "manobra_codigo": "76-PRGGP",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 3,
+        "manobra_codigo": "S76-NIF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 4,
+        "manobra_codigo": "S76-FDA-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 5,
+        "manobra_codigo": "S76-SCN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 6,
+        "manobra_codigo": "S76-CGI-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 7,
+        "manobra_codigo": "76-FALAD",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 8,
+        "manobra_codigo": "76-PERAT",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 9,
+        "manobra_codigo": "76-FALEF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 10,
+        "manobra_codigo": "76-FALPA",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 11,
+        "manobra_codigo": "76-FALFD",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 12,
+        "manobra_codigo": "76-FALRM",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 13,
+        "manobra_codigo": "76-FALGC",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 14,
+        "manobra_codigo": "76-PER26",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 15,
+        "manobra_codigo": "76-FALIV",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 16,
+        "manobra_codigo": "76-N1TQF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 17,
+        "manobra_codigo": "76-FALTS",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-04/12",
+        "ordem": 18,
+        "manobra_codigo": "S76-UAR-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 2,
+        "manobra_codigo": "76-PRGGP",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 3,
+        "manobra_codigo": "S76-NIF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 4,
+        "manobra_codigo": "S76-FDA-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 5,
+        "manobra_codigo": "76-DECSI",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 6,
+        "manobra_codigo": "S76-SID-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 7,
+        "manobra_codigo": "S76-CGI-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 8,
+        "manobra_codigo": "S76-SCN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 9,
+        "manobra_codigo": "S76-VMA-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 10,
+        "manobra_codigo": "S76-UAR-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 11,
+        "manobra_codigo": "S76-HLD-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 12,
+        "manobra_codigo": "S76-RNV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 13,
+        "manobra_codigo": "76-APXNP",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 14,
+        "manobra_codigo": "76-APXPR",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 15,
+        "manobra_codigo": "S76-ILS-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 16,
+        "manobra_codigo": "S76-VOR-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 17,
+        "manobra_codigo": "76-APXPI",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-05/12",
+        "ordem": 18,
+        "manobra_codigo": "76-ARRIF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 2,
+        "manobra_codigo": "S76-DDE-21",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 3,
+        "manobra_codigo": "S76-DM1-22",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 4,
+        "manobra_codigo": "S76-DMB-24",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 5,
+        "manobra_codigo": "76-MOTHV",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 6,
+        "manobra_codigo": "76-MOTCA",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 7,
+        "manobra_codigo": "76-MOTCB",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 8,
+        "manobra_codigo": "76-POUAB",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 9,
+        "manobra_codigo": "S76-CKL-04",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 10,
+        "manobra_codigo": "76-N1TQF",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 11,
+        "manobra_codigo": "S76-XFD-20",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 12,
+        "manobra_codigo": "76-MOTCZ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 13,
+        "manobra_codigo": "76-MOTAP",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 14,
+        "manobra_codigo": "76-APXOI",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 15,
+        "manobra_codigo": "76-APXAL",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 16,
+        "manobra_codigo": "S76-CGI-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 17,
+        "manobra_codigo": "S76-UAR-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-06/12",
+        "ordem": 18,
+        "manobra_codigo": "76-POUMO",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 1,
+        "manobra_codigo": "76-FALGC",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 2,
+        "manobra_codigo": "76-FALGD",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 3,
+        "manobra_codigo": "76-SOBGD",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 4,
+        "manobra_codigo": "76-FALGA",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 5,
+        "manobra_codigo": "76-FALEB",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 6,
+        "manobra_codigo": "76-FALIV",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 7,
+        "manobra_codigo": "76-FALFF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 8,
+        "manobra_codigo": "76-HIDPB",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 9,
+        "manobra_codigo": "76-SERTQ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 10,
+        "manobra_codigo": "76-SERJM",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 11,
+        "manobra_codigo": "76-AMOTV",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 12,
+        "manobra_codigo": "S76-UGR-46",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 13,
+        "manobra_codigo": "S76-LGB-47",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 14,
+        "manobra_codigo": "76-FALAD",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 15,
+        "manobra_codigo": "76-PERAT",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 16,
+        "manobra_codigo": "76-FALPA",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 17,
+        "manobra_codigo": "76-FALFD",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-07/12",
+        "ordem": 18,
+        "manobra_codigo": "76-N1TQF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 1,
+        "manobra_codigo": "76-MGBSF",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 2,
+        "manobra_codigo": "76-MGBOL",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 3,
+        "manobra_codigo": "76-CHPTG",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 4,
+        "manobra_codigo": "76-TRSRC",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 5,
+        "manobra_codigo": "76-CTRRC",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 6,
+        "manobra_codigo": "S76-TRH-38",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 7,
+        "manobra_codigo": "S76-TRD-39",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 8,
+        "manobra_codigo": "S76-TDM-41",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 9,
+        "manobra_codigo": "S76-NRO-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 10,
+        "manobra_codigo": "S76-NRL-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 11,
+        "manobra_codigo": "S76-ENE-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 12,
+        "manobra_codigo": "S76-AUT-70",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 13,
+        "manobra_codigo": "S76-REC-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 14,
+        "manobra_codigo": "S76-CKL-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 15,
+        "manobra_codigo": "S76-MRV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 16,
+        "manobra_codigo": "76-AMOTV",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 17,
+        "manobra_codigo": "S76-MGL-33",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-08/12",
+        "ordem": 18,
+        "manobra_codigo": "S76-MOH-35",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 1,
+        "manobra_codigo": "76-INCMO",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 2,
+        "manobra_codigo": "S76-FMF-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 3,
+        "manobra_codigo": "S76-CKL-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 4,
+        "manobra_codigo": "S76-FMI-09",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 5,
+        "manobra_codigo": "S76-FMG-08",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 6,
+        "manobra_codigo": "76-INCCB",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 7,
+        "manobra_codigo": "S76-CCF-10",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 8,
+        "manobra_codigo": "76-FUMBG",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 9,
+        "manobra_codigo": "S76-EFV-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 10,
+        "manobra_codigo": "S76-EFI-12",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 11,
+        "manobra_codigo": "76-DUACZ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 12,
+        "manobra_codigo": "76-DUADC",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 13,
+        "manobra_codigo": "76-DUAHV",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 14,
+        "manobra_codigo": "76-FALGD",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 15,
+        "manobra_codigo": "76-POUAB",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 16,
+        "manobra_codigo": "76-POUMO",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 17,
+        "manobra_codigo": "76-APXOI",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-09/12",
+        "ordem": 18,
+        "manobra_codigo": "76-APXAL",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 2,
+        "manobra_codigo": "S76-TDP-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 3,
+        "manobra_codigo": "76-MOTCZ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 4,
+        "manobra_codigo": "76-FALPA",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 5,
+        "manobra_codigo": "76-FALFD",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 6,
+        "manobra_codigo": "76-PERAT",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 7,
+        "manobra_codigo": "76-FALAD",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 8,
+        "manobra_codigo": "S76-APO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 9,
+        "manobra_codigo": "76-MOTAP",
+        "tripulante": "B"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 10,
+        "manobra_codigo": "76-APXOI",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 11,
+        "manobra_codigo": "76-POUMO",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 12,
+        "manobra_codigo": "S76-ARO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 13,
+        "manobra_codigo": "76-POUAB",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 14,
+        "manobra_codigo": "S76-LDP-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 15,
+        "manobra_codigo": "76-APXAL",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 16,
+        "manobra_codigo": "76-AUTAG",
+        "tripulante": "A"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 17,
+        "manobra_codigo": "S76-DIT-71",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-10/12",
+        "ordem": 18,
+        "manobra_codigo": "S76-FLU-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 1,
+        "manobra_codigo": "LOFT-CHK-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 2,
+        "manobra_codigo": "LOFT-CHK-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 3,
+        "manobra_codigo": "LOFT-CHK-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 4,
+        "manobra_codigo": "LOFT-CHK-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 5,
+        "manobra_codigo": "LOFT-CHK-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 6,
+        "manobra_codigo": "LOFT-CHK-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 7,
+        "manobra_codigo": "LOFT-CHK-08",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 8,
+        "manobra_codigo": "LOFT-CHK-09",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 9,
+        "manobra_codigo": "LOFT-CHK-10",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 10,
+        "manobra_codigo": "LOFT-CHK-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 11,
+        "manobra_codigo": "LOFT-CHK-23",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 12,
+        "manobra_codigo": "LOFT-CHK-12",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 13,
+        "manobra_codigo": "LOFT-CHK-13",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 14,
+        "manobra_codigo": "LOFT-CHK-14",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 15,
+        "manobra_codigo": "LOFT-CHK-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 16,
+        "manobra_codigo": "LOFT-CHK-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 17,
+        "manobra_codigo": "LOFT-CHK-18",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-11/12",
+        "ordem": 18,
+        "manobra_codigo": "LOFT-CHK-19",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 1,
+        "manobra_codigo": "LOFT-CHK-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 2,
+        "manobra_codigo": "LOFT-CHK-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 3,
+        "manobra_codigo": "LOFT-CHK-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 4,
+        "manobra_codigo": "LOFT-CHK-05",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 5,
+        "manobra_codigo": "LOFT-CHK-06",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 6,
+        "manobra_codigo": "LOFT-CHK-07",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 7,
+        "manobra_codigo": "LOFT-CHK-08",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 8,
+        "manobra_codigo": "LOFT-CHK-09",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 9,
+        "manobra_codigo": "LOFT-CHK-10",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 10,
+        "manobra_codigo": "LOFT-CHK-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 11,
+        "manobra_codigo": "LOFT-CHK-23",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 12,
+        "manobra_codigo": "LOFT-CHK-12",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 13,
+        "manobra_codigo": "LOFT-CHK-13",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 14,
+        "manobra_codigo": "LOFT-CHK-14",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 15,
+        "manobra_codigo": "LOFT-CHK-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 16,
+        "manobra_codigo": "LOFT-CHK-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 17,
+        "manobra_codigo": "LOFT-CHK-18",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-I-12/12",
+        "ordem": 18,
+        "manobra_codigo": "LOFT-CHK-19",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 2,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 3,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 4,
+        "manobra_codigo": "S76-DNR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 5,
+        "manobra_codigo": "S76-SUB-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 6,
+        "manobra_codigo": "S76-PWR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 7,
+        "manobra_codigo": "S76-NDL-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 8,
+        "manobra_codigo": "OPS-NOT-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 9,
+        "manobra_codigo": "76-FALGC",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 10,
+        "manobra_codigo": "76-FALFF",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 11,
+        "manobra_codigo": "76-MOTCZ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 12,
+        "manobra_codigo": "S76-XFD-20",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 13,
+        "manobra_codigo": "S76-OEI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 14,
+        "manobra_codigo": "S76-ILS-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 15,
+        "manobra_codigo": "S76-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 16,
+        "manobra_codigo": "S76-APN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 17,
+        "manobra_codigo": "S76-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-01/02",
+        "ordem": 18,
+        "manobra_codigo": "S76-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 2,
+        "manobra_codigo": "S76-NIF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 3,
+        "manobra_codigo": "S76-CKL-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 4,
+        "manobra_codigo": "S76-MGP-33",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 5,
+        "manobra_codigo": "S76-FFL-32",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 6,
+        "manobra_codigo": "S76-FFM-32",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 7,
+        "manobra_codigo": "76-MOTCZ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 8,
+        "manobra_codigo": "S76-XFD-20",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 9,
+        "manobra_codigo": "S76-NRO-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 10,
+        "manobra_codigo": "S76-NRL-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 11,
+        "manobra_codigo": "S76-CST-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 12,
+        "manobra_codigo": "S76-ILS-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 13,
+        "manobra_codigo": "S76-ARN-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 14,
+        "manobra_codigo": "S76-RNV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 15,
+        "manobra_codigo": "S76-VOR-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 16,
+        "manobra_codigo": "S76-LGB-47",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 17,
+        "manobra_codigo": "S76-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "SK76-S-02/02",
+        "ordem": 18,
+        "manobra_codigo": "S76-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 1,
+        "manobra_codigo": "A139-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 2,
+        "manobra_codigo": "OPS-OFF-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 3,
+        "manobra_codigo": "FLY-BAS-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 4,
+        "manobra_codigo": "OPS-NRM-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 5,
+        "manobra_codigo": "OPS-NAV-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 6,
+        "manobra_codigo": "FLY-BAS-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 7,
+        "manobra_codigo": "OPS-OFF-X2",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 8,
+        "manobra_codigo": "OPS-NOT-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 9,
+        "manobra_codigo": "CAU-FLO-73",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 10,
+        "manobra_codigo": "WAR-OUT-15",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 11,
+        "manobra_codigo": "CAU-LIC-60",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 12,
+        "manobra_codigo": "WAR-GEN-11",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 13,
+        "manobra_codigo": "A139-CKL-02",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 14,
+        "manobra_codigo": "FLY-BAS-17",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 15,
+        "manobra_codigo": "OPS-APP-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 16,
+        "manobra_codigo": "OPS-APP-X3",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 17,
+        "manobra_codigo": "A139-PNO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "A139-NOT-02",
+        "ordem": 18,
+        "manobra_codigo": "A139-EST-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 1,
+        "manobra_codigo": "S76-CKL-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 2,
+        "manobra_codigo": "S76-TDP-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 3,
+        "manobra_codigo": "S76-HOV-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 4,
+        "manobra_codigo": "S76-NVF-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 5,
+        "manobra_codigo": "S76-PWR-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 6,
+        "manobra_codigo": "OPS-NOT-X1",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 7,
+        "manobra_codigo": "76-FLWNR",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 8,
+        "manobra_codigo": "76-MOTCZ",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 9,
+        "manobra_codigo": "S76-CKL-03",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 10,
+        "manobra_codigo": "S76-OEI-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 11,
+        "manobra_codigo": "S76-XFD-20",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 12,
+        "manobra_codigo": "76-FALGC",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 13,
+        "manobra_codigo": "S76-LDP-00",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 14,
+        "manobra_codigo": "S76-APO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 15,
+        "manobra_codigo": "S76-ARO-01",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 16,
+        "manobra_codigo": "76-AUTAG",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 17,
+        "manobra_codigo": "S76-DIT-71",
+        "tripulante": "AB"
+      },
+      {
+        "modelo_codigo": "S76-NOT-02",
+        "ordem": 18,
+        "manobra_codigo": "S76-FLU-01",
+        "tripulante": "AB"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "IAD",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 7.7158
+      },
+      "duration": 7.7158,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 114466816,
+      "rows_read": 3672,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]
