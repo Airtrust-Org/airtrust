@@ -870,7 +870,7 @@ export async function gerarPDFFichaCliente(
   const SIG_TEXT_H = 2.8;
   const SIG_TS_H = 2.8;
   const sigBoxW = (contentWidth - 4) / 2;
-  const sigBoxH = 18; // compact but usable
+  const sigBoxH = 12; // compact signature
 
   // Observations area — minimum height
   const OBS_MIN_H = 14;
@@ -882,8 +882,8 @@ export async function gerarPDFFichaCliente(
   const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 7 : 0;
   const NOTECHS_CATEGORY_BUDGET = 0;
 
-  // Calculate safe boundary: table MUST NOT cross tableMaxY
-  const BOTTOM_RESERVED = OBS_MIN_H + 2 + sigBoxH + FOOTER_GAP + FOOTER_H + 3;
+  // Calculate safe boundary
+  const BOTTOM_RESERVED = OBS_MIN_H + 2 + sigBoxH + FOOTER_GAP + FOOTER_H + 2;
   const tableMaxY = pageHeight - BOTTOM_RESERVED;
   const tableBodyBudget = tableMaxY - currentY - 2 - NOTECHS_HEADER_H - NOTECHS_CATEGORY_BUDGET - SCALE_RESERVED;
 
