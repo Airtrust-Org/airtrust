@@ -124,22 +124,23 @@ export function getFichaPdfTableLayout(margin: number): FichaPdfTableLayout {
   //   CÓDIGO : margin+10  — 20mm wide  → ends at margin+30
   //   TRIP.  : margin+35  — 12mm wide (badge 8mm centered) → badge spans margin+31–margin+39
   //             gap from CÓDIGO end (+30) to badge start (+31) = 1mm clear
-  //   ITENS  : margin+48  — 40mm wide  → ends at margin+88
-  //   OBS    : margin+90  — 73mm wide  → ends at margin+163
-  //   NOTA   : margin+172 — centred badge, 10mm wide
+  //   ITENS  : margin+40  — 62mm wide  → ends at margin+102 (sized so the longest real
+  //             manobra/NOTECHS title wraps to at most 2 lines at TABLE_FONT, no ellipsis)
+  //   OBS    : margin+104 — 61mm wide  → ends at margin+165
+  //   NOTA   : margin+172 — centred badge, 10mm wide (unchanged, stays aligned with header)
   return {
     positions: {
       num: margin + 3,
       codigo: margin + 10,
       tripulante: margin + 35,
-      itens: margin + 48,
-      obs: margin + 90,
+      itens: margin + 40,
+      obs: margin + 104,
       nota: margin + 172,
     },
     codigoWidth: 20,
     tripulanteWidth: 12,
-    itensWidth: 40,
-    obsWidth: 73,
+    itensWidth: 62,
+    obsWidth: 61,
     notaBadgeWidth: 10,
     notaBadgeHeight: 4,
   };
@@ -579,7 +580,7 @@ export async function gerarPDFFichaCliente(
   const sessaoLine = limitTextLines(doc.splitTextToSize(sessaoNome, headerText.width), 1);
 
   doc.setTextColor(COLORS.primary);
-  doc.setFontSize(10.5);
+  doc.setFontSize(11.5);
   doc.setFont('helvetica', 'bold');
   doc.text('FICHA DE TREINAMENTO DE VOO', tituloX, headerTop + 6, { align: 'center' });
 
@@ -718,7 +719,7 @@ export async function gerarPDFFichaCliente(
   doc.setFillColor(COLORS.primary);
   doc.rect(margin, currentY, contentWidth, 6, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(7.5);
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
 
   const tableLayout = getFichaPdfTableLayout(margin);
@@ -743,8 +744,11 @@ export async function gerarPDFFichaCliente(
   currentY += 6;
 
   // ── Calcular alturas uniformes ────────────────────────────────────────────
-  // Regra: ITENS máx 1 linha (trunca com …), OBS máx 2 linhas (trunca com …)
-  // Todas as linhas terão a MESMA altura (uniformRowH)
+  // Regra: ITENS nunca trunca com "…" — quebra naturalmente (na largura/fonte
+  // atuais, os nomes reais da matriz cabem em até 2 linhas; se um nome futuro
+  // exceder isso, a linha cresce em vez de cortar o texto). OBS máx 3 linhas
+  // (trunca com …). A altura da linha cresce dinamicamente conforme o maior
+  // número de linhas entre as duas colunas.
   const TABLE_FONT = 8;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(TABLE_FONT);
@@ -771,10 +775,10 @@ export async function gerarPDFFichaCliente(
     ...notechsRows.map((n) => ({ ...n, _section: 'notechs' as const })),
   ];
 
-  // 1ª passagem: altura natural de cada linha (ITENS=1 linha, OBS=3 linhas máx)
+  // 1ª passagem: altura natural de cada linha (ITENS sem limite de linhas, OBS=3 linhas máx)
   const rowData = allRows.map((m) => {
     const nomeTxt = (m.nome || '').trim();
-    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), 1);
+    const nomeLines = doc.splitTextToSize(nomeTxt, ITENS_WIDTH);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
       obsTxt.length > 0
@@ -813,7 +817,7 @@ export async function gerarPDFFichaCliente(
   doc.setFontSize(finalFontSize);
   const scaledRows = rowData.map(({ m, nomeLines: _, obsLines: __, rowH }) => {
     const nomeTxt = (m.nome || '').trim();
-    const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), 1);
+    const nomeLines = doc.splitTextToSize(nomeTxt, ITENS_WIDTH);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
       obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), 3) : [];
@@ -883,7 +887,7 @@ export async function gerarPDFFichaCliente(
     doc.setFontSize(finalFontSize);
     doc.setTextColor(COLORS.text);
 
-    // Nome (1 linha máx)
+    // Nome (sem limite de linhas — nunca corta o texto)
     for (let li = 0; li < nomeLines.length; li++) {
       doc.text(nomeLines[li] || '', col.itens, textTopY + li * LINE_SPACING);
     }
