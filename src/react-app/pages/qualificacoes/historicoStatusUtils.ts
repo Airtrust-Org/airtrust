@@ -50,20 +50,18 @@ export function getHistoricoDisplayStatus(item: HistoricoStatusLike): string {
   const normalized = rawStatus === 'PROXIMA_VENCIMENTO' ? 'VENCENDO_30' : rawStatus;
   const temRenovacaoPosterior =
     item.tem_renovacao_posterior === 1 || item.tem_renovacao_posterior === true;
-  const vigenteOperacional =
-    item.vigente_operacional === 1 || item.vigente_operacional === true;
-  const ehRenovada =
-    temRenovacaoPosterior ||
-    ((!vigenteOperacional || temRenovacaoPosterior) &&
-      (item.renovada === 1 || item.renovada === true)) ||
-    (qualificacaoStatus === 'RENOVADA' && (!vigenteOperacional || temRenovacaoPosterior));
+
+  // RENOVADA: somente se existe sucessora real via link explícito renovacao_de.
+  // renovada=1 e status='RENOVADA' são legado informativo, nunca critério final.
+  const ehRenovada = temRenovacaoPosterior;
 
   if (qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'CANCELADA') {
     return qualificacaoStatus;
   }
 
   if (STATUS_RECONHECIDOS.has(normalized)) {
-    if (normalized !== 'RENOVADA' || !vigenteOperacional || temRenovacaoPosterior) {
+    // status='RENOVADA' vindo do backend só é confiável se tem link explícito de sucessão
+    if (normalized !== 'RENOVADA' || temRenovacaoPosterior) {
       return normalized;
     }
   }

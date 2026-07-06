@@ -82,12 +82,15 @@ export function useQualificacoesHistorico({
       const items = Array.isArray(json.data) ? json.data : [];
 
       // Derivar status caso backend não tenha retornado (garantia)
+      // ATENÇÃO: NUNCA derivar RENOVADA baseado apenas na flag renovada.
+      // RENOVADA requer sucessora real (tem_renovacao_posterior ou vigente_operacional=0).
+      // Se o backend não enviou status, usamos apenas lógica de datas.
       const today = new Date().toISOString().split('T')[0];
       const d30 = new Date();
       d30.setDate(d30.getDate() + 30);
       const today30 = d30.toISOString().split('T')[0];
       const enriched = items.map((r) => {
-        if (r.status) return r; // já veio
+        if (r.status) return r; // já veio do backend (fonte autoritativa)
         if (!r.data_vencimento) return { ...r, status: 'INDEFINIDA' };
         const dataVenc = String(r.data_vencimento || '')
           .trim()
@@ -96,8 +99,8 @@ export function useQualificacoesHistorico({
           return { ...r, status: 'INDEFINIDA' };
         }
         let s: string;
-        if (r.renovada) s = 'RENOVADA';
-        else if (dataVenc < today) s = 'VENCIDA';
+        // NÃO usar r.renovada para derivar RENOVADA — apenas lógica de datas
+        if (dataVenc < today) s = 'VENCIDA';
         else if (dataVenc <= today30) s = 'VENCENDO_30';
         else s = 'VALIDA';
         return { ...r, status: s };

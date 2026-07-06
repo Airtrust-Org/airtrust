@@ -304,11 +304,41 @@ export const MODELO_AERONAVE_EXPR = `COALESCE(
 export const SORTABLE_COLUMNS: Record<string, string> = {
   // PLANEJADA records created via integration have data_conclusao set (= data_prevista),
   // so we must check qh.status directly before falling through to date-based logic.
+  // RENOVADA: somente se existe sucessora real (NÃO é a vigente operacional).
+  // renovada=1 e status='RENOVADA' são legado informativo, nunca critério final.
   status: `(
     CASE
       WHEN qh.deleted_at IS NOT NULL THEN 'CANCELADA'
       WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 'PLANEJADA'
-      WHEN qh.renovada = 1 OR UPPER(COALESCE(qh.status,'')) IN ('RENOVADA','RENOVADO') THEN 'RENOVADA'
+      WHEN NOT (qh.deleted_at IS NULL AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADA','CANCELADO') AND COALESCE(qh.data_vencimento, qh.data_conclusao) IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM qualificacoes_historico qh_newer
+        LEFT JOIN qualificacoes_tipos qt_newer ON qt_newer.id = qh_newer.qualificacao_id
+        WHERE qh_newer.funcionario_id = qh.funcionario_id
+          AND qh_newer.deleted_at IS NULL
+          AND UPPER(COALESCE(qh_newer.status,'')) NOT IN ('CANCELADA','CANCELADO')
+          AND COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao) IS NOT NULL
+          AND UPPER(TRIM(COALESCE(
+            NULLIF(CAST(qh.qualificacao_id AS TEXT), ''),
+            NULLIF(qh.qualificacao_codigo, ''),
+            NULLIF(qt.codigo, ''),
+            NULLIF(qh.tipo, ''),
+            NULLIF(qt.nome, '')
+          ))) <> ''
+          AND UPPER(TRIM(COALESCE(
+            NULLIF(CAST(qh_newer.qualificacao_id AS TEXT), ''),
+            NULLIF(qh_newer.qualificacao_codigo, ''),
+            NULLIF(qt_newer.codigo, ''),
+            NULLIF(qh_newer.tipo, ''),
+            NULLIF(qt_newer.nome, '')
+          ))) = UPPER(TRIM(COALESCE(
+            NULLIF(CAST(qh.qualificacao_id AS TEXT), ''),
+            NULLIF(qh.qualificacao_codigo, ''),
+            NULLIF(qt.codigo, ''),
+            NULLIF(qh.tipo, ''),
+            NULLIF(qt.nome, '')
+          )))
+          AND (datetime(COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao, qh_newer.updated_at, qh_newer.created_at)) > datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) OR (datetime(COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao, qh_newer.updated_at, qh_newer.created_at)) = datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) AND qh_newer.id > qh.id))
+      )) THEN 'RENOVADA'
       WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) IS NULL THEN 'INDEFINIDA'
       WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) < date('now') THEN 'VENCIDA'
       WHEN COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months')) <= date('now','+30 days') THEN 'VENCENDO_30'
@@ -343,11 +373,22 @@ export function buildOrderByClause(orderBy: string, order: string): string {
     // Sort by numeric priority rank so PLANEJADA always comes first (rank 1) when ASC.
     // Checking qh.status directly is critical: PLANEJADA records have data_conclusao set
     // (= data_prevista), so relying on data_conclusao IS NULL alone would misclassify them.
+    // RENOVADA (rank 5): somente se existe sucessora real (NÃO é vigente operacional).
     const vencimento = `COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade, 12) || ' months'))`;
     const rankExpr = `(CASE
       WHEN qh.deleted_at IS NOT NULL THEN 6
       WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 1
-      WHEN qh.renovada = 1 OR UPPER(COALESCE(qh.status,'')) IN ('RENOVADA','RENOVADO') THEN 5
+      WHEN NOT (qh.deleted_at IS NULL AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADA','CANCELADO') AND COALESCE(qh.data_vencimento, qh.data_conclusao) IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM qualificacoes_historico qh_newer2
+        LEFT JOIN qualificacoes_tipos qt_newer2 ON qt_newer2.id = qh_newer2.qualificacao_id
+        WHERE qh_newer2.funcionario_id = qh.funcionario_id
+          AND qh_newer2.deleted_at IS NULL
+          AND UPPER(COALESCE(qh_newer2.status,'')) NOT IN ('CANCELADA','CANCELADO')
+          AND COALESCE(qh_newer2.data_vencimento, qh_newer2.data_conclusao) IS NOT NULL
+          AND UPPER(TRIM(COALESCE(NULLIF(CAST(qh.qualificacao_id AS TEXT), ''), NULLIF(qh.qualificacao_codigo, ''), NULLIF(qt.codigo, ''), NULLIF(qh.tipo, ''), NULLIF(qt.nome, '')))) <> ''
+          AND UPPER(TRIM(COALESCE(NULLIF(CAST(qh_newer2.qualificacao_id AS TEXT), ''), NULLIF(qh_newer2.qualificacao_codigo, ''), NULLIF(qt_newer2.codigo, ''), NULLIF(qh_newer2.tipo, ''), NULLIF(qt_newer2.nome, '')))) = UPPER(TRIM(COALESCE(NULLIF(CAST(qh.qualificacao_id AS TEXT), ''), NULLIF(qh.qualificacao_codigo, ''), NULLIF(qt.codigo, ''), NULLIF(qh.tipo, ''), NULLIF(qt.nome, ''))))
+          AND (datetime(COALESCE(qh_newer2.data_vencimento, qh_newer2.data_conclusao, qh_newer2.updated_at, qh_newer2.created_at)) > datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) OR (datetime(COALESCE(qh_newer2.data_vencimento, qh_newer2.data_conclusao, qh_newer2.updated_at, qh_newer2.created_at)) = datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) AND qh_newer2.id > qh.id))
+      )) THEN 5
       WHEN ${vencimento} < date('now') THEN 2
       WHEN ${vencimento} <= date('now','+30 days') THEN 3
       ELSE 4
