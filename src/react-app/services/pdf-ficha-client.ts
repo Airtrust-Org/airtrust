@@ -857,34 +857,40 @@ export async function gerarPDFFichaCliente(
 
   const totalNatural = rowData.reduce((s, r) => s + r.rowH, 0);
 
-  // Layout de baixo para cima:
-  const FOOTER_H = 6;
-  const SIG_RESERVED = 40;
-  const OBS_RESERVED = 23;
-  // Ficha modelo ALWAYS uses v6 template (no régua).
-  // Real fichas: v6 template also has no régua. Only legacy keeps it.
+  // ── Safe area: reserve bottom space BEFORE rendering table ──────────────
+  const FOOTER_H = 5;
+  const FOOTER_GAP = 2;
+
+  // Signature boxes — calculate actual height needed
+  const hasAnySignatureImg = !!(
+    dados.assinatura_aluno_dataUrl || dados.assinatura_instrutor_dataUrl
+  );
+  const SIG_PAD = 2;
+  const SIG_TITLE_H = 3.5;
+  const SIG_TEXT_H = 2.8;
+  const SIG_TS_H = 2.8;
+  const sigBoxW = (contentWidth - 4) / 2;
+  const sigBoxH = 18; // compact but usable
+
+  // Observations area — minimum height
+  const OBS_MIN_H = 14;
+
   const isTemplateV6 = dados.templateVersion === 'v6' || isModoModelo;
   const SCALE_RESERVED = isTemplateV6 ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
-  // NOTECHS agora é parte da tabela, não um bloco separado.
-  const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 6 : 0;
-  const NOTECHS_CATEGORY_DIVIDER_H = 4.5;
-  const NOTECHS_DIVIDER_H = NOTECHS_HEADER_H;
-  const NOTECHS_CATEGORY_BUDGET = manobrasNotechs.length > 0 ? NOTECHS_CATEGORY_DIVIDER_H * 4 : 0;
-  const tableBodyBudget =
-    pageHeight -
-    currentY -
-    4 -
-    NOTECHS_DIVIDER_H -
-    NOTECHS_CATEGORY_BUDGET -
-    SCALE_RESERVED -
-    OBS_RESERVED -
-    3 -
-    SIG_RESERVED -
-    FOOTER_H;
 
-  const scaleFactor = totalNatural > tableBodyBudget ? tableBodyBudget / totalNatural : 1;
+  // NOTECHS overhead
+  const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 5.5 : 0;
+  const NOTECHS_CATEGORY_DIVIDER_H = 4;
+  const NOTECHS_CATEGORY_BUDGET = manobrasNotechs.length > 0 ? NOTECHS_CATEGORY_DIVIDER_H * 4 : 0;
+
+  // Calculate safe boundary: table MUST NOT cross tableMaxY
+  const BOTTOM_RESERVED = OBS_MIN_H + 2 + sigBoxH + FOOTER_GAP + FOOTER_H + 3;
+  const tableMaxY = pageHeight - BOTTOM_RESERVED;
+  const tableBodyBudget = tableMaxY - currentY - 2 - NOTECHS_HEADER_H - NOTECHS_CATEGORY_BUDGET - SCALE_RESERVED;
+
+  const scaleFactor = totalNatural > tableBodyBudget ? Math.max(0.7, tableBodyBudget / totalNatural) : 1;
   const finalFontSize = scaleFactor < 0.95 ? Math.max(5.5, TABLE_FONT * scaleFactor) : TABLE_FONT;
-  const LINE_SPACING = 3.4 * Math.min(1, scaleFactor);
+  const LINE_SPACING = 3.2 * Math.min(1, scaleFactor);
 
   // 2ª passagem: re-split com fonte final
   doc.setFontSize(finalFontSize);
@@ -936,7 +942,7 @@ export async function gerarPDFFichaCliente(
       );
       doc.setLineWidth(0.5);
       doc.line(margin, currentY + 5, margin + contentWidth, currentY + 5);
-      currentY += NOTECHS_DIVIDER_H;
+      currentY += NOTECHS_HEADER_H;
     }
 
     // NOTECHS category sub-divider
@@ -1071,161 +1077,71 @@ export async function gerarPDFFichaCliente(
   currentY += 4;
 
   // Régua de avaliação: apenas para template legado (pre-V6.2).
-  // Ficha-modelo e fichas V6.2 NUNCA exibem régua.
   if (!isTemplateV6) {
     currentY = drawFichaAvaliacaoScale(doc, margin, currentY, contentWidth) + 4;
   }
 
-  // ========== OBSERVAÇÕES GERAIS — mínimo 3 linhas de texto ==========
-  if (dados.observacoes_gerais || isModoModelo) {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7.5);
-    doc.setTextColor(COLORS.textSecondary);
-    const obsTxt =
-      dados.observacoes_gerais ||
-      (isModoModelo ? 'Observações gerais: _________________________________________________' : '');
-    const obsLines = doc.splitTextToSize(obsTxt, contentWidth - 6);
-    const obsBoxH = Math.max(18, 5 + obsLines.length * 4.5); // mínimo 3 linhas de texto
+  // Clamp currentY to safe area
+  if (currentY > tableMaxY) currentY = tableMaxY;
 
+  // ========== OBSERVAÇÕES GERAIS — compact but visible ==========
+  const obsTxt = dados.observacoes_gerais || (isModoModelo ? 'Observações gerais: _________________________________________________' : '');
+  if (obsTxt) {
+    const obsLines = doc.splitTextToSize(obsTxt, contentWidth - 6);
     doc.setDrawColor(COLORS.border);
     doc.setFillColor(COLORS.bgLight);
-    doc.roundedRect(margin, currentY, contentWidth, obsBoxH, 2, 2, 'FD');
-    doc.text(obsLines, margin + 3, currentY + 5);
-    currentY += obsBoxH + 5; // gap maior (5mm) antes das assinaturas
+    doc.roundedRect(margin, currentY, contentWidth, OBS_MIN_H, 2, 2, 'FD');
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(COLORS.textSecondary);
+    doc.text(obsLines.slice(0, 2), margin + 3, currentY + 4.5);
+    currentY += OBS_MIN_H + 2;
   }
 
-  // ========== ASSINATURAS — ancoradas no fundo, proporcionais ==========
-  // Rodapé fixo no fundo. Assinaturas calculadas de baixo para cima.
-  const FOOTER_Y = pageHeight - FOOTER_H + 1; // rodapé no fundo (fixo)
-  const FOOTER_GAP = 4; // espaço entre assinaturas e rodapé
-
-  const hasAnySignatureImg = !!(
-    dados.assinatura_aluno_dataUrl || dados.assinatura_instrutor_dataUrl
-  );
-  const SIG_PAD = 2.5;
-  const SIG_TITLE_H = 4; // título TRIPULANTE/INSTRUTOR
-  const SIG_TEXT_H = 3; // nome
-  const SIG_TS_H = 3; // timestamp/status
-  const SIG_IMG_MAX = 14; // imagem max 14mm — proporção mantida, sem achatar
-  const sigBoxW = (contentWidth - 4) / 2;
-
-  // Calcular altura proporcional da imagem (nunca distorce)
-  const calcImgH = (dataUrl: string | null | undefined): number => {
-    if (!dataUrl) return 0;
-    try {
-      const props = doc.getImageProperties(dataUrl);
-      const drawW = sigBoxW - SIG_PAD * 2;
-      const ratio = props.height / props.width;
-      return Math.min(SIG_IMG_MAX, Math.max(6, drawW * ratio));
-    } catch {
-      return Math.min(SIG_IMG_MAX, 10);
-    }
-  };
-
-  const sigImgH_a = calcImgH(dados.assinatura_aluno_dataUrl);
-  const sigImgH_i = calcImgH(dados.assinatura_instrutor_dataUrl);
-  const sigImgH = Math.max(sigImgH_a, sigImgH_i);
-
-  const sigBoxH = hasAnySignatureImg
-    ? SIG_PAD + SIG_TITLE_H + SIG_TEXT_H + SIG_TS_H + 2 + sigImgH + SIG_PAD // com imagem
-    : SIG_PAD + SIG_TITLE_H + SIG_TEXT_H + SIG_TS_H + SIG_PAD; // sem imagem
-
-  // Assinaturas começam de baixo para cima: rodapé ← gap ← sig boxes
-  const sigStartY = FOOTER_Y - FOOTER_GAP - sigBoxH;
-
-  const drawSigBox = (
-    x: number,
-    label: string,
-    nome: string,
-    timestamp: string | null | undefined,
-    sigDataUrl: string | null | undefined,
-  ) => {
+  // ========== ASSINATURAS — fixed clean layout ==========
+  const sigStartY = currentY;
+  const drawSigBox = (x: number, label: string, nome: string, timestamp: string | null | undefined) => {
     const hasSig = !!timestamp;
     doc.setDrawColor(COLORS.border);
     doc.setFillColor(hasSig ? '#EBF7EE' : COLORS.bgLight);
     doc.roundedRect(x, sigStartY, sigBoxW, sigBoxH, 2, 2, 'FD');
 
-    let ty = sigStartY + SIG_PAD + SIG_TITLE_H - 0.5;
-
-    // Título (fonte reduzida)
+    let ty = sigStartY + SIG_PAD + SIG_TITLE_H;
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(hasSig ? COLORS.success : COLORS.text);
     doc.text(label, x + SIG_PAD, ty);
 
-    // Nome
     ty += SIG_TEXT_H;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     doc.setTextColor(COLORS.textSecondary);
     doc.text(getDisplayValue(nome), x + SIG_PAD, ty, { maxWidth: sigBoxW - SIG_PAD * 2 });
 
-    // Timestamp / status
     ty += SIG_TS_H;
-    doc.setFontSize(6);
+    doc.setFontSize(5.5);
     if (hasSig) {
       const d = new Date(timestamp!);
       doc.setTextColor(COLORS.success);
-      doc.text(
-        `\u2713 ${d.toLocaleDateString('pt-BR')}, ${d.toLocaleTimeString('pt-BR')}`,
-        x + SIG_PAD,
-        ty,
-      );
+      doc.text(`\u2713 ${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR')}`, x + SIG_PAD, ty);
     } else {
       doc.setTextColor(COLORS.textSecondary);
-      doc.text(isModoModelo ? 'Campo para assinatura' : 'Aguardando assinatura', x + SIG_PAD, ty);
-    }
-
-    // Imagem da assinatura — renderizada com proporção original
-    if (sigDataUrl && hasAnySignatureImg && sigImgH > 0) {
-      try {
-        const props = doc.getImageProperties(sigDataUrl);
-        const drawW = sigBoxW - SIG_PAD * 2;
-        const ratio = props.height / props.width;
-        const drawH = Math.min(sigImgH, drawW * ratio);
-        doc.addImage(sigDataUrl, 'PNG', x + SIG_PAD, ty + 2, drawW, drawH);
-      } catch {
-        /* ignore */
-      }
+      doc.text(isModoModelo ? 'Campo para assinatura' : 'Aguardando', x + SIG_PAD, ty);
     }
   };
 
-  drawSigBox(
-    margin,
-    'TRIPULANTE',
-    dados.tripulante_nome,
-    dados.assinatura_aluno_timestamp,
-    dados.assinatura_aluno_dataUrl,
-  );
-  drawSigBox(
-    margin + sigBoxW + 4,
-    'INSTRUTOR',
-    dados.instrutor_nome,
-    dados.assinatura_instrutor_timestamp,
-    dados.assinatura_instrutor_dataUrl,
-  );
+  drawSigBox(margin, 'TRIPULANTE', dados.tripulante_nome, dados.assinatura_aluno_timestamp);
+  drawSigBox(margin + sigBoxW + 4, 'INSTRUTOR', dados.instrutor_nome, dados.assinatura_instrutor_timestamp);
+  currentY += sigBoxH + FOOTER_GAP;
 
-  // ========== RODAPÉ — fixo no fundo, gap real acima ==========
-  doc.setFontSize(6.5);
+  // ========== RODAPÉ — single line with compact disclaimer ==========
+  const FOOTER_Y = pageHeight - FOOTER_H + 1;
+  const footerText = isModoModelo
+    ? `Gerado em ${new Date().toLocaleString('pt-BR')} | AirTrust — Ficha interna de treinamento. Uso conforme documentos oficiais.`
+    : `Gerado em ${new Date().toLocaleString('pt-BR')} | AirTrust — Aviation Management System`;
+  doc.setFontSize(5.5);
   doc.setTextColor(COLORS.textSecondary);
-  doc.text(
-    `Gerado em ${new Date().toLocaleString('pt-BR')} | AirTrust - Aviation Management System`,
-    pageWidth / 2,
-    FOOTER_Y,
-    { align: 'center' },
-  );
-
-  // ========== AVISO NOTECHS + DISCLAIMER (visível em todas as fichas) ==========
-  const hasNotechsItems = manobrasNotechs.length > 0;
-  const disclaimerY = FOOTER_Y - 8;
-  doc.setFontSize(5);
-  doc.setTextColor(COLORS.textSecondary);
-  if (hasNotechsItems) {
-    const notechsAvisoLinhas = doc.splitTextToSize(NOTECHS_PROVENIENCIA_AVISO, contentWidth);
-    doc.text(notechsAvisoLinhas, margin, disclaimerY);
-  }
-  const disclaimerLinhas = doc.splitTextToSize(REGULATORY_DISCLAIMER, contentWidth);
-  doc.text(disclaimerLinhas, margin, disclaimerY - (hasNotechsItems ? 10 : 0));
+  doc.text(footerText, pageWidth / 2, FOOTER_Y, { align: 'center' });
 
   // ========== PÁGINA 2 (opcional) — Régua NOTECHS, descritores completos ==========
   // Só é adicionada quando a ficha tem itens NOTECHS e não é ficha modelo/V6.2.
