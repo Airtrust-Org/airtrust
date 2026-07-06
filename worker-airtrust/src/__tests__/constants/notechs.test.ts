@@ -97,16 +97,16 @@ describe('getMissingNotechsItens / hasCompleteNotechsItens', () => {
 
   it('returns only the missing NOTECHS items when the ficha is partial', () => {
     const missing = getMissingNotechsItens([
-      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-01' },
-      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-02' },
+      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-COO-01' },
+      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-COO-02' },
       { categoria: 'GERAL', codigo: 'MAN-01' },
     ]);
 
     expect(missing).toHaveLength(13);
-    expect(missing[0]?.codigo).toBe('NOTECHS-03');
+    expect(missing[0]?.codigo).toBe('NOTECHS-COO-03');
     expect(hasCompleteNotechsItens([
-      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-01' },
-      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-02' },
+      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-COO-01' },
+      { categoria: NOTECHS_CATEGORIA, codigo: 'NOTECHS-COO-02' },
     ])).toBe(false);
   });
 

@@ -96,8 +96,8 @@ describe('simuladores matriz v6.2 data', () => {
     const data = loadSimuladoresMatrizV6Data();
 
     expect(data.notechsCodes).toHaveLength(15);
-    expect(data.notechsCodes[0]).toBe('NOTECHS-01');
-    expect(data.notechsCodes[14]).toBe('NOTECHS-15');
+    expect(data.notechsCodes[0]).toBe('NOTECHS-COO-01');
+    expect(data.notechsCodes[14]).toBe('NOTECHS-TMD-15');
 
     for (const model of data.models) {
       expect(model.rows.some((row) => row.codigo.startsWith('NOTECHS-'))).toBe(false);

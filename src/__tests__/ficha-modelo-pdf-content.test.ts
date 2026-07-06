@@ -158,9 +158,15 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     });
     expect(NOTECHS_ITENS).toHaveLength(15);
 
-    // NOTECHS codes visiveis (NOTECHS-01 a NOTECHS-15)
-    for (let i = 1; i <= 15; i++) {
-      expect(allText).toContain(`NOTECHS-${String(i).padStart(2, '0')}`);
+    // NOTECHS codes visiveis categorizados (COO-01..04, LID-05..08, CSA-09..11, TMD-12..15)
+    const expectedCodes = [
+      'NOTECHS-COO-01', 'NOTECHS-COO-02', 'NOTECHS-COO-03', 'NOTECHS-COO-04',
+      'NOTECHS-LID-05', 'NOTECHS-LID-06', 'NOTECHS-LID-07', 'NOTECHS-LID-08',
+      'NOTECHS-CSA-09', 'NOTECHS-CSA-10', 'NOTECHS-CSA-11',
+      'NOTECHS-TMD-12', 'NOTECHS-TMD-13', 'NOTECHS-TMD-14', 'NOTECHS-TMD-15',
+    ];
+    for (const code of expectedCodes) {
+      expect(allText).toContain(code);
     }
   });
 
@@ -200,7 +206,7 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     expect(addPageCalls.count).toBe(0);
     // NOTECHS ainda aparece integrado na tabela
     expect(allText).toMatch(/NOTECHS/);
-    expect(allText).toContain('NOTECHS-01');
-    expect(allText).toContain('NOTECHS-15');
+    expect(allText).toContain('NOTECHS-COO-01');
+    expect(allText).toContain('NOTECHS-TMD-15');
   });
 });

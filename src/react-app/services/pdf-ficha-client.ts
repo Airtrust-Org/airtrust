@@ -806,7 +806,7 @@ export async function gerarPDFFichaCliente(
   // Prepara linhas NOTECHS no mesmo formato dos itens técnicos.
   const notechsRows = manobrasNotechs.map((n, i) => ({
     ordem: n.ordem,
-    codigo: `NOTECHS-${String(i + 1).padStart(2, '0')}`,
+    codigo: (n as Record<string, unknown>).codigo as string || `NOTECHS-${String(i + 1).padStart(2, '0')}`,
     nome: sanitizeForPdf(n.nome) || sanitizeForPdf(n.descricao) || n.nome || n.descricao || '',
     descricao: sanitizeForPdf(n.descricao) || n.descricao || '',
     resultado: n.resultado,

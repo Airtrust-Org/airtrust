@@ -55,9 +55,9 @@ describe('fichaModeloPdf', () => {
     expect(dados.manobras[17].codigo).toBe('M18');
     expect(dados.manobras[17].tripulante).toBe('B');
     expect(dados.manobras[18].ordem).toBe(NOTECHS_ORDEM_BASE);
-    expect(dados.manobras[18].codigo).toBe('NOTECHS-01');
+    expect(dados.manobras[18].codigo).toBe('NOTECHS-COO-01');
     expect(dados.manobras.at(-1)?.ordem).toBe(1015);
-    expect(dados.manobras.at(-1)?.codigo).toBe('NOTECHS-15');
+    expect(dados.manobras.at(-1)?.codigo).toBe('NOTECHS-TMD-15');
   });
 
   it('usa observacoes do vínculo modelo↔manobra como override de nome/descrição quando presente', () => {
