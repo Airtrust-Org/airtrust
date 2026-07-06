@@ -849,12 +849,11 @@ export async function gerarPDFFichaCliente(
   // Real fichas: v6 template also has no régua. Only legacy keeps it.
   const isTemplateV6 = dados.templateVersion === 'v6' || isModoModelo;
   const SCALE_RESERVED = isTemplateV6 ? 0 : FICHA_AVALIACAO_SCALE_HEIGHT;
-  // NOTECHS agora é parte da tabela, não um bloco separado — sem reserva extra.
-  // Header bilíngue (~18pt) + até 3 sub-divisores de categoria (~9pt cada)
-  const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 18 : 0;
-  const NOTECHS_CATEGORY_DIVIDER_H = 9;
+  // NOTECHS agora é parte da tabela, não um bloco separado.
+  // Header bilíngue compacto + divisores de grupo inline e discretos.
+  const NOTECHS_HEADER_H = manobrasNotechs.length > 0 ? 10 : 0;
+  const NOTECHS_CATEGORY_DIVIDER_H = 5.5;
   const NOTECHS_DIVIDER_H = NOTECHS_HEADER_H;
-  // Estima até 3 sub-divisores de categoria entre os 4 grupos NOTECHS
   const NOTECHS_CATEGORY_BUDGET = manobrasNotechs.length > 0 ? NOTECHS_CATEGORY_DIVIDER_H * 4 : 0;
   const tableBodyBudget =
     pageHeight -
@@ -887,12 +886,12 @@ export async function gerarPDFFichaCliente(
   let notechsDividerInserted = false;
   let lastNotechsGroup = '';
 
-  // NOTECHS category sub-divider labels
+  // NOTECHS category sub-divider labels (compact, inline)
   const NOTECHS_GROUP_LABELS: Record<string, string> = {
-    COO: 'COOPERAÇÃO / COOPERATION',
-    LID: 'LIDERANÇA E HABILIDADES GERENCIAIS / LEADERSHIP AND MANAGEMENT SKILLS',
-    CSA: 'CONSCIÊNCIA SITUACIONAL / SITUATIONAL AWARENESS',
-    TMD: 'TOMADA DE DECISÃO / DECISION MAKING',
+    COO: 'COO \u2014 Coopera\u00E7\u00E3o / Cooperation',
+    LID: 'LID \u2014 Lideran\u00E7a e Hab. Gerenciais / Leadership and Management Skills',
+    CSA: 'CSA \u2014 Consci\u00EAncia Situacional / Situational Awareness',
+    TMD: 'TMD \u2014 Tomada de Decis\u00E3o / Decision Making',
   };
 
   const getNotechsGroupLocal = (codigo: string): string => {
@@ -908,19 +907,19 @@ export async function gerarPDFFichaCliente(
     // Insere divisor NOTECHS antes do primeiro item NOTECHS
     if ((m as Record<string, unknown>)._section === 'notechs' && !notechsDividerInserted) {
       notechsDividerInserted = true;
-      // Linha divisora + header bilíngue NOTECHS
+      // Linha divisora + header bilíngue compacto
       doc.setDrawColor(COLORS.border);
       doc.setLineWidth(0.5);
       doc.line(margin, currentY + 1, margin + contentWidth, currentY + 1);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6.5);
+      doc.setFontSize(6);
       doc.setTextColor(COLORS.textSecondary);
-      doc.text('NOTECHS \u2014 Non-Technical Skills', margin + 2, currentY + 4.2);
+      doc.text('NOTECHS \u2014 Non-Technical Skills', margin + 2, currentY + 3.5);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(5.5);
-      doc.text('Habilidades N\u00E3o T\u00E9cnicas / Comportamentais', margin + 2, currentY + 9.5);
+      doc.setFontSize(5);
+      doc.text('Habilidades N\u00E3o T\u00E9cnicas / Comportamentais', margin + 2, currentY + 7);
       doc.setLineWidth(0.5);
-      doc.line(margin, currentY + 12, margin + contentWidth, currentY + 12);
+      doc.line(margin, currentY + 8.5, margin + contentWidth, currentY + 8.5);
       currentY += NOTECHS_DIVIDER_H;
     }
 
@@ -929,17 +928,15 @@ export async function gerarPDFFichaCliente(
       const codigo = (m as Record<string, string>).codigo || '';
       const group = getNotechsGroupLocal(codigo);
       if (group && group !== lastNotechsGroup) {
-        currentY += 2;
+        // Divisor inline compacto: thin line + código do grupo + texto curto
         doc.setDrawColor(COLORS.border);
-        doc.setLineWidth(0.3);
-        doc.line(margin, currentY + 1, margin + contentWidth, currentY + 1);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(5);
+        doc.setLineWidth(0.2);
+        doc.line(margin, currentY + 0.5, margin + contentWidth, currentY + 0.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(4.5);
         doc.setTextColor(COLORS.textSecondary);
         const label = NOTECHS_GROUP_LABELS[group] || group;
-        doc.text(label, margin + 4, currentY + 4.5);
-        doc.setLineWidth(0.3);
-        doc.line(margin, currentY + 7, margin + contentWidth, currentY + 7);
+        doc.text(label, margin + 3, currentY + 3.8);
         currentY += NOTECHS_CATEGORY_DIVIDER_H;
       }
       if (group) lastNotechsGroup = group;

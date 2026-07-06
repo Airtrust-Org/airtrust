@@ -419,12 +419,12 @@ function drawManobrasSection(
     });
   });
 
-  // NOTECHS category sub-divider labels (compact, one line per group)
+  // NOTECHS category sub-divider labels (compact, inline)
   const NOTECHS_GROUP_LABELS: Record<string, string> = {
-    COO: 'COOPERA\u00C7\u00C3O / COOPERATION',
-    LID: 'LIDERAN\u00C7A E HABILIDADES GERENCIAIS / LEADERSHIP AND MANAGEMENT SKILLS',
-    CSA: 'CONSCI\u00CANCIA SITUACIONAL / SITUATIONAL AWARENESS',
-    TMD: 'TOMADA DE DECIS\u00C3O / DECISION MAKING',
+    COO: 'COO \u2014 Coopera\u00E7\u00E3o / Cooperation',
+    LID: 'LID \u2014 Lideran\u00E7a e Hab. Gerenciais / Leadership and Management Skills',
+    CSA: 'CSA \u2014 Consci\u00EAncia Situacional / Situational Awareness',
+    TMD: 'TMD \u2014 Tomada de Decis\u00E3o / Decision Making',
   };
 
   const getNotechsGroup = (codigo: string): string => {
@@ -460,7 +460,7 @@ function drawManobrasSection(
     const row = allRows[ri];
     const isNotechsStart = row.tipo === 'notechs' && (ri === 0 || allRows[ri - 1].tipo === 'tecnica');
 
-    // NOTECHS main divider
+    // NOTECHS main divider (compact)
     if (isNotechsStart) {
       notecsRowIdx = 0;
       currentY -= 2;
@@ -470,9 +470,9 @@ function drawManobrasSection(
         color: COLOR.border,
         thickness: 0.5,
       });
-      drawText(page, 'NOTECHS \u2014 Non-Technical Skills', margin + 2, currentY - 5, fontBold, 6.5, COLOR.textSecondary);
-      drawText(page, 'Habilidades N\u00E3o T\u00E9cnicas / Comportamentais', margin + 2, currentY - 11, fontRegular, 5.5, COLOR.textSecondary);
-      currentY -= 15;
+      drawText(page, 'NOTECHS \u2014 Non-Technical Skills', margin + 2, currentY - 4, fontBold, 6, COLOR.textSecondary);
+      drawText(page, 'Habilidades N\u00E3o T\u00E9cnicas / Comportamentais', margin + 2, currentY - 8, fontRegular, 5, COLOR.textSecondary);
+      currentY -= 10;
       page.drawLine({
         start: { x: margin, y: currentY },
         end: { x: margin + contentWidth, y: currentY },
@@ -482,27 +482,19 @@ function drawManobrasSection(
       currentY -= 2;
     }
 
-    // NOTECHS sub-category divider
+    // NOTECHS sub-category divider (inline, compact)
     if (row.tipo === 'notechs' && row.notecsGroup && !isNotechsStart) {
       const prevRow = allRows[ri - 1];
       if (prevRow?.notecsGroup !== row.notecsGroup) {
-        currentY -= 2;
         page.drawLine({
           start: { x: margin, y: currentY },
           end: { x: margin + contentWidth, y: currentY },
           color: COLOR.border,
-          thickness: 0.3,
+          thickness: 0.2,
         });
         const label = NOTECHS_GROUP_LABELS[row.notecsGroup] || row.notecsGroup;
-        drawText(page, label, margin + 4, currentY - 4.5, fontRegular, 5, COLOR.textSecondary);
-        currentY -= 7;
-        page.drawLine({
-          start: { x: margin, y: currentY },
-          end: { x: margin + contentWidth, y: currentY },
-          color: COLOR.border,
-          thickness: 0.3,
-        });
-        currentY -= 2;
+        drawText(page, label, margin + 3, currentY - 3.2, fontRegular, 4.5, COLOR.textSecondary);
+        currentY -= 4.5;
       }
     }
 

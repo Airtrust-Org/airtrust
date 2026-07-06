@@ -180,11 +180,11 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     expect(allText).toContain('NOTECHS \u2014 Non-Technical Skills');
     expect(allText).toContain('Habilidades N\u00E3o T\u00E9cnicas / Comportamentais');
 
-    // 4 category dividers
-    expect(allText).toContain('COOPERA\u00C7\u00C3O / COOPERATION');
-    expect(allText).toContain('LIDERAN\u00C7A E HABILIDADES GERENCIAIS / LEADERSHIP AND MANAGEMENT SKILLS');
-    expect(allText).toContain('CONSCI\u00CANCIA SITUACIONAL / SITUATIONAL AWARENESS');
-    expect(allText).toContain('TOMADA DE DECIS\u00C3O / DECISION MAKING');
+    // 4 category dividers (compact inline form)
+    expect(allText).toContain('COO \u2014 Coopera\u00E7\u00E3o / Cooperation');
+    expect(allText).toContain('LID \u2014 Lideran\u00E7a e Hab. Gerenciais / Leadership and Management Skills');
+    expect(allText).toContain('CSA \u2014 Consci\u00EAncia Situacional / Situational Awareness');
+    expect(allText).toContain('TMD \u2014 Tomada de Decis\u00E3o / Decision Making');
 
     // No CRM, no Notecs
     expect(allText).not.toMatch(/\(CRM\)/i);
