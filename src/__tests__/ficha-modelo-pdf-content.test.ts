@@ -250,30 +250,36 @@ describe('ficha modelo pdf — conteudo A139-I-01/12', () => {
     }
   });
 
-  it('mostra header NOTECHS single-line e 4 divisores de categoria no PDF V6.2', async () => {
+  it('mostra header NOTECHS como banner de secao, sem subtitulos de grupo', async () => {
     const dadosPDF = buildA139Modelo();
     await gerarPDFFichaCliente(dadosPDF);
 
     const allText = capturedTexts.join('\n');
 
-    // Single-line bilingual header
+    // Single-line header presente
     expect(allText).toContain(
       'NOTECHS \u2014 Non-Technical Skills / Habilidades N\u00E3o T\u00E9cnicas e Comportamentais',
     );
 
-    // 4 category dividers (full labels)
-    expect(allText).toContain('COO \u2014 Coopera\u00E7\u00E3o / Cooperation');
-    expect(allText).toContain(
-      'LID \u2014 Lideran\u00E7a e Habilidades Gerenciais / Leadership and Management Skills',
-    );
-    expect(allText).toContain('CSA \u2014 Consci\u00EAncia Situacional / Situational Awareness');
-    expect(allText).toContain('TMD \u2014 Tomada de Decis\u00E3o / Decision Making');
+    // 15 codigos categorizados presentes
+    for (const code of [
+      'NOTECHS-COO-01', 'NOTECHS-COO-02', 'NOTECHS-COO-03', 'NOTECHS-COO-04',
+      'NOTECHS-LID-05', 'NOTECHS-LID-06', 'NOTECHS-LID-07', 'NOTECHS-LID-08',
+      'NOTECHS-CSA-09', 'NOTECHS-CSA-10', 'NOTECHS-CSA-11',
+      'NOTECHS-TMD-12', 'NOTECHS-TMD-13', 'NOTECHS-TMD-14', 'NOTECHS-TMD-15',
+    ]) {
+      expect(allText).toContain(code);
+    }
+
+    // Category dividers removidos
+    expect(allText).not.toMatch(/COO \u2014 Coopera/);
+    expect(allText).not.toMatch(/LID \u2014 Lideran/);
+    expect(allText).not.toMatch(/CSA \u2014 Consci/);
+    expect(allText).not.toMatch(/TMD \u2014 Tomada/);
 
     // No CRM, no Notecs
     expect(allText).not.toMatch(/\(CRM\)/i);
     expect(allText).not.toMatch(/\bNotecs\b/);
-
-    // No extra page
     expect(addPageCalls.count).toBe(0);
   });
 
