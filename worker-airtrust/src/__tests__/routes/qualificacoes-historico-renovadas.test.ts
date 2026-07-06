@@ -294,6 +294,40 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(statsQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'RENOVADA'");
   });
 
+  it('tem_renovacao_posterior da linha usa o mesmo guard de vigencia operacional do contador (regressao AW139/Altemir)', async () => {
+    // Bug real: qh.renovacao_de gravado na direção invertida (registro antigo
+    // apontando para o registro atual) fazia o EXISTS bruto da linha marcar
+    // como RENOVADA o registro que é, na verdade, o vigente operacional —
+    // mesmo quando o contador (activeRenewedQualificationPredicate) já
+    // excluía esse caso corretamente. A linha deve usar o MESMO predicado.
+    const { db, calls } = createMockDb();
+    const app = createApp(db);
+
+    await app.request('/historico');
+
+    const dataQuery =
+      calls.find((call) => call.method === 'all' && call.query.includes('LIMIT ? OFFSET ?'))
+        ?.query || '';
+
+    const posteriorIdx = dataQuery.indexOf('AS tem_renovacao_posterior');
+    const vigenteIdx = dataQuery.indexOf('AS vigente_operacional');
+    expect(posteriorIdx).toBeGreaterThan(-1);
+    expect(vigenteIdx).toBeGreaterThan(-1);
+
+    // A coluna tem_renovacao_posterior precisa excluir o registro que é o
+    // vigente operacional (nenhum qh_newer mais recente da mesma
+    // qualificação) — igual ao que activeRenewedQualificationPredicate faz
+    // para o contador global. Sem essa exclusão, um link renovacao_de
+    // gravado ao contrário derruba o registro atual como RENOVADA.
+    // A checagem "qh_newer" (mesma usada por vigente_operacional) precisa
+    // aparecer também antes da coluna tem_renovacao_posterior — prova de que
+    // ambas as colunas compartilham o mesmo guard de vigência operacional.
+    const occurrencesBeforePosterior = dataQuery
+      .slice(0, posteriorIdx)
+      .split('qh_newer.funcionario_id = qh.funcionario_id').length - 1;
+    expect(occurrencesBeforePosterior).toBeGreaterThanOrEqual(1);
+  });
+
   it('mantem a sessao vigente com renovacao_de como valida quando nao houve substituicao posterior', async () => {
     const { db } = createMockDb();
     const app = createApp(db);

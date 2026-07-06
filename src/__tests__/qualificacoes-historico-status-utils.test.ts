@@ -153,6 +153,24 @@ describe('qualificacoes historico status utils', () => {
     ).toBe('VALIDA');
   });
 
+  it('regressão AW139 Manutenção: status/renovada legados sem sucessor real, vencimento em 37 dias → VALIDA (fora da janela de 30 dias)', () => {
+    // Caso Francisco Altemir / AW139 - Manutenção: status='RENOVADA' e renovada=1
+    // persistidos no banco (legado), mas tem_renovacao_posterior=0 (sem sucessora real).
+    // Vencimento a 37 dias está fora da janela VENCENDO_30 (<=30 dias) → deve ser VALIDA.
+    const em37Dias = new Date();
+    em37Dias.setDate(em37Dias.getDate() + 37);
+    const dataVencimento = em37Dias.toISOString().split('T')[0];
+
+    expect(
+      getHistoricoDisplayStatus({
+        status: 'RENOVADA',
+        renovada: 1,
+        tem_renovacao_posterior: 0,
+        data_vencimento: dataVencimento,
+      }),
+    ).toBe('VALIDA');
+  });
+
   it('qualificação vencendo sem sucessora aparece como VENCENDO_30', () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 15);
